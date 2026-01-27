@@ -49,7 +49,26 @@ class EnableDisable(StrEnum):
     DISABLE = auto()
 
 
+class Coordinate(StrEnum):
+    LOCAL = auto()
+    GLOBAL = auto()
+
+
+class Angle(StrEnum):
+    RADIAN = auto()
+    DEGREE = auto()
+
+
+class InertiaFromGeom(StrEnum):
+    FALSE = auto()
+    TRUE = auto()
+    AUTO = auto()
+
+
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
+
+GeomGroup = Annotated[int, Field(ge=0, le=30)]
+InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
 
 Vec2 = Tuple[float, float]
 Vec3 = Tuple[float, float, float]
