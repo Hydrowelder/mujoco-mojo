@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import ClassVar, Dict
+from typing import ClassVar, Dict, Tuple
 from xml.etree.ElementTree import Element
 
 from pydantic import BaseModel
 
 __all__ = ["XMLModel"]
+
+
+def _tuple_string(v: Tuple[float, ...]) -> str:
+    return " ".join(map(str, v))
 
 
 class XMLModel(BaseModel):
@@ -20,6 +24,8 @@ class XMLModel(BaseModel):
         for field in self.attributes:
             value = getattr(self, field, None)
             if value is not None:
+                if isinstance(value, tuple):
+                    value = _tuple_string(value)
                 el.set(field, str(value))
 
         # children

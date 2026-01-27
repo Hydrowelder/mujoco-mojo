@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.elements.geom import Geom
+from mujoco_mojo.mjcf.mujoco_attr.geom import Geom
 
 __all__ = ["Body"]
 
