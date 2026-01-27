@@ -1,0 +1,1 @@
+from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import *

@@ -1,21 +1,52 @@
 from __future__ import annotations
 
-from typing import Tuple
+from enum import StrEnum, auto
+from typing import Annotated, Tuple
 
-from pydantic import BaseModel, field_validator
+from pydantic import Field
 
-__all__ = ["Vec3"]
+__all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
 
 
-class Vec3(BaseModel):
-    value: Tuple[float, float, float]
+class GeomType(StrEnum):
+    PLANE = auto()
+    HFIELD = auto()
+    SPHERE = auto()
+    CAPSULE = auto()
+    ELLIPSOID = auto()
+    CYLINDER = auto()
+    BOX = auto()
+    MESH = auto()
+    SDF = auto()
 
-    @field_validator("value")
-    @classmethod
-    def check_len(cls, v) -> Tuple[float, float, float]:
-        if len(v) != 3:
-            raise ValueError(f"Vec3 requires exactly 3 values (entered {len(v)})")
-        return v
 
-    def __str__(self) -> str:
-        return " ".join(str(x) for x in self.value)
+class Integrator(StrEnum):
+    EULER = "Euler"
+    RK4 = "RK4"
+    IMPLICIT = "implicit"
+    IMPLICITFAST = "implicitfast"
+
+
+class Cone(StrEnum):
+    PYRAMIDAL = auto()
+    ELLIPTIC = auto()
+
+
+class Jacobian(StrEnum):
+    DENSE = auto()
+    SPARSE = auto()
+    AUTO = auto()
+
+
+class Solver(StrEnum):
+    PGS = "PGS"
+    CG = "CG"
+    NEWTON = "Newton"
+
+
+ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
+
+Vec2 = Tuple[float, float]
+Vec3 = Tuple[float, float, float]
+Vec4 = Tuple[float, float, float, float]
+Vec5 = Tuple[float, float, float, float, float]
