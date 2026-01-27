@@ -9,7 +9,7 @@ __all__ = ["Flag"]
 
 
 class Flag(XMLModel):
-    """This element sets the flags that enable and disable different parts of the simulation pipeline. The actual flags used at runtime are represented as the bits of two integers, namely mjModel.opt.disableflags and mjModel.opt.enableflags, used to disable standard features and enable optional features respectively. The reason for this separation is that setting both integers to 0 restores the default. In the XML we do not make this separation explicit, except for the default attribute values - which are “enable” for flags corresponding to standard features, and “disable” for flags corresponding to optional features. In the documentation below, we explain what happens when the setting is different from its default."""
+    """This element sets the flags that enable and disable different parts of the simulation pipeline. The actual flags used at runtime are represented as the bits of two integers, namely mjModel.opt.disableflags and mjModel.opt.enableflags, used to disable standard features and enable optional features respectively. The reason for this separation is that setting both integers to 0 restores the default. In the XML we do not make this separation explicit, except for the default attribute values - which are "enable" for flags corresponding to standard features, and "disable" for flags corresponding to optional features. In the documentation below, we explain what happens when the setting is different from its default."""
 
     tag = "flag"
 
@@ -42,7 +42,7 @@ class Flag(XMLModel):
     }
 
     constraint: Optional[EnableDisable] = None
-    """This flag disables all standard computations related to the constraint solver. As a result, no constraint forces are applied. Note that the next four flags disable the computations related to a specific type of constraint. Both this flag and the type-specific flag must be set to “enable” for a given computation to be performed."""
+    """This flag disables all standard computations related to the constraint solver. As a result, no constraint forces are applied. Note that the next four flags disable the computations related to a specific type of constraint. Both this flag and the type-specific flag must be set to "enable" for a given computation to be performed."""
     equality: Optional[EnableDisable] = None
     """This flag disables all standard computations related to equality constraints."""
     frictionloss: Optional[EnableDisable] = None
