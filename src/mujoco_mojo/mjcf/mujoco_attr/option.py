@@ -17,6 +17,8 @@ __all__ = ["Option"]
 
 
 class Option(XMLModel):
+    """This element is in one-to-one correspondence with the low level structure mjOption contained in the field mjModel.opt of mjModel. These are simulation options and do not affect the compilation process in any way; they are simply copied into the low level model. Even though mjOption can be modified by the user at runtime, it is nevertheless a good idea to adjust it properly through the XML."""
+
     tag = "option"
 
     attributes = {

@@ -44,6 +44,11 @@ class Solver(StrEnum):
     NEWTON = "Newton"
 
 
+class EnableDisable(StrEnum):
+    ENABLE = auto()
+    DISABLE = auto()
+
+
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 
 Vec2 = Tuple[float, float]

@@ -2,8 +2,8 @@
 <mujoco model="hello">
   <worldbody>
     <body name="robot">
-      <geom size="0.2" rgba="1.0 0.0 0.0 1.0" type="sphere"/>
+      <geom rgba="1.0 0.0 0.0 1.0" size="0.2" type="sphere"/>
     </body>
-    <geom size="5.0 5.0 0.1" rgba="0.5 0.5 0.5 1.0" name="floor" type="plane"/>
+    <geom rgba="0.5 0.5 0.5 1.0" size="5.0 5.0 0.1" name="floor" type="plane"/>
   </worldbody>
 </mujoco>
