@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from pydantic import Field
+
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
@@ -40,20 +42,20 @@ class Mujoco(XMLModel):
     model: str = "MuJoCo Model"
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
-    options: List[Option] = []
-    compilers: List[Compiler] = []
-    sizes: List[Size] = []
-    statistics: List = []
-    assets: List = []
+    options: List[Option] = Field(default_factory=list)
+    compilers: List[Compiler] = Field(default_factory=list)
+    sizes: List[Size] = Field(default_factory=list)
+    statistics: List = Field(default_factory=list)
+    assets: List = Field(default_factory=list)
     worldbody: Optional[WorldBody] = None
-    deformables: List = []
-    contacts: List = []
-    equalities: List = []
-    tendons: List = []
-    actuators: List = []
-    sensors: List = []
-    keyframes: List = []
-    visuals: List = []
-    defaults: List = []
-    customs: List = []
-    extensions: List = []
+    deformables: List = Field(default_factory=list)
+    contacts: List = Field(default_factory=list)
+    equalities: List = Field(default_factory=list)
+    tendons: List = Field(default_factory=list)
+    actuators: List = Field(default_factory=list)
+    sensors: List = Field(default_factory=list)
+    keyframes: List = Field(default_factory=list)
+    visuals: List = Field(default_factory=list)
+    defaults: List = Field(default_factory=list)
+    customs: List = Field(default_factory=list)
+    extensions: List = Field(default_factory=list)

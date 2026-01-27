@@ -1,3 +1,4 @@
+from mujoco_mojo.mjcf.mujoco_attr.asset_attr import *
 from mujoco_mojo.mjcf.mujoco_attr.option_attr import *
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr import *
 from mujoco_mojo.mjcf.mujoco_attr.body import *

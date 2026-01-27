@@ -80,3 +80,10 @@ class Mode(StrEnum):
     MUSCLE = auto()
     MUSCLEUSER = auto()
     ALL = auto()
+
+
+class Inertia(StrEnum):
+    CONVEX = auto()
+    EXACT = auto()
+    LEGACY = auto()
+    SHELL = auto()
