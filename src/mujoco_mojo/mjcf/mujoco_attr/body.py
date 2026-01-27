@@ -11,9 +11,8 @@ __all__ = ["Body"]
 class Body(XMLModel):
     tag = "body"
 
-    attributes = {"name", "pos"}
-
-    children_map = {"geoms": "geom", "bodies": "body"}
+    attributes = ("name", "pos")
+    children = ("geoms", "bodies")
 
     name: Optional[str] = None
     pos: Optional[str] = None

@@ -13,7 +13,7 @@ __all__ = ["Geom"]
 class Geom(XMLModel):
     tag = "geom"
 
-    attributes = {"name", "type", "size", "rgba", "pos"}
+    attributes = ("name", "type", "size", "rgba", "pos")
 
     name: Optional[str] = None
     type: GeomType = GeomType.SPHERE

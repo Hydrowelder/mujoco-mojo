@@ -13,7 +13,7 @@ class Flag(XMLModel):
 
     tag = "flag"
 
-    attributes = {
+    attributes = (
         "constraint",
         "equality",
         "frictionloss",
@@ -39,7 +39,7 @@ class Flag(XMLModel):
         "invdiscrete",
         "multiccd",
         "sleep",
-    }
+    )
 
     constraint: Optional[EnableDisable] = None
     """This flag disables all standard computations related to the constraint solver. As a result, no constraint forces are applied. Note that the next four flags disable the computations related to a specific type of constraint. Both this flag and the type-specific flag must be set to "enable" for a given computation to be performed."""
