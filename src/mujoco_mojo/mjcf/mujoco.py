@@ -14,26 +14,26 @@ class Mujoco(XMLModel):
 
     tag = "mujoco"
 
-    attributes = {"model"}
-    children_map = {
-        "options": "options",
-        "compilers": "compilers",
-        "sizes": "sizes",
-        "statistics": "statistics",
-        "assets": "assets",
-        "worldbody": "worldbody",
-        "deformables": "deformables",
-        "contacts": "contacts",
-        "equalities": "equalities",
-        "tendons": "tendons",
-        "actuators": "actuators",
-        "sensors": "sensors",
-        "keyframes": "keyframes",
-        "visuals": "visuals",
-        "defaults": "defaults",
-        "customs": "customs",
-        "extensions": "extensions",
-    }
+    attributes = ("model",)
+    children = (
+        "options",
+        "compilers",
+        "sizes",
+        "statistics",
+        "assets",
+        "worldbody",
+        "deformables",
+        "contacts",
+        "equalities",
+        "tendons",
+        "actuators",
+        "sensors",
+        "keyframes",
+        "visuals",
+        "defaults",
+        "customs",
+        "extensions",
+    )
 
     model: str = "MuJoCo Model"
     """The name of the model. This name is shown in the title bar of simulate.cc."""

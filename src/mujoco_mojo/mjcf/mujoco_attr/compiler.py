@@ -14,7 +14,7 @@ class Compiler(XMLModel):
 
     tag = "compiler"
 
-    attributes = {
+    attributes = (
         "autolimits",
         "boundmass",
         "boundinertia",
@@ -35,8 +35,8 @@ class Compiler(XMLModel):
         "saveinertial",
         "assetdir",
         "alignfree",
-    }
-    children_map = {"lengthrange": "lengthrange"}
+    )
+    children = ("lengthrange",)
 
     autolimits: Optional[bool] = None
     """This attribute affects the behavior of attributes such as "limited" (on <body-joint> or <tendon>), "forcelimited", "ctrllimited", and "actlimited" (on <actuator>). If "true", these attributes are unnecessary and their value will be inferred from the presence of their corresponding "range" attribute. If "false", no such inference will happen: For a joint to be limited, both limited="true" and range="min max" must be specified. In this mode, it is an error to specify a range without a limit."""

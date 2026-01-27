@@ -21,7 +21,7 @@ class Option(XMLModel):
 
     tag = "option"
 
-    attributes = {
+    attributes = (
         "flag",
         "timestep",
         "impratio",
@@ -50,8 +50,8 @@ class Option(XMLModel):
         "sdf_iterations",
         "sdf_initpoints",
         "actuatorgroupdisable",
-    }
-    children_map = {"flag": "flag"}
+    )
+    children = ("flag",)
 
     timestep: Optional[float] = None
     """Simulation time step in seconds. This is the single most important parameter affecting the speed-accuracy trade-off which is inherent in every physics simulation. Smaller values result in better accuracy and stability. To achieve real-time performance, the time step must be larger than the CPU time per step (or 4 times larger when using the RK4 integrator). The CPU time is measured with internal timers. It should be monitored when adjusting the time step. MuJoCo can simulate most robotic systems a lot faster than real-time, however models with many floating objects (resulting in many contacts) are more demanding computationally. Keep in mind that stability is determined not only by the time step but also by the Solver parameters; in particular softer constraints can be simulated with larger time steps. When fine-tuning a challenging model, it is recommended to experiment with both settings jointly. In optimization-related applications, real-time is no longer good enough and instead it is desirable to run the simulation as fast as possible. In that case the time step should be made as large as possible."""

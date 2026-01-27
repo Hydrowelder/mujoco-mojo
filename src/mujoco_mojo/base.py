@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import ClassVar, Dict, Tuple
+from collections.abc import Sequence
+from typing import ClassVar
 from xml.etree.ElementTree import Element
 
 from pydantic import BaseModel
@@ -8,28 +9,29 @@ from pydantic import BaseModel
 __all__ = ["XMLModel"]
 
 
-def _tuple_string(v: Tuple[float, ...]) -> str:
+def _tuple_string(v: Sequence[float]) -> str:
     return " ".join(map(str, v))
 
 
 class XMLModel(BaseModel):
     tag: ClassVar[str]
-    attributes: ClassVar[set[str]] = set()
-    children_map: ClassVar[Dict[str, str]] = {}
+    attributes: ClassVar[tuple[str, ...]] = ()
+    children: ClassVar[tuple[str, ...]] = ()
 
     def to_xml(self) -> Element:
         el = Element(self.tag)
 
-        # attributes
-        for field in self.attributes:
+        # attributes (deterministic)
+        for field in tuple(self.attributes):
             value = getattr(self, field, None)
             if value is not None:
-                if isinstance(value, tuple):
+                if isinstance(value, (tuple, list)):
                     value = _tuple_string(value)
-                el.set(field, str(value))
 
-        # children
-        for field, tag_name in self.children_map.items():
+                el.set(field, value if isinstance(value, str) else str(value))
+
+        # children (deterministic)
+        for field in tuple(self.children):
             value = getattr(self, field, None)
 
             if value is None:

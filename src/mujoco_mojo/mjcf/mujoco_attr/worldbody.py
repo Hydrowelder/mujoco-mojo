@@ -12,7 +12,7 @@ __all__ = ["WorldBody"]
 class WorldBody(XMLModel):
     tag = "worldbody"
 
-    children_map = {"bodies": "body", "geoms": "geom"}
+    children = ("bodies", "geoms")
 
     bodies: List[Body] = []
     geoms: List[Geom] = []
