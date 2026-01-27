@@ -38,6 +38,8 @@ class XMLModel(BaseModel):
         for field in tuple(self.attributes):
             value = getattr(self, field, None)
             if value is not None:
+                if field == "class_":
+                    field = "class"
                 el.set(field, _format_value(value))
 
         # children (deterministic)
@@ -54,3 +56,7 @@ class XMLModel(BaseModel):
                 el.append(value.to_xml())
 
         return el
+
+
+class BuiltIn(BaseModel):
+    pass

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from pydantic import Field
+
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.geom import Geom
 
@@ -16,5 +18,5 @@ class Body(XMLModel):
 
     name: Optional[str] = None
     pos: Optional[str] = None
-    geoms: List[Geom] = []
-    bodies: List[Body] = []
+    geoms: List[Geom] = Field(default_factory=list)
+    bodies: List[Body] = Field(default_factory=list)
