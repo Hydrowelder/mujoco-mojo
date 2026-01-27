@@ -14,6 +14,28 @@ class Compiler(XMLModel):
 
     tag = "compiler"
 
+    attributes = {
+        "autolimits",
+        "boundmass",
+        "boundinertia",
+        "settotalmass",
+        "balanceinertia",
+        "strippath",
+        "coordinate",
+        "angle",
+        "fitaabb",
+        "eulerseq",
+        "meshdir",
+        "texturedir",
+        "discardvisual",
+        "usethread",
+        "fusestatic",
+        "inertiafromgeom",
+        "inertiagrouprange",
+        "saveinertial",
+        "assetdir",
+        "alignfree",
+    }
     children_map = {"lengthrange": "lengthrange"}
 
     autolimits: Optional[bool] = None
