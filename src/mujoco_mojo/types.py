@@ -7,6 +7,16 @@ from pydantic import Field
 
 __all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
 
+ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
+
+GeomGroup = Annotated[int, Field(ge=0, le=30)]
+InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
+
+Vec2 = Tuple[float, float]
+Vec3 = Tuple[float, float, float]
+Vec4 = Tuple[float, float, float, float]
+Vec5 = Tuple[float, float, float, float, float]
+
 
 class GeomType(StrEnum):
     PLANE = auto()
@@ -65,12 +75,8 @@ class InertiaFromGeom(StrEnum):
     AUTO = auto()
 
 
-ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
-
-GeomGroup = Annotated[int, Field(ge=0, le=30)]
-InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
-
-Vec2 = Tuple[float, float]
-Vec3 = Tuple[float, float, float]
-Vec4 = Tuple[float, float, float, float]
-Vec5 = Tuple[float, float, float, float, float]
+class Mode(StrEnum):
+    NONE = auto()
+    MUSCLE = auto()
+    MUSCLEUSER = auto()
+    ALL = auto()

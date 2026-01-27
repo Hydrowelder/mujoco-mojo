@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import List, Optional
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
+from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.worldbody import WorldBody
 
 __all__ = ["Mujoco"]
@@ -39,8 +41,8 @@ class Mujoco(XMLModel):
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
     options: List[Option] = []
-    compilers: List = []
-    sizes: List = []
+    compilers: List[Compiler] = []
+    sizes: List[Size] = []
     statistics: List = []
     assets: List = []
     worldbody: Optional[WorldBody] = None
