@@ -13,7 +13,7 @@ class Mujoco(XMLModel):
     tag = "mujoco"
 
     attributes = {"model"}
-    children_map = {"worldbody": "worldbody"}
+    children_map = {"worldbody": "worldbody", "options": "options"}
 
     model: str = "MuJoCo Model"
     options: List[Option] = []
