@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mujoco-mojo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastparquet>=2025.12.0",
+    "matplotlib>=3.10.8",
+    "mujoco>=3.4.0",
+    "numpy>=2.4.1",
+    "pandas>=3.0.0",
+    "pybind11-stubgen>=2.5.5",
+]
+
+[dependency-groups]
+dev = ["pyright[nodejs]>=1.1.408", "ruff>=0.14.14"]
+
+[tool.ruff]
+exclude = ["typings"]
+
+[tool.pyright]
+stubPath = "typings"
+venvPath = "."
+venv = ".venv"
+ignore = ["typings"]

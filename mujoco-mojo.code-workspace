@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../mujoco-testing"
+		},
+		{
+			"path": "../mujoco-xml-schema-mjcf"
+		}
+	],
+	"settings": {}
+}
