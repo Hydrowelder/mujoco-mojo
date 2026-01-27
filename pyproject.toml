@@ -15,13 +15,14 @@ dependencies = [
     "numpy>=2.4.1",
     "pandas>=3.0.0",
     "pybind11-stubgen>=2.5.5",
+    "pydantic>=2.12.5",
 ]
 
 [dependency-groups]
-dev = ["pyright[nodejs]>=1.1.408", "ruff>=0.14.14"]
+dev = ["pyright[nodejs]>=1.1.408", "pytest>=9.0.2", "ruff>=0.14.14"]
 
 [tool.ruff]
-exclude = ["typings"]
+exclude = ["typings", "**/__init__.py"]
 
 [tool.pyright]
 stubPath = "typings"
