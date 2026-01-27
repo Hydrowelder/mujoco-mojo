@@ -13,10 +13,23 @@ def _tuple_string(v: Sequence[float]) -> str:
     return " ".join(map(str, v))
 
 
+def _format_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+
+    if isinstance(value, (tuple, list)):
+        return _tuple_string(value)
+
+    return str(value)
+
+
 class XMLModel(BaseModel):
     tag: ClassVar[str]
+    """Tag name of the XML tag."""
     attributes: ClassVar[tuple[str, ...]] = ()
+    """Attributes of the XML tag."""
     children: ClassVar[tuple[str, ...]] = ()
+    """Children of the XML tag."""
 
     def to_xml(self) -> Element:
         el = Element(self.tag)
@@ -25,10 +38,7 @@ class XMLModel(BaseModel):
         for field in tuple(self.attributes):
             value = getattr(self, field, None)
             if value is not None:
-                if isinstance(value, (tuple, list)):
-                    value = _tuple_string(value)
-
-                el.set(field, value if isinstance(value, str) else str(value))
+                el.set(field, _format_value(value))
 
         # children (deterministic)
         for field in tuple(self.children):

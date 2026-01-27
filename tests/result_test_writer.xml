@@ -1,5 +1,6 @@
 <?xml version="1.0" ?>
 <mujoco model="hello">
+  <compiler balanceinertia="true"/>
   <worldbody>
     <body name="robot">
       <geom type="sphere" size="0.2" rgba="1.0 0.0 0.0 1.0"/>

@@ -22,7 +22,9 @@ robot = mojo.Body(
 
 world = mojo.WorldBody(geoms=[floor], bodies=[robot])
 
-model = mojo.Mujoco(worldbody=world, model="hello")
+model = mojo.Mujoco(
+    worldbody=world, model="hello", compilers=[mojo.Compiler(balanceinertia=True)]
+)
 
 xml = mojo.to_pretty_xml(model.to_xml())
 
