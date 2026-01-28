@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
+
+from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material_attr.layer import Layer
 from mujoco_mojo.types import Vec2, Vec4
 
 __all__ = ["Material"]
@@ -28,6 +31,8 @@ class Material(XMLModel):
         "rgba",
     )
 
+    children = ("layers",)
+
     name: str
     """Name of the material, used for referencing."""
     class_: Optional[str] = None
@@ -52,3 +57,5 @@ class Material(XMLModel):
     """This attribute corresponds to uniform roughness coefficient applied to the entire material. This attribute has no effect in MuJoCo's native renderer, but it can be useful when rendering scenes with a physically-based renderer. In this case, if a non-negative value is specified, this roughness value should be multiplied by the roughness texture sampled value to obtain the final roughness of the material."""
     rgba: Optional[Vec4] = None
     """Color and transparency of the material. All components should be in the range [0 1]. Note that the texture color (if assigned) and the color specified here are multiplied component-wise. Thus the default value of "1 1 1 1" has the effect of leaving the texture unchanged. When the material is applied to a model element which defines its own local rgba attribute, the local definition has precedence. Note that this "local" definition could in fact come from a defaults class. The remaining material properties always apply."""
+
+    layers: List[Layer] = Field(default_factory=list)
