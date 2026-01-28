@@ -1,6 +1,10 @@
 site_name: MuJoCo Mojo
 site_url: https://hydrowelder.github.io/mujoco-mojo/
 copyright: Copyright &copy; 2026 <a href="https://www.david-gable.com">David Gable</a>
+repo_url: https://github.com/Hydrowelder/mujoco-mojo
+repo_name: mujoco-mojo
+remote_branch: gh-pages
+remote_name: origin
 
 watch:
   - docs
