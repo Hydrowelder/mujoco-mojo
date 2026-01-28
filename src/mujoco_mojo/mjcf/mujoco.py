@@ -5,10 +5,10 @@ from typing import List, Optional
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
-from mujoco_mojo.mjcf.mujoco_attr.worldbody import WorldBody
 
 __all__ = ["Mujoco"]
 
