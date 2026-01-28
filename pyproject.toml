@@ -20,7 +20,18 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pyright[nodejs]>=1.1.408", "pytest>=9.0.2", "ruff>=0.14.14"]
+dev = [
+    "mkdocs>=1.6.1",
+    "mkdocs-gen-files>=0.6.0",
+    "mkdocs-glightbox>=0.5.2",
+    "mkdocs-literate-nav>=0.6.2",
+    "mkdocs-material>=9.7.1",
+    "mkdocs-section-index>=0.3.10",
+    "mkdocstrings[python]>=1.0.2",
+    "pyright[nodejs]>=1.1.408",
+    "pytest>=9.0.2",
+    "ruff>=0.14.14",
+]
 
 [tool.ruff]
 exclude = ["typings", "**/__init__.py"]
