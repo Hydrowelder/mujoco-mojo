@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import ClassVar, Optional, Tuple
 
 from pydantic import field_validator
@@ -50,7 +51,7 @@ class Mesh(XMLModel):
     """Defaults class for setting unspecified attributes (only scale in this case)."""
     content_type: Optional[str] = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME type) of the file to be loaded. Any filename extensions will be overloaded. Currently model/vnd.mujoco.msh, model/obj, and model/stl are supported."""
-    file: Optional[str] = None
+    file: Optional[Path] = None
     """The file from which the mesh will be loaded. The path is determined as described in the meshdir attribute of compiler. The file extension must be "stl", "msh", or "obj" (not case sensitive) specifying the file type. If the file name is omitted, the vertex attribute becomes required."""
     scale: Optional[Vec3] = None
     """This attribute specifies the scaling that will be applied to the vertex data along each coordinate axis. Negative values are allowed, resulting in flipping the mesh along the corresponding axis."""
