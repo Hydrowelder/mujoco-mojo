@@ -7,4 +7,3 @@ from mujoco_mojo.mjcf.mujoco_attr.geom import *
 from mujoco_mojo.mjcf.mujoco_attr.option import *
 from mujoco_mojo.mjcf.mujoco_attr.size import *
 from mujoco_mojo.mjcf.mujoco_attr.statistic import *
-from mujoco_mojo.mjcf.mujoco_attr.worldbody import *

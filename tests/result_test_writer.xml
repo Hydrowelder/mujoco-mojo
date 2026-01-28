@@ -2,9 +2,9 @@
 <mujoco model="hello">
   <compiler balanceinertia="true"/>
   <worldbody>
+    <geom name="floor" type="plane" size="5.0 5.0 0.1" rgba="0.5 0.5 0.5 1.0"/>
     <body name="robot">
       <geom type="sphere" size="0.2" rgba="1 0 0 1"/>
     </body>
-    <geom name="floor" type="plane" size="5.0 5.0 0.1" rgba="0.5 0.5 0.5 1.0"/>
   </worldbody>
 </mujoco>
