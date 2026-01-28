@@ -27,13 +27,13 @@ class Geom(XMLModel):
         if self.rgba is not None:
             # Safe runtime check
             if not isinstance(self.rgba, np.ndarray):
-                self.rgba = np.array(self.rgba)
+                self.rgba = np.asarray(self.rgba)
             if self.rgba.shape != (4,):
                 raise ValueError("geom.rgba must have shape (4,)")
 
         if self.pos is not None:
             if not isinstance(self.pos, np.ndarray):
-                self.pos = np.array(self.pos)
+                self.pos = np.asarray(self.pos)
             if self.pos.shape != (3,):
                 raise ValueError("geom.pos must have shape (3,)")
 
