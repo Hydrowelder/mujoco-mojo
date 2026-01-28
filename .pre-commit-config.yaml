@@ -1,8 +1,14 @@
 repos:
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.408
+  - repo: local
     hooks:
-      - id: pyright
+      - id: fix-smart-quotes
+        name: Replace smart quotes
+        entry: python scripts/fix_smart_quotes.py
+        language: python
+        files: ^src/
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.14.14
@@ -22,13 +28,7 @@ repos:
     rev: 0.9.27
     hooks:
       - id: uv-export
-  - repo: local
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.408
     hooks:
-      - id: fix-smart-quotes
-        name: Replace smart quotes
-        entry: python scripts/fix_smart_quotes.py
-        language: python
-        files: ^src/
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
+      - id: pyright
