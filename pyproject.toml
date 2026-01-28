@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "mujoco>=3.4.0",
     "numpy>=2.4.1",
+    "numpydantic>=1.7.0",
     "pandas>=3.0.0",
     "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",

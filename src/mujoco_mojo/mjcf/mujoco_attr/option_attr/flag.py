@@ -20,7 +20,7 @@ class Flag(XMLModel):
         "limit",
         "contact",
         "spring",
-        "damper",
+        "damping",
         "gravity",
         "clampctrl",
         "warmstart",

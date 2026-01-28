@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Set
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import Flag
 from mujoco_mojo.types import (
     ActuatorGroup,
     Cone,
@@ -22,7 +23,6 @@ class Option(XMLModel):
     tag = "option"
 
     attributes = (
-        "flag",
         "timestep",
         "impratio",
         "tolerance",
@@ -107,3 +107,5 @@ class Option(XMLModel):
     """Number of starting points used for finding contacts with Signed Distance Field collisions."""
     actuatorgroupdisable: Optional[Set[ActuatorGroup]] = None
     """List of actuator groups to disable. Actuators whose group is in this list will produce no force. If they are stateful, their activation states will not be integrated. Internally this list is implemented as an integer bitfield, so values must be in the range 0 <= group <= 30. If not set, all actuator groups are enabled. See example model and associated screen-capture on the right."""
+
+    flag: Optional[Flag] = None

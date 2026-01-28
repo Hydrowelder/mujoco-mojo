@@ -421,6 +421,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "mujoco" },
     { name = "numpy" },
+    { name = "numpydantic" },
     { name = "pandas" },
     { name = "pybind11-stubgen" },
     { name = "pydantic" },
@@ -439,6 +440,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "mujoco", specifier = ">=3.4.0" },
     { name = "numpy", specifier = ">=2.4.1" },
+    { name = "numpydantic", specifier = ">=1.7.0" },
     { name = "pandas", specifier = ">=3.0.0" },
     { name = "pybind11-stubgen", specifier = ">=2.5.5" },
     { name = "pydantic", specifier = ">=2.12.5" },
@@ -524,6 +526,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/23/12/8b5fc6b9c487a09a7957188e0943c9ff08432c65e34567cabc1623b03a51/numpy-2.4.1-cp314-cp314t-win32.whl", hash = "sha256:5de60946f14ebe15e713a6f22850c2372fa72f4ff9a432ab44aa90edcadaa65a", size = 6152482, upload-time = "2026-01-10T06:44:36.798Z" },
     { url = "https://files.pythonhosted.org/packages/00/a5/9f8ca5856b8940492fc24fbe13c1bc34d65ddf4079097cf9e53164d094e1/numpy-2.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:8f085da926c0d491ffff3096f91078cc97ea67e7e6b65e490bc8dcda65663be2", size = 12627117, upload-time = "2026-01-10T06:44:38.828Z" },
     { url = "https://files.pythonhosted.org/packages/ad/0d/eca3d962f9eef265f01a8e0d20085c6dd1f443cbffc11b6dede81fd82356/numpy-2.4.1-cp314-cp314t-win_arm64.whl", hash = "sha256:6436cffb4f2bf26c974344439439c95e152c9a527013f26b3577be6c2ca64295", size = 10667121, upload-time = "2026-01-10T06:44:41.644Z" },
+]
+
+[[package]]
+name = "numpydantic"
+version = "1.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/59/ba/6bf5e0a7cc3fbfbb02a7824926cad73c58df374322eb7728b378023a76dc/numpydantic-1.7.0.tar.gz", hash = "sha256:268285bee026d9dfdf23efeee13f60c3b75d47de2ffdf2e58b4f0c17a6824e3b", size = 80412, upload-time = "2025-10-11T05:23:56.654Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/e0/42f0ea229a8b5ada24a1eae4f5522b80ab65b4083f5cea4c7372bc894af3/numpydantic-1.7.0-py3-none-any.whl", hash = "sha256:81314ed00423efa954a711a48003dba5382156e899f677f405ce043f5296b090", size = 86734, upload-time = "2025-10-11T05:23:55.003Z" },
 ]
 
 [[package]]
