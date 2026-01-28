@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
+import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import XMLModel
@@ -22,12 +23,19 @@ class Geom(XMLModel):
     pos: Optional[Vec3] = None
 
     @model_validator(mode="after")
-    def validate_vectors(self) -> "Geom":
-        if self.rgba is not None and len(self.rgba) != 4:
-            raise ValueError("geom.rgba must be length 4")
+    def validate_vectors(self) -> Geom:
+        if self.rgba is not None:
+            # Safe runtime check
+            if not isinstance(self.rgba, np.ndarray):
+                self.rgba = np.array(self.rgba)
+            if self.rgba.shape != (4,):
+                raise ValueError("geom.rgba must have shape (4,)")
 
-        if self.pos is not None and len(self.pos) != 3:
-            raise ValueError("geom.pos must be length 3")
+        if self.pos is not None:
+            if not isinstance(self.pos, np.ndarray):
+                self.pos = np.array(self.pos)
+            if self.pos.shape != (3,):
+                raise ValueError("geom.pos must have shape (3,)")
 
         if self.size is not None:
             expected = {

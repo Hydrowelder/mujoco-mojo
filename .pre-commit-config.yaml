@@ -22,3 +22,13 @@ repos:
     rev: 0.9.27
     hooks:
       - id: uv-export
+  - repo: local
+    hooks:
+      - id: fix-smart-quotes
+        name: Replace smart quotes
+        entry: python scripts/fix_smart_quotes.py
+        language: python
+        files: ^src/
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
