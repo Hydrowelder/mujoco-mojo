@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -48,7 +49,7 @@ class HField(XMLModel):
     """Name of the height field, used for referencing. If the name is omitted and a file name is specified, the height field name equals the file name without the path and extension."""
     content_type: Optional[str] = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME types) of the file to be loaded. Any filename extensions will be overloaded. Currently image/png and image/vnd.mujoco.hfield are supported."""
-    file: Optional[str] = None
+    file: Optional[Path] = None
     """If this attribute is specified, the elevation data is loaded from the given file. If the file extension is ".png", not case-sensitive, the file is treated as a PNG file. Otherwise it is treated as a binary file in the above custom format. The number of rows and columns in the data are determined from the file contents. Loading data from a file and setting nrow or ncol below to non-zero values results is compile error, even if these settings are consistent with the file contents."""
     nrow: Optional[int] = None
     """This attribute and the next are used to allocate a height field in mjModel. If the elevation attribute is not set, the elevation data is set to 0. This attribute specifies the number of rows in the elevation data matrix. The default value of 0 means that the data will be loaded from a file, which will be used to infer the size of the matrix."""
