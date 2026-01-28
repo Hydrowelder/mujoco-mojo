@@ -10,7 +10,7 @@ __all__ = ["Asset"]
 
 
 class Asset(XMLModel):
-    """This is a grouping element for defining assets. It does not have attributes. Assets are created in the model so that they can be referenced from other model elements; recall the discussion of Assets in the Overview chapter. Assets opened from a file can be identified in two different ways: filename extensions or the content_type attribute. MuJoCo will attempt to open a file specified by the content type provided, and only defaults to the filename extension if no content_type attribute is specified. The content type is ignored if the asset isn’t loaded from a file."""
+    """This is a grouping element for defining assets. It does not have attributes. Assets are created in the model so that they can be referenced from other model elements; recall the discussion of Assets in the Overview chapter. Assets opened from a file can be identified in two different ways: filename extensions or the content_type attribute. MuJoCo will attempt to open a file specified by the content type provided, and only defaults to the filename extension if no content_type attribute is specified. The content type is ignored if the asset isn't loaded from a file."""
 
     tag = "asset"
 

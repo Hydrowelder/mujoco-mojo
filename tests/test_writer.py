@@ -1,12 +1,14 @@
 from pathlib import Path
 
+import numpy as np
+
 import mujoco_mojo as mojo
 
 floor = mojo.Geom(
     name="floor",
     type=mojo.GeomType.PLANE,
     size=(5, 5, 0.1),
-    rgba=(0.5, 0.5, 0.5, 1),
+    rgba=np.array((0.5, 0.5, 0.5, 1)),
 )
 
 robot = mojo.Body(
@@ -15,7 +17,7 @@ robot = mojo.Body(
         mojo.Geom(
             type=mojo.GeomType.SPHERE,
             size=0.2,
-            rgba=(1, 0, 0, 1),
+            rgba=np.array((1, 0, 0, 1)),
         ),
     ],
 )

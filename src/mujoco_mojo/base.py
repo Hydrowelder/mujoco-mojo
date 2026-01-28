@@ -4,20 +4,31 @@ from collections.abc import Sequence
 from typing import ClassVar
 from xml.etree.ElementTree import Element
 
+import numpy as np
 from pydantic import BaseModel
 
 __all__ = ["XMLModel"]
 
 
-def _tuple_string(v: Sequence[float]) -> str:
+def _tuple_string(v) -> str:
+    """
+    Convert a sequence or array of numbers into a space-separated string.
+    Works with list, tuple, or NumPy ndarray.
+    """
     return " ".join(map(str, v))
 
 
 def _format_value(value) -> str:
+    """
+    Convert a Python value into a string suitable for XML attributes.
+    - Booleans become "true"/"false"
+    - Sequences (list, tuple, np.ndarray) become space-separated strings
+    - Everything else is cast to str
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
 
-    if isinstance(value, (tuple, list)):
+    if isinstance(value, (Sequence, np.ndarray)) and not isinstance(value, str):
         return _tuple_string(value)
 
     return str(value)

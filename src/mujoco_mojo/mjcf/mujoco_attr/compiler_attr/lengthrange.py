@@ -9,7 +9,7 @@ __all__ = ["LengthRange"]
 
 
 class LengthRange(XMLModel):
-    """This element controls the computation of actuator length ranges. For an overview of this functionality see Length range section. Note that if this element is omitted the defaults shown below still apply. In order to disable length range computations altogether, include this element and set mode=”none”."""
+    """This element controls the computation of actuator length ranges. For an overview of this functionality see Length range section. Note that if this element is omitted the defaults shown below still apply. In order to disable length range computations altogether, include this element and set mode="none"."""
 
     attributes = (
         "mode",
@@ -25,11 +25,11 @@ class LengthRange(XMLModel):
     )
 
     mode: Optional[Mode] = None
-    """Determines the type of actuators to which length range computation is applied. “none” disables this functionality. “all” applies it to all actuators. “muscle” applies it to actuators whose gaintype or biastype is set to “muscle”. “muscleuser” applies it to actuators whose gaintype or biastype is set to either “muscle” or “user”. The default is “muscle” because MuJoCo’s muscle model requires actuator length ranges to be defined."""
+    """Determines the type of actuators to which length range computation is applied. "none" disables this functionality. "all" applies it to all actuators. "muscle" applies it to actuators whose gaintype or biastype is set to "muscle". "muscleuser" applies it to actuators whose gaintype or biastype is set to either "muscle" or "user". The default is "muscle" because MuJoCo's muscle model requires actuator length ranges to be defined."""
     useexisting: Optional[bool] = None
-    """If this attribute is “true” and the length range for a given actuator is already defined in the model, the existing value will be used and the automatic computation will be skipped. The range is considered defined if the first number is smaller than the second number. The only reason to set this attribute to “false” is to force re-computation of actuator length ranges - which is needed when the model geometry is modified. Note that the automatic computation relies on simulation and can be slow, so saving the model and using the existing values when possible is recommended."""
+    """If this attribute is "true" and the length range for a given actuator is already defined in the model, the existing value will be used and the automatic computation will be skipped. The range is considered defined if the first number is smaller than the second number. The only reason to set this attribute to "false" is to force re-computation of actuator length ranges - which is needed when the model geometry is modified. Note that the automatic computation relies on simulation and can be slow, so saving the model and using the existing values when possible is recommended."""
     uselimit: Optional[bool] = None
-    """If this attribute is “true” and the actuator is attached to a joint or a tendon which has limits defined, these limits will be copied into the actuator length range and the automatic computation will be skipped. This may seem like a good idea but note that in complex models the feasible range of tendon actuators depends on the entire model, and may be smaller than the user-defined limits for that tendon. So the safer approach is to set this to “false”, and let the automatic computation discover the feasible range."""
+    """If this attribute is "true" and the actuator is attached to a joint or a tendon which has limits defined, these limits will be copied into the actuator length range and the automatic computation will be skipped. This may seem like a good idea but note that in complex models the feasible range of tendon actuators depends on the entire model, and may be smaller than the user-defined limits for that tendon. So the safer approach is to set this to "false", and let the automatic computation discover the feasible range."""
     accel: Optional[float] = None
     """This attribute scales the forces applied to the simulation in order to push each actuator to its smallest and largest length. The force magnitude is computed so that the resulting joint-space acceleration vector has norm equal to this attribute."""
     maxforce: Optional[float] = None
