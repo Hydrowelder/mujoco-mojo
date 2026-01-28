@@ -88,3 +88,29 @@ class Inertia(StrEnum):
     EXACT = auto()
     LEGACY = auto()
     SHELL = auto()
+
+
+class Type(StrEnum):
+    D2 = "2d"
+    CUBE = "cube"
+    SKYBOX = "skybox"
+
+
+class ColorSpace(StrEnum):
+    AUTO = auto()
+    LINEAR = auto()
+    SRGB = auto()
+
+
+class Mark(StrEnum):
+    NONE = auto()
+    EDGE = auto()
+    CROSS = auto()
+    RANDOM = auto()
+
+
+class TextureBuiltIn(StrEnum):
+    NONE = auto()
+    GRADIENT = auto()
+    CHECKER = auto()
+    FLAT = auto()
