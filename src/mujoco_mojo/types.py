@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from typing import Annotated, Tuple
+from typing import Annotated, Tuple, TypeAlias
 
+from numpydantic import NDArray, Shape
 from pydantic import Field
 
 __all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
@@ -12,10 +13,10 @@ ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 GeomGroup = Annotated[int, Field(ge=0, le=30)]
 InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
 
-Vec2 = Tuple[float, float]
-Vec3 = Tuple[float, float, float]
-Vec4 = Tuple[float, float, float, float]
-Vec5 = Tuple[float, float, float, float, float]
+Vec2: TypeAlias = NDArray[Shape["2"], float | int]  # type: ignore
+Vec3: TypeAlias = NDArray[Shape["3"], float | int]  # type: ignore
+Vec4: TypeAlias = NDArray[Shape["4"], float | int]  # type: ignore
+Vec5: TypeAlias = NDArray[Shape["5"], float | int]  # type: ignore
 
 
 class GeomType(StrEnum):

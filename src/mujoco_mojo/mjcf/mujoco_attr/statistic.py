@@ -31,3 +31,10 @@ class Statistic(XMLModel):
     """If this attribute is specified, it replaces the value of mjModel.stat.extent computed by the compiler. The computed value is half the side of the bounding box of the model in the initial configuration. At runtime this value is multiplied by some of the attributes of the map element above. When the model is first loaded, the free camera’s initial distance from the center (see below) is 1.5 times the extent. Must be strictly positive."""
     center: Optional[Vec3] = None
     """If this attribute is specified, it replaces the value of mjModel.stat.center computed by the compiler. The computed value is the center of the bounding box of the entire model in the initial configuration. This 3D vector is used to center the view of the free camera when the model is first loaded."""
+
+
+if __name__ == "__main__":
+    import numpy as np
+
+    x = Statistic(center=np.array([1.0, 2, 3]))
+    breakpoint()
