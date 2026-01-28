@@ -1,131 +1,127 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://mydomain.org/mysite/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/SUMMARY/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/SUMMARY/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/base/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/base/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/types/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/types/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/utils/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/utils/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/writer/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/writer/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/body/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/compiler/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/geom/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/geom/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/option/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/size/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/size/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/statistic/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/statistic/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/worldbody/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/hfield/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/hfield/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/model/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/model/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/texture/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/texture/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/layer/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/layer/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh_attr/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh_attr/plugin/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh_attr/plugin/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/lengthrange/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/lengthrange/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
     <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/</loc>
-         <lastmod>2026-01-28</lastmod>
-    </url>
-    <url>
-         <loc>https://mydomain.org/mysite/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/flag/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/flag/</loc>
          <lastmod>2026-01-28</lastmod>
     </url>
 </urlset>

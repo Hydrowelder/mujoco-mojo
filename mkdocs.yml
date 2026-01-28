@@ -1,5 +1,5 @@
 site_name: MuJoCo Mojo
-site_url: https://mydomain.org/mysite
+site_url: https://hydrowelder.github.io/mujoco-mojo/
 copyright: Copyright &copy; 2026 <a href="https://www.david-gable.com">David Gable</a>
 
 watch:
@@ -76,6 +76,7 @@ markdown_extensions:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
+      auto_title: true
   - pymdownx.inlinehilite
   - pymdownx.details
   - pymdownx.snippets
