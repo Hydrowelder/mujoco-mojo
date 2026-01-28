@@ -4,6 +4,13 @@ import numpy as np
 
 import mujoco_mojo as mojo
 
+
+def test_import():
+    import mujoco_mojo as mojo
+
+    mojo.__name__
+
+
 floor = mojo.Geom(
     name="floor",
     type=mojo.GeomType.PLANE,
