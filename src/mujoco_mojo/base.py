@@ -35,6 +35,8 @@ def _format_value(value) -> str:
 
 
 class XMLModel(BaseModel):
+    """Base class for most MuJoCo Mojo MJCF objects."""
+
     tag: ClassVar[str]
     """Tag name of the XML tag."""
     attributes: ClassVar[tuple[str, ...]] = ()
@@ -105,13 +107,14 @@ class XMLModel(BaseModel):
                 )
 
     @model_validator(mode="after")
-    def enforce_exclusive_groups(cls, model):
-        for group in cls.__exclusive_groups__:
-            count = sum(getattr(model, field) is not None for field in group)
-
+    def enforce_exclusive_groups(self) -> XMLModel:
+        """
+        Ensures that only one attribute in each exclusive group is set.
+        """
+        for group in self.__exclusive_groups__:
+            count = sum(getattr(self, field) is not None for field in group)
             if count > 1:
                 raise ValueError(
-                    f"{cls.__name__}: Only one of {group} may be specified"
+                    f"{type(self).__name__}: Only one of {group} may be specified"
                 )
-
-        return model
+        return self
