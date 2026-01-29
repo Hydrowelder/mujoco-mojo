@@ -38,12 +38,21 @@ theme:
   features:
     - navigation.tabs
     - navigation.instant
+    - navigation.instant.preview
     - navigation.top
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs.sticky
+    - navigation.footer
+    - content.action.edit
+    - content.action.view
     - content.code.copy
     - content.code.select
     - content.code.annotate
     - content.tooltips
     - search.highlight
+    - search.suggest
+    - search.share
     - content.tabs.link
     - content.footnote.tooltips
 
@@ -61,9 +70,15 @@ plugins:
           options:
             docstring_style: google
             show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
             show_signature_annotations: true
             separate_signature: true
             inherited_members: true
+            extensions:
+              - pydantic: { schema: true }
+              # - griffe_pydantic:
+              #     schema: true
   - glightbox
 
 markdown_extensions:
