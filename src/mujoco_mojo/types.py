@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from typing import Annotated, Tuple, TypeAlias
+from typing import Annotated, Literal, Tuple, TypeAlias
 
 from numpydantic import NDArray, Shape
 from pydantic import Field
 
 __all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
 
-ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
+frame_orientations = ("quat", "axisangle", "xyaxes", "zaxis", "euler")
 
+ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 GeomGroup = Annotated[int, Field(ge=0, le=30)]
 InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
 
@@ -17,6 +18,10 @@ Vec2: TypeAlias = NDArray[Shape["2"], float | int]  # type: ignore
 Vec3: TypeAlias = NDArray[Shape["3"], float | int]  # type: ignore
 Vec4: TypeAlias = NDArray[Shape["4"], float | int]  # type: ignore
 Vec5: TypeAlias = NDArray[Shape["5"], float | int]  # type: ignore
+Vec6: TypeAlias = NDArray[Shape["6"], float | int]  # type: ignore
+VecN: TypeAlias = NDArray[Shape["..."], float | int]  # type: ignore
+
+Mat3: TypeAlias = NDArray[Tuple[Literal[3], Literal[3]]]  # type: ignore
 
 
 class GeomType(StrEnum):
@@ -114,3 +119,10 @@ class TextureBuiltIn(StrEnum):
     GRADIENT = auto()
     CHECKER = auto()
     FLAT = auto()
+
+
+class Sleep(StrEnum):
+    AUTO = auto()
+    NEVER = auto()
+    ALLOWED = auto()
+    INIT = auto()

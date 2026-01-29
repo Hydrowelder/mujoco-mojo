@@ -5,7 +5,7 @@ from typing import ClassVar
 from xml.etree.ElementTree import Element
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 __all__ = ["XMLModel"]
 
@@ -41,6 +41,8 @@ class XMLModel(BaseModel):
     """Attributes of the XML tag."""
     children: ClassVar[tuple[str, ...]] = ()
     """Children of the XML tag."""
+    __exclusive_groups__: tuple[tuple[str, ...], ...] = ()
+    """Attributes which if defined simultaneously will result in an error."""
 
     def to_xml(self) -> Element:
         el = Element(self.tag)
@@ -101,3 +103,15 @@ class XMLModel(BaseModel):
                     f"{cls.__name__}: child '{name}' is not defined "
                     f"as a field or class variable"
                 )
+
+    @model_validator(mode="after")
+    def enforce_exclusive_groups(cls, model):
+        for group in cls.__exclusive_groups__:
+            count = sum(getattr(model, field) is not None for field in group)
+
+            if count > 1:
+                raise ValueError(
+                    f"{cls.__name__}: Only one of {group} may be specified"
+                )
+
+        return model
