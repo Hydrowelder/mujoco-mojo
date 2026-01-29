@@ -5,31 +5,31 @@
       
       
       
-        <link rel="canonical" href="https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/statistic/">
+        <link rel="canonical" href="https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/free_joint/">
       
       
-        <link rel="prev" href="../size/">
+        <link rel="prev" href="../frame/">
       
       
-        <link rel="next" href="../../../types/">
+        <link rel="next" href="../geom/">
       
       
         
       
       
-      <link rel="icon" href="../../../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>statistic - MuJoCo Mojo</title>
+        <title>free_joint - MuJoCo Mojo</title>
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -48,15 +48,15 @@
       
     
     
-      <link rel="stylesheet" href="../../../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
     
     
-  <link href="../../../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../../../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+  <link href="../../../../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../../../../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
             html.glightbox-open { overflow: initial; height: 100%; }
             .gslide-title { margin-top: 0px; user-select: text; }
             .gslide-desc { color: #666; user-select: text; }
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic" class="md-skip">
+        <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +101,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../../../.." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
+    <a href="../../../../../.." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -121,7 +121,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              statistic
+              free_joint
             
           </span>
         </div>
@@ -233,7 +233,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../../.." class="md-tabs__link">
+      <a href="../../../../../.." class="md-tabs__link">
         
   
   
@@ -256,7 +256,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../../" class="md-tabs__link">
+        <a href="../../../../" class="md-tabs__link">
           
   
   
@@ -296,7 +296,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../../../.." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
+    <a href="../../../../../.." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -326,7 +326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../../.." class="md-nav__link">
+      <a href="../../../../../.." class="md-nav__link">
         
   
   
@@ -432,7 +432,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../" class="md-nav__link ">
+            <a href="../../../../" class="md-nav__link ">
               
   
   
@@ -474,7 +474,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../base/" class="md-nav__link">
+      <a href="../../../../base/" class="md-nav__link">
         
   
   
@@ -521,7 +521,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../" class="md-nav__link ">
+            <a href="../../../" class="md-nav__link ">
               
   
   
@@ -563,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../mujoco/" class="md-nav__link">
+      <a href="../../../mujoco/" class="md-nav__link">
         
   
   
@@ -610,7 +610,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../" class="md-nav__link ">
               
   
   
@@ -652,7 +652,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset/" class="md-nav__link">
+      <a href="../../asset/" class="md-nav__link">
         
   
   
@@ -697,7 +697,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../asset_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/" class="md-nav__link ">
               
   
   
@@ -739,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/hfield/" class="md-nav__link">
+      <a href="../../asset_attr/hfield/" class="md-nav__link">
         
   
   
@@ -767,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/material/" class="md-nav__link">
+      <a href="../../asset_attr/material/" class="md-nav__link">
         
   
   
@@ -812,7 +812,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../asset_attr/material_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/material_attr/" class="md-nav__link ">
               
   
   
@@ -854,7 +854,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/material_attr/layer/" class="md-nav__link">
+      <a href="../../asset_attr/material_attr/layer/" class="md-nav__link">
         
   
   
@@ -890,7 +890,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/mesh/" class="md-nav__link">
+      <a href="../../asset_attr/mesh/" class="md-nav__link">
         
   
   
@@ -935,7 +935,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../asset_attr/mesh_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/mesh_attr/" class="md-nav__link ">
               
   
   
@@ -977,7 +977,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/mesh_attr/plugin/" class="md-nav__link">
+      <a href="../../asset_attr/mesh_attr/plugin/" class="md-nav__link">
         
   
   
@@ -1013,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/model/" class="md-nav__link">
+      <a href="../../asset_attr/model/" class="md-nav__link">
         
   
   
@@ -1041,7 +1041,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../asset_attr/texture/" class="md-nav__link">
+      <a href="../../asset_attr/texture/" class="md-nav__link">
         
   
   
@@ -1077,7 +1077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body/" class="md-nav__link">
+      <a href="../../body/" class="md-nav__link">
         
   
   
@@ -1102,8 +1102,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -1114,15 +1116,15 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2_4">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../body_attr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1146,7 +1148,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_2_1_2_2_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_2_1_2_2_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1_2_2_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1164,7 +1166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/attach/" class="md-nav__link">
+      <a href="../attach/" class="md-nav__link">
         
   
   
@@ -1192,7 +1194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/camera/" class="md-nav__link">
+      <a href="../camera/" class="md-nav__link">
         
   
   
@@ -1220,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/composite/" class="md-nav__link">
+      <a href="../composite/" class="md-nav__link">
         
   
   
@@ -1248,7 +1250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/flexcomp/" class="md-nav__link">
+      <a href="../flexcomp/" class="md-nav__link">
         
   
   
@@ -1276,7 +1278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/frame/" class="md-nav__link">
+      <a href="../frame/" class="md-nav__link">
         
   
   
@@ -1301,10 +1303,35 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../body_attr/free_joint/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    free_joint
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1320,6 +1347,140 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;free_joint
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;FreeJoint
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&nbsp;FreeJoint">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__exclusive_groups__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;__exclusive_groups__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.align" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;align
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;attributes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.children" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;children
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.group" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;group
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;name
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__pydantic_init_subclass__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;__pydantic_init_subclass__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.enforce_exclusive_groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;enforce_exclusive_groups
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1332,7 +1493,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/geom/" class="md-nav__link">
+      <a href="../geom/" class="md-nav__link">
         
   
   
@@ -1360,7 +1521,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/inertial/" class="md-nav__link">
+      <a href="../inertial/" class="md-nav__link">
         
   
   
@@ -1388,7 +1549,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/joint/" class="md-nav__link">
+      <a href="../joint/" class="md-nav__link">
         
   
   
@@ -1416,7 +1577,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/light/" class="md-nav__link">
+      <a href="../light/" class="md-nav__link">
         
   
   
@@ -1444,7 +1605,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/plugin/" class="md-nav__link">
+      <a href="../plugin/" class="md-nav__link">
         
   
   
@@ -1472,7 +1633,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../body_attr/site/" class="md-nav__link">
+      <a href="../site/" class="md-nav__link">
         
   
   
@@ -1508,7 +1669,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../compiler/" class="md-nav__link">
+      <a href="../../compiler/" class="md-nav__link">
         
   
   
@@ -1553,7 +1714,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../compiler_attr/" class="md-nav__link ">
+            <a href="../../compiler_attr/" class="md-nav__link ">
               
   
   
@@ -1595,7 +1756,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../compiler_attr/lengthrange/" class="md-nav__link">
+      <a href="../../compiler_attr/lengthrange/" class="md-nav__link">
         
   
   
@@ -1631,7 +1792,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../option/" class="md-nav__link">
+      <a href="../../option/" class="md-nav__link">
         
   
   
@@ -1676,7 +1837,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../option_attr/" class="md-nav__link ">
+            <a href="../../option_attr/" class="md-nav__link ">
               
   
   
@@ -1718,7 +1879,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../option_attr/flag/" class="md-nav__link">
+      <a href="../../option_attr/flag/" class="md-nav__link">
         
   
   
@@ -1754,7 +1915,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../size/" class="md-nav__link">
+      <a href="../../size/" class="md-nav__link">
         
   
   
@@ -1779,35 +1940,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    statistic
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../statistic/" class="md-nav__link">
         
   
   
@@ -1823,151 +1959,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;statistic
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;Statistic
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="&nbsp;Statistic">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__exclusive_groups__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;__exclusive_groups__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.center" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;center
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.children" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;children
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.extent" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;extent
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meaninertia" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meaninertia
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meanmass" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meanmass
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meansize" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meansize
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__pydantic_init_subclass__" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;__pydantic_init_subclass__
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.enforce_exclusive_groups" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;enforce_exclusive_groups
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1996,7 +1987,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../types/" class="md-nav__link">
+      <a href="../../../../types/" class="md-nav__link">
         
   
   
@@ -2024,7 +2015,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../utils/" class="md-nav__link">
+      <a href="../../../../utils/" class="md-nav__link">
         
   
   
@@ -2052,7 +2043,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../writer/" class="md-nav__link">
+      <a href="../../../../writer/" class="md-nav__link">
         
   
   
@@ -2113,10 +2104,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;statistic
+        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;free_joint
       
     </span>
   </a>
@@ -2124,19 +2115,19 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;Statistic
+        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;FreeJoint
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="&nbsp;Statistic">
+    <nav class="md-nav" aria-label="&nbsp;FreeJoint">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__exclusive_groups__" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__exclusive_groups__" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;__exclusive_groups__
@@ -2147,10 +2138,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.center" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.align" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;center
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;align
       
     </span>
   </a>
@@ -2158,7 +2149,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.children" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;attributes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.children" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;children
@@ -2169,10 +2171,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.extent" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.group" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;extent
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;group
       
     </span>
   </a>
@@ -2180,10 +2182,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meaninertia" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.name" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meaninertia
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;name
       
     </span>
   </a>
@@ -2191,29 +2193,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meanmass" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meanmass
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meansize" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;meansize
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__pydantic_init_subclass__" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__pydantic_init_subclass__" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;__pydantic_init_subclass__
@@ -2224,7 +2204,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.enforce_exclusive_groups" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.enforce_exclusive_groups" class="md-nav__link">
     <span class="md-ellipsis">
       
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;enforce_exclusive_groups
@@ -2264,7 +2244,7 @@
   
   
     <li class="md-path__item">
-      <a href="../../../../.." class="md-path__link">
+      <a href="../../../../../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -2287,7 +2267,7 @@
     
     
       <li class="md-path__item">
-        <a href="../../../base/" class="md-path__link">
+        <a href="../../../../base/" class="md-path__link">
           
   <span class="md-ellipsis">
     Code Reference
@@ -2308,7 +2288,7 @@
     
     
       <li class="md-path__item">
-        <a href="../../../base/" class="md-path__link">
+        <a href="../../../../base/" class="md-path__link">
           
   <span class="md-ellipsis">
     mujoco_mojo
@@ -2326,7 +2306,7 @@
     
     
       <li class="md-path__item">
-        <a href="../../mujoco/" class="md-path__link">
+        <a href="../../../mujoco/" class="md-path__link">
           
   <span class="md-ellipsis">
     mjcf
@@ -2344,10 +2324,28 @@
     
     
       <li class="md-path__item">
-        <a href="../asset/" class="md-path__link">
+        <a href="../../asset/" class="md-path__link">
           
   <span class="md-ellipsis">
     mujoco_attr
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../attach/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    body_attr
   </span>
 
         </a>
@@ -2366,7 +2364,7 @@
 
 
   
-    <a href="https://github.com/Hydrowelder/mujoco-mojo/edit/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\statistic.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Hydrowelder/mujoco-mojo/edit/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\body_attr\free_joint.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"></path></svg>
     </a>
@@ -2375,20 +2373,20 @@
     
       
     
-    <a href="https://github.com/Hydrowelder/mujoco-mojo/raw/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\statistic.py" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/Hydrowelder/mujoco-mojo/raw/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\body_attr\free_joint.py" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"></path></svg>
     </a>
   
 
 
-  <h1>statistic</h1>
+  <h1>free_joint</h1>
 
 <div class="doc doc-object doc-module">
 
 
 
-<a id="mujoco_mojo.mjcf.mujoco_attr.statistic"></a>
+<a id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint"></a>
     <div class="doc doc-contents first">
 
 
@@ -2414,20 +2412,23 @@
 
 
 
-<h2 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">Statistic</span>
+<h2 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">FreeJoint</span>
 
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic" class="headerlink" title="Permanent link">¶</a></h2>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint" class="headerlink" title="Permanent link">¶</a></h2>
 
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" href="../../../base/#mujoco_mojo.base.XMLModel">XMLModel</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" href="../../../../base/#mujoco_mojo.base.XMLModel">XMLModel</a></code></p>
 
 
 
-        <p>This element is used to override model statistics computed by the compiler. These statistics are not only informational but are also used to scale various components of the rendering and perturbation. We provide an override mechanism in the XML because it is sometimes easier to adjust a small number of model statistics than a larger number of visual parameters.</p>
+        <p>This element creates a free joint whose only attributes are name and group. The freejoint element is an XML shortcut for</p>
+<div class="language-xml highlight"><span class="filename">XML</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">&lt;joint</span><span class="w"> </span><span class="na">type=</span><span class="s">"free"</span><span class="w"> </span><span class="na">stiffness=</span><span class="s">"0"</span><span class="w"> </span><span class="na">damping=</span><span class="s">"0"</span><span class="w"> </span><span class="na">frictionloss=</span><span class="s">"0"</span><span class="w"> </span><span class="na">armature=</span><span class="s">"0"</span><span class="nt">/&gt;</span>
+</span></code></pre></div>
+<p>While this joint can evidently be created with the joint element, default joint settings could affect it. This is usually undesirable as physical free bodies do not have nonzero stiffness, damping, friction or armature. To avoid this complication, the freejoint element was introduced, ensuring joint defaults are not inherited. If the XML model is saved, it will appear as a regular joint of type free.</p>
 
 
 
@@ -2437,7 +2438,7 @@
 
 
               <details class="mkdocstrings-source">
-                <summary>Source code in <code>src\mujoco_mojo\mjcf\mujoco_attr\statistic.py</code></summary>
+                <summary>Source code in <code>src\mujoco_mojo\mjcf\mujoco_attr\body_attr\free_joint.py</code></summary>
                 <div class="language-python highlight"><table class="highlighttable"><tbody><tr><th colspan="2" class="filename"><span class="filename">Python</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-11">11</a></span>
 <span class="normal"><a href="#__codelineno-0-12">12</a></span>
 <span class="normal"><a href="#__codelineno-0-13">13</a></span>
@@ -2459,30 +2460,28 @@
 <span class="normal"><a href="#__codelineno-0-29">29</a></span>
 <span class="normal"><a href="#__codelineno-0-30">30</a></span>
 <span class="normal"><a href="#__codelineno-0-31">31</a></span>
-<span class="normal"><a href="#__codelineno-0-32">32</a></span>
-<span class="normal"><a href="#__codelineno-0-33">33</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11"></a><span class="k">class</span><span class="w"> </span><span class="nc">Statistic</span><span class="p">(</span><span class="n">XMLModel</span><span class="p">):</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12"></a><span class="w">    </span><span class="sd">"""This element is used to override model statistics computed by the compiler. These statistics are not only informational but are also used to scale various components of the rendering and perturbation. We provide an override mechanism in the XML because it is sometimes easier to adjust a small number of model statistics than a larger number of visual parameters."""</span>
+<span class="normal"><a href="#__codelineno-0-32">32</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11"></a><span class="k">class</span><span class="w"> </span><span class="nc">FreeJoint</span><span class="p">(</span><span class="n">XMLModel</span><span class="p">):</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12"></a><span class="w">    </span><span class="sd">"""This element creates a free joint whose only attributes are name and group. The freejoint element is an XML shortcut for</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13"></a>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14"></a>    <span class="n">tag</span> <span class="o">=</span> <span class="s2">"statistic"</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a>    <span class="n">attributes</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17"></a>        <span class="s2">"meaninertia"</span><span class="p">,</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a>        <span class="s2">"meanmass"</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19"></a>        <span class="s2">"meansize"</span><span class="p">,</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a>        <span class="s2">"extent"</span><span class="p">,</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21"></a>        <span class="s2">"center"</span><span class="p">,</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22"></a>    <span class="p">)</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23"></a>
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24"></a>    <span class="n">meanmass</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25"></a><span class="w">    </span><span class="sd">"""If this attribute is specified, it replaces the value of mjModel.stat.meanmass computed by the compiler. The computed value is the average body mass, not counting the massless world body. At runtime this value scales the perturbation force."""</span>
-</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26"></a>    <span class="n">meaninertia</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27"></a><span class="w">    </span><span class="sd">"""If this attribute is specified, it replaces the value of mjModel.stat.meaninertia computed by the compiler. The computed value is the average diagonal element of the joint-space inertia matrix when the model is in qpos0. At runtime this value scales the solver cost and gradient used for early termination."""</span>
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28"></a>    <span class="n">meansize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29"></a><span class="w">    </span><span class="sd">"""If this attribute is specified, it replaces the value of mjModel.stat.meansize computed by the compiler. At runtime this value multiplies the attributes of the scale element above, and acts as their length unit. If specific lengths are desired, it can be convenient to set meansize to a round number like 1 or 0.01 so that scale values are in recognized length units. This is the only semantic of meansize and setting it has no other side-effect. The automatically computed value is heuristic, representing the average body radius. The heuristic is based on geom sizes when present, the distances between joints when present, and the sizes of the body equivalent inertia boxes."""</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30"></a>    <span class="n">extent</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="w">    </span><span class="sd">"""If this attribute is specified, it replaces the value of mjModel.stat.extent computed by the compiler. The computed value is half the side of the bounding box of the model in the initial configuration. At runtime this value is multiplied by some of the attributes of the map element above. When the model is first loaded, the free camera's initial distance from the center (see below) is 1.5 times the extent. Must be strictly positive."""</span>
-</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32"></a>    <span class="n">center</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Vec3</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33"></a><span class="w">    </span><span class="sd">"""If this attribute is specified, it replaces the value of mjModel.stat.center computed by the compiler. The computed value is the center of the bounding box of the entire model in the initial configuration. This 3D vector is used to center the view of the free camera when the model is first loaded."""</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14"></a><span class="sd">    ``` xml</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a><span class="sd">    &lt;joint type="free" stiffness="0" damping="0" frictionloss="0" armature="0"/&gt;</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a><span class="sd">    ```</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17"></a>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="sd">    While this joint can evidently be created with the joint element, default joint settings could affect it. This is usually undesirable as physical free bodies do not have nonzero stiffness, damping, friction or armature. To avoid this complication, the freejoint element was introduced, ensuring joint defaults are not inherited. If the XML model is saved, it will appear as a regular joint of type free."""</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19"></a>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a>    <span class="n">tag</span> <span class="o">=</span> <span class="s2">"joint"</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21"></a>    <span class="nb">type</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">JointType</span><span class="p">]</span> <span class="o">=</span> <span class="n">JointType</span><span class="o">.</span><span class="n">FREE</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22"></a>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23"></a>    <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24"></a><span class="w">    </span><span class="sd">"""Name of the joint."""</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25"></a>    <span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26"></a><span class="w">    </span><span class="sd">"""Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints."""</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27"></a>    <span class="n">align</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Align</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28"></a><span class="w">    </span><span class="sd">"""When set to true, the body frame and free joint will automatically be aligned with inertial frame. When set to false, no alignment will occur. When set to auto, the compiler's alignfree global attribute will be respected.</span>
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29"></a>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    Inertial frame alignment is an optimization only applies to bodies with a free joint and no child bodies ("simple free bodies"). The alignment diagonalizes the 6x6 inertia matrix and minimizes bias forces, leading to faster and more stable simulation. While this behaviour is a strict improvement, it modifies the semantics of the free joint, making qpos and qvel values saved in older versions (for example, in keyframes) invalid.</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a>
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32"></a><span class="sd">    Note that the align attribute is never saved to XML. Instead, the pose of simple free bodies and their children will be modified such that the body frame and inertial frame are aligned."""</span>
 </span></code></pre></div></td></tr></tbody></table></div>
               </details>
 
@@ -2500,7 +2499,7 @@
 
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__exclusive_groups__" class="doc doc-heading">
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__exclusive_groups__" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">__exclusive_groups__</span>
 
 
@@ -2509,7 +2508,7 @@
       <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__exclusive_groups__" class="headerlink" title="Permanent link">¶</a></h3>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__exclusive_groups__" class="headerlink" title="Permanent link">¶</a></h3>
 <div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">__exclusive_groups__</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
 </span></code></pre></div>
 
@@ -2525,8 +2524,8 @@
 
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.center" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">center</span>
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.align" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">align</span>
 
 
   <span class="doc doc-labels">
@@ -2534,13 +2533,15 @@
       <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.center" class="headerlink" title="Permanent link">¶</a></h3>
-<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">center</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Vec3</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.align" class="headerlink" title="Permanent link">¶</a></h3>
+<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">align</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Align</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>If this attribute is specified, it replaces the value of mjModel.stat.center computed by the compiler. The computed value is the center of the bounding box of the entire model in the initial configuration. This 3D vector is used to center the view of the free camera when the model is first loaded.</p>
+        <p>When set to true, the body frame and free joint will automatically be aligned with inertial frame. When set to false, no alignment will occur. When set to auto, the compiler's alignfree global attribute will be respected.</p>
+<p>Inertial frame alignment is an optimization only applies to bodies with a free joint and no child bodies ("simple free bodies"). The alignment diagonalizes the 6x6 inertia matrix and minimizes bias forces, leading to faster and more stable simulation. While this behaviour is a strict improvement, it modifies the semantics of the free joint, making qpos and qvel values saved in older versions (for example, in keyframes) invalid.</p>
+<p>Note that the align attribute is never saved to XML. Instead, the pose of simple free bodies and their children will be modified such that the body frame and inertial frame are aligned.</p>
 
     </div>
 
@@ -2550,7 +2551,31 @@
 
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.children" class="doc doc-heading">
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.attributes" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">attributes</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+  </span>
+
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.attributes" class="headerlink" title="Permanent link">¶</a></h3>
+<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">attributes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Attributes of the XML tag.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.children" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">children</span>
 
 
@@ -2558,7 +2583,7 @@
       <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.children" class="headerlink" title="Permanent link">¶</a></h3>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.children" class="headerlink" title="Permanent link">¶</a></h3>
 <div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">children</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
 </span></code></pre></div>
 
@@ -2574,8 +2599,8 @@
 
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.extent" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">extent</span>
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.group" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">group</span>
 
 
   <span class="doc doc-labels">
@@ -2583,13 +2608,13 @@
       <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.extent" class="headerlink" title="Permanent link">¶</a></h3>
-<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">extent</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.group" class="headerlink" title="Permanent link">¶</a></h3>
+<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">group</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>If this attribute is specified, it replaces the value of mjModel.stat.extent computed by the compiler. The computed value is half the side of the bounding box of the model in the initial configuration. At runtime this value is multiplied by some of the attributes of the map element above. When the model is first loaded, the free camera's initial distance from the center (see below) is 1.5 times the extent. Must be strictly positive.</p>
+        <p>Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints.</p>
 
     </div>
 
@@ -2599,8 +2624,8 @@
 
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meaninertia" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">meaninertia</span>
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.name" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">name</span>
 
 
   <span class="doc doc-labels">
@@ -2608,63 +2633,13 @@
       <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meaninertia" class="headerlink" title="Permanent link">¶</a></h3>
-<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">meaninertia</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.name" class="headerlink" title="Permanent link">¶</a></h3>
+<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>If this attribute is specified, it replaces the value of mjModel.stat.meaninertia computed by the compiler. The computed value is the average diagonal element of the joint-space inertia matrix when the model is in qpos0. At runtime this value scales the solver cost and gradient used for early termination.</p>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meanmass" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">meanmass</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meanmass" class="headerlink" title="Permanent link">¶</a></h3>
-<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">meanmass</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>If this attribute is specified, it replaces the value of mjModel.stat.meanmass computed by the compiler. The computed value is the average body mass, not counting the massless world body. At runtime this value scales the perturbation force.</p>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meansize" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">meansize</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.meansize" class="headerlink" title="Permanent link">¶</a></h3>
-<div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">meansize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>If this attribute is specified, it replaces the value of mjModel.stat.meansize computed by the compiler. At runtime this value multiplies the attributes of the scale element above, and acts as their length unit. If specific lengths are desired, it can be convenient to set meansize to a round number like 1 or 0.01 so that scale values are in recognized length units. This is the only semantic of meansize and setting it has no other side-effect. The automatically computed value is heuristic, representing the average body radius. The heuristic is based on geom sizes when present, the distances between joints when present, and the sizes of the body equivalent inertia boxes.</p>
+        <p>Name of the joint.</p>
 
     </div>
 
@@ -2676,7 +2651,7 @@
 <div class="doc doc-object doc-function">
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__pydantic_init_subclass__" class="doc doc-heading">
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__pydantic_init_subclass__" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">__pydantic_init_subclass__</span>
 
 
@@ -2684,7 +2659,7 @@
       <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
   </span>
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.__pydantic_init_subclass__" class="headerlink" title="Permanent link">¶</a></h3>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.__pydantic_init_subclass__" class="headerlink" title="Permanent link">¶</a></h3>
 <div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">__pydantic_init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div>
 
@@ -2768,11 +2743,11 @@
 <div class="doc doc-object doc-function">
 
 
-<h3 id="mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.enforce_exclusive_groups" class="doc doc-heading">
+<h3 id="mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.enforce_exclusive_groups" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">enforce_exclusive_groups</span>
 
 
-<a href="#mujoco_mojo.mjcf.mujoco_attr.statistic.Statistic.enforce_exclusive_groups" class="headerlink" title="Permanent link">¶</a></h3>
+<a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint.FreeJoint.enforce_exclusive_groups" class="headerlink" title="Permanent link">¶</a></h3>
 <div class="language-python doc-signature highlight"><span class="filename">Python</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">enforce_exclusive_groups</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">XMLModel</span>
 </span></code></pre></div>
 
@@ -2865,7 +2840,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer">
         
           
-          <a href="../size/" class="md-footer__link md-footer__link--prev" aria-label="Previous: size">
+          <a href="../frame/" class="md-footer__link md-footer__link--prev" aria-label="Previous: frame">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
@@ -2875,20 +2850,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                size
+                frame
               </div>
             </div>
           </a>
         
         
           
-          <a href="../../../types/" class="md-footer__link md-footer__link--next" aria-label="Next: types">
+          <a href="../geom/" class="md-footer__link md-footer__link--next" aria-label="Next: geom">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                types
+                geom
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2929,14 +2904,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../..", "features": ["navigation.tabs", "navigation.instant", "navigation.instant.preview", "navigation.top", "navigation.path", "navigation.sections", "navigation.tabs.sticky", "navigation.footer", "content.action.edit", "content.action.view", "content.code.copy", "content.code.select", "content.code.annotate", "content.tooltips", "search.highlight", "search.suggest", "search.share", "content.tabs.link", "content.footnote.tooltips"], "search": "../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../../..", "features": ["navigation.tabs", "navigation.instant", "navigation.instant.preview", "navigation.top", "navigation.path", "navigation.sections", "navigation.tabs.sticky", "navigation.footer", "content.action.edit", "content.action.view", "content.code.copy", "content.code.select", "content.code.annotate", "content.tooltips", "search.highlight", "search.suggest", "search.share", "content.tabs.link", "content.footnote.tooltips"], "search": "../../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js"></script>
       
-        <script src="../../../../../javascripts/tablesort.js"></script>
+        <script src="../../../../../../javascripts/tablesort.js"></script>
       
     
   

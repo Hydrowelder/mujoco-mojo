@@ -5,29 +5,31 @@
       
       
       
-        <link rel="canonical" href="https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/writer/">
+        <link rel="canonical" href="https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/geom/">
       
       
-        <link rel="prev" href="../utils/">
+        <link rel="prev" href="../free_joint/">
       
+      
+        <link rel="next" href="../inertial/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../../../../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>writer - MuJoCo Mojo</title>
+        <title>geom - MuJoCo Mojo</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -46,15 +48,15 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
     
     
-  <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+  <link href="../../../../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../../../../../../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
             html.glightbox-open { overflow: initial; height: 100%; }
             .gslide-title { margin-top: 0px; user-select: text; }
             .gslide-desc { color: #666; user-select: text; }
@@ -83,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mujoco_mojo.writer" class="md-skip">
+        <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.geom" class="md-skip">
           Skip to content
         </a>
       
@@ -99,7 +101,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
+    <a href="../../../../../.." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -119,7 +121,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              writer
+              geom
             
           </span>
         </div>
@@ -231,7 +233,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../.." class="md-tabs__link">
+      <a href="../../../../../.." class="md-tabs__link">
         
   
   
@@ -254,7 +256,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../../../" class="md-tabs__link">
           
   
   
@@ -294,7 +296,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
+    <a href="../../../../../.." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
@@ -324,7 +326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../../../../../.." class="md-nav__link">
         
   
   
@@ -430,7 +432,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../../../" class="md-nav__link ">
               
   
   
@@ -472,7 +474,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../base/" class="md-nav__link">
+      <a href="../../../../base/" class="md-nav__link">
         
   
   
@@ -497,8 +499,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -509,15 +513,15 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/" class="md-nav__link ">
+            <a href="../../../" class="md-nav__link ">
               
   
   
@@ -541,7 +545,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_1_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_1_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -559,7 +563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco/" class="md-nav__link">
+      <a href="../../../mujoco/" class="md-nav__link">
         
   
   
@@ -584,8 +588,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -596,15 +602,15 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/" class="md-nav__link ">
+            <a href="../../" class="md-nav__link ">
               
   
   
@@ -628,7 +634,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_1_2_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_1_2_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1_2_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -646,7 +652,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset/" class="md-nav__link">
+      <a href="../../asset/" class="md-nav__link">
         
   
   
@@ -691,7 +697,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/asset_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/" class="md-nav__link ">
               
   
   
@@ -733,7 +739,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/hfield/" class="md-nav__link">
+      <a href="../../asset_attr/hfield/" class="md-nav__link">
         
   
   
@@ -761,7 +767,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/material/" class="md-nav__link">
+      <a href="../../asset_attr/material/" class="md-nav__link">
         
   
   
@@ -806,7 +812,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/asset_attr/material_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/material_attr/" class="md-nav__link ">
               
   
   
@@ -848,7 +854,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/material_attr/layer/" class="md-nav__link">
+      <a href="../../asset_attr/material_attr/layer/" class="md-nav__link">
         
   
   
@@ -884,7 +890,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/mesh/" class="md-nav__link">
+      <a href="../../asset_attr/mesh/" class="md-nav__link">
         
   
   
@@ -929,7 +935,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/asset_attr/mesh_attr/" class="md-nav__link ">
+            <a href="../../asset_attr/mesh_attr/" class="md-nav__link ">
               
   
   
@@ -971,7 +977,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/mesh_attr/plugin/" class="md-nav__link">
+      <a href="../../asset_attr/mesh_attr/plugin/" class="md-nav__link">
         
   
   
@@ -1007,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/model/" class="md-nav__link">
+      <a href="../../asset_attr/model/" class="md-nav__link">
         
   
   
@@ -1035,7 +1041,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/asset_attr/texture/" class="md-nav__link">
+      <a href="../../asset_attr/texture/" class="md-nav__link">
         
   
   
@@ -1071,7 +1077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body/" class="md-nav__link">
+      <a href="../../body/" class="md-nav__link">
         
   
   
@@ -1096,8 +1102,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -1108,15 +1116,15 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2_4">
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1_2_2_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/body_attr/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1140,7 +1148,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_2_1_2_2_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="5" aria-labelledby="__nav_2_1_2_2_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1_2_2_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1158,7 +1166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/attach/" class="md-nav__link">
+      <a href="../attach/" class="md-nav__link">
         
   
   
@@ -1186,7 +1194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/camera/" class="md-nav__link">
+      <a href="../camera/" class="md-nav__link">
         
   
   
@@ -1214,7 +1222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/composite/" class="md-nav__link">
+      <a href="../composite/" class="md-nav__link">
         
   
   
@@ -1242,7 +1250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/flexcomp/" class="md-nav__link">
+      <a href="../flexcomp/" class="md-nav__link">
         
   
   
@@ -1270,7 +1278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/frame/" class="md-nav__link">
+      <a href="../frame/" class="md-nav__link">
         
   
   
@@ -1298,7 +1306,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/free_joint/" class="md-nav__link">
+      <a href="../free_joint/" class="md-nav__link">
         
   
   
@@ -1323,10 +1331,35 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/geom/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    geom
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1342,6 +1375,35 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.geom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;geom
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1354,7 +1416,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/inertial/" class="md-nav__link">
+      <a href="../inertial/" class="md-nav__link">
         
   
   
@@ -1382,7 +1444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/joint/" class="md-nav__link">
+      <a href="../joint/" class="md-nav__link">
         
   
   
@@ -1410,7 +1472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/light/" class="md-nav__link">
+      <a href="../light/" class="md-nav__link">
         
   
   
@@ -1438,7 +1500,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/plugin/" class="md-nav__link">
+      <a href="../plugin/" class="md-nav__link">
         
   
   
@@ -1466,7 +1528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/body_attr/site/" class="md-nav__link">
+      <a href="../site/" class="md-nav__link">
         
   
   
@@ -1502,7 +1564,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/compiler/" class="md-nav__link">
+      <a href="../../compiler/" class="md-nav__link">
         
   
   
@@ -1547,7 +1609,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/compiler_attr/" class="md-nav__link ">
+            <a href="../../compiler_attr/" class="md-nav__link ">
               
   
   
@@ -1589,7 +1651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/compiler_attr/lengthrange/" class="md-nav__link">
+      <a href="../../compiler_attr/lengthrange/" class="md-nav__link">
         
   
   
@@ -1625,7 +1687,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/option/" class="md-nav__link">
+      <a href="../../option/" class="md-nav__link">
         
   
   
@@ -1670,7 +1732,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../mjcf/mujoco_attr/option_attr/" class="md-nav__link ">
+            <a href="../../option_attr/" class="md-nav__link ">
               
   
   
@@ -1712,7 +1774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/option_attr/flag/" class="md-nav__link">
+      <a href="../../option_attr/flag/" class="md-nav__link">
         
   
   
@@ -1748,7 +1810,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/size/" class="md-nav__link">
+      <a href="../../size/" class="md-nav__link">
         
   
   
@@ -1776,7 +1838,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mjcf/mujoco_attr/statistic/" class="md-nav__link">
+      <a href="../../statistic/" class="md-nav__link">
         
   
   
@@ -1820,7 +1882,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../types/" class="md-nav__link">
+      <a href="../../../../types/" class="md-nav__link">
         
   
   
@@ -1848,7 +1910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/" class="md-nav__link">
+      <a href="../../../../utils/" class="md-nav__link">
         
   
   
@@ -1873,35 +1935,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    writer
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../../writer/" class="md-nav__link">
         
   
   
@@ -1917,35 +1954,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#mujoco_mojo.writer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;writer
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1991,10 +1999,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#mujoco_mojo.writer" class="md-nav__link">
+  <a href="#mujoco_mojo.mjcf.mujoco_attr.body_attr.geom" class="md-nav__link">
     <span class="md-ellipsis">
       
-        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;writer
+        <code class="doc-symbol doc-symbol-toc doc-symbol-module"></code>&nbsp;geom
       
     </span>
   </a>
@@ -2026,7 +2034,7 @@
   
   
     <li class="md-path__item">
-      <a href="../../.." class="md-path__link">
+      <a href="../../../../../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -2049,7 +2057,7 @@
     
     
       <li class="md-path__item">
-        <a href="../base/" class="md-path__link">
+        <a href="../../../../base/" class="md-path__link">
           
   <span class="md-ellipsis">
     Code Reference
@@ -2070,10 +2078,64 @@
     
     
       <li class="md-path__item">
-        <a href="../base/" class="md-path__link">
+        <a href="../../../../base/" class="md-path__link">
           
   <span class="md-ellipsis">
     mujoco_mojo
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../../../mujoco/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    mjcf
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../../asset/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    mujoco_attr
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../attach/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    body_attr
   </span>
 
         </a>
@@ -2092,7 +2154,7 @@
 
 
   
-    <a href="https://github.com/Hydrowelder/mujoco-mojo/edit/master/docs/src\mujoco_mojo\writer.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Hydrowelder/mujoco-mojo/edit/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\body_attr\geom.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"></path></svg>
     </a>
@@ -2101,20 +2163,20 @@
     
       
     
-    <a href="https://github.com/Hydrowelder/mujoco-mojo/raw/master/docs/src\mujoco_mojo\writer.py" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/Hydrowelder/mujoco-mojo/raw/master/docs/src\mujoco_mojo\mjcf\mujoco_attr\body_attr\geom.py" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"></path></svg>
     </a>
   
 
 
-  <h1>writer</h1>
+  <h1>geom</h1>
 
 <div class="doc doc-object doc-module">
 
 
 
-<a id="mujoco_mojo.writer"></a>
+<a id="mujoco_mojo.mjcf.mujoco_attr.body_attr.geom"></a>
     <div class="doc doc-contents first">
 
 
@@ -2181,7 +2243,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer">
         
           
-          <a href="../utils/" class="md-footer__link md-footer__link--prev" aria-label="Previous: utils">
+          <a href="../free_joint/" class="md-footer__link md-footer__link--prev" aria-label="Previous: free_joint">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
@@ -2191,11 +2253,27 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                utils
+                free_joint
               </div>
             </div>
           </a>
         
+        
+          
+          <a href="../inertial/" class="md-footer__link md-footer__link--next" aria-label="Next: inertial">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                inertial
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"></path></svg>
+            </div>
+          </a>
         
       </nav>
     
@@ -2229,14 +2307,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.instant", "navigation.instant.preview", "navigation.top", "navigation.path", "navigation.sections", "navigation.tabs.sticky", "navigation.footer", "content.action.edit", "content.action.view", "content.code.copy", "content.code.select", "content.code.annotate", "content.tooltips", "search.highlight", "search.suggest", "search.share", "content.tabs.link", "content.footnote.tooltips"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../../..", "features": ["navigation.tabs", "navigation.instant", "navigation.instant.preview", "navigation.top", "navigation.path", "navigation.sections", "navigation.tabs.sticky", "navigation.footer", "content.action.edit", "content.action.view", "content.code.copy", "content.code.select", "content.code.annotate", "content.tooltips", "search.highlight", "search.suggest", "search.share", "content.tabs.link", "content.footnote.tooltips"], "search": "../../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js"></script>
       
-        <script src="../../../javascripts/tablesort.js"></script>
+        <script src="../../../../../../javascripts/tablesort.js"></script>
       
     
   
