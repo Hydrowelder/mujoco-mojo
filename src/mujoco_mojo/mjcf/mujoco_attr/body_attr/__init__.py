@@ -1,6 +1,7 @@
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import *
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.frame import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import *

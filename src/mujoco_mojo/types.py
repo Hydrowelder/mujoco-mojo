@@ -126,3 +126,28 @@ class Sleep(StrEnum):
     NEVER = auto()
     ALLOWED = auto()
     INIT = auto()
+
+
+class JointType(StrEnum):
+    FREE = auto()
+    BALL = auto()
+    SLIDE = auto()
+    HINGE = auto()
+
+
+class Limited(StrEnum):
+    FALSE = auto()
+    TRUE = auto()
+    AUTO = auto()
+
+
+class ActuatorFrcLimited(StrEnum):
+    FALSE = auto()
+    TRUE = auto()
+    AUTO = auto()
+
+
+class Align(StrEnum):
+    FALSE = auto()
+    TRUE = auto()
+    AUTO = auto()
