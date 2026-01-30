@@ -57,16 +57,42 @@ class XMLModel(BaseModel):
         el = Element(self.tag)
 
         # attributes (deterministic)
-        for field in tuple(self.attributes):
+        for field in self.attributes:
             value = getattr(self, field, None)
-            if value is not None:
-                # I use a trailing underscore to get around python's special names
-                # i.e., "class" is reserved for python so I use "class_" instead
-                field = field.rstrip("_")
-                el.set(field, _format_value(value))
 
-        # children (deterministic)
-        for field in tuple(self.children):
+            if value is None:
+                continue
+
+            field_name = field.rstrip("_")
+
+            # attribute is an XMLModel (to be flattened)
+            if isinstance(value, XMLModel):
+                # safety checks
+                if value.children:
+                    raise ValueError(
+                        f"{value.__class__.__name__} cannot be used as an "
+                        f"attribute because it defines children"
+                    )
+
+                # recursively extract attributes
+                sub_attrs = value._collect_xml_attributes()
+
+                # collision detection
+                for k in sub_attrs:
+                    if k in el.attrib:
+                        raise ValueError(
+                            f"Attribute collision while flattening "
+                            f"{value.__class__.__name__}: '{k}' already exists"
+                        )
+
+                el.attrib.update(sub_attrs)
+                continue
+
+            # normal attribute
+            el.set(field_name, _format_value(value))
+
+        # children (unchanged)
+        for field in self.children:
             value = getattr(self, field, None)
 
             if value is None:
@@ -79,6 +105,43 @@ class XMLModel(BaseModel):
                 el.append(value.to_xml())
 
         return el
+
+    def _collect_xml_attributes(self) -> dict[str, str]:
+        """
+        Recursively collect attributes for XML flattening.
+
+        Only valid for XMLModels that define attributes but no children.
+        """
+
+        if self.children:
+            raise ValueError(
+                f"{self.__class__.__name__} has children and cannot be flattened"
+            )
+
+        attrs: dict[str, str] = {}
+        for field in self.attributes:
+            value = getattr(self, field, None)
+
+            if value is None:
+                continue
+
+            key = field.rstrip("_")
+
+            if isinstance(value, XMLModel):
+                nested = value._collect_xml_attributes()
+
+                for k in nested:
+                    if k in attrs:
+                        raise ValueError(
+                            f"Attribute collision while flattening nested XMLModel: '{k}'"
+                        )
+
+                attrs.update(nested)
+
+            else:
+                attrs[key] = _format_value(value)
+
+        return attrs
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs):
