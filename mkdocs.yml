@@ -69,17 +69,28 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          paths: [src]
           options:
+            modernize_annotations: true
+            backlinks: tree
+            show_root_full_path: false
             docstring_style: google
             show_source: true
+            show_bases: true
             members_order: source
             show_symbol_type_heading: true
             show_symbol_type_toc: true
             show_signature_annotations: true
             separate_signature: true
             inherited_members: true
+            show_attribute_values: true
+            signature_crossrefs: true
             extensions:
               - pydantic: { schema: true }
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://mkdocstrings.github.io/griffe/objects.inv
+            - https://docs.pydantic.dev/latest/objects.inv
   - glightbox
 
 markdown_extensions:
