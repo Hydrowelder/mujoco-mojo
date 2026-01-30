@@ -12,19 +12,23 @@ __all__ = ["XMLModel"]
 
 def _tuple_string(v) -> str:
     """
+
     Convert a sequence or array of numbers into a space-separated string.
     Works with list, tuple, or NumPy ndarray.
     """
+
     return " ".join(map(str, v))
 
 
 def _format_value(value) -> str:
     """
+
     Convert a Python value into a string suitable for XML attributes.
     - Booleans become "true"/"false"
     - Sequences (list, tuple, np.ndarray) become space-separated strings
     - Everything else is cast to str
     """
+
     if isinstance(value, bool):
         return "true" if value else "false"
 
@@ -39,10 +43,13 @@ class XMLModel(BaseModel):
 
     tag: ClassVar[str]
     """Tag name of the XML tag."""
+
     attributes: ClassVar[tuple[str, ...]] = ()
     """Attributes of the XML tag."""
+
     children: ClassVar[tuple[str, ...]] = ()
     """Children of the XML tag."""
+
     __exclusive_groups__: tuple[tuple[str, ...], ...] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
@@ -76,10 +83,12 @@ class XMLModel(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs):
         """
+
         Validates that XML attribute and child names exist on the model.
 
         This runs after Pydantic has finished building model fields and ensures that all entries in `attributes` and `children` reference actual fields or class variables. Errors are raised at class definition time to prevent invalid XML schemas from being created.
         """
+
         super().__pydantic_init_subclass__(**kwargs)
 
         # Pydantic fields (includes inherited)
@@ -109,8 +118,10 @@ class XMLModel(BaseModel):
     @model_validator(mode="after")
     def enforce_exclusive_groups(self) -> XMLModel:
         """
+
         Ensures that only one attribute in each exclusive group is set.
         """
+
         for group in self.__exclusive_groups__:
             count = sum(getattr(self, field) is not None for field in group)
             if count > 1:

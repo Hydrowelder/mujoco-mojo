@@ -17,6 +17,7 @@ class Layer(XMLModel):
 
     texture: str
     """Name of the texture, like the texture attribute."""
+
     role: str
     """Role of the texture. The valid values, expected number of channels, and the role semantics are:
 

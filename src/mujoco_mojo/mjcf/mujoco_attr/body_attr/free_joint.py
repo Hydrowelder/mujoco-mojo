@@ -22,8 +22,10 @@ class FreeJoint(XMLModel):
 
     name: Optional[str] = None
     """Name of the joint."""
+
     group: Optional[int] = None
     """Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints."""
+
     align: Optional[Align] = None
     """When set to true, the body frame and free joint will automatically be aligned with inertial frame. When set to false, no alignment will occur. When set to auto, the compiler's alignfree global attribute will be respected.
 

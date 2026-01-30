@@ -31,20 +31,28 @@ class Inertial(XMLModel):
 
     pos: Vec3
     """Position of the inertial frame. This attribute is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
+
     quat: Optional[Vec3] = None
     """Orientation of the inertial frame. See Frame orientations."""
+
     axisangle: Optional[Vec3] = None
     """Orientation of the inertial frame. See Frame orientations."""
+
     xyaxes: Optional[Vec3] = None
     """Orientation of the inertial frame. See Frame orientations."""
+
     zaxis: Optional[Vec3] = None
     """Orientation of the inertial frame. See Frame orientations."""
+
     euler: Optional[Vec3] = None
     """Orientation of the inertial frame. See Frame orientations."""
+
     mass: float
     """Mass of the body. Negative values are not allowed. MuJoCo requires the inertia matrix in generalized coordinates to be positive-definite, which can sometimes be achieved even if some bodies have zero mass. In general however there is no reason to use massless bodies. Such bodies are often used in other engines to bypass the limitation that joints cannot be combined, or to attach sensors and cameras. In MuJoCo primitive joint types can be combined, and we have sites which are a more efficient attachment mechanism."""
+
     diaginertia: Optional[Vec3] = None
     """Diagonal inertia matrix, expressing the body inertia relative to the inertial frame. If this attribute is omitted, the next attribute becomes required."""
+
     fullinertia: Optional[Vec6] = None
     """Full inertia matrix M. Since M is 3-by-3 and symmetric, it is specified using only 6 numbers in the following order: M(1,1), M(2,2), M(3,3), M(1,2), M(1,3), M(2,3). The compiler computes the eigenvalue decomposition of M and sets the frame orientation and diagonal inertia accordingly. If non-positive eigenvalues are encountered (i.e., if M is not positive definite) a compile error is generated."""
 
