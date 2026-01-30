@@ -14,6 +14,7 @@ def test_import():
 
 quat = mojo.Quat(quat=np.array([1, 2, 3, 4]))
 sphere = mojo.GeomSphere(size=0.2, rgba=np.asarray((1, 0, 0, 1)))
+material = mojo.Material(name="material_name")
 
 world = mojo.WorldBody(
     geoms=[
@@ -22,6 +23,7 @@ world = mojo.WorldBody(
             size=np.asarray((5, 5, 0.1)),
             rgba=np.array((0.5, 0.5, 0.5, 1)),
             orientation=quat,
+            material=material.name,
         )
     ],
     bodies=[

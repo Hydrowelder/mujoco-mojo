@@ -7,7 +7,17 @@ from pydantic import Field
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.types import FluidShape, GeomType, Vec2, Vec3, Vec4, Vec5, Vec6, VecN
+from mujoco_mojo.types import (
+    FluidShape,
+    GeomType,
+    MaterialName,
+    Vec2,
+    Vec3,
+    Vec4,
+    Vec5,
+    Vec6,
+    VecN,
+)
 
 __all__ = [
     "Geom",
@@ -94,7 +104,7 @@ class GeomBase(XMLModel):
     priority: Optional[int] = None
     """The geom priority determines how the properties of two colliding geoms are combined to form the properties of the contact. This interacts with the solmix attribute. See Contact parameters."""
 
-    material: Optional[str] = None
+    material: Optional[MaterialName] = None
     """If specified, this attribute applies a material to the geom. Otherwise, if unspecified and the type of the geom is a mesh the compiler will apply the mesh asset material if present.
 
     The material determines the visual properties of the geom. The only exception is color: if the rgba attribute below is different from its internal default, it takes precedence while the remaining material properties are still applied. Note that if the same material is referenced from multiple geoms (as well as sites and tendons) and the user changes some of its properties at runtime, these changes will take effect immediately for all model elements referencing the material. This is because the compiler saves the material and its properties as a separate element in mjModel, and the elements using this material only keep a reference to it."""
