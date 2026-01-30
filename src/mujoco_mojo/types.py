@@ -46,14 +46,30 @@ class GeomType(StrEnum):
     """Enumeration of supported geometric types in MuJoCo."""
 
     PLANE = auto()
+    """Plane which is infinite for collision detection purposes."""
+
     HFIELD = auto()
+    """Height field geom."""
+
     SPHERE = auto()
+    """Sphere geom."""
+
     CAPSULE = auto()
+    """A capsule, which is a cylinder capped with two half-spheres."""
+
     ELLIPSOID = auto()
+    """Ellipoid geom."""
+
     CYLINDER = auto()
+    """Cylinder geom."""
     BOX = auto()
+    """Box geom."""
+
     MESH = auto()
+    """Mesh geom."""
+
     SDF = auto()
+    """Signed distance field (SDF, also referred to as signed distance function)."""
 
 
 class Integrator(StrEnum):
