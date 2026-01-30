@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from typing import Annotated, Tuple, TypeAlias
+from typing import Annotated, Tuple
 
 from numpydantic import NDArray, Shape
 from pydantic import Field
@@ -20,22 +20,22 @@ GeomGroup = Annotated[int, Field(ge=0, le=30)]
 InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
 """A tuple specifying the inclusive range of geom groups used for inertia computation."""
 
-Vec2: TypeAlias = NDArray[Shape["2"], float | int]  # type: ignore
+Vec2 = Annotated[NDArray[Shape["2"], float | int], ...]
 """A 2-element numeric array."""
 
-Vec3: TypeAlias = NDArray[Shape["3"], float | int]  # type: ignore
+Vec3 = Annotated[NDArray[Shape["3"], float | int], ...]
 """A 3-element numeric array, often used for positions or directions."""
 
-Vec4: TypeAlias = NDArray[Shape["4"], float | int]  # type: ignore
+Vec4 = Annotated[NDArray[Shape["4"], float | int], ...]
 """A 4-element numeric array, often used for RGBA colors or quaternions."""
 
-Vec5: TypeAlias = NDArray[Shape["5"], float | int]  # type: ignore
+Vec5 = Annotated[NDArray[Shape["5"], float | int], ...]
 """A 5-element numeric array."""
 
-Vec6: TypeAlias = NDArray[Shape["6"], float | int]  # type: ignore
+Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
 """A 6-element numeric array."""
 
-VecN: TypeAlias = NDArray[Shape["*"], float | int]  # type: ignore  # noqa: F722
+VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
 """An N-element numeric array of arbitrary length."""
 
 

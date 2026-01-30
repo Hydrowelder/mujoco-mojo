@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.types import FluidShape, GeomType, Vec2, Vec3, Vec4, Vec5, Vec6, VecN
 
@@ -42,11 +43,7 @@ _geom_attr = (
     "gap",
     "fromto",
     "pos",
-    "quat",
-    "axisangle",
-    "xyaxes",
-    "zaxis",
-    "euler",
+    "orientation",
     "hfield",
     "mesh",
     "fitscale",
@@ -138,19 +135,7 @@ class GeomBase(XMLModel):
     pos: Optional[Vec3] = None
     """Position of the geom, specified in the frame of the body where the geom is defined."""
 
-    quat: Optional[Vec3] = None
-    """Orientation of the geom frame. See Frame orientations."""
-
-    axisangle: Optional[Vec3] = None
-    """Orientation of the geom frame. See Frame orientations."""
-
-    xyaxes: Optional[Vec3] = None
-    """Orientation of the geom frame. See Frame orientations."""
-
-    zaxis: Optional[Vec3] = None
-    """Orientation of the geom frame. See Frame orientations."""
-
-    euler: Optional[Vec3] = None
+    orientation: Optional[Orientation] = None
     """Orientation of the geom frame. See Frame orientations."""
 
     hfield: Optional[str] = None
