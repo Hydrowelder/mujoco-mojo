@@ -211,7 +211,7 @@ class Inertia(StrEnum):
     """Assume mass is concentrated on the surface of the mesh. Use the mesh's surface to compute the inertia, assuming uniform surface density."""
 
 
-class Type(StrEnum):
+class TextureType(StrEnum):
     """This attribute determines how the texture is represented and mapped to objects. It also determines which of the remaining attributes are relevant."""
 
     D2 = "2d"
@@ -369,3 +369,22 @@ class FluidShape(StrEnum):
 
     ELLIPSOID = auto()
     """Activates the geom-level fluid interaction model based on an ellipsoidal approximation of the geom shape. When active, the model based on body inertia sizes is disabled for the body in which the geom is defined. See section on ellipsoid-based fluid interaction model for details."""
+
+
+class CameraType(StrEnum):
+    """Specifies how the camera position and orientation in world coordinates are computed in forward kinematics (which in turn determine what the camera sees)."""
+
+    FIXED = auto()
+    """The position and orientation specified are fixed relative to the body where the camera is defined."""
+
+    TRACK = auto()
+    """The camera position is at a constant offset from the body in world coordinates, while the camera orientation is constant in world coordinates. These constants are determined by applying forward kinematics in qpos0 and treating the camera as fixed. Tracking can be used for example to position a camera above a body, point it down so it sees the body, and have it always remain above the body no matter how the body translates and rotates."""
+
+    TRACKCOM = auto()
+    """similar to "track" but the constant spatial offset is defined relative to the center of mass of the kinematic subtree starting at the body in which the camera is defined. This can be used to keep an entire mechanism in view. Note that the subtree center of mass for the world body is the center of mass of the entire model. So if a camera is defined in the world body in mode "trackcom", it will track the entire model."""
+
+    TARGETBODY = auto()
+    """The camera position is fixed in the body frame, while the camera orientation is adjusted so that it always points towards the targeted body (which is specified with the target attribute below). This can be used for example to model an eye that fixates a moving object; the object will be the target, and the camera/eye will be defined in the body corresponding to the head."""
+
+    TARGETBODYCOM = auto()
+    """The same as "targetbody" but the camera is oriented towards the center of mass of the subtree starting at the target body."""

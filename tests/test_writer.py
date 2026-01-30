@@ -22,6 +22,7 @@ world = mojo.WorldBody(
             name="floor",
             size=np.asarray((5, 5, 0.1)),
             rgba=np.array((0.5, 0.5, 0.5, 1)),
+            pos=mojo.Pos(pos=np.array((1, 2, 3))),
             orientation=quat,
             material=material.name,
         )

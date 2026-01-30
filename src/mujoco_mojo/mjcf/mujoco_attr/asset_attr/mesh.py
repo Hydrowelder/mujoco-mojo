@@ -6,6 +6,7 @@ from typing import ClassVar, Optional, Tuple
 from pydantic import field_validator
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.types import Inertia, Vec3, Vec4
 
 __all__ = [
@@ -87,7 +88,7 @@ class Mesh(XMLModel):
     face: Optional[Tuple[Tuple[float, float, float], ...]] = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
-    refpos: Optional[Vec3] = None
+    refpos: Optional[Pos] = None
     """Reference position relative to which the 3D vertex coordinates are defined. This vector is subtracted from the positions."""
 
     refquat: Optional[Vec4] = None
