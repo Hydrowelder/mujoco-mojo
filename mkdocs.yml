@@ -21,16 +21,16 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: black
+      accent: lime
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
 
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: black
+      accent: lime
       toggle:
         icon: material/weather-night
         name: Switch to light mode
@@ -39,6 +39,8 @@ theme:
     - navigation.tabs
     - navigation.instant
     - navigation.instant.preview
+    - navigation.instant.prefetch
+    - navigation.instant.progress
     - navigation.top
     - navigation.path
     - navigation.sections
@@ -70,6 +72,7 @@ plugins:
           options:
             docstring_style: google
             show_source: true
+            members_order: source
             show_symbol_type_heading: true
             show_symbol_type_toc: true
             show_signature_annotations: true

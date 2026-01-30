@@ -16,5 +16,6 @@ class Plugin(XMLModel):
 
     plugin: Optional[str] = None
     """Plugin identifier, used for implicit plugin instantiation."""
+
     instance: Optional[str] = None  # TODO I think this was implemented poorly
     """Instance name, used for explicit plugin instantiation."""
