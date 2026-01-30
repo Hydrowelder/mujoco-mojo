@@ -1,0 +1,2 @@
+# Ignore site files in language statistics
+site/* linguist-vendored
