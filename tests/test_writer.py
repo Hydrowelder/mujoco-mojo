@@ -64,7 +64,7 @@ json_file.with_stem("sphere").write_text(sphere.model_dump_json(exclude_none=Tru
 assert "type" in sphere.model_dump_json(exclude_none=True), (
     "geom type was not serialized"
 )
-sphere = mojo.GeomSphere.model_validate_json(json_file.with_stem("sphere").read_text())
+sphere = mojo.SiteSphere.model_validate_json(json_file.with_stem("sphere").read_text())
 
 
 json_file.write_text(model.model_dump_json(exclude_none=True))

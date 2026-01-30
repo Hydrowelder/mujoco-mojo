@@ -9,6 +9,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.types import Sleep, Vec3, VecN
@@ -87,10 +88,10 @@ class Body(XMLModel):
     """See User parameters. Has length of `nbody_user`"""
 
     inertial: Optional[Inertial] = None
-    joints: Sequence[Joint] = Field(default_factory=list)  # TODO
-    freejoints: Optional[Sequence[FreeJoint]] = Field(default_factory=list)  # TODO
+    joints: Sequence[Joint] = Field(default_factory=list)
+    freejoints: Optional[Sequence[FreeJoint]] = Field(default_factory=list)
     geoms: Sequence[Geom] = Field(default_factory=list)
-    sites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    sites: Optional[Sequence[Site]] = Field(default_factory=list)
     cameras: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
     lights: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
     composites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
