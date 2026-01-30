@@ -149,3 +149,8 @@ class Align(StrEnum):
     FALSE = auto()
     TRUE = auto()
     AUTO = auto()
+
+
+class FluidShape(StrEnum):
+    NONE = auto()
+    ELLIPSOID = auto()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional, Sequence
 
 from pydantic import Field
 
@@ -69,4 +69,4 @@ class Material(XMLModel):
     rgba: Optional[Vec4] = None
     """Color and transparency of the material. All components should be in the range [0 1]. Note that the texture color (if assigned) and the color specified here are multiplied component-wise. Thus the default value of "1 1 1 1" has the effect of leaving the texture unchanged. When the material is applied to a model element which defines its own local rgba attribute, the local definition has precedence. Note that this "local" definition could in fact come from a defaults class. The remaining material properties always apply."""
 
-    layers: List[Layer] = Field(default_factory=list)
+    layers: Sequence[Layer] = Field(default_factory=list)

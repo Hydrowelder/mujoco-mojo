@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from pydantic import Field
 
@@ -42,9 +42,9 @@ class Mujoco(XMLModel):
     model: str = "MuJoCo Model"
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
-    options: List[Option] = Field(default_factory=list)
-    compilers: List[Compiler] = Field(default_factory=list)
-    sizes: List[Size] = Field(default_factory=list)
+    options: Sequence[Option] = Field(default_factory=list)
+    compilers: Sequence[Compiler] = Field(default_factory=list)
+    sizes: Sequence[Size] = Field(default_factory=list)
     statistics: List = Field(default_factory=list)
     assets: List = Field(default_factory=list)
     worldbody: Optional[WorldBody] = None
