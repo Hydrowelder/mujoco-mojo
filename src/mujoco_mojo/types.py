@@ -8,8 +8,6 @@ from pydantic import Field
 
 __all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
 
-frame_orientations = ("quat", "axisangle", "xyaxes", "zaxis", "euler")
-"""Tuple of supported frame orientation types for MuJoCo geoms and joints."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
