@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional, Sequence
 
 from pydantic import Field
 
@@ -100,19 +100,19 @@ class Body(XMLModel):
     """See User parameters. Has length of `nbody_user`"""
 
     inertial: Optional[Inertial] = None
-    joints: List[Joint] = Field(default_factory=list)  # TODO
-    freejoints: Optional[List[FreeJoint]] = Field(default_factory=list)  # TODO
-    geoms: List[Geom] = Field(default_factory=list)
-    sites: Optional[List[float]] = Field(default_factory=list)  # TODO
-    cameras: Optional[List[float]] = Field(default_factory=list)  # TODO
-    lights: Optional[List[float]] = Field(default_factory=list)  # TODO
-    composites: Optional[List[float]] = Field(default_factory=list)  # TODO
-    flexcomps: Optional[List[float]] = Field(default_factory=list)  # TODO
-    plugins: Optional[List[float]] = Field(default_factory=list)  # TODO
-    attaches: Optional[List[float]] = Field(default_factory=list)  # TODO
-    frames: Optional[List[float]] = Field(default_factory=list)  # TODO
+    joints: Sequence[Joint] = Field(default_factory=list)  # TODO
+    freejoints: Optional[Sequence[FreeJoint]] = Field(default_factory=list)  # TODO
+    geoms: Sequence[Geom] = Field(default_factory=list)
+    sites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    cameras: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    lights: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    composites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    flexcomps: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    plugins: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    attaches: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    frames: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
 
-    bodies: List[Body] = Field(default_factory=list)
+    bodies: Sequence[Body] = Field(default_factory=list)
 
 
 _temp_list = list(_body_children)

@@ -11,20 +11,18 @@ def test_import():
     mojo.__name__
 
 
-floor = mojo.Geom(
+floor = mojo.GeomPlane(
     name="floor",
-    type=mojo.GeomType.PLANE,
-    size=(5, 5, 0.1),
+    size=np.asarray((5, 5, 0.1)),
     rgba=np.array((0.5, 0.5, 0.5, 1)),
 )
 
 robot = mojo.Body(
     name="robot",
     geoms=[
-        mojo.Geom(
-            type=mojo.GeomType.SPHERE,
+        mojo.GeomSphere(
             size=0.2,
-            rgba=np.array((1, 0, 0, 1)),
+            rgba=np.asarray((1, 0, 0, 1)),
         ),
     ],
 )

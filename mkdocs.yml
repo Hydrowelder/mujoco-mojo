@@ -80,8 +80,6 @@ plugins:
             inherited_members: true
             extensions:
               - pydantic: { schema: true }
-              # - griffe_pydantic:
-              #     schema: true
   - glightbox
 
 markdown_extensions:

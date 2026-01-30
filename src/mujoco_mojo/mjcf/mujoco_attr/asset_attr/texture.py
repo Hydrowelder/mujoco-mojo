@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import ColorSpace, Mark, Type, Vec3
+from mujoco_mojo.types import ColorSpace, Mark, TextureBuiltIn, Type, Vec3
 
 __all__ = ["Texture"]
 
@@ -110,7 +110,7 @@ class TextureProcedural(Texture):
         "nchannel",
     )
 
-    builtin: TextureProcedural
+    builtin: TextureBuiltIn
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored. The keywords have the following meaning:
     * gradient
         * Generates a color gradient from rgb1 to rgb2. The interpolation in color space is done through a sigmoid function. For cube and skybox textures the gradient is along the +Y axis, i.e., from top to bottom for skybox rendering.
