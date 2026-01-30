@@ -12,7 +12,8 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.types import Sleep, Vec3, VecN
+from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.types import Sleep, VecN
 
 __all__ = ["Body", "WorldBody"]
 
@@ -60,7 +61,7 @@ class Body(XMLModel):
     mocap: Optional[bool] = None
     """If this attribute is "true", the body is labeled as a mocap body. This is allowed only for bodies that are children of the world body and have no joints. Such bodies are fixed from the viewpoint of the dynamics, but nevertheless the forward kinematics set their position and orientation from the fields mjData.mocap_{pos,quat} at each time step. The size of these arrays is adjusted by the compiler so as to match the number of mocap bodies in the model. This mechanism can be used to stream motion capture data into the simulation. Mocap bodies can also be moved via mouse perturbations in the interactive visualizer, even in dynamic simulation mode. This can be useful for creating props with adjustable position and orientation."""
 
-    pos: Optional[Vec3] = None
+    pos: Optional[Pos] = None
     """The 3D position of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
 
     orientation: Optional[Orientation] = None

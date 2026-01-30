@@ -7,6 +7,7 @@ from pydantic import Field
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.types import (
     FluidShape,
     GeomType,
@@ -142,7 +143,7 @@ class GeomBase(XMLModel):
     fromto: Optional[Vec6] = None
     """This attribute can only be used with capsule, box, cylinder and ellipsoid geoms. It provides an alternative specification of the geom length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the geom connects these two points, with the +Z axis of the geom's frame oriented from the first towards the second point, while in the perpendicular direction, the geom sizes are both equal to the first value of the size attribute. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the end points. If this attribute is specified, the remaining position and orientation-related attributes are ignored. The image on the right demonstrates use of fromto with the four supported geoms, using identical Z values. The model is here. Note that the fromto semantics of capsule are unique: the two end points specify the segment around which the radius defines the capsule surface."""
 
-    pos: Optional[Vec3] = None
+    pos: Optional[Pos] = None
     """Position of the geom, specified in the frame of the body where the geom is defined."""
 
     orientation: Optional[Orientation] = None

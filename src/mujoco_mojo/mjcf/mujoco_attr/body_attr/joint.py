@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.types import (
     ActuatorFrcLimited,
     JointType,
@@ -41,7 +42,7 @@ class Joint(XMLModel):
     group: Optional[int] = None
     """Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints."""
 
-    pos: Optional[Vec3] = None
+    pos: Optional[Pos] = None
     """Position of the joint, specified in the frame of the body where the joint is defined. For free joints this attribute is ignored."""
 
     axis: Optional[Vec3] = None

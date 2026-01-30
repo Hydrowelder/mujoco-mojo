@@ -4,7 +4,14 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import ColorSpace, Mark, TextureBuiltIn, TextureName, Type, Vec3
+from mujoco_mojo.types import (
+    ColorSpace,
+    Mark,
+    TextureBuiltIn,
+    TextureName,
+    TextureType,
+    Vec3,
+)
 
 __all__ = ["Texture"]
 
@@ -47,7 +54,7 @@ class Texture(XMLModel):
     name: Optional[TextureName] = None
     """As with all other assets, a texture must have a name in order to be referenced. However if the texture is loaded from a single file with the file attribute, the explicit name can be omitted and the file name (without the path and extension) becomes the texture name. If the name after parsing is empty and the texture type is not "skybox", the compiler will generate an error."""
 
-    type: Optional[Type] = None
+    type: Optional[TextureType] = None
     """This attribute determines how the texture is represented and mapped to objects. It also determines which of the remaining attributes are relevant. The keywords have the following meaning:
 
     The cube type has the effect of shrink-wrapping a texture cube over an object. Apart from the adjustment provided by the texuniform attribute of material, the process is automatic. Internally the GPU constructs a ray from the center of the object to each pixel (or rather fragment), finds the intersection of this ray with the cube surface (the cube and the object have the same center), and uses the corresponding texture color. The six square images defining the cube can be the same or different; if they are the same, only one copy is stored in mjModel. There are four mechanisms for specifying the texture data:

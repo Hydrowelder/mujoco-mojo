@@ -6,6 +6,7 @@ from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.types import (
     GeomType,
     MaterialName,
@@ -65,7 +66,7 @@ class SiteBase(XMLModel):
     fromto: Optional[Vec6] = None
     """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
 
-    pos: Optional[Vec3] = None
+    pos: Optional[Pos] = None
     """Position of the site frame."""
 
     orientation: Optional[Orientation] = None
