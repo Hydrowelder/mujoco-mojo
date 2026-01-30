@@ -24,6 +24,10 @@ robot = mojo.Body(
             size=0.2,
             rgba=np.asarray((1, 0, 0, 1)),
         ),
+        mojo.GeomCylinder(
+            size=np.asarray([1, 3]),
+            rgba=np.asarray((1, 0, 0, 1)),
+        ),
     ],
 )
 

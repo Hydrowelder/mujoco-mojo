@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.types import FluidShape, GeomType, Vec2, Vec3, Vec4, Vec5, Vec6, VecN
 
 __all__ = [
@@ -66,26 +67,13 @@ class GeomBase(XMLModel):
 
     tag = "geom"
 
+    children = ("plugin",)
+
     name: Optional[str] = None
     """Name of the geom."""
 
     class_: Optional[str] = None
     """Defaults class for setting unspecified attributes."""
-
-    # size: Optional[Tuple[float, ...] | float] = None
-    # """Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
-
-    # | Type      | Number | Description                                                                                                                                                                        |
-    # |-----------|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-    # | plane     | 3      | X half-size; Y half-size; spacing between square grid lines for rendering. If either the X or Y half-size is 0, the plane is rendered as infinite in the dimension(s) with 0 size. |
-    # | hfield    | 0      | The geom sizes are ignored and the height field sizes are used instead.                                                                                                            |
-    # | sphere    | 1      | Radius of the sphere.                                                                                                                                                              |
-    # | capsule   | 1 or 2 | Radius of the capsule; half-length of the cylinder part when not using the `fromto` specification.                                                                                 |
-    # | ellipsoid | 3      | X radius; Y radius; Z radius.                                                                                                                                                      |
-    # | cylinder  | 1 or 2 | Radius of the cylinder; half-length of the cylinder when not using the `fromto` specification.                                                                                     |
-    # | box       | 3      | X half-size; Y half-size; Z half-size.                                                                                                                                             |
-    # | mesh      | 0      | The geom sizes are ignored and the mesh sizes are used instead.                                                                                                                    |
-    # """
 
     contype: Optional[int] = None
     """This attribute and the next specify 32-bit integer bitmasks used for contact filtering of dynamically generated contact pairs. See Collision detection in the Computation chapter. Two geoms can collide if the contype of one geom is compatible with the conaffinity of the other geom or vice versa. Compatible means that the two bitmasks have a common bit set to 1."""
@@ -190,6 +178,9 @@ class GeomBase(XMLModel):
 
     user: Optional[VecN] = None
     """See User parameters."""
+
+    plugin: Optional[Plugin] = None
+    """Associate this geom with an engine plugin. Either plugin or instance are required."""
 
 
 class GeomPlane(GeomBase):

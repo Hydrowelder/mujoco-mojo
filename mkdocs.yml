@@ -73,8 +73,11 @@ plugins:
           options:
             modernize_annotations: true
             backlinks: tree
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+            show_root_heading: true
             show_root_full_path: false
-            docstring_style: google
             show_source: true
             show_bases: true
             members_order: source
@@ -82,6 +85,7 @@ plugins:
             show_symbol_type_toc: true
             show_signature_annotations: true
             separate_signature: true
+            summary: false # set to true to get summary tables
             inherited_members: true
             show_attribute_values: true
             signature_crossrefs: true
