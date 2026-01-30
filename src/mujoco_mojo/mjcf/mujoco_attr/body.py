@@ -9,8 +9,9 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.types import Sleep, Vec3, Vec4, Vec6, VecN, frame_orientations
+from mujoco_mojo.types import Sleep, Vec3, VecN
 
 __all__ = ["Body", "WorldBody"]
 
@@ -18,12 +19,8 @@ _body_attr = (
     "name",
     "childclass",
     "pos",
-    "quat",
+    "orientation",
     "mocap",
-    "axisangle",
-    "xyaxes",
-    "zaxis",
-    "euler",
     "gravcomp",
     "sleep",
     "user",
@@ -52,7 +49,6 @@ class Body(XMLModel):
 
     attributes = _body_attr
     children = _body_children
-    __exclusive_groups__ = (frame_orientations,)
 
     name: Optional[str] = None
     """Name of the body."""
@@ -64,20 +60,9 @@ class Body(XMLModel):
     """If this attribute is "true", the body is labeled as a mocap body. This is allowed only for bodies that are children of the world body and have no joints. Such bodies are fixed from the viewpoint of the dynamics, but nevertheless the forward kinematics set their position and orientation from the fields mjData.mocap_{pos,quat} at each time step. The size of these arrays is adjusted by the compiler so as to match the number of mocap bodies in the model. This mechanism can be used to stream motion capture data into the simulation. Mocap bodies can also be moved via mouse perturbations in the interactive visualizer, even in dynamic simulation mode. This can be useful for creating props with adjustable position and orientation."""
 
     pos: Optional[Vec3] = None
-    "The 3D position of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."
-    quat: Optional[Vec4] = None
-    """See Frame orientations."""
+    """The 3D position of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
 
-    axisangle: Optional[Vec4] = None
-    """See Frame orientations."""
-
-    xyaxes: Optional[Vec6] = None
-    """See Frame orientations."""
-
-    zaxis: Optional[Vec3] = None
-    """See Frame orientations."""
-
-    euler: Optional[Vec3] = None
+    orientation: Optional[Orientation] = None
     """See Frame orientations."""
 
     gravcomp: Optional[float] = None
