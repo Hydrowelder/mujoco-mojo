@@ -22,3 +22,5 @@ class Asset(XMLModel):
     textures: Optional[List] = Field(default_factory=list)
     materials: Optional[List] = Field(default_factory=list)
     models: Optional[List] = Field(default_factory=list)
+
+    # TODO add validator that makes sure each material has a texture that exists (if material.texture is not None)

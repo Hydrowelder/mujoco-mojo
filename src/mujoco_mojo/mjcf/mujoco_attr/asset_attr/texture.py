@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import ColorSpace, Mark, TextureBuiltIn, Type, Vec3
+from mujoco_mojo.types import ColorSpace, Mark, TextureBuiltIn, TextureName, Type, Vec3
 
 __all__ = ["Texture"]
 
@@ -44,7 +44,7 @@ class Texture(XMLModel):
 
     attributes = _texture_attr
 
-    name: Optional[str] = None
+    name: Optional[TextureName] = None
     """As with all other assets, a texture must have a name in order to be referenced. However if the texture is loaded from a single file with the file attribute, the explicit name can be omitted and the file name (without the path and extension) becomes the texture name. If the name after parsing is empty and the texture type is not "skybox", the compiler will generate an error."""
 
     type: Optional[Type] = None
