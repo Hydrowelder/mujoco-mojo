@@ -9,6 +9,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.types import Sleep, Vec3, Vec4, Vec6, VecN, frame_orientations
 
 __all__ = ["Body", "WorldBody"]
@@ -40,6 +41,7 @@ _body_children = (
     "plugins",
     "attaches",
     "frames",
+    "bodies",
 )
 
 
@@ -108,7 +110,7 @@ class Body(XMLModel):
     lights: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
     composites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
     flexcomps: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
-    plugins: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    plugins: Optional[Sequence[Plugin]] = Field(default_factory=list)  # TODO
     attaches: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
     frames: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
 

@@ -8,5 +8,4 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import *
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.plugin import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import *
