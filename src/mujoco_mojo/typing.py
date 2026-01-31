@@ -6,6 +6,8 @@ from typing import Annotated, NewType, Tuple
 from numpydantic import NDArray, Shape
 from pydantic import Field
 
+from mujoco_mojo.utils import is_empty_list
+
 __all__ = [
     "Vec2",
     "Vec3",
@@ -89,6 +91,10 @@ Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
 
 VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
 """An N-element numeric array of arbitrary length."""
+
+
+def empty_list_field():
+    return Field(default_factory=list, exclude_if=is_empty_list)
 
 
 class GeomType(StrEnum):

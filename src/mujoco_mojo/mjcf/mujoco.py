@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
 from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
+from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
+from mujoco_mojo.typing import ModelName
+from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Mujoco"]
 
@@ -39,23 +43,49 @@ class Mujoco(XMLModel):
         "extensions",
     )
 
-    model: str = "MuJoCo Model"
+    model: Optional[ModelName] = None
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
-    options: Sequence[Option] = Field(default_factory=list)
-    compilers: Sequence[Compiler] = Field(default_factory=list)
-    sizes: Sequence[Size] = Field(default_factory=list)
-    statistics: List = Field(default_factory=list)
-    assets: List = Field(default_factory=list)
+    options: Sequence[Option] = Field(default_factory=list, exclude_if=is_empty_list)
+    compilers: Sequence[Compiler] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
+    sizes: Sequence[Size] = Field(default_factory=list, exclude_if=is_empty_list)
+    statistics: Sequence[Statistic] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
+    assets: Sequence[Asset] = Field(default_factory=list, exclude_if=is_empty_list)
     worldbody: Optional[WorldBody] = None
-    deformables: List = Field(default_factory=list)
-    contacts: List = Field(default_factory=list)
-    equalities: List = Field(default_factory=list)
-    tendons: List = Field(default_factory=list)
-    actuators: List = Field(default_factory=list)
-    sensors: List = Field(default_factory=list)
-    keyframes: List = Field(default_factory=list)
-    visuals: List = Field(default_factory=list)
-    defaults: List = Field(default_factory=list)
-    customs: List = Field(default_factory=list)
-    extensions: List = Field(default_factory=list)
+    deformables: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    contacts: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    equalities: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    tendons: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    actuators: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    sensors: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    keyframes: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    visuals: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    defaults: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    customs: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
+    extensions: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO

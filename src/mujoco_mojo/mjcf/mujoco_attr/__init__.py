@@ -1,6 +1,7 @@
 """Defines child attributes of the Mujoco class."""
 
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr import (
+from .asset import Asset
+from .asset_attr import (
     HField,
     Layer,
     Material,
@@ -8,7 +9,6 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr import (
     Model,
     Texture,
 )
-
 from .body import Body, WorldBody
 from .body_attr import (
     Attach,
@@ -51,6 +51,7 @@ __all__ = [
     "HField",
     "Layer",
     "Material",
+    "Asset",
     "Mesh",
     "Model",
     "Texture",

@@ -5,6 +5,7 @@ from typing import List, Optional
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Asset"]
 
@@ -16,11 +17,11 @@ class Asset(XMLModel):
 
     children = ("meshes", "hfields", "skins", "textures", "materials", "models")
 
-    meshes: Optional[List] = Field(default_factory=list)
-    hfields: Optional[List] = Field(default_factory=list)
-    skins: Optional[List] = Field(default_factory=list)
-    textures: Optional[List] = Field(default_factory=list)
-    materials: Optional[List] = Field(default_factory=list)
-    models: Optional[List] = Field(default_factory=list)
+    meshes: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
+    hfields: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
+    skins: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
+    textures: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
+    materials: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
+    models: Optional[List] = Field(default_factory=list, exclude_if=is_empty_list)
 
     # TODO add validator that makes sure each material has a texture that exists (if material.texture is not None)

@@ -19,6 +19,7 @@ from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import BodyName, Sleep, VecN
+from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Body", "WorldBody"]
 
@@ -96,42 +97,48 @@ class Body(XMLModel):
     inertial: Optional[Inertial] = None
     """Inertial assigned to body."""
 
-    joints: Sequence[Joint] = Field(default_factory=list)
+    joints: Sequence[Joint] = Field(default_factory=list, exclude_if=is_empty_list)
     """Joints assigned to body."""
 
-    freejoints: Sequence[FreeJoint] = Field(default_factory=list)
+    freejoints: Sequence[FreeJoint] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
     """Free joints assigned to body. Defining more than one free joint will not do anything"""
 
-    geoms: Sequence[Geom] = Field(default_factory=list)
+    geoms: Sequence[Geom] = Field(default_factory=list, exclude_if=is_empty_list)
     """Geometries assigned to body."""
 
-    sites: Sequence[Site] = Field(default_factory=list)
+    sites: Sequence[Site] = Field(default_factory=list, exclude_if=is_empty_list)
     """Sites assigned to body."""
 
-    cameras: Sequence[Camera] = Field(default_factory=list)
+    cameras: Sequence[Camera] = Field(default_factory=list, exclude_if=is_empty_list)
     """Cameras assigned to body."""
 
-    lights: Sequence[Light] = Field(default_factory=list)
+    lights: Sequence[Light] = Field(default_factory=list, exclude_if=is_empty_list)
     """Lights assigned to body."""
 
-    composites: Sequence[Composite] = Field(default_factory=list)
+    composites: Sequence[Composite] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
     """Composites assigned to body."""
 
     flexcomps: Sequence[FlexComp] = Field(
-        default_factory=list
+        default_factory=list, exclude_if=is_empty_list
     )  # TODO finish flex first then return
     """Flexible composites assigned to body."""
 
-    plugins: Sequence[Plugin] = Field(default_factory=list)
+    plugins: Sequence[Plugin] = Field(default_factory=list, exclude_if=is_empty_list)
     """Plugins assigned to body."""
 
-    attaches: Sequence[Attach] = Field(default_factory=list)
+    attaches: Sequence[Attach] = Field(default_factory=list, exclude_if=is_empty_list)
     """Attach elements assigned to body."""
 
-    frames: Sequence[float] = Field(default_factory=list)  # TODO
+    frames: Sequence[float] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )  # TODO
     """Frames assigned to body."""
 
-    bodies: Sequence[Body] = Field(default_factory=list)
+    bodies: Sequence[Body] = Field(default_factory=list, exclude_if=is_empty_list)
     """Bodies assigned to body. Handled recursively."""
 
 
