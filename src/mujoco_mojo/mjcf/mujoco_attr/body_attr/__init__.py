@@ -1,3 +1,4 @@
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import *
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import *

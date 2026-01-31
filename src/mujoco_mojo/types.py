@@ -414,3 +414,7 @@ class CompositeInitial(StrEnum):
     FREE = auto()
     BALL = auto()
     NONE = auto()
+
+
+class CompositeJointKind(StrEnum):
+    MAIN = auto()
