@@ -53,7 +53,9 @@ class XMLModel(BaseModel):
     __exclusive_groups__: tuple[tuple[str, ...], ...] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
-    def to_xml(self) -> Element:
+    def to_xml(
+        self,
+    ) -> Element:  # TODO: add argument which will ignore fields with defaults (if they are default)
         el = Element(self.tag)
 
         # attributes (deterministic)

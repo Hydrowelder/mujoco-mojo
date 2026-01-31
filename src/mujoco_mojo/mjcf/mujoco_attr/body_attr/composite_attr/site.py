@@ -1,3 +1,11 @@
+"""Defines the site type for composites.
+
+!!! note
+    I was pretty lazy when I did this, I just decided to have this type inherit from the SiteBase class. That is not a super clean way to do it because it means this object may have attributes that MuJoCo will just ignore. The XML attributes defined here are restricted to the subset that only the composite site has.
+
+    Sorry...
+"""
+
 from typing import Optional
 
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase

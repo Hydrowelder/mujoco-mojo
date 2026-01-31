@@ -8,7 +8,7 @@ from pydantic import Field
 from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.typing import Vec3, Vec4, Vec6
+from mujoco_mojo.typing import EulerSeq, Vec3, Vec4, Vec6
 
 __all__ = [
     "Orientation",
@@ -45,35 +45,35 @@ class OrientationBase(XMLModel):
 
     tag = ""
 
-    def as_quat(self, euler_order: Optional[str] = None) -> Vec4:
-        if isinstance(self, Euler) and self.euler is not None and euler_order is None:
+    def as_quat(self, eulerseq: Optional[EulerSeq | str] = None) -> Quat:
+        if isinstance(self, Euler) and self.euler is not None and eulerseq is None:
             raise ValueError(
                 "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
             )
         # returns [w, x, y, z] for MuJoCo
-        rot = self._to_rotation(euler_order)
+        rot = self._to_rotation(eulerseq)
         q = rot.as_quat()  # scipy returns [x, y, z, w]
-        return np.asarray([q[3], q[0], q[1], q[2]])
+        return Quat(quat=np.asarray([q[3], q[0], q[1], q[2]]))
 
-    def as_matrix(self, euler_order: Optional[str] = None):
-        if isinstance(self, Euler) and self.euler is not None and euler_order is None:
+    def as_matrix(self, eulerseq: Optional[EulerSeq | str] = None):
+        if isinstance(self, Euler) and self.euler is not None and eulerseq is None:
             raise ValueError(
                 "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
             )
-        return self._to_rotation(euler_order).as_matrix()
+        return self._to_rotation(eulerseq).as_matrix()
 
-    def _to_rotation(self, euler_order: Optional[str] = None) -> R:
+    def _to_rotation(self, eulerseq: Optional[EulerSeq | str] = None) -> R:
         # determine the subtype to make a scipy Rotation object
         if isinstance(self, Quat) and self.quat is not None:
             quat = np.asarray(self.quat)
             x, y, z, w = quat[1], quat[2], quat[3], quat[0]
             return R.from_quat([x, y, z, w])
         elif isinstance(self, Euler) and self.euler is not None:
-            if euler_order is None:
+            if eulerseq is None:
                 raise ValueError(
                     "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
                 )
-            return R.from_euler(euler_order, np.asarray(self.euler))
+            return R.from_euler(eulerseq, np.asarray(self.euler))
         # WARNING: I vibecoded the following
         elif isinstance(self, AxisAngle) and self.axisangle is not None:
             axisangle = np.asarray(self.axisangle)
@@ -137,7 +137,7 @@ class Quat(OrientationBase):
 
     attributes = ("quat",)
 
-    quat: Optional[Vec4] = None
+    quat: Vec4 = np.array((1, 0, 0, 0))
     """Orientation of the frame. See Frame orientations. Defined as (w, x, y, z) quaternion order (the same as MuJoCo convention)."""
 
 
@@ -147,7 +147,7 @@ class AxisAngle(OrientationBase):
     type: Literal[OrientationType.AXISANGLE] = OrientationType.AXISANGLE
     attributes = ("axisangle",)
 
-    axisangle: Optional[Vec4] = None
+    axisangle: Vec4 = np.array((1, 0, 0, 0))
     """Orientation of the frame. See Frame orientations."""
 
 
@@ -157,7 +157,7 @@ class Euler(OrientationBase):
     type: Literal[OrientationType.EULER] = OrientationType.EULER
     attributes = ("euler",)
 
-    euler: Optional[Vec3] = None
+    euler: Vec3 = np.array((0, 0, 0))
     """Orientation of the frame. See Frame orientations. The sequence of axes around which these rotations are applied is determined by the eulerseq attribute of compiler and is the same for the entire model."""
 
 
@@ -167,7 +167,7 @@ class XYAxes(OrientationBase):
     type: Literal[OrientationType.XYAXES] = OrientationType.XYAXES
     attributes = ("xyaxes",)
 
-    xyaxes: Optional[Vec6] = None
+    xyaxes: Vec6 = np.array((1, 0, 0, 0, 1, 0))
     """Orientation of the frame. See Frame orientations."""
 
 
@@ -177,7 +177,7 @@ class ZAxis(OrientationBase):
     type: Literal[OrientationType.ZAXIS] = OrientationType.ZAXIS
     attributes = ("zaxis",)
 
-    zaxis: Optional[Vec3] = None
+    zaxis: Vec3 = np.array((0, 0, 1))
     """Orientation of the frame. See Frame orientations."""
 
 

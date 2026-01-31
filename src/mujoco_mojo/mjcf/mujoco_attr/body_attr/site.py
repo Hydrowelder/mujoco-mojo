@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Optional
 
+import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import (
     GeomType,
     MaterialName,
+    SiteName,
     Vec2,
     Vec3,
     Vec4,
@@ -35,7 +37,6 @@ _site_attr = (
     "orientation",
     "material",
     "size",
-    "fromto",
     "rgba",
     "user",
 )
@@ -48,28 +49,25 @@ class SiteBase(XMLModel):
 
     tag = "site"
 
-    name: Optional[str] = None
+    name: Optional[SiteName] = None
     """Name of the site."""
 
     class_: Optional[str] = None
     """Defaults class for setting unspecified attributes."""
 
-    group: Optional[int] = None
+    group: int = 0
     """Integer group to which the site belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of sites."""
 
     material: Optional[MaterialName] = None
     """Material used to specify the visual properties of the site."""
 
-    rgba: Optional[Vec4] = None
+    rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
     """Color and transparency. If this value is different from the internal default, it overrides the corresponding material properties."""
 
-    fromto: Optional[Vec6] = None
-    """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
-
-    pos: Optional[Pos] = None
+    pos: Pos = Pos(pos=np.array((0, 0, 0)))
     """Position of the site frame."""
 
-    orientation: Optional[Orientation] = None
+    orientation: Orientation = Quat()
     """Orientation of the site frame. See Frame orientations."""
 
     user: Optional[VecN] = None
@@ -95,7 +93,7 @@ class SiteSphere(SiteBase):
 class SiteCapsule(SiteBase):
     """This element creates a capsule site."""
 
-    attributes = _site_attr + ("size",)
+    attributes = _site_attr + ("size", "fromto")
     type: Literal[GeomType.CAPSULE] = GeomType.CAPSULE
     """Type of geometric shape.
 
@@ -108,11 +106,14 @@ class SiteCapsule(SiteBase):
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
+    fromto: Optional[Vec6] = None
+    """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
+
 
 class SiteEllipsoid(SiteBase):
     """This element creates a ellipsoid site."""
 
-    attributes = _site_attr + ("size",)
+    attributes = _site_attr + ("size", "fromto")
     type: Literal[GeomType.ELLIPSOID] = GeomType.ELLIPSOID
     """Type of geometric shape.
 
@@ -125,11 +126,14 @@ class SiteEllipsoid(SiteBase):
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
+    fromto: Optional[Vec6] = None
+    """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
+
 
 class SiteCylinder(SiteBase):
     """This element creates a cylinder site."""
 
-    attributes = _site_attr + ("size",)
+    attributes = _site_attr + ("size", "fromto")
     type: Literal[GeomType.CYLINDER] = GeomType.CYLINDER
     """Type of geometric shape.
 
@@ -142,11 +146,14 @@ class SiteCylinder(SiteBase):
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
+    fromto: Optional[Vec6] = None
+    """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
+
 
 class SiteBox(SiteBase):
     """This element creates a box site."""
 
-    attributes = _site_attr + ("size",)
+    attributes = _site_attr + ("size", "fromto")
     type: Literal[GeomType.BOX] = GeomType.BOX
     """Type of geometric shape.
 
@@ -158,6 +165,9 @@ class SiteBox(SiteBase):
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
+
+    fromto: Optional[Vec6] = None
+    """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
 
 
 Site = Annotated[

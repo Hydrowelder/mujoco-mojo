@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -15,7 +16,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
-from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import BodyName, Sleep, VecN
@@ -64,19 +65,19 @@ class Body(XMLModel):
     childclass: Optional[str] = None
     """If this attribute is present, all descendant elements that admit a defaults class will use the class specified here, unless they specify their own class or another body or frame with a childclass attribute is encountered along the chain of nested bodies and frames. Recall Default settings."""
 
-    mocap: Optional[bool] = None
+    mocap: bool = False
     """If this attribute is "true", the body is labeled as a mocap body. This is allowed only for bodies that are children of the world body and have no joints. Such bodies are fixed from the viewpoint of the dynamics, but nevertheless the forward kinematics set their position and orientation from the fields mjData.mocap_{pos,quat} at each time step. The size of these arrays is adjusted by the compiler so as to match the number of mocap bodies in the model. This mechanism can be used to stream motion capture data into the simulation. Mocap bodies can also be moved via mouse perturbations in the interactive visualizer, even in dynamic simulation mode. This can be useful for creating props with adjustable position and orientation."""
 
-    pos: Optional[Pos] = None
+    pos: Pos = Pos(pos=np.array((0, 0, 0)))
     """The 3D position of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
 
-    orientation: Optional[Orientation] = None
+    orientation: Orientation = Quat()
     """See Frame orientations."""
 
-    gravcomp: Optional[float] = None
+    gravcomp: float = 0
     """Gravity compensation force, specified as fraction of body weight. This attribute creates an upwards force applied to the body's center of mass, countering the force of gravity. As an example, a value of 1 creates an upward force equal to the body's weight and compensates for gravity exactly. Values greater than 1 will create a net upwards force or buoyancy effect."""
 
-    sleep: Optional[Sleep] = None
+    sleep: Sleep = Sleep.AUTO
     """Sleep policy for the tree under this body. This attribute is only supported by moving bodies which are the root of a kinematic tree. For the default auto, the compiler will set the sleep policy as follows:
 
     * A tree which is affected by actuators is not allowed to sleep (overridable).

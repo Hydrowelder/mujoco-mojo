@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Tuple
 
+import numpy as np
+
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import (
     ColorSpace,
+    GridLayoutStr,
     Mark,
     TextureBuiltInType,
     TextureName,
@@ -54,7 +57,7 @@ class Texture(XMLModel):
     name: Optional[TextureName] = None
     """As with all other assets, a texture must have a name in order to be referenced. However if the texture is loaded from a single file with the file attribute, the explicit name can be omitted and the file name (without the path and extension) becomes the texture name. If the name after parsing is empty and the texture type is not "skybox", the compiler will generate an error."""
 
-    type: Optional[TextureType] = None
+    type: TextureType = TextureType.CUBE
     """This attribute determines how the texture is represented and mapped to objects. It also determines which of the remaining attributes are relevant. The keywords have the following meaning:
 
     The cube type has the effect of shrink-wrapping a texture cube over an object. Apart from the adjustment provided by the texuniform attribute of material, the process is automatic. Internally the GPU constructs a ray from the center of the object to each pixel (or rather fragment), finds the intersection of this ray with the cube surface (the cube and the object have the same center), and uses the corresponding texture color. The six square images defining the cube can be the same or different; if they are the same, only one copy is stored in mjModel. There are four mechanisms for specifying the texture data:
@@ -68,20 +71,20 @@ class Texture(XMLModel):
 
     The 2d type maps a 2D image to a 3D object using texture coordinates (a.k.a UV coordinates). However, UV coordinates are only available for meshes. For primitive geoms, the texture is mapped to the object surface using the local XY coordinates of the geom, effectively projecting the texture along the Z axis. This sort of mapping is only suitable for planes and height fields, since their top surfaces always face the Z axis. 2d textures can be rectangular, unlike the sides of cube textures which must be square. The scaling can be controlled with the texrepeat attribute of material. The data can be loaded from a single file or created procedurally."""
 
-    colorspace: Optional[ColorSpace] = None
+    colorspace: ColorSpace = ColorSpace.AUTO
     """This attribute determines the color space of the texture. The default value auto means that the color space will be determined from the image file itself. If no color space is defined in the file, then linear is assumed."""
 
-    content_type: Optional[str] = None
+    content_type: Optional[Path] = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME types) of the file to be loaded. Any filename extensions will be ignored. Currently image/png, image/ktx, and image/vnd.mujoco.texture are supported."""
 
     file: Optional[Path] = None
     """If this attribute is specified, and the builtin attribute below is set to "none", the texture data is loaded from a single file. See the texturedir attribute of compiler regarding the file path."""
 
-    gridsize: Optional[Tuple[int, int]] = None
+    gridsize: Tuple[int, int] = (1, 1)
     """When a cube or skybox texture is loaded from a single file, this attribute and the next specify how the six square sides of the texture cube are obtained from the single image. The default setting "1 1" means that the same image is repeated on all sides of the cube. Otherwise the image is interpreted as a grid from which the six sides are extracted. The two integers here correspond to the number of rows and columns in the grid. Each integer must be positive and the product of the two cannot exceed 12. The number of rows and columns in the image must be integer multiples of the number of rows and columns in the grid, and these two multiples must be equal, so that the extracted images are square."""
 
-    gridlayout: Optional[str] = None
-    """When a cube or skybox texture is loaded from a single file, and the grid size is different from "1 1", this attribute specifies which grid cells are used and which side of the cube they correspond to. There are many skybox textures available online as composite images, but they do not use the same convention, which is why we have designed a flexible mechanism for decoding them. The string specified here must be composed of characters from the set {'.', 'R', 'L', 'U', 'D', 'F', 'B'}. The number of characters must equal the product of the two grid sizes. The grid is scanned in row-major order. The '.' character denotes an unused cell. The other characters are the first letters of Right, Left, Up, Down, Front, Back; see below for coordinate frame description. If the symbol for a given side appears more than once, the last definition is used. If a given side is omitted, it is filled with the color specified by the rgb1 attribute. For example, the desert landscape below can be loaded as a skybox or a cube map using gridsize = "3 4" and gridlayout = ".U..LFRB.D.." The full-resolution image file without the markings can be downloaded here."""
+    gridlayout: GridLayoutStr = "............"
+    """When a cube or skybox texture is loaded from a single file, and the grid size is different from "1 1", this attribute specifies which grid cells are used and which side of the cube they correspond to. There are many skybox textures available online as composite images, but they do not use the same convention, which is why we have designed a flexible mechanism for decoding them. The string specified here must be composed of characters from the set {`'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, `'B'`}. The number of characters must equal the product of the two grid sizes. The grid is scanned in row-major order. The `'.'` character denotes an unused cell. The other characters are the first letters of Right, Left, Up, Down, Front, Back; see below for coordinate frame description. If the symbol for a given side appears more than once, the last definition is used. If a given side is omitted, it is filled with the color specified by the rgb1 attribute. For example, the desert landscape below can be loaded as a skybox or a cube map using gridsize = "3 4" and gridlayout = ".U..LFRB.D.." The full-resolution image file without the markings can be downloaded here."""
 
     fileright: Optional[Path] = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, Down = -Y, Front = +Z, Back = -Z."""
@@ -126,32 +129,32 @@ class TextureBuiltIn(Texture):
     * flat
         * Fills the entire texture with rgb1, except for the bottom face of cube and skybox textures which is filled with rgb2."""
 
-    rgb1: Optional[Vec3] = None
+    rgb1: Vec3 = np.array((0.8, 0.8, 0.8))
     """The first color used for procedural texture generation. This color is also used to fill missing sides of cube and skybox textures loaded from files. The components of this and all other RGB(A) vectors should be in the range [0 1]."""
 
-    rgb2: Optional[Vec3] = None
+    rgb2: Vec3 = np.array((0.5, 0.5, 0.5))
     """The second color used for procedural texture generation."""
 
-    mark: Optional[Mark] = None
+    mark: Mark = Mark.NONE
     """Procedural textures can be marked with the markrgb color, on top of the colors determined by the builtin type. "edge" means that the edges of all texture images are marked. "cross" means that a cross is marked in the middle of each image. "random" means that randomly chosen pixels are marked. All markings are one-pixel wide, thus the markings appear larger and more diffuse on smaller textures."""
 
-    markrgb: Optional[Vec3] = None
+    markrgb: Vec3 = np.array((0, 0, 0))
     """The color used for procedural texture markings."""
 
-    random: Optional[float] = None
+    random: float = 0.01
     """When the mark attribute is set to "random", this attribute determines the probability of turning on each pixel. Note that larger textures have more pixels, and the probability here is applied independently to each pixel - thus the texture size and probability need to be adjusted jointly. Together with a gradient skybox texture, this can create the appearance of a night sky with stars. The random number generator is initialized with a fixed seed."""
 
-    width: Optional[int] = None
+    width: int = 0
     """The width of a procedural texture, i.e., the number of columns in the image. Larger values usually result in higher quality images, although in some cases (e.g. checker patterns) small values are sufficient. For textures loaded from files, this attribute is ignored."""
 
-    height: Optional[int] = None
+    height: int = 0
     """The height of the procedural texture, i.e., the number of rows in the image. For cube and skybox textures, this attribute is ignored and the height is set to 6 times the width. For textures loaded from files, this attribute is ignored."""
 
-    hflip: Optional[bool] = None
+    hflip: bool = False
     """If true, images loaded from file are flipped in the horizontal direction. Does not affect procedural textures."""
 
-    vflip: Optional[bool] = None
+    vflip: bool = False
     """If true, images loaded from file are flipped in the vertical direction. Does not affect procedural textures."""
 
-    nchannel: Optional[int] = None
+    nchannel: int = 3
     """The number of channels in the texture image file. This allows loading 4-channel textures (RGBA) or single-channel textures (e.g., for Physics-Based Rendering properties such as roughness or metallic)."""

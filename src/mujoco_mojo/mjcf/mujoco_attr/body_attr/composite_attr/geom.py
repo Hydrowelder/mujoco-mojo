@@ -1,3 +1,11 @@
+"""Defines the geometric types for composites.
+
+!!! note
+    I was pretty lazy when I did this, I just decided to have these type inherit from their respective Geom class. That is not a super clean way to do it because it means that these objects may have attributes that MuJoCo will just ignore. The XML attributes defined here are restricted to the subset that only the composite geometries have.
+
+    Sorry...
+"""
+
 from __future__ import annotations
 
 from typing import Annotated
