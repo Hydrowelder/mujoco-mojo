@@ -5,10 +5,12 @@ from typing import Optional, Sequence
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
@@ -89,19 +91,43 @@ class Body(XMLModel):
     """See User parameters. Has length of `nbody_user`"""
 
     inertial: Optional[Inertial] = None
+    """Inertial assigned to body."""
+
     joints: Sequence[Joint] = Field(default_factory=list)
+    """Joints assigned to body."""
+
     freejoints: Optional[Sequence[FreeJoint]] = Field(default_factory=list)
+    """Free joints assigned to body. Defining more than one free joint will not do anything"""
+
     geoms: Sequence[Geom] = Field(default_factory=list)
+    """Geometries assigned to body."""
+
     sites: Optional[Sequence[Site]] = Field(default_factory=list)
-    cameras: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
-    lights: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    """Sites assigned to body."""
+
+    cameras: Optional[Sequence[Camera]] = Field(default_factory=list)
+    """Cameras assigned to body."""
+
+    lights: Optional[Sequence[Light]] = Field(default_factory=list)
+    """Lights assigned to body."""
+
     composites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    """Composites assigned to body."""
+
     flexcomps: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    """Flexible composites assigned to body."""
+
     plugins: Optional[Sequence[Plugin]] = Field(default_factory=list)  # TODO
+    """Plugins assigned to body."""
+
     attaches: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    """Attach elements assigned to body."""
+
     frames: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    """Frames assigned to body."""
 
     bodies: Sequence[Body] = Field(default_factory=list)
+    """Bodies assigned to body. Handled recursively."""
 
 
 _temp_list = list(_body_children)
