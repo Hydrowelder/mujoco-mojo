@@ -12,6 +12,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import Skin
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.typing import CompositeInitial, CompositeType, Vec3, VecN
+from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Composite"]
 
@@ -63,7 +64,9 @@ class Composite(XMLModel):
     size: Optional[Tuple[int, int, int]] = None
     """Scaling of the curve functions. size[0] is the scaling of s, size[1] is the radius of cos(s) and sin(s), and size[2] is the speed of the argument (i.e. cos(2*pi*size[2]*s))."""
 
-    joints: Sequence[CompositeJoint] = Field(default_factory=list)
+    joints: Sequence[CompositeJoint] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
     """Joints assigned to composite."""
 
     geom: Optional[CompositeGeom] = None
@@ -75,5 +78,5 @@ class Composite(XMLModel):
     skin: Optional[Skin] = None
     """Skin assigned to composite."""
 
-    plugins: Sequence[Plugin] = Field(default_factory=list)
+    plugins: Sequence[Plugin] = Field(default_factory=list, exclude_if=is_empty_list)
     """Plugins assigned to composite."""

@@ -5,6 +5,7 @@ import numpy as np
 
 import mujoco_mojo as mojo
 import mujoco_mojo.mjcf as mjcf
+import mujoco_mojo.typing as mojot
 
 
 def test_import():
@@ -17,9 +18,14 @@ def test_import():
 # =============== build a basic model ===============
 quat = mjcf.Quat(quat=np.array([1, 2, 3, 4]))
 sphere = mjcf.GeomSphere(size=0.2, rgba=np.asarray((1, 0, 0, 1)))
-material = mjcf.Material(name=mojo.typing.MaterialName("material_name"))
+material = mjcf.Material(
+    name=mojot.MaterialName(
+        "material_name"
+    ),  # using a NewType helps make sure when connecting this later on
+)
 
 model = mjcf.Mujoco(
+    model=mojot.ModelName("hello"),
     worldbody=mjcf.WorldBody(
         geoms=[
             mjcf.GeomPlane(
@@ -28,12 +34,12 @@ model = mjcf.Mujoco(
                 rgba=np.array((0.5, 0.5, 0.5, 1)),
                 pos=mjcf.Pos(pos=np.array((1, 2, 3))),
                 orientation=quat,
-                material=material.name,
+                material=material.name,  # static analyzer warns you if this is not MaterialName type
             )
         ],
         bodies=[
             mjcf.Body(
-                name=mojo.typing.BodyName("robot"),
+                name=mojot.BodyName("robot"),
                 geoms=[
                     sphere,
                     mjcf.GeomCylinder(
@@ -44,7 +50,7 @@ model = mjcf.Mujoco(
             )
         ],
     ),
-    model="hello",
+    assets=[mjcf.Asset(materials=[material])],
     compilers=[mjcf.Compiler(balanceinertia=True)],
 )
 

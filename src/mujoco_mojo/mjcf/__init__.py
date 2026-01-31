@@ -2,6 +2,7 @@
 
 from mujoco_mojo.mjcf.mujoco import Mujoco
 from mujoco_mojo.mjcf.mujoco_attr import (
+    Asset,
     Attach,
     Body,
     Camera,
@@ -58,6 +59,7 @@ from mujoco_mojo.mjcf.position import Pos
 
 __all__ = [
     "Mujoco",
+    "Asset",
     "Attach",
     "Body",
     "Camera",

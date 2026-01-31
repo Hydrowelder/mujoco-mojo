@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
+from typing import Any
 from xml.dom import minidom
 from xml.etree.ElementTree import tostring
 
@@ -37,3 +38,7 @@ def to_pretty_xml(element) -> str:
     rough = tostring(element, "utf-8")
     reparsed = minidom.parseString(rough)
     return reparsed.toprettyxml(indent="  ")
+
+
+def is_empty_list(v: Any) -> bool:
+    return not len(v)
