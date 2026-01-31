@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from typing import Annotated, Literal, Optional, TypeAlias
+from typing import Annotated, Literal, Optional
 
+import numpy as np
 from pydantic import Field
+from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import Vec3, Vec4, Vec6
 
 __all__ = [
     "Orientation",
+    "OrientationType",
     "Quat",
     "AxisAngle",
     "XYAxes",
@@ -41,6 +44,90 @@ class OrientationBase(XMLModel):
     All MJCF elements that have spatial frames allow the five attributes listed below. The frame orientation is specified using at most one of these attributes. The quat attribute has a default value corresponding to the null rotation, while the others are initialized in the special undefined state. Thus if none of these attributes are specified by the user, the frame is not rotated."""
 
     tag = ""
+
+    def as_quat(self, euler_order: Optional[str] = None) -> Vec4:
+        if isinstance(self, Euler) and self.euler is not None and euler_order is None:
+            raise ValueError(
+                "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+            )
+        # returns [w, x, y, z] for MuJoCo
+        rot = self._to_rotation(euler_order)
+        q = rot.as_quat()  # scipy returns [x, y, z, w]
+        return np.asarray([q[3], q[0], q[1], q[2]])
+
+    def as_matrix(self, euler_order: Optional[str] = None):
+        if isinstance(self, Euler) and self.euler is not None and euler_order is None:
+            raise ValueError(
+                "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+            )
+        return self._to_rotation(euler_order).as_matrix()
+
+    def _to_rotation(self, euler_order: Optional[str] = None) -> R:
+        # determine the subtype to make a scipy Rotation object
+        if isinstance(self, Quat) and self.quat is not None:
+            quat = np.asarray(self.quat)
+            x, y, z, w = quat[1], quat[2], quat[3], quat[0]
+            return R.from_quat([x, y, z, w])
+        elif isinstance(self, Euler) and self.euler is not None:
+            if euler_order is None:
+                raise ValueError(
+                    "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+                )
+            return R.from_euler(euler_order, np.asarray(self.euler))
+        # WARNING: I vibecoded the following
+        elif isinstance(self, AxisAngle) and self.axisangle is not None:
+            axisangle = np.asarray(self.axisangle)
+            axis = axisangle[:3]
+            angle = axisangle[3]
+
+            # Normalize the axis vector
+            norm = np.linalg.norm(axis)
+            if norm == 0:
+                raise ValueError(
+                    "Axis vector cannot be zero for AxisAngle orientation."
+                )
+            axis = axis / norm
+
+            # Rotation vector = axis * angle (angle should be in radians)
+            # If angle is in degrees, convert: np.radians(angle)
+            rotvec = axis * angle
+            return R.from_rotvec(rotvec)
+        elif isinstance(self, XYAxes) and self.xyaxes is not None:
+            vecs = np.asarray(self.xyaxes)
+            x = vecs[:3]
+            y = vecs[3:]
+
+            # Orthonormalize Y w.r.t X
+            x = x / np.linalg.norm(x)
+            y = y - np.dot(y, x) * x
+            y = y / np.linalg.norm(y)
+
+            z = np.cross(x, y)
+
+            # Build rotation matrix with columns as axes
+            rotmat = np.column_stack((x, y, z)).astype(float)
+            return R.from_matrix(rotmat)
+        elif isinstance(self, ZAxis) and self.zaxis is not None:
+            z = np.asarray(self.zaxis)
+            z = z / np.linalg.norm(z)
+
+            # Choose arbitrary x-axis that's not colinear with z
+            if np.allclose(z, [0, 0, 1]):
+                # Already aligned, identity rotation
+                return R.identity()
+            else:
+                # pick temp x along world x-axis
+                tmp = np.array([1.0, 0.0, 0.0])
+                x = np.cross(tmp, z)
+                x /= np.linalg.norm(x)
+                y = np.cross(z, x)
+
+                rotmat = np.column_stack((x, y, z))
+                return R.from_matrix(rotmat)
+
+        raise NotImplementedError(
+            f"Rotation matrix transforms has not yet been developed for type ({type(self)})"
+        )
 
 
 class Quat(OrientationBase):
@@ -94,7 +181,7 @@ class ZAxis(OrientationBase):
     """Orientation of the frame. See Frame orientations."""
 
 
-Orientation: TypeAlias = Annotated[
-    Quat | AxisAngle | Euler | XYAxes | ZAxis,
-    Field(discriminator="type"),
+Orientation = Annotated[
+    Quat | AxisAngle | Euler | XYAxes | ZAxis, Field(discriminator="type")
 ]
+"""Discriminated union for type hinting the various types of Orientations."""

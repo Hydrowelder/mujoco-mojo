@@ -17,6 +17,8 @@ dependencies = [
     "pandas>=3.0.0",
     "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",
+    "scipy>=1.17.0",
+    "scipy-stubs[scipy]>=1.17.0.2",
 ]
 
 [dependency-groups]
