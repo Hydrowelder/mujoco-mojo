@@ -1,3 +1,5 @@
+"""Defines child attributes of the Mujoco class."""
+
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr import (
     HField,
     Layer,
