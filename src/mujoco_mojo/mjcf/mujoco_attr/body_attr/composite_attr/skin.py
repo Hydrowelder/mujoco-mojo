@@ -1,7 +1,7 @@
 from typing import Optional
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import MaterialName, Vec4
+from mujoco_mojo.typing import MaterialName, Vec4
 
 
 class Skin(XMLModel):

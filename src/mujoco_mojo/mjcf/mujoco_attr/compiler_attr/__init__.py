@@ -1,1 +1,3 @@
-from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import *
+from .lengthrange import LengthRange
+
+__all__ = ["LengthRange"]

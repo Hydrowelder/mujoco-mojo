@@ -7,7 +7,7 @@ from pydantic import Field
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import (
+from mujoco_mojo.typing import (
     GeomType,
     MaterialName,
     Vec2,

@@ -4,7 +4,7 @@ from typing import Optional
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import LightType, TrackingMode, Vec3
+from mujoco_mojo.typing import LightType, TrackingMode, Vec3
 
 __all__ = ["Light"]
 

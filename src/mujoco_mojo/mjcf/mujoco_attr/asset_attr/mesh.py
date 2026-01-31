@@ -7,7 +7,7 @@ from pydantic import field_validator
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import Inertia, Vec3, Vec4
+from mujoco_mojo.typing import Inertia, Vec3, Vec4
 
 __all__ = [
     "Mesh",

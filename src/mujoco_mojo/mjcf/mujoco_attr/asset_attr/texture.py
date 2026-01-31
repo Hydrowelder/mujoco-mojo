@@ -4,16 +4,16 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import (
+from mujoco_mojo.typing import (
     ColorSpace,
     Mark,
-    TextureBuiltIn,
+    TextureBuiltInType,
     TextureName,
     TextureType,
     Vec3,
 )
 
-__all__ = ["Texture"]
+__all__ = ["Texture", "TextureBuiltIn"]
 
 _texture_attr = (
     "name",
@@ -102,7 +102,7 @@ class Texture(XMLModel):
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, Down = -Y, Front = +Z, Back = -Z."""
 
 
-class TextureProcedural(Texture):
+class TextureBuiltIn(Texture):
     attributes = _texture_attr + (
         "builtin",
         "rgb1",
@@ -117,7 +117,7 @@ class TextureProcedural(Texture):
         "nchannel",
     )
 
-    builtin: TextureBuiltIn
+    builtin: TextureBuiltInType
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored. The keywords have the following meaning:
     * gradient
         * Generates a color gradient from rgb1 to rgb2. The interpolation in color space is done through a sigmoid function. For cube and skybox textures the gradient is along the +Y axis, i.e., from top to bottom for skybox rendering.

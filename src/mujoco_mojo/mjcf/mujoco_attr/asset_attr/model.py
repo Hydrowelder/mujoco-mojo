@@ -4,27 +4,9 @@ from pathlib import Path
 from typing import Optional
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import ModelName
+from mujoco_mojo.typing import ModelName
 
 __all__ = ["Model"]
-
-_mesh_attr = (
-    "name",
-    "class_",
-    "content_type",
-    "file",
-    "vertex",
-    "normal",
-    "texcoord",
-    "face",
-    "refpos",
-    "refquat",
-    "scale",
-    "smoothnormal",
-    "maxhullvert",
-    "inertia",
-    "material",
-)
 
 
 class Model(XMLModel):

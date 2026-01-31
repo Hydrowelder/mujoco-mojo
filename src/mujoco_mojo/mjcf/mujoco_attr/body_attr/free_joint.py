@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import ClassVar, Optional
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import Align, JointType
+from mujoco_mojo.typing import Align, JointType
 
 __all__ = ["FreeJoint"]
 
