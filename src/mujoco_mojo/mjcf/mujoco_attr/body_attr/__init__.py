@@ -1,3 +1,5 @@
+"""Defines child attributes of the Body class."""
+
 from .attach import Attach
 from .camera import Camera
 from .composite import Composite

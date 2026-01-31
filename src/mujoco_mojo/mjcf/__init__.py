@@ -1,3 +1,5 @@
+"""MJCF is a collection of classes made to make building your own MJCF easier with Python."""
+
 from mujoco_mojo.mjcf.mujoco import Mujoco
 from mujoco_mojo.mjcf.mujoco_attr import (
     Attach,
