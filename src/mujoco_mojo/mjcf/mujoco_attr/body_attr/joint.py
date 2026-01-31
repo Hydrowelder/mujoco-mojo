@@ -75,11 +75,12 @@ class Joint(XMLModel):
 
     actuatorfrcrange: Optional[Vec2] = None
     """Range for clamping total actuator forces acting on this joint. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints.
-    The compiler expects the first value to be smaller than the second value.
-    Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
+
+    The compiler expects the first value to be smaller than the second value. Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
 
     actuatorfrclimited: Optional[ActuatorFrcLimited] = None
     """This attribute specifies whether actuator forces acting on the joint should be clamped. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints.
+
     This attribute interacts with the actuatorfrcrange attribute. If this attribute is "false", actuator force clamping is disabled. If it is "true", actuator force clamping is enabled. If this attribute is "auto", and autolimits is set in compiler, actuator force clamping will be enabled if actuatorfrcrange is defined."""
 
     actuatorgravcomp: Optional[bool] = None
