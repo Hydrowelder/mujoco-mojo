@@ -15,6 +15,7 @@ __all__ = [
     "Vec5",
     "Vec6",
     "VecN",
+    "GridLayoutStr",
     "GeomType",
     "Integrator",
     "Cone",
@@ -24,7 +25,7 @@ __all__ = [
     "Coordinate",
     "Angle",
     "InertiaFromGeom",
-    "Mode",
+    "LengthRangeMode",
     "Inertia",
     "TextureType",
     "ColorSpace",
@@ -37,21 +38,34 @@ __all__ = [
     "Align",
     "FluidShape",
     "TrackingMode",
+    "LayerRole",
     "LightType",
     "CompositeType",
     "CompositeInitial",
     "CompositeJointKind",
     "FlexCompDOF",
     "FlexCompType",
+    "MeshName",
+    "HFieldName",
     "MaterialName",
     "TextureName",
     "BodyName",
+    "JointName",
     "ModelName",
+    "GeomName",
+    "SiteName",
+    "CameraName",
+    "LightName",
     "ActuatorGroup",
     "GeomGroup",
     "InertiaGroupRange",
 ]
 
+MeshName = NewType("MeshName", str)
+"""Alias of string. Used to type hint a field is the name of a Mesh."""
+
+HFieldName = NewType("HFieldName", str)
+"""Alias of string. Used to type hint a field is the name of an HField."""
 
 MaterialName = NewType("MaterialName", str)
 """Alias of string. Used to type hint a field is the name of a Material."""
@@ -59,11 +73,26 @@ MaterialName = NewType("MaterialName", str)
 TextureName = NewType("TextureName", str)
 """Alias of string. Used to type hint a field is the name of a Texture."""
 
+ModelName = NewType("ModelName", str)
+"""Alias of string. Used to type hint a field is the name of a Model."""
+
 BodyName = NewType("BodyName", str)
 """Alias of string. Used to type hint a field is the name of a Body."""
 
-ModelName = NewType("ModelName", str)
-"""Alias of string. Used to type hint a field is the name of a Model."""
+JointName = NewType("JointName", str)
+"""Alias of string. Used to type hint a field is the name of a Joint."""
+
+GeomName = NewType("GeomName", str)
+"""Alias of string. Used to type hint a field is the name of a Geom."""
+
+SiteName = NewType("SiteName", str)
+"""Alias of string. Used to type hint a field is the name of a Site."""
+
+CameraName = NewType("CameraName", str)
+"""Alias of string. Used to type hint a field is the name of a Camera."""
+
+LightName = NewType("LightName", str)
+"""Alias of string. Used to type hint a field is the name of a Light."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
@@ -73,6 +102,15 @@ GeomGroup = Annotated[int, Field(ge=0, le=30)]
 
 InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
 """A tuple specifying the inclusive range of geom groups used for inertia computation."""
+
+GridLayoutStr = Annotated[
+    str,
+    Field(
+        pattern=r"^[\.RLUDFB]{9}$",
+        description="String which may only use `'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, and `'B'`",
+    ),
+]
+"""A string used for texture grid layout. May only include `'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, and `'B'`."""
 
 Vec2 = Annotated[NDArray[Shape["2"], float | int], ...]
 """A 2-element numeric array."""
@@ -95,6 +133,101 @@ VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa:
 
 def empty_list_field():
     return Field(default_factory=list, exclude_if=is_empty_list)
+
+
+class EulerSeq(StrEnum):
+    """Euler rotation sequences.
+
+    * Lowercase letters denote intrinsic rotations (about the rotating frame).
+    * Uppercase letters denote extrinsic rotations (about the fixed parent frame).
+    """
+
+    # Intrinsic Tait-Bryan
+    xyz = "xyz"
+    """Intrinsic Tait-Bryan xyz sequence."""
+    xzy = "xzy"
+    """Intrinsic Tait-Bryan xzy sequence."""
+    yxz = "yxz"
+    """Intrinsic Tait-Bryan yxz sequence."""
+    yzx = "yzx"
+    """Intrinsic Tait-Bryan yzx sequence."""
+    zxy = "zxy"
+    """Intrinsic Tait-Bryan zxy sequence."""
+    zyx = "zyx"
+    """Intrinsic Tait-Bryan zyx sequence."""
+
+    # Intrinsic Proper Euler
+    xyx = "xyx"
+    """Intrinsic proper Euler xyx sequence."""
+    xzx = "xzx"
+    """Intrinsic proper Euler xzx sequence."""
+    yxy = "yxy"
+    """Intrinsic proper Euler yxy sequence."""
+    yzy = "yzy"
+    """Intrinsic proper Euler yzy sequence."""
+    zxz = "zxz"
+    """Intrinsic proper Euler zxz sequence."""
+    zyz = "zyz"
+    """Intrinsic proper Euler zyz sequence."""
+
+    # Extrinsic Tait-Bryan
+    XYZ = "XYZ"
+    """Extrinsic Tait-Bryan XYZ sequence"""
+    XZY = "XZY"
+    """Extrinsic Tait-Bryan XZY sequence"""
+    YXZ = "YXZ"
+    """Extrinsic Tait-Bryan YXZ sequence"""
+    YZX = "YZX"
+    """Extrinsic Tait-Bryan YZX sequence"""
+    ZXY = "ZXY"
+    """Extrinsic Tait-Bryan ZXY sequence"""
+    ZYX = "ZYX"
+    """Extrinsic Tait-Bryan ZYX sequence"""
+
+    # Extrinsic Proper Euler
+    XYX = "XYX"
+    """Extrinsic proper Euler XYX"""
+    XZX = "XZX"
+    """Extrinsic proper Euler XZX"""
+    YXY = "YXY"
+    """Extrinsic proper Euler YXY"""
+    YZY = "YZY"
+    """Extrinsic proper Euler YZY"""
+    ZXZ = "ZXZ"
+    """Extrinsic proper Euler ZXZ"""
+    ZYZ = "ZYZ"
+    """Extrinsic proper Euler ZYZ"""
+
+
+class LayerRole(StrEnum):
+    """Role of the texture. The valid values, expected number of channels, and the role semantics are:"""
+
+    RGB = "rgb"
+    """3 channels. base color / albedo [red, green, blue]."""
+
+    NORMAL = "normal"
+    """3 channels. bump map (surface normals)."""
+
+    OCCLUSION = "occlusion"
+    """1 channel. ambient occlusion."""
+
+    ROUGHNESS = "roughness"
+    """1 channel. roughness."""
+
+    METALLIC = "metallic"
+    """1 channel. metallicity."""
+
+    OPACITY = "opacity"
+    """1 channel. opacity (alpha channel)."""
+
+    EMISSIVE = "emissive"
+    """4 channels. RGB light emmision intensity, exposure weight in 4th channel."""
+
+    ORM = "orm"
+    """3 channels. packed 3 channel [occlusion, roughness, metallic]."""
+
+    RGBA = "rgba"
+    """4 channels. packed 4 channel [red, green, blue, alpha]."""
 
 
 class GeomType(StrEnum):
@@ -234,7 +367,7 @@ class InertiaFromGeom(StrEnum):
     """Masses and inertias are inferred automatically only when the inertial element is missing in the body definition."""
 
 
-class Mode(StrEnum):
+class LengthRangeMode(StrEnum):
     """Determines the type of actuators to which length range computation is applied."""
 
     NONE = "none"

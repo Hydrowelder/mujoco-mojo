@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.typing import LayerRole, TextureName
 
 __all__ = ["Layer"]
 
@@ -15,10 +16,10 @@ class Layer(XMLModel):
         "role",
     )
 
-    texture: str
+    texture: TextureName
     """Name of the texture, like the texture attribute."""
 
-    role: str
+    role: LayerRole
     """Role of the texture. The valid values, expected number of channels, and the role semantics are:
 
     | value     | channels | description                                                  |

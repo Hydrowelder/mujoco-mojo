@@ -7,6 +7,7 @@ from pydantic import field_validator, model_validator
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import Vec3, Vec6
 
 __all__ = ["Inertial"]
@@ -26,7 +27,7 @@ class Inertial(XMLModel):
     )
     __exclusive_groups__ = (("diaginertia", "fullinertia"),)
 
-    pos: Vec3
+    pos: Pos
     """Position of the inertial frame. This attribute is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
 
     orientation: Optional[Orientation] = None

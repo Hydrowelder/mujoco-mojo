@@ -43,7 +43,7 @@ class Mujoco(XMLModel):
         "extensions",
     )
 
-    model: Optional[ModelName] = None
+    model: ModelName = ModelName("MuJoCo Model")
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
     options: Sequence[Option] = Field(default_factory=list, exclude_if=is_empty_list)

@@ -16,20 +16,18 @@ def test_import():
 
 
 # =============== build a basic model ===============
-quat = mjcf.Quat(quat=np.array([1, 2, 3, 4]))
+quat = mjcf.Quat(quat=np.array((1, 2, 3, 4)))
 sphere = mjcf.GeomSphere(size=0.2, rgba=np.asarray((1, 0, 0, 1)))
-material = mjcf.Material(
-    name=mojot.MaterialName(
-        "material_name"
-    ),  # using a NewType helps make sure when connecting this later on
-)
+
+# using a mojo.typing.MaterialName helps make sure when connecting this later on
+material = mjcf.Material(name=mojot.MaterialName("material_name"))
 
 model = mjcf.Mujoco(
     model=mojot.ModelName("hello"),
     worldbody=mjcf.WorldBody(
         geoms=[
             mjcf.GeomPlane(
-                name="floor",
+                name=mojot.GeomName("floor"),
                 size=np.asarray((5, 5, 0.1)),
                 rgba=np.array((0.5, 0.5, 0.5, 1)),
                 pos=mjcf.Pos(pos=np.array((1, 2, 3))),
@@ -43,7 +41,7 @@ model = mjcf.Mujoco(
                 geoms=[
                     sphere,
                     mjcf.GeomCylinder(
-                        size=np.asarray([1, 3]),
+                        size=np.asarray((1, 3)),
                         rgba=np.asarray((1, 0, 0, 1)),
                     ),
                 ],
@@ -71,15 +69,15 @@ json_file.with_stem("quat").write_text(quat.model_dump_json(exclude_none=True))
 assert "type" in quat.model_dump_json(exclude_none=True), (
     "Orientation type was not serialized"
 )
-quat = mjcf.Quat.model_validate_json(json_file.with_stem("quat").read_text())
+quat = type(quat).model_validate_json(json_file.with_stem("quat").read_text())
 
 
 json_file.with_stem("sphere").write_text(sphere.model_dump_json(exclude_none=True))
 assert "type" in sphere.model_dump_json(exclude_none=True), (
     "geom type was not serialized"
 )
-sphere = mjcf.SiteSphere.model_validate_json(json_file.with_stem("sphere").read_text())
+sphere = type(sphere).model_validate_json(json_file.with_stem("sphere").read_text())
 
 
 json_file.write_text(model.model_dump_json(exclude_none=True))
-model = mjcf.Mujoco.model_validate_json(json_file.read_text())
+model = type(model).model_validate_json(json_file.read_text())
