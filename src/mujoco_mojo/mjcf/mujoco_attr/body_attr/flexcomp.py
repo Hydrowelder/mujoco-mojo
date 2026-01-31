@@ -196,8 +196,18 @@ class FlexComp(XMLModel):
     origin: Optional[Vec3] = None
     """The origin of the flexcomp. Used for generating a volumetric mesh from an OBJ surface mesh. Each surface triangle is connected to the origin to create a tetrahedron, so the resulting volumetric mesh is guaranteed to be well-formed only for convex shapes."""
 
-    contacts: Sequence[float] = Field(default_factory=list)
-    edges: Sequence[float] = Field(default_factory=list)
-    elasticities: Sequence[float] = Field(default_factory=list)
-    pins: Sequence[float] = Field(default_factory=list)
-    plugins: Sequence[float] = Field(default_factory=list)
+    contacts: Sequence[float] = Field(
+        default_factory=list
+    )  # TODO these are mainly built off flex so Im gonna do those first
+    edges: Sequence[float] = Field(
+        default_factory=list
+    )  # TODO these are mainly built off flex so Im gonna do those first
+    elasticities: Sequence[float] = Field(
+        default_factory=list
+    )  # TODO these are mainly built off flex so Im gonna do those first
+    pins: Sequence[float] = Field(
+        default_factory=list
+    )  # TODO these are mainly built off flex so Im gonna do those first
+    plugins: Sequence[float] = Field(
+        default_factory=list
+    )  # TODO these are mainly built off flex so Im gonna do those first

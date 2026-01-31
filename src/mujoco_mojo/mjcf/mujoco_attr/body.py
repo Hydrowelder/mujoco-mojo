@@ -5,6 +5,7 @@ from typing import Optional, Sequence
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
@@ -17,7 +18,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import Sleep, VecN
+from mujoco_mojo.types import BodyName, Sleep, VecN
 
 __all__ = ["Body", "WorldBody"]
 
@@ -56,7 +57,7 @@ class Body(XMLModel):
     attributes = _body_attr
     children = _body_children
 
-    name: Optional[str] = None
+    name: Optional[BodyName] = None
     """Name of the body."""
 
     childclass: Optional[str] = None
@@ -116,13 +117,15 @@ class Body(XMLModel):
     composites: Sequence[Composite] = Field(default_factory=list)
     """Composites assigned to body."""
 
-    flexcomps: Sequence[FlexComp] = Field(default_factory=list)  # TODO
+    flexcomps: Sequence[FlexComp] = Field(
+        default_factory=list
+    )  # TODO finish flex first then return
     """Flexible composites assigned to body."""
 
-    plugins: Sequence[Plugin] = Field(default_factory=list)  # TODO
+    plugins: Sequence[Plugin] = Field(default_factory=list)
     """Plugins assigned to body."""
 
-    attaches: Sequence[float] = Field(default_factory=list)  # TODO
+    attaches: Sequence[Attach] = Field(default_factory=list)
     """Attach elements assigned to body."""
 
     frames: Sequence[float] = Field(default_factory=list)  # TODO

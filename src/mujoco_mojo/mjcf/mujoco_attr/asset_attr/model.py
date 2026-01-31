@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.types import ModelName
 
 __all__ = ["Model"]
 
@@ -33,7 +34,7 @@ class Model(XMLModel):
 
     attributes = ("name", "file", "content_type")
 
-    name: Optional[str] = None
+    name: Optional[ModelName] = None
     """Name of the sub-model, used for referencing in attach. If unspecified, the model name is used."""
 
     file: Path
