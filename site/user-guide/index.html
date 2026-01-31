@@ -2362,7 +2362,7 @@
 <p>Guide is coming soon...</p>
 <div class="admonition warning">
 <p class="admonition-title">Default Values</p>
-<p>Some attributes in this package make use of default values. Wherever possible, the default values match what is stated in the <a href="https://mujoco.readthedocs.io/en/stable/XMLreference.html#xml-reference" target="_blank">XML Reference</a>. The <code>to_xml</code> method found in all <code>XMLModel</code> (which is most) has an argument which will omit serializing fields set as default.</p>
+<p>Some attributes in this package make use of default values. Wherever possible, the default values match what is stated in the <a href="https://mujoco.readthedocs.io/en/stable/XMLreference.html#xml-reference" target="_blank">XML Reference</a>. The <code>to_xml</code> method found in all <code>XMLModel</code> (which is most objects in <code>mujoco_mojo.mjcf</code>) has an argument (<code>exclude_defaults</code>) which will omit serializing fields set as default.</p>
 <p>If you have a specific use case which is dependent on a value you leave as default, it is highly recommended that you pin that value as opposed to use the default. MuJoCo may change their defaults, and this package may fall behind. In that case, you would be using a "default" which is no longer the default.</p>
 </div>
 
