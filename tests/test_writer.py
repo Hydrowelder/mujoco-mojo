@@ -54,7 +54,7 @@ model = mjcf.Mujoco(
 
 
 # =============== ensure it works with mujoco ===============
-xml = mojo.utils.to_pretty_xml(model.to_xml())
+xml = mojo.utils.to_pretty_xml(model.to_xml(exclude_default=True))
 save_as = Path(__file__).with_name("result_test_writer.xml")
 save_as.write_text(xml)
 

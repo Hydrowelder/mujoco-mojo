@@ -15,3 +15,8 @@ class Pos(XMLModel):
 
     pos: Vec3 = np.array((0, 0, 0))
     """Position (in (x, y, z))"""
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Pos):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.pos), np.asarray(other.pos))

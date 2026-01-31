@@ -140,6 +140,11 @@ class Quat(OrientationBase):
     quat: Vec4 = np.array((1, 0, 0, 0))
     """Orientation of the frame. See Frame orientations. Defined as (w, x, y, z) quaternion order (the same as MuJoCo convention)."""
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Quat):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.quat), np.asarray(other.quat))
+
 
 class AxisAngle(OrientationBase):
     """These are the quantities (x,y,z,a) mentioned above. The last number is the angle of rotation, in degrees or radians as specified by the angle attribute of compiler. The first three numbers determine a 3D vector which is the rotation axis. This vector is normalized to unit length during compilation, so the user can specify a vector of any non-zero length. Keep in mind that the rotation is right-handed; if the direction of the vector (x,y,z) is reversed this will result in the opposite rotation. Changing the sign of aa can also be used to specify the opposite rotation."""
@@ -149,6 +154,11 @@ class AxisAngle(OrientationBase):
 
     axisangle: Vec4 = np.array((1, 0, 0, 0))
     """Orientation of the frame. See Frame orientations."""
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AxisAngle):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.axisangle), np.asarray(other.axisangle))
 
 
 class Euler(OrientationBase):
@@ -160,6 +170,11 @@ class Euler(OrientationBase):
     euler: Vec3 = np.array((0, 0, 0))
     """Orientation of the frame. See Frame orientations. The sequence of axes around which these rotations are applied is determined by the eulerseq attribute of compiler and is the same for the entire model."""
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Euler):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.euler), np.asarray(other.euler))
+
 
 class XYAxes(OrientationBase):
     """The first 3 numbers are the X axis of the frame. The next 3 numbers are the Y axis of the frame, which is automatically made orthogonal to the X axis. The Z axis is then defined as the cross-product of the X and Y axes."""
@@ -170,6 +185,11 @@ class XYAxes(OrientationBase):
     xyaxes: Vec6 = np.array((1, 0, 0, 0, 1, 0))
     """Orientation of the frame. See Frame orientations."""
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, XYAxes):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.xyaxes), np.asarray(other.xyaxes))
+
 
 class ZAxis(OrientationBase):
     """The Z axis of the frame. The compiler finds the minimal rotation that maps the vector (0,0,1) into the vector specified here. This determines the X and Y axes of the frame implicitly. This is useful for geoms with rotational symmetry around the Z axis, as well as lights - which are oriented along the Z axis of their frame."""
@@ -179,6 +199,11 @@ class ZAxis(OrientationBase):
 
     zaxis: Vec3 = np.array((0, 0, 1))
     """Orientation of the frame. See Frame orientations."""
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ZAxis):
+            return NotImplemented
+        return np.array_equal(np.asarray(self.zaxis), np.asarray(other.zaxis))
 
 
 Orientation = Annotated[
