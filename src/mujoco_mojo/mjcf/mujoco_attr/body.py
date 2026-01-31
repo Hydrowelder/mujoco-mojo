@@ -6,6 +6,8 @@ from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
@@ -96,34 +98,34 @@ class Body(XMLModel):
     joints: Sequence[Joint] = Field(default_factory=list)
     """Joints assigned to body."""
 
-    freejoints: Optional[Sequence[FreeJoint]] = Field(default_factory=list)
+    freejoints: Sequence[FreeJoint] = Field(default_factory=list)
     """Free joints assigned to body. Defining more than one free joint will not do anything"""
 
     geoms: Sequence[Geom] = Field(default_factory=list)
     """Geometries assigned to body."""
 
-    sites: Optional[Sequence[Site]] = Field(default_factory=list)
+    sites: Sequence[Site] = Field(default_factory=list)
     """Sites assigned to body."""
 
-    cameras: Optional[Sequence[Camera]] = Field(default_factory=list)
+    cameras: Sequence[Camera] = Field(default_factory=list)
     """Cameras assigned to body."""
 
-    lights: Optional[Sequence[Light]] = Field(default_factory=list)
+    lights: Sequence[Light] = Field(default_factory=list)
     """Lights assigned to body."""
 
-    composites: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    composites: Sequence[Composite] = Field(default_factory=list)
     """Composites assigned to body."""
 
-    flexcomps: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    flexcomps: Sequence[FlexComp] = Field(default_factory=list)  # TODO
     """Flexible composites assigned to body."""
 
-    plugins: Optional[Sequence[Plugin]] = Field(default_factory=list)  # TODO
+    plugins: Sequence[Plugin] = Field(default_factory=list)  # TODO
     """Plugins assigned to body."""
 
-    attaches: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    attaches: Sequence[float] = Field(default_factory=list)  # TODO
     """Attach elements assigned to body."""
 
-    frames: Optional[Sequence[float]] = Field(default_factory=list)  # TODO
+    frames: Sequence[float] = Field(default_factory=list)  # TODO
     """Frames assigned to body."""
 
     bodies: Sequence[Body] = Field(default_factory=list)
