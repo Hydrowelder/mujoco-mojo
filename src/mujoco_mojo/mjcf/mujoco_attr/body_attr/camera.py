@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import TrackingMode, Vec2, VecN
+from mujoco_mojo.typing import TrackingMode, Vec2, VecN
 
 __all__ = ["Camera"]
 

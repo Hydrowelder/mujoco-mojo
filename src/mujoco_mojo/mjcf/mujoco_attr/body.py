@@ -18,7 +18,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
-from mujoco_mojo.types import BodyName, Sleep, VecN
+from mujoco_mojo.typing import BodyName, Sleep, VecN
 
 __all__ = ["Body", "WorldBody"]
 

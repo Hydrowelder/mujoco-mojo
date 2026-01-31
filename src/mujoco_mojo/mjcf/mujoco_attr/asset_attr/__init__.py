@@ -1,6 +1,15 @@
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material_attr import *
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.hfield import *
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import *
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import *
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import *
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import *
+from .hfield import HField
+from .material import Material
+from .material_attr import Layer
+from .mesh import Mesh
+from .model import Model
+from .texture import Texture
+
+__all__ = [
+    "HField",
+    "Material",
+    "Layer",
+    "Mesh",
+    "Model",
+    "Texture",
+]

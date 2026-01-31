@@ -1,4 +1,11 @@
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.joint import *
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import *
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.site import *
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import *
+from .geom import CompositeGeom
+from .joint import CompositeJoint
+from .site import CompositeSite
+from .skin import Skin
+
+__all__ = [
+    "CompositeJoint",
+    "CompositeGeom",
+    "CompositeSite",
+    "Skin",
+]

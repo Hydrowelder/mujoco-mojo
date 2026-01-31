@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Optional, TypeAlias
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import Vec3, Vec4, Vec6
+from mujoco_mojo.typing import Vec3, Vec4, Vec6
 
 __all__ = [
     "Orientation",

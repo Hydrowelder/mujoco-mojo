@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import Vec3
+from mujoco_mojo.typing import Vec3
 
 __all__ = ["Pos"]
 

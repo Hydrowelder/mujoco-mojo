@@ -6,7 +6,7 @@ from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material_attr.layer import Layer
-from mujoco_mojo.types import MaterialName, TextureName, Vec2, Vec4
+from mujoco_mojo.typing import MaterialName, TextureName, Vec2, Vec4
 
 __all__ = ["Material"]
 

@@ -8,7 +8,7 @@ from numpydantic import NDArray, Shape
 from pydantic import field_validator, model_validator
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import Vec4
+from mujoco_mojo.typing import Vec4
 
 __all__ = ["HField"]
 

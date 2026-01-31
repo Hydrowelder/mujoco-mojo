@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from mujoco_mojo.base import XMLModel
-from mujoco_mojo.types import EnableDisable
+from mujoco_mojo.typing import EnableDisable
 
 __all__ = ["Flag"]
 

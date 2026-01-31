@@ -1,23 +1,66 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Tuple
+from typing import Annotated, NewType, Tuple
 
 from numpydantic import NDArray, Shape
 from pydantic import Field
 
-__all__ = ["Vec2", "Vec3", "Vec4", "Vec5", "GeomType", "Integrator"]
+__all__ = [
+    "Vec2",
+    "Vec3",
+    "Vec4",
+    "Vec5",
+    "Vec6",
+    "VecN",
+    "GeomType",
+    "Integrator",
+    "Cone",
+    "Jacobian",
+    "Solver",
+    "EnableDisable",
+    "Coordinate",
+    "Angle",
+    "InertiaFromGeom",
+    "Mode",
+    "Inertia",
+    "TextureType",
+    "ColorSpace",
+    "TextureBuiltInType",
+    "Mark",
+    "Sleep",
+    "JointType",
+    "Limited",
+    "ActuatorFrcLimited",
+    "Align",
+    "FluidShape",
+    "TrackingMode",
+    "LightType",
+    "CompositeType",
+    "CompositeInitial",
+    "CompositeJointKind",
+    "FlexCompDOF",
+    "FlexCompType",
+    "MaterialName",
+    "TextureName",
+    "BodyName",
+    "ModelName",
+    "ActuatorGroup",
+    "GeomGroup",
+    "InertiaGroupRange",
+]
 
-MaterialName = str
+
+MaterialName = NewType("MaterialName", str)
 """Alias of string. Used to type hint a field is the name of a Material."""
 
-TextureName = str
+TextureName = NewType("TextureName", str)
 """Alias of string. Used to type hint a field is the name of a Texture."""
 
-BodyName = str
+BodyName = NewType("BodyName", str)
 """Alias of string. Used to type hint a field is the name of a Body."""
 
-ModelName = str
+ModelName = NewType("ModelName", str)
 """Alias of string. Used to type hint a field is the name of a Model."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
@@ -243,7 +286,7 @@ class ColorSpace(StrEnum):
     """SRGB color space."""
 
 
-class TextureBuiltIn(StrEnum):
+class TextureBuiltInType(StrEnum):
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored."""
 
     NONE = "none"

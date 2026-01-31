@@ -36,7 +36,7 @@ dev = [
 ]
 
 [tool.ruff]
-exclude = ["typings", "**/__init__.py"]
+exclude = ["typings"]
 
 [tool.pyright]
 stubPath = "typings"

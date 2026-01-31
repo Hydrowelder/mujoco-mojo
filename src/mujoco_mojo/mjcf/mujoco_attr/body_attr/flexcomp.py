@@ -7,7 +7,7 @@ from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
-from mujoco_mojo.types import FlexCompDOF, FlexCompType, MaterialName, Vec3, Vec4, VecN
+from mujoco_mojo.typing import FlexCompDOF, FlexCompType, MaterialName, Vec3, Vec4, VecN
 
 __all__ = ["FlexComp"]
 

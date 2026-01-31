@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
+from xml.dom import minidom
+from xml.etree.ElementTree import tostring
 
-__all__ = ["Color", "SimStatus"]
+__all__ = ["Color", "SimStatus", "to_pretty_xml"]
 
 
 class Color(StrEnum):
@@ -29,3 +31,9 @@ class SimStatus(StrEnum):
         p = min(max(0, p), 1)
         filled_length = int(width * p)
         return f"[{'█' * filled_length}{'░' * (width - filled_length)}]"
+
+
+def to_pretty_xml(element) -> str:
+    rough = tostring(element, "utf-8")
+    reparsed = minidom.parseString(rough)
+    return reparsed.toprettyxml(indent="  ")

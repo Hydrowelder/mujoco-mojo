@@ -4,7 +4,7 @@ from typing import Optional
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
-from mujoco_mojo.types import Angle, Coordinate, InertiaFromGeom, InertiaGroupRange
+from mujoco_mojo.typing import Angle, Coordinate, InertiaFromGeom, InertiaGroupRange
 
 __all__ = ["Compiler"]
 

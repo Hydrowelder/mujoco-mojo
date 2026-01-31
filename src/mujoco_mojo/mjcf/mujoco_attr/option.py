@@ -4,7 +4,7 @@ from typing import Optional, Set
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import Flag
-from mujoco_mojo.types import (
+from mujoco_mojo.typing import (
     ActuatorGroup,
     Cone,
     Integrator,

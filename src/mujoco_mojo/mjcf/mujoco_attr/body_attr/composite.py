@@ -11,7 +11,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.site import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import Skin
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.types import CompositeInitial, CompositeType, Vec3, VecN
+from mujoco_mojo.typing import CompositeInitial, CompositeType, Vec3, VecN
 
 __all__ = ["Composite"]
 

@@ -1,1 +1,3 @@
-from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import *
+from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import Flag
+
+__all__ = ["Flag"]

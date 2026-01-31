@@ -1,7 +1,7 @@
 from typing import Optional
 
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase
-from mujoco_mojo.types import Vec3
+from mujoco_mojo.typing import Vec3
 
 
 class CompositeSite(SiteBase):
