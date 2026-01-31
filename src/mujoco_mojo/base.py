@@ -53,14 +53,26 @@ class XMLModel(BaseModel):
     __exclusive_groups__: tuple[tuple[str, ...], ...] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
-    def to_xml(
-        self,
-    ) -> Element:  # TODO: add argument which will ignore fields with defaults (if they are default)
+    # TODO add argument which will ignore fields with defaults (if they are default, call it `exclude_default`)
+    def to_xml(self, exclude_default: bool = True) -> Element:
         el = Element(self.tag)
 
         # attributes (deterministic)
         for field in self.attributes:
             value = getattr(self, field, None)
+
+            if exclude_default:
+                # determine default value
+                default = type(self).model_fields[field].default
+
+                # determine if its equal to value
+                if isinstance(value, np.ndarray):
+                    is_default = np.array_equal(value, default)
+                else:
+                    is_default = value == default
+
+                if is_default:
+                    continue
 
             if value is None:
                 continue
@@ -72,8 +84,7 @@ class XMLModel(BaseModel):
                 # safety checks
                 if value.children:
                     raise ValueError(
-                        f"{value.__class__.__name__} cannot be used as an "
-                        f"attribute because it defines children"
+                        f"{value.__class__.__name__} cannot be used as an attribute because it defines children"
                     )
 
                 # recursively extract attributes
@@ -83,8 +94,7 @@ class XMLModel(BaseModel):
                 for k in sub_attrs:
                     if k in el.attrib:
                         raise ValueError(
-                            f"Attribute collision while flattening "
-                            f"{value.__class__.__name__}: '{k}' already exists"
+                            f"Attribute collision while flattening {value.__class__.__name__}: '{k}' already exists"
                         )
 
                 el.attrib.update(sub_attrs)
@@ -182,10 +192,7 @@ class XMLModel(BaseModel):
 
     @model_validator(mode="after")
     def enforce_exclusive_groups(self) -> XMLModel:
-        """
-
-        Ensures that only one attribute in each exclusive group is set.
-        """
+        """Ensures that only one attribute in each exclusive group is set."""
 
         for group in self.__exclusive_groups__:
             count = sum(getattr(self, field) is not None for field in group)
