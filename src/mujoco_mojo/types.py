@@ -404,3 +404,13 @@ class LightType(StrEnum):
 
     IMAGE = auto()
     """Not supported by default native renderer"""
+
+
+class CompositeType(StrEnum):
+    CABLE = auto()
+
+
+class CompositeInitial(StrEnum):
+    FREE = auto()
+    BALL = auto()
+    NONE = auto()
