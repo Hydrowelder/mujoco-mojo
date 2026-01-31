@@ -6,6 +6,7 @@ import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
@@ -134,9 +135,7 @@ class Body(XMLModel):
     attaches: Sequence[Attach] = Field(default_factory=list, exclude_if=is_empty_list)
     """Attach elements assigned to body."""
 
-    frames: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO
+    frames: Sequence[Frame] = Field(default_factory=list, exclude_if=is_empty_list)
     """Frames assigned to body."""
 
     bodies: Sequence[Body] = Field(default_factory=list, exclude_if=is_empty_list)

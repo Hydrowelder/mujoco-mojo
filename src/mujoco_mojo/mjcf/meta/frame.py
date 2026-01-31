@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from typing import Optional, Sequence
+
+import numpy as np
+from pydantic import Field
+
+from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.orientation import Orientation, Quat
+from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.typing import FrameName
+from mujoco_mojo.utils import is_empty_list
+
+__all__ = ["Frame"]
+
+
+class Frame(XMLModel):
+    """Frames specify a coordinate transformation which is applied to all child elements. They disappear during compilation and the transformation they encode is accumulated in their direct children. See frame for examples.
+
+    The frame meta-element is a pure coordinate transformation that can wrap any group of elements in the kinematic tree (under worldbody). After compilation, frame elements disappear and their transformation is accumulated in their direct children.
+
+    ???+ example "Example Usage of Frame"
+
+        Compiling this model:
+        ```xml hl_lines="3 5 7 12"
+        <mujoco>
+            <worldbody>
+                <frame quat="0 0 1 0">
+                    <geom name="Alice" quat="0 1 0 0" size="1"/>
+                </frame>
+
+                <frame pos="0 1 0">
+                    <geom name="Bob" pos="0 1 0" size="1"/>
+                    <body name="Carl" pos="1 0 0">
+                        ...
+                    </body>
+                </frame>
+            </worldbody>
+        </mujoco>
+        ```
+
+        Results in this model:
+        ```xml
+        <mujoco>
+            <worldbody>
+                <geom name="Alice" quat="0 0 0 1" size="1"/>
+                <geom name="Bob" pos="0 2 0" size="1"/>
+                <body name="Carl" pos="1 1 0">
+                    ...
+                </body>
+            </worldbody>
+        </mujoco>
+        ```
+
+        Note that in the compiled model, the frame elements have disappeared but their transformation was accumulated with those of their child elements in the resulting model.
+    """
+
+    tag = "frame"
+
+    attributes = ("name", "childclass", "pos", "orientation")
+    children = ("frames",)
+
+    name: Optional[FrameName] = None
+    """Name of the frame."""
+
+    childclass: Optional[str] = None
+    """If this attribute is present, all descendant elements that admit a defaults class will use the class specified here, unless they specify their own class or another frame or body with a childclass attribute is encountered along the chain of nested bodies and frames. Recall Default settings."""
+
+    pos: Pos = Pos(pos=np.array((0, 0, 0)))
+    """The 3D position of the frame, in the parent coordinate system."""
+
+    orientation: Orientation = Quat()
+    """See Frame orientations."""
+
+    frames: Sequence[Frame] = Field(default_factory=list, exclude_if=is_empty_list)
+    """Frames assigned to Frame."""

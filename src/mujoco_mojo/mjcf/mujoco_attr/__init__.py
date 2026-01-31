@@ -42,27 +42,26 @@ from .body_attr import (
 )
 from .compiler import Compiler
 from .compiler_attr import LengthRange
+from .contact import Contact
+from .contact_attr import Exclude, Pair
 from .option import Option
 from .option_attr import Flag
 from .size import Size
 from .statistic import Statistic
 
 __all__ = [
-    "HField",
-    "Layer",
-    "Material",
     "Asset",
-    "Mesh",
-    "Model",
-    "Texture",
-    "Body",
-    "WorldBody",
     "Attach",
+    "Body",
     "Camera",
+    "Compiler",
     "Composite",
     "CompositeGeom",
     "CompositeJoint",
     "CompositeSite",
+    "Contact",
+    "Exclude",
+    "Flag",
     "FlexComp",
     "FreeJoint",
     "Geom",
@@ -75,20 +74,26 @@ __all__ = [
     "GeomPlane",
     "GeomSDF",
     "GeomSphere",
+    "HField",
     "Inertial",
     "Joint",
+    "Layer",
+    "LengthRange",
     "Light",
+    "Material",
+    "Mesh",
+    "Model",
+    "Option",
+    "Pair",
     "Site",
     "SiteBox",
     "SiteCapsule",
     "SiteCylinder",
     "SiteEllipsoid",
     "SiteSphere",
-    "Skin",
-    "Compiler",
-    "LengthRange",
-    "Option",
-    "Flag",
     "Size",
+    "Skin",
     "Statistic",
+    "Texture",
+    "WorldBody",
 ]

@@ -56,6 +56,8 @@ __all__ = [
     "SiteName",
     "CameraName",
     "LightName",
+    "ContactPairName",
+    "ContactExcludeName",
     "ActuatorGroup",
     "GeomGroup",
     "InertiaGroupRange",
@@ -93,6 +95,15 @@ CameraName = NewType("CameraName", str)
 
 LightName = NewType("LightName", str)
 """Alias of string. Used to type hint a field is the name of a Light."""
+
+FrameName = NewType("FrameName", str)
+"""Alias of string. Used to type hint a field is the name of a Frame."""
+
+ContactPairName = NewType("ContactPairName", str)
+"""Alias of string. Used to type hint a field is the name of a contact Pair."""
+
+ContactExcludeName = NewType("ContactExcludeName", str)
+"""Alias of string. Used to type hint a field is the name of a contact Exclude."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
