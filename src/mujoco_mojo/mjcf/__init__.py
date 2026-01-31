@@ -1,7 +1,8 @@
 """MJCF is a collection of classes made to make building your own MJCF easier with Python."""
 
-from mujoco_mojo.mjcf.mujoco import Mujoco
-from mujoco_mojo.mjcf.mujoco_attr import (
+from .meta import Frame
+from .mujoco import Mujoco
+from .mujoco_attr import (
     Asset,
     Attach,
     Body,
@@ -46,7 +47,7 @@ from mujoco_mojo.mjcf.mujoco_attr import (
     Texture,
     WorldBody,
 )
-from mujoco_mojo.mjcf.orientation import (
+from .orientation import (
     AxisAngle,
     Euler,
     Orientation,
@@ -54,13 +55,13 @@ from mujoco_mojo.mjcf.orientation import (
     XYAxes,
     ZAxis,
 )
-from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.mjcf.position import Pos
+from .plugin import Plugin
+from .position import Pos
 
 __all__ = [
-    "Mujoco",
     "Asset",
     "Attach",
+    "AxisAngle",
     "Body",
     "Camera",
     "Compiler",
@@ -68,7 +69,9 @@ __all__ = [
     "CompositeGeom",
     "CompositeJoint",
     "CompositeSite",
+    "Euler",
     "Flag",
+    "Frame",
     "FlexComp",
     "FreeJoint",
     "Geom",
@@ -90,7 +93,12 @@ __all__ = [
     "Material",
     "Mesh",
     "Model",
+    "Mujoco",
     "Option",
+    "Orientation",
+    "Plugin",
+    "Pos",
+    "Quat",
     "Site",
     "SiteBox",
     "SiteCapsule",
@@ -101,13 +109,7 @@ __all__ = [
     "Skin",
     "Statistic",
     "Texture",
-    "AxisAngle",
-    "Euler",
-    "Orientation",
     "WorldBody",
-    "Quat",
     "XYAxes",
     "ZAxis",
-    "Plugin",
-    "Pos",
 ]

@@ -35,8 +35,6 @@ from .site import (
     SiteSphere,
 )
 
-# from .frame import *
-
 __all__ = [
     "Attach",
     "Camera",
@@ -44,7 +42,6 @@ __all__ = [
     "CompositeGeom",
     "CompositeJoint",
     "CompositeSite",
-    "Skin",
     "FlexComp",
     "FreeJoint",
     "Geom",
@@ -66,4 +63,5 @@ __all__ = [
     "SiteCylinder",
     "SiteEllipsoid",
     "SiteSphere",
+    "Skin",
 ]
