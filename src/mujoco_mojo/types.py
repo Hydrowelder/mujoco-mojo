@@ -14,6 +14,12 @@ MaterialName = str
 TextureName = str
 """Alias of string. Used to type hint a field is the name of a Texture."""
 
+BodyName = str
+"""Alias of string. Used to type hint a field is the name of a Body."""
+
+ModelName = str
+"""Alias of string. Used to type hint a field is the name of a Model."""
+
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
 
