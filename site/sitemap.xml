@@ -17,15 +17,11 @@
          <lastmod>2026-01-31</lastmod>
     </url>
     <url>
-         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/types/</loc>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/typing/</loc>
          <lastmod>2026-01-31</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/utils/</loc>
-         <lastmod>2026-01-31</lastmod>
-    </url>
-    <url>
-         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/writer/</loc>
          <lastmod>2026-01-31</lastmod>
     </url>
     <url>
@@ -178,6 +174,26 @@
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/skin/</loc>
+         <lastmod>2026-01-31</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/</loc>
+         <lastmod>2026-01-31</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/contact/</loc>
+         <lastmod>2026-01-31</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/edge/</loc>
+         <lastmod>2026-01-31</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/elasticity/</loc>
+         <lastmod>2026-01-31</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/pin/</loc>
          <lastmod>2026-01-31</lastmod>
     </url>
     <url>
