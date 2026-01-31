@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Annotated, Tuple
 
 from numpydantic import NDArray, Shape
@@ -45,30 +45,30 @@ VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa:
 class GeomType(StrEnum):
     """Enumeration of supported geometric types in MuJoCo."""
 
-    PLANE = auto()
+    PLANE = "plane"
     """Plane which is infinite for collision detection purposes."""
 
-    HFIELD = auto()
+    HFIELD = "hfield"
     """Height field geom."""
 
-    SPHERE = auto()
+    SPHERE = "sphere"
     """Sphere geom."""
 
-    CAPSULE = auto()
+    CAPSULE = "capsule"
     """A capsule, which is a cylinder capped with two half-spheres."""
 
-    ELLIPSOID = auto()
+    ELLIPSOID = "ellipsoid"
     """Ellipoid geom."""
 
-    CYLINDER = auto()
+    CYLINDER = "cylinder"
     """Cylinder geom."""
-    BOX = auto()
+    BOX = "box"
     """Box geom."""
 
-    MESH = auto()
+    MESH = "mesh"
     """Mesh geom."""
 
-    SDF = auto()
+    SDF = "sdf"
     """Signed distance field (SDF, also referred to as signed distance function)."""
 
 
@@ -101,23 +101,23 @@ class Integrator(StrEnum):
 class Cone(StrEnum):
     """Cone types used in collision/contact modeling."""
 
-    PYRAMIDAL = auto()
+    PYRAMIDAL = "pyramidal"
     """Sometimes make the solver faster and more robust."""
 
-    ELLIPTIC = auto()
+    ELLIPTIC = "elliptic"
     """Better model of the physical reality."""
 
 
 class Jacobian(StrEnum):
     """Jacobian computation methods."""
 
-    DENSE = auto()
+    DENSE = "dense"
     """Dense jacobian."""
 
-    SPARSE = auto()
+    SPARSE = "sparse"
     """Sparse jacobian."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Resolves to dense when the number of degrees of freedom is up to 60, and sparse over 60."""
 
 
@@ -145,69 +145,69 @@ class Solver(StrEnum):
 class EnableDisable(StrEnum):
     """Enable or disable a feature."""
 
-    ENABLE = auto()
+    ENABLE = "enable"
     """Enable the feature."""
 
-    DISABLE = auto()
+    DISABLE = "disable"
     """Disable the feature."""
 
 
 class Coordinate(StrEnum):
     """In previous versions, this attribute could be used to specify whether frame positions and orientations are expressed in local or global coordinates, but the "global" option has since been removed, and will cause an error to be generated. In order to convert older models which used the "global" option, load and save them in MuJoCo 2.3.3 or older."""
 
-    LOCAL = auto()
-    GLOBAL = auto()
+    LOCAL = "local"
+    GLOBAL = "global"
 
 
 class Angle(StrEnum):
     """This attribute specifies whether the angles in the MJCF model are expressed in units of degrees or radians. The compiler converts degrees into radians, and mjModel always uses radians. For URDF models the parser sets this attribute to "radian" internally, regardless of the XML setting."""
 
-    RADIAN = auto()
-    DEGREE = auto()
+    RADIAN = "radian"
+    DEGREE = "degree"
 
 
 class InertiaFromGeom(StrEnum):
     """This attribute controls the automatic inference of body masses and inertias from geoms attached to the body."""
 
-    FALSE = auto()
+    FALSE = "false"
     """No automatic inference is performed. In that case each body must have explicitly defined mass and inertia with the inertial element, or else a compile error will be generated."""
 
-    TRUE = auto()
+    TRUE = "true"
     """The mass and inertia of each body will be inferred from the geoms attached to it, overriding any values specified with the inertial element."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Masses and inertias are inferred automatically only when the inertial element is missing in the body definition."""
 
 
 class Mode(StrEnum):
     """Determines the type of actuators to which length range computation is applied."""
 
-    NONE = auto()
+    NONE = "none"
     """Disables this functionality."""
 
-    MUSCLE = auto()
+    MUSCLE = "muscle"
     """Applies to actuators whose gaintype or biastype is set to `muscle`"""
 
-    MUSCLEUSER = auto()
+    MUSCLEUSER = "muscleuser"
     """Applies to actuators whose gaintype or biastype is set to either `muscle` or `user`."""
 
-    ALL = auto()
+    ALL = "all"
     """Applies to all actuators."""
 
 
 class Inertia(StrEnum):
     """This attribute controls how the mesh is used when mass and inertia are inferred from geometry. The current default value legacy will be changed to convex in a future release."""
 
-    CONVEX = auto()
+    CONVEX = "convex"
     """Use the mesh's convex hull to compute volume and inertia, assuming uniform density."""
 
-    EXACT = auto()
+    EXACT = "exact"
     """Compute volume and inertia exactly, even for non-convex meshes. This algorithm requires a well-oriented, watertight mesh and will error otherwise."""
 
-    LEGACY = auto()
+    LEGACY = "legacy"
     """Use the legacy algorithm, leads to volume overcounting for non-convex meshes. Though currently the default to avoid breakages, it is not recommended."""
 
-    SHELL = auto()
+    SHELL = "shell"
     """Assume mass is concentrated on the surface of the mesh. Use the mesh's surface to compute the inertia, assuming uniform surface density."""
 
 
@@ -227,45 +227,45 @@ class TextureType(StrEnum):
 class ColorSpace(StrEnum):
     """This attribute determines the color space of the texture. The default value auto means that the color space will be determined from the image file itself. If no color space is defined in the file, then linear is assumed."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Color space will be determined from the image file itself. If no color space is defined in the file, then linear is assumed."""
 
-    LINEAR = auto()
+    LINEAR = "linear"
     """Linear color space."""
 
-    SRGB = auto()
+    SRGB = "srgb"
     """SRGB color space."""
 
 
 class TextureBuiltIn(StrEnum):
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored."""
 
-    NONE = auto()
+    NONE = "none"
     """No builtin texture."""
 
-    GRADIENT = auto()
+    GRADIENT = "gradient"
     """Generates a color gradient from rgb1 to rgb2. The interpolation in color space is done through a sigmoid function. For cube and skybox textures the gradient is along the +Y axis, i.e., from top to bottom for skybox rendering."""
 
-    CHECKER = auto()
+    CHECKER = "checker"
     """Generates a 2-by-2 checker pattern with alternating colors given by rgb1 and rgb2. This is suitable for rendering ground planes and also for marking objects with rotational symmetries. Note that 2d textures can be scaled so as to repeat the pattern as many times as necessary. For cube and skybox textures, the checker pattern is painted on each side of the cube."""
 
-    FLAT = auto()
+    FLAT = "flat"
     """Fills the entire texture with rgb1, except for the bottom face of cube and skybox textures which is filled with rgb2."""
 
 
 class Mark(StrEnum):
     """Procedural textures can be marked with the markrgb color, on top of the colors determined by the builtin type. All markings are one-pixel wide, thus the markings appear larger and more diffuse on smaller textures."""
 
-    NONE = auto()
+    NONE = "none"
     """No marks."""
 
-    EDGE = auto()
+    EDGE = "edge"
     """Edges of all texture images are marked."""
 
-    CROSS = auto()
+    CROSS = "cross"
     """A cross is marked in the middle of each image."""
 
-    RANDOM = auto()
+    RANDOM = "random"
     """Randomly chosen pixels are marked."""
 
 
@@ -287,7 +287,7 @@ class Mark(StrEnum):
 class Sleep(StrEnum):
     """Sleep policy for the tree under this body. This attribute is only supported by moving bodies which are the root of a kinematic tree."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Compiler will set the sleep policy as follows:
 
     * A tree which is affected by actuators is not allowed to sleep (overridable).
@@ -296,125 +296,125 @@ class Sleep(StrEnum):
     * flexes are not allowed to sleep (not overridable).
     * All other trees are allowed to sleep (overridable)."""
 
-    NEVER = auto()
+    NEVER = "never"
     """Constitute user overrides of the automatic compiler policy."""
 
-    ALLOWED = auto()
+    ALLOWED = "allowed"
     """Constitute user overrides of the automatic compiler policy."""
 
-    INIT = auto()
+    INIT = "init"
     """Can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such models will lead to a compilation error."""
 
 
 class JointType(StrEnum):
     """Types of joints supported in MuJoCo."""
 
-    FREE = auto()
+    FREE = "free"
     """Free "joint" with three translational degrees of freedom followed by three rotational degrees of freedom. In other words it makes the body floating. The rotation is represented as a unit quaternion. This joint type is only allowed in bodies that are children of the world body. No other joints can be defined in the body if a free joint is defined. Unlike the remaining joint types, free joints do not have a position within the body frame. Instead the joint position is assumed to coincide with the center of the body frame. Thus at runtime the position and orientation data of the free joint correspond to the global position and orientation of the body frame. Free joints cannot have limits."""
 
-    BALL = auto()
+    BALL = "ball"
     """A ball joint with three rotational degrees of freedom. The rotation is represented as a unit quaternion. The quaternion (1,0,0,0) corresponds to the initial configuration in which the model is defined. Any other quaternion is interpreted as a 3D rotation relative to this initial configuration. The rotation is around the point defined by the pos attribute. If a body has a ball joint, it cannot have other rotational joints (ball or hinge). Combining ball joints with slide joints in the same body is allowed."""
 
-    SLIDE = auto()
+    SLIDE = "slide"
     """A sliding or prismatic joint with one translational degree of freedom. Such joints are defined by a position and a sliding direction. For simulation purposes only the direction is needed; the joint position is used for rendering purposes."""
 
-    HINGE = auto()
+    HINGE = "hinge"
     """A hinge joint with one rotational degree of freedom. The rotation takes place around a specified axis through a specified position. This is the most common type of joint and is therefore the default. Most models contain only hinge and free joints."""
 
 
 class Limited(StrEnum):
     """Specifies if the joint has limits."""
 
-    FALSE = auto()
+    FALSE = "false"
     """Joint limits are disabled."""
 
-    TRUE = auto()
+    TRUE = "true"
     """Joint limits are enabled."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Joint limits will be enabled if range is defined (if autolimits is set in compiler)."""
 
 
 class ActuatorFrcLimited(StrEnum):
     """This attribute specifies whether actuator forces acting on the joint should be clamped. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints."""
 
-    FALSE = auto()
+    FALSE = "false"
     """Actuator force clamping is disabled."""
 
-    TRUE = auto()
+    TRUE = "true"
     """Actuator force clamping is enabled."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Actuator force clamping will be enabled if actuatorfrcrange is defined (if autolimits is set in compiler)."""
 
 
 class Align(StrEnum):
     """Specifies alignment options for aligning body frame and free joint."""
 
-    FALSE = auto()
+    FALSE = "false"
     """No alignment will occur between the body frame and free joint."""
 
-    TRUE = auto()
+    TRUE = "true"
     """Body frame and free joint will automatically be aligned with inertial frame."""
 
-    AUTO = auto()
+    AUTO = "auto"
     """Compiler's alignfree global attribute will be respected."""
 
 
 class FluidShape(StrEnum):
     """Geometry-level fluid interaction model."""
 
-    NONE = auto()
+    NONE = "none"
     """I have no clue."""  # BUG Gable (1/30/2026) - if you know let me know thx
 
-    ELLIPSOID = auto()
+    ELLIPSOID = "ellipsoid"
     """Activates the geom-level fluid interaction model based on an ellipsoidal approximation of the geom shape. When active, the model based on body inertia sizes is disabled for the body in which the geom is defined. See section on ellipsoid-based fluid interaction model for details."""
 
 
 class TrackingMode(StrEnum):
     """Specifies how the camera/light position and orientation in world coordinates are computed in forward kinematics (which in turn determine what the camera/light sees)."""
 
-    FIXED = auto()
+    FIXED = "fixed"
     """The position and orientation specified are fixed relative to the body where the camera/light is defined."""
 
-    TRACK = auto()
+    TRACK = "track"
     """The camera/light position is at a constant offset from the body in world coordinates, while the camera/light orientation is constant in world coordinates. These constants are determined by applying forward kinematics in qpos0 and treating the camera/light as fixed. Tracking can be used for example to position a camera/light above a body, point it down so it sees the body, and have it always remain above the body no matter how the body translates and rotates."""
 
-    TRACKCOM = auto()
+    TRACKCOM = "trackcom"
     """similar to "track" but the constant spatial offset is defined relative to the center of mass of the kinematic subtree starting at the body in which the camera/light is defined. This can be used to keep an entire mechanism in view. Note that the subtree center of mass for the world body is the center of mass of the entire model. So if a camera/light is defined in the world body in mode "trackcom", it will track the entire model."""
 
-    TARGETBODY = auto()
+    TARGETBODY = "targetbody"
     """The camera/light position is fixed in the body frame, while the camera/light orientation is adjusted so that it always points towards the targeted body (which is specified with the target attribute below). This can be used for example to model an eye that fixates a moving object; the object will be the target, and the camera/light/eye will be defined in the body corresponding to the head."""
 
-    TARGETBODYCOM = auto()
+    TARGETBODYCOM = "targetbodycom"
     """The same as "targetbody" but the camera/light is oriented towards the center of mass of the subtree starting at the target body."""
 
 
 class LightType(StrEnum):
     """Determines the type of light. Note that some light types may not be supported by some renderers (e.g. only spot and directional lights are supported by the default native renderer)."""
 
-    SPOT = auto()
+    SPOT = "spot"
     """Supported by default native renderer"""
 
-    DIRECTIONAL = auto()
+    DIRECTIONAL = "directional"
     """Supported by default native renderer"""
 
-    POINT = auto()
+    POINT = "point"
     """Not supported by default native renderer"""
 
-    IMAGE = auto()
+    IMAGE = "image"
     """Not supported by default native renderer"""
 
 
 class CompositeType(StrEnum):
-    CABLE = auto()
+    CABLE = "cable"
 
 
 class CompositeInitial(StrEnum):
-    FREE = auto()
-    BALL = auto()
-    NONE = auto()
+    FREE = "free"
+    BALL = "ball"
+    NONE = "none"
 
 
 class CompositeJointKind(StrEnum):
-    MAIN = auto()
+    MAIN = "main"
