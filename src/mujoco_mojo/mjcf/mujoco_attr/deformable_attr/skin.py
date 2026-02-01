@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Optional, Sequence
+
+import numpy as np
+from pydantic import Field
+
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.skin_attr.bone import Bone
+from mujoco_mojo.typing import DeformableSkinName, MaterialName, Vec4, VecN
+from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["DeformableSkin"]
 
@@ -48,37 +57,37 @@ class DeformableSkin(XMLModel):
         "group",
     )
 
-    children=("bones",)
+    children = ("bones",)
 
-name: string, optional
-"""Name of the skin."""
+    name: Optional[DeformableSkinName] = None
+    """Name of the skin."""
 
-file: string, optional
-"""The SKN file from which the skin will be loaded. The path is determined as described in the meshdir attribute of compiler. If the file is omitted, the skin specification must be provided in the XML using the attributes below."""
+    file: Optional[Path] = None
+    """The SKN file from which the skin will be loaded. The path is determined as described in the meshdir attribute of compiler. If the file is omitted, the skin specification must be provided in the XML using the attributes below."""
 
-vertex: real(3*nvert), optional
-"""Vertex 3D positions, in the global bind pose where the skin is defined."""
+    vertex: Optional[VecN] = None
+    """Vertex 3D positions, in the global bind pose where the skin is defined."""
 
-texcoord: real(2*nvert), optional
-"""Vertex 2D texture coordinates, between 0 and 1. Note that skin and geom texturing are somewhat different. Geoms can use automated texture coordinate generation while skins cannot. This is because skin data are computed directly in global coordinates. So if the material references a texture, one should specify explicit texture coordinates for the skin using this attribute. Otherwise the texture will appear to be stationary in the world while the skin moves around (creating an interesting effect but probably not as intended)."""
+    texcoord: Optional[VecN] = None
+    """Vertex 2D texture coordinates, between 0 and 1. Note that skin and geom texturing are somewhat different. Geoms can use automated texture coordinate generation while skins cannot. This is because skin data are computed directly in global coordinates. So if the material references a texture, one should specify explicit texture coordinates for the skin using this attribute. Otherwise the texture will appear to be stationary in the world while the skin moves around (creating an interesting effect but probably not as intended)."""
 
-face: int(3*nface), optional
-"""Trinagular skin faces. Each face is a triple of vertex indices, which are integers between zero and nvert-1."""
+    face: Optional[VecN] = None
+    """Trinagular skin faces. Each face is a triple of vertex indices, which are integers between zero and nvert-1."""
 
-inflate: real, "0"
-"""If this number is not zero, the position of vertex during updating will be offset along the vertex normal, but the distance specified in this attribute. This is particularly useful for skins representing flexible 2D shapes."""
+    inflate: float = 0
+    """If this number is not zero, the position of vertex during updating will be offset along the vertex normal, but the distance specified in this attribute. This is particularly useful for skins representing flexible 2D shapes."""
 
-material: string, optional
-"""If specified, this attribute applies a material to the skin."""
+    material: Optional[MaterialName] = None
+    """If specified, this attribute applies a material to the skin."""
 
-rgba: real(4), "0.5 0.5 0.5 1"
-"""Instead of creating material assets and referencing them, this attribute can be used to set color and transparency only. This is not as flexible as the material mechanism, but is more convenient and is often sufficient. If the value of this attribute is different from the internal default, it takes precedence over the material."""
+    rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
+    """Instead of creating material assets and referencing them, this attribute can be used to set color and transparency only. This is not as flexible as the material mechanism, but is more convenient and is often sufficient. If the value of this attribute is different from the internal default, it takes precedence over the material."""
 
-group: int, "0"
-"""Integer group to which the skin belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of skins."""
+    group: int = 0
+    """Integer group to which the skin belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of skins."""
 
     bones: Sequence[Bone] = Field(
-            default_factory=list,
-            exclude_if=is_empty_list,
-        )
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
     """Bones defined in the skin."""
