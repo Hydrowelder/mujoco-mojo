@@ -7,7 +7,7 @@ from .composite_attr import (
     CompositeGeom,
     CompositeJoint,
     CompositeSite,
-    Skin,
+    CompositeSkin,
 )
 from .flexcomp import FlexComp
 from .free_joint import FreeJoint
@@ -63,5 +63,5 @@ __all__ = [
     "SiteCylinder",
     "SiteEllipsoid",
     "SiteSphere",
-    "Skin",
+    "CompositeSkin",
 ]

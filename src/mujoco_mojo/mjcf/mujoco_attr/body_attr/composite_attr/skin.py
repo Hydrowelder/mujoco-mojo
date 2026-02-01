@@ -6,7 +6,7 @@ from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import MaterialName, Vec4
 
 
-class Skin(XMLModel):
+class CompositeSkin(XMLModel):
     """If this element is included, the model compiler will generate a skinned mesh asset and attach it to the element bodies of the composite object. Skin can be attached to 2D grid, cloth, box, cylinder and ellipsoid. For other composite types it has no effect. Note that the skin created here is equivalent to a skin specified directly in the XML, as opposed to a skin loaded from file. So if the model is saved as XML, it will contain a large section describing the automatically-generated skin."""
 
     texcoord: bool = False

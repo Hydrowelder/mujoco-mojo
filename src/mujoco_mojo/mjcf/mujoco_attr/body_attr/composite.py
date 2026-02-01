@@ -9,7 +9,7 @@ from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import CompositeGeom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.joint import CompositeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.site import CompositeSite
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import Skin
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.typing import CompositeInitial, CompositeType, Vec3, VecN
@@ -76,7 +76,7 @@ class Composite(XMLModel):
     site: Optional[CompositeSite] = None
     """Site assigned to composite."""
 
-    skin: Optional[Skin] = None
+    skin: Optional[CompositeSkin] = None
     """Skin assigned to composite."""
 
     plugins: Sequence[Plugin] = Field(default_factory=list, exclude_if=is_empty_list)
