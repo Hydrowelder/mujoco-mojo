@@ -17,7 +17,6 @@ raise NotImplementedError(
 __all__ = ["Replicate"]
 
 
-# TODO put under actuator containers when done
 class Replicate(XMLModel):
     """The replicate element duplicates the enclosed kinematic tree elements with incremental translational and rotational offsets, adding namespace suffixes to avoid name collisions. Appended suffix strings are integers in the range [0...count-1] with the minimum number of digits required to represent the total element count (i.e., if replicating 200 times, suffixes will be 000, 001, ... etc). All referencing elements are automatically replicated and namespaced appropriately. Detailed examples of models using replicate can be found in the model/replicate/ directory.
 

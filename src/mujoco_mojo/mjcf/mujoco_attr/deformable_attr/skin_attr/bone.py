@@ -12,15 +12,11 @@ class Bone(XMLModel):
     tag = "bone"
 
     attributes = (
-        "name",
-        "file",
-        "material",
-        "rgba",
-        "inflate",
-        "vertex",
-        "texcoord",
-        "face",
-        "group",
+        "body",
+        "bindpos",
+        "bindquat",
+        "vertid",
+        "vertweight",
     )
 
     body: BodyName
