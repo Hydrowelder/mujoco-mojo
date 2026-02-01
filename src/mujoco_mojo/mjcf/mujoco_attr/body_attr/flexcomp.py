@@ -93,7 +93,7 @@ class FlexComp(XMLModel):
         "origin",
     )
 
-    children = ("contacts", "edges", "elasticities", "pins", "plugins")
+    children = ("contacts", "edges", "elasticities", "pins", "plugin")
 
     name: str
     """The name of the flex element being generated automatically. This name is used as a prefix for all bodies that are automatically generated here, and is also referenced by the corresponding flex equality constraint (if applicable)."""

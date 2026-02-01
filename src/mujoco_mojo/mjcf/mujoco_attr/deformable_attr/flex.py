@@ -10,7 +10,7 @@ from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.edge import FlexEdge
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
     FlexElasticity,
 )
-from mujoco_mojo.typing import DeformableFlexName, MaterialName, Vec4, VecN
+from mujoco_mojo.typing import FlexName, MaterialName, Vec4, VecN
 
 __all__ = ["Flex"]
 
@@ -37,7 +37,7 @@ class Flex(XMLModel):
     )
     children = ("contact", "edge", "elasticity")
 
-    name: Optional[DeformableFlexName] = None
+    name: Optional[FlexName] = None
     """Name of the flex."""
 
     dim: int = 2
