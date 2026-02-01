@@ -2,222 +2,366 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/user-guide/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/SUMMARY/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/base/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/typing/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/utils/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/defaults/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/orientation/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/plugin/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/position/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/meta/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/meta/frame/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/meta/include/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/meta/replicate/</loc>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/contact/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality/</loc>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/size/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/statistic/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon/</loc>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/hfield/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/mesh/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/model/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/texture/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/asset_attr/material_attr/layer/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/attach/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/camera/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp/</loc>
-         <lastmod>2026-01-31</lastmod>
-    </url>
-    <url>
-         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/frame/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/free_joint/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/geom/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/inertial/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/joint/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/light/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/plugin/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/site/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/geom/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/joint/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/site/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/composite_attr/skin/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/contact/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/edge/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/elasticity/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/body_attr/flexcomp_attr/pin/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/compiler_attr/lengthrange/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/contact_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/contact_attr/exclude/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/contact_attr/pair/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/flex/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/skin/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/flex_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/flex_attr/contact/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/flex_attr/edge/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/flex_attr/elasticity/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/skin_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/deformable_attr/skin_attr/bone/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/connect/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/equality_base/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/flex/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/joint/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/tendon/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/equality_attr/weld/</loc>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
     </url>
     <url>
          <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/option_attr/flag/</loc>
-         <lastmod>2026-01-31</lastmod>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/fixed/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/spatial/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/tendon_base/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/fixed_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/fixed_attr/joint/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/spatial_attr/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/spatial_attr/geom/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/spatial_attr/pulley/</loc>
+         <lastmod>2026-02-01</lastmod>
+    </url>
+    <url>
+         <loc>https://hydrowelder.github.io/mujoco-mojo/reference/mujoco_mojo/mjcf/mujoco_attr/tendon_attr/spatial_attr/site/</loc>
+         <lastmod>2026-02-01</lastmod>
     </url>
 </urlset>
