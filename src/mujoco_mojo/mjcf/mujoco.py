@@ -8,6 +8,8 @@ from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
 from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
+from mujoco_mojo.mjcf.mujoco_attr.contact import Contact
+from mujoco_mojo.mjcf.mujoco_attr.deformable import Deformable
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
@@ -46,46 +48,99 @@ class Mujoco(XMLModel):
     model: ModelName = ModelName("MuJoCo Model")
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
-    options: Sequence[Option] = Field(default_factory=list, exclude_if=is_empty_list)
-    compilers: Sequence[Compiler] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )
-    sizes: Sequence[Size] = Field(default_factory=list, exclude_if=is_empty_list)
-    statistics: Sequence[Statistic] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )
-    assets: Sequence[Asset] = Field(default_factory=list, exclude_if=is_empty_list)
     worldbody: Optional[WorldBody] = None
-    deformables: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO
-    contacts: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO
+    """World body of the model. There can be only one."""
+
+    options: Sequence[Option] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Simulation options."""
+
+    compilers: Sequence[Compiler] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Compiler options."""
+
+    sizes: Sequence[Size] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Size parameter options."""
+
+    statistics: Sequence[Statistic] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Model statistic overrides."""
+
+    assets: Sequence[Asset] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Assets definitions in the model."""
+
+    deformables: Sequence[Deformable] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Deformables elements definitions in the model."""
+
+    contacts: Sequence[Contact] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Contact elements definitions in the model."""
+
     equalities: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Equality constraint definition grouping."""
+
     tendons: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Tendon definition grouping."""
+
     actuators: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Actuator definition grouping."""
+
     sensors: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Sensor definition grouping."""
     keyframes: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Keyframe definition grouping."""
+
     visuals: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Visual definition grouping."""
+
     defaults: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Default definition grouping."""
+
     customs: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Custom definitions grouping."""
     extensions: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )  # TODO
+    """Extension definitions grouping."""

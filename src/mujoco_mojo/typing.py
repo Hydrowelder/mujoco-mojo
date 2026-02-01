@@ -56,6 +56,8 @@ __all__ = [
     "SiteName",
     "CameraName",
     "LightName",
+    "DeformableSkinName",
+    "DeformableFlexName",
     "ContactPairName",
     "ContactExcludeName",
     "ActuatorGroup",
@@ -104,6 +106,12 @@ ContactPairName = NewType("ContactPairName", str)
 
 ContactExcludeName = NewType("ContactExcludeName", str)
 """Alias of string. Used to type hint a field is the name of a contact Exclude."""
+
+DeformableSkinName = NewType("DeformableSkinName", str)
+"""Alias of string. Used to type hint a field is the name of a DeformableSkin."""
+
+DeformableFlexName = NewType("DeformableFlexName", str)
+"""Alias of string. Used to type hint a field is the name of a DeformableFlex."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
@@ -661,3 +669,38 @@ class FlexCompType(StrEnum):
 
     DIRECT = "direct"
     """`direct` allows the user to specify the point and element data of the flexcomp directly in the XML. Note that flexcomp will still generate moving bodies automatically, as well as automate other settings; so it still provides convenience compared to specifing the corresponding flex directly."""
+
+
+class FlexElastic2D(StrEnum):
+    """Elastic contribution to passive forces of 2D flexes."""
+
+    NONE = "none"
+    """None."""
+
+    BEND = "bend"
+    """Bending only."""
+
+    STRETCH = "stretch"
+    """Stretching only."""
+
+    BOTH = "both"
+    "Bending and stretching."
+
+
+class SelfCollide(StrEnum):
+    """This determines the strategy for midphase collision pruning of element pairs belonging to the same flex."""
+
+    NONE = "none"
+    """Flex elements cannot collide with each other."""
+
+    NARROW = "narrow"
+    """Narrow phase only (i.e. all pairs are checked). This is a diagnostic tool and is never a good idea in practice."""
+
+    BVH = "bvh"
+    """Bounding volume hierarchies (strategy for midphase collision pruning)."""
+
+    SAP = "sap"
+    """Sweep-and-prune (strategy for midphase collision pruning)."""
+
+    AUTO = "auto"
+    """Select sap in 1D and 2D, and bvh in 3D. Which strategy performs better depends on the specifics of the model. The automatic setting is just a simple rule which we have found to perform well in general."""

@@ -17,6 +17,7 @@ from .body_attr import (
     CompositeGeom,
     CompositeJoint,
     CompositeSite,
+    CompositeSkin,
     FlexComp,
     FreeJoint,
     Geom,
@@ -38,12 +39,12 @@ from .body_attr import (
     SiteCylinder,
     SiteEllipsoid,
     SiteSphere,
-    Skin,
 )
 from .compiler import Compiler
 from .compiler_attr import LengthRange
 from .contact import Contact
 from .contact_attr import Exclude, Pair
+from .deformable import Deformable
 from .option import Option
 from .option_attr import Flag
 from .size import Size
@@ -60,6 +61,7 @@ __all__ = [
     "CompositeJoint",
     "CompositeSite",
     "Contact",
+    "Deformable",
     "Exclude",
     "Flag",
     "FlexComp",
@@ -92,7 +94,7 @@ __all__ = [
     "SiteEllipsoid",
     "SiteSphere",
     "Size",
-    "Skin",
+    "CompositeSkin",
     "Statistic",
     "Texture",
     "WorldBody",

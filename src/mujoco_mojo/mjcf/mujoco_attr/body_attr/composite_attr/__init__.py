@@ -3,11 +3,11 @@
 from .geom import CompositeGeom
 from .joint import CompositeJoint
 from .site import CompositeSite
-from .skin import Skin
+from .skin import CompositeSkin
 
 __all__ = [
     "CompositeJoint",
     "CompositeGeom",
     "CompositeSite",
-    "Skin",
+    "CompositeSkin",
 ]

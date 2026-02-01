@@ -10,7 +10,7 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import Material
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import Mesh
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import Texture
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import Skin
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Asset"]
@@ -25,7 +25,9 @@ class Asset(XMLModel):
 
     meshes: Sequence[Mesh] = Field(default_factory=list, exclude_if=is_empty_list)
     hfields: Sequence[HField] = Field(default_factory=list, exclude_if=is_empty_list)
-    skins: Sequence[Skin] = Field(default_factory=list, exclude_if=is_empty_list)
+    skins: Sequence[CompositeSkin] = Field(
+        default_factory=list, exclude_if=is_empty_list
+    )
     textures: Sequence[Texture] = Field(default_factory=list, exclude_if=is_empty_list)
     materials: Sequence[Material] = Field(
         default_factory=list, exclude_if=is_empty_list
