@@ -66,7 +66,8 @@ class Composite(XMLModel):
     """Scaling of the curve functions. size[0] is the scaling of s, size[1] is the radius of cos(s) and sin(s), and size[2] is the speed of the argument (i.e. cos(2*pi*size[2]*s))."""
 
     joints: Sequence[CompositeJoint] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )
     """Joints assigned to composite."""
 
@@ -79,5 +80,8 @@ class Composite(XMLModel):
     skin: Optional[CompositeSkin] = None
     """Skin assigned to composite."""
 
-    plugins: Sequence[Plugin] = Field(default_factory=list, exclude_if=is_empty_list)
+    plugins: Sequence[Plugin] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
     """Plugins assigned to composite."""

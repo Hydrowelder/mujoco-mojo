@@ -6,7 +6,14 @@ from typing import Optional, Sequence, Tuple
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.contact import FlexCompContact
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.edge import FlexCompEdge
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
+    FlexCompElasticity,
+)
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.pin import FlexCompPin
 from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.typing import FlexCompDOF, FlexCompType, MaterialName, Vec3, Vec4, VecN
 from mujoco_mojo.utils import is_empty_list
 
@@ -197,18 +204,29 @@ class FlexComp(XMLModel):
     origin: Optional[Vec3] = None
     """The origin of the flexcomp. Used for generating a volumetric mesh from an OBJ surface mesh. Each surface triangle is connected to the origin to create a tetrahedron, so the resulting volumetric mesh is guaranteed to be well-formed only for convex shapes."""
 
-    contacts: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO these are mainly built off flex so Im gonna do those first
-    edges: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO these are mainly built off flex so Im gonna do those first
-    elasticities: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO these are mainly built off flex so Im gonna do those first
-    pins: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO these are mainly built off flex so Im gonna do those first
-    plugins: Sequence[float] = Field(
-        default_factory=list, exclude_if=is_empty_list
-    )  # TODO these are mainly built off flex so Im gonna do those first
+    contacts: Sequence[FlexCompContact] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Contact properties grouping."""
+
+    edges: Sequence[FlexCompEdge] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Edge constraint properties grouping."""
+
+    elasticities: Sequence[FlexCompElasticity] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Elasticity properties grouping."""
+
+    pins: Sequence[FlexCompPin] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Pin properties grouping."""
+
+    plugin: Optional[Plugin] = None
+    """Plugin for the body."""

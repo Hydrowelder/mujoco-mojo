@@ -1,5 +1,13 @@
 """Defines child attributes of the FlexComp class."""
-# from .contact import *
-# from .edge import *
-# from .elasticity import *
-# from .pin import *
+
+from .contact import FlexCompContact
+from .edge import FlexCompEdge
+from .elasticity import FlexCompElasticity
+from .pin import FlexCompPin
+
+__all__ = [
+    "FlexCompContact",
+    "FlexCompEdge",
+    "FlexCompElasticity",
+    "FlexCompPin",
+]

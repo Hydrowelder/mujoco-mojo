@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.contact import FlexContact
+
+__all__ = ["FlexCompContact"]
+
+
+class FlexCompContact(FlexContact):
+    """This is basically a FlexContact."""
+
+    attributes = (
+        "internal",
+        "selfcollide",
+        "vertcollide",
+        "activelayers",
+        "contype",
+        "conaffinity",
+        "condim",
+        "priority",
+        "friction",
+        "solmix",
+        "solimp",
+        "margin",
+        "gap",
+    )
