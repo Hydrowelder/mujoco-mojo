@@ -90,6 +90,8 @@ plugins:
             separate_signature: true
             summary: false # set to true to get summary tables
             inherited_members: true
+            inheritance_diagram_direction: TD
+            show_inheritance_diagram: true
             show_attribute_values: true
             signature_crossrefs: true
             extensions:
@@ -139,5 +141,6 @@ markdown_extensions:
   - pymdownx.tilde
 
 extra_javascript:
+  - https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js
   - https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js
   - javascripts/tablesort.js
