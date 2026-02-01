@@ -59,6 +59,15 @@ from .option import Option
 from .option_attr import Flag
 from .size import Size
 from .statistic import Statistic
+from .tendon import Tendon
+from .tendon_attr import (
+    Fixed,
+    Spatial,
+    SpatialGeom,
+    SpatialPulley,
+    SpatialSite,
+    TendonJoint,
+)
 
 __all__ = [
     "Asset",
@@ -72,6 +81,13 @@ __all__ = [
     "CompositeSite",
     "Contact",
     "Deformable",
+    "TendonJoint",
+    "SpatialGeom",
+    "SpatialPulley",
+    "SpatialSite",
+    "Fixed",
+    "Spatial",
+    "Tendon",
     "Exclude",
     "Equality",
     "EqualityConnectBody",
