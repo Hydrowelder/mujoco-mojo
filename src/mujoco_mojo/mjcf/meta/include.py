@@ -1,3 +1,8 @@
+"""
+!!! failure "Not Implemented"
+    The Include class is not implemented. There is no plan to implement as its functionality is duplicated by Attach and that of Python itself. Its functionality within the Mujoco class is not implemented.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

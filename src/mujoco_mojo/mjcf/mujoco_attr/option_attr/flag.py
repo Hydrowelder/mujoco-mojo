@@ -116,6 +116,6 @@ class Flag(XMLModel):
     sleep: EnableDisable = EnableDisable.DISABLE
     """This flag enables sleeping. Disabling this flag when some trees are sleeping will wake them.
 
-    !!! warning "flag value at initialization time"
+    !!! warning "Flag value at initialization time"
         Unlike any other flag, the sleep flag has an effect during mjData initialization (mj_makeData or mj_resetData). First, it must be set at initialization time in order for the sleep-init policy to take effect. Second, it must be set in order for static quantities to be computed. See implementation notes for more details.
     """
