@@ -10,10 +10,7 @@ class FlexEdge(XMLModel):
 
     tag = "edge"
 
-    attributes = (
-        "stiffness",
-        "damping",
-    )
+    attributes = ("stiffness", "damping")
 
     stiffness: float = 0
     """Stiffness of all edges. Only for 1D flex. For 2D and 3D, plugins must be used."""

@@ -14,6 +14,7 @@ __all__ = [
     "Vec4",
     "Vec5",
     "Vec6",
+    "Vec7",
     "VecN",
     "GridLayoutStr",
     "GeomType",
@@ -57,9 +58,10 @@ __all__ = [
     "CameraName",
     "LightName",
     "DeformableSkinName",
-    "DeformableFlexName",
+    "FlexName",
     "ContactPairName",
     "ContactExcludeName",
+    "TendonName",
     "ActuatorGroup",
     "GeomGroup",
     "InertiaGroupRange",
@@ -110,8 +112,14 @@ ContactExcludeName = NewType("ContactExcludeName", str)
 DeformableSkinName = NewType("DeformableSkinName", str)
 """Alias of string. Used to type hint a field is the name of a DeformableSkin."""
 
-DeformableFlexName = NewType("DeformableFlexName", str)
+FlexName = NewType("FlexName", str)
 """Alias of string. Used to type hint a field is the name of a DeformableFlex."""
+
+EqualityName = NewType("EqualityName", str)
+"""Alias of string. Used to type hint a field is the name of an Eqaulity."""
+
+TendonName = NewType("TendonName", str)
+"""Alias of string. Used to type hint a field is the name of an Tendon."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
@@ -145,6 +153,9 @@ Vec5 = Annotated[NDArray[Shape["5"], float | int], ...]
 
 Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
 """A 6-element numeric array."""
+
+Vec7 = Annotated[NDArray[Shape["7"], float | int], ...]
+"""A 7-element numeric array."""
 
 VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
 """An N-element numeric array of arbitrary length."""

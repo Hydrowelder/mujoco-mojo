@@ -10,6 +10,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.contact import Contact
 from mujoco_mojo.mjcf.mujoco_attr.deformable import Deformable
+from mujoco_mojo.mjcf.mujoco_attr.equality import Equality
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
@@ -93,10 +94,10 @@ class Mujoco(XMLModel):
     )
     """Contact elements definitions in the model."""
 
-    equalities: Sequence[float] = Field(
+    equalities: Sequence[Equality] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Equality constraint definition grouping."""
 
     tendons: Sequence[float] = Field(
@@ -116,6 +117,7 @@ class Mujoco(XMLModel):
         exclude_if=is_empty_list,
     )  # TODO
     """Sensor definition grouping."""
+
     keyframes: Sequence[float] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
@@ -139,6 +141,7 @@ class Mujoco(XMLModel):
         exclude_if=is_empty_list,
     )  # TODO
     """Custom definitions grouping."""
+
     extensions: Sequence[float] = Field(
         default_factory=list,
         exclude_if=is_empty_list,

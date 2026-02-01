@@ -45,6 +45,16 @@ from .compiler_attr import LengthRange
 from .contact import Contact
 from .contact_attr import Exclude, Pair
 from .deformable import Deformable
+from .equality import Equality
+from .equality_attr import (
+    EqualityConnectBody,
+    EqualityConnectSite,
+    EqualityFlex,
+    EqualityJoint,
+    EqualityTendon,
+    EqualityWeldBody,
+    EqualityWeldSite,
+)
 from .option import Option
 from .option_attr import Flag
 from .size import Size
@@ -63,6 +73,14 @@ __all__ = [
     "Contact",
     "Deformable",
     "Exclude",
+    "Equality",
+    "EqualityConnectBody",
+    "EqualityConnectSite",
+    "EqualityFlex",
+    "EqualityJoint",
+    "EqualityTendon",
+    "EqualityWeldBody",
+    "EqualityWeldSite",
     "Flag",
     "FlexComp",
     "FreeJoint",
