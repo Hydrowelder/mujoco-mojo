@@ -62,6 +62,7 @@ __all__ = [
     "ModelName",
     "GeomName",
     "SiteName",
+    "SensorName",
     "CameraName",
     "LightName",
     "DeformableSkinName",
@@ -139,6 +140,9 @@ PluginName = NewType("PluginName", str)
 
 InstanceName = NewType("InstanceName", str)
 """Alias of string. Used to type hint a field is the name of a plugin Instance."""
+
+SensorName = NewType("SensorName", str)
+"""Alias of string. Used to type hint a field is the name of a Sensor."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""

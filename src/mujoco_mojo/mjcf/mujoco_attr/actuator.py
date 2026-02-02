@@ -35,9 +35,9 @@ class Actuator(XMLModel):
         "intvelocities",
         "dampers",
         "cylinders",
-        # "muscles",
-        # "adhesions",
-        # "plugins",
+        "muscles",
+        "adhesions",
+        "plugins",
     )
 
     generals: Sequence[ActuatorGeneral] = Field(

@@ -5,6 +5,7 @@ from typing import Optional, Sequence
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
 from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
 from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
@@ -12,8 +13,10 @@ from mujoco_mojo.mjcf.mujoco_attr.contact import Contact
 from mujoco_mojo.mjcf.mujoco_attr.deformable import Deformable
 from mujoco_mojo.mjcf.mujoco_attr.equality import Equality
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
+from mujoco_mojo.mjcf.mujoco_attr.sensor import Sensor
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
+from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.typing import ModelName
 from mujoco_mojo.utils import is_empty_list
 
@@ -100,19 +103,19 @@ class Mujoco(XMLModel):
     )
     """Equality constraint definition grouping."""
 
-    tendons: Sequence[float] = Field(
+    tendons: Sequence[Tendon] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Tendon definition grouping."""
 
-    actuators: Sequence[float] = Field(
+    actuators: Sequence[Actuator] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Actuator definition grouping."""
 
-    sensors: Sequence[float] = Field(
+    sensors: Sequence[Sensor] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )  # TODO
