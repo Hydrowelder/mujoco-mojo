@@ -118,7 +118,7 @@ class Mujoco(XMLModel):
     sensors: Sequence[Sensor] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Sensor definition grouping."""
 
     keyframes: Sequence[float] = Field(
