@@ -9,8 +9,8 @@ from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.typing import (
     CompositeJointKind,
+    JointLimited,
     JointType,
-    Limited,
     Vec2,
     Vec3,
     Vec5,
@@ -83,7 +83,7 @@ class CompositeJoint(XMLModel):
 
     Besides increasing the realism of joints with geared transmission, positive armature significantly improves simulation stability, even for small values, and is a recommended possible fix when encountering stability issues."""
 
-    limited: Limited = Field(
+    limited: JointLimited = Field(
         default_factory=lambda: deepcopy(Joint.model_fields["limited"].default)
     )
     """This attribute specifies if the joint has limits. It interacts with the range attribute. If this attribute is "false", joint limits are disabled. If this attribute is "true", joint limits are enabled. If this attribute is "auto", and autolimits is set in compiler, joint limits will be enabled if range is defined."""
