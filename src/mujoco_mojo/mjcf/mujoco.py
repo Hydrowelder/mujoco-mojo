@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from pydantic import Field
 
@@ -52,7 +52,7 @@ class Mujoco(XMLModel):
     model: ModelName = ModelName("MuJoCo Model")
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
-    worldbody: Optional[WorldBody] = None
+    worldbody: WorldBody | None = None
     """World body of the model. There can be only one."""
 
     options: Sequence[Option] = Field(

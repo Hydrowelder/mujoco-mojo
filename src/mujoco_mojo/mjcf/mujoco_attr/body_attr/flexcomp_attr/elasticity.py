@@ -26,25 +26,29 @@ class FlexCompElasticity(XMLModel):
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     poisson: float = Field(
-        default_factory=lambda: deepcopy(FlexElasticity.model_fields["poisson"].default)
+        default_factory=lambda: deepcopy(
+            FlexElasticity.model_fields["poisson"].default,
+        ),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     damping: float = Field(
-        default_factory=lambda: deepcopy(FlexElasticity.model_fields["damping"].default)
+        default_factory=lambda: deepcopy(
+            FlexElasticity.model_fields["damping"].default,
+        ),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     thickness: float = Field(
         default_factory=lambda: deepcopy(
-            FlexElasticity.model_fields["thickness"].default
-        )
+            FlexElasticity.model_fields["thickness"].default,
+        ),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     elastic2d: FlexElastic2D = Field(
         default_factory=lambda: deepcopy(
-            FlexElasticity.model_fields["elastic2d"].default
-        )
+            FlexElasticity.model_fields["elastic2d"].default,
+        ),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.equality_base import EqualityBase
@@ -14,12 +12,12 @@ class EqualityJoint(EqualityBase):
     """This element constrains the position or angle of one joint to be a quartic polynomial of another joint. Only scalar joint types (slide and hinge) can be used."""
 
     tag = "joint"
-    attributes = EqualityBase.attributes + ("joint1", "joint2", "polycoef")
+    attributes = (*EqualityBase.attributes, "joint1", "joint2", "polycoef")
 
     joint1: JointName
     """Name of the first joint."""
 
-    joint2: Optional[JointName] = None
+    joint2: JointName | None = None
     """Name of the second joint. If this attribute is omitted, the first joint is fixed to a constant."""
 
     polycoef: Vec5 = np.array((0, 1, 0, 0, 0))

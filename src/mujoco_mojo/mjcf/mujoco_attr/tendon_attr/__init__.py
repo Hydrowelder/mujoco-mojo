@@ -4,10 +4,10 @@ from .spatial import Spatial
 from .spatial_attr import SpatialGeom, SpatialPulley, SpatialSite
 
 __all__ = [
-    "TendonJoint",
+    "Fixed",
+    "Spatial",
     "SpatialGeom",
     "SpatialPulley",
     "SpatialSite",
-    "Fixed",
-    "Spatial",
+    "TendonJoint",
 ]

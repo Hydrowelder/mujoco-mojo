@@ -1,6 +1,6 @@
 # MuJoCo Mojo
 
-Pythonic MJCF generation and validation toolkit built on Pydantic v2.
+Pythonic MJCF generation and validation toolkit built on Pydantic v2. It is built for Python 3.13 and above.
 
 ## Features
 
@@ -13,8 +13,8 @@ Pythonic MJCF generation and validation toolkit built on Pydantic v2.
 ## Quick Example
 
 ```python
-from mujoco_mojo import Material
+import mujoco_mojo.mjcf as mjcf
 
-mat = Material(name="steel")
+mat = mjcf.Material(name="steel")
 print(mat.to_xml())
 ```

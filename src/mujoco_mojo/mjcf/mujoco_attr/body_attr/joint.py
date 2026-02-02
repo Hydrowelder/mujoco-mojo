@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -28,10 +26,10 @@ class Joint(XMLModel):
 
     attributes = ()
 
-    name: Optional[JointName] = None
+    name: JointName | None = None
     """Name of the joint."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     type: JointType = JointType.HINGE
@@ -110,5 +108,5 @@ class Joint(XMLModel):
     frictionloss: float = 0
     """Friction loss due to dry friction. This value is the same for all degrees of freedom created by this joint. Semantically friction loss does not make sense for free joints, but the compiler allows it. To enable friction loss, set this attribute to a positive value."""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters."""

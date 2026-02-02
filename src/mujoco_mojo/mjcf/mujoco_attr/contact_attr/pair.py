@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -30,10 +28,10 @@ class Pair(XMLModel):
         "margin",
     )
 
-    name: Optional[ContactPairName] = None
+    name: ContactPairName | None = None
     """Name of this contact pair."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     geom1: GeomName

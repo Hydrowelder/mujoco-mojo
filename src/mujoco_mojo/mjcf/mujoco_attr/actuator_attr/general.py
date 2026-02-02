@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 from pydantic import model_validator
 
@@ -24,7 +22,8 @@ class ActuatorGeneral(ActuatorBase):
 
     tag = "general"
 
-    attributes = ActuatorBase.attributes + (
+    attributes = (
+        *ActuatorBase.attributes,
         "actlimited",
         "actrange",
         "body",
@@ -46,7 +45,7 @@ class ActuatorGeneral(ActuatorBase):
 
     Setting this attribute without specifying actlimited is an error if autolimits is "false" in compiler."""
 
-    body: Optional[BodyName] = None
+    body: BodyName | None = None
     """This transmission can apply linear forces at contact points in the direction of the contact normal. The set of contacts is all those belonging to the specified body. This can be used to model natural active adhesion mechanisms like the feet of geckos and insects. The actuator length is again defined as zero. For more information, see the adhesion shortcut below."""
 
     actdim: float = -1
@@ -87,13 +86,13 @@ class ActuatorGeneral(ActuatorBase):
     | `user`   | bias_term = mjcb_act_bias(...)                                   |
     """
 
-    dynprm: Optional[VecN] = None
+    dynprm: VecN | None = None
     """Activation dynamics parameters. The built-in activation types (except for muscle) use only the first parameter, but we provide additional parameters in case user callbacks implement a more elaborate model. The length of this array is not enforced by the parser, so the user can enter as many parameters as needed. These defaults are not compatible with muscle actuators; see muscle below."""
 
-    gainprm: Optional[VecN] = None
+    gainprm: VecN | None = None
     """Gain parameters. The built-in gain types (except for muscle) use only the first parameter, but we provide additional parameters in case user callbacks implement a more elaborate model. The length of this array is not enforced by the parser, so the user can enter as many parameters as needed. These defaults are not compatible with muscle actuators; see muscle below."""
 
-    biasprm: Optional[VecN] = None
+    biasprm: VecN | None = None
     """Bias parameters. The affine bias type uses three parameters. The length of this array is not enforced by the parser, so the user can enter as many parameters as needed. These defaults are not compatible with muscle actuators; see muscle below."""
 
     actearly: bool = False
@@ -110,7 +109,7 @@ class ActuatorGeneral(ActuatorBase):
 
         if sum(v is not None for v in fields) != 1:
             raise ValueError(
-                "Exactly one of joint, jointinparent, site, or body must be specified"
+                "Exactly one of joint, jointinparent, site, or body must be specified",
             )
 
         return self

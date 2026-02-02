@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import (
     SensorName,
@@ -18,7 +16,7 @@ class SensorBase(XMLModel):
 
     attributes = ("name", "noise", "cutoff", "user")
 
-    name: Optional[SensorName] = None
+    name: SensorName | None = None
     """Name of the sensor."""
 
     noise: float = 0
@@ -27,5 +25,5 @@ class SensorBase(XMLModel):
     cutoff: float = 0
     """When this value is positive, it limits the absolute value of the sensor output. It is also used to normalize the sensor output in the sensor data plots in simulate.cc."""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters."""

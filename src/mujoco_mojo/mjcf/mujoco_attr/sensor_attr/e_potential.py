@@ -4,8 +4,8 @@ __all__ = ["SensorEPotential"]
 
 
 class SensorEPotential(SensorBase):
-    """"""
+    """This element creates sensor that returns the potential energy."""
 
     tag = "e_potential"
 
-    attributes = SensorBase.attributes + ()
+    attributes = (*SensorBase.attributes,)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field
@@ -38,10 +38,10 @@ class Material(XMLModel):
     name: MaterialName
     """Name of the material, used for referencing."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
-    texture: Optional[TextureName] = None
+    texture: TextureName | None = None
     """If this attribute is specified, the material has a texture associated with it. Referencing the material from a model element will cause the texture to be applied to that element. Note that the value of this attribute is the name of a texture asset, not a texture file name. Textures cannot be loaded in the material definition; instead they must be loaded explicitly via the texture element and then referenced here. The texture referenced here is used for specifying the RGB values. For advanced rendering (e.g., Physics-Based Rendering), more texture types need to be specified (e.g., roughness, metallic). In this case, this texture attribute should be omitted, and the texture types should be specified using layer child elements. Note however that the built-in renderer does not support PBR properties, so these advanced rendering features are only available when using an external renderer."""
 
     texrepeat: Vec2 = np.array((1, 1))

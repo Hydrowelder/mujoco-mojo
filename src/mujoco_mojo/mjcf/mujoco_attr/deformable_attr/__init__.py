@@ -4,10 +4,10 @@ from .skin import DeformableSkin
 from .skin_attr import Bone
 
 __all__ = [
-    "Flex",
-    "FlexElasticity",
-    "FlexEdge",
-    "FlexContact",
-    "DeformableSkin",
     "Bone",
+    "DeformableSkin",
+    "Flex",
+    "FlexContact",
+    "FlexEdge",
+    "FlexElasticity",
 ]

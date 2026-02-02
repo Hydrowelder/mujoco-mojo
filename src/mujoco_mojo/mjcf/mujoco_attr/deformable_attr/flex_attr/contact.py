@@ -48,52 +48,52 @@ class FlexContact(XMLModel):
     """This only has an effect for 3D flexes. Each tetrahedron is labeled by the model compiler with an integer corresponding to (graph) distance to the outside surface of the flex. Thus outside-facing elements are in layer 0, their neighbors are in layer 1, etc. This attribute specifies how many layers will be allowed to participate in collisions. The default setting 1 means that only one layer (i.e. layer 0) can collide, with itself and with the rest of the world. This is usually sufficient, however if the outer layer is composed of small tetrahedra, another body can "pierce" it and get stuck. In that case the value should be increased."""
 
     contype: int = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["contype"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["contype"].default),
     )
     """Same meaning as regular geom attributes."""
 
     conaffinity: int = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["conaffinity"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["conaffinity"].default),
     )
     """Same meaning as regular geom attributes."""
 
     condim: Literal[1, 3, 4, 6] = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["condim"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["condim"].default),
     )
     """Same meaning as regular geom attributes."""
 
     priority: int = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["priority"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["priority"].default),
     )
     """Same meaning as regular geom attributes."""
 
     friction: Vec3 = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["friction"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["friction"].default),
     )
     """Same meaning as regular geom attributes."""
 
     solmix: float = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["solmix"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["solmix"].default),
     )
     """Same meaning as regular geom attributes."""
 
     solref: Vec2 = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["solref"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["solref"].default),
     )
     """Same meaning as regular geom attributes."""
 
     solimp: Vec5 = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["solimp"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["solimp"].default),
     )
     """Same meaning as regular geom attributes."""
 
     margin: float = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["margin"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["margin"].default),
     )
     """Same meaning as regular geom attributes."""
 
     gap: float = Field(
-        default_factory=lambda: deepcopy(GeomBase.model_fields["gap"].default)
+        default_factory=lambda: deepcopy(GeomBase.model_fields["gap"].default),
     )
     """Same meaning as regular geom attributes."""
 

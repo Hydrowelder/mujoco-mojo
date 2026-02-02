@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import Align, JointName, JointType
@@ -9,19 +9,21 @@ __all__ = ["FreeJoint"]
 
 
 class FreeJoint(XMLModel):
-    """This element creates a free joint whose only attributes are name and group. The freejoint element is an XML shortcut for
+    """
+    This element creates a free joint whose only attributes are name and group. The freejoint element is an XML shortcut for
 
     ``` xml
     <joint type="free" stiffness="0" damping="0" frictionloss="0" armature="0"/>
     ```
 
-    While this joint can evidently be created with the joint element, default joint settings could affect it. This is usually undesirable as physical free bodies do not have nonzero stiffness, damping, friction or armature. To avoid this complication, the freejoint element was introduced, ensuring joint defaults are not inherited. If the XML model is saved, it will appear as a regular joint of type free."""
+    While this joint can evidently be created with the joint element, default joint settings could affect it. This is usually undesirable as physical free bodies do not have nonzero stiffness, damping, friction or armature. To avoid this complication, the freejoint element was introduced, ensuring joint defaults are not inherited. If the XML model is saved, it will appear as a regular joint of type free.
+    """
 
     tag = "joint"
 
     type: ClassVar[JointType] = JointType.FREE
 
-    name: Optional[JointName] = None
+    name: JointName | None = None
     """Name of the joint."""
 
     group: int = 0

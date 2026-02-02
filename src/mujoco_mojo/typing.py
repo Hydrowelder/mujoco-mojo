@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, NewType, Tuple
+from typing import Annotated, NewType
 
 from numpydantic import NDArray, Shape
 from pydantic import Field
@@ -9,6 +9,67 @@ from pydantic import Field
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = [
+    "ActuatorControlLimited",
+    "ActuatorForceLimited",
+    "ActuatorGroup",
+    "ActuatorLimited",
+    "ActuatorName",
+    "Align",
+    "Angle",
+    "BiasType",
+    "BodyName",
+    "CameraName",
+    "ColorSpace",
+    "CompositeInitial",
+    "CompositeJointKind",
+    "CompositeType",
+    "Cone",
+    "ContactExcludeName",
+    "ContactPairName",
+    "Coordinate",
+    "DeformableSkinName",
+    "DynType",
+    "EnableDisable",
+    "FlexCompDOF",
+    "FlexCompType",
+    "FlexName",
+    "FluidShape",
+    "GainType",
+    "GeomGroup",
+    "GeomName",
+    "GeomType",
+    "GridLayoutStr",
+    "HFieldName",
+    "Inertia",
+    "InertiaFromGeom",
+    "InertiaGroupRange",
+    "InstanceName",
+    "Integrator",
+    "Jacobian",
+    "JointLimited",
+    "JointName",
+    "JointType",
+    "LayerRole",
+    "LengthRangeMode",
+    "LightName",
+    "LightType",
+    "Mark",
+    "MaterialName",
+    "MeshName",
+    "ModelName",
+    "PluginName",
+    "SensorAttachableName",
+    "SensorName",
+    "SensorObjectType",
+    "SiteName",
+    "Sleep",
+    "Solver",
+    "TendonLimited",
+    "TendonName",
+    "TextureBuiltInType",
+    "TextureName",
+    "TextureType",
+    "TrackingMode",
     "Vec2",
     "Vec3",
     "Vec4",
@@ -17,65 +78,6 @@ __all__ = [
     "Vec7",
     "Vec9",
     "VecN",
-    "GridLayoutStr",
-    "GeomType",
-    "Integrator",
-    "Cone",
-    "Jacobian",
-    "Solver",
-    "EnableDisable",
-    "Coordinate",
-    "Angle",
-    "InertiaFromGeom",
-    "LengthRangeMode",
-    "Inertia",
-    "TextureType",
-    "ColorSpace",
-    "TextureBuiltInType",
-    "Mark",
-    "Sleep",
-    "JointType",
-    "DynType",
-    "GainType",
-    "BiasType",
-    "JointLimited",
-    "ActuatorForceLimited",
-    "TendonLimited",
-    "ActuatorLimited",
-    "ActuatorControlLimited",
-    "Align",
-    "FluidShape",
-    "TrackingMode",
-    "LayerRole",
-    "LightType",
-    "CompositeType",
-    "CompositeInitial",
-    "CompositeJointKind",
-    "FlexCompDOF",
-    "FlexCompType",
-    "MeshName",
-    "HFieldName",
-    "MaterialName",
-    "TextureName",
-    "BodyName",
-    "JointName",
-    "ModelName",
-    "GeomName",
-    "SiteName",
-    "SensorName",
-    "CameraName",
-    "LightName",
-    "DeformableSkinName",
-    "FlexName",
-    "ContactPairName",
-    "ContactExcludeName",
-    "TendonName",
-    "ActuatorName",
-    "PluginName",
-    "InstanceName",
-    "ActuatorGroup",
-    "GeomGroup",
-    "InertiaGroupRange",
 ]
 
 MeshName = NewType("MeshName", str)
@@ -144,13 +146,42 @@ InstanceName = NewType("InstanceName", str)
 SensorName = NewType("SensorName", str)
 """Alias of string. Used to type hint a field is the name of a Sensor."""
 
+SensorAttachableName = BodyName | GeomName | SiteName | CameraName
+"""Alias of names which can have a sensor attached to them."""
+
+Name = (
+    MeshName
+    | HFieldName
+    | MaterialName
+    | TextureName
+    | ModelName
+    | BodyName
+    | JointName
+    | GeomName
+    | SiteName
+    | CameraName
+    | LightName
+    | FrameName
+    | ContactPairName
+    | ContactExcludeName
+    | DeformableSkinName
+    | FlexName
+    | EqualityName
+    | TendonName
+    | ActuatorName
+    | PluginName
+    | InstanceName
+    | SensorName
+)
+"""Alias of any name."""
+
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
 
 GeomGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing a geom group index. Must be between 0 and 30 inclusive."""
 
-InertiaGroupRange = Tuple[GeomGroup, GeomGroup]
+InertiaGroupRange = tuple[GeomGroup, GeomGroup]
 """A tuple specifying the inclusive range of geom groups used for inertia computation."""
 
 GridLayoutStr = Annotated[
@@ -192,7 +223,8 @@ def empty_list_field():
 
 
 class EulerSeq(StrEnum):
-    """Euler rotation sequences.
+    """
+    Euler rotation sequences.
 
     * Lowercase letters denote intrinsic rotations (about the rotating frame).
     * Uppercase letters denote extrinsic rotations (about the fixed parent frame).
@@ -834,3 +866,109 @@ class SelfCollide(StrEnum):
 
     AUTO = "auto"
     """Select sap in 1D and 2D, and bvh in 3D. Which strategy performs better depends on the specifics of the model. The automatic setting is just a simple rule which we have found to perform well in general."""
+
+
+class SensorObjectType(StrEnum):
+    """Types of objects to which a sensor may be attached. This must be an object type that has a spatial frame."""
+
+    BODY = "body"
+    """Attach to a body in the inertial frame."""
+
+    XBODY = "xbody"
+    """Attach to a body in the regular frame of the body (usually centered at the joint with the parent body)."""
+
+    GEOM = "geom"
+    """Attach to a geom."""
+
+    SITE = "site"
+    """Attach to a site."""
+
+    CAMERA = "camera"
+    """Attach to a camera."""
+
+
+class ContactReduce(StrEnum):
+    """Reduces the number of matched contacts to exactly num sub-arrays, or "slots". If less than num contacts match, the remaining slots are set to be identically zero. Note that the default, "unsorted" reduction criterion is potentitally non-deterministic. See reduce below."""
+
+    NONE = "none"
+    """Returns the first num contacts that satisfy the matching criterion, in the order that they appear in mjData.contact. Note that while this is the fastest option, it is also potentially non-deterministic: future changes to collision detection code may cause the identity and order of matching contacts to change."""
+
+    MINDIST = "mindist"
+    """Returns num contacts with the smallest penetration depth, ascending order."""
+
+    MAXFORCE = "maxforce"
+    """Returns num contacts with the largest force norm, descending order."""
+
+    NETFORCE = "netforce"
+    """This reduction criterion returns one new "synthetic" contact, located at the force-weighted centroid of all matched contacts. The frame of the contact is the global frame, so normal and tangent directions lose their natural semantic. The force and torque are computed such that a wrench applied at the computed position will have the same net effect as all the matching contacts combined. Note that this reduction criterion always returns exactly one contact."""
+
+
+class ContactData(StrEnum):
+    """
+    Specification of which data field(s) to report from the selected contacts.
+
+    Importantly, the data attribute can contain multiple sequential data types, as long as the relative order—as listed above—is maintained. For example, data = "found force dist" will return 5 numbers per contact (the concateneated values of [found, force, dist]), while data = "force found dist" is an error because found must come before force.
+
+    !!! quote "Missing contacts"
+        If less than num contacts satisfy the matching criterion, the entire data slot is set to be identically zero. Because most data types can take 0 as a valid value, only the zero-ness of the normal and tangent unit vectors can be used to unambiguously detect an empty slot. For this reason, the found data type is in place to allow for simple detection of missing contacts.
+
+    !!! quote "Size of sensordata block"
+        Unlike other sensors, the size of the corresponding sensordata block depends on the values of its attributes num and data. The total size of the output of a contact sensor is the product num x size(selected data fields). For example, requesting num = 6 contacts with data = "force dist normal" (3+1+3=7), will result in a sensordata block of 42 numbers (6 consecutive slots x 7 numbers per slot).
+
+    !!! quote "Direction convention"
+        Because contacts create two equal-and-opposite forces between contacting bodies, there is freedom in the choice of which body impinges on which.
+
+        The sensor's convention is for "geom1/body1/subtree1" and "geom2/body2/subtree2" to determine the direction of the normal. The normal always points from the first to the second.
+
+        In the case that a direction cannot be determined, as when only a site is used as the matching criterion, or when both subtrees are the same, the normal direction is the same as it is in mjData.contact, where the normal points from the first to the second geom, and the two geoms are sorted according to their order in mjtGeom.
+    """
+
+    FOUND = "found"
+    """`float`: This field serves two purposes. First, it indicates whether a contact was found in this slot, 0 means not found while a positive number means found. Second, the positive value equals the number of matching contacts. So if num = 3 contacts were requested but only 2 were matched, the found fields will equal (2, 2, 0); if 6 were matched they will equal (6, 6, 6)."""
+
+    FORCE = "force"
+    """`Vec3`: The contact force, in the contact frame."""
+
+    TORQUE = "torque"
+    """`Vec3`: The contact torque, in the contact frame."""
+
+    DIST = "dist"
+    """`float`: The penetration distance."""
+
+    POS = "pos"
+    """`float`: The contact position, in the global frame."""
+
+    NORMAL = "normal"
+    """`Vec3`: The contact normal direction, in the global frame."""
+
+    TANGENT = "tangent"
+    """`Vec3`: The first tangent direction, in the global frame. In order to complete the full 3x3 contact frame, use tangent2 = cross(normal, tangent)."""
+
+
+class DataType(StrEnum):
+    """The type of output generated by this sensor."""
+
+    AXIS = "axis"
+    """Unit-length 3D vector."""
+
+    QUATERNION = "quaternion"
+    """Unit quaternion. These need to be declared because when MuJoCo adds noise, it must respect the vector normalization."""
+
+    REAL = "real"
+    """Generic array (or scalar) of real values to which noise can be added independently."""
+
+    POSITIVE = "positive"
+    """"""
+
+
+class NeedStage(StrEnum):
+    """The MuJoCo computation stage that must be completed before the user callback mjcb_sensor() is able to evaluate the output of this sensor."""
+
+    POS = "pos"
+    """Position stage."""
+
+    VEL = "vel"
+    """Velocity stage."""
+
+    ACC = "acc"
+    """Acceleration stage."""

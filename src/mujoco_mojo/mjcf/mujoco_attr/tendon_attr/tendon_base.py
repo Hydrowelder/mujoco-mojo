@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -40,10 +38,10 @@ class TendonBase(XMLModel):
         "user",
     )
 
-    name: Optional[TendonName] = None
+    name: TendonName | None = None
     """Name of the tendon."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     group: int = 0
@@ -86,5 +84,5 @@ class TendonBase(XMLModel):
     damping: float = 0
     """Damping coefficient. A positive value generates a damping force (linear in velocity) acting along the tendon. Unlike joint damping which is integrated implicitly by the Euler method, tendon damping is not integrated implicitly, thus joint damping should be used if possible."""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters."""

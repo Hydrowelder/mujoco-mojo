@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import BodyName, ModelName
 
@@ -17,7 +15,7 @@ class Attach(XMLModel):
     model: ModelName
     """The sub-model from which to attach a subtree."""
 
-    body: Optional[BodyName] = None
+    body: BodyName | None = None
     """Name of the body in the sub-model to attach here. The body and its subtree will be attached. If this attribute is not specified, the contents of the world body will be attached in a new frame."""
 
     prefix: str

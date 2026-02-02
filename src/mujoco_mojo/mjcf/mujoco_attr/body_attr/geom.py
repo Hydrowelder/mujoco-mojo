@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 
 import numpy as np
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
@@ -27,15 +27,15 @@ from mujoco_mojo.typing import (
 
 __all__ = [
     "Geom",
-    "GeomPlane",
-    "GeomHField",
-    "GeomSphere",
-    "GeomCapsule",
-    "GeomEllipsoid",
-    "GeomCylinder",
     "GeomBox",
+    "GeomCapsule",
+    "GeomCylinder",
+    "GeomEllipsoid",
+    "GeomHField",
     "GeomMesh",
+    "GeomPlane",
     "GeomSDF",
+    "GeomSphere",
 ]
 
 _geom_attr = (
@@ -69,21 +69,24 @@ _geom_attr = (
 
 
 class GeomBase(XMLModel):
-    """This element creates a geom, and attaches it rigidly to the body within which the geom is defined. Multiple geoms can be attached to the same body. At runtime they determine the appearance and collision properties of the body. At compile time they can also determine the inertial properties of the body, depending on the presence of the inertial element and the setting of the inertiafromgeom attribute of compiler. This is done by summing the masses and inertias of all geoms attached to the body with geom group in the range specified by the inertiagrouprange attribute of compiler. The geom masses and inertias are computed using the geom shape, a specified density or a geom mass which implies a density, and the assumption of uniform density.
+    """
+    This element creates a geom, and attaches it rigidly to the body within which the geom is defined. Multiple geoms can be attached to the same body. At runtime they determine the appearance and collision properties of the body. At compile time they can also determine the inertial properties of the body, depending on the presence of the inertial element and the setting of the inertiafromgeom attribute of compiler. This is done by summing the masses and inertias of all geoms attached to the body with geom group in the range specified by the inertiagrouprange attribute of compiler. The geom masses and inertias are computed using the geom shape, a specified density or a geom mass which implies a density, and the assumption of uniform density.
 
     Geoms are not strictly required for physics simulation. One can create and simulate a model that only has bodies and joints. Such a model can even be visualized, using equivalent inertia boxes to represent bodies. Only contact forces would be missing from such a simulation. We do not recommend using such models, but knowing that this is possible helps clarify the role of bodies and geoms in MuJoCo.
+
+    This is also used to determine the `SensorObjectType` using the `Sensor.get_sensor_object_type` staticmethod.
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = ConfigDict(extra="forbid")
 
     tag = "geom"
 
     children = ("plugin",)
 
-    name: Optional[GeomName] = None
+    name: GeomName | None = None
     """Name of the geom."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     contype: int = 1
@@ -108,7 +111,7 @@ class GeomBase(XMLModel):
     priority: int = 0
     """The geom priority determines how the properties of two colliding geoms are combined to form the properties of the contact. This interacts with the solmix attribute. See Contact parameters."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """If specified, this attribute applies a material to the geom. Otherwise, if unspecified and the type of the geom is a mesh the compiler will apply the mesh asset material if present.
 
     The material determines the visual properties of the geom. The only exception is color: if the rgba attribute below is different from its internal default, it takes precedence while the remaining material properties are still applied. Note that if the same material is referenced from multiple geoms (as well as sites and tendons) and the user changes some of its properties at runtime, these changes will take effect immediately for all model elements referencing the material. This is because the compiler saves the material and its properties as a separate element in mjModel, and the elements using this material only keep a reference to it."""
@@ -119,7 +122,7 @@ class GeomBase(XMLModel):
     friction: Vec3 = np.array((1, 0.005, 0.0001))
     """Contact friction parameters for dynamically generated contact pairs. The first number is the sliding friction, acting along both axes of the tangent plane. The second number is the torsional friction, acting around the contact normal. The third number is the rolling friction, acting around both axes of the tangent plane. The friction parameters for the contact pair are combined depending on the solmix and priority attributes, as explained in Contact parameters. See the general Contact section for descriptions of the semantics of this attribute."""
 
-    mass: Optional[float] = None
+    mass: float | None = None
     """If this attribute is specified, the density attribute below is ignored and the geom density is computed from the given mass, using the geom shape and the assumption of uniform density. The computed density is then used to obtain the geom inertia. Recall that the geom mass and inertia are only used during compilation, to infer the body mass and inertia if necessary. At runtime only the body inertial properties affect the simulation; the geom mass and inertia are not saved in mjModel."""
 
     density: float = 1000
@@ -143,7 +146,7 @@ class GeomBase(XMLModel):
     gap: float = 0
     """This attribute is used to enable the generation of inactive contacts, i.e., contacts that are ignored by the constraint solver but are included in mjData.contact for the purpose of custom computations. When this value is positive, geom distances between margin and margin-gap correspond to such inactive contacts."""
 
-    fromto: Optional[Vec6] = None
+    fromto: Vec6 | None = None
     """This attribute can only be used with capsule, box, cylinder and ellipsoid geoms. It provides an alternative specification of the geom length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the geom connects these two points, with the +Z axis of the geom's frame oriented from the first towards the second point, while in the perpendicular direction, the geom sizes are both equal to the first value of the size attribute. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the end points. If this attribute is specified, the remaining position and orientation-related attributes are ignored. The image on the right demonstrates use of fromto with the four supported geoms, using identical Z values. The model is here. Note that the fromto semantics of capsule are unique: the two end points specify the segment around which the radius defines the capsule surface."""
 
     pos: Pos = Pos(pos=np.array((0, 0, 0)))
@@ -169,10 +172,10 @@ class GeomBase(XMLModel):
     | 3     | Kutta lift coefficient   | CK         | 1.0     |
     | 4     | Magnus lift coefficient  | CM         | 1.0     |"""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters."""
 
-    plugin: Optional[Plugin] = None
+    plugin: Plugin | None = None
     """Associate this geom with an engine plugin. Either plugin or instance are required."""
 
 
@@ -186,7 +189,7 @@ class GeomPlane(GeomBase):
     The `plane` type defines a plane which is infinite for collision detection purposes. It can only be attached to the world body or static children of the world. The plane passes through a point specified via the pos attribute. It is normal to the Z axis of the geom's local frame. The +Z direction corresponds to empty space. Thus the position and orientation defaults of (0,0,0) and (1,0,0,0) would create a ground plane at Z=0 elevation, with +Z being the vertical direction in the world (which is MuJoCo's convention). Since the plane is infinite, it could have been defined using any other point in the plane. The specified position however has additional meaning with regard to rendering. If either of the first two size parameters are positive, the plane is rendered as a rectangle of finite size (in the positive dimensions). This rectangle is centered at the specified position. Three size parameters are required. The first two specify the half- size of the rectangle along the X and Y axes. The third size parameter is unusual: it specifies the spacing between the grid subdivisions of the plane for rendering purposes. The subdivisions are revealed in wireframe rendering mode, but in general they should not be used to paint a grid over the ground plane (textures should be used for that purpose). Instead their role is to improve lighting and shadows, similar to the subdivisions used to render boxes. When planes are viewed from the back, the are automatically made semi-transparent. Planes and the +Z faces of boxes are the only surfaces that can show reflections, if the material applied to the geom has positive reflection. To render an infinite plane, set the first two size parameters to zero.
     """
 
-    size: Optional[Vec3] = None
+    size: Vec3 | None = None
     """X half-size; Y half-size; spacing between square grid lines for rendering. If either the X or Y half-size is 0, the plane is rendered as infinite in the dimension(s) with 0 size.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
@@ -196,7 +199,10 @@ class GeomPlane(GeomBase):
 class GeomHField(GeomBase):
     """This element creates a height field geometry."""
 
-    attributes = _geom_attr + ("hfield",)
+    attributes = (
+        *_geom_attr,
+        "hfield",
+    )
     type: Literal[GeomType.HFIELD] = GeomType.HFIELD
     """Type of geometric shape.
 
@@ -210,106 +216,109 @@ class GeomHField(GeomBase):
 class GeomSphere(GeomBase):
     """This element creates a sphere geometry."""
 
-    attributes = _geom_attr + ("size", "mesh")
+    attributes = (*_geom_attr, "size", "mesh")
     type: Literal[GeomType.SPHERE] = GeomType.SPHERE
     """Type of geometric shape. The keywords have the following meaning:
 
     The `sphere` type defines a sphere. This and the next four types correspond to built-in geometric primitives. These primitives are treated as analytic surfaces for collision detection purposes, in many cases relying on custom pair- wise collision routines. Models including only planes, spheres, capsules and boxes are the most efficient in terms of collision detection. Other geom types invoke the general-purpose convex collider. The sphere is centered at the geom's position. Only one size parameter is used, specifying the radius of the sphere. Rendering of geometric primitives is done with automatically generated meshes whose density can be adjusted via quality. The sphere mesh is triangulated along the lines of latitude and longitude, with the Z axis passing through the north and south pole. This can be useful in wireframe mode for visualizing frame orientation."""
 
-    size: Optional[float] = None
+    size: float | None = None
     """Radius of the sphere.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
-    mesh: Optional[MeshName] = None
+    mesh: MeshName | None = None
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
 class GeomCapsule(GeomBase):
     """This element creates a capsule geometry."""
 
-    attributes = _geom_attr + ("size", "mesh")
+    attributes = (*_geom_attr, "size", "mesh")
     type: Literal[GeomType.CAPSULE] = GeomType.CAPSULE
     """Type of geometric shape.
 
     The `capsule` type defines a capsule, which is a cylinder capped with two half-spheres. It is oriented along the Z axis of the geom's frame. When the geom frame is specified in the usual way, two size parameters are required: the radius of the capsule followed by the half-height of the cylinder part. However capsules as well as cylinders can also be thought of as connectors, allowing an alternative specification with the fromto attribute below. In that case only one size parameter is required, namely the radius of the capsule.
     """
 
-    size: Optional[Vec2 | float] = None
+    size: Vec2 | float | None = None
     """Radius of the capsule; half-length of the cylinder part when not using the fromto specification.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
-    mesh: Optional[MeshName] = None
+    mesh: MeshName | None = None
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
 class GeomEllipsoid(GeomBase):
     """This element creates a ellipsoid geometry."""
 
-    attributes = _geom_attr + ("size", "mesh")
+    attributes = (*_geom_attr, "size", "mesh")
     type: Literal[GeomType.ELLIPSOID] = GeomType.ELLIPSOID
     """Type of geometric shape.
 
     The `ellipsoid` type defines a ellipsoid. This is a sphere scaled separately along the X, Y and Z axes of the local frame. It requires three size parameters, corresponding to the three radii. Note that even though ellipsoids are smooth, their collisions are handled via the general-purpose convex collider. The only exception are plane-ellipsoid collisions which are computed analytically.
     """
 
-    size: Optional[Vec3] = None
+    size: Vec3 | None = None
     """X radius; Y radius; Z radius.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
-    mesh: Optional[MeshName] = None
+    mesh: MeshName | None = None
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
 class GeomCylinder(GeomBase):
     """This element creates a cylinder geometry."""
 
-    attributes = _geom_attr + ("size", "mesh")
+    attributes = (*_geom_attr, "size", "mesh")
     type: Literal[GeomType.CYLINDER] = GeomType.CYLINDER
     """Type of geometric shape.
 
     The `cylinder` type defines a cylinder. It requires two size parameters: the radius and half-height of the cylinder. The cylinder is oriented along the Z axis of the geom's frame. It can alternatively be specified with the fromto attribute below.
     """
 
-    size: Optional[Vec2 | float] = None
+    size: Vec2 | float | None = None
     """Radius of the cylinder; half-length of the cylinder when not using the fromto specification.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
-    mesh: Optional[MeshName] = None
+    mesh: MeshName | None = None
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
 class GeomBox(GeomBase):
     """This element creates a box geometry."""
 
-    attributes = _geom_attr + ("size", "mesh")
+    attributes = (*_geom_attr, "size", "mesh")
     type: Literal[GeomType.BOX] = GeomType.BOX
     """Type of geometric shape.
 
     The `box` type defines a box. Three size parameters are required, corresponding to the half-sizes of the box along the X, Y and Z axes of the geom's frame. Note that box-box collisions can generate up to 8 contact points.
     """
 
-    size: Optional[Vec3] = None
+    size: Vec3 | None = None
     """X half-size; Y half-size; Z half-size.
 
     Geom size parameters. The number of required parameters and their meaning depends on the geom type as documented under the type attribute. Here we only provide a summary. All required size parameters must be positive; the internal defaults correspond to invalid settings. Note that when a non-mesh geom type references a mesh, a geometric primitive of that type is fitted to the mesh. In that case the sizes are obtained from the mesh, and the geom size parameters are ignored. Thus the number and description of required size parameters in the table below only apply to geoms that do not reference meshes.
     """
 
-    mesh: Optional[MeshName] = None
+    mesh: MeshName | None = None
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
 class GeomMesh(GeomBase):
     """This element creates a mesh geometry."""
 
-    attributes = _geom_attr + ("mesh",)
+    attributes = (
+        *_geom_attr,
+        "mesh",
+    )
     type: Literal[GeomType.MESH] = GeomType.MESH
     """Type of geometric shape.
 

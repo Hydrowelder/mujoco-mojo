@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import numpy as np
 from pydantic import Field
@@ -15,7 +15,8 @@ __all__ = ["DeformableSkin"]
 
 
 class DeformableSkin(XMLModel):
-    """These are deformable meshes whose vertex positions and normals are computed each time the model is rendered. MuJoCo skins are only used for visualization and do not affect the physics in any way. In particular, collisions involve the geoms of the bodies to which the skin is attached, and not the skin itself. Unlike regular meshes which are referenced from geoms and participate in collisions, the skin is not referenced from anywhere else in the model. It is a stand-alone element that is used by renderer and not by the simulator.
+    """
+    These are deformable meshes whose vertex positions and normals are computed each time the model is rendered. MuJoCo skins are only used for visualization and do not affect the physics in any way. In particular, collisions involve the geoms of the bodies to which the skin is attached, and not the skin itself. Unlike regular meshes which are referenced from geoms and participate in collisions, the skin is not referenced from anywhere else in the model. It is a stand-alone element that is used by renderer and not by the simulator.
 
     The skin has vertex positions and normals updated at runtime, and triangle faces and optional texture coordinates which are predefined. It also has "bones" used for updating. Bones are regular MuJoCo bodies referenced with the bone subelement. Each bone has a list of vertex indices and corresponding real-valued weights which specify how much the bone position and orientation influence the corresponding vertex. The vertex has local coordinates with respect to every bone that influences it. The local coordinates are computed by the model compiler, given global vertex coordinates and global bind poses for each body. The bind poses do not have to correspond to the model reference configuration qpos0. Note that the vertex positions and bone bind poses provided in the skin definition are always global, even if the model itself is defined in local coordinates.
 
@@ -59,25 +60,25 @@ class DeformableSkin(XMLModel):
 
     children = ("bones",)
 
-    name: Optional[DeformableSkinName] = None
+    name: DeformableSkinName | None = None
     """Name of the skin."""
 
-    file: Optional[Path] = None
+    file: Path | None = None
     """The SKN file from which the skin will be loaded. The path is determined as described in the meshdir attribute of compiler. If the file is omitted, the skin specification must be provided in the XML using the attributes below."""
 
-    vertex: Optional[VecN] = None
+    vertex: VecN | None = None
     """Vertex 3D positions, in the global bind pose where the skin is defined."""
 
-    texcoord: Optional[VecN] = None
+    texcoord: VecN | None = None
     """Vertex 2D texture coordinates, between 0 and 1. Note that skin and geom texturing are somewhat different. Geoms can use automated texture coordinate generation while skins cannot. This is because skin data are computed directly in global coordinates. So if the material references a texture, one should specify explicit texture coordinates for the skin using this attribute. Otherwise the texture will appear to be stationary in the world while the skin moves around (creating an interesting effect but probably not as intended)."""
 
-    face: Optional[VecN] = None
+    face: VecN | None = None
     """Trinagular skin faces. Each face is a triple of vertex indices, which are integers between zero and nvert-1."""
 
     inflate: float = 0
     """If this number is not zero, the position of vertex during updating will be offset along the vertex normal, but the distance specified in this attribute. This is particularly useful for skins representing flexible 2D shapes."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """If specified, this attribute applies a material to the skin."""
 
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))

@@ -6,8 +6,8 @@ from .site import CompositeSite
 from .skin import CompositeSkin
 
 __all__ = [
-    "CompositeJoint",
     "CompositeGeom",
+    "CompositeJoint",
     "CompositeSite",
     "CompositeSkin",
 ]

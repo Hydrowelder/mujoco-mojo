@@ -7,16 +7,16 @@ SRC_DIR = Path("src")
 
 # Mapping of smart quotes to regular quotes
 REPLACEMENTS = {
-    "’": "'",
-    "‘": "'",
-    "“": '"',
-    "”": '"',
-    "–": "-",
-    " ": " ",
-    " ": " ",
-    "​": "",
-    "⁡": "",
-    "…": "...",
+    "\u2005": " ",  # Four-Per-Em Space
+    "\u200a": " ",  # Hair Space
+    "\u200b": "",  # Zero Width Space (ZWSP)
+    "\u2013": "-",  # En Dash
+    "\u2018": "'",  # Left Single Quotation Mark
+    "\u2019": "'",  # Right Single Quotation Mark
+    "\u201c": '"',  # Left Double Quotation Mark
+    "\u201d": '"',  # Right Double Quotation Mark
+    "\u2026": "...",  # Horizontal Ellipsis
+    "\u2061": "",  # Function Application
 }
 
 
