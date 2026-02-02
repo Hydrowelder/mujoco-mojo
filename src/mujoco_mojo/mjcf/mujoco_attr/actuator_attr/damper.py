@@ -17,12 +17,15 @@ class ActuatorDamper(ActuatorBase):
     !!! note
         These general attributes are accessible via their respective properties for reference.
 
-        | Attribute   | Setting | Attribute | Setting |
-        |:------------|:--------|:----------|:--------|
-        | dyntype     | none    | dynprm    | 1 0 0   |
-        | gaintype    | affine  | gainprm   | 0 0 -kv |
-        | biastype    | none    | biasprm   | 0 0 0   |
-        | ctrllimited | true    | N/A       | N/A     |
+        | Attribute     | Setting |
+        |:--------------|:--------|
+        | `dyntype`     | none    |
+        | `gaintype`    | affine  |
+        | `biastype`    | none    |
+        | `ctrllimited` | true    |
+        | `dynprm`      | 1 0 0   |
+        | `gainprm`     | 0 0 -kv |
+        | `biasprm`     | 0 0 0   |
     """
 
     tag = "damper"

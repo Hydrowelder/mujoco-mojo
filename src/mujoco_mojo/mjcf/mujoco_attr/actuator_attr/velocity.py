@@ -16,11 +16,14 @@ class ActuatorVelocity(ActuatorBase):
     !!! note
         These general attributes are accessible via their respective properties for reference.
 
-        | Attribute | Setting | Attribute | Setting |
-        |:----------|:--------|:----------|:--------|
-        | dyntype   | none    | dynprm    | 1 0 0   |
-        | gaintype  | fixed   | gainprm   | kv 0 0  |
-        | biastype  | affine  | biasprm   | 0 0 -kv |
+        | Attribute  | Setting |
+        |:-----------|:--------|
+        | `dyntype`  | none    |
+        | `gaintype` | fixed   |
+        | `biastype` | affine  |
+        | `dynprm`   | 1 0 0   |
+        | `gainprm`  | kv 0 0  |
+        | `biasprm`  | 0 0 -kv |
     """
 
     tag = "velocity"

@@ -5,6 +5,7 @@ from typing import Sequence
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.adhesion import ActuatorAdhesion
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.cylinder import ActuatorCylinder
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.damper import ActuatorDamper
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.general import ActuatorGeneral
@@ -12,6 +13,8 @@ from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.intvelocity import (
     ActuatorIntegratedVelocity,
 )
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.motor import ActuatorMotor
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.muscle import ActuatorMuscle
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.plugin import ActuatorPlugin
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.position import ActuatorPosition
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.velocity import ActuatorVelocity
 from mujoco_mojo.utils import is_empty_list
@@ -79,20 +82,20 @@ class Actuator(XMLModel):
     )
     """Cylinders actuator elements."""
 
-    # muscles: Sequence[] = Field(
-    #     default_factory=list,
-    #     exclude_if=is_empty_list,
-    # )
-    # """Muscles actuator elements."""
+    muscles: Sequence[ActuatorMuscle] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Muscles actuator elements."""
 
-    # adhesions: Sequence[] = Field(
-    #     default_factory=list,
-    #     exclude_if=is_empty_list,
-    # )
-    # """Adhesions actuator elements."""
+    adhesions: Sequence[ActuatorAdhesion] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Adhesions actuator elements."""
 
-    # plugins: Sequence[] = Field(
-    #     default_factory=list,
-    #     exclude_if=is_empty_list,
-    # )
-    # """Plugins actuator elements."""
+    plugins: Sequence[ActuatorPlugin] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Plugins actuator elements."""
