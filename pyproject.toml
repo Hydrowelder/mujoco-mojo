@@ -39,10 +39,10 @@ dev = [
 ]
 
 [tool.ruff]
-exclude = ["typings"]
+exclude = ["typings", "scripts/templating/sensor_template.py"]
 
 [tool.pyright]
 stubPath = "typings"
 venvPath = "."
 venv = ".venv"
-ignore = ["typings"]
+ignore = ["typings", "scripts/templating/sensor_template.py"]
