@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field
@@ -15,7 +15,8 @@ __all__ = ["Frame"]
 
 
 class Frame(XMLModel):
-    """Frames specify a coordinate transformation which is applied to all child elements. They disappear during compilation and the transformation they encode is accumulated in their direct children. See frame for examples.
+    """
+    Frames specify a coordinate transformation which is applied to all child elements. They disappear during compilation and the transformation they encode is accumulated in their direct children. See frame for examples.
 
     The frame meta-element is a pure coordinate transformation that can wrap any group of elements in the kinematic tree (under worldbody). After compilation, frame elements disappear and their transformation is accumulated in their direct children.
 
@@ -60,10 +61,10 @@ class Frame(XMLModel):
     attributes = ("name", "childclass", "pos", "orientation")
     children = ("frames",)
 
-    name: Optional[FrameName] = None
+    name: FrameName | None = None
     """Name of the frame."""
 
-    childclass: Optional[str] = None
+    childclass: str | None = None
     """If this attribute is present, all descendant elements that admit a defaults class will use the class specified here, unless they specify their own class or another frame or body with a childclass attribute is encountered along the chain of nested bodies and frames. Recall Default settings."""
 
     pos: Pos = Pos(pos=np.array((0, 0, 0)))

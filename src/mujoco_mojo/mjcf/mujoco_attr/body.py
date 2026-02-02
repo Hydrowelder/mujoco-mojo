@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field
@@ -60,10 +60,10 @@ class Body(XMLModel):
     attributes = _body_attr
     children = _body_children
 
-    name: Optional[BodyName] = None
+    name: BodyName | None = None
     """Name of the body."""
 
-    childclass: Optional[str] = None
+    childclass: str | None = None
     """If this attribute is present, all descendant elements that admit a defaults class will use the class specified here, unless they specify their own class or another body or frame with a childclass attribute is encountered along the chain of nested bodies and frames. Recall Default settings."""
 
     mocap: bool = False
@@ -93,10 +93,10 @@ class Body(XMLModel):
 
     See implementation notes for more details."""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters. Has length of `nbody_user`"""
 
-    inertial: Optional[Inertial] = None
+    inertial: Inertial | None = None
     """Inertial assigned to body."""
 
     joints: Sequence[Joint] = Field(

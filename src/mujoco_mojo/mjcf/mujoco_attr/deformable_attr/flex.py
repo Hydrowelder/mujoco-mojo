@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -37,7 +35,7 @@ class Flex(XMLModel):
     )
     children = ("contact", "edge", "elasticity")
 
-    name: Optional[FlexName] = None
+    name: FlexName | None = None
     """Name of the flex."""
 
     dim: int = 2
@@ -49,22 +47,22 @@ class Flex(XMLModel):
     body: str
     """An array of MuJoCo body names (separated by white space) to which each vertex belongs. The number of body names should either equal the number of vertices (nvert), or be a single body. If a single body is specified, all vertices are defined within that body - in which case the flex becomes a rigid body. The latter functionality effectively creates a general non-convex mesh (unlike mesh geoms which are convexified for collision detection purposes)."""
 
-    vertex: Optional[VecN] = None
+    vertex: VecN | None = None
     """The local coordinates of the vertices within the corresponding body frames. If this attribute is omitted, all coordinates are (0,0,0) or in other words, the vertices coincide with the centers of the body frames."""
 
-    texcoord: Optional[VecN] = None
+    texcoord: VecN | None = None
     """Texture coordinates. If omitted, texture mapping for this flex is disabled, even if a texture is specified in the material."""
 
-    elemtexcoord: Optional[VecN] = None
+    elemtexcoord: VecN | None = None
     """Texture indices for each face. If omitted, texture are assumed to be vertex-based."""
 
-    element: Optional[VecN] = None
+    element: VecN | None = None
     """For each element of the flex, this lists the zero-based indices of the vertices forming that flex element. We need two vertices to specify a capsule, three vertices to specify a triangle, and four vertices to specify a tetrahedron - which is why the number of indices equals (dim+1) times the number of elements. In 2D, the vertices should be listed in counter-clockwise order. In 1D and 3D the order is irrelevant; in 3D the model compiler will rearrange the vertices as needed. Repeated vertex indices within a flex element are not allowed. The topology of the flex is not enforced; it could correspond to a continuous soft body, or a collection of disconnected stretchable elements, or anything in-between."""
 
     flatskin: bool = False
     """This attribute determines whether 2D and 3D flexes that are rendered in flexskin mode will use smooth or flat shading. The default smooth shading is suitable in most cases, however if the object is intended to have visible sharp edges (such as a cube) then flat shading is more natural."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates."""
 
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
@@ -73,14 +71,14 @@ class Flex(XMLModel):
     group: int = 0
     """Integer group to which the flex belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of flexes."""
 
-    node: Optional[str] = None
+    node: str | None = None
     """The degrees-of-freedom of the flex. An array of MuJoCo body names (separated by white space) to which each node belongs. The number of body names should equal the number of nodes (nnode). See the flexcomp dof attribute for more details."""
 
-    edge: Optional[FlexEdge] = None
+    edge: FlexEdge | None = None
     """Edge constraint properties of Flex."""
 
-    elasticity: Optional[FlexElasticity] = None
+    elasticity: FlexElasticity | None = None
     """Elasticity model properties of Flex."""
 
-    contact: Optional[FlexContact] = None
+    contact: FlexContact | None = None
     """Contact properties of Flex."""

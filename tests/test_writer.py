@@ -4,12 +4,12 @@ import mujoco
 import numpy as np
 
 import mujoco_mojo as mojo
-import mujoco_mojo.mjcf as mjcf
 import mujoco_mojo.typing as mojot
+from mujoco_mojo import mjcf
 
 
 def test_import():
-    import mujoco_mojo.mjcf as mjcf
+    from mujoco_mojo import mjcf
 
     mojo.__name__
     mjcf.__name__
@@ -33,7 +33,7 @@ model = mjcf.Mujoco(
                 pos=mjcf.Pos(pos=np.array((1, 2, 3))),
                 orientation=quat,
                 material=material.name,  # static analyzer warns you if this is not MaterialName type
-            )
+            ),
         ],
         bodies=[
             mjcf.Body(
@@ -45,7 +45,7 @@ model = mjcf.Mujoco(
                         rgba=np.asarray((1, 0, 0, 1)),
                     ),
                 ],
-            )
+            ),
         ],
     ),
     assets=[mjcf.Asset(materials=[material])],

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Optional, Tuple
+from typing import ClassVar
 
 import numpy as np
 from pydantic import field_validator
@@ -13,13 +13,13 @@ from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
 
 __all__ = [
     "Mesh",
-    "MeshSphere",
-    "MeshHemisphere",
     "MeshCone",
+    "MeshHemisphere",
+    "MeshPlate",
+    "MeshSphere",
     "MeshSupersphere",
     "MeshTorus",
     "MeshWedge",
-    "MeshPlate",
 ]
 
 _mesh_attr = (
@@ -42,7 +42,8 @@ _mesh_attr = (
 
 
 class Mesh(XMLModel):
-    """This element creates a mesh asset, which can then be referenced from geoms. If the referencing geom type is mesh the mesh is instantiated in the model, otherwise a geometric primitive is automatically fitted to it; see the geom element below.
+    """
+    This element creates a mesh asset, which can then be referenced from geoms. If the referencing geom type is mesh the mesh is instantiated in the model, otherwise a geometric primitive is automatically fitted to it; see the geom element below.
 
     MuJoCo works with triangulated meshes. They can be loaded from binary STL files, OBJ files or MSH files with custom format described below, or vertex and face data specified directly in the XML. Software such as MeshLab can be used to convert from other mesh formats to STL or OBJ. While any collection of triangles can be loaded as a mesh and rendered, collision detection works with the convex hull of the mesh as explained in Collision detection. The mesh appearance (including texture mapping) is controlled by the material and rgba attributes of the referencing geom, similarly to height fields.
 
@@ -89,16 +90,16 @@ class Mesh(XMLModel):
 
     attributes = _mesh_attr
 
-    name: Optional[MeshName] = None
+    name: MeshName | None = None
     """Name of the mesh, used for referencing. If omitted, the mesh name equals the file name without the path and extension."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes (only scale in this case)."""
 
-    content_type: Optional[str] = None
+    content_type: str | None = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME type) of the file to be loaded. Any filename extensions will be overloaded. Currently model/vnd.mujoco.msh, model/obj, and model/stl are supported."""
 
-    file: Optional[Path] = None
+    file: Path | None = None
     """The file from which the mesh will be loaded. The path is determined as described in the meshdir attribute of compiler. The file extension must be "stl", "msh", or "obj" (not case sensitive) specifying the file type. If the file name is omitted, the vertex attribute becomes required."""
 
     scale: Vec3 = np.array((1, 1, 1))
@@ -119,16 +120,16 @@ class Mesh(XMLModel):
     maxhullvert: int = -1
     """Maximum number of vertices in a mesh's convex hull. Currently this is implemented by asking qhull to terminate after maxhullvert vertices. The default value of -1 means "unlimited". Positive values must be larger than 3."""
 
-    vertex: Optional[Tuple[Tuple[float, float, float], ...]] = None
+    vertex: tuple[tuple[float, float, float], ...] | None = None
     """Vertex 3D position data. You can specify position data in the XML using this attribute, or using a binary file, but not both."""
 
-    normal: Optional[Tuple[Tuple[float, float, float], ...]] = None
+    normal: tuple[tuple[float, float, float], ...] | None = None
     """Vertex 3D normal data. If specified, the number of normals must equal the number of vertices. The model compiler normalizes the normals automatically."""
 
-    texcoord: Optional[Tuple[Tuple[float, float], ...]] = None
+    texcoord: tuple[tuple[float, float], ...] | None = None
     """Vertex 2D texture coordinates, which are numbers between 0 and 1. If specified, the number of texture coordinate pairs must equal the number of vertices."""
 
-    face: Optional[Tuple[Tuple[float, float, float], ...]] = None
+    face: tuple[tuple[float, float, float], ...] | None = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
     refpos: Pos = Pos(pos=np.array((1, 1, 1)))
@@ -137,19 +138,16 @@ class Mesh(XMLModel):
     refquat: Quat = Quat()
     """Reference orientation relative to which the 3D vertex coordinates and normals are defined. The conjugate of this quaternion is used to rotate the positions and normals. The model compiler normalizes the quaternion automatically."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """Fallback material for mesh geoms that do not specify their own material."""
 
 
 class MeshSphere(Mesh):
-    """
-
-    Repeated subdivisions of a unit icosahedron ("icosphere").
-    """
+    """Repeated subdivisions of a unit icosahedron ("icosphere")."""
 
     builtin: ClassVar[str] = "sphere"
 
-    attributes = _mesh_attr + ("builtin", "subdivision")
+    attributes = (*_mesh_attr, "builtin", "subdivision")
 
     subdivision: int
     """integer in [0-4]: The number of subdivisions to apply to icosahedron faces."""
@@ -163,14 +161,11 @@ class MeshSphere(Mesh):
 
 
 class MeshHemisphere(Mesh):
-    """
-
-    Quad-projected hemisphere.
-    """
+    """Quad-projected hemisphere."""
 
     builtin: ClassVar[str] = "hemisphere"
 
-    attributes = _mesh_attr + ("builtin", "resolution")
+    attributes = (*_mesh_attr, "builtin", "resolution")
 
     resolution: int
     """integer in [0-10]: Equator discretization of one hemisphere quadrant."""
@@ -184,14 +179,11 @@ class MeshHemisphere(Mesh):
 
 
 class MeshCone(Mesh):
-    """
-
-    Cone mesh from top and bottom polygons.
-    """
+    """Cone mesh from top and bottom polygons."""
 
     builtin: ClassVar[str] = "cone"
 
-    attributes = _mesh_attr + ("builtin", "nvert", "radius")
+    attributes = (*_mesh_attr, "builtin", "nvert", "radius")
 
     nvert: int
     """integer >= 3: The number of vertices in the polygon."""
@@ -215,14 +207,11 @@ class MeshCone(Mesh):
 
 
 class MeshSupersphere(Mesh):
-    """
-
-    Supersphere (superellipsoid) shape.
-    """
+    """Supersphere (superellipsoid) shape."""
 
     builtin: ClassVar[str] = "supersphere"
 
-    attributes = _mesh_attr + ("builtin", "resolution", "e", "n")
+    attributes = (*_mesh_attr, "builtin", "resolution", "e", "n")
 
     resolution: int
     """integer >= 3: Longitude and latitude discretization."""
@@ -249,14 +238,11 @@ class MeshSupersphere(Mesh):
 
 
 class MeshTorus(Mesh):
-    """
-
-    Supertorus (generalized torus) shape.
-    """
+    """Supertorus (generalized torus) shape."""
 
     builtin: ClassVar[str] = "torus"
 
-    attributes = _mesh_attr + ("builtin", "resolution", "radius", "s", "t")
+    attributes = (*_mesh_attr, "builtin", "resolution", "radius", "s", "t")
 
     resolution: int
     """integer >= 3: Discretization of both circumferences."""
@@ -293,14 +279,12 @@ class MeshTorus(Mesh):
 
 
 class MeshWedge(Mesh):
-    """
-
-    Slice of a unit spherical shell.
-    """
+    """Slice of a unit spherical shell."""
 
     builtin: ClassVar[str] = "wedge"
 
-    attributes = _mesh_attr + (
+    attributes = (
+        *_mesh_attr,
         "builtin",
         "res_phi",
         "res_theta",
@@ -354,14 +338,11 @@ class MeshWedge(Mesh):
 
 
 class MeshPlate(Mesh):
-    """
-
-    Rectangular plate mesh.
-    """
+    """Rectangular plate mesh."""
 
     builtin: ClassVar[str] = "plate"
 
-    attributes = _mesh_attr + ("builtin", "res_x", "res_y")
+    attributes = (*_mesh_attr, "builtin", "res_x", "res_y")
 
     res_x: int
     """integer > 0: Horizontal resolution of the plate."""

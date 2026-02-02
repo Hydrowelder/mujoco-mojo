@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -11,33 +11,35 @@ __all__ = ["EqualityConnectBody", "EqualityConnectSite"]
 
 
 class EqualityConnectBody(EqualityBase):
-    """This element creates an equality constraint that connects two bodies at a point. The constraint effectively defines a ball joint outside the kinematic tree.
+    """
+    This element creates an equality constraint that connects two bodies at a point. The constraint effectively defines a ball joint outside the kinematic tree.
 
     Using body1 and anchor (both required) and optionally body2. When using this specification, the constraint is assumed to be satisfied at the configuration in which the model is defined (mjData.qpos0).
     """
 
     tag = "connect"
-    attributes = EqualityBase.attributes + ("body1", "body2", "anchor")
+    attributes = (*EqualityBase.attributes, "body1", "body2", "anchor")
 
     type: Literal["body"] = "body"
 
     body1: BodyName
     """Name of the first body participating in the constraint."""
 
-    body2: Optional[BodyName] = None
+    body2: BodyName | None = None
     """Name of the second body participating in the constraint. If this attribute is omitted, the second body is the world body."""
 
-    anchor: Optional[Vec3] = None
+    anchor: Vec3 | None = None
     """Coordinates of the 3D anchor point where the two bodies are connected, in the local coordinate frame of body1. The constraint is assumed to be satisfied in the configuration at which the model is defined (mjData.qpos0), which lets the compiler compute the associated anchor point for body2."""
 
 
 class EqualityConnectSite(EqualityBase):
-    """This element creates an equality constraint that connects two bodies at a point. The constraint effectively defines a ball joint outside the kinematic tree.
+    """
+    This element creates an equality constraint that connects two bodies at a point. The constraint effectively defines a ball joint outside the kinematic tree.
 
     site1 and site2 (both required). When using this specification, the two sites will be pulled together by the constraint, regardless of their position in the default configuration. An example of this specification is shown in this model.
     """
 
-    attributes = EqualityBase.attributes + ("site1", "site2")
+    attributes = (*EqualityBase.attributes, "site1", "site2")
 
     type: Literal["site"] = "site"
 
@@ -49,6 +51,7 @@ class EqualityConnectSite(EqualityBase):
 
 
 EqualityConnect = Annotated[
-    EqualityConnectBody | EqualityConnectSite, Field(discriminator="type")
+    EqualityConnectBody | EqualityConnectSite,
+    Field(discriminator="type"),
 ]
 """Discriminated union for type hinting the various types of Connect."""

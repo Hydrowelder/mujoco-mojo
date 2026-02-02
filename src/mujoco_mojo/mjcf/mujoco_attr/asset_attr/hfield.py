@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from pydantic import field_validator, model_validator
@@ -13,7 +12,8 @@ __all__ = ["HField"]
 
 
 class HField(XMLModel):
-    """This element creates a height field asset, which can then be referenced from geoms with type "hfield". A height field, also known as terrain map, is a 2D matrix of elevation data. The data can be specified in one of three ways:
+    """
+    This element creates a height field asset, which can then be referenced from geoms with type "hfield". A height field, also known as terrain map, is a 2D matrix of elevation data. The data can be specified in one of three ways:
 
     1. The elevation data can be loaded from a PNG file. The image is converted internally to gray scale, and the intensity of each pixel is used to define elevation; white is high and black is low.
 
@@ -44,13 +44,13 @@ class HField(XMLModel):
         "size",
     )
 
-    name: Optional[HFieldName] = None
+    name: HFieldName | None = None
     """Name of the height field, used for referencing. If the name is omitted and a file name is specified, the height field name equals the file name without the path and extension."""
 
-    content_type: Optional[str] = None
+    content_type: str | None = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME types) of the file to be loaded. Any filename extensions will be overloaded. Currently image/png and image/vnd.mujoco.hfield are supported."""
 
-    file: Optional[Path] = None
+    file: Path | None = None
     """If this attribute is specified, the elevation data is loaded from the given file. If the file extension is ".png", not case-sensitive, the file is treated as a PNG file. Otherwise it is treated as a binary file in the above custom format. The number of rows and columns in the data are determined from the file contents. Loading data from a file and setting nrow or ncol below to non-zero values results is compile error, even if these settings are consistent with the file contents."""
 
     nrow: int = 0
@@ -59,7 +59,7 @@ class HField(XMLModel):
     ncol: int = 0
     """This attribute specifies the number of columns in the elevation data matrix."""
 
-    elevation: Optional[VecN] = None
+    elevation: VecN | None = None
     """This attribute specifies the elevation data matrix. Values are automatically normalized to lie between 0 and 1 by first subtracting the minimum value and then dividing by the (maximum-minimum) difference, if not 0. If not provided, values are set to 0."""
 
     size: Vec4
@@ -80,7 +80,7 @@ class HField(XMLModel):
             expected_len = nrow * ncol
             if elev.size != expected_len:
                 raise ValueError(
-                    f"Elevation length {elev.size} does not match nrow*ncol={expected_len}"
+                    f"Elevation length {elev.size} does not match nrow*ncol={expected_len}",
                 )
 
         # Normalize

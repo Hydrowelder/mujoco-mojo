@@ -5,13 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mujoco-mojo"
 version = "0.1.0"
-description = "Add your description here"
+description = "Pythonic MuJoCo MJCF generation and validation toolkit built on Pydantic v2."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastparquet>=2025.12.0",
     "matplotlib>=3.10.8",
-    "mkdocs-open-in-new-tab>=1.0.8",
     "mujoco>=3.4.0",
     "numpy>=2.4.1",
     "numpydantic>=1.7.0",
@@ -30,6 +29,7 @@ dev = [
     "mkdocs-glightbox>=0.5.2",
     "mkdocs-literate-nav>=0.6.2",
     "mkdocs-material>=9.7.1",
+    "mkdocs-open-in-new-tab>=1.0.8",
     "mkdocs-section-index>=0.3.10",
     "mkdocstrings[python]>=1.0.2",
     "pyright[nodejs]>=1.1.408",
@@ -40,6 +40,44 @@ dev = [
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.ruff.lint]
+select = ["D", "RUF", "E", "F", "W", "UP"] # some suggest using "ALL"
+
+ignore = [
+    # modules
+    "ANN", # flake8-annotations
+    "COM", # flake8-commas
+    "C90", # mccabe complexity
+    "DJ",  # django
+    "EXE", # flake8-executable
+    "T10", # debugger
+    "TID", # flake8-tidy-imports
+
+    # specific rules
+    "D100",   # ignore missing docs
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D203",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D404",
+    "D415",
+    "E402",   # false positives for local imports
+    "E501",   # line too long
+    "TRY003", # external messages in exceptions are too verbose
+    "TD002",
+    "TD003",
+    "FIX002", # too verbose descriptions of todos
+]
 
 [tool.pyright]
 stubPath = "typings"

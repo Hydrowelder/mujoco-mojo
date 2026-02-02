@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 
 import numpy as np
 from pydantic import Field
@@ -12,13 +12,15 @@ __all__ = ["EqualityWeldBody", "EqualityWeldSite"]
 
 
 class EqualityWeldBody(EqualityBase):
-    """This element creates a weld equality constraint. It attaches two bodies to each other, removing all relative degrees of freedom between them (softly of course, like all other constraints in MuJoCo). The two bodies are not required to be close to each other. The relative body position and orientation being enforced by the constraint solver is the one in which the model was defined. Note that two bodies can also be welded together rigidly, by defining one body as a child of the other body, without any joint elements in the child body.
+    """
+    This element creates a weld equality constraint. It attaches two bodies to each other, removing all relative degrees of freedom between them (softly of course, like all other constraints in MuJoCo). The two bodies are not required to be close to each other. The relative body position and orientation being enforced by the constraint solver is the one in which the model was defined. Note that two bodies can also be welded together rigidly, by defining one body as a child of the other body, without any joint elements in the child body.
 
     Using body1 (and optionally anchor, relpose, body2). When using this specification, the constraint is assumed to be satisfied at the configuration in which the model is defined.
     """
 
     tag = "weld"
-    attributes = EqualityBase.attributes + (
+    attributes = (
+        *EqualityBase.attributes,
         "body1",
         "body2",
         "anchor",
@@ -31,13 +33,13 @@ class EqualityWeldBody(EqualityBase):
     body1: BodyName
     """Name of the first body participating in the constraint."""
 
-    body2: Optional[BodyName] = None
+    body2: BodyName | None = None
     """Name of the second body. If this attribute is omitted, the second body is the world body. Welding a body to the world and changing the corresponding component of mjData.eq_active at runtime can be used to fix the body temporarily."""
 
     relpose: Vec7 = np.array((0, 1, 0, 0, 0, 0, 0))
     """This attribute specifies the relative pose (3D position followed by 4D quaternion orientation) of body2 relative to body1. If the quaternion part (i.e., last 4 components of the vector) are all zeros, as in the default setting, this attribute is ignored and the relative pose is the one corresponding to the model reference pose in qpos0. The unusual default is because all equality constraint types share the same default for their numeric parameters."""
 
-    anchor: Optional[Vec3] = np.array((0, 0, 0))
+    anchor: Vec3 | None = np.array((0, 0, 0))
     """Coordinates of the weld point relative to body2. If relpose is not specified, the meaning of this parameter is the same as for connect constraints, except that is relative to body2. If relpose is specified, body1 will use the pose to compute its anchor point."""
 
     toquescale: float = 1
@@ -45,13 +47,14 @@ class EqualityWeldBody(EqualityBase):
 
 
 class EqualityWeldSite(EqualityBase):
-    """This element creates a weld equality constraint. It attaches two bodies to each other, removing all relative degrees of freedom between them (softly of course, like all other constraints in MuJoCo). The two bodies are not required to be close to each other. The relative body position and orientation being enforced by the constraint solver is the one in which the model was defined. Note that two bodies can also be welded together rigidly, by defining one body as a child of the other body, without any joint elements in the child body.
+    """
+    This element creates a weld equality constraint. It attaches two bodies to each other, removing all relative degrees of freedom between them (softly of course, like all other constraints in MuJoCo). The two bodies are not required to be close to each other. The relative body position and orientation being enforced by the constraint solver is the one in which the model was defined. Note that two bodies can also be welded together rigidly, by defining one body as a child of the other body, without any joint elements in the child body.
 
     site1 and site2 (both required). When using this specification, the frames of the two sites will be aligned by the constraint, regardless of their position in the default configuration. An example of this specification is shown in this model.
     """
 
     tag = "weld"
-    attributes = EqualityBase.attributes + ("site1", "site2", "toquescale")
+    attributes = (*EqualityBase.attributes, "site1", "site2", "toquescale")
 
     type: Literal["site"] = "site"
 
@@ -66,6 +69,7 @@ class EqualityWeldSite(EqualityBase):
 
 
 EqualityWeld = Annotated[
-    EqualityWeldBody | EqualityWeldSite, Field(discriminator="type")
+    EqualityWeldBody | EqualityWeldSite,
+    Field(discriminator="type"),
 ]
 """Discriminated union for type hinting the various types of Weld."""

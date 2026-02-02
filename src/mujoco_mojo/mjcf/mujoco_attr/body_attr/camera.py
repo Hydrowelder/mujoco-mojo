@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -36,10 +34,10 @@ class Camera(XMLModel):
         "user",
     )
 
-    name: Optional[CameraName] = None
+    name: CameraName | None = None
     """Name of the camera."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     mode: TrackingMode = TrackingMode.FIXED
@@ -51,7 +49,7 @@ class Camera(XMLModel):
     * `targetbody` means that the camera position is fixed in the body frame, while the camera orientation is adjusted so that it always points towards the targeted body (which is specified with the target attribute below). This can be used for example to model an eye that fixates a moving object; the object will be the target, and the camera/eye will be defined in the body corresponding to the head.
     * `targetbodycom` is the same as "targetbody" but the camera is oriented towards the center of mass of the subtree starting at the target body."""
 
-    target: Optional[BodyName] = None
+    target: BodyName | None = None
     """When the camera mode is "targetbody" or "targetbodycom", this attribute becomes required. It specifies which body should be targeted by the camera. In all other modes this attribute is ignored."""
 
     orthographic: bool = False
@@ -60,13 +58,13 @@ class Camera(XMLModel):
     fovy: float = 45
     """Vertical field-of-view of the camera. If the camera uses a perspective projection, the field-of-view is expressed in degrees, regardless of the global compiler/angle setting. If the camera uses an orthographic projection, the field-of-view is expressed in units of length; note that in this case the default of 45 is too large for most scenes and should likely be reduced. In either case, the horizontal field of view is computed automatically given the window size and the vertical field of view."""
 
-    resolution: Tuple[int, int] = (1, 1)
+    resolution: tuple[int, int] = (1, 1)
     """Resolution of the camera in pixels [width height]. Note that these values are not used for rendering since those dimensions are determined by the size of the rendering context. This attribute serves as a convenient location to save the required resolution when creating a context."""
 
     focal: Vec2 = np.array((0, 0))
     """Focal length of the camera in length units. It is mutually exclusive with fovy. See Cameras for details."""
 
-    focalpixel: Tuple[int, int] = (1, 1)
+    focalpixel: tuple[int, int] = (1, 1)
     """Focal length of the camera in pixel units. If both focal and focalpixel are specified, the former is ignored."""
 
     principal: Vec2 = np.array((0, 0))
@@ -87,5 +85,5 @@ class Camera(XMLModel):
     orientation: Orientation = Quat()
     """Orientation of the camera frame. See Frame orientations. Note that specifically for cameras, the xyaxes attribute is semantically convenient as the X and Y axes correspond to the directions "right" and "up" in pixel space, respectively."""
 
-    user: Optional[VecN] = None
+    user: VecN | None = None
     """See User parameters."""

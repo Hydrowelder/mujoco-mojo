@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from pydantic import Field
 
@@ -26,11 +26,13 @@ class Asset(XMLModel):
     meshes: Sequence[Mesh] = Field(default_factory=list, exclude_if=is_empty_list)
     hfields: Sequence[HField] = Field(default_factory=list, exclude_if=is_empty_list)
     skins: Sequence[CompositeSkin] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )
     textures: Sequence[Texture] = Field(default_factory=list, exclude_if=is_empty_list)
     materials: Sequence[Material] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )
     models: Sequence[Model] = Field(default_factory=list, exclude_if=is_empty_list)
 

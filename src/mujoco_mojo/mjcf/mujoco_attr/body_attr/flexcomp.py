@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
 
 from pydantic import Field
 
@@ -21,7 +21,8 @@ __all__ = ["FlexComp"]
 
 
 class FlexComp(XMLModel):
-    """Similar to composite, this element (new in MuJoCo 3.0) is not a model element, but rather a macro which expands into multiple model elements representing a deformable entity. In particular this macro creates one flex element, a number of bodies that are children of the body in which the flexcomp is defined, and optionally one flex equality which constrains all flex edges to their initial length. A number of attributes are specified here and then passed through to the automatically-constructed flex. The primary role of flexcomp is to automate the creation of a (possibly large) collection of moving bodies with corresponding joints, and connect them with stretchable flex elements. See flex and deformable objects documentation for specifics on how flexes work. Here we only describe the automated construction process.
+    """
+    Similar to composite, this element (new in MuJoCo 3.0) is not a model element, but rather a macro which expands into multiple model elements representing a deformable entity. In particular this macro creates one flex element, a number of bodies that are children of the body in which the flexcomp is defined, and optionally one flex equality which constrains all flex edges to their initial length. A number of attributes are specified here and then passed through to the automatically-constructed flex. The primary role of flexcomp is to automate the creation of a (possibly large) collection of moving bodies with corresponding joints, and connect them with stretchable flex elements. See flex and deformable objects documentation for specifics on how flexes work. Here we only describe the automated construction process.
 
     An important distinction between flex and flexcomp is that the flex references bodies and specifies vertex coordinates in the frames of those bodies, while the flexcomp defines points. Each flexcomp point corresponds to one body and one vertex in the underlying flex. If the flexcomp point is pinned, the corresponding flex body is the parent body of the flexcomp, while the corresponding flex vertex coordinates equal the flexcomp point coordinates. If the flexcomp point is not pinned, a new child body is created at the coordinates of the flexcomp point (within the flexcomp parent body), and then the coordinates of the flex vertex within that new body are (0,0,0). The mechanism for pinning flexcomp points is explained below.
 
@@ -98,10 +99,10 @@ class FlexComp(XMLModel):
     name: str
     """The name of the flex element being generated automatically. This name is used as a prefix for all bodies that are automatically generated here, and is also referenced by the corresponding flex equality constraint (if applicable)."""
 
-    dim: Optional[int] = None
+    dim: int | None = None
     """Dimensionality of the flex object. This value must be 1, 2 or 3. The flex elements are capsules in 1D, triangles with radius in 2D, and tetrahedra with radius in 3D. Certain flexcomp types imply a dimensionality, in which case the value specified here is ignored."""
 
-    dof: Optional[FlexCompDOF] = None
+    dof: FlexCompDOF | None = None
     """The parametrization of the flex's degrees of freedom (dofs). See the video on the right illustrating the different parametrizations with deformable spheres. The three models in the video are respectively sphere_full, sphere_radial and sphere_trilinear.
 
     * `full`: Three translational dofs per vertex. This is the most expressive but also the most expensive option.
@@ -117,7 +118,7 @@ class FlexComp(XMLModel):
     Note that a higher interpolation order generally requires a smaller time step for stability, although usually not as large as with the "full" option and a fine mesh.
     """
 
-    type: Optional[FlexCompType] = None
+    type: FlexCompType | None = None
     """This attribute determines the type of flexcomp object. The remaining attributes and sub-elements are then interpreted according to the type. Default settings are also adjusted depending on the type. Different types correspond to different methods for specifying the flexcomp points and the stretchable elements that connect them. They fall in three categories: direct specification entered in the XML, direct specification loaded from file, and automated generation from higher-level specification.
 
     `grid` generates a rectangular grid of points in 1D, 2D or 3D as specified by dim. The number of points in each dimension is determined by count while the grid spacing in each dimension is determined by spacing. Make sure the spacing is sufficiently large relative to radius to avoid permanent contacts. In 2D and 3D the grid is automatically triangulated, and corresponding flex elements are created (triangles or tetrahedra). In 1D the elements are capsules connecting consecutive pairs of points.
@@ -138,70 +139,70 @@ class FlexComp(XMLModel):
 
     `direct` allows the user to specify the point and element data of the flexcomp directly in the XML. Note that flexcomp will still generate moving bodies automatically, as well as automate other settings; so it still provides convenience compared to specifing the corresponding flex directly.
     """
-    count: Optional[Tuple[int, int, int]] = None
+    count: tuple[int, int, int] | None = None
     """The number of automatically generated points in each dimension. This and the next attribute only apply to types grid, box, cylinder, ellipsoid."""
 
-    spacing: Optional[Vec3] = None
+    spacing: Vec3 | None = None
     """The spacing between the automatically generated points in each dimension. The spacing should be sufficiently large compared to the radius, to avoid permanent contacts."""
 
-    point: Optional[VecN] = None
+    point: VecN | None = None
     """The 3D coordinates of the points. This attribute is only used with type direct. All other flexcomp types generate their own points. The points are used to construct bodies and vertices as explained earlier."""
 
-    element: Optional[Tuple[int, ...]] = None
+    element: tuple[int, ...] | None = None
     """The zero-based point ids forming each flex elements. This attribute is only used with type direct. All other flexcomp types generate their own elements. This data is passed through to the automatically-generated flex."""
 
-    texcoord: Optional[VecN] = None
+    texcoord: VecN | None = None
     """Texture coordinates of each point, passed through to the automatically-generated flex. Note that flexcomp does not generate texture coordinates automatically, except for 2D grids, box, cylinder and ellipsoid. For all other types, the user can specify explicit texture coordinates here, even if the points themselves were generated automatically. This requires understanding of the layout of the automatically-generated points and how they correspond to the texture referenced by the material."""
 
-    mass: Optional[float] = None
+    mass: float | None = None
     """The mass of each automatically-generated body equals this value divided by the number of points. Note that pinning some points does not affect the mass of the other bodies."""
 
-    inertiabox: Optional[float] = None
+    inertiabox: float | None = None
     """Even though the automatically-generated bodies have the physics of point masses, with slider joints, MuJoCo still requires each body to have rotational inertia. The inertias generated here are diagonal, and are computed such that the corresponding equivalent-inertia boxes have sides equal to this value."""
 
-    file: Optional[Path] = None
+    file: Path | None = None
     """The name of the file from which a surface (triangular) or volumetric (tetrahedral) mesh is loaded. For surface meshes, the file extension is used to determine the file format. Supported formats are GMSH and the formats specified in mesh assets, excluding the legacy .msh format. Volumetric meshes are supported only in GMSH format. See here for more information on GMSH files."""
 
-    rigid: Optional[bool] = None
+    rigid: bool | None = None
     """If this is true, all points correspond to vertices within the parent body, and no new bodies are created. This is equivalent to pinning all points. Note that if all points are indeed pinned, the model compiler will detect that the flex is rigid (which behaves is a non-convex mesh in collision detection)."""
 
-    pos: Optional[Vec3] = None
+    pos: Vec3 | None = None
     """This 3D vector translates all points relative to the frame of the parent body."""
 
-    orientation: Optional[Orientation] = None
+    orientation: Orientation | None = None
     """If using a quaternion, rotation of all points around the pos vector specified above. Together these two vectors define a pose transformation, used to position and orient the points as needed.
 
     Other orientations are options in place of quat."""
 
-    scale: Optional[Vec3] = None
+    scale: Vec3 | None = None
     """Scaling of all point coordinates, for types that specify coordinates explicitly. Scaling is applied after the pose transformation."""
 
-    radius: Optional[float] = None
+    radius: float | None = None
     """Radius of all flex elements. It can be zero in 3D, but must be positive in 1D and 2D. The radius affects both collision detection and rendering. In 1D and 2D it is needed to make the elements volumetric.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    rgba: Optional[Vec4] = None
+    rgba: Vec4 | None = None
     """Instead of creating material assets and referencing them, this attribute can be used to set color and transparency only. This is not as flexible as the material mechanism, but is more convenient and is often sufficient. If the value of this attribute is different from the internal default, it takes precedence over the material.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    group: Optional[int] = None
+    group: int | None = None
     """Integer group to which the flex belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of flexes.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    flatskin: Optional[bool] = None
+    flatskin: bool | None = None
     """This attribute determines whether 2D and 3D flexes that are rendered in flexskin mode will use smooth or flat shading. The default smooth shading is suitable in most cases, however if the object is intended to have visible sharp edges (such as a cube) then flat shading is more natural.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    origin: Optional[Vec3] = None
+    origin: Vec3 | None = None
     """The origin of the flexcomp. Used for generating a volumetric mesh from an OBJ surface mesh. Each surface triangle is connected to the origin to create a tetrahedron, so the resulting volumetric mesh is guaranteed to be well-formed only for convex shapes."""
 
     contacts: Sequence[FlexCompContact] = Field(
@@ -228,5 +229,5 @@ class FlexComp(XMLModel):
     )
     """Pin properties grouping."""
 
-    plugin: Optional[Plugin] = None
+    plugin: Plugin | None = None
     """Plugin for the body."""

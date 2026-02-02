@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import GeomName
 
@@ -18,5 +16,5 @@ class SpatialGeom(XMLModel):
     geom: GeomName
     """The name of a geom that acts as an obstacle for the tendon path. Only sphere and cylinder geoms can be referenced here."""
 
-    sidesite: Optional[str] = None
+    sidesite: str | None = None
     """To prevent the tendon path from snapping from one side of the geom to the other as the model configuration varies, the user can define a preferred "side" of the geom. At runtime, the wrap that is closer to the specified site is automatically selected. Specifying a side site is often needed in practice. If the side site is inside the geom, the tendon is constrained to pass through the interior of the geom."""

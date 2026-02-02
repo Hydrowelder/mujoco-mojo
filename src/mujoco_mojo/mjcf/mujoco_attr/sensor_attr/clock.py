@@ -4,8 +4,8 @@ __all__ = ["SensorClock"]
 
 
 class SensorClock(SensorBase):
-    """"""
+    """This element creates sensor that returns the simulation time."""
 
     tag = "clock"
 
-    attributes = SensorBase.attributes + ()
+    attributes = (*SensorBase.attributes,)

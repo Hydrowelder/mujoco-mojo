@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from mujoco_mojo.base import XMLModel
@@ -19,11 +17,13 @@ __all__ = ["Light"]
 
 
 class Light(XMLModel):
-    """This element creates a light, which moves with the body where it is defined. To create a fixed light, define it in the world body. The lights created here are in addition to the headlight which is always defined and is configured via the visual element. Lights shine along the direction specified by the dir attribute. They do not have a full spatial frame with three orthogonal axes.
+    """
+    This element creates a light, which moves with the body where it is defined. To create a fixed light, define it in the world body. The lights created here are in addition to the headlight which is always defined and is configured via the visual element. Lights shine along the direction specified by the dir attribute. They do not have a full spatial frame with three orthogonal axes.
 
     By default, MuJoCo uses the standard OpenGL (fixed functional) Phong lighting model for its rendering, with augmented with shadow mapping. (See the OpenGL documentation for more information, including details about various attributes.)
 
-    MJCF also supports alternative lighting models (e.g. physically-based rendering) by providing additional attributes. Attributes may be applied or ignored depending on the lighting model being used."""
+    MJCF also supports alternative lighting models (e.g. physically-based rendering) by providing additional attributes. Attributes may be applied or ignored depending on the lighting model being used.
+    """
 
     tag = "light"
 
@@ -50,16 +50,16 @@ class Light(XMLModel):
         "texture",
     )
 
-    name: Optional[LightName] = None
+    name: LightName | None = None
     """Name of the light."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     mode: TrackingMode = TrackingMode.FIXED
     """This is identical to the mode attribute of camera. It specifies the how the light position and orientation in world coordinates are computed in forward kinematics (which in turn determine what the light illuminates)."""
 
-    target: Optional[BodyName] = None
+    target: BodyName | None = None
     """This is identical to the target attribute of camera above. It specifies which body should be targeted in "targetbody" and "targetbodycom" modes."""
 
     type: LightType = LightType.SPOT
@@ -83,7 +83,7 @@ class Light(XMLModel):
     diffuse: Vec3 = np.array((0.7, 0.7, 0.7))
     """The color of the light. For the Phong (default) lighting model, this defines the diffuse color of the light."""
 
-    texture: Optional[TextureName] = None
+    texture: TextureName | None = None
     """The texture to use for image-based lighting. This is unused by the default Phong lighting model."""
 
     intensity: float = 0

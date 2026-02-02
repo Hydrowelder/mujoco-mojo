@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+raise Exception(
+    "This script has been cofigured to automatically error since I have already used it. Running it runs the risk of overwriting a tremendous amount of work.",
+)
+
 template_text = Path(__file__).with_name("sensor_template.py").read_text()
 
 sensor_attr_folder = (

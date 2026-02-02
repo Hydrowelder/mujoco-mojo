@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field
@@ -21,14 +21,16 @@ __all__ = ["Spatial"]
 
 
 class Spatial(TendonBase):
-    """This element creates a spatial tendon, which is a minimum-length path passing through specified via-points and wrapping around specified obstacle geoms. The objects along the path are defined with the sub-elements site and geom below. One can also define pulleys which split the path in multiple branches. Each branch of the tendon path must start and end with a site, and if it has multiple obstacle geoms they must be separated by sites - so as to avoid the need for an iterative solver at the tendon level.
+    """
+    This element creates a spatial tendon, which is a minimum-length path passing through specified via-points and wrapping around specified obstacle geoms. The objects along the path are defined with the sub-elements site and geom below. One can also define pulleys which split the path in multiple branches. Each branch of the tendon path must start and end with a site, and if it has multiple obstacle geoms they must be separated by sites - so as to avoid the need for an iterative solver at the tendon level.
 
     A second form of wrapping is where the tendon is constrained to pass through a geom rather than wrap around it. This is enabled automatically when a sidesite is specified and its position is inside the volume of the obstacle geom.
     """
 
     tag = "spatial"
 
-    attributes = TendonBase.attributes + (
+    attributes = (
+        *TendonBase.attributes,
         "actuatorfrclimited",
         "actuatorfrcrange",
         "width",
@@ -48,7 +50,7 @@ class Spatial(TendonBase):
     width: float = 0.003
     """Radius of the cross-section area of the spatial tendon, used for rendering. Parts of the tendon that wrap around geom obstacles are rendered with reduced width."""
 
-    material: Optional[MaterialName] = None
+    material: MaterialName | None = None
     """Material used to set the appearance of the tendon."""
 
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))

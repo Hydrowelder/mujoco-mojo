@@ -1,5 +1,3 @@
-from typing import Optional
-
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.typing import EqualityName, Vec2, Vec5
@@ -10,10 +8,10 @@ class EqualityBase(XMLModel):
 
     attributes = ("name", "class_", "active", "solref", "solimp")
 
-    name: Optional[EqualityName] = None
+    name: EqualityName | None = None
     """Name of the equality constraint."""
 
-    class_: Optional[str] = None
+    class_: str | None = None
     """Defaults class for setting unspecified attributes."""
 
     active: bool = True

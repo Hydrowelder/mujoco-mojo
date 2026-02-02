@@ -35,11 +35,11 @@ class FlexCompEdge(XMLModel):
     """The standard constraint parameters, passed through to the automatically generated equality constraint."""
 
     stiffness: float = Field(
-        default_factory=lambda: deepcopy(FlexEdge.model_fields["stiffness"].default)
+        default_factory=lambda: deepcopy(FlexEdge.model_fields["stiffness"].default),
     )
     """Edge stiffness, passed through to the automatically generated flex."""
 
     damping: float = Field(
-        default_factory=lambda: deepcopy(FlexEdge.model_fields["damping"].default)
+        default_factory=lambda: deepcopy(FlexEdge.model_fields["damping"].default),
     )
     """Edge damping, passed through to the automatically generated flex."""

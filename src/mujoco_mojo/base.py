@@ -12,23 +12,19 @@ __all__ = ["XMLModel"]
 
 def _tuple_string(v) -> str:
     """
-
     Convert a sequence or array of numbers into a space-separated string.
     Works with list, tuple, or NumPy ndarray.
     """
-
     return " ".join(map(str, v))
 
 
 def _format_value(value) -> str:
     """
-
     Convert a Python value into a string suitable for XML attributes.
     - Booleans become "true"/"false"
     - Sequences (list, tuple, np.ndarray) become space-separated strings
     - Everything else is cast to str
     """
-
     if isinstance(value, bool):
         return "true" if value else "false"
 
@@ -83,7 +79,7 @@ class XMLModel(BaseModel):
                 # safety checks
                 if value.children:
                     raise ValueError(
-                        f"{value.__class__.__name__} cannot be used as an attribute because it defines children"
+                        f"{value.__class__.__name__} cannot be used as an attribute because it defines children",
                     )
 
                 # recursively extract attributes
@@ -93,7 +89,7 @@ class XMLModel(BaseModel):
                 for k in sub_attrs:
                     if k in el.attrib:
                         raise ValueError(
-                            f"Attribute collision while flattening {value.__class__.__name__}: '{k}' already exists"
+                            f"Attribute collision while flattening {value.__class__.__name__}: '{k}' already exists",
                         )
 
                 el.attrib.update(sub_attrs)
@@ -123,10 +119,9 @@ class XMLModel(BaseModel):
 
         Only valid for XMLModels that define attributes but no children.
         """
-
         if self.children:
             raise ValueError(
-                f"{self.__class__.__name__} has children and cannot be flattened"
+                f"{self.__class__.__name__} has children and cannot be flattened",
             )
 
         attrs: dict[str, str] = {}
@@ -144,7 +139,7 @@ class XMLModel(BaseModel):
                 for k in nested:
                     if k in attrs:
                         raise ValueError(
-                            f"Attribute collision while flattening nested XMLModel: '{k}'"
+                            f"Attribute collision while flattening nested XMLModel: '{k}'",
                         )
 
                 attrs.update(nested)
@@ -157,12 +152,10 @@ class XMLModel(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs):
         """
-
         Validates that XML attribute and child names exist on the model.
 
         This runs after Pydantic has finished building model fields and ensures that all entries in `attributes` and `children` reference actual fields or class variables. Errors are raised at class definition time to prevent invalid XML schemas from being created.
         """
-
         super().__pydantic_init_subclass__(**kwargs)
 
         # Pydantic fields (includes inherited)
@@ -178,7 +171,7 @@ class XMLModel(BaseModel):
             if name not in valid_names:
                 raise TypeError(
                     f"{cls.__name__}: attribute '{name}' is not defined "
-                    f"as a field or class variable"
+                    f"as a field or class variable",
                 )
 
         # Validate children
@@ -186,17 +179,16 @@ class XMLModel(BaseModel):
             if name not in valid_names:
                 raise TypeError(
                     f"{cls.__name__}: child '{name}' is not defined "
-                    f"as a field or class variable"
+                    f"as a field or class variable",
                 )
 
     @model_validator(mode="after")
     def enforce_exclusive_groups(self) -> XMLModel:
         """Ensures that only one attribute in each exclusive group is set."""
-
         for group in self.__exclusive_groups__:
             count = sum(getattr(self, field) is not None for field in group)
             if count > 1:
                 raise ValueError(
-                    f"{type(self).__name__}: Only one of {group} may be specified"
+                    f"{type(self).__name__}: Only one of {group} may be specified",
                 )
         return self

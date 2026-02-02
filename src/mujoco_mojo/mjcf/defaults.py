@@ -5,9 +5,9 @@ import numpy as np
 from mujoco_mojo.typing import Vec2, Vec3, Vec5
 
 __all__ = [
+    "FRICTION_DEFAULT",
     "SOLIMP_DEFAULT",
     "SOLREF_DEFAULT",
-    "FRICTION_DEFAULT",
 ]
 
 SOLIMP_DEFAULT: Vec5 = np.array((0.9, 0.95, 0.001, 0.5, 2))

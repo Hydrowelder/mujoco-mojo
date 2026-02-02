@@ -11,7 +11,8 @@ __all__ = ["ActuatorMuscle"]
 
 
 class ActuatorMuscle(ActuatorBase):
-    """This element is used to model a muscle actuator, as described in the Muscles actuators section. The underlying general attributes are set as follows:
+    """
+    This element is used to model a muscle actuator, as described in the Muscles actuators section. The underlying general attributes are set as follows:
 
     !!! note
         These general attributes are accessible via their respective properties for reference.
@@ -28,7 +29,8 @@ class ActuatorMuscle(ActuatorBase):
 
     tag = "muscle"
 
-    attributes = ActuatorBase.attributes + (
+    attributes = (
+        *ActuatorBase.attributes,
         "timeconst",
         "tausmooth",
         "range",
@@ -73,7 +75,8 @@ class ActuatorMuscle(ActuatorBase):
 
     @property
     def dyntype(self) -> Literal[DynType.MUSCLE]:
-        """Activation dynamics type for the actuator. The available dynamics types were already described in the Actuation model section. Repeating that description in somewhat different notation (corresponding to the mjModel and mjData fields involved).
+        """
+        Activation dynamics type for the actuator. The available dynamics types were already described in the Actuation model section. Repeating that description in somewhat different notation (corresponding to the mjModel and mjData fields involved).
 
         !!! note "Included for reference only"
         """
@@ -81,7 +84,8 @@ class ActuatorMuscle(ActuatorBase):
 
     @property
     def gaintype(self) -> Literal[GainType.MUSCLE]:
-        """The gain and bias together determine the output of the force generation mechanism, which is currently assumed to be affine. As already explained in Actuation model, the general formula is: scalar_force = gain_term * (act or ctrl) + bias_term. The formula uses the activation state when present, and the control otherwise.
+        """
+        The gain and bias together determine the output of the force generation mechanism, which is currently assumed to be affine. As already explained in Actuation model, the general formula is: scalar_force = gain_term * (act or ctrl) + bias_term. The formula uses the activation state when present, and the control otherwise.
 
         !!! note "Included for reference only"
         """
@@ -89,7 +93,8 @@ class ActuatorMuscle(ActuatorBase):
 
     @property
     def biastype(self) -> Literal[BiasType.MUSCLE]:
-        """The gain and bias together determine the output of the force generation mechanism, which is currently assumed to be affine. As already explained in Actuation model, the general formula is: scalar_force = gain_term * (act or ctrl) + bias_term. The formula uses the activation state when present, and the control otherwise.
+        """
+        The gain and bias together determine the output of the force generation mechanism, which is currently assumed to be affine. As already explained in Actuation model, the general formula is: scalar_force = gain_term * (act or ctrl) + bias_term. The formula uses the activation state when present, and the control otherwise.
 
         !!! note "Included for reference only"
         """
@@ -97,7 +102,8 @@ class ActuatorMuscle(ActuatorBase):
 
     @property
     def dynprm(self) -> Vec3:
-        """Activation dynamics parameters.
+        """
+        Activation dynamics parameters.
 
         !!! warning
             These parameters are different than for other actuators!
@@ -110,7 +116,8 @@ class ActuatorMuscle(ActuatorBase):
 
     @property
     def gainprm(self) -> Vec9:
-        """Gain parameters.
+        """
+        Gain parameters.
 
         !!! warning
             These parameters are different than for other actuators!
@@ -129,12 +136,13 @@ class ActuatorMuscle(ActuatorBase):
                 self.vmax,
                 self.fpmax,
                 self.fvmax,
-            )
+            ),
         )
 
     @property
     def biasprm(self) -> Vec9:
-        """Bias parameters.
+        """
+        Bias parameters.
 
         !!! warning
             These parameters are different than for other actuators!

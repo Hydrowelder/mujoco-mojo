@@ -1,8 +1,13 @@
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.mujoco_attr.body import Body
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomBase
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase
+from mujoco_mojo.typing import SensorObjectType
 from mujoco_mojo.utils import is_empty_list
 
 # import a bunch of stuff
@@ -353,53 +358,95 @@ class Sensor(XMLModel):
         exclude_if=is_empty_list,
     )
     """Grouping of SensorDistance."""
-    normal: Sequence[SensorNormal] = Field(
+    normals: Sequence[SensorNormal] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorNormal."""
 
-    fromto: Sequence[SensorFromto] = Field(
+    fromtos: Sequence[SensorFromto] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFromto."""
 
-    contact: Sequence[SensorContact] = Field(
+    contacts: Sequence[SensorContact] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorContact."""
 
-    tactile: Sequence[SensorTactile] = Field(
+    tactiles: Sequence[SensorTactile] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTactile."""
 
-    e_potential: Sequence[SensorEPotential] = Field(
+    e_potentials: Sequence[SensorEPotential] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorEPotential."""
 
-    e_kinetic: Sequence[SensorEKinetic] = Field(
+    e_kinetics: Sequence[SensorEKinetic] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorEKinetic."""
 
-    clock: Sequence[SensorClock] = Field(
+    clocks: Sequence[SensorClock] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorClock."""
 
-    user: Sequence[SensorUser] = Field(
+    users: Sequence[SensorUser] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorUser."""
 
-    plugin: Optional[SensorPlugin] = None
+    plugin: SensorPlugin | None = None
     """Sensor plugin."""
+
+    @staticmethod
+    def to_sensor_object_type(
+        obj: Body | Camera | GeomBase | SiteBase,
+        inertial: bool = True,
+    ) -> SensorObjectType | None:
+        """
+        Determines the SensorObjectType for a given object.
+
+        Args:
+            obj (XMLModel): Object to determine type. Objects with a sensor object type are Body, Camera, GeomBase, and SiteBase.
+            inertial (bool, optional): If the object is a Body, this determines if the inertial frame or regular frame is used. Defaults to True.
+
+        Returns:
+            SensorObjectType | None: Sensor object type (if valid) or None if there is no sensor object type.
+
+        """
+        _err_msg = "The object to have its SensorObjectType was found to have multiple valid types, which itself is invalid."
+        sensor_object_type = None
+        if isinstance(obj, Body):
+            if inertial:
+                if sensor_object_type is not None:
+                    raise TypeError(_err_msg)
+                sensor_object_type = SensorObjectType.BODY
+            else:
+                if sensor_object_type is not None:
+                    raise TypeError(_err_msg)
+                sensor_object_type = SensorObjectType.XBODY
+        elif isinstance(obj, GeomBase):
+            if sensor_object_type is not None:
+                raise TypeError(_err_msg)
+            sensor_object_type = SensorObjectType.GEOM
+        elif isinstance(obj, SiteBase):
+            if sensor_object_type is not None:
+                raise TypeError(_err_msg)
+            sensor_object_type = SensorObjectType.SITE
+        elif isinstance(obj, Camera):
+            if sensor_object_type is not None:
+                raise TypeError(_err_msg)
+            sensor_object_type = SensorObjectType.CAMERA
+
+        return sensor_object_type

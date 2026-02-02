@@ -1,11 +1,11 @@
 """
 !!! failure "Not Implemented"
-    The Replicate class is not implemented. There is no plan to implement as its functionality is duplicated by that of Python itself. Its functionality within the Mujoco class is not implemented.
+The Replicate class is not implemented. There is no plan to implement as its functionality is duplicated by that of Python itself. Its functionality within the Mujoco class is not implemented.
 """
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field, PositiveInt
@@ -16,14 +16,15 @@ from mujoco_mojo.typing import Vec3
 from mujoco_mojo.utils import is_empty_list
 
 raise NotImplementedError(
-    "The Replicate class is not implemented. There is no plan to implement as its functionality is duplicated by that of Python itself."
+    "The Replicate class is not implemented. There is no plan to implement as its functionality is duplicated by that of Python itself.",
 )
 
 __all__ = ["Replicate"]
 
 
 class Replicate(XMLModel):
-    """The replicate element duplicates the enclosed kinematic tree elements with incremental translational and rotational offsets, adding namespace suffixes to avoid name collisions. Appended suffix strings are integers in the range [0...count-1] with the minimum number of digits required to represent the total element count (i.e., if replicating 200 times, suffixes will be 000, 001, ... etc). All referencing elements are automatically replicated and namespaced appropriately. Detailed examples of models using replicate can be found in the model/replicate/ directory.
+    """
+    The replicate element duplicates the enclosed kinematic tree elements with incremental translational and rotational offsets, adding namespace suffixes to avoid name collisions. Appended suffix strings are integers in the range [0...count-1] with the minimum number of digits required to represent the total element count (i.e., if replicating 200 times, suffixes will be 000, 001, ... etc). All referencing elements are automatically replicated and namespaced appropriately. Detailed examples of models using replicate can be found in the model/replicate/ directory.
 
     There are some caveats concerning keyframes when using replicate. Since mjs_attach is used to self-attach multiple times the enclosed kinematic tree, if this tree contains further attach elements, keyframes will not be replicated nor namespaced by replicate, but they will be attached and namespaced once by the innermost call of mjs_attach. See the limitations discussed in attachment.
 
@@ -74,7 +75,7 @@ class Replicate(XMLModel):
     count: PositiveInt
     """The number of replicas. Must be positive."""
 
-    sep: Optional[str] = None
+    sep: str | None = None
     """The namespace separator. This optional string is prepended to the namespace suffix string. Note that for nested replicate elements, the innermost namespace suffixes are appended first."""
 
     pos: Vec3 = np.array((0, 0, 0))
@@ -84,6 +85,7 @@ class Replicate(XMLModel):
     """Rotation angles around three coordinate axes between two subsequent replicas. The angular units and rotation sequence respect the global angle and eulerseq settings. Rotation is always with respect to the frame of the previous replica, so total rotation is cumulative."""
 
     replications: Sequence[Replicate] = Field(
-        default_factory=list, exclude_if=is_empty_list
+        default_factory=list,
+        exclude_if=is_empty_list,
     )
     """Replications assigned to Replicate."""

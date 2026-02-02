@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 from pydantic import Field
@@ -36,7 +36,7 @@ class Composite(XMLModel):
     )
     children = ("joints", "skin", "geom", "site", "plugins")
 
-    prefix: Optional[str] = None
+    prefix: str | None = None
     """All automatically generated model elements have names indicating the element type and index. For example, the body at coordinates (2, 0) in a 2D grid is named "B2_0" by default. If prefix="C" is specified, the same body is named "CB2_0". The prefix is needed when multiple composite objects are used in the same model, to avoid name conflicts."""
 
     type: CompositeType = CompositeType.CABLE
@@ -44,7 +44,7 @@ class Composite(XMLModel):
 
     The `cable` type creates a 1D chain of bodies connected with ball joints, each having a geom with user-defined type (cylinder, capsule or box). The geometry can either be defined with an array of 3D vertex coordinates vertex or with prescribed functions with the option curve. Currently, only linear and trigonometric functions are supported. For example, an helix can be obtained with curve="cos(s) sin(s) s". The size is set with the option size, resulting in f(s)={size[1]⋅cos(2π⋅size[2]), size[1]⋅sin(2π⋅size[2]),  size[0]⋅s}."""
 
-    count: Tuple[int] | Tuple[int, int] | Tuple[int, int, int]
+    count: tuple[int] | tuple[int, int] | tuple[int, int, int]
     """The element count in each dimension of the grid. This can have 1, 2 or 3 numbers, specifying the element count along the X, Y and Z axis of the parent body frame within. Any missing numbers default to 1. If any of these numbers is 1, all subsequent numbers must also be 1, so that the leading dimensions of the grid are used. This means for example that a 1D grid will always extend along the X axis. To achieve a different orientation, rotate the frame of the parent body. Note that some types imply a grid of certain dimensionality, so the requirements for this attribute depend on the specified type."""
 
     offset: Vec3 = np.array((0, 0, 0))
@@ -53,16 +53,16 @@ class Composite(XMLModel):
     quat: Quat = Quat(quat=np.array((1, 0, 0, 0)))
     """It specifies a quaternion that rotates the first body frame. The quaternion is expressed in the parent body frame."""
 
-    vertex: Optional[VecN] = None
+    vertex: VecN | None = None
     """Vertex 3D positions in global coordinates."""
 
     initial: CompositeInitial = CompositeInitial.NONE
     """Behavior of the first point. Free: free joint. Ball: ball joint. None: no dof."""
 
-    curve: Optional[Tuple[str, str, str]] = None
+    curve: tuple[str, str, str] | None = None
     """Functions specifying the vertex positions. Available functions are s, cos(s), and sin(s), where s is the arc length parameter."""
 
-    size: Optional[Tuple[int, int, int]] = None
+    size: tuple[int, int, int] | None = None
     """Scaling of the curve functions. size[0] is the scaling of s, size[1] is the radius of cos(s) and sin(s), and size[2] is the speed of the argument (i.e. cos(2*pi*size[2]*s))."""
 
     joints: Sequence[CompositeJoint] = Field(
@@ -71,13 +71,13 @@ class Composite(XMLModel):
     )
     """Joints assigned to composite."""
 
-    geom: Optional[CompositeGeom] = None
+    geom: CompositeGeom | None = None
     """Geometry assigned to composite."""
 
-    site: Optional[CompositeSite] = None
+    site: CompositeSite | None = None
     """Site assigned to composite."""
 
-    skin: Optional[CompositeSkin] = None
+    skin: CompositeSkin | None = None
     """Skin assigned to composite."""
 
     plugins: Sequence[Plugin] = Field(

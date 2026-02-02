@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.typing import BodyName, ContactExcludeName
 
@@ -19,7 +17,7 @@ class Exclude(XMLModel):
         "body2",
     )
 
-    name: Optional[ContactExcludeName] = None
+    name: ContactExcludeName | None = None
     """Name of this contact pair."""
 
     body1: BodyName

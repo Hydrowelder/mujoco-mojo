@@ -57,76 +57,76 @@ class CompositeJoint(XMLModel):
     """These are the solref and solimp attributes used to equality-constrain the joint. Whether or not a given joint is quality-constrained depends on the joint kind and composite object type as explained above. For joints that are not equality-constrained, this attribute has no effect. The defaults are adjusted depending on the composite type. Otherwise these attributes obey the same rules as all other solref and solimp attributes in MJCF. See Solver parameters."""
 
     axis: Vec3 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["axis"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["axis"].default),
     )
     """This attribute specifies the axis of rotation for hinge joints and the direction of translation for slide joints. It is ignored for free and ball joints. The vector specified here is automatically normalized to unit length as long as its length is greater than 10E-14; otherwise a compile error is generated."""
 
     group: int = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["group"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["group"].default),
     )
     """Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints."""
 
     stiffness: float = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["stiffness"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["stiffness"].default),
     )
     """Joint stiffness. The spring force is computed along with the other passive forces."""
 
     damping: float = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["damping"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["damping"].default),
     )
     """Damping applied to all degrees of freedom created by this joint. Unlike friction loss which is computed by the constraint solver, damping is simply a force linear in velocity. It is included in the passive forces. Despite this simplicity, larger damping values can make numerical integrators unstable, which is why our Euler integrator handles damping implicitly. See Integration in the Computation chapter."""
 
     armature: float = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["armature"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["armature"].default),
     )
     """Additional inertia associated with movement of the joint that is not due to body mass. This added inertia is usually due to a rotor (a.k.a armature) spinning faster than the joint itself due to a geared transmission. In the illustration, we compare (left) a 2-dof system with an armature body (purple box), coupled with a gear ratio of 33 to the pendulum using a joint equality constraint, and (right) a simple 1-dof pendulum with an equivalent armature. Because the gear ratio appears twice, multiplying both forces and lengths, the effect is known as "reflected inertia" and the equivalent value is the inertia of the spinning body multiplied by the square of the gear ratio, in this case 9=329=32. The value applies to all degrees of freedom created by this joint.
 
     Besides increasing the realism of joints with geared transmission, positive armature significantly improves simulation stability, even for small values, and is a recommended possible fix when encountering stability issues."""
 
     limited: JointLimited = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["limited"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["limited"].default),
     )
     """This attribute specifies if the joint has limits. It interacts with the range attribute. If this attribute is "false", joint limits are disabled. If this attribute is "true", joint limits are enabled. If this attribute is "auto", and autolimits is set in compiler, joint limits will be enabled if range is defined."""
 
     range: Vec2 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["range"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["range"].default),
     )
     """The joint limits. Limits can be imposed on all joint types except for free joints. For hinge and ball joints, the range is specified in degrees or radians depending on the angle attribute of compiler. For ball joints, the limit is imposed on the angle of rotation (relative to the reference configuration) regardless of the axis of rotation. Only the second range parameter is used for ball joints; the first range parameter should be set to 0. See the Limit section in the Computation chapter for more information.
 
     Setting this attribute without specifying limited is an error if autolimits is "false" in compiler."""
 
     margin: float = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["margin"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["margin"].default),
     )
     """The distance threshold below which limits become active. Recall that the Constraint solver normally generates forces as soon as a constraint becomes active, even if the margin parameter makes that happen at a distance. This attribute together with solreflimit and solimplimit can be used to model a soft joint limit."""
 
     solreflimit: Vec2 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["solreflimit"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["solreflimit"].default),
     )
     """Constraint solver parameters for simulating joint limits. See Solver parameters."""
 
     solimplimit: Vec5 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["solimplimit"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["solimplimit"].default),
     )
     """Constraint solver parameters for simulating joint limits. See Solver parameters."""
 
     frictionloss: float = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["frictionloss"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["frictionloss"].default),
     )
     """Friction loss due to dry friction. This value is the same for all degrees of freedom created by this joint. Semantically friction loss does not make sense for free joints, but the compiler allows it. To enable friction loss, set this attribute to a positive value."""
 
     solreffriction: Vec2 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["solreffriction"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["solreffriction"].default),
     )
     """Constraint solver parameters for simulating dry friction. See Solver parameters."""
 
     solimpfriction: Vec5 = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["solimpfriction"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["solimpfriction"].default),
     )
     """Constraint solver parameters for simulating dry friction. See Solver parameters."""
 
     type: JointType = Field(
-        default_factory=lambda: deepcopy(Joint.model_fields["type"].default)
+        default_factory=lambda: deepcopy(Joint.model_fields["type"].default),
     )
     """Type of the joint. The keywords have the following meaning: The free type creates a free "joint" with three translational degrees of freedom followed by three rotational degrees of freedom. In other words it makes the body floating. The rotation is represented as a unit quaternion. This joint type is only allowed in bodies that are children of the world body. No other joints can be defined in the body if a free joint is defined. Unlike the remaining joint types, free joints do not have a position within the body frame. Instead the joint position is assumed to coincide with the center of the body frame. Thus at runtime the position and orientation data of the free joint correspond to the global position and orientation of the body frame. Free joints cannot have limits.
 

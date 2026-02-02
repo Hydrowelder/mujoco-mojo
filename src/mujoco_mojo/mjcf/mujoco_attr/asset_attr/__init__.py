@@ -9,8 +9,8 @@ from .texture import Texture
 
 __all__ = [
     "HField",
-    "Material",
     "Layer",
+    "Material",
     "Mesh",
     "Model",
     "Texture",
