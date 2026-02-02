@@ -17,11 +17,14 @@ class ActuatorPosition(ActuatorBase):
     !!! note
         These general attributes are accessible via their respective properties for reference.
 
-        | Attribute | Setting             | Attribute | Setting       |
-        |:----------|:--------------------|:----------|:--------------|
-        | dyntype   | none or filterexact | dynprm    | timeconst 0 0 |
-        | gaintype  | fixed               | gainprm   | kp 0 0        |
-        | biastype  | affine              | biasprm   | 0 -kp -kv     |
+        | Attribute  | Setting             |
+        |:-----------|:--------------------|
+        | `dyntype`  | none or filterexact |
+        | `gaintype` | fixed               |
+        | `biastype` | affine              |
+        | `dynprm`   | timeconst 0 0       |
+        | `gainprm`  | kp 0 0              |
+        | `biasprm`  | 0 -kp -kv           |
     """
 
     tag = "position"

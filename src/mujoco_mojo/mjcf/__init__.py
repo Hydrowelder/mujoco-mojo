@@ -3,6 +3,17 @@
 from .meta import Frame
 from .mujoco import Mujoco
 from .mujoco_attr import (
+    Actuator,
+    ActuatorAdhesion,
+    ActuatorCylinder,
+    ActuatorDamper,
+    ActuatorGeneral,
+    ActuatorIntegratedVelocity,
+    ActuatorMotor,
+    ActuatorMuscle,
+    ActuatorPlugin,
+    ActuatorPosition,
+    ActuatorVelocity,
     Asset,
     Attach,
     Body,
@@ -67,6 +78,17 @@ from .plugin import Plugin
 from .position import Pos
 
 __all__ = [
+    "Actuator",
+    "ActuatorAdhesion",
+    "ActuatorCylinder",
+    "ActuatorDamper",
+    "ActuatorGeneral",
+    "ActuatorIntegratedVelocity",
+    "ActuatorMotor",
+    "ActuatorMuscle",
+    "ActuatorPlugin",
+    "ActuatorPosition",
+    "ActuatorVelocity",
     "Asset",
     "Attach",
     "AxisAngle",

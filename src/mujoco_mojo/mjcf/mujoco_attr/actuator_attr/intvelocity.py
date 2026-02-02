@@ -17,12 +17,15 @@ class ActuatorIntegratedVelocity(ActuatorBase):
     !!! note
         These general attributes are accessible via their respective properties for reference.
 
-        | Attribute  | Setting    | Attribute | Setting   |
-        |:-----------|:-----------|:----------|:----------|
-        | dyntype    | integrator | dynprm    | 1 0 0     |
-        | gaintype   | fixed      | gainprm   | kp 0 0    |
-        | biastype   | affine     | biasprm   | 0 -kp -kv |
-        | actlimited | true       | N/A       | N/A       |
+        | Attribute    | Setting    |
+        |:-------------|:-----------|
+        | `dyntype`    | integrator |
+        | `gaintype`   | fixed      |
+        | `biastype`   | affine     |
+        | `actlimited` | true       |
+        | `dynprm`     | 1 0 0      |
+        | `gainprm`    | kp 0 0     |
+        | `biasprm`    | 0 -kp -kv  |
     """
 
     tag = "intvelocity"

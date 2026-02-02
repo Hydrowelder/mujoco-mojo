@@ -5,30 +5,51 @@ from typing import Literal
 import numpy as np
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
-from mujoco_mojo.typing import BiasType, DynType, GainType, Vec3
+from mujoco_mojo.typing import BiasType, BodyName, DynType, GainType, Vec3
 
-__all__ = ["ActuatorMotor"]
+__all__ = ["ActuatorAdhesion"]
 
 
-class ActuatorMotor(ActuatorBase):
-    """This element creates a direct-drive actuator. The underlying general attributes are set as follows:
+class ActuatorAdhesion(ActuatorBase):
+    """This element is used to model a muscle actuator, as described in the Muscles actuators section. The underlying general attributes are set as follows:
 
     !!! note
         These general attributes are accessible via their respective properties for reference.
 
-        | Attribute  | Setting |
-        |:-----------|:--------|
-        | `dyntype`  | none    |
-        | `gaintype` | fixed   |
-        | `biastype` | none    |
-        | `dynprm`   | 1 0 0   |
-        | `gainprm`  | 1 0 0   |
-        | `biasprm`  | 0 0 0   |
+        | Attribute     | Setting  |
+        |:--------------|:---------|
+        | `dyntype`     | none     |
+        | `gaintype`    | fixed    |
+        | `biastype`    | none     |
+        | `trntype`     | body     |
+        | `dynprm`      | 1 0 0    |
+        | `gainprm`     | gain 0 0 |
+        | `biasprm`     | 0 0 0    |
+        | `ctrllimited` | true     |
+
+        > `trntype` means transmission type. Meaning the Actuator uses the Body field.
+        > It is not accessible as a property. See ActuatorGeneral.
     """
 
-    tag = "motor"
+    tag = "adhesion"
 
-    attributes = ActuatorBase.attributes
+    attributes = (
+        "name",
+        "class_",
+        "group",
+        "forcelimited",
+        "ctrlrange",
+        "forcerange",
+        "user",  # the above are inherited from ActuatorBase
+        "body",
+        "gain",
+    )
+
+    body: BodyName
+    """The actuator acts on all contacts involving this body's geoms."""
+
+    gain: float = 1
+    """Gain of the adhesion actuator, in units of force. The total adhesion force applied by the actuator is the control value multiplied by the gain. This force is distributed equally between all the contacts involving geoms belonging to the target body."""
 
     @property
     def dyntype(self) -> Literal[DynType.NONE]:
@@ -60,6 +81,7 @@ class ActuatorMotor(ActuatorBase):
 
         !!! note "Included for reference only"
         """
+
         return np.array((1, 0, 0))
 
     @property
@@ -68,7 +90,7 @@ class ActuatorMotor(ActuatorBase):
 
         !!! note "Included for reference only"
         """
-        return np.array((1, 0, 0))
+        return np.array((self.gain, 0, 0))
 
     @property
     def biasprm(self) -> Vec3:

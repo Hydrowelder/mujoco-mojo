@@ -1,7 +1,18 @@
 """Defines child attributes of the Mujoco class."""
 
 from .actuator import Actuator
-from .actuator_attr import ActuatorGeneral, ActuatorMotor
+from .actuator_attr import (
+    ActuatorAdhesion,
+    ActuatorCylinder,
+    ActuatorDamper,
+    ActuatorGeneral,
+    ActuatorIntegratedVelocity,
+    ActuatorMotor,
+    ActuatorMuscle,
+    ActuatorPlugin,
+    ActuatorPosition,
+    ActuatorVelocity,
+)
 from .asset import Asset
 from .asset_attr import (
     HField,
@@ -73,8 +84,16 @@ from .tendon_attr import (
 
 __all__ = [
     "Actuator",
+    "ActuatorAdhesion",
+    "ActuatorCylinder",
+    "ActuatorDamper",
     "ActuatorGeneral",
+    "ActuatorIntegratedVelocity",
     "ActuatorMotor",
+    "ActuatorMuscle",
+    "ActuatorPlugin",
+    "ActuatorPosition",
+    "ActuatorVelocity",
     "Asset",
     "Attach",
     "Body",
