@@ -8,10 +8,10 @@ from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import (
-    ActuatorFrcLimited,
+    ActuatorForceLimited,
+    JointLimited,
     JointName,
     JointType,
-    Limited,
     Vec2,
     Vec3,
     Vec5,
@@ -74,7 +74,7 @@ class Joint(XMLModel):
     """The joint limits. Limits can be imposed on all joint types except for free joints. For hinge and ball joints, the range is specified in degrees or radians depending on the angle attribute of compiler. For ball joints, the limit is imposed on the angle of rotation (relative to the reference configuration) regardless of the axis of rotation. Only the second range parameter is used for ball joints; the first range parameter should be set to 0. See the Limit section in the Computation chapter for more information.
     Setting this attribute without specifying limited is an error if autolimits is "false" in compiler."""
 
-    limited: Limited = Limited.AUTO
+    limited: JointLimited = JointLimited.AUTO
     """This attribute specifies if the joint has limits. It interacts with the range attribute. If this attribute is "false", joint limits are disabled. If this attribute is "true", joint limits are enabled. If this attribute is "auto", and autolimits is set in compiler, joint limits will be enabled if range is defined."""
 
     actuatorfrcrange: Vec2 = np.array((0, 0))
@@ -82,7 +82,7 @@ class Joint(XMLModel):
 
     The compiler expects the first value to be smaller than the second value. Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
 
-    actuatorfrclimited: ActuatorFrcLimited = ActuatorFrcLimited.AUTO
+    actuatorfrclimited: ActuatorForceLimited = ActuatorForceLimited.AUTO
     """This attribute specifies whether actuator forces acting on the joint should be clamped. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints.
 
     This attribute interacts with the actuatorfrcrange attribute. If this attribute is "false", actuator force clamping is disabled. If it is "true", actuator force clamping is enabled. If this attribute is "auto", and autolimits is set in compiler, actuator force clamping will be enabled if actuatorfrcrange is defined."""

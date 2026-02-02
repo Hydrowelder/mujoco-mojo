@@ -34,8 +34,14 @@ __all__ = [
     "Mark",
     "Sleep",
     "JointType",
-    "Limited",
-    "ActuatorFrcLimited",
+    "DynType",
+    "GainType",
+    "BiasType",
+    "JointLimited",
+    "ActuatorForceLimited",
+    "TendonLimited",
+    "ActuatorLimited",
+    "ActuatorControlLimited",
     "Align",
     "FluidShape",
     "TrackingMode",
@@ -62,6 +68,7 @@ __all__ = [
     "ContactPairName",
     "ContactExcludeName",
     "TendonName",
+    "ActuatorName",
     "ActuatorGroup",
     "GeomGroup",
     "InertiaGroupRange",
@@ -120,6 +127,9 @@ EqualityName = NewType("EqualityName", str)
 
 TendonName = NewType("TendonName", str)
 """Alias of string. Used to type hint a field is the name of an Tendon."""
+
+ActuatorName = NewType("ActuatorName", str)
+"""Alias of string. Used to type hint a field is the name of an Actuator."""
 
 ActuatorGroup = Annotated[int, Field(ge=0, le=30)]
 """An integer representing an actuator group index. Must be between 0 and 30 inclusive."""
@@ -413,6 +423,60 @@ class LengthRangeMode(StrEnum):
     """Applies to all actuators."""
 
 
+class DynType(StrEnum):
+    """Activation dynamics type of actuators."""
+
+    NONE = "none"
+    """No internal state"""
+
+    INTEGRATOR = "integrator"
+    """act_dot = ctrl"""
+
+    FILTER = "filter"
+    """act_dot = (ctrl - act) / dynprm[0]"""
+
+    FILTEREXACT = "filterexact"
+    """Like filter but with exact integration"""
+
+    MUSCLE = "muscle"
+    """act_dot = mju_muscleDynamics(...)"""
+
+    USER = "user"
+    """act_dot = mjcb_act_dyn(...)"""
+
+
+class GainType(StrEnum):
+    """Gain type of actuators."""
+
+    FIXED = "fixed"
+    """gain_term = gainprm[0]"""
+
+    AFFINE = "affine"
+    """gain_term = gain_prm[0] + gain_prm[1] * length + gain_prm[2] * velocity"""
+
+    MUSCLE = "muscle"
+    """gain_term = mju_muscleGain(...)"""
+
+    USER = "user"
+    """gain_term = mjcb_act_gain(...)"""
+
+
+class BiasType(StrEnum):
+    """Bias type of actuators."""
+
+    NONE = "none"
+    """bias_term = 0"""
+
+    AFFINE = "affine"
+    """bias_term = biasprm[0] + biasprm[1]*length + biasprm[2]*velocity"""
+
+    MUSCLE = "muscle"
+    """bias_term = mju_muscleBias(...)"""
+
+    USER = "user"
+    """bias_term = mjcb_act_bias(...)"""
+
+
 class Inertia(StrEnum):
     """This attribute controls how the mesh is used when mass and inertia are inferred from geometry. The current default value legacy will be changed to convex in a future release."""
 
@@ -540,7 +604,7 @@ class JointType(StrEnum):
     """A hinge joint with one rotational degree of freedom. The rotation takes place around a specified axis through a specified position. This is the most common type of joint and is therefore the default. Most models contain only hinge and free joints."""
 
 
-class Limited(StrEnum):
+class JointLimited(StrEnum):
     """Specifies if the joint has limits."""
 
     FALSE = "false"
@@ -553,7 +617,33 @@ class Limited(StrEnum):
     """Joint limits will be enabled if range is defined (if autolimits is set in compiler)."""
 
 
-class ActuatorFrcLimited(StrEnum):
+class TendonLimited(StrEnum):
+    """Specifies if the tendon has limits."""
+
+    FALSE = "false"
+    """Tendon limits are disabled."""
+
+    TRUE = "true"
+    """Tendon limits are enabled."""
+
+    AUTO = "auto"
+    """Tendon limits will be enabled if range is defined (if autolimits is set in compiler)."""
+
+
+class ActuatorControlLimited(StrEnum):
+    """Specifies if the actuator control input has limits."""
+
+    FALSE = "false"
+    """Control input clamping is disabled."""
+
+    TRUE = "true"
+    """Control input to this actuator is automatically clamped to ctrlrange at runtime."""
+
+    AUTO = "auto"
+    """If `autolimits` is set in compiler, control clamping will automatically be set to true if `ctrlrange` is defined without explicitly setting this attribute to "true"."""
+
+
+class ActuatorForceLimited(StrEnum):
     """This attribute specifies whether actuator forces acting on the joint should be clamped. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints."""
 
     FALSE = "false"
@@ -563,7 +653,20 @@ class ActuatorFrcLimited(StrEnum):
     """Actuator force clamping is enabled."""
 
     AUTO = "auto"
-    """Actuator force clamping will be enabled if actuatorfrcrange is defined (if autolimits is set in compiler)."""
+    """If `autolimits` is set in compiler, actuator force clamping will be enabled if `actuatorfrcrange`/`forcerange` is defined."""
+
+
+class ActuatorLimited(StrEnum):
+    """Specifies if the internal state (activation) associated with an actuator is clamped to `actrange` at runtime."""
+
+    FALSE = "false"
+    """Activation clamping is disabled."""
+
+    TRUE = "true"
+    """Activation clamping is enabled."""
+
+    AUTO = "auto"
+    """If `autolimits` is set in compiler, activation clamping will automatically be set to true if `actrange` is defined without explicitly setting this attribute to "true"."""
 
 
 class Align(StrEnum):

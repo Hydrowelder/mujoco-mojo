@@ -1,5 +1,7 @@
 """Defines child attributes of the Mujoco class."""
 
+from .actuator import Actuator
+from .actuator_attr import ActuatorGeneral, ActuatorMotor
 from .asset import Asset
 from .asset_attr import (
     HField,
@@ -70,6 +72,9 @@ from .tendon_attr import (
 )
 
 __all__ = [
+    "Actuator",
+    "ActuatorGeneral",
+    "ActuatorMotor",
     "Asset",
     "Attach",
     "Body",

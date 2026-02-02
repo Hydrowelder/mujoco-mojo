@@ -7,7 +7,7 @@ import numpy as np
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.typing import (
-    Limited,
+    TendonLimited,
     TendonName,
     Vec2,
     Vec5,
@@ -49,7 +49,7 @@ class TendonBase(XMLModel):
     group: int = 0
     """Integer group to which the tendon belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of tendons."""
 
-    limited: Limited = Limited.AUTO
+    limited: TendonLimited = TendonLimited.AUTO
     """If this attribute is "true", the length limits defined by the range attribute below are imposed by the constraint solver. If this attribute is "auto", and autolimits is set in compiler, length limits will be enabled if range is defined."""
 
     range: Vec2 = np.array((0, 0))

@@ -10,7 +10,7 @@ from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.spatial_attr.pulley import Spatial
 from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.spatial_attr.site import SpatialSite
 from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.tendon_base import TendonBase
 from mujoco_mojo.typing import (
-    ActuatorFrcLimited,
+    ActuatorForceLimited,
     MaterialName,
     Vec2,
     Vec4,
@@ -39,7 +39,7 @@ class Spatial(TendonBase):
 
     children = ("sites", "geoms", "pulleys")
 
-    actuatorfrclimited: ActuatorFrcLimited = ActuatorFrcLimited.AUTO
+    actuatorfrclimited: ActuatorForceLimited = ActuatorForceLimited.AUTO
     """This attribute specifies whether actuator forces acting on the tendon should be clamped. See Force limits for details. This attribute interacts with the actuatorfrcrange attribute. If this attribute is "false", actuator force clamping is disabled. If it is "true", actuator force clamping is enabled. If this attribute is "auto", and autolimits is set in compiler, actuator force clamping will be enabled if actuatorfrcrange is defined."""
 
     actuatorfrcrange: Vec2 = np.array((0, 0))
