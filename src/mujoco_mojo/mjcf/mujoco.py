@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
 from mujoco_mojo.mjcf.mujoco_attr.body import WorldBody
@@ -135,19 +136,20 @@ class Mujoco(XMLModel):
     )
     """Visual definition grouping."""
 
-    defaults: Sequence[float] = Field(
-        default_factory=list,
-        exclude_if=is_empty_list,
-    )  # TODO
-    """Default definition grouping."""
+    # the following two are not planned for implementation
+    # defaults: Sequence[float] = Field(
+    #     default_factory=list,
+    #     exclude_if=is_empty_list,
+    # )
+    # """Default definition grouping."""
 
-    customs: Sequence[float] = Field(
-        default_factory=list,
-        exclude_if=is_empty_list,
-    )  # TODO
-    """Custom definitions grouping."""
+    # customs: Sequence[float] = Field(
+    #     default_factory=list,
+    #     exclude_if=is_empty_list,
+    # )
+    # """Custom definitions grouping."""
 
-    extensions: Sequence[float] = Field(
+    extensions: Sequence[Extension] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )  # TODO

@@ -1,5 +1,11 @@
 """MJCF is a collection of classes made to make building your own MJCF easier with Python."""
 
+from .extension import (
+    Extension,
+    ExtensionPlugin,
+    ExtensionPluginInstance,
+    ExtensionPluginInstanceConfig,
+)
 from .meta import Frame
 from .mujoco import Mujoco
 from .mujoco_attr import (
@@ -182,6 +188,10 @@ __all__ = [
     "EqualityWeldSite",
     "Euler",
     "Exclude",
+    "Extension",
+    "ExtensionPlugin",
+    "ExtensionPluginInstance",
+    "ExtensionPluginInstanceConfig",
     "Fixed",
     "Flag",
     "FlexComp",

@@ -134,15 +134,15 @@ Guide is coming soon...
           * [x] sensor/⁠clock
           * [x] sensor/⁠user
           * [x] sensor/⁠plugin
-      * [ ] keyframe
-          * [ ] keyframe/⁠key
-      * [ ] visual
-          * [ ] visual/⁠global
-          * [ ] visual/⁠quality
-          * [ ] visual/⁠headlight
-          * [ ] visual/⁠map
-          * [ ] visual/⁠scale
-          * [ ] visual/⁠rgba
+      * [x] keyframe
+          * [x] keyframe/⁠key
+      * [x] visual
+          * [x] visual/⁠global
+          * [x] visual/⁠quality
+          * [x] visual/⁠headlight
+          * [x] visual/⁠map
+          * [x] visual/⁠scale
+          * [x] visual/⁠rgba
       * [ ] default
           * [ ] default/⁠mesh
           * [ ] default/⁠material
@@ -168,7 +168,7 @@ Guide is coming soon...
           * [ ] custom/⁠text
           * [ ] custom/⁠tuple
               * [ ] tuple/⁠element
-      * [ ] extension
-          * [ ] extension/⁠plugin
-              * [ ] plugin/⁠instance
-                  * [ ] instance/⁠config
+      * [x] extension
+          * [x] extension/⁠plugin
+              * [x] plugin/⁠instance
+                  * [x] instance/⁠config
