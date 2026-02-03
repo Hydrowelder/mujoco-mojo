@@ -137,13 +137,13 @@ class Mujoco(XMLModel):
     """Visual definition grouping."""
 
     # the following two are not planned for implementation
-    # defaults: Sequence[float] = Field(
+    # defaults: Sequence[Default] = Field(
     #     default_factory=list,
     #     exclude_if=is_empty_list,
     # )
     # """Default definition grouping."""
 
-    # customs: Sequence[float] = Field(
+    # customs: Sequence[Custom] = Field(
     #     default_factory=list,
     #     exclude_if=is_empty_list,
     # )
@@ -152,5 +152,5 @@ class Mujoco(XMLModel):
     extensions: Sequence[Extension] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Extension definitions grouping."""
