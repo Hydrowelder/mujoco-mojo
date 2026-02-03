@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<mujoco model="hello">
+    <compiler balanceinertia="true">
+        <lengthrange />
+    </compiler>
+    <asset>
+        <material name="material_name" />
+    </asset>
+    <worldbody>
+        <geom
+                name="floor"
+                material="material_name"
+                quat="1 2 3 4" />
+        <body name="robot">
+            <geom
+                    rgba="1 0 0 1"
+                    size="0.2" />
+            <geom
+                    rgba="1 0 0 1"
+                    size="1 3" />
+        </body>
+    </worldbody>
+</mujoco>
