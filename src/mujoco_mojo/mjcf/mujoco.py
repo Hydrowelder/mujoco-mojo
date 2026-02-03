@@ -47,8 +47,8 @@ class Mujoco(XMLModel):
         "sensors",
         "keyframes",
         "visuals",
-        "defaults",
-        "customs",
+        # "defaults",
+        # "customs",
         "extensions",
     )
 

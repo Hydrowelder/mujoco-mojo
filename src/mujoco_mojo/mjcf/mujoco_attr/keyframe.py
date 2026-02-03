@@ -16,9 +16,9 @@ class Keyframe(XMLModel):
 
     tag = "keyframe"
 
-    children = ("keyframes",)
+    children = ("keys",)
 
-    key: Sequence[Key] = Field(
+    keys: Sequence[Key] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
