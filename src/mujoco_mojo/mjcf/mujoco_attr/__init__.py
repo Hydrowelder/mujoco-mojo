@@ -68,6 +68,8 @@ from .equality_attr import (
     EqualityWeldBody,
     EqualityWeldSite,
 )
+from .keyframe import Keyframe
+from .keyframe_attr import Key
 from .option import Option
 from .option_attr import Flag
 from .sensor import Sensor
@@ -133,6 +135,15 @@ from .tendon_attr import (
     SpatialSite,
     TendonJoint,
 )
+from .visual import Visual
+from .visual_attr import (
+    VisualGlobal,
+    VisualHeadlight,
+    VisualMap,
+    VisualQuality,
+    VisualRGBA,
+    VisualScale,
+)
 
 __all__ = [
     "Actuator",
@@ -184,6 +195,8 @@ __all__ = [
     "HField",
     "Inertial",
     "Joint",
+    "Key",
+    "Keyframe",
     "Layer",
     "LengthRange",
     "Light",
@@ -257,5 +270,12 @@ __all__ = [
     "Tendon",
     "TendonJoint",
     "Texture",
+    "Visual",
+    "VisualGlobal",
+    "VisualHeadlight",
+    "VisualMap",
+    "VisualQuality",
+    "VisualRGBA",
+    "VisualScale",
     "WorldBody",
 ]

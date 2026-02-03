@@ -12,11 +12,13 @@ from mujoco_mojo.mjcf.mujoco_attr.compiler import Compiler
 from mujoco_mojo.mjcf.mujoco_attr.contact import Contact
 from mujoco_mojo.mjcf.mujoco_attr.deformable import Deformable
 from mujoco_mojo.mjcf.mujoco_attr.equality import Equality
+from mujoco_mojo.mjcf.mujoco_attr.keyframe import Keyframe
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.sensor import Sensor
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
 from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
+from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.typing import ModelName
 from mujoco_mojo.utils import is_empty_list
 
@@ -121,16 +123,16 @@ class Mujoco(XMLModel):
     )
     """Sensor definition grouping."""
 
-    keyframes: Sequence[float] = Field(
+    keyframes: Sequence[Keyframe] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Keyframe definition grouping."""
 
-    visuals: Sequence[float] = Field(
+    visuals: Sequence[Visual] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
-    )  # TODO
+    )
     """Visual definition grouping."""
 
     defaults: Sequence[float] = Field(
