@@ -86,11 +86,6 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
-        
-        <a href="#implemented-mjcf-tags" class="md-skip">
-          Skip to content
-        </a>
-      
     </div>
     <div data-md-component="announce">
       
@@ -381,24 +376,6 @@
       
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    User Guide
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -415,34 +392,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#implemented-mjcf-tags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Implemented MJCF Tags
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -6070,25 +6019,6 @@
   
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#implemented-mjcf-tags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Implemented MJCF Tags
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -6136,9 +6066,8 @@
 <p>Some attributes in this package make use of default values. Wherever possible, the default values match what is stated in the <a href="https://mujoco.readthedocs.io/en/stable/XMLreference.html#xml-reference" target="_blank">XML Reference</a>. The <code>to_xml</code> method found in all <code>XMLModel</code> (which is most objects in <code>mujoco_mojo.mjcf</code>) has an argument (<code>exclude_defaults</code>) which will omit serializing fields set as default.</p>
 <p>If you have a specific use case which is dependent on a value you leave as default, it is highly recommended that you pin that value as opposed to use the default. MuJoCo may change their defaults, and this package may fall behind. In that case, you would be using a "default" which is no longer the default.</p>
 </div>
-<h2 id="implemented-mjcf-tags">Implemented MJCF Tags<a class="headerlink" href="#implemented-mjcf-tags" title="Permanent link">¶</a></h2>
-<details>
-<summary>mujoco</summary>
+<details class="success">
+<summary>Implemented MJCF Tags</summary>
 <ul class="task-list">
 <li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked><span class="task-list-indicator"></span></label> mujoco</li>
 <li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked><span class="task-list-indicator"></span></label> option<ul class="task-list">

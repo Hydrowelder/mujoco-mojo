@@ -5,9 +5,7 @@ Guide is coming soon...
 
     If you have a specific use case which is dependent on a value you leave as default, it is highly recommended that you pin that value as opposed to use the default. MuJoCo may change their defaults, and this package may fall behind. In that case, you would be using a "default" which is no longer the default.
 
-## Implemented MJCF Tags
-
-??? "mujoco"
+??? success "Implemented MJCF Tags"
     * [x] mujoco
       * [x] option
           * [x] option/⁠flag
