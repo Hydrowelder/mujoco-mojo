@@ -49,6 +49,7 @@ __all__ = [
     "JointLimited",
     "JointName",
     "JointType",
+    "KeyName",
     "LayerRole",
     "LengthRangeMode",
     "LightName",
@@ -146,6 +147,9 @@ InstanceName = NewType("InstanceName", str)
 SensorName = NewType("SensorName", str)
 """Alias of string. Used to type hint a field is the name of a Sensor."""
 
+KeyName = NewType("KeyName", str)
+"""Alias of string. Used to type hint a field is the name of a Key."""
+
 SensorAttachableName = BodyName | GeomName | SiteName | CameraName
 """Alias of names which can have a sensor attached to them."""
 
@@ -172,6 +176,7 @@ Name = (
     | PluginName
     | InstanceName
     | SensorName
+    | KeyName
 )
 """Alias of any name."""
 
