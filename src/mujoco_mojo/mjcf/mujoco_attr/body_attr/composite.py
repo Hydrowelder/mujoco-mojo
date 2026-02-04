@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field
 
@@ -65,7 +63,7 @@ class Composite(XMLModel):
     size: tuple[int, int, int] | None = None
     """Scaling of the curve functions. size[0] is the scaling of s, size[1] is the radius of cos(s) and sin(s), and size[2] is the speed of the argument (i.e. cos(2*pi*size[2]*s))."""
 
-    joints: Sequence[CompositeJoint] = Field(
+    joints: list[CompositeJoint] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
@@ -80,7 +78,7 @@ class Composite(XMLModel):
     skin: CompositeSkin | None = None
     """Skin assigned to composite."""
 
-    plugins: Sequence[Plugin] = Field(
+    plugins: list[Plugin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

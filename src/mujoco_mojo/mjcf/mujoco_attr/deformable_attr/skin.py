@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -87,7 +86,7 @@ class DeformableSkin(XMLModel):
     group: int = 0
     """Integer group to which the skin belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of skins."""
 
-    bones: Sequence[Bone] = Field(
+    bones: list[Bone] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

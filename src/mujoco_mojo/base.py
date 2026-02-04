@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ClassVar
+from typing import ClassVar, Literal, get_origin
 from xml.etree.ElementTree import Element
 
 import numpy as np
@@ -56,7 +56,11 @@ class XMLModel(BaseModel):
         for field in self.attributes:
             value = getattr(self, field, None)
 
-            if exclude_default:
+            field_info = type(self).model_fields[field]
+            annotation = field_info.annotation
+            is_literal = get_origin(annotation) is Literal
+
+            if exclude_default and not is_literal:
                 # determine default value
                 default = type(self).model_fields[field].default
 
@@ -107,9 +111,9 @@ class XMLModel(BaseModel):
 
             if isinstance(value, list):
                 for item in value:
-                    el.append(item.to_xml())
+                    el.append(item.to_xml(exclude_default=exclude_default))
             else:
-                el.append(value.to_xml())
+                el.append(value.to_xml(exclude_default=exclude_default))
 
         return el
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -19,13 +17,13 @@ class Tendon(XMLModel):
 
     children = ("spatials", "fixeds")
 
-    spatials: Sequence[Spatial] = Field(
+    spatials: list[Spatial] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Spatial tendon elements."""
 
-    fixeds: Sequence[Fixed] = Field(
+    fixeds: list[Fixed] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

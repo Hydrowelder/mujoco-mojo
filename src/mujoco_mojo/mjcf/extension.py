@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -41,7 +39,7 @@ class ExtensionPluginInstance(XMLModel):
     name: PluginName
     """Name of the plugin instance."""
 
-    configs: Sequence[ExtensionPluginInstanceConfig] = Field(
+    configs: list[ExtensionPluginInstanceConfig] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
@@ -59,7 +57,7 @@ class ExtensionPlugin(XMLModel):
     plugin: PluginName
     """Identifier of the plugin."""
 
-    instances: Sequence[ExtensionPluginInstance] = Field(
+    instances: list[ExtensionPluginInstance] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
@@ -73,7 +71,7 @@ class Extension(XMLModel):
 
     children = ("plugins",)
 
-    plugins: Sequence[ExtensionPlugin] = Field(
+    plugins: list[ExtensionPlugin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

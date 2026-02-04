@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field
 
@@ -71,4 +69,4 @@ class Material(XMLModel):
     rgba: Vec4 = np.array((1, 1, 1, 1))
     """Color and transparency of the material. All components should be in the range [0 1]. Note that the texture color (if assigned) and the color specified here are multiplied component-wise. Thus the default value of "1 1 1 1" has the effect of leaving the texture unchanged. When the material is applied to a model element which defines its own local rgba attribute, the local definition has precedence. Note that this "local" definition could in fact come from a defaults class. The remaining material properties always apply."""
 
-    layers: Sequence[Layer] = Field(default_factory=list, exclude_if=is_empty_list)
+    layers: list[Layer] = Field(default_factory=list, exclude_if=is_empty_list)

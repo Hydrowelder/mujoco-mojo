@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.fixed_attr.joint import TendonJoint
@@ -18,7 +16,7 @@ class Fixed(TendonBase):
 
     children = ("joints",)
 
-    joints: Sequence[TendonJoint] = Field(
+    joints: list[TendonJoint] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

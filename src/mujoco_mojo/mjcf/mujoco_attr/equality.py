@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -22,31 +20,31 @@ class Equality(XMLModel):
 
     children = ("connects", "welds", "joints", "tendons", "flexes")
 
-    connects: Sequence[EqualityConnect] = Field(
+    connects: list[EqualityConnect] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Connect elements assigned to Equality."""
 
-    welds: Sequence[EqualityWeld] = Field(
+    welds: list[EqualityWeld] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Weld elements assigned to Equality."""
 
-    joints: Sequence[EqualityJoint] = Field(
+    joints: list[EqualityJoint] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Joint elements assigned to Equality."""
 
-    tendons: Sequence[EqualityTendon] = Field(
+    tendons: list[EqualityTendon] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Tendon elements assigned to Equality."""
 
-    flexes: Sequence[EqualityFlex] = Field(
+    flexes: list[EqualityFlex] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field
 
@@ -99,73 +97,73 @@ class Body(XMLModel):
     inertial: Inertial | None = None
     """Inertial assigned to body."""
 
-    joints: Sequence[Joint] = Field(
+    joints: list[Joint] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Joints assigned to body."""
 
-    freejoints: Sequence[FreeJoint] = Field(
+    freejoints: list[FreeJoint] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Free joints assigned to body. Defining more than one free joint will not do anything"""
 
-    geoms: Sequence[Geom] = Field(
+    geoms: list[Geom] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Geometries assigned to body."""
 
-    sites: Sequence[Site] = Field(
+    sites: list[Site] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Sites assigned to body."""
 
-    cameras: Sequence[Camera] = Field(
+    cameras: list[Camera] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Cameras assigned to body."""
 
-    lights: Sequence[Light] = Field(
+    lights: list[Light] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Lights assigned to body."""
 
-    composites: Sequence[Composite] = Field(
+    composites: list[Composite] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Composites assigned to body."""
 
-    flexcomps: Sequence[FlexComp] = Field(
+    flexcomps: list[FlexComp] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Flexible composites assigned to body."""
 
-    plugins: Sequence[Plugin] = Field(
+    plugins: list[Plugin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Plugins assigned to body."""
 
-    attaches: Sequence[Attach] = Field(
+    attaches: list[Attach] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Attach elements assigned to body."""
 
-    frames: Sequence[Frame] = Field(
+    frames: list[Frame] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Frames assigned to body."""
 
-    bodies: Sequence[Body] = Field(
+    bodies: list[Body] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

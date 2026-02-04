@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -19,8 +17,8 @@ class Contact(XMLModel):
 
     children = ("pairs", "excludes")
 
-    pairs: Sequence[Pair] = Field(default_factory=list, exclude_if=is_empty_list)
+    pairs: list[Pair] = Field(default_factory=list, exclude_if=is_empty_list)
     """Pair elements assigned to Contact."""
 
-    excludes: Sequence[Exclude] = Field(default_factory=list, exclude_if=is_empty_list)
+    excludes: list[Exclude] = Field(default_factory=list, exclude_if=is_empty_list)
     """Exclude elements assigned to Contact."""

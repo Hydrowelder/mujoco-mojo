@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import Field
@@ -205,25 +204,25 @@ class FlexComp(XMLModel):
     origin: Vec3 | None = None
     """The origin of the flexcomp. Used for generating a volumetric mesh from an OBJ surface mesh. Each surface triangle is connected to the origin to create a tetrahedron, so the resulting volumetric mesh is guaranteed to be well-formed only for convex shapes."""
 
-    contacts: Sequence[FlexCompContact] = Field(
+    contacts: list[FlexCompContact] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Contact properties grouping."""
 
-    edges: Sequence[FlexCompEdge] = Field(
+    edges: list[FlexCompEdge] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Edge constraint properties grouping."""
 
-    elasticities: Sequence[FlexCompElasticity] = Field(
+    elasticities: list[FlexCompElasticity] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Elasticity properties grouping."""
 
-    pins: Sequence[FlexCompPin] = Field(
+    pins: list[FlexCompPin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

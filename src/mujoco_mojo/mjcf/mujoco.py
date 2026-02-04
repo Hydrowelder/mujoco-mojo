@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from pathlib import Path
 
 from pydantic import Field
 
+import mujoco_mojo.utils as utils
 from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
@@ -58,99 +59,111 @@ class Mujoco(XMLModel):
     worldbody: WorldBody | None = None
     """World body of the model. There can be only one."""
 
-    options: Sequence[Option] = Field(
+    options: list[Option] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Simulation options."""
 
-    compilers: Sequence[Compiler] = Field(
+    compilers: list[Compiler] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Compiler options."""
 
-    sizes: Sequence[Size] = Field(
+    sizes: list[Size] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Size parameter options."""
 
-    statistics: Sequence[Statistic] = Field(
+    statistics: list[Statistic] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Model statistic overrides."""
 
-    assets: Sequence[Asset] = Field(
+    assets: list[Asset] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Assets definitions in the model."""
 
-    deformables: Sequence[Deformable] = Field(
+    deformables: list[Deformable] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Deformables elements definitions in the model."""
 
-    contacts: Sequence[Contact] = Field(
+    contacts: list[Contact] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Contact elements definitions in the model."""
 
-    equalities: Sequence[Equality] = Field(
+    equalities: list[Equality] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Equality constraint definition grouping."""
 
-    tendons: Sequence[Tendon] = Field(
+    tendons: list[Tendon] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Tendon definition grouping."""
 
-    actuators: Sequence[Actuator] = Field(
+    actuators: list[Actuator] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Actuator definition grouping."""
 
-    sensors: Sequence[Sensor] = Field(
+    sensors: list[Sensor] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Sensor definition grouping."""
 
-    keyframes: Sequence[Keyframe] = Field(
+    keyframes: list[Keyframe] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Keyframe definition grouping."""
 
-    visuals: Sequence[Visual] = Field(
+    visuals: list[Visual] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Visual definition grouping."""
 
     # the following two are not planned for implementation
-    # defaults: Sequence[Default] = Field(
+    # defaults: list[Default] = Field(
     #     default_factory=list,
     #     exclude_if=is_empty_list,
     # )
     # """Default definition grouping."""
 
-    # customs: Sequence[Custom] = Field(
+    # customs: list[Custom] = Field(
     #     default_factory=list,
     #     exclude_if=is_empty_list,
     # )
     # """Custom definitions grouping."""
 
-    extensions: Sequence[Extension] = Field(
+    extensions: list[Extension] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Extension definitions grouping."""
+
+    def write_xml(self, file: Path, exclude_default: bool = True) -> None:
+        """
+        Writes the MuJoCo model to an XML file.
+
+        Args:
+            file (Path): Filepath to save XML.
+            exclude_default (bool, optional): Wheter or not to include default values. Values equal to None are always ignored. Attributes which are literals (such as Geom.type) are always included. Defaults to True.
+
+        """
+        xml = utils.to_pretty_xml(self.to_xml(exclude_default=exclude_default))
+        file.write_text(xml)

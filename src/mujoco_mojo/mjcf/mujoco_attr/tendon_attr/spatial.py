@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field
 
@@ -59,19 +57,19 @@ class Spatial(TendonBase):
     armature: float = 0
     """Inertia associated with changes in tendon length. Setting this attribute to a positive value mm adds a kinetic energy term 12mv221mv2, where vv is the tendon velocity. Tendon inertia is most valuable when modeling the armature inertia in a linear actuator which contains a spinning element or the inertial motion of a fluid in a linear hydraulic actuator. In the illustration, we compare (left) a 3-dof system with a "tendon" implemented with a rotational joint and a slider joint with armature, attached to the world with a connect constraint and (right) an equivalent 1-dof model with an armature-bearing tendon. Like joint armature, this added inertia is only associated with changes in tendon length, and would not affect the dynamics of a moving fixed-length tendon. Because the tendon Jacobian JJ is position-dependent, tendon armature leads to an additional bias-force term c=mJJ˙Tq˙c=mJJ˙Tq˙."""
 
-    sites: Sequence[SpatialSite] = Field(
+    sites: list[SpatialSite] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Pair elements assigned to Contact."""
 
-    geoms: Sequence[SpatialGeom] = Field(
+    geoms: list[SpatialGeom] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Exclude elements assigned to Contact."""
 
-    pulleys: Sequence[SpatialPulley] = Field(
+    pulleys: list[SpatialPulley] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

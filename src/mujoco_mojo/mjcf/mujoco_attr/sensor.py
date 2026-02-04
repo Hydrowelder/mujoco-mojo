@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -119,288 +117,288 @@ class Sensor(XMLModel):
         "plugin",
     )
 
-    touches: Sequence[SensorTouch] = Field(
+    touches: list[SensorTouch] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTouch."""
 
-    accelerometers: Sequence[SensorAccelerometer] = Field(
+    accelerometers: list[SensorAccelerometer] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorAccelerometer."""
 
-    velocimeters: Sequence[SensorVelocimeter] = Field(
+    velocimeters: list[SensorVelocimeter] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorVelocimeter."""
 
-    gyros: Sequence[SensorGyro] = Field(
+    gyros: list[SensorGyro] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorGyro."""
 
-    forces: Sequence[SensorForce] = Field(
+    forces: list[SensorForce] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorForce."""
 
-    torques: Sequence[SensorTorque] = Field(
+    torques: list[SensorTorque] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTorque."""
 
-    magnetometers: Sequence[SensorMagnetometer] = Field(
+    magnetometers: list[SensorMagnetometer] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorMagnetometer."""
 
-    rangefinders: Sequence[SensorRangefinder] = Field(
+    rangefinders: list[SensorRangefinder] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorRangefinder."""
 
-    camprojections: Sequence[SensorCamprojection] = Field(
+    camprojections: list[SensorCamprojection] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorCamprojection."""
 
-    jointposes: Sequence[SensorJointpos] = Field(
+    jointposes: list[SensorJointpos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointpos."""
 
-    jointvels: Sequence[SensorJointvel] = Field(
+    jointvels: list[SensorJointvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointvel."""
 
-    tendonposes: Sequence[SensorTendonpos] = Field(
+    tendonposes: list[SensorTendonpos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonpos."""
 
-    tendonvels: Sequence[SensorTendonvel] = Field(
+    tendonvels: list[SensorTendonvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonvel."""
 
-    actuatorposes: Sequence[SensorActuatorpos] = Field(
+    actuatorposes: list[SensorActuatorpos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorActuatorpos."""
 
-    actuatorvels: Sequence[SensorActuatorvel] = Field(
+    actuatorvels: list[SensorActuatorvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorActuatorvel."""
 
-    actuatorfrcs: Sequence[SensorActuatorfrc] = Field(
+    actuatorfrcs: list[SensorActuatorfrc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorActuatorfrc."""
 
-    jointactuatorfrcs: Sequence[SensorJointactuatorfrc] = Field(
+    jointactuatorfrcs: list[SensorJointactuatorfrc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointactuatorfrc."""
 
-    tendonactuatorfrcs: Sequence[SensorTendonactuatorfrc] = Field(
+    tendonactuatorfrcs: list[SensorTendonactuatorfrc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonactuatorfrc."""
 
-    ballquats: Sequence[SensorBallquat] = Field(
+    ballquats: list[SensorBallquat] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorBallquat."""
 
-    ballangvels: Sequence[SensorBallangvel] = Field(
+    ballangvels: list[SensorBallangvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorBallangvel."""
 
-    jointlimitposes: Sequence[SensorJointlimitpos] = Field(
+    jointlimitposes: list[SensorJointlimitpos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointlimitpos."""
 
-    jointlimitvels: Sequence[SensorJointlimitvel] = Field(
+    jointlimitvels: list[SensorJointlimitvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointlimitvel."""
 
-    jointlimitfrcs: Sequence[SensorJointlimitfrc] = Field(
+    jointlimitfrcs: list[SensorJointlimitfrc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorJointlimitfrc."""
 
-    tendonlimitposes: Sequence[SensorTendonlimitpos] = Field(
+    tendonlimitposes: list[SensorTendonlimitpos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonlimitpos."""
 
-    tendonlimitvels: Sequence[SensorTendonlimitvel] = Field(
+    tendonlimitvels: list[SensorTendonlimitvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonlimitvel."""
 
-    tendonlimitfrcs: Sequence[SensorTendonlimitfrc] = Field(
+    tendonlimitfrcs: list[SensorTendonlimitfrc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTendonlimitfrc."""
 
-    frameposes: Sequence[SensorFramepos] = Field(
+    frameposes: list[SensorFramepos] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramepos."""
 
-    framequats: Sequence[SensorFramequat] = Field(
+    framequats: list[SensorFramequat] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramequat."""
 
-    framexaxes: Sequence[SensorFramexaxis] = Field(
+    framexaxes: list[SensorFramexaxis] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramexaxis."""
 
-    frameyaxes: Sequence[SensorFrameyaxis] = Field(
+    frameyaxes: list[SensorFrameyaxis] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFrameyaxis."""
 
-    framezaxes: Sequence[SensorFramezaxis] = Field(
+    framezaxes: list[SensorFramezaxis] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramezaxis."""
 
-    framelinvels: Sequence[SensorFramelinvel] = Field(
+    framelinvels: list[SensorFramelinvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramelinvel."""
 
-    frameangvels: Sequence[SensorFrameangvel] = Field(
+    frameangvels: list[SensorFrameangvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFrameangvel."""
 
-    framelinaccs: Sequence[SensorFramelinacc] = Field(
+    framelinaccs: list[SensorFramelinacc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFramelinacc."""
 
-    frameangaccs: Sequence[SensorFrameangacc] = Field(
+    frameangaccs: list[SensorFrameangacc] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFrameangacc."""
 
-    subtreecoms: Sequence[SensorSubtreecom] = Field(
+    subtreecoms: list[SensorSubtreecom] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorSubtreecom."""
 
-    subtreelinvels: Sequence[SensorSubtreelinvel] = Field(
+    subtreelinvels: list[SensorSubtreelinvel] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorSubtreelinvel."""
 
-    subtreeangmoms: Sequence[SensorSubtreeangmom] = Field(
+    subtreeangmoms: list[SensorSubtreeangmom] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorSubtreeangmom."""
 
-    insidesites: Sequence[SensorInsidesite] = Field(
+    insidesites: list[SensorInsidesite] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorInsidesite."""
 
-    distances: Sequence[SensorDistance] = Field(
+    distances: list[SensorDistance] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorDistance."""
-    normals: Sequence[SensorNormal] = Field(
+    normals: list[SensorNormal] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorNormal."""
 
-    fromtos: Sequence[SensorFromto] = Field(
+    fromtos: list[SensorFromto] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorFromto."""
 
-    contacts: Sequence[SensorContact] = Field(
+    contacts: list[SensorContact] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorContact."""
 
-    tactiles: Sequence[SensorTactile] = Field(
+    tactiles: list[SensorTactile] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorTactile."""
 
-    e_potentials: Sequence[SensorEPotential] = Field(
+    e_potentials: list[SensorEPotential] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorEPotential."""
 
-    e_kinetics: Sequence[SensorEKinetic] = Field(
+    e_kinetics: list[SensorEKinetic] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorEKinetic."""
 
-    clocks: Sequence[SensorClock] = Field(
+    clocks: list[SensorClock] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Grouping of SensorClock."""
 
-    users: Sequence[SensorUser] = Field(
+    users: list[SensorUser] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

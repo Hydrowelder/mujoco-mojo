@@ -182,7 +182,7 @@ class GeomBase(XMLModel):
 class GeomPlane(GeomBase):
     """This element creates a plane geometry."""
 
-    attributes = _geom_attr
+    attributes = (*_geom_attr, "type", "size")
     type: Literal[GeomType.PLANE] = GeomType.PLANE
     """Type of geometric shape.
 
@@ -199,10 +199,7 @@ class GeomPlane(GeomBase):
 class GeomHField(GeomBase):
     """This element creates a height field geometry."""
 
-    attributes = (
-        *_geom_attr,
-        "hfield",
-    )
+    attributes = (*_geom_attr, "type", "hfield")
     type: Literal[GeomType.HFIELD] = GeomType.HFIELD
     """Type of geometric shape.
 
@@ -216,7 +213,7 @@ class GeomHField(GeomBase):
 class GeomSphere(GeomBase):
     """This element creates a sphere geometry."""
 
-    attributes = (*_geom_attr, "size", "mesh")
+    attributes = (*_geom_attr, "type", "size", "mesh")
     type: Literal[GeomType.SPHERE] = GeomType.SPHERE
     """Type of geometric shape. The keywords have the following meaning:
 
@@ -235,7 +232,7 @@ class GeomSphere(GeomBase):
 class GeomCapsule(GeomBase):
     """This element creates a capsule geometry."""
 
-    attributes = (*_geom_attr, "size", "mesh")
+    attributes = (*_geom_attr, "type", "size", "mesh")
     type: Literal[GeomType.CAPSULE] = GeomType.CAPSULE
     """Type of geometric shape.
 
@@ -255,7 +252,7 @@ class GeomCapsule(GeomBase):
 class GeomEllipsoid(GeomBase):
     """This element creates a ellipsoid geometry."""
 
-    attributes = (*_geom_attr, "size", "mesh")
+    attributes = (*_geom_attr, "type", "size", "mesh")
     type: Literal[GeomType.ELLIPSOID] = GeomType.ELLIPSOID
     """Type of geometric shape.
 
@@ -275,7 +272,7 @@ class GeomEllipsoid(GeomBase):
 class GeomCylinder(GeomBase):
     """This element creates a cylinder geometry."""
 
-    attributes = (*_geom_attr, "size", "mesh")
+    attributes = (*_geom_attr, "type", "size", "mesh")
     type: Literal[GeomType.CYLINDER] = GeomType.CYLINDER
     """Type of geometric shape.
 
@@ -295,7 +292,7 @@ class GeomCylinder(GeomBase):
 class GeomBox(GeomBase):
     """This element creates a box geometry."""
 
-    attributes = (*_geom_attr, "size", "mesh")
+    attributes = (*_geom_attr, "type", "size", "mesh")
     type: Literal[GeomType.BOX] = GeomType.BOX
     """Type of geometric shape.
 
@@ -315,10 +312,7 @@ class GeomBox(GeomBase):
 class GeomMesh(GeomBase):
     """This element creates a mesh geometry."""
 
-    attributes = (
-        *_geom_attr,
-        "mesh",
-    )
+    attributes = (*_geom_attr, "type", "mesh")
     type: Literal[GeomType.MESH] = GeomType.MESH
     """Type of geometric shape.
 
@@ -330,7 +324,7 @@ class GeomMesh(GeomBase):
 
 
 class GeomSDF(GeomBase):
-    attributes = _geom_attr
+    attributes = (*_geom_attr, "type")
     type: Literal[GeomType.SDF] = GeomType.SDF
     """Type of geometric shape.
 
