@@ -1,4 +1,9 @@
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
   - repo: local
     hooks:
       - id: fix-smart-quotes

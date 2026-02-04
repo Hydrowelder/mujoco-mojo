@@ -5,7 +5,7 @@ from .material import Material
 from .material_attr import Layer
 from .mesh import Mesh
 from .model import Model
-from .texture import Texture
+from .texture import Texture, TextureBuiltIn
 
 __all__ = [
     "HField",
@@ -14,4 +14,5 @@ __all__ = [
     "Mesh",
     "Model",
     "Texture",
+    "TextureBuiltIn",
 ]

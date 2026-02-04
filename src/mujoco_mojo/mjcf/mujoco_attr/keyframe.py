@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -18,7 +16,7 @@ class Keyframe(XMLModel):
 
     children = ("keys",)
 
-    keys: Sequence[Key] = Field(
+    keys: list[Key] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

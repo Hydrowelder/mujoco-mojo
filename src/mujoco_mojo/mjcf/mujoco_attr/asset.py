@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -23,17 +21,29 @@ class Asset(XMLModel):
 
     children = ("meshes", "hfields", "skins", "textures", "materials", "models")
 
-    meshes: Sequence[Mesh] = Field(default_factory=list, exclude_if=is_empty_list)
-    hfields: Sequence[HField] = Field(default_factory=list, exclude_if=is_empty_list)
-    skins: Sequence[CompositeSkin] = Field(
+    meshes: list[Mesh] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
-    textures: Sequence[Texture] = Field(default_factory=list, exclude_if=is_empty_list)
-    materials: Sequence[Material] = Field(
+    hfields: list[HField] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
-    models: Sequence[Model] = Field(default_factory=list, exclude_if=is_empty_list)
+    skins: list[CompositeSkin] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    textures: list[Texture] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    materials: list[Material] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    models: list[Model] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
 
     # TODO add validator that makes sure each material has a texture that exists (if material.texture is not None)

@@ -5,8 +5,6 @@ The Replicate class is not implemented. There is no plan to implement as its fun
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field, PositiveInt
 
@@ -84,7 +82,7 @@ class Replicate(XMLModel):
     orientation: Euler = Euler()
     """Rotation angles around three coordinate axes between two subsequent replicas. The angular units and rotation sequence respect the global angle and eulerseq settings. Rotation is always with respect to the frame of the previous replica, so total rotation is cumulative."""
 
-    replications: Sequence[Replicate] = Field(
+    replications: list[Replicate] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

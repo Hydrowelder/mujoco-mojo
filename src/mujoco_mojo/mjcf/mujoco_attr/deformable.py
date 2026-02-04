@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -19,13 +17,13 @@ class Deformable(XMLModel):
 
     children = ("flexes", "skins")
 
-    flexes: Sequence[Flex] = Field(
+    flexes: list[Flex] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Flexes defined in the deformable."""
 
-    skins: Sequence[DeformableSkin] = Field(
+    skins: list[DeformableSkin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

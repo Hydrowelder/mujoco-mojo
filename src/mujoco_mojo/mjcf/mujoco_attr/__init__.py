@@ -21,6 +21,7 @@ from .asset_attr import (
     Mesh,
     Model,
     Texture,
+    TextureBuiltIn,
 )
 from .body import Body, WorldBody
 from .body_attr import (
@@ -270,6 +271,7 @@ __all__ = [
     "Tendon",
     "TendonJoint",
     "Texture",
+    "TextureBuiltIn",
     "Visual",
     "VisualGlobal",
     "VisualHeadlight",

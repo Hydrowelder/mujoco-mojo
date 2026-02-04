@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
@@ -40,61 +38,61 @@ class Actuator(XMLModel):
         "plugins",
     )
 
-    generals: Sequence[ActuatorGeneral] = Field(
+    generals: list[ActuatorGeneral] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Generals actuator elements."""
 
-    motors: Sequence[ActuatorMotor] = Field(
+    motors: list[ActuatorMotor] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Motors actuator elements."""
 
-    positions: Sequence[ActuatorPosition] = Field(
+    positions: list[ActuatorPosition] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Positions actuator elements."""
 
-    velocities: Sequence[ActuatorVelocity] = Field(
+    velocities: list[ActuatorVelocity] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Velocities actuator elements."""
 
-    intvelocities: Sequence[ActuatorIntegratedVelocity] = Field(
+    intvelocities: list[ActuatorIntegratedVelocity] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Intvelocities actuator elements."""
 
-    dampers: Sequence[ActuatorDamper] = Field(
+    dampers: list[ActuatorDamper] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Dampers actuator elements."""
 
-    cylinders: Sequence[ActuatorCylinder] = Field(
+    cylinders: list[ActuatorCylinder] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Cylinders actuator elements."""
 
-    muscles: Sequence[ActuatorMuscle] = Field(
+    muscles: list[ActuatorMuscle] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Muscles actuator elements."""
 
-    adhesions: Sequence[ActuatorAdhesion] = Field(
+    adhesions: list[ActuatorAdhesion] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Adhesions actuator elements."""
 
-    plugins: Sequence[ActuatorPlugin] = Field(
+    plugins: list[ActuatorPlugin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

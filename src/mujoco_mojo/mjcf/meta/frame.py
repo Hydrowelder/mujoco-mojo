@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 import numpy as np
 from pydantic import Field
 
@@ -73,5 +71,5 @@ class Frame(XMLModel):
     orientation: Orientation = Quat()
     """See Frame orientations."""
 
-    frames: Sequence[Frame] = Field(default_factory=list, exclude_if=is_empty_list)
+    frames: list[Frame] = Field(default_factory=list, exclude_if=is_empty_list)
     """Frames assigned to Frame."""

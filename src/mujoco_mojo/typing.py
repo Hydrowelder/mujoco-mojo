@@ -192,7 +192,7 @@ InertiaGroupRange = tuple[GeomGroup, GeomGroup]
 GridLayoutStr = Annotated[
     str,
     Field(
-        pattern=r"^[\.RLUDFB]{9}$",
+        pattern=r"^[\.RLUDFB]+$",
         description="String which may only use `'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, and `'B'`",
     ),
 ]
