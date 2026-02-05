@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
 from mujoco_mojo.typing import (
     Angle,
@@ -74,13 +73,13 @@ class Compiler(XMLModel):
     eulerseq: EulerSeq | str = EulerSeq.xyz
     """This attribute specifies the sequence of Euler rotations for all euler attributes of elements that have spatial frames, as explained in Frame orientations. This must be a string with exactly 3 characters from the set {x, y, z, X, Y, Z}. The character at position n determines the axis around which the n-th rotation is performed. Lower case letters denote axes that rotate with the frame (intrinsic), while upper case letters denote axes that remain fixed in the parent frame (extrinsic). The "rpy" convention used in URDF corresponds to "XYZ" in MJCF."""
 
-    meshdir: Path | None = None
+    meshdir: DepPath | None = None
     """This attribute instructs the compiler where to look for mesh and height field files. The full path to a file is determined as follows. If the strippath attribute described above is "true", all path information from the file name is removed. The following checks are then applied in order: (1) if the file name contains an absolute path, it is used without further changes; (2) if this attribute is set and contains an absolute path, the full path is the string given here appended with the file name; (3) the full path is the path to the main MJCF model file, appended with the value of this attribute if specified, appended with the file name."""
 
-    texturedir: Path | None = None
+    texturedir: DepPath | None = None
     """This attribute is used to instruct the compiler where to look for texture files. It works in the same way as meshdir above."""
 
-    assetdir: Path | None = None
+    assetdir: DepPath | None = None
     """This attribute sets the values of both meshdir and texturedir above. Values in the latter attributes take precedence over assetdir."""
 
     discardvisual: bool = False

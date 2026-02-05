@@ -977,3 +977,16 @@ class NeedStage(StrEnum):
 
     ACC = "acc"
     """Acceleration stage."""
+
+
+class TextureMIME(StrEnum):
+    """Enumerations for valid Texture MIME types."""
+
+    PNG = "image/png"
+    """Texture file is a PNG texture."""
+
+    KTX = "image/ktx"
+    """Texture file is a Khronos Texture."""
+
+    VND = "image/vnd.mujoco.texture"
+    """Texture file is a vnd.mujoco.texture (whatever that is)."""

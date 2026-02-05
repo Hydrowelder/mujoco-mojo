@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from pathlib import Path
+import mimetypes
+from typing import Self
 
 import numpy as np
+from pydantic import model_validator
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.typing import (
     ColorSpace,
     GridLayoutStr,
     Mark,
     TextureBuiltInType,
+    TextureMIME,
     TextureName,
     TextureType,
     Vec3,
@@ -74,10 +78,10 @@ class Texture(XMLModel):
     colorspace: ColorSpace = ColorSpace.AUTO
     """This attribute determines the color space of the texture. The default value auto means that the color space will be determined from the image file itself. If no color space is defined in the file, then linear is assumed."""
 
-    content_type: Path | None = None
+    content_type: TextureMIME | None = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME types) of the file to be loaded. Any filename extensions will be ignored. Currently image/png, image/ktx, and image/vnd.mujoco.texture are supported."""
 
-    file: Path | None = None
+    file: DepPath | None = None
     """If this attribute is specified, and the builtin attribute below is set to "none", the texture data is loaded from a single file. See the texturedir attribute of compiler regarding the file path."""
 
     gridsize: tuple[int, int] = (1, 1)
@@ -86,23 +90,110 @@ class Texture(XMLModel):
     gridlayout: GridLayoutStr = "............"
     """When a cube or skybox texture is loaded from a single file, and the grid size is different from "1 1", this attribute specifies which grid cells are used and which side of the cube they correspond to. There are many skybox textures available online as composite images, but they do not use the same convention, which is why we have designed a flexible mechanism for decoding them. The string specified here must be composed of characters from the set {`'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, `'B'`}. The number of characters must equal the product of the two grid sizes. The grid is scanned in row-major order. The `'.'` character denotes an unused cell. The other characters are the first letters of Right, Left, Up, Down, Front, Back; see below for coordinate frame description. If the symbol for a given side appears more than once, the last definition is used. If a given side is omitted, it is filled with the color specified by the rgb1 attribute. For example, the desert landscape below can be loaded as a skybox or a cube map using gridsize = "3 4" and gridlayout = ".U..LFRB.D.." The full-resolution image file without the markings can be downloaded here."""
 
-    fileright: Path | None = None
+    fileright: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: `Right = +X`, Left = -X, Up = +Y, Down = -Y, Front = +Z, Back = -Z."""
 
-    fileleft: Path | None = None
+    fileleft: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, `Left = -X`, Up = +Y, Down = -Y, Front = +Z, Back = -Z."""
 
-    fileup: Path | None = None
+    fileup: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, `Up = +Y`, Down = -Y, Front = +Z, Back = -Z."""
 
-    filedown: Path | None = None
+    filedown: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, `Down = -Y`, Front = +Z, Back = -Z."""
 
-    filefront: Path | None = None
+    filefront: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, Down = -Y, `Front = +Z`, Back = -Z."""
 
-    fileback: Path | None = None
+    fileback: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, Down = -Y, Front = +Z, `Back = -Z`."""
+
+    @model_validator(mode="after")
+    def validate_files(self) -> Self:
+        single_file = self.file
+
+        cube_files = [
+            self.fileright,
+            self.fileleft,
+            self.fileup,
+            self.filedown,
+            self.filefront,
+            self.fileback,
+        ]
+        cube_files = [path for path in cube_files if path is not None]
+
+        # existance of single_file is mutually exclusive with cube files
+        if single_file and cube_files:
+            raise ValueError(
+                "Defining file at the same time as any of fileright, fileleft, fileup, filedown, filefront, or fileback is invalid."
+            )
+
+        # no files at all allowed
+        if not single_file and not cube_files:
+            return self
+
+        # gather MIME types and validate
+        # this ensures a few things
+        # * all MIMES are matching
+        # * content_type matches the MIMEs
+        # * content_type is defined
+
+        paths = [single_file] if single_file else cube_files
+        invalid_paths = []
+        content_type = None
+        for path in paths:
+            mime, _ = mimetypes.guess_file_type(path, strict=True)
+            if mime is None:
+                invalid_paths.append((path, "unable to determine type"))
+            else:
+                try:
+                    path_mime = TextureMIME(mime)
+
+                    # compare if the content type is already a MIME
+                    if isinstance(self.content_type, TextureMIME):
+                        if path_mime != self.content_type:
+                            raise Exception(
+                                f"MIME type for {path} did not match what was defined."
+                            )
+                    else:
+                        if content_type is None:
+                            content_type = path_mime
+                        else:
+                            if path_mime != content_type:
+                                raise Exception(
+                                    f"MIME type for {path} did not match what was defined."
+                                )
+                except Exception:
+                    invalid_paths.append((path, mime))
+                    continue
+
+        # print invalid paths and mimes before raising validation error
+        if invalid_paths:
+
+            def _format_invalid_paths(
+                invalid_paths: list[tuple[DepPath, str]],
+                expected: TextureMIME | None,
+            ) -> str:
+                lines = []
+                for path, mime in invalid_paths:
+                    lines.append(f"  - {path!s} (detected: {mime!r})")
+
+                expected_line = (
+                    f"\nExpected MIME: {expected.value}"
+                    if expected is not None
+                    else "\nExpected MIME: one of "
+                    + ", ".join(m.value for m in TextureMIME)
+                )
+
+                return "\n".join(lines) + expected_line
+
+            message = (
+                "Invalid texture file MIME types detected:\n"
+                + _format_invalid_paths(invalid_paths, self.content_type)
+            )
+            raise ValueError(message)
+
+        return self
 
 
 class TextureBuiltIn(Texture):

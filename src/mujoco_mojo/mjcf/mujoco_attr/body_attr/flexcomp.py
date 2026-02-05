@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.contact import FlexCompContact
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.edge import FlexCompEdge
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
@@ -159,7 +158,7 @@ class FlexComp(XMLModel):
     inertiabox: float | None = None
     """Even though the automatically-generated bodies have the physics of point masses, with slider joints, MuJoCo still requires each body to have rotational inertia. The inertias generated here are diagonal, and are computed such that the corresponding equivalent-inertia boxes have sides equal to this value."""
 
-    file: Path | None = None
+    file: DepPath | None = None
     """The name of the file from which a surface (triangular) or volumetric (tetrahedral) mesh is loaded. For surface meshes, the file extension is used to determine the file format. Supported formats are GMSH and the formats specified in mesh assets, excluding the legacy .msh format. Volumetric meshes are supported only in GMSH format. See here for more information on GMSH files."""
 
     rigid: bool | None = None

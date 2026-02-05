@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
 from pydantic import field_validator
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
@@ -99,7 +99,7 @@ class Mesh(XMLModel):
     content_type: str | None = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME type) of the file to be loaded. Any filename extensions will be overloaded. Currently model/vnd.mujoco.msh, model/obj, and model/stl are supported."""
 
-    file: Path | None = None
+    file: DepPath | None = None
     """The file from which the mesh will be loaded. The path is determined as described in the meshdir attribute of compiler. The file extension must be "stl", "msh", or "obj" (not case sensitive) specifying the file type. If the file name is omitted, the vertex attribute becomes required."""
 
     scale: Vec3 = np.array((1, 1, 1))

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.skin_attr.bone import Bone
 from mujoco_mojo.typing import DeformableSkinName, MaterialName, Vec4, VecN
 from mujoco_mojo.utils import is_empty_list
@@ -62,7 +61,7 @@ class DeformableSkin(XMLModel):
     name: DeformableSkinName | None = None
     """Name of the skin."""
 
-    file: Path | None = None
+    file: DepPath | None = None
     """The SKN file from which the skin will be loaded. The path is determined as described in the meshdir attribute of compiler. If the file is omitted, the skin specification must be provided in the XML using the attributes below."""
 
     vertex: VecN | None = None
