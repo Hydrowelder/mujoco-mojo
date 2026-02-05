@@ -5,9 +5,8 @@ The Include class is not implemented. There is no plan to implement as its funct
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 
 raise NotImplementedError(
     "The Include class is not implemented. There is no plan to implement as its functionality is duplicated by Attach and that of Python itself.",
@@ -28,5 +27,5 @@ class Include(XMLModel):
 
     attributes = ("file",)
 
-    file: Path
+    file: DepPath
     """The name of the XML file to be included. The file location is relative to the directory of the main MJCF file. If the file is not in the same directory, it should be prefixed with a relative path."""

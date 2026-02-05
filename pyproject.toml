@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mujoco-mojo"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pythonic MuJoCo MJCF generation and validation toolkit built on Pydantic v2."
 readme = "README.md"
 requires-python = ">=3.13"

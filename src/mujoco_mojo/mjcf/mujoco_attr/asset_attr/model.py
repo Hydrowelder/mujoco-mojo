@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.typing import ModelName
 
 __all__ = ["Model"]
@@ -18,7 +17,7 @@ class Model(XMLModel):
     name: ModelName | None = None
     """Name of the sub-model, used for referencing in attach. If unspecified, the model name is used."""
 
-    file: Path
+    file: DepPath
     """The file from which the sub-model will be loaded. Note that the sub-model must be a valid MJCF model."""
 
     content_type: str | None = None

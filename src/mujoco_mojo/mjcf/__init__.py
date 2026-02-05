@@ -1,5 +1,6 @@
 """MJCF is a collection of classes made to make building your own MJCF easier with Python."""
 
+from .dependency_path import DepPath
 from .extension import (
     Extension,
     ExtensionPlugin,
@@ -179,6 +180,7 @@ __all__ = [
     "CompositeSkin",
     "Contact",
     "Deformable",
+    "DepPath",
     "Equality",
     "EqualityConnectBody",
     "EqualityConnectSite",

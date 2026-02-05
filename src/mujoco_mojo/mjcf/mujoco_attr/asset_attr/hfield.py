@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 from pydantic import field_validator, model_validator
 
 from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.typing import HFieldName, Vec4, VecN
 
 __all__ = ["HField"]
@@ -50,7 +49,7 @@ class HField(XMLModel):
     content_type: str | None = None
     """If the file attribute is specified, then this sets the Media Type (formerly known as MIME types) of the file to be loaded. Any filename extensions will be overloaded. Currently image/png and image/vnd.mujoco.hfield are supported."""
 
-    file: Path | None = None
+    file: DepPath | None = None
     """If this attribute is specified, the elevation data is loaded from the given file. If the file extension is ".png", not case-sensitive, the file is treated as a PNG file. Otherwise it is treated as a binary file in the above custom format. The number of rows and columns in the data are determined from the file contents. Loading data from a file and setting nrow or ncol below to non-zero values results is compile error, even if these settings are consistent with the file contents."""
 
     nrow: int = 0

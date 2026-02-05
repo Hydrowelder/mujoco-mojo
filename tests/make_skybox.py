@@ -11,10 +11,8 @@ mujoco = mojo.Mujoco(
     assets=[mojo.Asset()],
 )
 
-# textures generated using https://jaxry.github.io/panorama-to-cubemap/
-# image source NASA/Goddard Space Flight Center Scientific Visualization Studio. Gaia DR2: ESA/Gaia/DPAC. Constellation figures based on those developed for the IAU by Alan MacRobert of Sky and Telescope magazine (Roger Sinnott and Rick Fienberg).
-# https://svs.gsfc.nasa.gov/4851
-cube_folder = Path() / "textures" / "stars"
+# Download this skybox from here: https://www.david-gable.com/work/photography/Space/Star-Skybox/p1/
+cube_folder = mojo.DepPath() / "textures" / "stars"
 mujoco.assets[0].textures.append(
     skybox_texture := mojo.Texture(
         name=mojo.TextureName("skybox_texture_colors"),
