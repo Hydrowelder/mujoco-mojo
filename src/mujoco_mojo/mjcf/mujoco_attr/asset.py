@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.hfield import HField
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import Material
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import Mesh
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import Texture
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Asset"]

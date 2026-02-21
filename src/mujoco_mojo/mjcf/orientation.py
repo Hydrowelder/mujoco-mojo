@@ -7,7 +7,7 @@ import numpy as np
 from pydantic import Field
 from scipy.spatial.transform import Rotation as R
 
-from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import EulerSeq, Vec3, Vec4, Vec6
 
 __all__ = [

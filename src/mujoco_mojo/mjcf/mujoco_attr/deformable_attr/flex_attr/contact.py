@@ -5,8 +5,8 @@ from typing import Literal
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomBase
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import SelfCollide, Vec2, Vec3, Vec5
 
 __all__ = ["FlexContact"]

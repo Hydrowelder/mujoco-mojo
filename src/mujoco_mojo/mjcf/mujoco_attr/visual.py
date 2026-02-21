@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.global_ import VisualGlobal
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.headlight import VisualHeadlight
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.map import VisualMap
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.quality import VisualQuality
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.rgba import VisualRGBA
 from mujoco_mojo.mjcf.mujoco_attr.visual_attr.scale import VisualScale
+from mujoco_mojo.mjcf.xml_model import XMLModel
 
 __all__ = ["Visual"]
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.keyframe_attr.key import Key
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Keyframe"]

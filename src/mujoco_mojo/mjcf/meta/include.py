@@ -5,8 +5,8 @@ The Include class is not implemented. There is no plan to implement as its funct
 
 from __future__ import annotations
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
+from mujoco_mojo.mjcf.xml_model import XMLModel
 
 raise NotImplementedError(
     "The Include class is not implemented. There is no plan to implement as its functionality is duplicated by Attach and that of Python itself.",

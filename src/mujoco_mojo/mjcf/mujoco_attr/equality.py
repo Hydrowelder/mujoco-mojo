@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.connect import EqualityConnect
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.flex import EqualityFlex
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.joint import EqualityJoint
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.tendon import EqualityTendon
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.weld import EqualityWeld
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Equality"]

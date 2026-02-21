@@ -8,8 +8,8 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field, PositiveInt
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Euler
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3
 from mujoco_mojo.utils import is_empty_list
 

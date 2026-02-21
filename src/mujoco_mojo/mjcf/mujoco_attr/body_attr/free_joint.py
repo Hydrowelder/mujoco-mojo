@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Align, JointName, JointType
 
 __all__ = ["FreeJoint"]

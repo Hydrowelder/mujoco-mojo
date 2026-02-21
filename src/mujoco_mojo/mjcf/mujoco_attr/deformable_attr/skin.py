@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.skin_attr.bone import Bone
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import DeformableSkinName, MaterialName, Vec4, VecN
 from mujoco_mojo.utils import is_empty_list
 

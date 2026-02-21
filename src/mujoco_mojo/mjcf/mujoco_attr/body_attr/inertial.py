@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 from pydantic import field_validator, model_validator
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3, Vec6
 
 __all__ = ["Inertial"]

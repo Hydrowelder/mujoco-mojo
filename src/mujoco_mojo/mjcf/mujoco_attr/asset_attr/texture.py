@@ -6,8 +6,8 @@ from typing import Self
 import numpy as np
 from pydantic import model_validator
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     ColorSpace,
     GridLayoutStr,

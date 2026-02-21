@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material_attr.layer import Layer
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import MaterialName, TextureName, Vec2, Vec4
 from mujoco_mojo.utils import is_empty_list
 

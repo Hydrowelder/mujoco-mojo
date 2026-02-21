@@ -4,7 +4,7 @@ mujoco_mojo is a collection of Python objects built to make working with MuJoCo 
 It provides vast bindings for all MJCF XML schema objects, tools to convert to XML, run MuJoCo simulations, and more.
 """
 
-from . import base, utils
+from . import utils
 from .mjcf import (
     Actuator,
     ActuatorAdhesion,
@@ -447,7 +447,6 @@ __all__ = [
     "WorldBody",
     "XYAxes",
     "ZAxis",
-    "base",
     "mjcf",
     "typing",
     "utils",

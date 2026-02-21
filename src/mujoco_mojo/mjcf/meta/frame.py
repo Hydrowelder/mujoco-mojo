@@ -3,9 +3,9 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FrameName
 from mujoco_mojo.utils import is_empty_list
 

@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import CompositeGeom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.joint import CompositeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.site import CompositeSite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import CompositeInitial, CompositeType, Vec3, VecN
 from mujoco_mojo.utils import is_empty_list
 

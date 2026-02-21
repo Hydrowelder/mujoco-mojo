@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
@@ -18,6 +17,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import BodyName, Sleep, VecN
 from mujoco_mojo.utils import is_empty_list
 

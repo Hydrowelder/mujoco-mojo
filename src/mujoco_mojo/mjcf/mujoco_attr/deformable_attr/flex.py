@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.contact import FlexContact
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.edge import FlexEdge
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
     FlexElasticity,
 )
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FlexName, MaterialName, Vec4, VecN
 
 __all__ = ["Flex"]
