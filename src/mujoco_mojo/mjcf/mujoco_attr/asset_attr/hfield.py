@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 from pydantic import field_validator, model_validator
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import HFieldName, Vec4, VecN
 
 __all__ = ["HField"]

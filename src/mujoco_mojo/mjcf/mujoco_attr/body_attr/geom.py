@@ -5,11 +5,11 @@ from typing import Annotated, Literal
 import numpy as np
 from pydantic import ConfigDict, Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     FluidShape,
     GeomName,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.adhesion import ActuatorAdhesion
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.cylinder import ActuatorCylinder
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.damper import ActuatorDamper
@@ -15,6 +14,7 @@ from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.muscle import ActuatorMuscle
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.plugin import ActuatorPlugin
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.position import ActuatorPosition
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.velocity import ActuatorVelocity
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils import is_empty_list
 
 __all__ = ["Actuator"]

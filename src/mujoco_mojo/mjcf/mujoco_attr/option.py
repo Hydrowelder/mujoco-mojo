@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import FRICTION_DEFAULT, SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.mujoco_attr.option_attr.flag import Flag
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     ActuatorGroup,
     Cone,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import LengthRangeMode
 
 __all__ = ["LengthRange"]

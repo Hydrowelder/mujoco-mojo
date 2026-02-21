@@ -5,10 +5,10 @@ from typing import ClassVar
 import numpy as np
 from pydantic import field_validator
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
 
 __all__ = [

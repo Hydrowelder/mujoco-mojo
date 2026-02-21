@@ -2,10 +2,10 @@ from copy import deepcopy
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
     FlexElasticity,
 )
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FlexElastic2D
 
 

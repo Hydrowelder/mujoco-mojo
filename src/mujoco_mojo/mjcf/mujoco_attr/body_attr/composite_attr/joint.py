@@ -4,9 +4,9 @@ from copy import deepcopy
 
 from pydantic import Field
 
-from mujoco_mojo.base import XMLModel
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     CompositeJointKind,
     JointLimited,

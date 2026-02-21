@@ -4,7 +4,7 @@ from typing import Self
 
 from pydantic import model_validator
 
-from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import InstanceName, PluginName
 
 __all__ = ["Plugin"]

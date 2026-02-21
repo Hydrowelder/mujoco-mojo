@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mujoco_mojo.base import XMLModel
+from mujoco_mojo.mjcf.xml_model import XMLModel
 
 __all__ = ["Size"]
 
