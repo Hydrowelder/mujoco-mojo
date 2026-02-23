@@ -155,6 +155,7 @@ from .mjcf import (
     XYAxes,
     ZAxis,
 )
+from .mojo import Mojo
 from .typing import (
     ActuatorControlLimited,
     ActuatorForceLimited,
@@ -343,6 +344,7 @@ __all__ = [
     "MeshName",
     "Model",
     "ModelName",
+    "Mojo",
     "Mujoco",
     "Option",
     "Orientation",

@@ -8,7 +8,6 @@ import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
-from mujoco_mojo.process_manager.var import Var
 
 __all__ = ["XMLModel"]
 
@@ -49,7 +48,7 @@ class XMLModel(MojoBaseModel):
     children: ClassVar[tuple[str, ...]] = ()
     """Children of the XML tag."""
 
-    __exclusive_groups__: tuple[tuple[str, ...], ...] = ()
+    __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
     def to_xml(self, exclude_default: bool = True) -> Element:
@@ -199,7 +198,3 @@ class XMLModel(MojoBaseModel):
                     f"{type(self).__name__}: Only one of {group} may be specified",
                 )
         return self
-
-    @property
-    def named_value_references(self) -> list[Var]:
-        return []

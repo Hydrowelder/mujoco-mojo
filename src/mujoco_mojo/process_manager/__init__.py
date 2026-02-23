@@ -1,6 +1,8 @@
 from process_manager import (
     BernoulliDistribution,
     CategoricalDistribution,
+    DistributionDict,
+    DistributionList,
     ExponentialDistribution,
     LogNormalDistribution,
     NamedValue,
@@ -19,6 +21,8 @@ from .var import Var
 __all__ = [
     "BernoulliDistribution",
     "CategoricalDistribution",
+    "DistributionDict",
+    "DistributionList",
     "ExponentialDistribution",
     "LogNormalDistribution",
     "NamedValue",
