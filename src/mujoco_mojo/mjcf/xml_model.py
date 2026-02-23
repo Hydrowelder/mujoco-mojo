@@ -8,6 +8,7 @@ import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
+from mujoco_mojo.process_manager.var import Var
 
 __all__ = ["XMLModel"]
 
@@ -198,3 +199,7 @@ class XMLModel(MojoBaseModel):
                     f"{type(self).__name__}: Only one of {group} may be specified",
                 )
         return self
+
+    @property
+    def named_value_references(self) -> list[Var]:
+        return []

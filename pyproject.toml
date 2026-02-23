@@ -15,6 +15,7 @@ dependencies = [
     "numpy>=2.4.1",
     "numpydantic>=1.7.0",
     "pandas>=3.0.0",
+    "process-manager",
     "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",
     "scipy>=1.17.0",
@@ -84,3 +85,6 @@ stubPath = "typings"
 venvPath = "."
 venv = ".venv"
 ignore = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.uv.sources]
+process-manager = { git = "https://github.com/Hydrowelder/process_manager.git" }
