@@ -9,6 +9,7 @@ from mujoco_mojo import mjcf
 
 
 def test_import():
+    import mujoco_mojo as mojo
     from mujoco_mojo import mjcf
 
     mojo.__name__

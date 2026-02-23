@@ -85,6 +85,3 @@ stubPath = "typings"
 venvPath = "."
 venv = ".venv"
 ignore = ["typings", "scripts/templating/sensor_template.py"]
-
-[tool.uv.sources]
-process-manager = { git = "https://github.com/Hydrowelder/process_manager.git" }
