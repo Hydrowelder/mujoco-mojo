@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 from pathlib import Path
 
+from process_manager.distribution import DistributionDict
 from pydantic import Field
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
-from mujoco_mojo.process_manager import NamedValueDict, NamedValueList
+from mujoco_mojo.process_manager import NamedValueDict
 
 
 class Config(MojoBaseModel):
@@ -14,9 +17,14 @@ class Config(MojoBaseModel):
     iterations: int
 
 
+class Values(MojoBaseModel):
+    dists: DistributionDict = Field(default_factory=DistributionDict)
+    named: NamedValueDict = Field(default_factory=NamedValueDict)
+
+
 class Mojo(MojoBaseModel):
     """Mojo is the highest level watcher which manages running jobs."""
 
     mjcf: Mujoco
-    named_values: NamedValueDict | NamedValueList = Field(NamedValueDict())
+    values: Values = Field(default_factory=Values)
     config: Config
