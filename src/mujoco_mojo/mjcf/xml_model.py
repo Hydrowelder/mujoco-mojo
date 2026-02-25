@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ClassVar, Literal, get_origin
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_origin
 from xml.etree.ElementTree import Element
 
 import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
+
+if TYPE_CHECKING:
+    from mujoco_mojo.process_manager import Val
 
 __all__ = ["XMLModel"]
 
@@ -198,3 +201,48 @@ class XMLModel(MojoBaseModel):
                     f"{type(self).__name__}: Only one of {group} may be specified",
                 )
         return self
+
+    @property
+    def vals(self) -> list[Val]:
+        """
+        Returns a list of NamedValue references in the XMLModel and its children.
+
+        This method will recursively search instances of:
+        * XMLModel
+        * lists, tuples, sets, and numpy arrays
+        * dictionary values
+        """
+        vals: list[Val] = []
+
+        all_fields = set(self.attributes) | set(self.children)
+
+        for field in all_fields:
+            value = getattr(self, field, None)
+            if value is not None:
+                vals.extend(self._search_for_vals(value))
+        return vals
+
+    def _search_for_vals(self, obj: Any) -> list[Val]:
+        from mujoco_mojo.process_manager import Val
+
+        vals = []
+
+        # direct hit
+        if isinstance(obj, Val):
+            vals.append(obj)
+
+        # recurse into nested XMLModel
+        if isinstance(obj, XMLModel):
+            vals.extend(obj.vals)
+
+        # iterable value
+        if isinstance(obj, (list, tuple, set, np.ndarray)):
+            for item in obj:
+                vals.extend(self._search_for_vals(item))
+
+        # dictionary values
+        if isinstance(obj, dict):
+            for item in obj.values():
+                vals.extend(self._search_for_vals(item))
+
+        return vals
