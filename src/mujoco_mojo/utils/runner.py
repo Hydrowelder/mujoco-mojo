@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+from pydantic import field_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
@@ -17,7 +18,8 @@ logger = logging.getLogger()
 
 __all__ = ["MojoGenerator", "MojoRunner", "MojoRuntime", "MonteCarloConfig", "Trial"]
 
-# TODO: add job statusing
+STATUS_FNAME = "status.json"
+
 # --- Protocols ---
 
 
@@ -40,7 +42,25 @@ class MojoRuntime(Protocol):
 
 class MonteCarloConfig(MojoBaseModel):
     n_trial: int = 2
+    """Number of trials to run.
+
+    You are able to resume a previous job and modify the number of runs desired by changing this value. A job already in progress will not be dynamically stopped though if you change this value at runtime."""
+
     n_proc: int = 1
+    """Number of proccesses to allow.
+
+    This value is used to determine how many parallel jobs can be run. It is also used for the discovery of trial status. Using a value of 1 will result in the slowest runtime, but highest reliability.
+
+    Important:
+        Be a good citizen. Use a reasonable number if you are working on a shared resource. You are a jerk if you use everything."""
+
+    @field_validator("n_trial", "n_proc")
+    @classmethod
+    def validate_greater_than_zero(cls, v: int) -> int:
+        if v < 1:
+            # coerce an invalid value to be able to run
+            return 1
+        return v
 
     @property
     def trial_nums(self) -> np.ndarray:
@@ -67,6 +87,10 @@ class MonteCarloConfig(MojoBaseModel):
 
         """
         return f"0{self.padding_width}d"
+
+    @property
+    def is_parallel(self) -> bool:
+        return self.n_proc > 1
 
 
 @dataclass
@@ -152,11 +176,8 @@ class Trial:
             The output of the `runtime` function if provided; otherwise, the raw `MojoModel` object for the trial or None if there was a failure prior to generating the MojoModel.
 
         """
-        status = TrialStatus(
-            trial_num=self.trial_num,
-            _path=self.trial_dir / "status.json",  # pyright: ignore[reportCallIssue]
-        )
-        assert status._path is not None
+        status = TrialStatus(trial_num=self.trial_num)
+        status._path = self.trial_dir / STATUS_FNAME
 
         self.trial_dir.mkdir(parents=True, exist_ok=True)
         status.dump_to_path(status._path)
@@ -231,15 +252,22 @@ class MojoRunner:
         )
 
     def run_monte_carlo(
-        self, global_overrides: NamedValueDict | None = None
+        self, global_overrides: NamedValueDict | None = None, resume: bool = True
     ) -> list[Any]:
         """Orchestrates a Monte Carlo job."""
         overrides = global_overrides or NamedValueDict()
 
-        logger.info(
-            f"Running {self.config.n_trial} trials with {self.config.n_proc} processors."
-        )
-        if self.config.n_proc > 1:
+        # decide which trials to execute
+        trial_nums = self.get_pending_trials() if resume else self.config.trial_nums
+
+        if not trial_nums:
+            logger.info("All trials were already completed. Nothing to do.")
+            return []
+
+        if self.config.is_parallel:
+            logger.info(
+                f"Running {len(trial_nums)} trials with {self.config.n_proc} processors. {self.n_trials_complete}/{self.config.n_trial} trials completed."
+            )
             results = []
             with ProcessPoolExecutor(max_workers=self.config.n_proc) as executor:
                 futures = [
@@ -259,3 +287,62 @@ class MojoRunner:
             ]
 
         return results
+
+    @property
+    def n_trials_complete(self) -> int:
+        """
+        The number of completed trials.
+
+        Since this method calls the get_pending_trials method, which is I/O restricted, this method should be used sparingly.
+        """
+        return len(self.get_pending_trials()) - self.config.n_trial
+
+    def get_pending_trials(self) -> list[int]:
+        """
+        Scans the workdir do identify which trials still need execution.
+
+        This is done using:
+        1. `glob` to quickly find the trials which at least started.
+        2. Parallel pooling to process the globbed files to reduce I/O wait time.
+        """
+        # discover started trials
+        status_files = list(self.workdir.glob(f"trial_*/{STATUS_FNAME}"))
+
+        # map of trail_num to path
+        found_map = {}
+        for p in status_files:
+            try:
+                tn = int(p.parent.name.split("_")[-1])
+                found_map[tn] = p
+            except (ValueError, IndexError):
+                continue
+
+        def _process_status(tn: int) -> int | None:
+            """Worker function for the TreadPool."""
+            # if the status file didnt exist the trial is pending
+            if tn not in found_map:
+                return tn
+
+            try:
+                status_path = found_map[tn]
+                status = TrialStatus.model_validate_json(status_path.read_text())
+                if status.completion == Completion.INCOMPLETE:
+                    # this trial started, but never finished
+                    return tn
+            except Exception:
+                # if the JSON was corrupted, assume it needs to be rerun
+                return tn
+
+            return None
+
+        # run the checks in parallel
+        max_workers = self.config.n_proc if self.config.is_parallel else 1
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # iterate of ALL trial_nums
+            futures = [
+                executor.submit(_process_status, tn) for tn in self.config.trial_nums
+            ]
+            results = [f.result() for f in futures]
+
+        return [r for r in results if r is not None]
