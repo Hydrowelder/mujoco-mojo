@@ -1,17 +1,25 @@
+import logging
+import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
 
 __all__ = []
 
+Step = Literal["generating", "solving", "done"]
+
+logger = logging.getLogger(__name__)
+
 
 class Completion(StrEnum):
     INCOMPLETE = "incomplete"
-    """Neither completed nor failed. Typically indicates pending."""
+    """Neither completed nor failed. Indicates the process is ongoing."""
 
     COMPLETED = "completed"
     """Completed successfully with no detected exceptions."""
@@ -68,38 +76,30 @@ class TrialStatus(MojoBaseModel):
 
     Included here so that the MojoRunner can set the bulk status of the job with a try-except block."""
 
-    pending: StepStatus = Field(default=StepStatus(started=datetime.now(UTC)))
-    """Pending step.
-
-    * Information on times when the job sequencer has not yet begun processing this Trial yet.
-    * This step must be completed before moving to `generating`.
-    * It is the first step in the sequence."""
-
     generating: StepStatus = Field(default_factory=StepStatus)
     """Generation step.
 
     * Information on times during which the job sequencer is generating XML (not yet running MuJoCo).
     * This step must be completed before moving to `solving`.
-    * It is the second step in the sequence."""
+    * It is the first step in the sequence."""
 
     solving: StepStatus = Field(default_factory=StepStatus)
     """Solving step.
 
     * Information on times during which the job sequencer is running MuJoCo.
-    * This step is the third step in the sequence.
+    * This step is the second step in the sequence.
     * Completion of the step is the end of the trial."""
 
+    _path: Path | None = PrivateAttr(default=None)
+    """Where this status file is serialized."""
+
     @property
-    def status(self) -> Literal["pending", "generating", "solving", "done"]:
+    def status(self) -> Step:
         # early exit for jobs that are no longer being considered
         if self.completion in (Completion.COMPLETED, Completion.FAILED):
             return "done"
 
-        # trial is incomplete, check if it is pending
-        if self.pending.is_pending or self.pending.is_in_progress:
-            return "pending"
-
-        # trial is no longer pending, check if generating
+        # trial is not pending, check if generating
         if self.generating.is_in_progress:
             return "generating"
 
@@ -115,8 +115,6 @@ class TrialStatus(MojoBaseModel):
         self,
     ) -> StepStatus | Literal[Completion.COMPLETED, Completion.FAILED]:
         match self.status:
-            case "pending":
-                return self.pending
             case "generating":
                 return self.generating
             case "solving":
@@ -128,3 +126,29 @@ class TrialStatus(MojoBaseModel):
                 raise NotImplementedError(
                     f"A trial status of {self.status} has not yet been implemented"
                 )
+
+    @contextmanager
+    def record_step(self):
+        # get the current step to update
+        step = self.step
+
+        # steps which are a completion state should not be updated further, they should be done
+        assert not isinstance(step, Completion)
+
+        # configure the step status
+        step.started = datetime.now(UTC)
+        start_time = time.perf_counter()
+
+        if self._path is None:
+            msg = "Unable to record a step for trial since no serialization path was provided."
+            logger.error(msg)
+            raise ValueError(msg)
+        self.dump_to_path(self._path)
+
+        try:
+            # run the code inside the `with` block
+            yield
+        finally:
+            # teardown: record duration even if the block failed
+            step.elapsed = time.perf_counter() - start_time
+            self.dump_to_path(self._path)

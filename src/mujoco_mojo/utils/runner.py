@@ -11,6 +11,7 @@ import numpy as np
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.process_manager import NOMINAL_TRIAL_NUM, NamedValueDict
+from mujoco_mojo.utils.statusing import Completion, TrialStatus
 
 logger = logging.getLogger()
 
@@ -129,7 +130,7 @@ class Trial:
         gen_kwargs: dict[str, Any],
         run_args: list[Any],
         run_kwargs: dict[str, Any],
-    ) -> Any | MojoModel:
+    ) -> Any | MojoModel | None:
         """
         Executes the complete simulation pipeline for this trial.
 
@@ -148,29 +149,51 @@ class Trial:
             run_kwargs: Keyword arguments for the runtime.
 
         Returns:
-            The output of the `runtime` function if provided; otherwise, the raw `MojoModel` object for the trial.
+            The output of the `runtime` function if provided; otherwise, the raw `MojoModel` object for the trial or None if there was a failure prior to generating the MojoModel.
 
         """
-        logger.info(f"Generating trial_num={self.trial_num}")
+        status = TrialStatus(
+            trial_num=self.trial_num,
+            _path=self.trial_dir / "status.json",  # pyright: ignore[reportCallIssue]
+        )
+        assert status._path is not None
 
-        # 1. Generate
-        mojo = generator(self.trial_num, overrides, *gen_args, **gen_kwargs)
-
-        # 2. Setup Workspace & Save Metadata
-        logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
         self.trial_dir.mkdir(parents=True, exist_ok=True)
-        mojo.mjcf.write_xml(self.xml_path)
-        self.model_config_path.write_text(mojo.model_dump_json(indent=4))
+        status.dump_to_path(status._path)
 
-        # 3. Execute (if runtime provided)
-        if runtime is not None:
-            logger.info(f"Executing trial_num={self.trial_num} runtime")
-            return runtime(mojo, *run_args, **run_kwargs)
-        else:
-            logger.info(
-                f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
-            )
-            return mojo
+        result = None
+        try:
+            # 1. Generate
+            with status.record_step():
+                logger.info(f"Generating trial_num={self.trial_num}")
+                mojo = generator(self.trial_num, overrides, *gen_args, **gen_kwargs)
+
+                # 2. Setup Workspace & Save Metadata
+                logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
+                self.trial_dir.mkdir(parents=True, exist_ok=True)
+                mojo.mjcf.write_xml(self.xml_path)
+                self.model_config_path.write_text(mojo.model_dump_json(indent=4))
+
+            with status.record_step():
+                # 3. Execute (if runtime provided)
+                if runtime is not None:
+                    logger.info(f"Executing trial_num={self.trial_num} runtime")
+                    result = runtime(mojo, *run_args, **run_kwargs)
+                else:
+                    logger.info(
+                        f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
+                    )
+                    result = mojo
+
+            status.completion = Completion.COMPLETED
+
+        except Exception as e:
+            status.completion = Completion.FAILED
+            logger.error(f"Trail {self.trial_num} failed with the following error: {e}")
+        finally:
+            status.dump_to_path(status._path)
+
+        return result
 
 
 @dataclass
