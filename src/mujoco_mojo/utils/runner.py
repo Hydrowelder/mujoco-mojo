@@ -9,7 +9,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from mujoco_mojo.base import MojoBaseModel
-from mujoco_mojo.mojo import Mojo
+from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.process_manager import NOMINAL_TRIAL_NUM, NamedValueDict
 
 logger = logging.getLogger()
@@ -21,17 +21,17 @@ __all__ = ["MojoGenerator", "MojoRunner", "MojoRuntime", "MonteCarloConfig", "Tr
 
 
 class MojoGenerator(Protocol):
-    """Definition of a function that generates a Mojo model instance."""
+    """Definition of a function that generates a MojoModel model instance."""
 
     def __call__(
         self, trial_num: int, overrides: NamedValueDict, *args: Any, **kwargs: Any
-    ) -> Mojo: ...
+    ) -> MojoModel: ...
 
 
 class MojoRuntime(Protocol):
-    """Definition of a function that executes a generated Mojo model."""
+    """Definition of a function that executes a generated MojoModel model."""
 
-    def __call__(self, mojo: Mojo, *args: Any, **kwargs: Any) -> Any: ...
+    def __call__(self, mojo: MojoModel, *args: Any, **kwargs: Any) -> Any: ...
 
 
 # --- Models ---
@@ -70,26 +70,54 @@ class MonteCarloConfig(MojoBaseModel):
 
 @dataclass
 class Trial:
-    """Handles the lifecycle of a single simulation run."""
+    """
+    Handles the lifecycle of a single simulation run.
+
+    The Trial object is responsible for the 'dirty work' of a Monte Carlo run:
+    creating directories, writing the MJCF XML, saving the configuration
+    snapshot, and triggering the physics runtime.
+
+    By isolating this logic into a dataclass, it can be safely pickled and
+    shipped to worker processes for parallel execution.
+    """
 
     trial_num: int
+    """Unique identifier for this trial iteration."""
+
     base_dir: Path
+    """Root directory where all simulation trials are stored."""
+
     xml_name: str
+    """Filename for the generated MJCF XML (e.g., 'model.xml')."""
+
     model_config_name: str
+    """Filename for the serialized MojoModel configuration (e.g., 'config.json')."""
+
     padding_style: str
+    """Format specifier for directory naming (e.g., '04d')."""
 
     @property
     def trial_dir(self) -> Path:
+        """
+        The absolute path to this trial's unique workspace.
+
+        Example:
+            If base_dir is './sims' and trial_num is 7 with '03d' padding,
+            this returns './sims/trial_007'.
+
+        """
         return (
             self.base_dir / f"trial_{self.trial_num:{self.padding_style}}"
         ).resolve()
 
     @property
     def xml_path(self) -> Path:
+        """The full path to the MJCF XML file for this trial."""
         return self.trial_dir / self.xml_name
 
     @property
     def model_config_path(self) -> Path:
+        """The full path to the JSON configuration file for this trial."""
         return self.trial_dir / self.model_config_name
 
     def run(
@@ -101,8 +129,28 @@ class Trial:
         gen_kwargs: dict[str, Any],
         run_args: list[Any],
         run_kwargs: dict[str, Any],
-    ) -> Any:
-        """The full pipeline: Generate then Execute."""
+    ) -> Any | MojoModel:
+        """
+        Executes the complete simulation pipeline for this trial.
+
+        This method coordinates three main phases:
+        1.  **Generation**: Calls the user-provided generator to build a `MojoModel` model.
+        2.  **Persistence**: Creates the workspace and writes the model/config to disk.
+        3.  **Execution**: Triggers the physics runtime if one is provided.
+
+        Args:
+            generator: Function that returns a `MojoModel` instance.
+            runtime: Optional function to run the simulation (MuJoCo).
+            overrides: Key-value pairs that override random distributions.
+            gen_args: Positional arguments for the generator.
+            gen_kwargs: Keyword arguments for the generator.
+            run_args: Positional arguments for the runtime.
+            run_kwargs: Keyword arguments for the runtime.
+
+        Returns:
+            The output of the `runtime` function if provided; otherwise, the raw `MojoModel` object for the trial.
+
+        """
         logger.info(f"Generating trial_num={self.trial_num}")
 
         # 1. Generate
@@ -122,7 +170,7 @@ class Trial:
             logger.info(
                 f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
             )
-        return mojo  # BUG not sure this should return mojo, I dont really know why i would care. Maybe when statusing is done this would return an enum with the state
+            return mojo
 
 
 @dataclass

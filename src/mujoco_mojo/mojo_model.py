@@ -19,7 +19,7 @@ class Values(MojoBaseModel):
     This currently does nothing, but is intended to be used to copy assets to a central location to be shared by multiple instances of a runtime."""
 
 
-class Mojo(MojoBaseModel):
+class MojoModel(MojoBaseModel):
     """Mojo is the highest level watcher which manages running jobs."""
 
     mjcf: Mujoco
