@@ -13,7 +13,7 @@ from mujoco_mojo.typing import (
     Vec2,
     Vec4,
 )
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Spatial"]
 

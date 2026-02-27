@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import Field
 
-import mujoco_mojo.utils as utils
+import mujoco_mojo.utils.utils as utils
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
@@ -22,7 +22,7 @@ from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import ModelName
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Mujoco"]
 

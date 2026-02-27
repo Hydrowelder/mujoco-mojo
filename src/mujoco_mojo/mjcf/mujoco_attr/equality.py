@@ -8,7 +8,7 @@ from mujoco_mojo.mjcf.mujoco_attr.equality_attr.joint import EqualityJoint
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.tendon import EqualityTendon
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.weld import EqualityWeld
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Equality"]
 

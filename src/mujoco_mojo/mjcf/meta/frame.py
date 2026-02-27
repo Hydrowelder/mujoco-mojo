@@ -7,7 +7,7 @@ from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FrameName
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Frame"]
 

@@ -5,7 +5,7 @@ from pydantic import Field
 from mujoco_mojo.mjcf.mujoco_attr.contact_attr.exclude import Exclude
 from mujoco_mojo.mjcf.mujoco_attr.contact_attr.pair import Pair
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Contact"]
 
