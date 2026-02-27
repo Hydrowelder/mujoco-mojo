@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Any
 from xml.dom import minidom
 from xml.etree.ElementTree import tostring
 
-__all__ = ["Color", "SimStatus", "to_pretty_xml"]
+__all__ = ["Color", "is_empty_list", "to_pretty_xml"]
 
 
 class Color(StrEnum):
@@ -20,18 +20,6 @@ class Color(StrEnum):
     UNDERLINE = "\033[4m"
     ITALIC = "\033[3m"
     NC = "\033[0m"
-
-
-class SimStatus(StrEnum):
-    RUNNING = auto()
-    NORMAL_TERMINATION = auto()
-    ERROR_TERMINATION = auto()
-
-    @classmethod
-    def prog_bar(cls, p: float, width: int = 40) -> str:
-        p = min(max(0, p), 1)
-        filled_length = int(width * p)
-        return f"[{'█' * filled_length}{'░' * (width - filled_length)}]"
 
 
 def to_pretty_xml(element) -> str:
