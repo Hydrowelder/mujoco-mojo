@@ -15,7 +15,6 @@ from process_manager import (
     TriangularDistribution,
     TruncatedNormalDistribution,
     UniformDistribution,
-    Val,
     ValueName,
 )
 
@@ -36,6 +35,5 @@ __all__ = [
     "TriangularDistribution",
     "TruncatedNormalDistribution",
     "UniformDistribution",
-    "Val",
     "ValueName",
 ]
