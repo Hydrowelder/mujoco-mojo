@@ -1,4 +1,7 @@
 from process_manager import (
+    NOMINAL_TRIAL_NUM,
+    BaseDict,
+    BaseList,
     BernoulliDistribution,
     CategoricalDistribution,
     DistName,
@@ -19,6 +22,9 @@ from process_manager import (
 )
 
 __all__ = [
+    "NOMINAL_TRIAL_NUM",
+    "BaseDict",
+    "BaseList",
     "BernoulliDistribution",
     "CategoricalDistribution",
     "DistName",
