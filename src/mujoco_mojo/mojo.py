@@ -7,19 +7,16 @@ from pydantic import Field
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
-from mujoco_mojo.process_manager import NamedValueDict
-
-
-class Config(MojoBaseModel):
-    """Contains metadata definitions for how jobs should be run."""
-
-    workdir: Path
-    iterations: int
+from mujoco_mojo.process_manager import BaseList, NamedValueDict
 
 
 class Values(MojoBaseModel):
     dists: DistributionDict = Field(default_factory=DistributionDict)
     named: NamedValueDict = Field(default_factory=NamedValueDict)
+    runtime_assets: BaseList[Path] = Field(default_factory=BaseList[Path])
+    """This list contains a list of the unique assets required by an instance of Mojo.
+
+    This currently does nothing, but is intended to be used to copy assets to a central location to be shared by multiple instances of a runtime."""
 
 
 class Mojo(MojoBaseModel):
@@ -27,4 +24,3 @@ class Mojo(MojoBaseModel):
 
     mjcf: Mujoco
     values: Values = Field(default_factory=Values)
-    config: Config
