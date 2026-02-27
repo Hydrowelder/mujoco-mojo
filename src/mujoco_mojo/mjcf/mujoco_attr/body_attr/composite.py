@@ -11,7 +11,7 @@ from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import CompositeInitial, CompositeType, Vec3, VecN
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Composite"]
 

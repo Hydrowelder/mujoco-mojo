@@ -9,7 +9,7 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import Texture
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Asset"]
 

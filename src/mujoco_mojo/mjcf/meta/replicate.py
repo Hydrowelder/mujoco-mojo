@@ -11,7 +11,7 @@ from pydantic import Field, PositiveInt
 from mujoco_mojo.mjcf.orientation import Euler
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 raise NotImplementedError(
     "The Replicate class is not implemented. There is no plan to implement as its functionality is duplicated by that of Python itself.",

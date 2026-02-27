@@ -6,7 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomBase
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import SensorObjectType
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 # import a bunch of stuff
 from .sensor_attr.accelerometer import SensorAccelerometer

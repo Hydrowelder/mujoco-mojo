@@ -4,7 +4,7 @@ from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.fixed_attr.joint import TendonJoint
 from mujoco_mojo.mjcf.mujoco_attr.tendon_attr.tendon_base import TendonBase
-from mujoco_mojo.utils import is_empty_list
+from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["Fixed"]
 
