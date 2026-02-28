@@ -240,13 +240,21 @@ class MojoRunner:
         if func is None:
             return "none defined"
         try:
+            # 1. Get the file path
             gen_file = inspect.getfile(func)
-            gen_name = func.__name__  # pyright: ignore[reportAttributeAccessIssue]
-            return f"`{gen_name}` (defined in: `{gen_file}`)"
+
+            # 2. Get the qualified name (e.g., "Experiment.generate")
+            # This gives you the class context automatically
+            gen_name = getattr(func, "__qualname__", func.__name__)  # pyright: ignore[reportAttributeAccessIssue]
+
+            # 3. Get the line number
+            # getsourcelines returns ([lines], starting_line_number)
+            _, line_num = inspect.getsourcelines(func)
+
+            return f"`{gen_name}` (defined in: `{gen_file}:{line_num}`)"
+
         except Exception:
-            logger.error(
-                "Failed to caputre generator name. Falling back to raw generator name."
-            )
+            logger.error("Failed to capture generator details.")
             return f"`{func}`"
 
     def capture_environment(self):

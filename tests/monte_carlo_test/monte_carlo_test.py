@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import mujoco_mojo as mojo
@@ -49,13 +50,34 @@ def runtime(mojo: mojo.MojoModel):
     return None
 
 
+@dataclass
+class Experiment:
+    @staticmethod
+    def generate(
+        trial_num: int,
+        overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
+    ) -> mojo.MojoModel:
+        return generate(trial_num=trial_num, overrides=overrides)
+
+    @staticmethod
+    def runtime(mojo: mojo.MojoModel):
+        return runtime(mojo=mojo)
+
+
 def test_monte_carlo():
     mojo.utils.MojoRunner(
-        generator=generate,
-        runtime=runtime,
+        generator=Experiment.generate,
+        runtime=Experiment.runtime,
         workdir=Path(__file__).parent / "mc_test",
         config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
     ).run(resume=False)
+
+    # mojo.utils.MojoRunner(
+    #     generator=generate,
+    #     runtime=runtime,
+    #     workdir=Path(__file__).parent / "mc_test",
+    #     config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+    # ).run(resume=False)
 
 
 if __name__ == "__main__":
