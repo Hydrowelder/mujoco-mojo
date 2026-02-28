@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -12,13 +12,12 @@ from pydantic import field_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.process_manager import NOMINAL_TRIAL_NUM, NamedValueDict
-from mujoco_mojo.utils.statusing import Completion, TrialStatus
+from mujoco_mojo.utils.statusing import STATUS_FNAME, Completion, JobStatus, TrialStatus
 
 logger = logging.getLogger()
 
 __all__ = ["MojoGenerator", "MojoRunner", "MojoRuntime", "MonteCarloConfig", "Trial"]
 
-STATUS_FNAME = "status.json"
 
 # --- Protocols ---
 
@@ -206,7 +205,7 @@ class Trial:
                     )
                     result = mojo
 
-            status.completion = Completion.COMPLETED
+            status.completion = Completion.SUCCESS
 
         except Exception as e:
             status.completion = Completion.FAILED
@@ -257,16 +256,27 @@ class MojoRunner:
         """Orchestrates a Monte Carlo job."""
         overrides = global_overrides or NamedValueDict()
 
-        # decide which trials to execute
-        trial_nums = self.get_pending_trials() if resume else self.config.trial_nums
+        # initialize the status tracker
+        status_tracker = JobStatus(
+            workdir=self.workdir,
+            n_trial=self.config.n_trial,
+            padding_style=self.config.padding_style,
+        )
+        status_tracker._trial_nums = list(self.config.trial_nums)
 
-        if not trial_nums:
+        # decide which trials to execute
+        if resume:
+            status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
+
+        to_run = status_tracker.pending_trial_nums
+
+        if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
             return []
 
         if self.config.is_parallel:
             logger.info(
-                f"Running {len(trial_nums)} trials with {self.config.n_proc} processors. {self.n_trials_complete}/{self.config.n_trial} trials completed."
+                f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
             )
             results = []
             with ProcessPoolExecutor(max_workers=self.config.n_proc) as executor:
@@ -287,62 +297,3 @@ class MojoRunner:
             ]
 
         return results
-
-    @property
-    def n_trials_complete(self) -> int:
-        """
-        The number of completed trials.
-
-        Since this method calls the get_pending_trials method, which is I/O restricted, this method should be used sparingly.
-        """
-        return len(self.get_pending_trials()) - self.config.n_trial
-
-    def get_pending_trials(self) -> list[int]:
-        """
-        Scans the workdir do identify which trials still need execution.
-
-        This is done using:
-        1. `glob` to quickly find the trials which at least started.
-        2. Parallel pooling to process the globbed files to reduce I/O wait time.
-        """
-        # discover started trials
-        status_files = list(self.workdir.glob(f"trial_*/{STATUS_FNAME}"))
-
-        # map of trail_num to path
-        found_map = {}
-        for p in status_files:
-            try:
-                tn = int(p.parent.name.split("_")[-1])
-                found_map[tn] = p
-            except (ValueError, IndexError):
-                continue
-
-        def _process_status(tn: int) -> int | None:
-            """Worker function for the TreadPool."""
-            # if the status file didnt exist the trial is pending
-            if tn not in found_map:
-                return tn
-
-            try:
-                status_path = found_map[tn]
-                status = TrialStatus.model_validate_json(status_path.read_text())
-                if status.completion == Completion.INCOMPLETE:
-                    # this trial started, but never finished
-                    return tn
-            except Exception:
-                # if the JSON was corrupted, assume it needs to be rerun
-                return tn
-
-            return None
-
-        # run the checks in parallel
-        max_workers = self.config.n_proc if self.config.is_parallel else 1
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # iterate of ALL trial_nums
-            futures = [
-                executor.submit(_process_status, tn) for tn in self.config.trial_nums
-            ]
-            results = [f.result() for f in futures]
-
-        return [r for r in results if r is not None]
