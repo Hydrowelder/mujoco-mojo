@@ -311,4 +311,5 @@ class MojoRunner:
                         trial_num=tn, completion=Completion.FAILED
                     )
 
+        status_tracker.generate_report()
         return results
