@@ -18,7 +18,7 @@ def generate(
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
     time.sleep(0.01)
-    # _normal_draw = (
+    # _normal_draw = ( # BUG currently broken due to numpy serialization
     #     (
     #         mojo.NormalDistribution(
     #             name=mojo.DistName("normal_draw"),
@@ -34,9 +34,11 @@ def generate(
     #     )
     # )
 
-    # breakpoint()
-    # mojo_model.values.named.model_dump_json()
-    # mojo_model.model_dump_json()
+    # BUG this works since this isnt numpy
+    nv = mojo.NamedValue[float](name=mojo.ValueName("value"))
+    nv.value = 12.3
+    mojo_model.values.named.update(nv)
+
     return mojo_model
 
 
