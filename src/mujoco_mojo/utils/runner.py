@@ -15,6 +15,15 @@ from pydantic import field_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.process_manager import NOMINAL_TRIAL_NUM, NamedValueDict
+from mujoco_mojo.utils.defaults import (
+    DEFAULT_MC_N_PROC,
+    DEFAULT_MC_N_TRIAL,
+    DEFAULT_MODEL_CONFIG_NAME,
+    DEFAULT_RESUME,
+    DEFAULT_RUNTIME,
+    DEFAULT_WORKDIR,
+    DEFAULT_XML_NAME,
+)
 from mujoco_mojo.utils.statusing import STATUS_FNAME, Completion, JobStatus, TrialStatus
 
 logger = logging.getLogger()
@@ -43,12 +52,12 @@ class MojoRuntime(Protocol):
 
 
 class MonteCarloConfig(MojoBaseModel):
-    n_trial: int = 2
+    n_trial: int = DEFAULT_MC_N_TRIAL
     """Number of trials to run.
 
     You are able to resume a previous job and modify the number of runs desired by changing this value. A job already in progress will not be dynamically stopped though if you change this value at runtime."""
 
-    n_proc: int = 1
+    n_proc: int = DEFAULT_MC_N_PROC
     """Number of proccesses to allow.
 
     This value is used to determine how many parallel jobs can be run. It is also used for the discovery of trial status. Using a value of 1 will result in the slowest runtime, but highest reliability.
@@ -224,10 +233,10 @@ class Trial:
 @dataclass
 class MojoRunner:
     generator: MojoGenerator
-    runtime: MojoRuntime | None
-    workdir: Path = Path("./mojo_models")
-    model_config_name: str = "model_config.json"
-    xml_name: str = "model.xml"
+    runtime: MojoRuntime | None = DEFAULT_RUNTIME
+    workdir: Path = DEFAULT_WORKDIR
+    model_config_name: str = DEFAULT_MODEL_CONFIG_NAME
+    xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig = field(default_factory=MonteCarloConfig)
 
     gen_args: list[Any] = field(default_factory=list)
@@ -288,7 +297,9 @@ class MojoRunner:
         )
 
     def run(
-        self, global_overrides: NamedValueDict | None = None, resume: bool = True
+        self,
+        global_overrides: NamedValueDict | None = None,
+        resume: bool = DEFAULT_RESUME,
     ) -> list[Any]:
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
