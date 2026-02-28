@@ -11,11 +11,13 @@ def generate(
     overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
 ) -> mojo.MojoModel:
     print(f"generating nothing {trial_num}!")
+    # if trial_num % 2:
+    #     raise ValueError("askflaskfhl")
     mojo_model = mojo.MojoModel(
         mjcf=mojo.mjcf.Mujoco(model=mojo.ModelName(f"monte_carlo_test_{trial_num}")),
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
-    time.sleep(1)
+    time.sleep(0.01)
     # _normal_draw = (
     #     (
     #         mojo.NormalDistribution(
@@ -41,7 +43,7 @@ def generate(
 def runtime(mojo: mojo.MojoModel):
     print("running nothing!")
     # raise ValueError("blah blah blah")
-    time.sleep(1)
+    time.sleep(0.01)
     return None
 
 
@@ -51,7 +53,7 @@ def test_monte_carlo():
         runtime=runtime,
         workdir=Path(__file__).parent / "mc_test",
         config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
-    ).run(resume=True)
+    ).run(resume=False)
 
 
 if __name__ == "__main__":

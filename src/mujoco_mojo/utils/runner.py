@@ -156,7 +156,7 @@ class Trial:
         gen_kwargs: dict[str, Any],
         run_args: list[Any],
         run_kwargs: dict[str, Any],
-    ) -> Any | MojoModel | None:
+    ) -> tuple[Any | MojoModel | None, TrialStatus]:
         """
         Executes the complete simulation pipeline for this trial.
 
@@ -218,7 +218,7 @@ class Trial:
         finally:
             status.dump_to_path(status._path)
 
-        return result
+        return result, status
 
 
 @dataclass
@@ -242,12 +242,12 @@ class MojoRunner:
         try:
             gen_file = inspect.getfile(func)
             gen_name = func.__name__  # pyright: ignore[reportAttributeAccessIssue]
-            return f"{gen_name} (defined in: {gen_file})"
+            return f"`{gen_name}` (defined in: `{gen_file}`)"
         except Exception:
             logger.error(
                 "Failed to caputre generator name. Falling back to raw generator name."
             )
-            return str(func)
+            return f"`{func}`"
 
     def capture_environment(self):
         req_path = self.workdir / "requirements.txt"
@@ -296,7 +296,9 @@ class MojoRunner:
             raise NotImplementedError(msg)
         return result
 
-    def execute_single_trial(self, trial_num: int, overrides: NamedValueDict) -> Any:
+    def execute_single_trial(
+        self, trial_num: int, overrides: NamedValueDict
+    ) -> tuple[Any | MojoModel | None, TrialStatus]:
         """Helper to package a Trial and run it."""
         trial = Trial(
             trial_num=trial_num,
@@ -357,9 +359,9 @@ class MojoRunner:
                 for f in as_completed(future_to_tn):
                     tn = future_to_tn[f]
                     try:
-                        result = f.result()
+                        result, trial_status = f.result()
                         results.append(result)
-                        status_tracker.update_trial(tn, Completion.SUCCESS)
+                        status_tracker.update_trial(tn, trial_status.completion)
                     except Exception as e:
                         logger.error(f"Trial {tn} failed: {e}")
                         results.append(None)
@@ -367,13 +369,11 @@ class MojoRunner:
         else:
             for tn in to_run:
                 try:
-                    result = self.execute_single_trial(
+                    result, trial_status = self.execute_single_trial(
                         trial_num=tn, overrides=overrides
                     )
                     results.append(result)
-                    status_tracker.update_trial(
-                        trial_num=tn, completion=Completion.SUCCESS
-                    )
+                    status_tracker.update_trial(tn, trial_status.completion)
                 except Exception as e:
                     logger.error(f"A trial failed with error: {e}")
                     results.append(None)
@@ -381,5 +381,5 @@ class MojoRunner:
                         trial_num=tn, completion=Completion.FAILED
                     )
 
-        status_tracker.generate_report()
+        status_tracker.generate_report(n_proc=self.config.n_proc)
         return results
