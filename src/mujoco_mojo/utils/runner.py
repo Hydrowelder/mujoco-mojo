@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import logging
+import subprocess
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -230,6 +233,64 @@ class MojoRunner:
     run_args: list[Any] = field(default_factory=list)
     run_kwargs: dict[str, Any] = field(default_factory=dict)
 
+    @staticmethod
+    def inspect_protocol(func: MojoGenerator | MojoRuntime | None) -> str:
+        if func is None:
+            return "none defined"
+        try:
+            gen_file = inspect.getfile(func)
+            gen_name = func.__name__  # pyright: ignore[reportAttributeAccessIssue]
+            return f"{gen_name} (defined in: {gen_file})"
+        except Exception:
+            logger.error(
+                "Failed to caputre generator name. Falling back to raw generator name."
+            )
+            return str(func)
+
+    def capture_environment(self):
+        req_path = self.workdir / "requirements.txt"
+
+        # 1. Try 'uv' first (since it's the modern standard)
+        try:
+            result = subprocess.run(
+                ["uv", "pip", "freeze"], capture_output=True, text=True
+            )
+            if result.returncode == 0 and result.stdout:
+                req_path.write_text(result.stdout)
+                return
+        except FileNotFoundError:
+            pass
+
+        # 2. Fallback to standard pip
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "freeze"], capture_output=True, text=True
+            )
+            if result.returncode == 0 and result.stdout:
+                req_path.write_text(result.stdout)
+                return
+        except Exception:
+            pass
+
+        # 3. Last resort: Record the Python version and basic info
+        req_path.write_text(
+            f"# Fallback: Could not use uv/pip\n# Python Version: {sys.version}\n"
+        )
+
+    def run(
+        self, global_overrides: NamedValueDict | None = None, resume: bool = True
+    ) -> list[Any]:
+        self.capture_environment()
+        if isinstance(self.config, MonteCarloConfig):
+            result = self.run_monte_carlo(
+                global_overrides=global_overrides, resume=resume
+            )
+        else:
+            msg = f"A configuration for {self.config.__class__.__name__} has not been implemented/"
+            logger.error(msg)
+            raise NotImplementedError(msg)
+        return result
+
     def execute_single_trial(self, trial_num: int, overrides: NamedValueDict) -> Any:
         """Helper to package a Trial and run it."""
         trial = Trial(
@@ -261,6 +322,8 @@ class MojoRunner:
             workdir=self.workdir,
             n_trial=self.config.n_trial,
             padding_style=self.config.padding_style,
+            generator=MojoRunner.inspect_protocol(self.generator),
+            runtime=MojoRunner.inspect_protocol(self.runtime),
         )
         status_tracker._trial_nums = list(self.config.trial_nums)
 
