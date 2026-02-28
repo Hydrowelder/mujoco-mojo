@@ -52,24 +52,6 @@ class StepStatus(MojoBaseModel):
             return timedelta(seconds=self.elapsed)
         return None
 
-    @property
-    def is_pending(self) -> bool:
-        return self.started is None
-
-    @property
-    def is_in_progress(self) -> bool:
-        if isinstance(self.started, datetime) and not isinstance(self.elapsed, float):
-            return True
-        else:
-            return False
-
-    @property
-    def is_done(self) -> bool:
-        if isinstance(self.started, datetime) and isinstance(self.elapsed, float):
-            return True
-        else:
-            return False
-
 
 class TrialStatus(MojoBaseModel):
     """Persistant state of a single trial, saved to disk."""
@@ -104,48 +86,25 @@ class TrialStatus(MojoBaseModel):
     _path: Path | None = PrivateAttr(default=None)
     """Where this status file is serialized."""
 
-    @property
-    def status(self) -> Step:
-        # early exit for jobs that are no longer being considered
-        if self.completion in (Completion.SUCCESS, Completion.FAILED):
-            return "done"
-
-        # trial is not pending, check if generating
-        if self.generating.is_in_progress:
-            return "generating"
-
-        # trial is no longer generating, check if solving
-        if self.solving.is_in_progress:
-            return "solving"
-
-        # trial must be pending if not generating, solving or done
-        return "pending"
-
-    @property
-    def step(
-        self,
-    ) -> StepStatus | Literal[Completion.SUCCESS, Completion.FAILED]:
-        match self.status:
-            case "pending":
-                return self.pending
-            case "generating":
-                return self.generating
-            case "solving":
-                return self.solving
-            case "done":
-                assert self.completion is not Completion.INCOMPLETE, (
-                    "Status of trial was incomplete but not generating or solving"
-                )
-                return self.completion
-            case _:
-                raise NotImplementedError(
-                    f"A trial status of {self.status} has not yet been implemented"
-                )
-
     @contextmanager
-    def record_step(self):
+    def record_step(self, step_name: Step):
         # get the current step to update
-        step = self.step
+        match step_name:
+            case "pending":
+                step = self.pending
+            case "generating":
+                step = self.generating
+            case "solving":
+                step = self.solving
+            case _:
+                logger.warning(f"There is no step associated with {step_name}")
+                return
+
+        if self._path is None:
+            msg = "Unable to record a step for trial since no serialization path was provided."
+            logger.error(msg)
+            raise ValueError(msg)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
 
         # steps which are a completion state should not be updated further, they should be done
         assert not isinstance(step, Completion), "Status of step was Completion"
@@ -154,10 +113,6 @@ class TrialStatus(MojoBaseModel):
         step.started = datetime.now(UTC)
         start_time = time.perf_counter()
 
-        if self._path is None:
-            msg = "Unable to record a step for trial since no serialization path was provided."
-            logger.error(msg)
-            raise ValueError(msg)
         self.dump_to_path(self._path)
 
         try:
@@ -195,7 +150,7 @@ class JobStatus(MojoBaseModel):
         2. Parallel pooling to process the globbed files to reduce I/O wait time.
         """
         # discover started trials
-        status_files = list(self.workdir.glob(f"trial_*/{STATUS_FNAME}"))
+        status_files = list((self.workdir / "trials").glob(f"trial_*/{STATUS_FNAME}"))
 
         # map of trial_num to path
         found_map: dict[int, Path] = {}
@@ -326,7 +281,7 @@ class JobStatus(MojoBaseModel):
             self.dump_to_path(status_path, indent=4)
 
     @property
-    def _metrics_df(self) -> pd.DataFrame:
+    def _metrics_series(self) -> pd.DataFrame:
         data = {
             "Workdir": self.workdir.as_posix(),
             "Number of Trials": str(self.n_trial),
@@ -336,16 +291,17 @@ class JobStatus(MojoBaseModel):
             "Generator": self.generator,
             "Runtime": self.runtime,
         }
-        return pd.DataFrame(data=[data]).T
+        return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     @property
-    def _run_time_df(self) -> pd.DataFrame:
+    def _run_time_series(self) -> pd.DataFrame:
         data = {
+            "Metric": "Value",
             "Total Elapsed": str(self.elapsed).split(".")[0],
             "Start Time": f"{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
             "End Time": f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
         }
-        return pd.DataFrame(data=[data]).T
+        return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     @property
     def _failed_runs_md(self) -> str:
@@ -366,12 +322,12 @@ class JobStatus(MojoBaseModel):
 ---
 
 ## Metrics:
-{self._metrics_df.to_markdown(index=False)}
+{self._metrics_series.to_markdown(index=False)}
 
 ---
 
 ## Run Times:
-{self._run_time_df.to_markdown(index=False)}
+{self._run_time_series.to_markdown(index=False)}
 
 ---
 
