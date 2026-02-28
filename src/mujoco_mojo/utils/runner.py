@@ -181,13 +181,13 @@ class Trial:
         status = TrialStatus(trial_num=self.trial_num)
         status._path = self.trial_dir / STATUS_FNAME
 
-        with status.record_step():
-            self.trial_dir.mkdir(parents=True, exist_ok=True)
+        with status.record_step(step_name="pending"):
+            pass
 
         result = None
         try:
             # 1. Generate
-            with status.record_step():
+            with status.record_step(step_name="generating"):
                 logger.info(f"Generating trial_num={self.trial_num}")
                 mojo = generator(self.trial_num, overrides, *gen_args, **gen_kwargs)
 
@@ -197,7 +197,7 @@ class Trial:
                 mojo.mjcf.write_xml(self.xml_path)
                 self.model_config_path.write_text(mojo.model_dump_json(indent=4))
 
-            with status.record_step():
+            with status.record_step(step_name="solving"):
                 # 3. Execute (if runtime provided)
                 if runtime is not None:
                     logger.info(f"Executing trial_num={self.trial_num} runtime")
@@ -329,11 +329,13 @@ class MojoRunner:
             runtime=MojoRunner.inspect_protocol(self.runtime),
         )
         status_tracker._trial_nums = list(self.config.trial_nums)
+        status_tracker._registry = dict(
+            [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
+        )
 
         # decide which trials to execute
         if resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
-
         to_run = status_tracker.pending_trial_nums
 
         results = []
