@@ -45,7 +45,7 @@ class MojoGenerator(Protocol):
 class MojoRuntime(Protocol):
     """Definition of a function that executes a generated MojoModel model."""
 
-    def __call__(self, mojo: MojoModel, *args: Any, **kwargs: Any) -> Any: ...
+    def __call__(self, mojo_model: MojoModel, *args: Any, **kwargs: Any) -> Any: ...
 
 
 # --- Models ---

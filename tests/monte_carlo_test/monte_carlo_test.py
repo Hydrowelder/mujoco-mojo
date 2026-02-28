@@ -43,7 +43,7 @@ def generate(
     return mojo_model
 
 
-def runtime(mojo: mojo.MojoModel):
+def runtime(mojo_model: mojo.MojoModel):
     print("running nothing!")
     # raise ValueError("blah blah blah")
     time.sleep(0.01)
@@ -60,8 +60,8 @@ class Experiment:
         return generate(trial_num=trial_num, overrides=overrides)
 
     @staticmethod
-    def runtime(mojo: mojo.MojoModel):
-        return runtime(mojo=mojo)
+    def runtime(mojo_model: mojo.MojoModel):
+        return runtime(mojo_model=mojo_model)
 
 
 def test_monte_carlo():

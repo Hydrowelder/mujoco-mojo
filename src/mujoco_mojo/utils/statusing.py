@@ -246,13 +246,16 @@ class JobStatus(MojoBaseModel):
 
     @computed_field
     @property
-    def n_success(self) -> int:
-        return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
+    def time_remaining(self) -> timedelta:
+        """Calculates the estimated time ramianing based on elapsed wall-clock time."""
+        elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
 
-    @computed_field
-    @property
-    def n_failed(self) -> int:
-        return sum(1 for c in self._registry.values() if c == Completion.FAILED)
+        if self.progress <= 0:
+            return timedelta(seconds=0)
+
+        total_est_time = elapsed / self.progress
+        remaining_seconds = total_est_time - elapsed
+        return timedelta(seconds=max(1, int(remaining_seconds)))
 
     @property
     def n_done(self) -> int:
@@ -266,19 +269,6 @@ class JobStatus(MojoBaseModel):
     @property
     def progress(self) -> float:
         return min(max(0, self.n_done / self.n_trial), 1)
-
-    @computed_field
-    @property
-    def time_remaining(self) -> timedelta:
-        """Calculates the estimated time ramianing based on elapsed wall-clock time."""
-        elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
-
-        if self.progress <= 0:
-            return timedelta(seconds=0)
-
-        total_est_time = elapsed / self.progress
-        remaining_seconds = total_est_time - elapsed
-        return timedelta(seconds=max(1, int(remaining_seconds)))
 
     @computed_field
     @property
@@ -307,6 +297,16 @@ class JobStatus(MojoBaseModel):
         p = self.progress
         filled_length = int(width * p)
         return f"|{'█' * filled_length}{'░' * (width - filled_length)}|"
+
+    @computed_field
+    @property
+    def n_success(self) -> int:
+        return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
+
+    @computed_field
+    @property
+    def n_failed(self) -> int:
+        return sum(1 for c in self._registry.values() if c == Completion.FAILED)
 
     @computed_field
     @property

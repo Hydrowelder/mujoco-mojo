@@ -87,7 +87,7 @@ app = typer.Typer(
 )
 
 # create a run group for the run commands
-run_app = typer.Typer(help="Execution subcommands for trials.")
+run_app = typer.Typer()
 app.add_typer(run_app, name="run")
 
 
@@ -117,17 +117,40 @@ def main(
 
 
 def _load_func(path: str) -> Any:
-    """Helper to dynamically import user logic."""
-    # Ensure current directory is in path for local simulation files
+    """Helper to dynamically import user logic, supporting classes and methods."""
     if "." not in sys.path:
         sys.path.insert(0, ".")
 
+    parts = path.split(".")
+
+    # try to find the longest importable module path
+    mod = None
+    attr_parts = None
+    for i in range(len(parts) - 1, 0, -1):
+        mod_path = ".".join(parts[:i])
+        try:
+            mod = importlib.import_module(mod_path)
+            attr_parts = parts[i:]
+            break
+        except ImportError:
+            continue
+
+    if mod is None or attr_parts is None:
+        rprint(
+            f"[bold red]Error:[/bold red] Could not find module for [bold green]`{path}`[/bold green]"
+        )
+        raise typer.Exit(code=1)
+
+    # drill down to the attributes (Class -> Method)
     try:
-        module_path, func_name = path.rsplit(".", 1)
-        mod = importlib.import_module(module_path)
-        return getattr(mod, func_name)
-    except Exception as e:
-        rprint(f"[bold red]Error:[/bold red] Could not load '{path}': {e}")
+        obj = mod
+        for part in attr_parts:
+            obj = getattr(obj, part)
+        return obj
+    except AttributeError as e:
+        rprint(
+            f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] not found: {e}"
+        )
         raise typer.Exit(code=1)
 
 
@@ -143,6 +166,8 @@ def run_globals(
 ):
     """
     [bold yellow]Global settings for all simulation runs.[/bold yellow]
+
+    This command is what is used to actually run mujoco-mojo. It is used in conjuntion with the other subcommands (such as [bold cyan]`monte-carlo`[/bold cyan] or [bold cyan]`optimize`[/bold cyan]).
     """
     # Ensure ctx.obj exists even if we exit early
     ctx.ensure_object(dict)
@@ -189,7 +214,7 @@ def run_monte_carlo(
     n_proc: NProcType = DEFAULT_MC_N_PROC,
 ):
     """
-    [bold green]Execute a Monte Carlo campaign.[/bold green]
+    [bold yellow]Execute a Monte Carlo campaign.[/bold yellow]
 
     This command handles the directory setup, distribution salting, and parallel execution of physics trials.
     """
