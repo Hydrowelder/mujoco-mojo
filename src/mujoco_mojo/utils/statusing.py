@@ -1,27 +1,32 @@
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, field_serializer
 
 from mujoco_mojo.base import MojoBaseModel
 
-__all__ = []
-
-Step = Literal["generating", "solving", "done"]
+__all__ = ["STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
 
 logger = logging.getLogger(__name__)
+
+Step = Literal["generating", "solving", "done"]
+"""Steps a trial can have"""
+
+STATUS_FNAME = "status.json"
+"""Filename of status files."""
 
 
 class Completion(StrEnum):
     INCOMPLETE = "incomplete"
     """Neither completed nor failed. Indicates the process is ongoing."""
 
-    COMPLETED = "completed"
+    SUCCESS = "completed"
     """Completed successfully with no detected exceptions."""
 
     FAILED = "failed"
@@ -37,7 +42,7 @@ class StepStatus(MojoBaseModel):
     elapsed: float | None = None
     """Time the step took to run.
 
-    A `None` value indicates the step has no completed. This value is not updated throughout the step's execution (i.e., if the step is in progress, this value will still report `None`)."""
+    A `None` value indicates the step has not completed. This value is not updated throughout the step's execution (i.e., if the step is in progress, this value will still report `None`)."""
 
     @property
     def timedelta(self) -> timedelta | None:
@@ -96,7 +101,7 @@ class TrialStatus(MojoBaseModel):
     @property
     def status(self) -> Step:
         # early exit for jobs that are no longer being considered
-        if self.completion in (Completion.COMPLETED, Completion.FAILED):
+        if self.completion in (Completion.SUCCESS, Completion.FAILED):
             return "done"
 
         # trial is not pending, check if generating
@@ -113,7 +118,7 @@ class TrialStatus(MojoBaseModel):
     @property
     def step(
         self,
-    ) -> StepStatus | Literal[Completion.COMPLETED, Completion.FAILED]:
+    ) -> StepStatus | Literal[Completion.SUCCESS, Completion.FAILED]:
         match self.status:
             case "generating":
                 return self.generating
@@ -152,3 +157,98 @@ class TrialStatus(MojoBaseModel):
             # teardown: record duration even if the block failed
             step.elapsed = time.perf_counter() - start_time
             self.dump_to_path(self._path)
+
+
+class JobStatus(MojoBaseModel):
+    """
+    Orchestrates the global state of a job.
+
+    This class acts as a cache and aggregator for the individual TrialStatus files on disk. It provides high-level metrics needed for dashboards and job resumption.
+    """
+
+    workdir: Path
+    n_trial: int
+    padding_style: str
+    start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    _trial_nums: list[int] = PrivateAttr(default_factory=list)
+    _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
+
+    def refresh_from_disk(self, n_proc: int = 1) -> None:
+        """
+        Scans the workdir do identify which trials still need execution.
+
+        This is done using:
+        1. `glob` to quickly find the trials which at least started.
+        2. Parallel pooling to process the globbed files to reduce I/O wait time.
+        """
+        # discover started trials
+        status_files = list(self.workdir.glob(f"trial_*/{STATUS_FNAME}"))
+
+        # map of trail_num to path
+        found_map: dict[int, Path] = {}
+        for p in status_files:
+            try:
+                tn = int(p.parent.name.split("_")[-1])
+                found_map[tn] = p
+            except (ValueError, IndexError):
+                continue
+
+        def _check_file(tn: int) -> tuple[int, Completion]:
+            """Worker function for the TreadPool."""
+            # if the status file didnt exist the trial is pending
+            if tn not in found_map:
+                return tn, Completion.INCOMPLETE
+
+            try:
+                status = TrialStatus.model_validate_json(found_map[tn].read_text())
+                return tn, status.completion
+            except Exception:
+                # if the JSON was corrupted, assume it needs to be rerun
+                return tn, Completion.INCOMPLETE
+
+        # run the checks in parallel
+        max_workers = n_proc if n_proc > 1 else 1
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(_check_file, self._trial_nums))
+
+        self._registry = dict(results)
+
+    @property
+    def pending_trial_nums(self) -> list[int]:
+        """Returns trial numbers which are either missing or marked as incomplete."""
+        return [
+            tn for tn, comp in self._registry.items() if comp == Completion.INCOMPLETE
+        ]
+
+    @property
+    def n_success(self) -> int:
+        return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
+
+    @property
+    def n_failed(self) -> int:
+        return sum(1 for c in self._registry.values() if c == Completion.FAILED)
+
+    @property
+    def n_done(self) -> int:
+        return self.n_success + self.n_failed
+
+    @field_serializer("n_success", "n_failed")
+    def serialize_done(self, v: int) -> str:
+        return str(v)
+
+    @property
+    def progress(self) -> float:
+        return self.n_done / self.n_trial if self.n_trial else 0
+
+    @property
+    def get_eta(self) -> timedelta:
+        """Calculates the estimated time ramianing based on elapsed wall-clock time."""
+        elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
+
+        if self.progress <= 0:
+            return timedelta(seconds=0)
+
+        total_est_time = elapsed / self.progress
+        remaining_seconds = total_est_time - elapsed
+        return timedelta(seconds=max(1, int(remaining_seconds)))
