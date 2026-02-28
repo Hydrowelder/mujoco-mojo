@@ -7,7 +7,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, PrivateAttr, field_serializer
+from pydantic import Field, PrivateAttr, computed_field, field_serializer
 
 from mujoco_mojo.base import MojoBaseModel
 
@@ -221,10 +221,12 @@ class JobStatus(MojoBaseModel):
             tn for tn, comp in self._registry.items() if comp == Completion.INCOMPLETE
         ]
 
+    @computed_field
     @property
     def n_success(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
 
+    @computed_field
     @property
     def n_failed(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.FAILED)
@@ -234,15 +236,17 @@ class JobStatus(MojoBaseModel):
         return self.n_success + self.n_failed
 
     @field_serializer("n_success", "n_failed")
-    def serialize_done(self, v: int) -> str:
+    def serialize_n_done(self, v: int) -> str:
         return str(v)
 
+    @computed_field
     @property
     def progress(self) -> float:
-        return self.n_done / self.n_trial if self.n_trial else 0
+        return min(max(0, self.n_done / self.n_trial), 1)
 
+    @computed_field
     @property
-    def get_eta(self) -> timedelta:
+    def time_remaining(self) -> timedelta:
         """Calculates the estimated time ramianing based on elapsed wall-clock time."""
         elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
 
@@ -252,3 +256,37 @@ class JobStatus(MojoBaseModel):
         total_est_time = elapsed / self.progress
         remaining_seconds = total_est_time - elapsed
         return timedelta(seconds=max(1, int(remaining_seconds)))
+
+    @computed_field
+    @property
+    def failure_rate(self) -> float:
+        return self.n_failed / self.n_done if self.n_done else 0
+
+    @property
+    def success_rate(self) -> float:
+        return self.n_success / self.n_done if self.n_done else 0
+
+    @computed_field
+    @property
+    def progress_bar(self) -> str:
+        """Visual progress bar for text-based monitoring."""
+        width = 40
+        p = self.progress
+        filled_length = int(width * p)
+        return f"[{'█' * filled_length}{'░' * (width - filled_length)}]"
+
+    @field_serializer("progress", "failure_rate")
+    def serialize_float_as_perc(self, v: float) -> str:
+        return f"{v:.2%}"
+
+    @field_serializer("time_remaining")
+    def serialize_timedelta(self, v: timedelta) -> str:
+        return str(v)
+
+    def update_trial(self, trial_num: int, completion: Completion, save: bool = True):
+        """Updates the internal registry and optionally persists the global status."""
+        self._registry[trial_num] = completion
+
+        if save:
+            status_path = self.workdir / STATUS_FNAME
+            self.dump_to_path(status_path, indent=4)

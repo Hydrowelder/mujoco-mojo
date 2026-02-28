@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -270,30 +270,45 @@ class MojoRunner:
 
         to_run = status_tracker.pending_trial_nums
 
+        results = []
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
-            return []
+            return results
 
         if self.config.is_parallel:
             logger.info(
                 f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
             )
-            results = []
             with ProcessPoolExecutor(max_workers=self.config.n_proc) as executor:
-                futures = [
-                    executor.submit(self.execute_single_trial, tn, overrides)
-                    for tn in self.config.trial_nums
-                ]
-                for f in futures:
+                future_to_tn = {
+                    executor.submit(self.execute_single_trial, tn, overrides): tn
+                    for tn in to_run
+                }
+                for f in as_completed(future_to_tn):
+                    tn = future_to_tn[f]
                     try:
-                        results.append(f.result())
+                        result = f.result()
+                        results.append(result)
+                        status_tracker.update_trial(tn, Completion.SUCCESS)
                     except Exception as e:
-                        logger.error(f"A trial failed with error: {e}")
+                        logger.error(f"Trial {tn} failed: {e}")
                         results.append(None)
+                        status_tracker.update_trial(tn, Completion.FAILED)
         else:
-            results = [
-                self.execute_single_trial(trial_num=tn, overrides=overrides)
-                for tn in self.config.trial_nums
-            ]
+            for tn in to_run:
+                try:
+                    result = self.execute_single_trial(
+                        trial_num=tn, overrides=overrides
+                    )
+                    results.append(result)
+                    status_tracker.update_trial(
+                        trial_num=tn, completion=Completion.SUCCESS
+                    )
+                except Exception as e:
+                    logger.error(f"A trial failed with error: {e}")
+                    results.append(None)
+                    status_tracker.update_trial(
+                        trial_num=tn, completion=Completion.FAILED
+                    )
 
         return results
