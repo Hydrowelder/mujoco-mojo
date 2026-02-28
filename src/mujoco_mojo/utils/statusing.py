@@ -1,3 +1,4 @@
+import getpass
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,7 +28,7 @@ class Completion(StrEnum):
     INCOMPLETE = "incomplete"
     """Neither completed nor failed. Indicates the process is ongoing."""
 
-    SUCCESS = "completed"
+    SUCCESS = "success"
     """Completed successfully with no detected exceptions."""
 
     FAILED = "failed"
@@ -136,6 +137,7 @@ class JobStatus(MojoBaseModel):
     This class acts as a cache and aggregator for the individual TrialStatus files on disk. It provides high-level metrics needed for dashboards and job resumption.
     """
 
+    started_by: str = Field(default_factory=getpass.getuser)
     workdir: Path
     n_trial: int
     padding_style: str
@@ -146,9 +148,9 @@ class JobStatus(MojoBaseModel):
     _trial_nums: list[int] = PrivateAttr(default_factory=list)
     _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
 
-    def refresh_from_disk(self, n_proc: int = 1) -> None:
+    def trial_statuses(self, n_proc: int = 1) -> dict[int, TrialStatus | None]:
         """
-        Scans the workdir do identify which trials still need execution.
+        Scans the workdir to serialize trial statuses.
 
         This is done using:
         1. `glob` to quickly find the trials which at least started.
@@ -166,28 +168,74 @@ class JobStatus(MojoBaseModel):
             except (ValueError, IndexError):
                 continue
 
-        def _check_file(tn: int) -> tuple[int, Completion]:
+        def _check_file(tn: int) -> TrialStatus | None:
             """Worker function for the TreadPool."""
             # if the status file didnt exist the trial is pending
             if tn not in found_map:
-                return tn, Completion.INCOMPLETE
+                return None
 
             try:
                 status = TrialStatus.model_validate_json(found_map[tn].read_text())
                 if status.completion == Completion.INCOMPLETE:
-                    return tn, Completion.INCOMPLETE
+                    return None
                 else:
-                    return tn, status.completion
+                    return status
             except Exception:
                 # if the JSON was corrupted, assume it needs to be rerun
-                return tn, Completion.INCOMPLETE
+                return None
 
         # run the checks in parallel
         max_workers = n_proc if n_proc > 1 else 1
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(_check_file, self._trial_nums))
 
-        self._registry = dict(results)
+        return {
+            tn: status
+            for tn, status in zip(self._trial_nums, results)
+            if status is not None
+        }
+
+    def refresh_from_disk(self, n_proc: int = 1) -> None:
+        """
+        Scans the workdir to identify which trials still need execution.
+
+        This is done using:
+        1. `glob` to quickly find the trials which at least started.
+        2. Parallel pooling to process the globbed files to reduce I/O wait time.
+        """
+        self._registry = {
+            tn: (status.completion if status is not None else Completion.INCOMPLETE)
+            for tn, status in self.trial_statuses(n_proc=n_proc).items()
+        }
+
+    def total_runtimes(
+        self, n_proc: int = 1
+    ) -> dict[Literal["pending", "generating", "solving", "total"], float]:
+        time_pending = 0
+        time_generating = 0
+        time_solving = 0
+        for tn, status in self.trial_statuses(n_proc=n_proc).items():
+            if status is None:
+                continue
+
+            if status.pending.elapsed is None:
+                continue
+            time_pending += status.pending.elapsed
+
+            if status.generating.elapsed is None:
+                continue
+            time_generating += status.generating.elapsed
+
+            if status.solving.elapsed is None:
+                continue
+            time_solving += status.solving.elapsed
+
+        return {
+            "pending": time_pending,
+            "generating": time_generating,
+            "solving": time_solving,
+            "total": time_pending + time_generating + time_solving,
+        }
 
     @property
     def pending_trial_nums(self) -> list[int]:
@@ -258,7 +306,7 @@ class JobStatus(MojoBaseModel):
         width = 40
         p = self.progress
         filled_length = int(width * p)
-        return f"[{'█' * filled_length}{'░' * (width - filled_length)}]"
+        return f"|{'█' * filled_length}{'░' * (width - filled_length)}|"
 
     @computed_field
     @property
@@ -288,6 +336,7 @@ class JobStatus(MojoBaseModel):
     @property
     def _metrics_series(self) -> pd.DataFrame:
         data = {
+            "Started By": self.started_by,
             "Workdir": self.workdir.as_posix(),
             "Number of Trials": str(self.n_trial),
             "Successes": f"{self.n_success} ({self.success_rate:.1%})",
@@ -298,13 +347,15 @@ class JobStatus(MojoBaseModel):
         }
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
-    @property
-    def _run_time_series(self) -> pd.DataFrame:
+    def _run_time_series(self, n_proc: int = 1) -> pd.DataFrame:
+        runtimes = self.total_runtimes(n_proc=n_proc)
         data = {
-            "Metric": "Value",
             "Total Elapsed": str(self.elapsed).split(".")[0],
             "Start Time": f"{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
             "End Time": f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+            "Elapsed Pending": f"{str(timedelta(seconds=runtimes['pending'])).split('.')[0]} ({runtimes['pending'] / runtimes['total']:.2%})",
+            "Elapsed Generating": f"{str(timedelta(seconds=runtimes['generating'])).split('.')[0]} ({runtimes['generating'] / runtimes['total']:.2%})",
+            "Elapsed Solving": f"{str(timedelta(seconds=runtimes['solving'])).split('.')[0]} ({runtimes['solving'] / runtimes['total']:.2%})",
         }
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
@@ -317,12 +368,14 @@ class JobStatus(MojoBaseModel):
         nums = [f"`{tn:{self.padding_style}}`" for tn in sorted(self.failed_trial_nums)]
         return "## ❌ Failed Trials:\n* " + "\n* ".join(nums)
 
-    def generate_report(self, filename: str = "MOJO_RUNTIME_REPORT.md") -> None:
+    def generate_report(
+        self, filename: str = "MOJO_RUNTIME_REPORT.md", n_proc: int = 1
+    ) -> None:
         report_path = self.workdir / filename
 
         content = f"""
 # Simulation Campaign Report
-*Report generated at {datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")} UTC*
+> *Report generated at {datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")} UTC*
 
 ---
 
@@ -332,7 +385,7 @@ class JobStatus(MojoBaseModel):
 ---
 
 ## Run Times:
-{self._run_time_series.to_markdown(index=False)}
+{self._run_time_series(n_proc=n_proc).to_markdown(index=False)}
 
 ---
 
@@ -340,8 +393,7 @@ class JobStatus(MojoBaseModel):
 
 ---
 
-**Generated by mujoco-mojo**
-
+> **Generated by [`mujoco-mojo`](https://github.com/Hydrowelder/mujoco-mojo)**
 """.strip()
-        report_path.write_text(content)
+        report_path.write_text(content + "\n")  # i like having an ending newline
         logger.info(f"MuJoCo Mojo report generated at {report_path}")
