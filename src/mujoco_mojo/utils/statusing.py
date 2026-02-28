@@ -171,6 +171,8 @@ class JobStatus(MojoBaseModel):
     n_trial: int
     padding_style: str
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    generator: str
+    runtime: str
 
     _trial_nums: list[int] = PrivateAttr(default_factory=list)
     _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
@@ -319,8 +321,10 @@ class JobStatus(MojoBaseModel):
             "Successes": f"{self.n_success} ({self.success_rate:.1%})",
             "Failures": f"{self.n_failed} ({self.failure_rate:.1%})",
             "Progress": f"{self.progress:.2%}",
+            "Generator": self.generator,
+            "Runtime": self.runtime,
         }
-        return pd.DataFrame(data=data)
+        return pd.DataFrame(data=[data])
 
     @property
     def _run_time_df(self) -> pd.DataFrame:
@@ -329,16 +333,16 @@ class JobStatus(MojoBaseModel):
             "Start Time": f"{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
             "End Time": f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
         }
-        return pd.DataFrame(data=data)
+        return pd.DataFrame(data=[data])
 
     @property
     def _failed_runs_md(self) -> str:
         if not self.failed_trial_nums:
-            return "✅ **No failures detected.** 🎉"
+            return "## Failed Trials:\n✅ **No failures detected.** 🎉"
 
         # Using a list with bullet points for clean Markdown rendering
         nums = [f"`{tn:{self.padding_style}}`" for tn in sorted(self.failed_trial_nums)]
-        return "### ❌ Failed Trials:\n* " + "\n* ".join(nums)
+        return "## ❌ Failed Trials:\n* " + "\n* ".join(nums)
 
     def generate_report(self, filename: str = "MOJO_RUNTIME_REPORT.md") -> None:
         report_path = self.workdir / filename
