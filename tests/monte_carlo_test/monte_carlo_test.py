@@ -16,13 +16,20 @@ def generate(
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
     time.sleep(1)
-    # _normal_draw = mojo.NormalDistribution(
-    #     name=mojo.DistName("normal_draw"),
-    #     mu=5,
-    #     sigma=10,
-    #     seed=SEED,
-    # ).update_dicts(
-    #     dist_dict=mojo_model.values.dists, named_value_dict=mojo_model.values.named
+    # _normal_draw = (
+    #     (
+    #         mojo.NormalDistribution(
+    #             name=mojo.DistName("normal_draw"),
+    #             mu=5,
+    #             sigma=10,
+    #             seed=SEED,
+    #         )
+    #     )
+    #     .with_seed(SEED)
+    #     .with_trial_num(trial_num)
+    #     .update_dicts(
+    #         dist_dict=mojo_model.values.dists, named_value_dict=mojo_model.values.named
+    #     )
     # )
 
     # breakpoint()
@@ -33,6 +40,7 @@ def generate(
 
 def runtime(mojo: mojo.MojoModel):
     print("running nothing!")
+    # raise ValueError("blah blah blah")
     time.sleep(1)
     return None
 

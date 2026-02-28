@@ -208,9 +208,11 @@ class Trial:
                     )
                     result = mojo
 
+            status.step = "done"
             status.completion = Completion.SUCCESS
 
         except Exception as e:
+            status.step = "done"
             status.completion = Completion.FAILED
             logger.error(f"Trial {self.trial_num} failed with the following error: {e}")
         finally:
