@@ -59,6 +59,9 @@ class TrialStatus(MojoBaseModel):
     trial_num: int
     """Trial number identifier."""
 
+    step: Step = "pending"
+    """The current step of the trial."""
+
     completion: Completion = Completion.INCOMPLETE
     """The overall completion type.
 
@@ -89,6 +92,8 @@ class TrialStatus(MojoBaseModel):
     @contextmanager
     def record_step(self, step_name: Step):
         # get the current step to update
+        self.step = step_name
+
         match step_name:
             case "pending":
                 step = self.pending
