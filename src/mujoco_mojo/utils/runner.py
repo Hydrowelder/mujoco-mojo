@@ -134,7 +134,7 @@ class Trial:
 
         """
         return (
-            self.base_dir / f"trial_{self.trial_num:{self.padding_style}}"
+            self.base_dir / "trials" / f"trial_{self.trial_num:{self.padding_style}}"
         ).resolve()
 
     @property
@@ -181,8 +181,8 @@ class Trial:
         status = TrialStatus(trial_num=self.trial_num)
         status._path = self.trial_dir / STATUS_FNAME
 
-        self.trial_dir.mkdir(parents=True, exist_ok=True)
-        status.dump_to_path(status._path)
+        with status.record_step():
+            self.trial_dir.mkdir(parents=True, exist_ok=True)
 
         result = None
         try:
@@ -212,7 +212,7 @@ class Trial:
 
         except Exception as e:
             status.completion = Completion.FAILED
-            logger.error(f"Trail {self.trial_num} failed with the following error: {e}")
+            logger.error(f"Trial {self.trial_num} failed with the following error: {e}")
         finally:
             status.dump_to_path(status._path)
 
@@ -222,7 +222,7 @@ class Trial:
 @dataclass
 class MojoRunner:
     generator: MojoGenerator
-    runtime: MojoRuntime | None = None
+    runtime: MojoRuntime | None
     workdir: Path = Path("./mojo_models")
     model_config_name: str = "model_config.json"
     xml_name: str = "model.xml"
@@ -280,7 +280,10 @@ class MojoRunner:
     def run(
         self, global_overrides: NamedValueDict | None = None, resume: bool = True
     ) -> list[Any]:
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        (self.workdir / ".gitignore").write_text("*")
         self.capture_environment()
+
         if isinstance(self.config, MonteCarloConfig):
             result = self.run_monte_carlo(
                 global_overrides=global_overrides, resume=resume

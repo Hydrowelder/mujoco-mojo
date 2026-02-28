@@ -9,8 +9,12 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
 from mujoco_mojo.process_manager import BaseList, NamedValueDict
 
+__all__ = ["MojoModel", "Values"]
+
 
 class Values(MojoBaseModel):
+    trial_num: int
+    seed: int | None = None
     dists: DistributionDict = Field(default_factory=DistributionDict)
     named: NamedValueDict = Field(default_factory=NamedValueDict)
     runtime_assets: BaseList[Path] = Field(default_factory=BaseList[Path])
@@ -23,4 +27,4 @@ class MojoModel(MojoBaseModel):
     """Mojo is the highest level watcher which manages running jobs."""
 
     mjcf: Mujoco
-    values: Values = Field(default_factory=Values)
+    values: Values
