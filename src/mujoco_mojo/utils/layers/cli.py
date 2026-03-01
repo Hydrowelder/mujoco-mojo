@@ -65,7 +65,14 @@ XMLNameType = Annotated[
 ]
 ResumeType = Annotated[
     bool,
-    typer.Option("--resume/--no-resume", help="Resume from disk"),
+    typer.Option("--resume/--no-resume", help="Resume from previous state on disk"),
+]
+CleanWorkdirType = Annotated[
+    bool,
+    typer.Option(
+        "--clean-workdir",
+        help="Delete the workdir before running (mutually exclusive with --resume)",
+    ),
 ]
 GenArgsType = Annotated[
     list[str],
@@ -234,6 +241,7 @@ def run_globals(
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     resume: ResumeType = DEFAULT_RESUME,
+    clean_workdir: CleanWorkdirType = False,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -297,7 +305,7 @@ def run_globals(
         )
     )
 
-    ctx.obj = {"runner": runner, "resume": resume}
+    ctx.obj = {"runner": runner, "resume": resume, "clean_workdir": clean_workdir}
 
 
 @run_app.command(name="monte-carlo")
@@ -316,6 +324,7 @@ def run_monte_carlo(
     # 1. Retrieve the shared values from the context
     runner: MojoRunner = ctx.obj["runner"]
     resume: bool = ctx.obj["resume"]
+    clean_workdir: bool = ctx.obj["clean_workdir"]
 
     # 2. build config
     runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc)
@@ -324,7 +333,7 @@ def run_monte_carlo(
     rprint(
         f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
     )
-    _results, had_fails = runner.run(resume=resume)
+    _results, had_fails = runner.run(resume=resume, clean_workdir=clean_workdir)
 
     if had_fails:
         preamble = "[bold red]Monte Carlo finished with failures![/bold red]"

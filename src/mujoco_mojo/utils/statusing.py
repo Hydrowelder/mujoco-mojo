@@ -7,11 +7,13 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import pandas as pd
-from pydantic import Field, PrivateAttr, computed_field, field_serializer
+from pydantic import Field, PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
+from mujoco_mojo.meta import REPO_URL
 
 __all__ = ["STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
 
@@ -140,6 +142,7 @@ class JobStatus(MojoBaseModel):
     started_by: str = Field(default_factory=getpass.getuser)
     workdir: Path
     n_trial: int
+    n_proc: int
     padding_style: str
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     elapsed: timedelta = Field(default_factory=timedelta)
@@ -150,8 +153,16 @@ class JobStatus(MojoBaseModel):
     run_args_used: bool
     run_kwargs_used: bool
 
-    _trial_nums: list[int] = PrivateAttr(default_factory=list)
+    @property
+    def trial_nums(self) -> list[int]:
+        from mujoco_mojo.utils.runner import MonteCarloConfig
+
+        return MonteCarloConfig._trial_nums(self.n_trial)
+
     _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
+
+    def trial_num_to_path(self, trial_num: int) -> Path:
+        return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
 
     def trial_statuses(self, n_proc: int = 1) -> dict[int, TrialStatus | None]:
         """
@@ -192,11 +203,11 @@ class JobStatus(MojoBaseModel):
         # run the checks in parallel
         max_workers = n_proc if n_proc > 1 else 1
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_check_file, self._trial_nums))
+            results = list(executor.map(_check_file, self.trial_nums))
 
         return {
             tn: status
-            for tn, status in zip(self._trial_nums, results)
+            for tn, status in zip(self.trial_nums, results)
             if status is not None
         }
 
@@ -249,13 +260,12 @@ class JobStatus(MojoBaseModel):
             tn for tn, comp in self._registry.items() if comp == Completion.INCOMPLETE
         ]
 
-    @computed_field
     @property
     def time_remaining(self) -> timedelta:
         """Calculates the estimated time ramianing based on elapsed wall-clock time."""
         elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
 
-        if self.progress <= 0:
+        if self.progress <= 0 or self.progress == 1:
             return timedelta(seconds=0)
 
         total_est_time = elapsed / self.progress
@@ -266,21 +276,19 @@ class JobStatus(MojoBaseModel):
     def n_done(self) -> int:
         return self.n_success + self.n_failed
 
-    @field_serializer("n_success", "n_failed")
-    def serialize_n_done(self, v: int) -> str:
-        return str(v)
-
-    @computed_field
     @property
     def progress(self) -> float:
         return min(max(0, self.n_done / self.n_trial), 1)
 
-    @computed_field
     @property
     def end_time(self) -> datetime:
-        return self.start_time + self.elapsed
+        if self.is_done:
+            # job is done
+            return self.start_time + self.elapsed
+        else:
+            # job is not done, predict completion time
+            return datetime.now(UTC) + self.time_remaining
 
-    @computed_field
     @property
     def failure_rate(self) -> float:
         return self.n_failed / self.n_done if self.n_done else 0
@@ -289,7 +297,6 @@ class JobStatus(MojoBaseModel):
     def success_rate(self) -> float:
         return self.n_success / self.n_done if self.n_done else 0
 
-    @computed_field
     @property
     def progress_bar(self) -> str:
         """Visual progress bar for text-based monitoring."""
@@ -298,17 +305,14 @@ class JobStatus(MojoBaseModel):
         filled_length = int(width * p)
         return f"|{'█' * filled_length}{'░' * (width - filled_length)}|"
 
-    @computed_field
     @property
     def n_success(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
 
-    @computed_field
     @property
     def n_failed(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.FAILED)
 
-    @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
         failed_tn = []
@@ -317,14 +321,6 @@ class JobStatus(MojoBaseModel):
                 failed_tn.append(tn)
         return sorted(failed_tn)
 
-    @field_serializer("progress", "failure_rate")
-    def serialize_float_as_perc(self, v: float) -> str:
-        return f"{v:.2%}"
-
-    @field_serializer("time_remaining", "elapsed")
-    def serialize_timedelta(self, v: timedelta) -> str:
-        return str(v)
-
     def update_trial(self, trial_num: int, completion: Completion, save: bool = True):
         """Updates the internal registry and optionally persists the global status."""
         self._registry[trial_num] = completion
@@ -332,6 +328,14 @@ class JobStatus(MojoBaseModel):
         if save:
             status_path = self.workdir / STATUS_FNAME
             self.dump_to_path(status_path, indent=4)
+
+    @property
+    def is_done(self) -> bool:
+        return self.n_done == self.n_trial
+
+    @staticmethod
+    def _utc_to_local(utc_aware: datetime) -> datetime:
+        return utc_aware.astimezone(tz=ZoneInfo("localtime"))
 
     @property
     def _metrics_series(self) -> pd.DataFrame:
@@ -346,6 +350,7 @@ class JobStatus(MojoBaseModel):
             "Started By": self.started_by,
             "Workdir": f"`{self.workdir.as_posix()}`",
             "Number of Trials": str(self.n_trial),
+            "Number of Processers": str(self.n_proc),
             "Successes": f"{self.n_success} ({self.success_rate:.1%})",
             "Failures": f"{self.n_failed} ({self.failure_rate:.1%})",
             "Progress": f"{self.progress:.2%}",
@@ -359,15 +364,25 @@ class JobStatus(MojoBaseModel):
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     def _run_time_series(self, n_proc: int = 1) -> pd.DataFrame:
-        runtimes = self.total_runtimes(n_proc=n_proc)
         data = {
             "Total Elapsed": str(self.elapsed).split(".")[0],
-            "Start Time": f"{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
-            "End Time": f"{self.end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
-            "Elapsed Pending": f"{str(timedelta(seconds=runtimes['pending'])).split('.')[0]} ({runtimes['pending'] / runtimes['total']:.2%})",
-            "Elapsed Generating": f"{str(timedelta(seconds=runtimes['generating'])).split('.')[0]} ({runtimes['generating'] / runtimes['total']:.2%})",
-            "Elapsed Solving": f"{str(timedelta(seconds=runtimes['solving'])).split('.')[0]} ({runtimes['solving'] / runtimes['total']:.2%})",
+            "Total Remaining": str(self.time_remaining).split(".")[0],
+            "Start Time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S %Z%z')} (*{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC*)",
+            "End Time"
+            if self.is_done
+            else "End Time (est.)": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S %Z%z')} (*{self.end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC*)",
         }
+
+        if self.is_done:
+            # only run this part if the job is done (it is a slow method)
+            runtimes = self.total_runtimes(n_proc=n_proc)
+            data.update(
+                {
+                    "Elapsed Pending": f"{str(timedelta(seconds=runtimes['pending'])).split('.')[0]} ({runtimes['pending'] / runtimes['total']:.2%})",
+                    "Elapsed Generating": f"{str(timedelta(seconds=runtimes['generating'])).split('.')[0]} ({runtimes['generating'] / runtimes['total']:.2%})",
+                    "Elapsed Solving": f"{str(timedelta(seconds=runtimes['solving'])).split('.')[0]} ({runtimes['solving'] / runtimes['total']:.2%})",
+                }
+            )
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     @property
@@ -384,10 +399,19 @@ class JobStatus(MojoBaseModel):
     ) -> None:
         report_path = self.workdir / filename
 
+        disclaimer = ""
+        if not self.is_done:
+            disclaimer = (
+                "\n### ⚠️ **WARNING: JOB INCOMPLETE**\n```\n"
+                f"This report was generated while the job was incomplete.\n"
+                f"Metrics and completion times are estimates based on the current "
+                f"{self.progress:.1%} progress.\n```\n"
+            )
+
         content = f"""
 # Simulation Campaign Report
 > *Report generated at {datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")} UTC*
-
+{disclaimer}
 ---
 
 ## Metrics:
@@ -404,7 +428,27 @@ class JobStatus(MojoBaseModel):
 
 ---
 
-> **Generated by [`mujoco-mojo`](https://github.com/Hydrowelder/mujoco-mojo)**
+> **Generated by [`mujoco-mojo`]({REPO_URL})**
 """.strip()
         report_path.write_text(content + "\n")  # i like having an ending newline
         logger.info(f"MuJoCo Mojo report generated at {report_path}")
+
+    def to_dashboard_json(self, n_proc: int | None = None) -> dict:
+        """Returns a lightweight summary optimized for the Alpine.js dashboard."""
+        # We trigger the disk refresh here so the data is fresh
+        self.refresh_from_disk(n_proc=self.n_proc if n_proc is None else n_proc)
+
+        return {
+            "progress": self.progress * 100,
+            "n_success": self.n_success,
+            "n_failed": self.n_failed,
+            "n_trial": self.n_trial,
+            "n_done": self.n_done,
+            "failure_rate": self.failure_rate,
+            # We convert timedelta to string here so JS doesn't have to parse it
+            "time_remaining": str(self.time_remaining).split(".")[0],
+            "elapsed": str(self.elapsed).split(".")[0],
+            "is_complete": self.progress >= 1.0,
+            # The 'Pulse' data: just a list of the last 10 failed trial numbers
+            "failure_tns": self.failed_trial_nums,
+        }
