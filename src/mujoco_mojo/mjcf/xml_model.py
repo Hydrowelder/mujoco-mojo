@@ -104,9 +104,9 @@ class XMLModel(MojoBaseModel):
             if isinstance(value, XMLModel):
                 # safety checks
                 if value.children:
-                    raise ValueError(
-                        f"{value.__class__.__name__} cannot be used as an attribute because it defines children",
-                    )
+                    msg = f"{value.__class__.__name__} cannot be used as an attribute because it defines children"
+                    logger.error(msg)
+                    raise ValueError(msg)
 
                 # recursively extract attributes
                 sub_attrs = value._collect_xml_attributes()
@@ -114,9 +114,9 @@ class XMLModel(MojoBaseModel):
                 # collision detection
                 for k in sub_attrs:
                     if k in el.attrib:
-                        raise ValueError(
-                            f"Attribute collision while flattening {value.__class__.__name__}: '{k}' already exists",
-                        )
+                        msg = f"Attribute collision while flattening {value.__class__.__name__}: '{k}' already exists"
+                        logger.error(msg)
+                        raise ValueError(msg)
 
                 el.attrib.update(sub_attrs)
                 continue
@@ -137,10 +137,9 @@ class XMLModel(MojoBaseModel):
                 if isinstance(item, XMLModel):
                     el.append(item.to_xml(exclude_default=exclude_default))
                 else:
-                    raise TypeError(
-                        f"Field '{field}' in {self.__class__.__name__} contains an object "
-                        f"of type {type(item).__name__} which is not an XMLModel (missing to_xml)."
-                    )
+                    msg = f"Field '{field}' in {self.__class__.__name__} contains an object of type {type(item).__name__} which is not an XMLModel (missing to_xml)."
+                    logger.error(msg)
+                    raise TypeError(msg)
 
         return el
 
@@ -151,9 +150,9 @@ class XMLModel(MojoBaseModel):
         Only valid for XMLModels that define attributes but no children.
         """
         if self.children:
-            raise ValueError(
-                f"{self.__class__.__name__} has children and cannot be flattened",
-            )
+            msg = f"{self.__class__.__name__} has children and cannot be flattened"
+            logger.error(msg)
+            raise ValueError(msg)
 
         attrs: dict[str, str] = {}
         for field in self.attributes:
@@ -200,18 +199,16 @@ class XMLModel(MojoBaseModel):
         # Validate attributes
         for name in cls.attributes:
             if name not in valid_names:
-                raise TypeError(
-                    f"{cls.__name__}: attribute '{name}' is not defined "
-                    f"as a field or class variable",
-                )
+                msg = f"{cls.__name__}: attribute '{name}' is not defined as a field or class variable"
+                logger.error(msg)
+                raise TypeError(msg)
 
         # Validate children
         for name in cls.children:
             if name not in valid_names:
-                raise TypeError(
-                    f"{cls.__name__}: child '{name}' is not defined "
-                    f"as a field or class variable",
-                )
+                msg = f"{cls.__name__}: child '{name}' is not defined as a field or class variable"
+                logger.error(msg)
+                raise TypeError(msg)
 
         if (
             "name" in cls.model_fields
@@ -229,9 +226,9 @@ class XMLModel(MojoBaseModel):
         for group in self.__exclusive_groups__:
             count = sum(getattr(self, field) is not None for field in group)
             if count > 1:
-                raise ValueError(
-                    f"{type(self).__name__}: Only one of {group} may be specified",
-                )
+                msg = f"{type(self).__name__}: Only one of {group} may be specified"
+                logger.error(msg)
+                raise ValueError(msg)
         return self
 
     def get_id(self, mj_model: mujoco.MjModel) -> int:
@@ -240,9 +237,9 @@ class XMLModel(MojoBaseModel):
         """
         # 1. Check if this specific class supports ID lookup
         if self.mjt_obj is None:
-            raise TypeError(
-                f"Class '{self.__class__.__name__}' does not map to a MuJoCo runtime object."
-            )
+            msg = f"Class '{self.__class__.__name__}' does not map to a MuJoCo runtime object."
+            logger.error(msg)
+            raise TypeError(msg)
 
         # 2. Get the name (supporting your custom TypeHints)
         name = getattr(self, "name", None)
@@ -252,9 +249,9 @@ class XMLModel(MojoBaseModel):
             if self.tag == "worldbody":
                 name = "world"
             else:
-                raise ValueError(
-                    f"Instance of {self.__class__.__name__} has no name defined."
-                )
+                msg = f"Instance of {self.__class__.__name__} has no name defined."
+                logger.error(msg)
+                raise ValueError(msg)
 
         # 3. Perform the MuJoCo lookup
         obj_id = mujoco.mj_name2id(mj_model, self.mjt_obj, name)

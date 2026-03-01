@@ -6,6 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomBase
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import SensorObjectType
+from mujoco_mojo.utils.logging import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
 # import a bunch of stuff
@@ -58,6 +59,8 @@ from .sensor_attr.torque import SensorTorque
 from .sensor_attr.touch import SensorTouch
 from .sensor_attr.user import SensorUser
 from .sensor_attr.velocimeter import SensorVelocimeter
+
+logger = get_logger(__name__)
 
 __all__ = ["Sensor"]
 
@@ -423,28 +426,33 @@ class Sensor(XMLModel):
             SensorObjectType | None: Sensor object type (if valid) or None if there is no sensor object type.
 
         """
-        _err_msg = "The object to have its SensorObjectType was found to have multiple valid types, which itself is invalid."
+        msg = "The object to have its SensorObjectType was found to have multiple valid types, which itself is invalid."
         sensor_object_type = None
         if isinstance(obj, Body):
             if inertial:
                 if sensor_object_type is not None:
-                    raise TypeError(_err_msg)
+                    logger.error(msg)
+                    raise TypeError(msg)
                 sensor_object_type = SensorObjectType.BODY
             else:
                 if sensor_object_type is not None:
-                    raise TypeError(_err_msg)
+                    logger.error(msg)
+                    raise TypeError(msg)
                 sensor_object_type = SensorObjectType.XBODY
         elif isinstance(obj, GeomBase):
             if sensor_object_type is not None:
-                raise TypeError(_err_msg)
+                logger.error(msg)
+                raise TypeError(msg)
             sensor_object_type = SensorObjectType.GEOM
         elif isinstance(obj, SiteBase):
             if sensor_object_type is not None:
-                raise TypeError(_err_msg)
+                logger.error(msg)
+                raise TypeError(msg)
             sensor_object_type = SensorObjectType.SITE
         elif isinstance(obj, Camera):
             if sensor_object_type is not None:
-                raise TypeError(_err_msg)
+                logger.error(msg)
+                raise TypeError(msg)
             sensor_object_type = SensorObjectType.CAMERA
 
         return sensor_object_type

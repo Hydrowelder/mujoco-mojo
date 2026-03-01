@@ -9,6 +9,9 @@ from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import EulerSeq, Vec3, Vec4, Vec6
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "AxisAngle",
@@ -49,9 +52,9 @@ class OrientationBase(XMLModel):
 
     def as_quat(self, eulerseq: EulerSeq | str | None = None) -> Quat:
         if isinstance(self, Euler) and self.euler is not None and eulerseq is None:
-            raise ValueError(
-                "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)",
-            )
+            msg = "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+            logger.error(msg)
+            raise ValueError(msg)
         # returns [w, x, y, z] for MuJoCo
         rot = self._to_rotation(eulerseq)
         q = rot.as_quat()  # scipy returns [x, y, z, w]
@@ -59,9 +62,9 @@ class OrientationBase(XMLModel):
 
     def as_matrix(self, eulerseq: EulerSeq | str | None = None):
         if isinstance(self, Euler) and self.euler is not None and eulerseq is None:
-            raise ValueError(
-                "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)",
-            )
+            msg = "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+            logger.error(msg)
+            raise ValueError(msg)
         return self._to_rotation(eulerseq).as_matrix()
 
     def _to_rotation(self, eulerseq: EulerSeq | str | None = None) -> R:
@@ -72,9 +75,9 @@ class OrientationBase(XMLModel):
             return R.from_quat([x, y, z, w])
         if isinstance(self, Euler) and self.euler is not None:
             if eulerseq is None:
-                raise ValueError(
-                    "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)",
-                )
+                msg = "Unable to return for Euler without specifying the euler angle order (xyz, ZXZ, etc.)"
+                logger.error(msg)
+                raise ValueError(msg)
             return R.from_euler(eulerseq, np.asarray(self.euler))
         # WARNING: I vibecoded the following
         if isinstance(self, AxisAngle) and self.axisangle is not None:
@@ -85,9 +88,9 @@ class OrientationBase(XMLModel):
             # Normalize the axis vector
             norm = np.linalg.norm(axis)
             if norm == 0:
-                raise ValueError(
-                    "Axis vector cannot be zero for AxisAngle orientation.",
-                )
+                msg = "Axis vector cannot be zero for AxisAngle orientation."
+                logger.error(msg)
+                raise ValueError(msg)
             axis = axis / norm
 
             # Rotation vector = axis * angle (angle should be in radians)
@@ -126,9 +129,9 @@ class OrientationBase(XMLModel):
             rotmat = np.column_stack((x, y, z))
             return R.from_matrix(rotmat)
 
-        raise NotImplementedError(
-            f"Rotation matrix transforms has not yet been developed for type ({type(self)})",
-        )
+        msg = f"Rotation matrix transforms has not yet been developed for type ({type(self)})"
+        logger.error(msg)
+        raise NotImplementedError(msg)
 
 
 class Quat(OrientationBase):

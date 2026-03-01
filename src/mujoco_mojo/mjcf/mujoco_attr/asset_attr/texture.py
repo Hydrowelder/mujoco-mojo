@@ -18,6 +18,9 @@ from mujoco_mojo.typing import (
     TextureType,
     Vec3,
 )
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["Texture", "TextureBuiltIn"]
 
@@ -124,9 +127,9 @@ class Texture(XMLModel):
 
         # existance of single_file is mutually exclusive with cube files
         if single_file and cube_files:
-            raise ValueError(
-                "Defining file at the same time as any of fileright, fileleft, fileup, filedown, filefront, or fileback is invalid."
-            )
+            msg = "Defining file at the same time as any of fileright, fileleft, fileup, filedown, filefront, or fileback is invalid."
+            logger.error(msg)
+            raise ValueError(msg)
 
         # no files at all allowed
         if not single_file and not cube_files:
@@ -152,17 +155,19 @@ class Texture(XMLModel):
                     # compare if the content type is already a MIME
                     if isinstance(self.content_type, TextureMIME):
                         if path_mime != self.content_type:
-                            raise Exception(
+                            msg = (
                                 f"MIME type for {path} did not match what was defined."
                             )
+                            logger.error(msg)
+                            raise Exception(msg)
                     else:
                         if content_type is None:
                             content_type = path_mime
                         else:
                             if path_mime != content_type:
-                                raise Exception(
-                                    f"MIME type for {path} did not match what was defined."
-                                )
+                                msg = f"MIME type for {path} did not match what was defined."
+                                logger.error(msg)
+                                raise Exception(msg)
                 except Exception:
                     invalid_paths.append((path, mime))
                     continue
@@ -187,11 +192,11 @@ class Texture(XMLModel):
 
                 return "\n".join(lines) + expected_line
 
-            message = (
-                "Invalid texture file MIME types detected:\n"
-                + _format_invalid_paths(invalid_paths, self.content_type)
+            msg = "Invalid texture file MIME types detected:\n" + _format_invalid_paths(
+                invalid_paths, self.content_type
             )
-            raise ValueError(message)
+            logger.error(msg)
+            raise ValueError(msg)
 
         return self
 

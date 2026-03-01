@@ -81,9 +81,11 @@ class HField(XMLModel):
         if nrow is not None and ncol is not None:
             expected_len = nrow * ncol
             if elev.size != expected_len:
-                raise ValueError(
+                msg = (
                     f"Elevation length {elev.size} does not match nrow*ncol={expected_len}",
                 )
+                logger.error(msg)
+                raise ValueError(msg)
 
         # Normalize
         min_val = elev.min()
