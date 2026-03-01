@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mujoco
 from pydantic import Field
 
 import mujoco_mojo.utils.utils as utils
@@ -22,7 +23,10 @@ from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import ModelName
-from mujoco_mojo.utils.utils import is_empty_list
+from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
+
+logger = get_logger(__name__)
 
 __all__ = ["Mujoco"]
 
@@ -167,3 +171,6 @@ class Mujoco(XMLModel):
         """
         xml = utils.to_pretty_xml(self.to_xml(exclude_default=exclude_default))
         file.write_text(xml)
+
+    def to_mjspec(self) -> mujoco.MjSpec:
+        return mujoco.MjSpec.from_string(to_pretty_xml(self.to_xml()))

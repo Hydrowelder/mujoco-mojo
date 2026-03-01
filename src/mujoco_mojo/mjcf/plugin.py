@@ -6,6 +6,9 @@ from pydantic import model_validator
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import InstanceName, PluginName
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["Plugin"]
 
@@ -40,5 +43,7 @@ class Plugin(XMLModel):
     @model_validator(mode="after")
     def validate_plugin(self) -> Self:
         if not self.plugin or self.instance:
-            raise ValueError("Must specify at least one of 'plugin' or 'instance'")
+            msg = "Must specify at least one of 'plugin' or 'instance'"
+            logger.error(msg)
+            raise ValueError(msg)
         return self

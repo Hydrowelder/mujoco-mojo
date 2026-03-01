@@ -1,10 +1,26 @@
+r"""
+```bash
+mujoco-mojo run \
+    --generator mujoco-mojo.tests.monte_carlo_test.monte_carlo.Experiment.generate \
+    --runtime mujoco-mojo.tests.monte_carlo_test.monte_carlo.Experiment.runtime \
+    --workdir mujoco-mojo/tests/monte_carlo_test/mc_test/ \
+    --no-resume \
+    monte-carlo \
+    --n-trial 10 \
+    --n-proc 1
+```
+"""
+
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import mujoco_mojo as mojo
+from mujoco_mojo.utils.logging import get_logger
 
 SEED = 42
+
+logger = get_logger(__name__)
 
 
 def generate(
@@ -13,9 +29,10 @@ def generate(
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
-    print(f"generating nothing {trial_num}!")
+    # print(f"generating nothing {trial_num}!")
     # print(f"Args used: {args}!")
     # print(f"Kwargs used: {kwargs}!")
+    logger.info(f"generating nothing {trial_num}!")
 
     if not trial_num % 5:
         raise ValueError("askflaskfhl")

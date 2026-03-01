@@ -7,6 +7,9 @@ from mujoco_mojo.typing import (
     BodyName,
     GeomName,
 )
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["SensorCollisionBase"]
 
@@ -44,9 +47,13 @@ class SensorCollisionBase(SensorBase):
     @model_validator(mode="after")
     def validate_targets(self):
         if (self.geom1 is None) == (self.body1 is None):
-            raise ValueError("Exactly one of geom1 or body1 must be specified")
+            msg = "Exactly one of geom1 or body1 must be specified"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if (self.geom2 is None) == (self.body2 is None):
-            raise ValueError("Exactly one of geom2 or body2 must be specified")
+            msg = "Exactly one of geom2 or body2 must be specified"
+            logger.error(msg)
+            raise ValueError(msg)
 
         return self

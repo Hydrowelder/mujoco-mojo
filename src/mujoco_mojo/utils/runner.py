@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import logging
 import shutil
 import subprocess
 import sys
@@ -25,9 +24,10 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
+from mujoco_mojo.utils.logging import get_logger
 from mujoco_mojo.utils.statusing import STATUS_FNAME, Completion, JobStatus, TrialStatus
 
-logger = logging.getLogger()
+logger = get_logger(__name__)
 
 __all__ = ["MojoGenerator", "MojoRunner", "MojoRuntime", "MonteCarloConfig", "Trial"]
 
@@ -435,5 +435,5 @@ class MojoRunner:
                     )
                 status_tracker.generate_report(n_proc=self.config.n_proc)
 
-        status_tracker.generate_report(n_proc=self.config.n_proc)
+        status_tracker.generate_report(n_proc=self.config.n_proc, alert_generation=True)
         return results, bool(status_tracker.failed_trial_nums)

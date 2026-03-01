@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, Literal, get_origin
+from typing import (
+    ClassVar,
+    Literal,
+    Protocol,
+    get_origin,
+    runtime_checkable,
+)
 from xml.etree.ElementTree import Element
 
+import mujoco
 import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
+from mujoco_mojo.utils.logging import get_logger
 
-if TYPE_CHECKING:
-    pass
+logger = get_logger(__name__)
 
 __all__ = ["XMLModel"]
 
@@ -39,6 +46,14 @@ def _format_value(value) -> str:
     return str(value)
 
 
+@runtime_checkable
+class NamedXMLObject(Protocol):
+    """A protocol that matches any object with a name and an mjt_obj."""
+
+    name: str | None
+    mjt_obj: ClassVar[mujoco.mjtObj | None]
+
+
 class XMLModel(MojoBaseModel):
     """Base class for most MuJoCo Mojo MJCF objects."""
 
@@ -53,6 +68,8 @@ class XMLModel(MojoBaseModel):
 
     __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
+
+    mjt_obj: ClassVar[mujoco.mjtObj | None] = None
 
     def to_xml(self, exclude_default: bool = True) -> Element:
         el = Element(self.tag)
@@ -107,18 +124,23 @@ class XMLModel(MojoBaseModel):
             # normal attribute
             el.set(field_name, _format_value(value))
 
-        # children (unchanged)
+        # children
         for field in self.children:
             value = getattr(self, field, None)
 
             if value is None:
                 continue
 
-            if isinstance(value, list):
-                for item in value:
+            # turn single items into a list so we only write the logic once
+            items = value if isinstance(value, list) else [value]
+            for item in items:
+                if isinstance(item, XMLModel):
                     el.append(item.to_xml(exclude_default=exclude_default))
-            else:
-                el.append(value.to_xml(exclude_default=exclude_default))
+                else:
+                    raise TypeError(
+                        f"Field '{field}' in {self.__class__.__name__} contains an object "
+                        f"of type {type(item).__name__} which is not an XMLModel (missing to_xml)."
+                    )
 
         return el
 
@@ -147,9 +169,9 @@ class XMLModel(MojoBaseModel):
 
                 for k in nested:
                     if k in attrs:
-                        raise ValueError(
-                            f"Attribute collision while flattening nested XMLModel: '{k}'",
-                        )
+                        msg = f"Attribute collision while flattening nested XMLModel: '{k}'"
+                        logger.error(msg)
+                        raise ValueError(msg)
 
                 attrs.update(nested)
 
@@ -191,6 +213,16 @@ class XMLModel(MojoBaseModel):
                     f"as a field or class variable",
                 )
 
+        if (
+            "name" in cls.model_fields
+            and cls.mjt_obj is None
+            and cls.tag != "worldbody"
+        ):
+            # only warning if some named objects truly don't have a MuJoCo counterpart
+            logger.debug(
+                f"{cls.__name__}: class has a name attribute but no mjtObj definition. This may be an error on behalf of the MuJoCo Mojo developer."
+            )
+
     @model_validator(mode="after")
     def enforce_exclusive_groups(self) -> XMLModel:
         """Ensures that only one attribute in each exclusive group is set."""
@@ -201,3 +233,35 @@ class XMLModel(MojoBaseModel):
                     f"{type(self).__name__}: Only one of {group} may be specified",
                 )
         return self
+
+    def get_id(self, mj_model: mujoco.MjModel) -> int:
+        """
+        Generic ID lookup that works for any subclass defining mjt_obj and name.
+        """
+        # 1. Check if this specific class supports ID lookup
+        if self.mjt_obj is None:
+            raise TypeError(
+                f"Class '{self.__class__.__name__}' does not map to a MuJoCo runtime object."
+            )
+
+        # 2. Get the name (supporting your custom TypeHints)
+        name = getattr(self, "name", None)
+
+        if name is None:
+            # Special case for 'worldbody' which MuJoCo implicitly calls "world"
+            if self.tag == "worldbody":
+                name = "world"
+            else:
+                raise ValueError(
+                    f"Instance of {self.__class__.__name__} has no name defined."
+                )
+
+        # 3. Perform the MuJoCo lookup
+        obj_id = mujoco.mj_name2id(mj_model, self.mjt_obj, name)
+
+        if obj_id == -1:
+            msg = f"Could not find {self.mjt_obj.name} '{name}' in MjModel."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        return obj_id

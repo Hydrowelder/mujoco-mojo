@@ -10,6 +10,9 @@ from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "Mesh",
@@ -156,7 +159,9 @@ class MeshSphere(Mesh):
     @classmethod
     def validate_subdivision(cls, v: int) -> int:
         if not 0 <= v <= 4:
-            raise ValueError("subdivision must be in [0, 4]")
+            msg = "subdivision must be in [0, 4]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -174,7 +179,9 @@ class MeshHemisphere(Mesh):
     @classmethod
     def validate_resolution(cls, v: int) -> int:
         if not 0 <= v <= 10:
-            raise ValueError("resolution must be in [0, 10]")
+            msg = "resolution must be in [0, 10]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -195,14 +202,18 @@ class MeshCone(Mesh):
     @classmethod
     def validate_nvert(cls, v: int) -> int:
         if v < 3:
-            raise ValueError("nvert must be >= 3")
+            msg = "nvert must be >= 3"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("radius")
     @classmethod
     def validate_radius(cls, v: float) -> float:
         if not 0 <= v <= 1:
-            raise ValueError("radius must be in [0, 1]")
+            msg = "radius must be in [0, 1]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -226,14 +237,18 @@ class MeshSupersphere(Mesh):
     @classmethod
     def validate_resolution(cls, v: int) -> int:
         if v < 3:
-            raise ValueError("resolution must be >= 3")
+            msg = "resolution must be >= 3"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("e", "n")
     @classmethod
     def validate_non_negative(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("must be >= 0")
+            msg = "must be >= 0"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -260,21 +275,27 @@ class MeshTorus(Mesh):
     @classmethod
     def validate_resolution(cls, v: int) -> int:
         if v < 3:
-            raise ValueError("resolution must be >= 3")
+            msg = "resolution must be >= 3"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("radius")
     @classmethod
     def validate_radius(cls, v: float) -> float:
         if not 0 < v <= 1:
-            raise ValueError("radius must be in (0, 1]")
+            msg = "radius must be in (0, 1]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("s", "t")
     @classmethod
     def validate_positive(cls, v: float) -> float:
         if v <= 0:
-            raise ValueError("must be > 0")
+            msg = "must be > 0"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -312,28 +333,36 @@ class MeshWedge(Mesh):
     @classmethod
     def validate_non_negative(cls, v: int) -> int:
         if v < 0:
-            raise ValueError("must be >= 0")
+            msg = "must be >= 0"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("fov_phi")
     @classmethod
     def validate_fov_phi(cls, v: float) -> float:
         if not 0 < v <= 180:
-            raise ValueError("fov_phi must be in (0, 180]")
+            msg = "fov_phi must be in (0, 180]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("fov_theta")
     @classmethod
     def validate_fov_theta(cls, v: float) -> float:
         if not 0 < v < 90:
-            raise ValueError("fov_theta must be in (0, 90)")
+            msg = "fov_theta must be in (0, 90)"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("gamma")
     @classmethod
     def validate_gamma(cls, v: float) -> float:
         if not 0 <= v <= 1:
-            raise ValueError("gamma must be in [0, 1]")
+            msg = "gamma must be in [0, 1]"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
@@ -354,7 +383,9 @@ class MeshPlate(Mesh):
     @classmethod
     def validate_positive(cls, v: int) -> int:
         if v <= 0:
-            raise ValueError("must be > 0")
+            msg = "must be > 0"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
 
