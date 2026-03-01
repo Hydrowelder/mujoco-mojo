@@ -1,3 +1,4 @@
+import ast
 import importlib
 import sys
 from importlib.metadata import version
@@ -65,6 +66,52 @@ XMLNameType = Annotated[
 ResumeType = Annotated[
     bool,
     typer.Option("--resume/--no-resume", help="Resume from disk"),
+]
+GenArgsType = Annotated[
+    list[str],
+    typer.Option(
+        "--gen-arg",
+        "-ga",
+        help=(
+            "Positional arg for the [bold cyan]generator[/bold cyan]. "
+            "Repeat for multiple values (e.g., [italic]--gen-arg high_friction --gen-arg 1.5[/italic]). "
+            "Values are [bold yellow]smart-parsed[/bold yellow] (e.g., '1.5' becomes a float)."
+        ),
+    ),
+]
+GenKwargsType = Annotated[
+    list[str],
+    typer.Option(
+        "--gen-kwarg",
+        "-gk",
+        help=(
+            "Keyword arg (key=value) for the [bold cyan]generator[/bold cyan]. "
+            "Example: [italic]--gen-kwarg mode='fast' --gen-kwarg complexity=10[/italic]. "
+            "Strings with special characters should be [bold red]single-quoted[/bold red] inside the double quotes."
+        ),
+    ),
+]
+RunArgsType = Annotated[
+    list[str],
+    typer.Option(
+        "--run-arg",
+        "-ra",
+        help=(
+            "Positional arg for the [bold magenta]runtime[/bold magenta]. "
+            "Repeat for multiple values. Useful for passing flags directly to the physics engine."
+        ),
+    ),
+]
+RunKwargsType = Annotated[
+    list[str],
+    typer.Option(
+        "--run-kwarg",
+        "-rk",
+        help=(
+            "Keyword arg (key=value) for the [bold magenta]runtime[/bold magenta]. "
+            "Example: [italic]--run-kwarg solver='Newton' --run-kwarg iterations=5[/italic]."
+        ),
+    ),
 ]
 
 # monte carlo
@@ -154,6 +201,30 @@ def _load_func(path: str) -> Any:
         raise typer.Exit(code=1)
 
 
+def _smart_parse(value: str) -> Any:
+    """Tries to convert CLI strings to Python types (int, float, bool)."""
+    try:
+        # ast.literal_eval handles 10 -> int, 10.5 -> float, True -> bool
+        return ast.literal_eval(value)
+    except (ValueError, SyntaxError):
+        # Fallback to raw string if it's not a basic literal
+        return value
+
+
+def _process_kwargs(kwargs: list[str]) -> dict[str, Any]:
+    """Parses Keyword Args of the format: ["key=val", "name=gable"] into {"key": "val", "name": "gable"}"""
+    processed_kwargs = {}
+    for kv in kwargs:
+        if "=" not in kv:
+            rprint(
+                f"[bold red]Error:[/bold red] Invalid Key-Value pair '{kv}'. Use key=value."
+            )
+            raise typer.Exit(1)
+        k, v = kv.split("=", 1)
+        processed_kwargs[k] = _smart_parse(v)
+    return processed_kwargs
+
+
 @run_app.callback()
 def run_globals(
     ctx: typer.Context,
@@ -163,6 +234,10 @@ def run_globals(
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     resume: ResumeType = DEFAULT_RESUME,
+    gen_args: GenArgsType = [],
+    gen_kwargs: GenKwargsType = [],
+    run_args: RunArgsType = [],
+    run_kwargs: RunKwargsType = [],
 ):
     """
     [bold yellow]Global settings for all simulation runs.[/bold yellow]
@@ -178,6 +253,12 @@ def run_globals(
 
     from mujoco_mojo.utils.runner import MojoRunner
 
+    processed_gen_args = [_smart_parse(a) for a in gen_args]
+    processed_gen_kwargs = _process_kwargs(gen_kwargs)
+
+    processed_run_args = [_smart_parse(a) for a in run_args]
+    processed_run_kwargs = _process_kwargs(run_kwargs)
+
     # resolve code paths
     gen_func = _load_func(generator)
     run_func = _load_func(runtime) if runtime else None
@@ -189,12 +270,18 @@ def run_globals(
         workdir=workdir,
         model_config_name=model_config_name,
         xml_name=xml_name,
+        gen_args=processed_gen_args,
+        gen_kwargs=processed_gen_kwargs,
+        run_args=processed_run_args,
+        run_kwargs=processed_run_kwargs,
     )
 
     # dry-run check
+    gen_name, gen_path = runner.inspect_protocol(gen_func)
+    run_name, run_path = runner.inspect_protocol(run_func)
     inspection_results = (
-        f"[bold blue]Generator:[/bold blue] {runner.inspect_protocol(gen_func)}\n"
-        f"[bold blue]Runtime:  [/bold blue] {runner.inspect_protocol(run_func)}"
+        f"[bold blue]generator[/bold blue] {gen_name} [dim]([u]{gen_path}[/u])[/dim]\n"
+        f"[bold blue]runtime  [/bold blue] {run_name} [dim]([u]{run_path}[/u])[/dim]"
     )
     rprint(
         Panel(
@@ -231,9 +318,14 @@ def run_monte_carlo(
     rprint(
         f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
     )
-    _results = runner.run(resume=resume)
+    _results, had_fails = runner.run(resume=resume)
+
+    if had_fails:
+        preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
+    else:
+        preamble = "[bold green]Monte Carlo finished![/bold green]"
     rprint(
-        f"\n[bold green]Monte Carlo finished![/bold green] Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
+        f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
     )
 
     raise typer.Exit()

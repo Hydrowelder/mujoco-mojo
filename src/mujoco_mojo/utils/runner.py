@@ -38,14 +38,14 @@ class MojoGenerator(Protocol):
     """Definition of a function that generates a MojoModel model instance."""
 
     def __call__(
-        self, trial_num: int, overrides: NamedValueDict, *args: Any, **kwargs: Any
+        self, trial_num: int, overrides: NamedValueDict, /, *args: Any, **kwargs: Any
     ) -> MojoModel: ...
 
 
 class MojoRuntime(Protocol):
     """Definition of a function that executes a generated MojoModel model."""
 
-    def __call__(self, mojo_model: MojoModel, *args: Any, **kwargs: Any) -> Any: ...
+    def __call__(self, mojo_model: MojoModel, /, *args: Any, **kwargs: Any) -> Any: ...
 
 
 # --- Models ---
@@ -198,24 +198,26 @@ class Trial:
             # 1. Generate
             with status.record_step(step_name="generating"):
                 logger.info(f"Generating trial_num={self.trial_num}")
-                mojo = generator(self.trial_num, overrides, *gen_args, **gen_kwargs)
+                mojo_model = generator(
+                    self.trial_num, overrides, *gen_args, **gen_kwargs
+                )
 
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
                 self.trial_dir.mkdir(parents=True, exist_ok=True)
-                mojo.mjcf.write_xml(self.xml_path)
-                self.model_config_path.write_text(mojo.model_dump_json(indent=4))
+                mojo_model.mjcf.write_xml(self.xml_path)
+                self.model_config_path.write_text(mojo_model.model_dump_json(indent=4))
 
             with status.record_step(step_name="solving"):
                 # 3. Execute (if runtime provided)
                 if runtime is not None:
                     logger.info(f"Executing trial_num={self.trial_num} runtime")
-                    result = runtime(mojo, *run_args, **run_kwargs)
+                    result = runtime(mojo_model, *run_args, **run_kwargs)
                 else:
                     logger.info(
                         f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
                     )
-                    result = mojo
+                    result = mojo_model
 
             status.step = "done"
             status.completion = Completion.SUCCESS
@@ -245,9 +247,9 @@ class MojoRunner:
     run_kwargs: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def inspect_protocol(func: MojoGenerator | MojoRuntime | None) -> str:
+    def inspect_protocol(func: MojoGenerator | MojoRuntime | None) -> tuple[str, str]:
         if func is None:
-            return "none defined"
+            return ("none defined", "")
         try:
             # 1. Get the file path
             gen_file = inspect.getfile(func)
@@ -260,11 +262,11 @@ class MojoRunner:
             # getsourcelines returns ([lines], starting_line_number)
             _, line_num = inspect.getsourcelines(func)
 
-            return f"`{gen_name}` (defined in: `{gen_file}:{line_num}`)"
+            return (f"{gen_name}", f"{gen_file}:{line_num}")
 
         except Exception:
             logger.error("Failed to capture generator details.")
-            return f"`{func}`"
+            return (f"`{func}`", "")
 
     def capture_environment(self):
         req_path = self.workdir / "requirements.txt"
@@ -300,20 +302,20 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict | None = None,
         resume: bool = DEFAULT_RESUME,
-    ) -> list[Any]:
+    ) -> tuple[list[Any], bool]:
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
         self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
-            result = self.run_monte_carlo(
+            result, had_fails = self.run_monte_carlo(
                 global_overrides=global_overrides, resume=resume
             )
         else:
             msg = f"A configuration for {self.config.__class__.__name__} has not been implemented/"
             logger.error(msg)
             raise NotImplementedError(msg)
-        return result
+        return result, had_fails
 
     def execute_single_trial(
         self, trial_num: int, overrides: NamedValueDict
@@ -339,17 +341,24 @@ class MojoRunner:
 
     def run_monte_carlo(
         self, global_overrides: NamedValueDict | None = None, resume: bool = True
-    ) -> list[Any]:
-        """Orchestrates a Monte Carlo job."""
+    ) -> tuple[list[Any], bool]:
+        """
+        Orchestrates a Monte Carlo job.
+
+        """
         overrides = global_overrides or NamedValueDict()
 
         # initialize the status tracker
         status_tracker = JobStatus(
-            workdir=self.workdir,
+            workdir=self.workdir.resolve(),
             n_trial=self.config.n_trial,
             padding_style=self.config.padding_style,
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
+            gen_args_used=bool(self.gen_args),
+            gen_kwargs_used=bool(self.gen_kwargs),
+            run_args_used=bool(self.run_args),
+            run_kwargs_used=bool(self.run_kwargs),
         )
         status_tracker._trial_nums = list(self.config.trial_nums)
         status_tracker._registry = dict(
@@ -364,7 +373,7 @@ class MojoRunner:
         results = []
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
-            return results
+            return results, bool(status_tracker.failed_trial_nums)
 
         if self.config.is_parallel:
             logger.info(
@@ -401,4 +410,4 @@ class MojoRunner:
                     )
 
         status_tracker.generate_report(n_proc=self.config.n_proc)
-        return results
+        return results, bool(status_tracker.failed_trial_nums)

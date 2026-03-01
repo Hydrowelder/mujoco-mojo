@@ -24,6 +24,21 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 * Resume a previously started job without rerunning previous cases
 * Automatically record installed Python packages to `requirements.txt` for job recreation (works with `uv` or `pip`)
 * End of run summary with metric to help perform a state of health check
+* Flexible commandline utilities to run jobs
+
+    ??? example
+        ```bash
+        mujoco-mojo run \
+        --generator monte_carlo_test.Experiment.generate \
+        --runtime monte_carlo_test.Experiment.runtime \
+        --workdir ./mc_test/ \
+        --no-resume \
+        --gen-arg 123 \
+        --gen-kwarg 'test=1234' \
+        monte-carlo \
+        --n-trial 10 \
+        --n-proc 1
+        ```
 * *SOON*: dashboard tool for runtime monitoring
 
 ## Installation
