@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
@@ -25,6 +28,8 @@ class Joint(XMLModel):
     tag = "joint"
 
     attributes = ()
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_JOINT
 
     name: JointName | None = None
     """Name of the joint."""

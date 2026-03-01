@@ -69,7 +69,8 @@ class XMLModel(MojoBaseModel):
     __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
-    mjt_obj: ClassVar[mujoco.mjtObj | None] = None
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = None
+    """Attribute used to perform MjModel ID lookups."""
 
     def to_xml(self, exclude_default: bool = True) -> Element:
         el = Element(self.tag)
@@ -199,26 +200,26 @@ class XMLModel(MojoBaseModel):
         # Validate attributes
         for name in cls.attributes:
             if name not in valid_names:
-                msg = f"{cls.__name__}: attribute '{name}' is not defined as a field or class variable"
+                msg = f"{cls.__name__}: attribute '{name}' is not defined as a field or class variable. Please contact a MuJoCo Mojo developer."
                 logger.error(msg)
                 raise TypeError(msg)
 
         # Validate children
         for name in cls.children:
             if name not in valid_names:
-                msg = f"{cls.__name__}: child '{name}' is not defined as a field or class variable"
+                msg = f"{cls.__name__}: child '{name}' is not defined as a field or class variable. Please contact a MuJoCo Mojo developer."
                 logger.error(msg)
                 raise TypeError(msg)
 
         if (
             "name" in cls.model_fields
-            and cls.mjt_obj is None
+            and cls._mjt_obj is None
             and cls.tag != "worldbody"
         ):
             # only warning if some named objects truly don't have a MuJoCo counterpart
-            logger.debug(
-                f"{cls.__name__}: class has a name attribute but no mjtObj definition. This may be an error on behalf of the MuJoCo Mojo developer."
-            )
+            msg = f"{cls.__name__}: class has a name attribute but no mjtObj definition. This may be an error on behalf of the MuJoCo Mojo developer."
+            logger.error(msg)
+            raise TypeError(msg)
 
     @model_validator(mode="after")
     def enforce_exclusive_groups(self) -> XMLModel:
@@ -236,7 +237,7 @@ class XMLModel(MojoBaseModel):
         Generic ID lookup that works for any subclass defining mjt_obj and name.
         """
         # 1. Check if this specific class supports ID lookup
-        if self.mjt_obj is None:
+        if self._mjt_obj is None:
             msg = f"Class '{self.__class__.__name__}' does not map to a MuJoCo runtime object."
             logger.error(msg)
             raise TypeError(msg)
@@ -254,10 +255,10 @@ class XMLModel(MojoBaseModel):
                 raise ValueError(msg)
 
         # 3. Perform the MuJoCo lookup
-        obj_id = mujoco.mj_name2id(mj_model, self.mjt_obj, name)
+        obj_id = mujoco.mj_name2id(mj_model, self._mjt_obj, name)
 
         if obj_id == -1:
-            msg = f"Could not find {self.mjt_obj.name} '{name}' in MjModel."
+            msg = f"Could not find {self._mjt_obj.name} '{name}' in MjModel."
             logger.error(msg)
             raise ValueError(msg)
 

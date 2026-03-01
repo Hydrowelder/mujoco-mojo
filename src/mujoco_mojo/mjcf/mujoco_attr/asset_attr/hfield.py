@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 from pydantic import field_validator, model_validator
 
@@ -45,6 +48,8 @@ class HField(XMLModel):
         "elevation",
         "size",
     )
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_HFIELD
 
     name: HFieldName | None = None
     """Name of the height field, used for referencing. If the name is omitted and a file name is specified, the height field name equals the file name without the path and extension."""

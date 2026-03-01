@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
+import mujoco
 import numpy as np
 from pydantic import ConfigDict, Field
 
@@ -52,6 +53,8 @@ class SiteBase(XMLModel):
     model_config = ConfigDict(extra="forbid")
 
     tag = "site"
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_SITE
 
     name: SiteName | None = None
     """Name of the site."""

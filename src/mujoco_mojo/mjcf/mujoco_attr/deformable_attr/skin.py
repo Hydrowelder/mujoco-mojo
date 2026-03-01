@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -57,6 +60,8 @@ class DeformableSkin(XMLModel):
     )
 
     children = ("bones",)
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_SKIN
 
     name: DeformableSkinName | None = None
     """Name of the skin."""

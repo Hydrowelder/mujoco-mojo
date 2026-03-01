@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -32,6 +35,8 @@ class Material(XMLModel):
     )
 
     children = ("layers",)
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_MATERIAL
 
     name: MaterialName
     """Name of the material, used for referencing."""

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.contact import FlexContact
@@ -34,6 +37,8 @@ class Flex(XMLModel):
         "node",
     )
     children = ("contact", "edge", "elasticity")
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_SITE
 
     name: FlexName | None = None
     """Name of the flex."""

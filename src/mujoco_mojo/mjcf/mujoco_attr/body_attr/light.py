@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.position import Pos
@@ -49,6 +52,8 @@ class Light(XMLModel):
         "target",
         "texture",
     )
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_LIGHT
 
     name: LightName | None = None
     """Name of the light."""

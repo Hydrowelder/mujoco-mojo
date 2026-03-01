@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import mimetypes
-from typing import Self
+from typing import ClassVar, Self
 
+import mujoco
 import numpy as np
 from pydantic import model_validator
 
@@ -60,6 +61,8 @@ class Texture(XMLModel):
     tag = "texture"
 
     attributes = _texture_attr
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_TEXTURE
 
     name: TextureName | None = None
     """As with all other assets, a texture must have a name in order to be referenced. However if the texture is loaded from a single file with the file attribute, the explicit name can be omitted and the file name (without the path and extension) becomes the texture name. If the name after parsing is empty and the texture type is not "skybox", the compiler will generate an error."""

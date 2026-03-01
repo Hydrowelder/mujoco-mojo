@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.orientation import Orientation, Quat
@@ -33,6 +36,8 @@ class Camera(XMLModel):
         "sensorsize",
         "user",
     )
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_CAMERA
 
     name: CameraName | None = None
     """Name of the camera."""

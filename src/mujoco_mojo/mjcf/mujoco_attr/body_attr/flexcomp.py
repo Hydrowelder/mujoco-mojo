@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 from pydantic import Field
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
@@ -93,6 +96,8 @@ class FlexComp(XMLModel):
     )
 
     children = ("contacts", "edges", "elasticities", "pins", "plugin")
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_FLEX
 
     name: str
     """The name of the flex element being generated automatically. This name is used as a prefix for all bodies that are automatically generated here, and is also referenced by the corresponding flex equality constraint (if applicable)."""

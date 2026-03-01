@@ -172,5 +172,8 @@ class Mujoco(XMLModel):
         xml = utils.to_pretty_xml(self.to_xml(exclude_default=exclude_default))
         file.write_text(xml)
 
-    def to_mjspec(self) -> mujoco.MjSpec:
+    def to_mj_spec(self) -> mujoco.MjSpec:
         return mujoco.MjSpec.from_string(to_pretty_xml(self.to_xml()))
+
+    def to_mj_model(self) -> mujoco.MjModel:
+        return mujoco.MjModel.from_xml_string(to_pretty_xml(self.to_xml()))

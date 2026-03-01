@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 from pydantic import Field
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -44,6 +47,8 @@ class ExtensionPluginInstance(XMLModel):
         exclude_if=is_empty_list,
     )
     """Extension plugins definitions grouping."""
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_PLUGIN
 
 
 class ExtensionPlugin(XMLModel):
