@@ -17,8 +17,8 @@ def generate(
     # print(f"Args used: {args}!")
     # print(f"Kwargs used: {kwargs}!")
 
-    # if trial_num % 2:
-    #     raise ValueError("askflaskfhl")
+    if not trial_num % 5:
+        raise ValueError("askflaskfhl")
     mojo_model = mojo.MojoModel(
         mjcf=mojo.mjcf.Mujoco(model=mojo.ModelName(f"monte_carlo_test_{trial_num}")),
         values=mojo.Values(seed=SEED, trial_num=trial_num),

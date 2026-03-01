@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -73,9 +74,13 @@ class MonteCarloConfig(MojoBaseModel):
             return 1
         return v
 
+    @staticmethod
+    def _trial_nums(n_trial: int) -> list[int]:
+        return (NOMINAL_TRIAL_NUM + np.arange(n_trial)).tolist()
+
     @property
-    def trial_nums(self) -> np.ndarray:
-        return NOMINAL_TRIAL_NUM + np.arange(self.n_trial)
+    def trial_nums(self) -> list[int]:
+        return self._trial_nums(self.n_trial)
 
     @property
     def padding_width(self) -> int:
@@ -132,6 +137,10 @@ class Trial:
     padding_style: str
     """Format specifier for directory naming (e.g., '04d')."""
 
+    @staticmethod
+    def _trial_dir(workdir: Path, trial_num: int, padding_style: str) -> Path:
+        return (workdir / "trials" / f"trial_{trial_num:{padding_style}}").resolve()
+
     @property
     def trial_dir(self) -> Path:
         """
@@ -142,9 +151,7 @@ class Trial:
             this returns './sims/trial_007'.
 
         """
-        return (
-            self.base_dir / "trials" / f"trial_{self.trial_num:{self.padding_style}}"
-        ).resolve()
+        return self._trial_dir(self.base_dir, self.trial_num, self.padding_style)
 
     @property
     def xml_path(self) -> Path:
@@ -304,7 +311,22 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict | None = None,
         resume: bool = DEFAULT_RESUME,
+        clean_workdir: bool = False,
     ) -> tuple[list[Any], bool]:
+
+        if clean_workdir and resume:
+            msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if clean_workdir:
+            try:
+                shutil.rmtree(self.workdir)
+            except Exception as e:
+                msg = f"Failed to delete workdir {self.workdir}: {e}"
+                logger.error(msg)
+                raise RuntimeError(msg)
+
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
         self.capture_environment()
@@ -354,6 +376,7 @@ class MojoRunner:
         status_tracker = JobStatus(
             workdir=self.workdir.resolve(),
             n_trial=self.config.n_trial,
+            n_proc=self.config.n_proc,
             padding_style=self.config.padding_style,
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
@@ -362,7 +385,6 @@ class MojoRunner:
             run_args_used=bool(self.run_args),
             run_kwargs_used=bool(self.run_kwargs),
         )
-        status_tracker._trial_nums = list(self.config.trial_nums)
         status_tracker._registry = dict(
             [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
         )
@@ -396,6 +418,7 @@ class MojoRunner:
                         logger.error(f"Trial {tn} failed: {e}")
                         results.append(None)
                         status_tracker.update_trial(tn, Completion.FAILED)
+                    status_tracker.generate_report(n_proc=self.config.n_proc)
         else:
             for tn in to_run:
                 try:
@@ -410,6 +433,7 @@ class MojoRunner:
                     status_tracker.update_trial(
                         trial_num=tn, completion=Completion.FAILED
                     )
+                status_tracker.generate_report(n_proc=self.config.n_proc)
 
         status_tracker.generate_report(n_proc=self.config.n_proc)
         return results, bool(status_tracker.failed_trial_nums)
