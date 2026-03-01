@@ -142,8 +142,9 @@ class JobStatus(MojoBaseModel):
     n_trial: int
     padding_style: str
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    generator: tuple[str, str]
-    runtime: tuple[str, str]
+    elapsed: timedelta = Field(default_factory=timedelta)
+    generator: tuple[str, Path | None, int | None]
+    runtime: tuple[str, Path | None, int | None]
     gen_args_used: bool
     gen_kwargs_used: bool
     run_args_used: bool
@@ -276,11 +277,6 @@ class JobStatus(MojoBaseModel):
 
     @computed_field
     @property
-    def elapsed(self) -> timedelta:
-        return datetime.now(UTC) - self.start_time
-
-    @computed_field
-    @property
     def end_time(self) -> datetime:
         return self.start_time + self.elapsed
 
@@ -332,13 +328,20 @@ class JobStatus(MojoBaseModel):
     def update_trial(self, trial_num: int, completion: Completion, save: bool = True):
         """Updates the internal registry and optionally persists the global status."""
         self._registry[trial_num] = completion
-
+        self.elapsed = datetime.now(UTC) - self.start_time
         if save:
             status_path = self.workdir / STATUS_FNAME
             self.dump_to_path(status_path, indent=4)
 
     @property
     def _metrics_series(self) -> pd.DataFrame:
+        def _parse_func(name: str, path: Path | None, line: int | None) -> str:
+            if path is None or line is None:
+                return name
+
+            uri = path.as_uri()
+            return f"`{name}` at [`{'/'.join(path.parts[-2:])}:{line}`]({uri})"
+
         data = {
             "Started By": self.started_by,
             "Workdir": f"`{self.workdir.as_posix()}`",
@@ -346,8 +349,8 @@ class JobStatus(MojoBaseModel):
             "Successes": f"{self.n_success} ({self.success_rate:.1%})",
             "Failures": f"{self.n_failed} ({self.failure_rate:.1%})",
             "Progress": f"{self.progress:.2%}",
-            "Generator": f"`{self.generator[0]}` at `{self.generator[1]}`",
-            "Runtime": f"`{self.runtime[0]}` at `{self.runtime[1]}`",
+            "Generator": _parse_func(*self.generator),
+            "Runtime": _parse_func(*self.runtime),
             "Generator Args Used?": "✅" if self.gen_args_used else "❌",
             "Generator Kwargs Used?": "✅" if self.gen_kwargs_used else "❌",
             "Runtime Args Used?": "✅" if self.run_args_used else "❌",

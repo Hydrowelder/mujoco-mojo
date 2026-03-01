@@ -247,9 +247,11 @@ class MojoRunner:
     run_kwargs: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def inspect_protocol(func: MojoGenerator | MojoRuntime | None) -> tuple[str, str]:
+    def inspect_protocol(
+        func: MojoGenerator | MojoRuntime | None,
+    ) -> tuple[str, Path | None, int | None]:
         if func is None:
-            return ("none defined", "")
+            return ("none defined", None, None)
         try:
             # 1. Get the file path
             gen_file = inspect.getfile(func)
@@ -262,11 +264,11 @@ class MojoRunner:
             # getsourcelines returns ([lines], starting_line_number)
             _, line_num = inspect.getsourcelines(func)
 
-            return (f"{gen_name}", f"{gen_file}:{line_num}")
+            return (f"{gen_name}", Path(gen_file).resolve(), line_num)
 
         except Exception:
             logger.error("Failed to capture generator details.")
-            return (f"`{func}`", "")
+            return (f"{func}", None, None)
 
     def capture_environment(self):
         req_path = self.workdir / "requirements.txt"
