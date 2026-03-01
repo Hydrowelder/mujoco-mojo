@@ -201,7 +201,19 @@
 
       <section class="mt-8" x-show="status.failure_tns.length > 0" x-cloak>
         <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
-          <span class="mr-2">❌</span> Failed Trials
+          <svg
+            class="w-6 h-6 mr-2 stroke-current"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2.5"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+          Failed Trials
         </h2>
         <div
           class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-inner"
@@ -233,7 +245,7 @@
             x-text="status.is_complete ? 'Final Data' : `Sync: ${secondsSinceUpdate}s ago` "
           ></span>
         </div>
-        <div>v<span x-text="status.version || '0.0.0'"></span></div>
+        <div><span x-text="status.version || '0.0.0'"></span></div>
       </div>
       <div class="italic opacity-50">&copy; 2026 David Gable</div>
     </footer>
