@@ -277,12 +277,18 @@ def run_globals(
     )
 
     # dry-run check
-    gen_name, gen_path = runner.inspect_protocol(gen_func)
-    run_name, run_path = runner.inspect_protocol(run_func)
-    inspection_results = (
-        f"[bold blue]generator[/bold blue] {gen_name} [dim]([u]{gen_path}[/u])[/dim]\n"
-        f"[bold blue]runtime  [/bold blue] {run_name} [dim]([u]{run_path}[/u])[/dim]"
-    )
+    gen_name, gen_path, gen_line = runner.inspect_protocol(gen_func)
+    run_name, run_path, run_line = runner.inspect_protocol(run_func)
+    if gen_path is not None and gen_line is not None:
+        inspection_results = (
+            f"[bold blue]generator[/bold blue] {gen_name} [dim]([u]{gen_path}:{gen_line}[/u])[/dim]\n"
+            f"[bold blue]runtime  [/bold blue] {run_name} [dim]([u]{run_path}:{run_line}[/u])[/dim]"
+        )
+    else:
+        inspection_results = (
+            f"[bold blue]generator[/bold blue] {gen_name}\n"
+            f"[bold blue]runtime  [/bold blue] {run_name}"
+        )
     rprint(
         Panel(
             inspection_results,
