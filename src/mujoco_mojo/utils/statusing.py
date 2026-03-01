@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -446,10 +447,10 @@ class JobStatus(MojoBaseModel):
             "n_trial": self.n_trial,
             "n_done": self.n_done,
             "failure_rate": self.failure_rate,
-            # We convert timedelta to string here so JS doesn't have to parse it
             "time_remaining": str(self.time_remaining).split(".")[0],
             "elapsed": str(self.elapsed).split(".")[0],
             "is_complete": self.progress >= 1.0,
-            # The 'Pulse' data: just a list of the last 10 failed trial numbers
             "failure_tns": self.failed_trial_nums,
+            "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S %Z%z')}",
+            "version": version("mujoco-mojo"),
         }
