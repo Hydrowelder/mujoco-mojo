@@ -7,6 +7,9 @@ from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3, Vec6
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["Inertial"]
 
@@ -47,8 +50,12 @@ class Inertial(XMLModel):
         if self.diaginertia is None and self.fullinertia is not None:
             return False
         if self.diaginertia is None and self.fullinertia is None:
-            raise ValueError("Neither diaginertia nor fullinertia were specified.")
-        raise ValueError("Both diaginertia and fullinertia were specified (invalid).")
+            msg = "Neither diaginertia nor fullinertia were specified."
+            logger.error(msg)
+            raise ValueError(msg)
+        msg = "Both diaginertia and fullinertia were specified (invalid)."
+        logger.error(msg)
+        raise ValueError(msg)
 
     @property
     def inertia_matrix(self) -> np.ndarray:
@@ -109,9 +116,13 @@ class Inertial(XMLModel):
     @classmethod
     def validate_mass(cls, v: float) -> float:
         if not np.isfinite(v):
-            raise ValueError("mass must be finite")
+            msg = "mass must be finite"
+            logger.error(msg)
+            raise ValueError(msg)
         if v < 0:
-            raise ValueError("mass must be non-negative")
+            msg = "mass must be non-negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("diaginertia")
@@ -123,13 +134,19 @@ class Inertial(XMLModel):
         arr = np.asarray(v, dtype=np.float64)
 
         if arr.shape != (3,):
-            raise ValueError("diaginertia must be length 3")
+            msg = "diaginertia must be length 3"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if not np.all(np.isfinite(arr)):
-            raise ValueError("diaginertia must be finite")
+            msg = "diaginertia must be finite"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if np.any(arr <= 0):
-            raise ValueError("diaginertia values must be positive")
+            msg = "diaginertia values must be positive"
+            logger.error(msg)
+            raise ValueError(msg)
 
         return arr
 
@@ -142,26 +159,36 @@ class Inertial(XMLModel):
         arr = np.asarray(v, dtype=np.float64)
 
         if arr.shape != (6,):
-            raise ValueError("fullinertia must have length 6")
+            msg = "fullinertia must have length 6"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if not np.all(np.isfinite(arr)):
-            raise ValueError("fullinertia must be finite")
+            msg = "fullinertia must be finite"
+            logger.error(msg)
+            raise ValueError(msg)
 
         return arr
 
     @model_validator(mode="after")
     def validate_inertia_physics(self) -> Inertial:
         if self.diaginertia is None and self.fullinertia is None:
-            raise ValueError("Either diaginertia or fullinertia must be specified")
+            msg = "Either diaginertia or fullinertia must be specified"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if self.diaginertia is not None and self.fullinertia is not None:
-            raise ValueError("Only one of diaginertia or fullinertia may be specified")
+            msg = "Only one of diaginertia or fullinertia may be specified"
+            logger.error(msg)
+            raise ValueError(msg)
 
         M = self.inertia_matrix
 
         # Symmetry sanity check (numerical)
         if not np.allclose(M, M.T, atol=1e-12):
-            raise ValueError("Inertia matrix is not symmetric")
+            msg = "Inertia matrix is not symmetric"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # Eigenvalue check (MuJoCo uses this too)
         eigvals = np.linalg.eigvalsh(M)

@@ -7,6 +7,9 @@ from pydantic import model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
 from mujoco_mojo.typing import BiasType, DynType, GainType, Vec3
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["ActuatorIntegratedVelocity"]
 
@@ -111,6 +114,8 @@ class ActuatorIntegratedVelocity(ActuatorBase):
     @model_validator(mode="after")
     def validate_position(self):
         if self.kv != 0 and self.dampratio != 0:
-            raise ValueError("kv and dampratio are mutually exclusive")
+            msg = "kv and dampratio are mutually exclusive"
+            logger.error(msg)
+            raise ValueError(msg)
 
         return self

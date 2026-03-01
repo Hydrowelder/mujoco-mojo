@@ -6,6 +6,9 @@ from pydantic import field_validator, model_validator
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import HFieldName, Vec4, VecN
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["HField"]
 
@@ -95,5 +98,7 @@ class HField(XMLModel):
     @classmethod
     def validate_positive(cls, v: int) -> int:
         if v is not None and v < 0:
-            raise ValueError("nrow and ncol must be non-negative")
+            msg = "nrow and ncol must be non-negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return v

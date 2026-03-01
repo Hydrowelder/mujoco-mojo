@@ -7,6 +7,9 @@ from pydantic import field_validator, model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
 from mujoco_mojo.typing import BiasType, DynType, GainType, Vec3
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["ActuatorCylinder"]
 
@@ -102,21 +105,27 @@ class ActuatorCylinder(ActuatorBase):
     @classmethod
     def validate_timeconst(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("timeconst cannot be negative")
+            msg = "timeconst cannot be negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("area")
     @classmethod
     def validate_area(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("area cannot be negative")
+            msg = "area cannot be negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @field_validator("diameter")
     @classmethod
     def validate_diameter(cls, v: float) -> float:
         if v < 0:
-            raise ValueError("diameter cannot be negative")
+            msg = "diameter cannot be negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return v
 
     @model_validator(mode="after")

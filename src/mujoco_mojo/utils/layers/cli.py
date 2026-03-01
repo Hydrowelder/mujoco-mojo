@@ -1,5 +1,6 @@
 import ast
 import importlib
+import logging
 import sys
 from importlib.metadata import version
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Annotated, Any
 import typer
 from rich import print as rprint
 from rich.panel import Panel
+
+from mujoco_mojo.utils.logging import get_logger
 
 from ..defaults import (
     DEFAULT_MC_N_PROC,
@@ -20,6 +23,16 @@ from ..defaults import (
 )
 
 
+def get_log_level(verbose_count: int, quiet_count: int) -> int:
+    # Standard: 20 (INFO)
+    # Each 'v' subtracts 10 (moving toward DEBUG)
+    # Each 'q' adds 10 (moving toward WARNING/ERROR)
+    level = logging.INFO - (verbose_count * 10) + (quiet_count * 10)
+
+    # Clamp to valid logging ranges [10, 50]
+    return max(logging.DEBUG, min(logging.CRITICAL, level))
+
+
 def validate_generator(ctx: typer.Context, value: str | None):
     # If the user is just asking for help (-h), don't validate!
     help_requested = any(arg in sys.argv for arg in ["-h", "--help"])
@@ -28,11 +41,32 @@ def validate_generator(ctx: typer.Context, value: str | None):
 
     # If we are actually running and it's missing, THEN error
     if value is None:
-        rprint("[bold red]Error:[/bold red] Missing option '--generator'.")
-        rprint("Try 'mujoco-mojo run --help' for global options.")
+        logger = get_logger(__name__)
+        logger.error("[bold red]Error:[/bold red] Missing option '--generator'.")
+        logger.error("Try 'mujoco-mojo run --help' for global options.")
         raise typer.Exit(code=1)
     return value
 
+
+# main
+VerboseType = Annotated[
+    int,
+    typer.Option(
+        "--verbose",
+        "-v",
+        help="Increase verbosity (can be repeated, e.g., -vv for DEBUG).",
+        count=True,
+    ),
+]
+QuietType = Annotated[
+    int,
+    typer.Option(
+        "--quiet",
+        "-q",
+        help="Decrease verbosity (can be repeated, e.g., -qq for ERROR).",
+        count=True,
+    ),
+]
 
 # mojo runner
 GeneratorType = Annotated[
@@ -155,6 +189,7 @@ def version_callback(value: bool):
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -164,10 +199,24 @@ def main(
             help="Show version and exit.",
         ),
     ] = None,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
 ):
     """
     [bold cyan]MuJoCo Mojo:[/bold cyan] High-performance and extensible physics simulation manager.
     """
+    from mujoco_mojo.utils.logging import setup_logger
+
+    # Calculate level
+    level = logging.INFO - (verbose * 10) + (quiet * 10)
+    level = max(logging.DEBUG, min(logging.CRITICAL, level))
+
+    # Initialize the global logger
+    setup_logger(level=level)
+
+    # Store for subcommands if needed
+    ctx.ensure_object(dict)
+    ctx.obj["log_level"] = level
 
 
 def _load_func(path: str) -> Any:
@@ -190,7 +239,8 @@ def _load_func(path: str) -> Any:
             continue
 
     if mod is None or attr_parts is None:
-        rprint(
+        logger = get_logger(__name__)
+        logger.error(
             f"[bold red]Error:[/bold red] Could not find module for [bold green]`{path}`[/bold green]"
         )
         raise typer.Exit(code=1)
@@ -202,7 +252,8 @@ def _load_func(path: str) -> Any:
             obj = getattr(obj, part)
         return obj
     except AttributeError as e:
-        rprint(
+        logger = get_logger(__name__)
+        logger.error(
             f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] not found: {e}"
         )
         raise typer.Exit(code=1)
@@ -223,7 +274,8 @@ def _process_kwargs(kwargs: list[str]) -> dict[str, Any]:
     processed_kwargs = {}
     for kv in kwargs:
         if "=" not in kv:
-            rprint(
+            logger = get_logger(__name__)
+            logger.error(
                 f"[bold red]Error:[/bold red] Invalid Key-Value pair '{kv}'. Use key=value."
             )
             raise typer.Exit(1)
@@ -330,15 +382,24 @@ def run_monte_carlo(
     runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc)
 
     # 3. run
-    rprint(
+    logger = get_logger(__name__)
+    logger.info(
         f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
     )
     _results, had_fails = runner.run(resume=resume, clean_workdir=clean_workdir)
 
     if had_fails:
         preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
+        logger.error(
+            f"Monte Carlo finished with failures! See results in {runner.workdir.resolve()}",
+            extra={"file_only": True},
+        )
     else:
         preamble = "[bold green]Monte Carlo finished![/bold green]"
+        logger.info(
+            f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
+            extra={"file_only": True},
+        )
     rprint(
         f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
     )

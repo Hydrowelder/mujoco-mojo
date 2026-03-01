@@ -2,6 +2,9 @@ from pydantic import model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.base import SensorBase
 from mujoco_mojo.typing import BodyName, ContactData, ContactReduce, GeomName, SiteName
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["SensorContact"]
 
@@ -74,7 +77,9 @@ class SensorContact(SensorBase):
     @model_validator(mode="after")
     def validate_contact_sensor(self):
         if self.num < 1:
-            raise ValueError("num must be >= 1")
+            msg = "num must be >= 1"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # data must be ordered correctly
         order = [
@@ -89,7 +94,9 @@ class SensorContact(SensorBase):
 
         # remove duplicates
         if len(set(self.data)) != len(self.data):
-            raise ValueError("Duplicate entries in contact data")
+            msg = "Duplicate entries in contact data"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # normalize order
         self.data = tuple(sorted(self.data, key=lambda d: order.index(d)))

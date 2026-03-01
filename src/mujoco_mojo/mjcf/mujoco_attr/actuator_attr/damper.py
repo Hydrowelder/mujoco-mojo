@@ -7,6 +7,9 @@ from pydantic import Field, model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
 from mujoco_mojo.typing import ActuatorControlLimited, BiasType, DynType, GainType, Vec3
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["ActuatorDamper"]
 
@@ -109,8 +112,12 @@ class ActuatorDamper(ActuatorBase):
     @model_validator(mode="after")
     def validate_position(self):
         if self.kv < 0:
-            raise ValueError("kv cannot be negative")
+            msg = "kv cannot be negative"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if any(np.asarray(self.ctrlrange) < 0):
-            raise ValueError("ctrlrange cannot be negative")
+            msg = "ctrlrange cannot be negative"
+            logger.error(msg)
+            raise ValueError(msg)
         return self
