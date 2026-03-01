@@ -452,5 +452,5 @@ class JobStatus(MojoBaseModel):
             "is_complete": self.progress >= 1.0,
             "failure_tns": self.failed_trial_nums,
             "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S %Z%z')}",
-            "version": version("mujoco-mojo"),
+            "version": f"mujoco-mojo v{version('mujoco-mojo')}",
         }
