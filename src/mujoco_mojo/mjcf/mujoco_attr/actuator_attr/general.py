@@ -13,6 +13,9 @@ from mujoco_mojo.typing import (
     Vec2,
     VecN,
 )
+from mujoco_mojo.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["ActuatorGeneral"]
 
@@ -108,8 +111,8 @@ class ActuatorGeneral(ActuatorBase):
         ]
 
         if sum(v is not None for v in fields) != 1:
-            raise ValueError(
-                "Exactly one of joint, jointinparent, site, or body must be specified",
-            )
+            msg = "Exactly one of joint, jointinparent, site, or body must be specified"
+            logger.error(msg)
+            raise ValueError(msg)
 
         return self

@@ -7,10 +7,13 @@ from __future__ import annotations
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.utils.logging import get_logger
 
-raise NotImplementedError(
-    "The Include class is not implemented. There is no plan to implement as its functionality is duplicated by Attach and that of Python itself.",
-)
+logger = get_logger(__name__)
+
+msg = "The Include class is not implemented. There is no plan to implement as its functionality is duplicated by Attach and that of Python itself. Please contact a MuJoCo Mojo developer."
+logger.error(msg)
+raise NotImplementedError(msg)
 
 __all__ = ["Include"]
 

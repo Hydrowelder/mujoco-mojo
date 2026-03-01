@@ -194,8 +194,8 @@ class Inertial(XMLModel):
         eigvals = np.linalg.eigvalsh(M)
 
         if np.any(eigvals <= 0):
-            raise ValueError(
-                f"Inertia matrix must be positive definite. Eigenvalues: {eigvals}",
-            )
+            msg = (f"Inertia matrix must be positive definite. Eigenvalues: {eigvals}",)
+            logger.error(msg)
+            raise ValueError(msg)
 
         return self
