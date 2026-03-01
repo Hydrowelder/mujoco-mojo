@@ -142,8 +142,12 @@ class JobStatus(MojoBaseModel):
     n_trial: int
     padding_style: str
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    generator: str
-    runtime: str
+    generator: tuple[str, str]
+    runtime: tuple[str, str]
+    gen_args_used: bool
+    gen_kwargs_used: bool
+    run_args_used: bool
+    run_kwargs_used: bool
 
     _trial_nums: list[int] = PrivateAttr(default_factory=list)
     _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
@@ -337,13 +341,17 @@ class JobStatus(MojoBaseModel):
     def _metrics_series(self) -> pd.DataFrame:
         data = {
             "Started By": self.started_by,
-            "Workdir": self.workdir.as_posix(),
+            "Workdir": f"`{self.workdir.as_posix()}`",
             "Number of Trials": str(self.n_trial),
             "Successes": f"{self.n_success} ({self.success_rate:.1%})",
             "Failures": f"{self.n_failed} ({self.failure_rate:.1%})",
             "Progress": f"{self.progress:.2%}",
-            "Generator": self.generator,
-            "Runtime": self.runtime,
+            "Generator": f"`{self.generator[0]}` at `{self.generator[1]}`",
+            "Runtime": f"`{self.runtime[0]}` at `{self.runtime[1]}`",
+            "Generator Args Used?": "✅" if self.gen_args_used else "❌",
+            "Generator Kwargs Used?": "✅" if self.gen_kwargs_used else "❌",
+            "Runtime Args Used?": "✅" if self.run_args_used else "❌",
+            "Runtime Kwargs Used?": "✅" if self.run_kwargs_used else "❌",
         }
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 

@@ -1,4 +1,3 @@
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,15 +9,20 @@ SEED = 42
 def generate(
     trial_num: int,
     overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
+    *args,
+    **kwargs,
 ) -> mojo.MojoModel:
-    print(f"generating nothing {trial_num}!")
+    # print(f"generating nothing {trial_num}!")
+    # print(f"Args used: {args}!")
+    # print(f"Kwargs used: {kwargs}!")
+
     # if trial_num % 2:
     #     raise ValueError("askflaskfhl")
     mojo_model = mojo.MojoModel(
         mjcf=mojo.mjcf.Mujoco(model=mojo.ModelName(f"monte_carlo_test_{trial_num}")),
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
-    time.sleep(0.01)
+    # time.sleep(1)
     # _normal_draw = ( # BUG currently broken due to numpy serialization
     #     (
     #         mojo.NormalDistribution(
@@ -43,10 +47,12 @@ def generate(
     return mojo_model
 
 
-def runtime(mojo_model: mojo.MojoModel):
-    print("running nothing!")
-    # raise ValueError("blah blah blah")
-    time.sleep(0.01)
+def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
+    # print("running nothing!")
+    if mojo_model.values.trial_num == 7:
+        raise ValueError("blah blah blah")
+    # time.sleep(3)
+
     return None
 
 
@@ -56,12 +62,14 @@ class Experiment:
     def generate(
         trial_num: int,
         overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
+        *args,
+        **kwargs,
     ) -> mojo.MojoModel:
-        return generate(trial_num=trial_num, overrides=overrides)
+        return generate(trial_num, overrides, *args, **kwargs)
 
     @staticmethod
-    def runtime(mojo_model: mojo.MojoModel):
-        return runtime(mojo_model=mojo_model)
+    def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
+        return runtime(mojo_model, *args, **kwargs)
 
 
 def test_monte_carlo():
