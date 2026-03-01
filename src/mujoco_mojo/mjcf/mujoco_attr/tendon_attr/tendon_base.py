@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
@@ -37,6 +40,8 @@ class TendonBase(XMLModel):
         "damping",
         "user",
     )
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_TENDON
 
     name: TendonName | None = None
     """Name of the tendon."""

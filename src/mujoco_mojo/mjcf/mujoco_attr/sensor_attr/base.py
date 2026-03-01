@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
+
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     SensorName,
@@ -15,6 +19,8 @@ class SensorBase(XMLModel):
     tag = ""
 
     attributes = ("name", "noise", "cutoff", "user")
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_SENSOR
 
     name: SensorName | None = None
     """Name of the sensor."""

@@ -1,3 +1,7 @@
+from typing import ClassVar
+
+import mujoco
+
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import KeyName, VecN
 
@@ -8,6 +12,8 @@ class Key(XMLModel):
     tag = "key"
 
     attributes = ("name", "time", "qpos", "qvel", "act", "mpos", "mquat", "ctrl")
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_KEY
 
     name: KeyName | None = None
     """Name of this keyframe."""

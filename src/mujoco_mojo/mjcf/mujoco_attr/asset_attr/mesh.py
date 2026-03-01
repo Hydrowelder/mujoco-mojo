@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import mujoco
 import numpy as np
 from pydantic import field_validator
 
@@ -92,6 +93,7 @@ class Mesh(XMLModel):
     tag = "mesh"
 
     attributes = _mesh_attr
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_MESH
 
     name: MeshName | None = None
     """Name of the mesh, used for referencing. If omitted, the mesh name equals the file name without the path and extension."""

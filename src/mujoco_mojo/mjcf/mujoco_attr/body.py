@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -57,6 +60,8 @@ class Body(XMLModel):
 
     attributes = _body_attr
     children = _body_children
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_BODY
 
     name: BodyName | None = None
     """Name of the body."""

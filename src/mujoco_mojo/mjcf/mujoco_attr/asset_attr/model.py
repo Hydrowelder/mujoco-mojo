@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
+
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import ModelName
@@ -22,3 +26,5 @@ class Model(XMLModel):
 
     content_type: str | None = None
     """The file type to be loaded into a model. Currently only text/xml is supported."""
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_MODEL

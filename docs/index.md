@@ -16,6 +16,7 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 * Pythonic composition of assets, bodies, sensors, and plugins
 * Designed to mirror MuJoCo’s XML schema closely (no magic abstractions)
 * Suitable for code generation, tooling, and large model pipelines
+* Embedded MuJoCo object enumerations to make getting `mjOBJ` IDs simple
 
 ### Job Utilities
 * Single or multi-threaded trial execution
@@ -39,7 +40,8 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
         --n-trial 10 \
         --n-proc 1
         ```
-* *SOON*: dashboard tool for runtime monitoring
+* Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
+* Built in Rich logging for terminal and a rotating file handler for persistant logs
 
 ## Installation
 === "`uv` (recommended)"
@@ -55,4 +57,4 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
     ```
 
 !!! warning
-    At the time of writing, MuJoCo supports up to Python 3.13
+    At the time of writing, MuJoCo supports up to Python 3.13. This package is built on modern Python requiring 3.12 or above.

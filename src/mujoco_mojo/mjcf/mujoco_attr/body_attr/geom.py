@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
+import mujoco
 import numpy as np
 from pydantic import ConfigDict, Field
 
@@ -82,6 +83,8 @@ class GeomBase(XMLModel):
     tag = "geom"
 
     children = ("plugin",)
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_GEOM
 
     name: GeomName | None = None
     """Name of the geom."""

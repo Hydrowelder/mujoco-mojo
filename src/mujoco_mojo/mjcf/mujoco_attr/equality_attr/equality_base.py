@@ -1,3 +1,7 @@
+from typing import ClassVar
+
+import mujoco
+
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import EqualityName, Vec2, Vec5
@@ -7,6 +11,8 @@ class EqualityBase(XMLModel):
     tag = ""
 
     attributes = ("name", "class_", "active", "solref", "solimp")
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_EQUALITY
 
     name: EqualityName | None = None
     """Name of the equality constraint."""

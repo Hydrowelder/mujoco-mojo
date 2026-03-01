@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+import mujoco
 import numpy as np
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -43,6 +46,8 @@ class ActuatorBase(XMLModel):
         "refsite",
         "user",
     )
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_ACTUATOR
 
     name: ActuatorName | None = None
     """Element name. See Naming elements."""

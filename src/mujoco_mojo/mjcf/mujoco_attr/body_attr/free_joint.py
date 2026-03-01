@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import mujoco
+
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Align, JointName, JointType
 
@@ -22,6 +24,8 @@ class FreeJoint(XMLModel):
     tag = "joint"
 
     type: ClassVar[JointType] = JointType.FREE
+
+    _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_JOINT
 
     name: JointName | None = None
     """Name of the joint."""
