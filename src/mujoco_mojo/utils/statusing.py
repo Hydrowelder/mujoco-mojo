@@ -436,6 +436,7 @@ class JobStatus(MojoBaseModel):
     def to_dashboard_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         # We trigger the disk refresh here so the data is fresh
+        self = self.model_validate_json((self.workdir / STATUS_FNAME).read_text())
         self.refresh_from_disk(n_proc=self.n_proc if n_proc is None else n_proc)
 
         return {

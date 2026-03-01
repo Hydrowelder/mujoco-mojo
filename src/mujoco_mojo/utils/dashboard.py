@@ -2,20 +2,19 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from mujoco_mojo.utils.statusing import JobStatus
 
 app = FastAPI(title="MuJoCo Mojo Dashboard")
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+HERE = Path(__file__).parent
+templates = Jinja2Templates(directory=HERE / "templates")
+
+# Chime sound comes from https://mixkit.co/free-sound-effects/win/
+app.mount("/static", StaticFiles(directory=HERE / "templates"), name="static")
 
 CURRENT_JOB: JobStatus | None = None
-
-
-def set_active_job(job: JobStatus):
-    global CURRENT_JOB
-    CURRENT_JOB = job
-    print(f"DEBUG: Active job set to {CURRENT_JOB.started_by}")
 
 
 @app.get("/", response_class=HTMLResponse)
