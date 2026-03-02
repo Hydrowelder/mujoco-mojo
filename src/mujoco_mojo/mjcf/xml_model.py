@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 from collections.abc import Sequence
+from pathlib import Path
 from typing import (
     ClassVar,
     Literal,
@@ -15,7 +17,9 @@ import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.utils import get_checksum
 
 logger = get_logger(__name__)
 
@@ -263,3 +267,75 @@ class XMLModel(MojoBaseModel):
             raise ValueError(msg)
 
         return obj_id
+
+    def _iter_tree(
+        self,
+    ):  # doesnt this need to determine if there is a list/dict/tuple/array which contains paths too?
+        """Yields this model and all its XMLModel children recursively."""
+        yield self
+        for field in self.children:
+            value = getattr(self, field, None)
+            if value is None:
+                continue
+            items = value if isinstance(value, list) else [value]
+            for item in items:
+                if isinstance(item, XMLModel):
+                    yield from item._iter_tree()
+
+    def bundle_assets(self, target_dir: Path, rel_to_xml: Path) -> None:
+        """
+        Crawls the entire XMLModel tree. Any attribute that is a Path object is copied to target_dir/assets and the model is updated to a relative path.
+        """
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # get objects in the tree
+        for obj in self._iter_tree():
+            for attr_name in obj.attributes:
+                value = getattr(obj, attr_name, None)
+
+                is_collection = isinstance(value, (list, tuple, set))
+
+                # type is cast to list here. Will need to uncast later.
+                items = list(value) if is_collection else [value]
+
+                new_values = []
+                changed = False
+
+                # loop over attribute as a list of items
+                for item in items:
+                    if isinstance(item, DepPath):
+                        if not item.exists():
+                            logger.error(f"Asset file not found: {item}")
+                            new_values.append(item)
+                            continue
+
+                        # copy the file
+                        dest_file = target_dir / item.name
+
+                        should_copy = True
+                        if dest_file.exists():
+                            # files already in the destination skipped
+                            if get_checksum(item) == get_checksum(dest_file):
+                                should_copy = False
+                            else:
+                                logger.warning(
+                                    f"Asset file {value} already in assets bundle. Old file will be overwritten."
+                                )
+
+                        if should_copy:
+                            logger.debug(
+                                f"Copying dependency asset from {item.resolve()} to {dest_file.resolve()}"
+                            )
+                            shutil.copy2(item, dest_file)
+
+                        new_values.append(rel_to_xml / item.name)
+                        changed = True
+                    else:
+                        new_values.append(item)
+
+                if changed:
+                    # cast back to previous type
+                    final_val = (
+                        type(value)(new_values) if is_collection else new_values[0]
+                    )
+                    setattr(obj, attr_name, final_val)

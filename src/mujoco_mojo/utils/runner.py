@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import inspect
+import os
 import shutil
 import subprocess
 import sys
+from bdb import BdbQuit
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,6 +139,10 @@ class Trial:
     padding_style: str
     """Format specifier for directory naming (e.g., '04d')."""
 
+    @property
+    def shared_asset_dir(self) -> Path:
+        return self.base_dir.resolve() / "assets"
+
     @staticmethod
     def _trial_dir(workdir: Path, trial_num: int, padding_style: str) -> Path:
         return (workdir / "trials" / f"trial_{trial_num:{padding_style}}").resolve()
@@ -212,6 +218,16 @@ class Trial:
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
                 self.trial_dir.mkdir(parents=True, exist_ok=True)
+
+                # bundle assets, this remaps DepPath attributes to point to the shared asset dir
+                rel_to_xml = Path(
+                    os.path.relpath(self.shared_asset_dir, self.trial_dir)
+                )
+                mojo_model.mjcf.bundle_assets(
+                    target_dir=self.shared_asset_dir, rel_to_xml=rel_to_xml
+                )
+
+                # save XML (with modified DepPath)
                 mojo_model.mjcf.write_xml(self.xml_path)
                 self.model_config_path.write_text(mojo_model.model_dump_json(indent=4))
 
@@ -229,6 +245,9 @@ class Trial:
             status.step = "done"
             status.completion = Completion.SUCCESS
 
+        except BdbQuit:
+            logger.warning("BdbQuit detected. Exiting execution...")
+            raise
         except Exception as e:
             status.step = "done"
             status.completion = Completion.FAILED
@@ -427,6 +446,9 @@ class MojoRunner:
                     )
                     results.append(result)
                     status_tracker.update_trial(tn, trial_status.completion)
+                except BdbQuit:
+                    # user is quitting from breakpoint()
+                    raise
                 except Exception as e:
                     logger.error(f"A trial failed with error: {e}")
                     results.append(None)

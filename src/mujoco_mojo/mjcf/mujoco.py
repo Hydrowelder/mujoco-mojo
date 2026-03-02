@@ -173,7 +173,14 @@ class Mujoco(XMLModel):
         file.write_text(xml)
 
     def to_mj_spec(self) -> mujoco.MjSpec:
+        """Creates an MjSpec from the Mujoco instance."""
         return mujoco.MjSpec.from_string(to_pretty_xml(self.to_xml()))
 
     def to_mj_model(self) -> mujoco.MjModel:
+        """Creates an MjModel from the Mujoco instance."""
         return mujoco.MjModel.from_xml_string(to_pretty_xml(self.to_xml()))
+
+    def prep_for_sim(self) -> tuple[mujoco.MjModel, mujoco.MjData]:
+        """Creates a MuJoCo MjModel and MjData from the Mujoco instance."""
+        model = self.to_mj_model()
+        return model, mujoco.MjData(model)

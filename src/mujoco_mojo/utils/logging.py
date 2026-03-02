@@ -11,6 +11,7 @@ __all__ = ["get_logger", "setup_logger"]
 
 mojo_theme = Theme(
     {
+        "logging.level.debug": "bold dodger_blue1",
         "logging.level.info": "bold green",
         "logging.level.warning": "bold yellow",
         "logging.level.error": "bold red",
