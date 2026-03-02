@@ -17,6 +17,7 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 * Designed to mirror MuJoCo’s XML schema closely (no magic abstractions)
 * Suitable for code generation, tooling, and large model pipelines
 * Embedded MuJoCo object enumerations to make getting `mjOBJ` IDs simple
+* Specialized handling of dependency by remapping assets to become shared allows for space efficient execution of complex models
 
 ### Job Utilities
 * Single or multi-threaded trial execution
