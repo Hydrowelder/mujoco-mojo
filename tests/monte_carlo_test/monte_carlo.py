@@ -11,6 +11,7 @@ mujoco-mojo run \
 ```
 """
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def generate(
         ),
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
-    # time.sleep(1)
+    time.sleep(1)
     # _normal_draw = ( # BUG currently broken due to numpy serialization
     #     (
     #         mojo.NormalDistribution(
@@ -88,7 +89,7 @@ def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # print("running nothing!")
     if mojo_model.values.trial_num == 7:
         raise ValueError("blah blah blah")
-    # time.sleep(3)
+    time.sleep(2)
 
     return None
 

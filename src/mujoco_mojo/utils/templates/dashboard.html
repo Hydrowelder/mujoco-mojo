@@ -273,7 +273,7 @@
             await this.update();
             // stop auto-refreshing whe the job is done
             if (!this.status.is_complete) {
-              this.timer = setInterval(() => this.update(), 2000);
+              this.timer = setInterval(() => this.update(), 5000);
             }
 
             // Separate 1-second timer just for the "seconds ago" counter

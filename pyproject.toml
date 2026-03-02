@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mujoco-mojo = "mujoco_mojo.utils.layers.cli:app"
+mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 
 [tool.setuptools.package-data]
 "mujoco_mojo.utils" = ["templates/*.html", "templates/*.js", "templates/*.mp3"]
