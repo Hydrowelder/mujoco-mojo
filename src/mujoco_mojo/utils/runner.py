@@ -252,8 +252,8 @@ class Trial:
             status.step = "done"
             status.completion = Completion.SUCCESS
 
-        except BdbQuit:
-            logger.warning("BdbQuit detected. Exiting execution...")
+        except (BdbQuit, KeyboardInterrupt):
+            logger.warning("Quit command detected. Exiting execution...")
             raise
         except Exception as e:
             status.step = "done"
@@ -268,7 +268,9 @@ class Trial:
 @dataclass
 class MojoRunner:
     generator: MojoGenerator
+    generator_path: str | None = None  # e.g., "sim.generate"
     runtime: MojoRuntime | None = DEFAULT_RUNTIME
+    runtime_path: str | None = None  # e.g., "sim.runtime"
     workdir: Path = DEFAULT_WORKDIR
     model_config_name: str = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
@@ -338,6 +340,35 @@ class MojoRunner:
         global_overrides: NamedValueDict | None = None,
         resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
+        execution_mode: ExecutionMode = ExecutionMode.LOCAL,
+        trial_ids: list[int] | None = None,
+    ) -> tuple[list[Any], bool]:
+        match execution_mode:
+            case ExecutionMode.LOCAL:
+                return self.run_local(
+                    global_overrides=global_overrides,
+                    resume=resume,
+                    clean_workdir=clean_workdir,
+                    trial_ids=trial_ids,
+                )
+            case ExecutionMode.SLURM:
+                return self.run_slurm(
+                    global_overrides=global_overrides,
+                    resume=resume,
+                    clean_workdir=clean_workdir,
+                    trial_ids=trial_ids,
+                )
+            case _:
+                msg = f"No run command has been configured for execution mode {execution_mode}"
+                logger.error(msg)
+                raise NotImplementedError(msg)
+
+    def run_local(
+        self,
+        global_overrides: NamedValueDict | None = None,
+        resume: bool = DEFAULT_RESUME,
+        clean_workdir: bool = False,
+        trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
 
         if clean_workdir and resume:
@@ -359,10 +390,47 @@ class MojoRunner:
 
         if isinstance(self.config, MonteCarloConfig):
             result, had_fails = self.run_monte_carlo(
-                global_overrides=global_overrides, resume=resume
+                global_overrides=global_overrides,
+                resume=resume,
+                trial_ids=trial_ids,
             )
         else:
-            msg = f"A configuration for {self.config.__class__.__name__} has not been implemented/"
+            msg = f"A configuration for {self.config.__class__.__name__} has not been implemented."
+            logger.error(msg)
+            raise NotImplementedError(msg)
+        return result, had_fails
+
+    @property
+    def slurm_trial_id(self) -> int | None:
+        """Returns the current SLURM task ID if running as part of an array job."""
+        tid = os.getenv("SLURM_ARRAY_TASK_ID")
+        return int(tid) if tid is not None else None
+
+    def run_slurm(
+        self,
+        global_overrides: NamedValueDict | None = None,
+        resume: bool = DEFAULT_RESUME,
+        clean_workdir: bool = False,
+        trial_ids: list[int] | None = None,
+    ) -> tuple[list[Any], bool]:
+        """Generates an sbatch script and submits the job array to SLURM for a given config."""
+        msg = "SLURM is not implemented"
+        logger.error(msg)
+        raise NotImplementedError(msg)
+
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        (self.workdir / "logs").mkdir(parents=True, exist_ok=True)
+
+        self.capture_environment()
+
+        if isinstance(self.config, MonteCarloConfig):
+            result, had_fails = self.run_slurm_monte_carlo(
+                global_overrides=global_overrides,
+                resume=resume,
+                trial_ids=trial_ids,
+            )
+        else:
+            msg = f"A SLURM configuration for {self.config.__class__.__name__} has not been implemented."
             logger.error(msg)
             raise NotImplementedError(msg)
         return result, had_fails
@@ -390,13 +458,23 @@ class MojoRunner:
         )
 
     def run_monte_carlo(
-        self, global_overrides: NamedValueDict | None = None, resume: bool = True
+        self,
+        global_overrides: NamedValueDict | None = None,
+        resume: bool = True,
+        trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """
         Orchestrates a Monte Carlo job.
 
         """
         overrides = global_overrides or NamedValueDict()
+
+        if self.slurm_trial_id is not None:
+            tn = self.slurm_trial_id
+            logger.info(f"SLURM Worker detected. Executing Trial {tn}")
+            result, trial_status = self.execute_single_trial(tn, overrides)
+
+            return [result], trial_status.completion == Completion.FAILED
 
         # initialize the status tracker
         status_tracker = JobStatus(
@@ -413,9 +491,14 @@ class MojoRunner:
             run_args_used=bool(self.run_args),
             run_kwargs_used=bool(self.run_kwargs),
         )
-        status_tracker._registry = dict(
-            [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
-        )
+        if trial_ids:
+            status_tracker._registry = dict(
+                [(tn, Completion.INCOMPLETE) for tn in trial_ids]
+            )
+        else:
+            status_tracker._registry = dict(
+                [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
+            )
 
         # decide which trials to execute
         if resume:
@@ -431,7 +514,8 @@ class MojoRunner:
             logger.info(
                 f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
             )
-            with ProcessPoolExecutor(max_workers=self.config.n_proc) as executor:
+            executor = ProcessPoolExecutor(max_workers=self.config.n_proc)
+            try:
                 future_to_tn = {
                     executor.submit(self.execute_single_trial, tn, overrides): tn
                     for tn in to_run
@@ -446,6 +530,9 @@ class MojoRunner:
                             trial_timedelta=trial_status.td,
                             completion=trial_status.completion,
                         )
+                    except (BdbQuit, KeyboardInterrupt):
+                        # user is quitting from breakpoint() or CTRL+C
+                        raise
                     except Exception as e:
                         logger.error(f"Trial {tn} failed: {e}")
                         results.append(None)
@@ -455,6 +542,13 @@ class MojoRunner:
                             completion=Completion.FAILED,
                         )
                     status_tracker.generate_report(n_proc=self.config.n_proc)
+            except (BdbQuit, KeyboardInterrupt):
+                # allows killing the job with one CTRL+C
+                logger.warning("Interrupt recieved. Stopping all trials.")
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+            finally:
+                executor.shutdown(wait=True)
         else:
             for tn in to_run:
                 try:
@@ -467,8 +561,8 @@ class MojoRunner:
                         trial_timedelta=trial_status.td,
                         completion=trial_status.completion,
                     )
-                except BdbQuit:
-                    # user is quitting from breakpoint()
+                except (BdbQuit, KeyboardInterrupt):
+                    # user is quitting from breakpoint() or CTRL+C
                     raise
                 except Exception as e:
                     logger.error(f"A trial failed with error: {e}")
@@ -482,3 +576,89 @@ class MojoRunner:
 
         status_tracker.generate_report(n_proc=self.config.n_proc, alert_generation=True)
         return results, bool(status_tracker.failed_trial_nums)
+
+    def run_slurm_monte_carlo(
+        self,
+        global_overrides: NamedValueDict | None = None,
+        resume: bool = True,
+        trial_ids: list[int] | None = None,
+    ) -> tuple[list[Any], bool]:
+        """Orchestrates a Monte Carlo SLURM submission."""
+        msg = "SLURM is not implemented"
+        logger.error(msg)
+        raise NotImplementedError(msg)
+        # initialize the status tracker
+
+        if trial_ids:
+            to_run = trial_ids
+        else:
+            status_tracker = JobStatus(
+                workdir=self.workdir.resolve(),
+                job_type=JobType.MONTE_CARLO,
+                execution_mode=ExecutionMode.SLURM,
+                n_trial=self.config.n_trial,
+                n_proc=self.config.n_proc,
+                padding_style=self.config.padding_style,
+                generator=MojoRunner.inspect_protocol(self.generator),
+                runtime=MojoRunner.inspect_protocol(self.runtime),
+                gen_args_used=bool(self.gen_args),
+                gen_kwargs_used=bool(self.gen_kwargs),
+                run_args_used=bool(self.run_args),
+                run_kwargs_used=bool(self.run_kwargs),
+            )
+
+            # decide which trials to execute
+            if resume:
+                status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
+            to_run = status_tracker.pending_trial_nums
+
+        if not to_run:
+            logger.info("All trials were already completed. Nothing to do.")
+            return [], False
+
+        # generate the .sh script
+        array_range = ",".join(map(str, to_run))
+        script_path = self.workdir / "mujoco_mojo_submit.sh"
+
+        runtime_str = f'--runtime "{self.runtime_path}"' if self.runtime_path else ""
+        project_root = Path.cwd().resolve()
+        cmd = (
+            f"{sys.executable} -m mujoco_mojo run monte-carlo "
+            f'--generator "{self.generator_path}" '
+            f"{runtime_str} "
+            f'--workdir "{self.workdir.resolve()}" '
+            f"--trial-id $SLURM_ARRAY_TASK_ID "
+            f"--execution-mode local"  # The worker runs its specific trial locally
+        )
+        sbatch_content = f"""#!/bin/bash
+#SBATCH --job-name=mojo
+#SBATCH --array={array_range}
+#SBATCH --output={self.workdir.resolve()}/logs/trial_%a.log
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=4G
+#SBATCH --time=01:00:00
+
+# Move to where the code lives
+cd {project_root}
+
+# Ensure local modules are importable
+export PYTHONPATH=$PYTHONPATH:{project_root}
+
+# Execute the worker
+{cmd}
+"""
+
+        script_path.write_text(sbatch_content)
+
+        # submit to sbatch
+        logger.info(f"Submitting {len(to_run)} trials to SLURM...")
+        result = subprocess.run(
+            ["sbatch", str(script_path)], capture_output=True, text=True
+        )
+
+        if result.returncode == 0:
+            logger.info(f"SLURM Job submitted: {result.stdout.strip()}")
+            return [], False
+        else:
+            logger.error(f"SLURM Submission Failed: {result.stderr}")
+            return [], True
