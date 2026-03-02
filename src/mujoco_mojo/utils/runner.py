@@ -27,7 +27,14 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_XML_NAME,
 )
 from mujoco_mojo.utils.logging import get_logger
-from mujoco_mojo.utils.statusing import STATUS_FNAME, Completion, JobStatus, TrialStatus
+from mujoco_mojo.utils.statusing import (
+    STATUS_FNAME,
+    Completion,
+    ExecutionMode,
+    JobStatus,
+    JobType,
+    TrialStatus,
+)
 
 logger = get_logger(__name__)
 
@@ -394,6 +401,8 @@ class MojoRunner:
         # initialize the status tracker
         status_tracker = JobStatus(
             workdir=self.workdir.resolve(),
+            job_type=JobType.MONTE_CARLO,
+            execution_mode=ExecutionMode.LOCAL,
             n_trial=self.config.n_trial,
             n_proc=self.config.n_proc,
             padding_style=self.config.padding_style,
@@ -432,11 +441,19 @@ class MojoRunner:
                     try:
                         result, trial_status = f.result()
                         results.append(result)
-                        status_tracker.update_trial(tn, trial_status.completion)
+                        status_tracker.update_trial(
+                            trial_num=tn,
+                            trial_timedelta=trial_status.td,
+                            completion=trial_status.completion,
+                        )
                     except Exception as e:
                         logger.error(f"Trial {tn} failed: {e}")
                         results.append(None)
-                        status_tracker.update_trial(tn, Completion.FAILED)
+                        status_tracker.update_trial(
+                            trial_num=tn,
+                            trial_timedelta=None,
+                            completion=Completion.FAILED,
+                        )
                     status_tracker.generate_report(n_proc=self.config.n_proc)
         else:
             for tn in to_run:
@@ -445,7 +462,11 @@ class MojoRunner:
                         trial_num=tn, overrides=overrides
                     )
                     results.append(result)
-                    status_tracker.update_trial(tn, trial_status.completion)
+                    status_tracker.update_trial(
+                        trial_num=tn,
+                        trial_timedelta=trial_status.td,
+                        completion=trial_status.completion,
+                    )
                 except BdbQuit:
                     # user is quitting from breakpoint()
                     raise
@@ -453,7 +474,9 @@ class MojoRunner:
                     logger.error(f"A trial failed with error: {e}")
                     results.append(None)
                     status_tracker.update_trial(
-                        trial_num=tn, completion=Completion.FAILED
+                        trial_num=tn,
+                        trial_timedelta=None,
+                        completion=Completion.FAILED,
                     )
                 status_tracker.generate_report(n_proc=self.config.n_proc)
 

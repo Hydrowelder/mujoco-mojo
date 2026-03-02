@@ -27,6 +27,16 @@ STATUS_FNAME = "status.json"
 """Filename of status files."""
 
 
+# started at 5 mins
+class JobType(StrEnum):
+    MONTE_CARLO = "monte_carlo"
+
+
+class ExecutionMode(StrEnum):
+    LOCAL = "local"
+    SLURM = "slurm"
+
+
 class Completion(StrEnum):
     INCOMPLETE = "incomplete"
     """Neither completed nor failed. Indicates the process is ongoing."""
@@ -50,7 +60,7 @@ class StepStatus(MojoBaseModel):
     A `None` value indicates the step has not completed. This value is not updated throughout the step's execution (i.e., if the step is in progress, this value will still report `None`)."""
 
     @property
-    def timedelta(self) -> timedelta | None:
+    def td(self) -> timedelta | None:
         """Time delta object provided by `datetime`."""
         if self.elapsed is not None:
             return timedelta(seconds=self.elapsed)
@@ -132,6 +142,16 @@ class TrialStatus(MojoBaseModel):
             step.elapsed = time.perf_counter() - start_time
             self.dump_to_path(self._path)
 
+    @property
+    def td(self) -> timedelta:
+        """The current timedelta for the trial to be completed. Incomplete steps are assumed to have 0 runtime."""
+        pending = self.pending.td if self.pending.td is not None else timedelta()
+        generating = (
+            self.generating.td if self.generating.td is not None else timedelta()
+        )
+        solving = self.solving.td if self.solving.td is not None else timedelta()
+        return pending + generating + solving
+
 
 class JobStatus(MojoBaseModel):
     """
@@ -141,18 +161,22 @@ class JobStatus(MojoBaseModel):
     """
 
     started_by: str = Field(default_factory=getpass.getuser)
+    job_type: JobType
+    execution_mode: ExecutionMode
     workdir: Path
     n_trial: int
     n_proc: int
     padding_style: str
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    elapsed: timedelta = Field(default_factory=timedelta)
+    elapsed: timedelta = Field(default=timedelta(0))
+    average_trial_duration: timedelta = Field(default=timedelta(0))
     generator: tuple[str, Path | None, int | None]
     runtime: tuple[str, Path | None, int | None]
     gen_args_used: bool
     gen_kwargs_used: bool
     run_args_used: bool
     run_kwargs_used: bool
+    _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
 
     @property
     def trial_nums(self) -> list[int]:
@@ -160,7 +184,9 @@ class JobStatus(MojoBaseModel):
 
         return MonteCarloConfig._trial_nums(self.n_trial)
 
-    _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
+    @property
+    def n_remaining(self) -> int:
+        return self.n_trial - len(self._registry)
 
     def trial_num_to_path(self, trial_num: int) -> Path:
         return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
@@ -220,6 +246,8 @@ class JobStatus(MojoBaseModel):
         1. `glob` to quickly find the trials which at least started.
         2. Parallel pooling to process the globbed files to reduce I/O wait time.
         """
+        if n_proc < 1:
+            n_proc = 1
         self._registry = {
             tn: (status.completion if status is not None else Completion.INCOMPLETE)
             for tn, status in self.trial_statuses(n_proc=n_proc).items()
@@ -262,8 +290,12 @@ class JobStatus(MojoBaseModel):
         ]
 
     @property
-    def time_remaining(self) -> timedelta:
-        """Calculates the estimated time ramianing based on elapsed wall-clock time."""
+    def time_remaining_wall_clock(self) -> timedelta:
+        """
+        Calculates the estimated time ramianing based on elapsed wall-clock time.
+
+        For simulations which were not resumed, this property is more accurate than the time_remaining_average_success property.
+        """
         elapsed = (datetime.now(UTC) - self.start_time).total_seconds()
 
         if self.progress <= 0 or self.progress == 1:
@@ -272,6 +304,24 @@ class JobStatus(MojoBaseModel):
         total_est_time = elapsed / self.progress
         remaining_seconds = total_est_time - elapsed
         return timedelta(seconds=max(1, int(remaining_seconds)))
+
+    @property
+    def time_remaining_average_success(self) -> timedelta:
+        """
+        Calculates the estimated time ramianing based on the average successful trial completion rate.
+
+        For simulations which were resumed, this property is more accurate than the time_remaining_wall_clock property.
+        """
+        if self.n_remaining <= 0 or self.average_trial_duration.total_seconds() == 0:
+            return timedelta(0)
+
+        # the number of processors used will change the estimate!
+        total_remaining_seconds = (
+            self.n_remaining
+            * self.average_trial_duration.total_seconds()
+            / max(1, self.n_proc)
+        )
+        return timedelta(seconds=int(total_remaining_seconds))
 
     @property
     def n_done(self) -> int:
@@ -288,7 +338,7 @@ class JobStatus(MojoBaseModel):
             return self.start_time + self.elapsed
         else:
             # job is not done, predict completion time
-            return datetime.now(UTC) + self.time_remaining
+            return datetime.now(UTC) + self.time_remaining_average_success
 
     @property
     def failure_rate(self) -> float:
@@ -322,10 +372,32 @@ class JobStatus(MojoBaseModel):
                 failed_tn.append(tn)
         return sorted(failed_tn)
 
-    def update_trial(self, trial_num: int, completion: Completion, save: bool = True):
-        """Updates the internal registry and optionally persists the global status."""
+    def update_trial(
+        self,
+        trial_num: int,
+        trial_timedelta: timedelta | None,
+        completion: Completion,
+        save: bool = True,
+    ):
+        """Updates the internal registry and average trial duration and optionally persists the global status."""
+        # this updater MUST be called before the registry is updated since n_done will change
+        # this avoids incorrect math (n_done would be off by 1) as well as a divide by 0
+        # failed runs do not return a timedelta and it is mathematically better to not include them
+        # instead of include with a runtime of 0.
+
+        # for that same reason, n_success is used instead of n_done since that is more accurate
+        if trial_timedelta is not None and completion == Completion.SUCCESS:
+            # including average_trial_duration as an attribute allows us to stop a job and resume it
+            # without having a terrible estimated time remaining. As mentioned before, this comes at the
+            # cost of accuracy for jobs which have failures. But if you have a job with failures, maybe
+            # you should be figuring out why that is instead of being mad that the ETA is off
+            self.average_trial_duration += (
+                trial_timedelta - self.average_trial_duration
+            ) / (self.n_success + 1)
+
         self._registry[trial_num] = completion
         self.elapsed = datetime.now(UTC) - self.start_time
+
         if save:
             status_path = self.workdir / STATUS_FNAME
             self.dump_to_path(status_path, indent=4)
@@ -350,6 +422,8 @@ class JobStatus(MojoBaseModel):
         data = {
             "Started By": self.started_by,
             "Workdir": f"`{self.workdir.as_posix()}`",
+            "Job Type": str(self.job_type),
+            "Execution Mode": str(self.execution_mode),
             "Number of Trials": str(self.n_trial),
             "Number of Processers": str(self.n_proc),
             "Successes": (
@@ -376,7 +450,7 @@ class JobStatus(MojoBaseModel):
     def _run_time_series(self, n_proc: int = 1) -> pd.DataFrame:
         data = {
             "Total Elapsed": str(self.elapsed).split(".")[0],
-            "Total Remaining": str(self.time_remaining).split(".")[0],
+            "Total Remaining": str(self.time_remaining_average_success).split(".")[0],
             "Start Time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S %Z%z')} (*{self.start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC*)",
             "End Time"
             if self.is_done
@@ -464,7 +538,7 @@ class JobStatus(MojoBaseModel):
             "n_trial": self.n_trial,
             "n_done": self.n_done,
             "failure_rate": self.failure_rate,
-            "time_remaining": str(self.time_remaining).split(".")[0],
+            "time_remaining": str(self.time_remaining_average_success).split(".")[0],
             "elapsed": str(self.elapsed).split(".")[0],
             "is_complete": self.progress >= 1.0,
             "failure_tns": self.failed_trial_nums,
