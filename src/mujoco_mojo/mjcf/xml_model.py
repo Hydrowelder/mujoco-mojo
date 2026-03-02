@@ -317,6 +317,9 @@ class XMLModel(MojoBaseModel):
                             # files already in the destination skipped
                             if get_checksum(item) == get_checksum(dest_file):
                                 should_copy = False
+                                logger.debug(
+                                    f"Dependency asset {item.resolve()} was already in the shared asset directory {target_dir.resolve()} (as identified by filename and MD5 hash) so the file will be skipped from being copied."
+                                )
                             else:
                                 logger.warning(
                                     f"Asset file {value} already in assets bundle. Old file will be overwritten."
