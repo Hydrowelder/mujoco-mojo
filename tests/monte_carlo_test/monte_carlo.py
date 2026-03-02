@@ -13,7 +13,6 @@ mujoco-mojo run \
 
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 import mujoco_mojo as mojo
 from mujoco_mojo.utils.logging import get_logger
@@ -34,8 +33,8 @@ def generate(
     # print(f"Kwargs used: {kwargs}!")
     logger.info(f"generating nothing {trial_num}!")
 
-    if not trial_num % 5:
-        raise ValueError("askflaskfhl")
+    # if not trial_num % 5:
+    #     raise ValueError("askflaskfhl")
 
     asset = mojo.mjcf.Asset(
         textures=[
@@ -87,8 +86,8 @@ def generate(
 
 def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # print("running nothing!")
-    if mojo_model.values.trial_num == 7:
-        raise ValueError("blah blah blah")
+    # if mojo_model.values.trial_num == 7:
+    #     raise ValueError("blah blah blah")
     time.sleep(2)
 
     return None
@@ -110,22 +109,22 @@ class Experiment:
         return runtime(mojo_model, *args, **kwargs)
 
 
-def test_monte_carlo():
-    mojo.utils.MojoRunner(
-        generator=Experiment.generate,
-        runtime=Experiment.runtime,
-        workdir=Path(__file__).parent / "mc_test",
-        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
-    ).run(resume=False)
+# def test_monte_carlo():
+#     mojo.utils.MojoRunner(
+#         generator=Experiment.generate,
+#         runtime=Experiment.runtime,
+#         workdir=Path(__file__).parent / "mc_test",
+#         config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+#     ).run(resume=False)
 
-    # mojo.utils.MojoRunner(
-    #     generator=generate,
-    #     runtime=runtime,
-    #     workdir=Path(__file__).parent / "mc_test",
-    #     config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
-    # ).run(resume=False)
+# mojo.utils.MojoRunner(
+#     generator=generate,
+#     runtime=runtime,
+#     workdir=Path(__file__).parent / "mc_test",
+#     config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+# ).run(resume=False)
 
 
-if __name__ == "__main__":
-    # generate(trial_num=0)
-    test_monte_carlo()
+# if __name__ == "__main__":
+#     # generate(trial_num=0)
+#     test_monte_carlo()

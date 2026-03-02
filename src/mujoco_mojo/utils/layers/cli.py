@@ -14,6 +14,7 @@ from rich.panel import Panel
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.utils.logging import get_logger, setup_logger
+from mujoco_mojo.utils.statusing import ExecutionMode
 
 from ..defaults import (
     DEFAULT_MC_N_PROC,
@@ -212,6 +213,23 @@ if True:
             ),
         ),
     ]
+    ExecutionModeType = Annotated[
+        ExecutionMode,
+        typer.Option(
+            "--mode",
+            "-m",
+            help="The strategy used to execute trials.",
+            case_sensitive=False,
+        ),
+    ]
+    TrialIdType = Annotated[
+        list[int],
+        typer.Option(
+            "--trial-id",
+            "-tid",
+            help="Specific trial IDs to run ([italic]-tid 5 -tid 42[/italic])",
+        ),
+    ]
 
     # monte carlo
     NTrialType = Annotated[
@@ -323,7 +341,9 @@ def _prepare_runner(
 
     return MojoRunner(
         generator=gen_func,
+        generator_path=generator,  # needed for SLURM
         runtime=run_func,
+        runtime_path=runtime,  # needed for SLURM
         workdir=workdir,
         model_config_name=model_config_name,
         xml_name=xml_name,
@@ -346,6 +366,8 @@ def run_monte_carlo(
     clean_workdir: CleanWorkdirType = False,
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
+    execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
+    trial_ids: TrialIdType = [],
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -361,6 +383,12 @@ def run_monte_carlo(
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+
+    if n_trial != 0 and trial_ids:
+        logger.warning(
+            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
+        )
+        n_trial = 0
 
     runner: MojoRunner = _prepare_runner(
         generator=generator,
@@ -385,7 +413,12 @@ def run_monte_carlo(
         f"Starting {n_trial} trials (using {n_proc} workers)...",
         extra={"file_only": True},
     )
-    _results, had_fails = runner.run(resume=resume, clean_workdir=clean_workdir)
+    _results, had_fails = runner.run(
+        resume=resume,
+        clean_workdir=clean_workdir,
+        execution_mode=execution_mode,
+        trial_ids=trial_ids,
+    )
 
     if had_fails:
         preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
