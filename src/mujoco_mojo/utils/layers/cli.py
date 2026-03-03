@@ -70,7 +70,7 @@ def _load_func(path: str) -> Any:
         rprint(
             f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] not found: {e}"
         )
-        logger.error(f"`{path}`not found: {e}", extra={"file_only": True})
+        logger.exception(f"`{path}`not found: {e}", extra={"file_only": True})
         raise typer.Exit(code=1)
 
 
