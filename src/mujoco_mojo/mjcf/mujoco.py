@@ -170,7 +170,7 @@ class Mujoco(XMLModel):
 
         """
         xml = utils.to_pretty_xml(self.to_xml(exclude_default=exclude_default))
-        file.write_text(xml)
+        file.write_text(xml, encoding="utf-8")
 
     def to_mj_spec(self) -> mujoco.MjSpec:
         """Creates an MjSpec from the Mujoco instance."""

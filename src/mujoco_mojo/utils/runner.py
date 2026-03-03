@@ -236,7 +236,9 @@ class Trial:
 
                 # save XML (with modified DepPath)
                 mojo_model.mjcf.write_xml(self.xml_path)
-                self.model_config_path.write_text(mojo_model.model_dump_json(indent=4))
+                self.model_config_path.write_text(
+                    mojo_model.model_dump_json(indent=4), encoding="utf-8"
+                )
 
             with status.record_step(step_name="solving"):
                 # 3. Execute (if runtime provided)
@@ -258,7 +260,9 @@ class Trial:
         except Exception as e:
             status.step = "done"
             status.completion = Completion.FAILED
-            logger.error(f"Trial {self.trial_num} failed with the following error: {e}")
+            logger.exception(
+                f"Trial {self.trial_num} failed with the following error: {e}"
+            )
         finally:
             status.dump_to_path(status._path)
 
@@ -301,8 +305,8 @@ class MojoRunner:
 
             return (f"{gen_name}", Path(gen_file).resolve(), line_num)
 
-        except Exception:
-            logger.error("Failed to capture generator details.")
+        except Exception as e:
+            logger.exception(f"Failed to capture generator details: {e}")
             return (f"{func}", None, None)
 
     def capture_environment(self):
@@ -314,7 +318,7 @@ class MojoRunner:
                 ["uv", "pip", "freeze"], capture_output=True, text=True
             )
             if result.returncode == 0 and result.stdout:
-                req_path.write_text(result.stdout)
+                req_path.write_text(result.stdout, encoding="utf-8")
                 return
         except FileNotFoundError:
             pass
@@ -325,14 +329,15 @@ class MojoRunner:
                 [sys.executable, "-m", "pip", "freeze"], capture_output=True, text=True
             )
             if result.returncode == 0 and result.stdout:
-                req_path.write_text(result.stdout)
+                req_path.write_text(result.stdout, encoding="utf-8")
                 return
         except Exception:
             pass
 
         # 3. Last resort: Record the Python version and basic info
         req_path.write_text(
-            f"# Fallback: Could not use uv/pip\n# Python Version: {sys.version}\n"
+            f"# Fallback: Could not use uv/pip\n# Python Version: {sys.version}\n",
+            encoding="utf-8",
         )
 
     def run(
@@ -381,11 +386,12 @@ class MojoRunner:
                 shutil.rmtree(self.workdir)
             except Exception as e:
                 msg = f"Failed to delete workdir {self.workdir}: {e}"
-                logger.error(msg)
+                logger.exception(msg)
                 raise RuntimeError(msg)
 
         self.workdir.mkdir(parents=True, exist_ok=True)
-        (self.workdir / ".gitignore").write_text("*")
+        if not (self.workdir / ".gitignore").exists():
+            (self.workdir / ".gitignore").write_text("*", encoding="utf-8")
         self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
@@ -534,7 +540,7 @@ class MojoRunner:
                         # user is quitting from breakpoint() or CTRL+C
                         raise
                     except Exception as e:
-                        logger.error(f"Trial {tn} failed: {e}")
+                        logger.exception(f"Trial {tn} failed: {e}")
                         results.append(None)
                         status_tracker.update_trial(
                             trial_num=tn,
@@ -565,7 +571,7 @@ class MojoRunner:
                     # user is quitting from breakpoint() or CTRL+C
                     raise
                 except Exception as e:
-                    logger.error(f"A trial failed with error: {e}")
+                    logger.exception(f"A trial failed with error: {e}")
                     results.append(None)
                     status_tracker.update_trial(
                         trial_num=tn,
@@ -648,7 +654,7 @@ export PYTHONPATH=$PYTHONPATH:{project_root}
 {cmd}
 """
 
-        script_path.write_text(sbatch_content)
+        script_path.write_text(sbatch_content, encoding="utf-8")
 
         # submit to sbatch
         logger.info(f"Submitting {len(to_run)} trials to SLURM...")
