@@ -181,6 +181,221 @@ class GeomBase(XMLModel):
     plugin: Plugin | None = None
     """Associate this geom with an engine plugin. Either plugin or instance are required."""
 
+    def geom_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Returns the position of the center of the geom."""
+        return mj_data.geom_xpos[self.get_id(mj_model)]
+
+    def geom_aabb_radius(self, mj_model: mujoco.MjModel) -> float:
+        """Returns the radius of a bounding sphere of the geom."""
+        return np.max(mj_model.geom_size[self.get_id(mj_model)])
+
+    @staticmethod
+    def _get_geom_dist_between_geom(
+        geom_1: Geom,
+        geom_2: Geom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: np.ndarray,
+    ) -> float:
+        return mujoco.mj_geomDistance(
+            m=mj_model,
+            d=mj_data,
+            geom1=geom_1.get_id(mj_model=mj_model),
+            geom2=geom_2.get_id(mj_model=mj_model),
+            distmax=dist_max,
+            fromto=fromto,
+        )
+
+    @staticmethod
+    def _get_geom_dist_between_geoms_acc(
+        geom_1: Geom | list[Geom],
+        geom_2: Geom | list[Geom],
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: np.ndarray,
+    ) -> float:
+        """The brute force, but accurate method which checks every pair and returns the minimum distance."""
+        list_1 = geom_1 if isinstance(geom_1, list) else [geom_1]
+        list_2 = geom_2 if isinstance(geom_2, list) else [geom_2]
+
+        min_dist = dist_max
+        temp_fromto = np.zeros(6)
+        fromto = temp_fromto
+
+        for g1 in list_1:
+            for g2 in list_2:
+                d = GeomBase._get_geom_dist_between_geom(
+                    geom_1=g1,
+                    geom_2=g2,
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    dist_max=min_dist,  # use min_dist
+                    fromto=temp_fromto,
+                )
+                if d < min_dist:
+                    min_dist = d
+                    fromto[:] = temp_fromto
+
+                # early exit if contacting
+                if min_dist < 0.0:
+                    return min_dist
+        return min_dist
+
+    @staticmethod
+    def _get_geom_dist_between_geoms_auto(
+        geom_1: Geom | list[Geom],
+        geom_2: Geom | list[Geom],
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: np.ndarray,
+    ) -> float:
+        """
+        Broadphase and narrowphase method to calculate geometric distance.
+
+        Uses bounding spheres (like an Axis-Aligned Bounding Box) to set the threshold at which the full accuracy calculation is performed. If the center to center distance between the geoms minus their radii is less than dist_max the explicit calculation is performed.
+        """
+        list_1 = geom_1 if isinstance(geom_1, list) else [geom_1]
+        list_2 = geom_2 if isinstance(geom_2, list) else [geom_2]
+
+        min_dist = dist_max
+        temp_fromto = np.zeros(6)
+        fromto = temp_fromto
+
+        for g1 in list_1:
+            # center of the geom and its max radius
+            pos1 = g1.geom_xpos(mj_model=mj_model, mj_data=mj_data)
+            rad1 = g1.geom_aabb_radius(mj_model=mj_model)
+
+            for g2 in list_2:
+                pos2 = g2.geom_xpos(mj_model=mj_model, mj_data=mj_data)
+                rad2 = g2.geom_aabb_radius(mj_model=mj_model)
+
+                d_centers = float(np.linalg.norm(pos1 - pos2))
+                d_approx = d_centers - (rad1 + rad2)
+
+                # broad phase elimination
+                if d_approx > min_dist:
+                    continue
+
+                # candidate pair for min distance
+                d_real = GeomBase._get_geom_dist_between_geom(
+                    geom_1=g1,
+                    geom_2=g2,
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    dist_max=min_dist,  # use min_dist
+                    fromto=temp_fromto,
+                )
+
+                if d_real < min_dist:
+                    min_dist = d_real
+                    fromto[:] = temp_fromto
+
+                if min_dist < 0.0:
+                    return min_dist
+
+        return min_dist
+
+    @staticmethod
+    def get_geom_dist_between_geoms(
+        geom_1: Geom | list[Geom],
+        geom_2: Geom | list[Geom],
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Vec6 | None = None,
+        auto: bool = True,
+    ) -> float:
+        """
+        Calculates the shortest distance between a geometry (or geometries) and geometry (or geometries).
+
+        This method is intended for use with geometry which has been discretized to get around the limitation that all geometries are convex hulls. This method wraps the low-level `mujoco.mj_geomDistance` function. It computes the signed distance between two geoms based on their current poses in `mj_data`.
+
+        Args:
+            geom_1 (Geom | list[Geom]): First Geom/collection of Geom to check.
+            geom_2 (Geom): Second Geom/collection of Geom to check against.
+            mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
+            mj_data (mujoco.MjData): The current simulation state.
+            dist_max (float): The maximum search distance. If geoms are further apart than this, the function returns `dist_max`.
+            fromto (Vec6 | None, optional): A 6-element NumPy array (float64) used as an output buffer. After execution, it contains the global coordinates of the two closest points: [x1, y1, z1, x2, y2, z2].. Defaults to None.
+            auto (bool, optional): If True, an Axis-Aligned Bounding Box (AABB) like method is used where bounding spheres approximate clearances if the geoms are distant from one another (dist_max < distance between centers minus the bounding radii). When set to True, will use a brute force method to calculate geometric distance. Defaults to True.
+
+        Returns:
+            float: The shortest distance between the two geoms. A negative value indicates penetration (overlap). Returns `dist_max` if no intersection is found within the specified range.
+
+        Note:
+            Both geoms must belong to the provided `mj_model`. This calculation is computationally more expensive than bounding box checks as it accounts for the specific shapes (mesh, primitive, etc.).
+
+        """
+        if fromto is None:
+            fromto = np.zeros(6)
+        else:
+            fromto = np.asarray(fromto)
+        if auto:
+            return GeomBase._get_geom_dist_between_geoms_auto(
+                geom_1=geom_1,
+                geom_2=geom_2,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                dist_max=dist_max,
+                fromto=fromto,
+            )
+        else:
+            return GeomBase._get_geom_dist_between_geoms_acc(
+                geom_1=geom_1,
+                geom_2=geom_2,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                dist_max=dist_max,
+                fromto=fromto,
+            )
+
+    def get_geom_dist(
+        self,
+        other: Geom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Vec6 | None = None,
+        auto: bool = True,
+    ) -> float:
+        """
+        Calculates the shortest distance between this geometry and another.
+
+        This method wraps the low-level `mujoco.mj_geomDistance` function. It computes the signed distance between two geoms based on their current poses in `mj_data`.
+
+        Args:
+            other (Geom): The target Geom to check against.
+            mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
+            mj_data (mujoco.MjData): The current simulation state.
+            dist_max (float): The maximum search distance. If geoms are further apart than this, the function returns `dist_max`.
+            fromto (Vec6 | None, optional): A 6-element NumPy array (float64) used as an output buffer. After execution, it contains the global coordinates of the two closest points: [x1, y1, z1, x2, y2, z2].. Defaults to None.
+            auto (bool, optional): If True, an Axis-Aligned Bounding Box (AABB) like method is used where bounding spheres approximate clearances if the geoms are distant from one another (dist_max < distance between centers minus the bounding radii). When set to True, will use a brute force method to calculate geometric distance. Defaults to True.
+
+        Returns:
+            float: The shortest distance between the two geoms. A negative value indicates penetration (overlap). Returns `dist_max` if no intersection is found within the specified range.
+
+        Note:
+            Both geoms must belong to the provided `mj_model`. This calculation is computationally more expensive than bounding box checks as it accounts for the specific shapes (mesh, primitive, etc.).
+
+        """
+        if fromto is None:
+            fromto = np.zeros(6)
+        else:
+            fromto = np.asarray(fromto)
+        return self.get_geom_dist_between_geoms(
+            mj_model=mj_model,
+            mj_data=mj_data,
+            geom_1=self,  # self is a Geom # pyright: ignore[reportArgumentType]
+            geom_2=other,
+            dist_max=dist_max,
+            fromto=fromto,
+            auto=auto,
+        )
+
 
 class GeomPlane(GeomBase):
     """This element creates a plane geometry."""

@@ -1,25 +1,21 @@
-r"""
-```bash
-mujoco-mojo run \
-    --generator mujoco-mojo.tests.monte_carlo_test.monte_carlo.Experiment.generate \
-    --runtime mujoco-mojo.tests.monte_carlo_test.monte_carlo.Experiment.runtime \
-    --workdir mujoco-mojo/tests/monte_carlo_test/mc_test/ \
-    --no-resume \
-    monte-carlo \
-    --n-trial 10 \
-    --n-proc 1
-```
-"""
-
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 
 import mujoco_mojo as mojo
 from mujoco_mojo.utils.logging import get_logger
 
 SEED = 42
 
+# logger = get_logger("mujoco_mojo")
 logger = get_logger(__name__)
+
+
+@lru_cache
+def cached_method(x: str = "asdf"):
+    """Memory cached functions do get cached, but only only for each proc used (`--n-proc` 4 will result in this function being called 4 times)."""
+    logger.critical("CACHED METHOD CALLED!!")
+    return
 
 
 def generate(
@@ -33,6 +29,7 @@ def generate(
     # print(f"Kwargs used: {kwargs}!")
     logger.info(f"generating nothing {trial_num}!")
 
+    cached_method()
     # if not trial_num % 5:
     #     raise ValueError("askflaskfhl")
 
