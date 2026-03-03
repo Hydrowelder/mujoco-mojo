@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from pathlib import Path
+from typing import ClassVar, Self
 
 import mujoco
 import numpy as np
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.orientation import Quat
@@ -145,6 +146,78 @@ class Mesh(XMLModel):
 
     material: MaterialName | None = None
     """Fallback material for mesh geoms that do not specify their own material."""
+
+    @model_validator(mode="after")
+    def validate_file(self) -> Self:
+        # make the file extension lowercase
+        if self.file is not None and self.file.suffix not in [".stl", ".msh", ".obj"]:
+            msg = f'Mesh {self.name}: Invalid file suffix ({self.file.suffix}). Must be ".stl", ".msh", or ".obj".'
+            logger.error(msg)
+            raise ValueError(msg)
+
+        # assert that only one or none are defined
+        file_provided = self.file is not None
+        vertex_provided = self.vertex is not None
+        if file_provided ^ vertex_provided:
+            msg = f"Mesh {self.name}: One of file or vertex may be provided ({file_provided=}, {vertex_provided=})."
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
+
+    @classmethod
+    def decompose_mesh(
+        cls,
+        stl_path: Path,
+        threshold: float = 0.05,
+        max_convex_hulls: int = -1,
+        **kwargs,
+    ) -> list[Mesh]:
+        """
+        Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD). New meshes are stored as vertices.
+
+        Note:
+            This may be a good method to wrap in a memory cache as it can be expensive.
+
+        Args:
+            stl_path (Path): Path to the input STL/OBJ file.
+            threshold (float, optional): Surface distance threshold (lower = more parts/more accurate). Defaults to 0.05.
+            max_convex_hulls (int, optional): Hard limit on number of hulls. -1 for no limit.
+            kwargs: Keyword arguments to pass to CoACD.
+
+        Returns:
+            list[Mesh]: _description_
+
+        """
+        import coacd
+        import trimesh
+
+        msg = "The decompose mesh method has not yet been implemented!"
+        logger.exception(msg)
+        raise NotImplementedError(msg)
+        # load the original mesh
+        t_mesh = trimesh.load(stl_path, force="mesh")
+        setattr(t_mesh, "indices", t_mesh.faces)
+
+        # prepare the CoACD mesh
+        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)
+
+        # decompose
+        parts = coacd.run_coacd(
+            mesh=t_mesh,
+            threshold=threshold,
+            max_convex_hull=max_convex_hulls,
+            **kwargs,
+        )
+
+        # convert meshes into Mesh objects
+        decomposed_meshes = []
+        base_name = stl_path.stem
+        for i, (verts, faces) in enumerate(parts):
+            part_mesh = cls(
+                name=MeshName(f"{base_name}_{i}"),
+                vertex=tuple(map(tuple, verts.tolist())),
+            )
+        return []
 
 
 class MeshSphere(Mesh):
