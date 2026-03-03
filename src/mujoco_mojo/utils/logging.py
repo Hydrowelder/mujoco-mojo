@@ -54,7 +54,7 @@ def setup_logger(
     backup_count: int = 5,
 ) -> logging.Logger:
     """Shortcut to a sensible MuJoCo Mojo logger using Rich for the terminal."""
-    logger = get_logger("mujoco_mojo")
+    logger = logging.getLogger()
     logger.setLevel(level)
 
     # avoid double logging by preventing logs from being sent to the root logger
