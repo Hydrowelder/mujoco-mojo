@@ -1,3 +1,5 @@
+"""Defines the CLI for mujoco-mojo."""
+
 import ast
 import importlib
 import logging
