@@ -158,7 +158,7 @@ class Mesh(XMLModel):
         # assert that only one or none are defined
         file_provided = self.file is not None
         vertex_provided = self.vertex is not None
-        if file_provided ^ vertex_provided:
+        if not (file_provided ^ vertex_provided):
             msg = f"Mesh {self.name}: One of file or vertex may be provided ({file_provided=}, {vertex_provided=})."
             logger.error(msg)
             raise ValueError(msg)
@@ -167,9 +167,12 @@ class Mesh(XMLModel):
     @classmethod
     def decompose_mesh(
         cls,
-        stl_path: Path,
+        path: Path,
         threshold: float = 0.05,
         max_convex_hulls: int = -1,
+        vertex: bool = False,
+        save_dir: DepPath | None = None,
+        save_preview: Path | None = None,
         **kwargs,
     ) -> list[Mesh]:
         """
@@ -179,49 +182,103 @@ class Mesh(XMLModel):
             This may be a good method to wrap in a memory cache as it can be expensive.
 
         Args:
-            stl_path (Path): Path to the input STL/OBJ file.
+            path (Path): Path to the input STL/OBJ file.
             threshold (float, optional): Surface distance threshold (lower = more parts/more accurate). Defaults to 0.05.
             max_convex_hulls (int, optional): Hard limit on number of hulls. -1 for no limit.
+            vertex (bool, optional): If True, the generated meshes will be the vertex type (this is not really suitable for multi-run jobs since the XML file becomes quite large). If False, the save_as parameter becomes required and will save
+            save_dir (Path, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
+            save_preview (Path, optional): Where to save a preview of the generated meshes. The meshes are filled with a random color. Example is `Path("mesh_decomposed.obj")`.
             kwargs: Keyword arguments to pass to CoACD.
 
         Returns:
-            list[Mesh]: _description_
+            list[Mesh]: Resulting mesh objects.
 
         """
-        import coacd
-        import trimesh
+        try:
+            import coacd
+            import trimesh
+        except ModuleNotFoundError:
+            msg = "The `coacd` and `trimesh` packages are required. Install with `uv add coacd trimesh` or `pip install coacd trimesh`"
+            logger.exception(msg)
+            raise ModuleNotFoundError(msg)
 
-        msg = "The decompose mesh method has not yet been implemented!"
-        logger.exception(msg)
-        raise NotImplementedError(msg)
+        logger.info(f"Decomposing {path} with {threshold=} and {max_convex_hulls=}")
+
         # load the original mesh
-        t_mesh = trimesh.load(stl_path, force="mesh")
-        setattr(t_mesh, "indices", t_mesh.faces)
+        t_mesh = trimesh.load(path, force="mesh")
 
         # prepare the CoACD mesh
-        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)
+        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)  # pyright: ignore[reportAttributeAccessIssue]
 
         # decompose
-        parts = coacd.run_coacd(
-            mesh=t_mesh,
+        result = coacd.run_coacd(
+            mesh=coacd_mesh,
             threshold=threshold,
             max_convex_hull=max_convex_hulls,
             **kwargs,
         )
 
         # convert meshes into Mesh objects
-        decomposed_meshes = []
-        base_name = stl_path.stem
-        for i, (verts, faces) in enumerate(parts):
-            part_mesh = cls(
-                name=MeshName(f"{base_name}_{i}"),
-                vertex=tuple(map(tuple, verts.tolist())),
-            )
-        return []
+        decomposed_mojo_meshes = []
+        base_name = path.stem
+
+        if vertex:
+            for i, (verts, faces) in enumerate(result):
+                part_mesh = cls(
+                    name=MeshName(f"{base_name}_{i}"),
+                    vertex=tuple(map(tuple, verts.tolist())),
+                    face=tuple(map(tuple, faces.tolist())),
+                    inertia=Inertia.CONVEX,  # Guaranteed convex by CoACD
+                )
+                decomposed_mojo_meshes.append(part_mesh)
+        else:
+            # make sure inputs are valid and mkdir
+            if save_dir is None:
+                msg = f"Mesh {base_name}: save_dir is required when vertex=False."
+                logger.exception(msg)
+                raise ValueError(msg)
+
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            # save meshes to dir
+            for i, (vs, fs) in enumerate(result):
+                # construct mesh and export
+                name = f"{base_name}_{i}"
+                export_path = save_dir / f"{name}{path.suffix}"
+
+                part_trimesh = trimesh.Trimesh(vs, fs)
+                part_trimesh.export(export_path)
+
+                # create mojo mesh
+                decomposed_mojo_meshes.append(
+                    cls(
+                        name=MeshName(f"{base_name}_{i}"),
+                        file=export_path,
+                        inertia=Inertia.CONVEX,
+                    )
+                )
+
+        if save_preview is not None:
+            scene = trimesh.Scene()
+            rng = np.random.default_rng(42)
+            for i, (vs, fs) in enumerate(result):
+                p = trimesh.Trimesh(vs, fs)
+
+                p.visual.vertex_colors[:, :3] = (rng.random(3) * 255).astype(  # type: ignore
+                    np.uint8
+                )
+                scene.add_geometry(p)
+            scene.export(save_preview)
+            logger.info(f"Saved decomposition preview to {save_preview}")
+        return decomposed_mojo_meshes
 
 
 class MeshSphere(Mesh):
-    """Repeated subdivisions of a unit icosahedron ("icosphere")."""
+    """
+    Repeated subdivisions of a unit icosahedron ("icosphere").
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/s.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "sphere"
 
@@ -241,7 +298,11 @@ class MeshSphere(Mesh):
 
 
 class MeshHemisphere(Mesh):
-    """Quad-projected hemisphere."""
+    """
+    Quad-projected hemisphere.
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/h.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "hemisphere"
 
@@ -261,7 +322,11 @@ class MeshHemisphere(Mesh):
 
 
 class MeshCone(Mesh):
-    """Cone mesh from top and bottom polygons."""
+    """
+    Cone mesh from top and bottom polygons.
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/c.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "cone"
 
@@ -293,7 +358,11 @@ class MeshCone(Mesh):
 
 
 class MeshSupersphere(Mesh):
-    """Supersphere (superellipsoid) shape."""
+    """
+    Supersphere (superellipsoid) shape.
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/ss.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "supersphere"
 
@@ -328,7 +397,11 @@ class MeshSupersphere(Mesh):
 
 
 class MeshTorus(Mesh):
-    """Supertorus (generalized torus) shape."""
+    """
+    Supertorus (generalized torus) shape.
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/st.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "torus"
 
@@ -375,7 +448,11 @@ class MeshTorus(Mesh):
 
 
 class MeshWedge(Mesh):
-    """Slice of a unit spherical shell."""
+    """
+    Slice of a unit spherical shell.
+
+    <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/w.png" width="300" />
+    """
 
     builtin: ClassVar[str] = "wedge"
 
@@ -442,7 +519,7 @@ class MeshWedge(Mesh):
 
 
 class MeshPlate(Mesh):
-    """Rectangular plate mesh."""
+    """A rectangular plate with given resolution in each dimension. This mesh is designed to be used by the tactile sensor, which reports data at the vertices."""
 
     builtin: ClassVar[str] = "plate"
 
@@ -466,4 +543,6 @@ class MeshPlate(Mesh):
 
 if __name__ == "__main__":
     MeshPlate(res_x=1, res_y=2)
+
+    Mesh.decompose_mesh(path=Path())
     breakpoint()
