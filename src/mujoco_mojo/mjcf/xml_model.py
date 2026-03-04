@@ -304,6 +304,7 @@ class XMLModel(MojoBaseModel):
                 # loop over attribute as a list of items
                 for item in items:
                     if isinstance(item, DepPath):
+                        item = item.resolve()
                         if not item.exists():
                             logger.error(f"Asset file not found: {item}")
                             new_values.append(item)
