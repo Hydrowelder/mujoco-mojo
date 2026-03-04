@@ -193,6 +193,9 @@ class Mesh(XMLModel):
         Returns:
             list[Mesh]: Resulting mesh objects.
 
+        **Without** `decompose_mesh`: <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/without_coacd.jpg" width="600" />
+        **With** `decompose_mesh`: <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/with_coacd.jpg" width="600" />
+
         """
         try:
             import coacd
