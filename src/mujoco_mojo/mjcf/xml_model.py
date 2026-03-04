@@ -29,9 +29,18 @@ __all__ = ["XMLModel"]
 def _tuple_string(v) -> str:
     """
     Convert a sequence or array of numbers into a space-separated string.
+
     Works with list, tuple, or NumPy ndarray.
     """
-    return " ".join(map(str, v))
+
+    def flatten(items):
+        for item in items:
+            if isinstance(item, (list, tuple, np.ndarray)):
+                yield from flatten(item)
+            else:
+                yield str(item)
+
+    return " ".join(flatten(v))
 
 
 def _format_value(value) -> str:

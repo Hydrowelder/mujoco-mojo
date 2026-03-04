@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar, Literal, Self, overload
 
 import mujoco
 import numpy as np
@@ -135,7 +135,7 @@ class Mesh(XMLModel):
     texcoord: tuple[tuple[float, float], ...] | None = None
     """Vertex 2D texture coordinates, which are numbers between 0 and 1. If specified, the number of texture coordinate pairs must equal the number of vertices."""
 
-    face: tuple[tuple[float, float, float], ...] | None = None
+    face: tuple[tuple[int, int, int], ...] | None = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
     refpos: Pos = Pos(pos=np.array((1, 1, 1)))
@@ -164,6 +164,32 @@ class Mesh(XMLModel):
             raise ValueError(msg)
         return self
 
+    @overload
+    @classmethod
+    def decompose_mesh(
+        cls,
+        path: Path,
+        threshold: float = 0.05,
+        max_convex_hulls: int = -1,
+        vertex: Literal[False] = False,
+        save_dir: DepPath = ...,
+        save_preview: Path | None = None,
+        **kwargs,
+    ) -> list[Self]: ...
+
+    @classmethod
+    @overload
+    def decompose_mesh(
+        cls,
+        path: Path,
+        threshold: float = 0.05,
+        max_convex_hulls: int = -1,
+        vertex: Literal[True] = ...,
+        save_dir: None = None,
+        save_preview: Path | None = None,
+        **kwargs,
+    ) -> list[Self]: ...
+
     @classmethod
     def decompose_mesh(
         cls,
@@ -174,29 +200,42 @@ class Mesh(XMLModel):
         save_dir: DepPath | None = None,
         save_preview: Path | None = None,
         **kwargs,
-    ) -> list[Mesh]:
+    ) -> list[Self]:
         """
-        Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD). New meshes are stored as vertices.
+        Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD).
+
+        This comes at the cost of file space, import speed, and runtime (especially for calculating minimum geometric distances).
 
         Note:
-            This may be a good method to wrap in a memory cache as it can be expensive.
+            This may be a good method to wrap in a memory cache as it can be expensive. It is also recommended to use `vertex=False` and `save_dir` if running Monte Carlo.
 
         Args:
             path (Path): Path to the input STL/OBJ file.
             threshold (float, optional): Surface distance threshold (lower = more parts/more accurate). Defaults to 0.05.
             max_convex_hulls (int, optional): Hard limit on number of hulls. -1 for no limit.
             vertex (bool, optional): If True, the generated meshes will be the vertex type (this is not really suitable for multi-run jobs since the XML file becomes quite large). If False, the save_as parameter becomes required and will save
-            save_dir (Path, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
+            save_dir (DepPath, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
             save_preview (Path, optional): Where to save a preview of the generated meshes. The meshes are filled with a random color. Example is `Path("mesh_decomposed.obj")`.
             kwargs: Keyword arguments to pass to CoACD.
 
         Returns:
             list[Mesh]: Resulting mesh objects.
 
-        **Without** `decompose_mesh`: <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/without_coacd.jpg" width="600" />
-        **With** `decompose_mesh`: <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/with_coacd.jpg" width="600" />
+        Example:
+            Default settings (threshold=0.05, max_convex_hulls=-1), using [Bottle.obj](https://github.com/SarahWeiii/CoACD/blob/main/examples/Bottle.obj)
+            | Without | With    |
+            |:-------:|:-------:|
+            | 48 KB   | 1.13 MB |
+            | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/without_coacd.jpg" width="300" /> | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/with_coacd.jpg" width="300" /> |
+
 
         """
+        # make sure inputs are valid and mkdir
+        if save_dir is None and not vertex:
+            msg = f"Mesh {path.stem}: save_dir is required when vertex=False."
+            logger.exception(msg)
+            raise ValueError(msg)
+
         try:
             import coacd
             import trimesh
@@ -235,12 +274,7 @@ class Mesh(XMLModel):
                 )
                 decomposed_mojo_meshes.append(part_mesh)
         else:
-            # make sure inputs are valid and mkdir
-            if save_dir is None:
-                msg = f"Mesh {base_name}: save_dir is required when vertex=False."
-                logger.exception(msg)
-                raise ValueError(msg)
-
+            assert save_dir is not None  # this is checked at the top of the function
             save_dir.mkdir(parents=True, exist_ok=True)
 
             # save meshes to dir
