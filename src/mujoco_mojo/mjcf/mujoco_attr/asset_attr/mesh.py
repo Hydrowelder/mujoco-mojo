@@ -223,6 +223,7 @@ class Mesh(XMLModel):
 
         Example:
             Default settings (threshold=0.05, max_convex_hulls=-1), using [Bottle.obj](https://github.com/SarahWeiii/CoACD/blob/main/examples/Bottle.obj)
+
             | Without | With    |
             |:-------:|:-------:|
             | 48 KB   | 1.13 MB |

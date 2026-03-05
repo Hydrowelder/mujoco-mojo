@@ -7,6 +7,7 @@ from typing import (
     ClassVar,
     Literal,
     Protocol,
+    Self,
     get_origin,
     runtime_checkable,
 )
@@ -84,6 +85,17 @@ class XMLModel(MojoBaseModel):
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = None
     """Attribute used to perform MjModel ID lookups."""
+
+    @model_validator(mode="after")
+    def warn_rgba(self) -> Self:
+
+        rgba: np.ndarray | None = getattr(self, "rgba", None)
+        if rgba is not None:
+            if max(rgba) > 1:
+                logger.warning(
+                    f"{self.__class__.__name__} {getattr(self, 'name', 'unnamed')}: MuJoCo rgba values range from 0 to 1, not 0 to 255. You entered {rgba=}."
+                )
+        return self
 
     def to_xml(self, exclude_default: bool = True) -> Element:
         el = Element(self.tag)
