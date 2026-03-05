@@ -9,7 +9,7 @@ from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import EulerSeq, Vec3, Vec4, Vec6
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 

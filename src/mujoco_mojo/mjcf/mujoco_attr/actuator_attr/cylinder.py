@@ -7,7 +7,7 @@ from pydantic import field_validator, model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
 from mujoco_mojo.typing import BiasType, DynType, GainType, Vec3
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 

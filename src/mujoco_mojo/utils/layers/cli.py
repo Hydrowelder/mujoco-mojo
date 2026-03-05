@@ -15,7 +15,7 @@ from rich.panel import Panel
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
-from mujoco_mojo.utils.logging import get_logger, setup_logger
+from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 
 from ..defaults import (

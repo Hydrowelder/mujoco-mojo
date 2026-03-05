@@ -6,7 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomBase
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteBase
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import SensorObjectType
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
 # import a bunch of stuff

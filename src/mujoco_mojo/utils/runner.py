@@ -26,7 +26,7 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import (
     STATUS_FNAME,
     Completion,
