@@ -19,7 +19,7 @@ from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import get_checksum
 
 logger = get_logger(__name__)

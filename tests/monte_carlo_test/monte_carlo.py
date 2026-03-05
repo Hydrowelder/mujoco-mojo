@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import mujoco_mojo as mojo
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 SEED = 42
 

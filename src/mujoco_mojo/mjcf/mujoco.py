@@ -23,7 +23,7 @@ from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import ModelName
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
 
 logger = get_logger(__name__)

@@ -13,7 +13,7 @@ from pydantic import Field, PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 __all__ = ["STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
 

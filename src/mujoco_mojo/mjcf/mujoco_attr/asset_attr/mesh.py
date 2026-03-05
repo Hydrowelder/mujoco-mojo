@@ -12,7 +12,7 @@ from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 

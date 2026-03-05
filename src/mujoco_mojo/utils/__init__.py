@@ -1,5 +1,7 @@
+from .color import Color
+from .log import get_logger, setup_logger
 from .runner import MojoGenerator, MojoRunner, MojoRuntime, MonteCarloConfig, Trial
-from .utils import Color, is_empty_list, to_pretty_xml
+from .utils import is_empty_list, to_pretty_xml
 
 __all__ = [
     "Color",
@@ -8,6 +10,8 @@ __all__ = [
     "MojoRuntime",
     "MonteCarloConfig",
     "Trial",
+    "get_logger",
     "is_empty_list",
+    "setup_logger",
     "to_pretty_xml",
 ]

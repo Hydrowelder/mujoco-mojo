@@ -3,6 +3,11 @@ from enum import StrEnum
 import numpy as np
 
 from mujoco_mojo.typing import Vec4
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
+
+__all__ = ["Color"]
 
 rng = np.random.default_rng(seed=42)
 

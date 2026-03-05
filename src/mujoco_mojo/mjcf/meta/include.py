@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.utils.logging import get_logger
+from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 

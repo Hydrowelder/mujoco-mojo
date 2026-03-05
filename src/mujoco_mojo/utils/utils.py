@@ -1,27 +1,12 @@
 from __future__ import annotations
 
 import hashlib
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from xml.dom import minidom
 from xml.etree.ElementTree import tostring
 
-__all__ = ["Color", "get_checksum", "is_empty_list", "to_pretty_xml"]
-
-
-class Color(StrEnum):
-    PURPLE = "\033[95m"
-    CYAN = "\033[96m"
-    DARKCYAN = "\033[97m"
-    BLUE = "\033[94m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    BOLD = "\033[1m"
-    UNDERLINE = "\033[4m"
-    ITALIC = "\033[3m"
-    NC = "\033[0m"
+__all__ = ["get_checksum", "is_empty_list", "to_pretty_xml"]
 
 
 def to_pretty_xml(element) -> str:
