@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from numpydantic import NDArray
 from process_manager.distribution import DistributionDict
 from pydantic import Field
 
@@ -14,7 +15,7 @@ class Values(MojoBaseModel):
     trial_num: int
     seed: int | None = None
     dists: DistributionDict = Field(default_factory=DistributionDict)
-    named: NamedValueDict = Field(default_factory=NamedValueDict)
+    named: NamedValueDict[NDArray] = Field(default_factory=NamedValueDict[NDArray])
 
 
 class MojoModel(MojoBaseModel):

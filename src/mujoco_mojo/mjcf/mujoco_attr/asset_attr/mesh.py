@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Literal, Self, overload
+from typing import Any, ClassVar, Literal, Self, overload
 
 import mujoco
 import numpy as np
@@ -199,7 +199,7 @@ class Mesh(XMLModel):
         vertex: bool = False,
         save_dir: DepPath | None = None,
         save_preview: Path | None = None,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> list[Self]:
         """
         Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD).
@@ -216,7 +216,7 @@ class Mesh(XMLModel):
             vertex (bool, optional): If True, the generated meshes will be the vertex type (this is not really suitable for multi-run jobs since the XML file becomes quite large). If False, the save_as parameter becomes required and will save
             save_dir (DepPath, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
             save_preview (Path, optional): Where to save a preview of the generated meshes. The meshes are filled with a random color. Example is `Path("mesh_decomposed.obj")`.
-            kwargs: Keyword arguments to pass to CoACD.
+            **kwargs (dict[str, Any]): Keyword arguments to pass to CoACD.
 
         Returns:
             list[Mesh]: Resulting mesh objects.
@@ -224,10 +224,10 @@ class Mesh(XMLModel):
         Example:
             Default settings (threshold=0.05, max_convex_hulls=-1), using [Bottle.obj](https://github.com/SarahWeiii/CoACD/blob/main/examples/Bottle.obj)
 
-            | Without | With    |
-            |:-------:|:-------:|
-            | 48 KB   | 1.13 MB |
-            | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/without_coacd.jpg" width="300" /> | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/with_coacd.jpg" width="300" /> |
+            | Base Model | Without | With    |
+            |:-:|:-------:|:-------:|
+            | N/A | 48 KB   | 1.13 MB |
+            | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/bunny_original.jpg" width="300" /> | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/bunny_without_coacd.jpg" width="300" /> | <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/bunny_with_coacd.jpg" width="300" /> |
 
 
         """
@@ -258,7 +258,7 @@ class Mesh(XMLModel):
             mesh=coacd_mesh,
             threshold=threshold,
             max_convex_hull=max_convex_hulls,
-            **kwargs,
+            **kwargs,  # pyright: ignore[reportArgumentType]
         )
 
         # convert meshes into Mesh objects

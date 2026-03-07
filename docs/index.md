@@ -8,6 +8,23 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 * Runtime validation
 * Programmatic composition of complex models
 
+## Installation
+=== "`uv` (recommended)"
+
+    ```bash
+    uv add mujoco-mojo
+    ```
+
+=== "`pip`"
+
+    ```
+    pip install mujoco-mojo
+    ```
+
+!!! warning
+    At the time of writing, MuJoCo supports up to Python 3.13. This package is built on modern Python requiring 3.12 or above.
+
+
 ## Features
 
 ### MJCF Tools
@@ -43,19 +60,3 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
         ```
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
 * Built in Rich logging for terminal and a rotating file handler for persistant logs
-
-## Installation
-=== "`uv` (recommended)"
-
-    ```bash
-    uv add mujoco-mojo
-    ```
-
-=== "`pip`"
-
-    ```
-    pip install mujoco-mojo
-    ```
-
-!!! warning
-    At the time of writing, MuJoCo supports up to Python 3.13. This package is built on modern Python requiring 3.12 or above.
