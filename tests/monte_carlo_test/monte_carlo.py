@@ -33,8 +33,8 @@ def generate(
     logger.info(f"generating nothing {trial_num}!")
 
     cached_method()
-    # if not trial_num % 5:
-    #     raise ValueError("askflaskfhl")
+    if not trial_num % 5:
+        raise ValueError("askflaskfhl")
 
     asset = mojo.mjcf.Asset(
         textures=[
@@ -59,7 +59,7 @@ def generate(
         ),
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
-    time.sleep(1)
+    time.sleep(0.0001)
     _normal_draw = (
         (
             mojo.NormalDistribution(
@@ -85,9 +85,9 @@ def generate(
 
 def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # print("running nothing!")
-    # if mojo_model.values.trial_num == 7:
-    #     raise ValueError("blah blah blah")
-    time.sleep(2)
+    if mojo_model.values.trial_num == 7:
+        raise ValueError("blah blah blah")
+    time.sleep(0.0002)
 
     return None
 
