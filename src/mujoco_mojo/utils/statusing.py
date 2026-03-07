@@ -542,17 +542,34 @@ class JobStatus(MojoBaseModel):
         self = self.model_validate_json((self.workdir / STATUS_FNAME).read_text())
         self.refresh_from_disk(n_proc=self.n_proc if n_proc is None else n_proc)
 
+        avg_seconds = self.average_trial_duration.total_seconds()
+
+        # Avoid divide by zero if no trials have finished yet
+        throughput = 0
+        if avg_seconds > 0:
+            throughput = (60.0 / avg_seconds) * self.n_proc
+
+        success_tns = [
+            tn for tn, comp in self._registry.items() if comp == Completion.SUCCESS
+        ]
+        last_success_tn = max(success_tns) if success_tns else None
+
         return {
             "progress": self.progress * 100,
             "n_success": self.n_success,
             "n_failed": self.n_failed,
             "n_trial": self.n_trial,
             "n_done": self.n_done,
+            "n_remaining": self.n_remaining,
             "failure_rate": self.failure_rate,
+            "throughput": round(throughput, 1),
+            "avg_duration": str(self.average_trial_duration).split(".")[0],
             "time_remaining": str(self.time_remaining_average_success).split(".")[0],
             "elapsed": str(self.elapsed).split(".")[0],
             "is_complete": self.progress >= 1.0,
             "failure_tns": self.failed_trial_nums,
+            "last_success_tn": last_success_tn,
+            "start_time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
             "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
             "version": f"mujoco-mojo v{version('mujoco-mojo')}",
         }

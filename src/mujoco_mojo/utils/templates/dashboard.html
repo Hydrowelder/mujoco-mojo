@@ -7,6 +7,7 @@
         display: none !important;
       }
     </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
     <script src="https://cdn.tailwindcss.com"></script>
     <script
@@ -31,14 +32,14 @@
     </script>
   </head>
   <body
-    class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans transition-colors duration-300"
+    class="bg-slate-200 text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans transition-colors duration-300"
     x-data="dashboard()"
     x-init="init()"
     x-effect="document.title = `(${status.progress.toFixed(1)}%) Mojo Dashboard`"
   >
     <div class="max-w-6xl mx-auto p-8">
       <header
-        class="flex justify-between items-end mb-8 border-b border-slate-200 dark:border-slate-700 pb-6"
+        class="flex flex-col md:flex-row justify-between items-start md:items-endd mb-8 border-b border-slate-200 dark:border-slate-700 pb-6"
       >
         <div>
           <h1
@@ -156,7 +157,9 @@
 
       <section class="mb-12">
         <div class="flex justify-between mb-2 items-center">
-          <span class="text-xl font-bold">Overall Progress</span>
+          <span class="text-slate-500 dark:text-slate-400 text-xl font-bold"
+            >Overall Progress</span
+          >
           <span
             class="text-3xl font-black text-cyan-600 dark:text-cyan-400"
             x-text="status.progress.toFixed(1) + '%'"
@@ -174,27 +177,32 @@
       </section>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <template x-for="stat in stats">
+        <template x-for="(stat, index) in stats" :key="index">
           <div
-            class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-md flex flex-col justify-between"
+            class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]"
           >
             <div>
               <p
-                class="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider mb-1"
+                class="text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-widest mb-2"
                 x-text="stat.label"
               ></p>
               <p
-                class="text-2xl font-bold"
+                class="text-3xl font-black"
                 :class="stat.color"
                 x-text="stat.value"
               ></p>
             </div>
-            <template x-if="stat.subValue">
-              <p
-                class="mt-2 text-xs font-mono text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-2"
-                x-text="stat.subValue"
-              ></p>
-            </template>
+
+            <div
+              class="mt-4 border-t border-slate-100 dark:border-slate-700/50 pt-3 flex flex-col gap-1"
+            >
+              <template x-if="stat.subValue">
+                <p
+                  class="text-[10px] font-mono uppercase tracking-tighter text-slate-400"
+                  x-text="stat.subValue"
+                ></p>
+              </template>
+            </div>
           </div>
         </template>
       </div>
@@ -239,10 +247,10 @@
         >
           <span
             class="h-1.5 w-1.5 rounded-full"
-            :class="status.is_complete ? 'bg-cyan-500' : (secondsSinceUpdate < 5 ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')"
+            :class="status.is_complete ? 'bg-cyan-500' : (secondsSinceUpdate < 10 ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')"
           ></span>
           <span
-            x-text="status.is_complete ? 'Final Data' : `Sync: ${secondsSinceUpdate}s ago` "
+            x-text="status.is_complete ? 'Final Data' : `Sync: ${formatTimeAgo(secondsSinceUpdate)}`"
           ></span>
         </div>
         <div><span x-text="status.version || '0.0.0'"></span></div>
@@ -254,29 +262,33 @@
     <audio id="chime" src="/static/chime.mp3"></audio>
 
     <script>
+      // Helper stays global
+      function formatTimeAgo(seconds) {
+        if (!seconds || seconds < 60) return `${seconds || 0}s ago`;
+        const mins = Math.floor(seconds / 60);
+        if (mins < 60) return `${mins}m ago`;
+        return `${Math.floor(mins / 60)}h ago`;
+      }
+
       function dashboard() {
         return {
           status: {
-            progress: 0,
+            n_done: 0,
             n_success: 0,
             n_failed: 0,
             failure_tns: [],
-            time_remaining: "0:00:00",
-            is_complete: false,
+            progress: 0,
           },
           stats: [],
-          chimePlayed: false,
           lastUpdate: null,
           secondsSinceUpdate: 0,
+          timer: null,
 
           async init() {
-            await this.update();
-            // stop auto-refreshing whe the job is done
-            if (!this.status.is_complete) {
-              this.timer = setInterval(() => this.update(), 5000);
-            }
+            // 1. Establish the timers FIRST.
+            // This ensures the heartbeat exists even if the first update fails.
+            this.timer = setInterval(() => this.update(), 5000);
 
-            // Separate 1-second timer just for the "seconds ago" counter
             setInterval(() => {
               if (this.lastUpdate) {
                 this.secondsSinceUpdate = Math.floor(
@@ -284,18 +296,24 @@
                 );
               }
             }, 1000);
+
+            // 2. Now try the initial load
+            await this.update();
           },
 
           async update() {
             try {
               const resp = await fetch("/api/status");
-              this.status = await resp.json();
+              if (!resp.ok) return; // Server is booting, skip this tick
 
+              const data = await resp.json();
+              this.status = data;
               this.lastUpdate = Date.now();
               this.secondsSinceUpdate = 0;
 
-              // Helper math for the percentages
-              const totalDone = this.status.n_success + this.status.n_failed;
+              // Safe Math - use || 0 to prevent NaN crashes
+              const totalDone = this.status.n_done || 0;
+              const n_trial = this.status.n_trial || 1;
               const successPerc =
                 totalDone > 0
                   ? ((this.status.n_success / totalDone) * 100).toFixed(1)
@@ -304,37 +322,58 @@
                 totalDone > 0
                   ? ((this.status.n_failed / totalDone) * 100).toFixed(1)
                   : 0;
+              const donePerc = ((totalDone / n_trial) * 100).toFixed(1);
+
+              const lastSuccess = this.status.last_success_tn || "None";
+              const fails = this.status.failure_tns || [];
+              const lastFailure =
+                fails.length > 0 ? fails[fails.length - 1] : "None";
 
               this.stats = [
                 {
                   label: "Successes",
-                  // Returns something like: "29 (76.3%)"
                   value: `${this.status.n_success} (${successPerc}%)`,
-                  color: "text-emerald-400",
+                  color: "text-emerald-500",
+                  subValue: `Last Success: Trial ${lastSuccess}`,
                 },
                 {
                   label: "Failures",
-                  // Returns something like: "9 (23.7%)"
                   value: `${this.status.n_failed} (${failurePerc}%)`,
                   color: "text-rose-500",
+                  subValue: `Last Failure: Trial ${lastFailure}`,
                 },
+                {
+                  label: "Remaining",
+                  value: `${this.status.n_remaining} (${(100 - donePerc).toFixed(1)}%)`,
+                  color: "text-amber-500",
+                  subValue: `${this.status.throughput} trials/min (${this.status.avg_duration} per trial)`,
+                },
+                {
+                  label: "Time Elapsed",
+                  value: this.status.elapsed,
+                  color: "text-slate-400",
+                  subValue: `Started: ${this.status.start_time}`,
+                },
+                {
+                  label: "Total Done",
+                  value: `${totalDone}`,
+                  color: "text-cyan-500",
+                  subValue: `Target: ${n_trial} trials`,
+                },
+
                 {
                   label: this.status.is_complete
                     ? "Finished"
                     : "Est. Remaining",
                   value: this.status.time_remaining,
-                  subValue: this.status.is_complete
-                    ? `Finished at: ${this.status.end_time}`
-                    : `ETA: ${this.status.end_time}`,
-                  color: "text-slate-200",
+                  color: "text-slate-400",
+                  subValue: `ETA: ${this.status.end_time}`,
                 },
               ];
 
-              // If the job just finished, stop the timer
               if (this.status.is_complete && this.timer) {
                 clearInterval(this.timer);
                 this.timer = null;
-                console.log("Job complete. Polling stopped.");
               }
 
               if (this.status.is_complete && !this.chimePlayed) {
@@ -342,7 +381,9 @@
                 this.chimePlayed = true;
               }
             } catch (err) {
-              console.error("Dashboard update failed:", err);
+              // If the server is killed, we land here.
+              // Since the setInterval is already running, it will just keep trying!
+              console.warn("Mojo Dashboard: Runner offline, retrying...");
             }
           },
         };
