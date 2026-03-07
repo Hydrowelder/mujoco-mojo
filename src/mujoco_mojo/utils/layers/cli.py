@@ -3,6 +3,7 @@
 import ast
 import importlib
 import logging
+import socket
 import sys
 from importlib.metadata import version
 from pathlib import Path
@@ -27,6 +28,20 @@ from ..defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
+
+
+def get_local_ip():
+    """Returns the actual local IP address of this machine."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Does not actually need to connect to 8.8.8.8 to work
+        s.connect(("8.8.8.8", 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
 
 
 def _setup_cli_logging(verbose: int, quiet: int) -> logging.Logger:
@@ -132,18 +147,32 @@ if True:
         str,
         typer.Option(
             "--generator",
+            "-g",
             help="Path to generator (e.g. 'sim.gen')",
             show_default=False,
         ),
     ]
     RuntimeType = Annotated[
         str | None,
-        typer.Option("--runtime", help="Optional runtime path"),
+        typer.Option(
+            "--runtime",
+            "-r",
+            help="Optional runtime path",
+        ),
+    ]
+    PostProcessorType = Annotated[
+        str | None,
+        typer.Option(
+            "--post-processor",
+            "-p",
+            help="Optional runtime path",
+        ),
     ]
     WorkdirType = Annotated[
         Path,
         typer.Option(
             "--workdir",
+            "-w",
             help="Workspace directory. The job will be executed out of this directory. It will be made if it does not already exist.",
         ),
     ]
@@ -151,12 +180,17 @@ if True:
         str,
         typer.Option(
             "--model-config-name",
+            "-mcn",
             help="Name for model dump file (e.g. 'model_config.json')",
         ),
     ]
     XMLNameType = Annotated[
         str,
-        typer.Option("--xml-name", help="Name for XML file (e.g. 'model.xml')"),
+        typer.Option(
+            "--xml-name",
+            "-xml",
+            help="Name for XML file (e.g. 'model.xml')",
+        ),
     ]
     ResumeType = Annotated[
         bool,
@@ -166,6 +200,7 @@ if True:
         bool,
         typer.Option(
             "--clean-workdir",
+            "-cw",
             help="Delete the workdir before running (mutually exclusive with --resume)",
         ),
     ]
@@ -236,12 +271,17 @@ if True:
     # monte carlo
     NTrialType = Annotated[
         int,
-        typer.Option("--n-trial", help="Number of trials to be performed in the job."),
+        typer.Option(
+            "--n-trial",
+            "-nt",
+            help="Number of trials to be performed in the job.",
+        ),
     ]
     NProcType = Annotated[
         int,
         typer.Option(
             "--n-proc",
+            "-np",
             help="Parallel processes to use in executing tasks (such as running Monte Carlo or status file proccessing for the dashboard)."
             " [bold red underline]Be a good citizen.[/bold red underline] It is easy to abuse this command. Only use what resouces you [bold white underline]absolutely need[/bold white underline].",
         ),
@@ -252,6 +292,7 @@ if True:
         Path,
         typer.Option(
             "--workdir",
+            "-w",
             help="Workspace directory to build the dashboard for. This should be the same argument as what is used for other mujoco-mojo run commands.",
         ),
     ]
@@ -259,6 +300,7 @@ if True:
         str,
         typer.Option(
             "--host",
+            "-h",
             help="What host IP should be used to serve the dashboard.",
         ),
     ]
@@ -277,7 +319,12 @@ cli_app = typer.Typer(
     help="[bold cyan]MuJoCo Mojo:[/bold cyan] High-performance and extensible physics simulation manager",
     rich_markup_mode="rich",
     no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={
+        "help_option_names": [
+            # "-h",
+            "--help",
+        ]
+    },
 )
 
 
@@ -466,16 +513,23 @@ def run_dashboard(
 
     job = JobStatus.model_validate_json((workdir / STATUS_FNAME).read_text())
     job.refresh_from_disk(n_proc=n_proc)
-
     mujoco_mojo.utils.dashboard.CURRENT_JOB = job
+
+    # detect ip
+    local_ip = get_local_ip()
+    connection_info = f"Local: [bold cyan]http://127.0.0.1:{port}[/bold cyan]"
+
+    if host == "0.0.0.0":
+        connection_info += f"\nMobile: [bold cyan]http://{local_ip}:{port}[/bold cyan]"
+    else:
+        connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
 
     Console().print(
         Panel(
-            f"""[bold green]MuJoCo Mojo Dashboard is Live![/bold green]
-Open in your browser at: [bold cyan]http://{host}:{port}[/bold cyan]
-
-[yellow]Press CTRL+C to stop the dashboard[/yellow]""",
+            f"""[bold green]MuJoCo Mojo Dashboard is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop the dashboard[/yellow]""",
             border_style="green",
+            title="Mojo Monitor",
+            subtitle=f"Workers: {n_proc}",
         )
     )
     uvicorn.run(dashboard_app, host=host, port=port, log_level="warning")
