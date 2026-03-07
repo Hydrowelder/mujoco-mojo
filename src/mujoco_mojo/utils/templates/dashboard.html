@@ -1,4 +1,3 @@
-<!doctype html>
 <html lang="en">
   <head>
     <title>MuJoCo Mojo Dashboard</title>
@@ -6,20 +5,19 @@
       [x-cloak] {
         display: none !important;
       }
+      /* Anti-glare root background */
+      html {
+        background-color: #e2e8f0;
+      }
+      html.dark {
+        background-color: #0f172a;
+      }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!--
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script
-      defer
-      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
-    -->
     <script src="/static/tailwind.min.js"></script>
     <script defer src="/static/alpine.min.js"></script>
     <script>
       tailwind.config = { darkMode: "class" };
-
       if (
         localStorage.theme === "dark" ||
         (!("theme" in localStorage) &&
@@ -32,23 +30,21 @@
     </script>
   </head>
   <body
-    class="bg-slate-200 text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans transition-colors duration-300"
+    class="min-h-screen bg-slate-200 text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans transition-colors duration-300"
     x-data="dashboard()"
     x-init="init()"
     x-effect="document.title = `(${status.progress.toFixed(1)}%) Mojo Dashboard`"
   >
-    <div class="max-w-6xl mx-auto p-8">
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
       <header
-        class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-slate-200 dark:border-slate-700 pb-6 gap-4"
+        class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-slate-400 dark:border-slate-700 pb-6 gap-4"
       >
         <div class="flex-1 min-w-0">
-          <h1
-            class="text-4xl font-black tracking-tight text-cyan-500 dark:text-cyan-400"
-          >
+          <h1 class="text-4xl font-black tracking-tight text-cyan-500">
             MUJOCO MOJO
           </h1>
 
-          <div class="flex items-center gap-2 mt-1 max-w-[200px] md:max-w-none">
+          <div class="flex items-center gap-2 mt-1 max-w-[280px] md:max-w-none">
             <span class="text-slate-500 shrink-0 text-sm font-bold"
               >Owner:</span
             >
@@ -62,29 +58,73 @@
         </div>
 
         <div
-          class="flex flex-col items-start md:items-end gap-3 text-sm text-slate-500 w-full md:w-auto"
+          class="flex flex-col items-start md:items-end gap-3 w-full md:w-auto"
         >
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3">
+            <button
+              @click="isMuted = !isMuted; localStorage.setItem('mojo_muted', isMuted)"
+              class="p-1.5 rounded-lg border transition-all duration-200 flex items-center justify-center hover:scale-105 active:scale-95"
+              :class="isMuted ? 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400 hover:text-cyan-500' : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-500 text-cyan-500 shadow-sm hover:bg-cyan-100 dark:hover:bg-cyan-900/40'"
+              :title="isMuted ? 'Unmute completion chime' : 'Mute completion chime'"
+            >
+              <svg
+                x-show="isMuted"
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                />
+              </svg>
+              <svg
+                x-show="!isMuted"
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                x-cloak
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                />
+              </svg>
+            </button>
+
             <div
               x-data="{
           theme: localStorage.theme || 'system',
           setTheme(val) {
-              this.theme = val;
-              if (val === 'system') {
-                  localStorage.removeItem('theme');
-                  document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
-              } else {
-                  localStorage.theme = val;
-                  document.documentElement.classList.toggle('dark', val === 'dark');
-              }
+            this.theme = val;
+            if (val === 'system') {
+              localStorage.removeItem('theme');
+              document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
+            } else {
+              localStorage.theme = val;
+              document.documentElement.classList.toggle('dark', val === 'dark');
+            }
           }
         }"
               class="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg border border-slate-300 dark:border-slate-700"
             >
               <button
                 @click="setTheme('light')"
-                class="p-1.5 rounded-md transition-all"
-                :class="theme === 'light' ? 'bg-white shadow-sm text-amber-500' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+                title="Light Mode"
+                class="p-1.5 rounded-md transition-all hover:text-amber-500"
+                :class="theme === 'light' ? 'bg-white shadow-sm text-amber-500' : 'text-slate-500'"
               >
                 <svg
                   class="w-4 h-4"
@@ -102,8 +142,9 @@
               </button>
               <button
                 @click="setTheme('system')"
-                class="p-1.5 rounded-md transition-all"
-                :class="theme === 'system' ? 'bg-white/50 dark:bg-slate-700 shadow-sm text-cyan-600 dark:text-cyan-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+                title="System Theme"
+                class="p-1.5 rounded-md transition-all hover:text-cyan-500"
+                :class="theme === 'system' ? 'bg-white/50 dark:bg-slate-700 shadow-sm text-cyan-500' : 'text-slate-500'"
               >
                 <svg
                   class="w-4 h-4"
@@ -121,8 +162,9 @@
               </button>
               <button
                 @click="setTheme('dark')"
-                class="p-1.5 rounded-md transition-all"
-                :class="theme === 'dark' ? 'bg-slate-700 shadow-sm text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+                title="Dark Mode"
+                class="p-1.5 rounded-md transition-all hover:text-blue-400"
+                :class="theme === 'dark' ? 'bg-slate-700 shadow-sm text-blue-400' : 'text-slate-500'"
               >
                 <svg
                   class="w-4 h-4"
@@ -143,7 +185,8 @@
             <a
               href="https://github.com/Hydrowelder/mujoco-mojo"
               target="_blank"
-              class="p-2 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+              title="GitHub Repository"
+              class="p-2 text-slate-500 hover:text-cyan-500 transition-colors active:scale-90"
             >
               <svg class="w-7 h-7 fill-current" viewBox="0 0 256 256">
                 <path
@@ -159,12 +202,7 @@
             >
             <p
               class="font-mono text-slate-600 dark:text-slate-300 text-xs truncate cursor-help flex-1"
-              style="
-                direction: rtl;
-                text-align: left;
-                white-space: nowrap;
-                overflow: hidden;
-              "
+              style="direction: rtl; text-align: left"
               title="{{ job.workdir }}"
             >
               &lrm;{{ job.workdir }}
@@ -184,7 +222,7 @@
           ></span>
         </div>
         <div
-          class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-8 overflow-hidden border border-slate-300 dark:border-slate-700 shadow-inner"
+          class="w-full bg-white dark:bg-slate-800 rounded-full h-8 overflow-hidden border border-slate-400 dark:border-slate-700 shadow-md"
         >
           <div
             class="bg-gradient-to-r from-cyan-600 to-blue-500 h-full transition-all duration-500 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
@@ -197,7 +235,7 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <template x-for="(stat, index) in stats" :key="index">
           <div
-            class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]"
+            class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]"
           >
             <div>
               <p
@@ -242,12 +280,12 @@
           Failed Trials
         </h2>
         <div
-          class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-inner"
+          class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md"
         >
           <div class="flex flex-wrap gap-2">
             <template x-for="tn in status.failure_tns" :key="tn">
               <span
-                class="px-3 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm"
+                class="px-3 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm shadow-sm"
                 x-text="tn"
               ></span>
             </template>
@@ -257,7 +295,7 @@
     </div>
 
     <footer
-      class="max-w-6xl mx-auto p-8 mt-12 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-row-reverse justify-between items-center text-xs text-slate-400 font-mono"
+      class="max-w-6xl mx-auto p-8 mt-12 pt-6 border-t border-slate-400 dark:border-slate-800 flex flex-row-reverse justify-between items-center text-xs text-slate-400 font-mono"
     >
       <div class="flex items-center gap-3">
         <div
@@ -273,14 +311,23 @@
         </div>
         <div><span x-text="status.version || '0.0.0'"></span></div>
       </div>
-      <div class="italic opacity-50">&copy; 2026 David Gable</div>
+      <div class="italic opacity-50 transition-opacity hover:opacity-100">
+        &copy; 2026
+        <a
+          href="https://www.david-gable.com/"
+          target="_blank"
+          class="text-inherit no-underline cursor-pointer"
+          title="Visit david-gable.com"
+        >
+          David Gable
+        </a>
+      </div>
     </footer>
 
     <!-- mixkit-fantasy-game-success-notification-270 -->
     <audio id="chime" src="/static/chime.mp3" playsinline></audio>
 
     <script>
-      // Helper stays global
       function formatTimeAgo(seconds) {
         if (!seconds || seconds < 60) return `${seconds || 0}s ago`;
         const mins = Math.floor(seconds / 60);
@@ -301,12 +348,11 @@
           lastUpdate: null,
           secondsSinceUpdate: 0,
           timer: null,
+          chimePlayed: false,
+          isMuted: localStorage.getItem("mojo_muted") !== "false",
 
           async init() {
-            // 1. Establish the timers FIRST.
-            // This ensures the heartbeat exists even if the first update fails.
             this.timer = setInterval(() => this.update(), 5000);
-
             setInterval(() => {
               if (this.lastUpdate) {
                 this.secondsSinceUpdate = Math.floor(
@@ -314,22 +360,19 @@
                 );
               }
             }, 1000);
-
-            // 2. Now try the initial load
             await this.update();
           },
 
           async update() {
             try {
               const resp = await fetch("/api/status");
-              if (!resp.ok) return; // Server is booting, skip this tick
+              if (!resp.ok) return;
 
               const data = await resp.json();
               this.status = data;
               this.lastUpdate = Date.now();
               this.secondsSinceUpdate = 0;
 
-              // Safe Math - use || 0 to prevent NaN crashes
               const totalDone = this.status.n_done || 0;
               const n_trial = this.status.n_trial || 1;
               const successPerc =
@@ -369,7 +412,7 @@
                 {
                   label: "Time Elapsed",
                   value: this.status.elapsed,
-                  color: "text-slate-400",
+                  color: "text-slate-500",
                   subValue: `Started: ${this.status.start_time}`,
                 },
                 {
@@ -378,13 +421,12 @@
                   color: "text-cyan-500",
                   subValue: `Target: ${n_trial} trials`,
                 },
-
                 {
                   label: this.status.is_complete
                     ? "Finished"
                     : "Est. Remaining",
                   value: this.status.time_remaining,
-                  color: "text-slate-400",
+                  color: "text-slate-500",
                   subValue: `ETA: ${this.status.end_time}`,
                 },
               ];
@@ -394,30 +436,26 @@
                 this.timer = null;
               }
 
-              if (this.status.is_complete && !this.chimePlayed) {
+              if (
+                this.status.is_complete &&
+                !this.chimePlayed &&
+                !this.isMuted
+              ) {
                 const chime = document.getElementById("chime");
-
-                // play() returns a promise, it's better to handle it
                 chime
                   .play()
                   .then(() => {
                     this.chimePlayed = true;
-
-                    // Use the 'ended' event to release audio focus
                     chime.onended = () => {
                       chime.pause();
-                      chime.src = ""; // Clear source temporarily to release focus
-                      chime.load(); // Reset the element
+                      chime.src = "";
+                      chime.load();
                     };
                   })
-                  .catch((e) =>
-                    console.warn("Audio play blocked by browser:", e),
-                  );
+                  .catch((e) => console.warn("Chime blocked:", e));
               }
             } catch (err) {
-              // If the server is killed, we land here.
-              // Since the setInterval is already running, it will just keep trying!
-              console.warn("Mojo Dashboard: Runner offline, retrying...");
+              console.warn("Mojo Dashboard: Offline");
             }
           },
         };
