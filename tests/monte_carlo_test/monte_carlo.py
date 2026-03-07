@@ -2,6 +2,9 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 
+import numpy as np
+from numpydantic import NDArray
+
 import mujoco_mojo as mojo
 from mujoco_mojo.utils.log import get_logger
 
@@ -57,25 +60,24 @@ def generate(
         values=mojo.Values(seed=SEED, trial_num=trial_num),
     )
     time.sleep(1)
-    # _normal_draw = ( # BUG currently broken due to numpy serialization
-    #     (
-    #         mojo.NormalDistribution(
-    #             name=mojo.DistName("normal_draw"),
-    #             mu=5,
-    #             sigma=10,
-    #             seed=SEED,
-    #         )
-    #     )
-    #     .with_seed(SEED)
-    #     .with_trial_num(trial_num)
-    #     .update_dicts(
-    #         dist_dict=mojo_model.values.dists, named_value_dict=mojo_model.values.named
-    #     )
-    # )
+    _normal_draw = (
+        (
+            mojo.NormalDistribution(
+                name=mojo.DistName("normal_draw"),
+                mu=5,
+                sigma=10,
+                seed=SEED,
+            )
+        )
+        .with_seed(SEED)
+        .with_trial_num(trial_num)
+        .sample_and_update_dicts(
+            dist_dict=mojo_model.values.dists, named_value_dict=mojo_model.values.named
+        )
+    )
 
-    # BUG this works since this isnt numpy
-    nv = mojo.NamedValue[float](name=mojo.ValueName("value"))
-    nv.value = 12.3
+    nv = mojo.NamedValue[NDArray](name=mojo.ValueName("value"))
+    nv.value = np.array([12.3])
     mojo_model.values.named.update(nv)
 
     return mojo_model
