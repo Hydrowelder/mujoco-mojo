@@ -35,7 +35,7 @@
     x-init="init()"
     x-effect="document.title = `(${status.progress.toFixed(1)}%) Mojo Dashboard`"
   >
-    <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <div class="max-w-6xl mx-auto p-4 md:p-8 md:pb-0">
       <header
         class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-slate-400 dark:border-slate-700 pb-6 gap-4"
       >
@@ -282,10 +282,12 @@
         <div
           class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md"
         >
-          <div class="flex flex-wrap gap-2">
+          <div
+            class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3"
+          >
             <template x-for="tn in status.failure_tns" :key="tn">
               <span
-                class="px-3 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm shadow-sm"
+                class="inline-flex items-center justify-center px-2 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl"
                 x-text="tn"
               ></span>
             </template>
@@ -295,7 +297,7 @@
     </div>
 
     <footer
-      class="max-w-6xl mx-auto p-8 mt-12 pt-6 border-t border-slate-400 dark:border-slate-800 flex flex-row-reverse justify-between items-center text-xs text-slate-400 font-mono"
+      class="max-w-6xl mx-auto px-8 mt-6 py-6 border-t border-slate-400 dark:border-slate-800 flex flex-row-reverse justify-between items-center text-xs text-slate-400 font-mono"
     >
       <div class="flex items-center gap-3">
         <div
@@ -311,15 +313,15 @@
         </div>
         <div><span x-text="status.version || '0.0.0'"></span></div>
       </div>
+
       <div class="italic opacity-50 transition-opacity hover:opacity-100">
-        &copy; 2026
         <a
           href="https://www.david-gable.com/"
           target="_blank"
-          class="text-inherit no-underline cursor-pointer"
+          class="text-inherit no-underline cursor-pointer hover:text-cyan-500 transition-colors"
           title="Visit david-gable.com"
         >
-          David Gable
+          &copy; 2026 David Gable
         </a>
       </div>
     </footer>
