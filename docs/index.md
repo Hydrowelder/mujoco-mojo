@@ -47,16 +47,15 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 
     ??? example
         ```bash
-        mujoco-mojo run \
-        --generator monte_carlo_test.Experiment.generate \
-        --runtime monte_carlo_test.Experiment.runtime \
-        --workdir ./mc_test/ \
-        --no-resume \
-        --gen-arg 123 \
-        --gen-kwarg 'test=1234' \
-        monte-carlo \
-        --n-trial 10 \
-        --n-proc 1
+        mujoco-mojo run monte-carlo \
+            --generator monte_carlo_test.Experiment.generate \
+            --runtime monte_carlo_test.runtime \
+            --workdir ./mc_test/ \
+            --no-resume \
+            --gen-arg 123 \
+            --gen-kwarg 'test=1234' \
+            --n-trial 10 \
+            --n-proc 1
         ```
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
 * Built in Rich logging for terminal and a rotating file handler for persistant logs
