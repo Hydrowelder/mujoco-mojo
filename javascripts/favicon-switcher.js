@@ -1,20 +1,28 @@
-const syncSystemFavicon = () => {
+/* --- MuJoCo Mojo: System-Level Favicon Sync --- */
+
+const syncFaviconToSystem = () => {
     const favicon = document.querySelector("link[rel='icon']");
     if (!favicon) return;
 
-    // Check if the user's OS is in Dark Mode
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    // 1. Check OS Preference (ignores MkDocs palette)
+    const isSystemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    // Use absolute paths if your site is in a subfolder (like /mujoco-mojo/)
-    const path = isDark ? "assets/dark-logo.svg" : "assets/light-logo.svg";
+    // 2. Identify the base path from the current favicon
+    const currentHref = favicon.href;
+    const baseDir = currentHref.substring(0, currentHref.lastIndexOf('/assets/') + 1);
 
-    // Force the browser to refresh the icon by clearing and re-setting
-    favicon.href = "";
-    favicon.href = path;
+    // 3. Select logo based purely on system theme
+    const logoName = isSystemDark ? "dark-logo.svg" : "light-logo.svg";
+    const newPath = `${baseDir}assets/${logoName}`;
+
+    // 4. Update the link tag
+    if (favicon.getAttribute("href") !== newPath) {
+        favicon.href = newPath;
+    }
 }
 
-// Run once on load
-syncSystemFavicon();
+// Initial Run
+syncFaviconToSystem();
 
-// Watch for changes to the System Theme (OS level)
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncSystemFavicon);
+// Listen for System Theme changes (e.g., sunset/sunrise auto-toggles)
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncFaviconToSystem);

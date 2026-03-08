@@ -15,7 +15,7 @@
         
       
       
-      <link rel="icon" href="assets/light-logo.svg">
+      <link rel="icon" href="assets/dakr-logo.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.2">
     
     
@@ -99,7 +99,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
-  <img src="assets/light-logo.svg" alt="logo">
+  <img src="assets/dark-logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -313,7 +313,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
-  <img src="assets/light-logo.svg" alt="logo">
+  <img src="assets/dark-logo.svg" alt="logo">
 
     </a>
     MuJoCo Mojo
@@ -641,12 +641,13 @@
   <a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="assets/light-hero-logo.svg" data-desc-position="bottom"><img src="assets/light-hero-logo.svg" alt="MuJoCo Mojo Logo"></a>
 </p>
 
-<p>A <strong>Pythonic MJCF generation and validation toolkit</strong> for MuJoCo, built on <strong>Pydantic v2</strong>.</p>
-<p>MuJoCo Mojo lets you construct MJCF models using <strong>typed Python objects</strong> instead of handwritten XML, with:</p>
+<p>A <strong>complete MJCF lifecycle and trial orchestration suite</strong> for MuJoCo, powered by <strong>Pydantic v2</strong>.</p>
+<p><strong>MuJoCo Mojo</strong> bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.</p>
 <ul>
-<li>Static typing</li>
-<li>Runtime validation</li>
-<li>Programmatic composition of complex models</li>
+<li><strong>Model:</strong> Build MJCFs via <strong>validated Python objects</strong>—no more manual XML hacking.</li>
+<li><strong>Scale:</strong> Execute <strong>multi-threaded Monte Carlo trials</strong> with built-in resume logic.</li>
+<li><strong>Monitor:</strong> Track progress via a <strong>zero-dependency web dashboard</strong> and persistent logs.</li>
+<li><strong>Reproduce:</strong> Automatic <strong>environment snapshotting</strong> (<code>requirements.txt</code>) for every job.</li>
 </ul>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">¶</a></h2>
 <p>Install <code>mujoco-mojo</code> in your project using the following:</p>
@@ -686,7 +687,7 @@
 <li>Automatically record installed Python packages to <code>requirements.txt</code> for job recreation (works with <code>uv</code> or <code>pip</code>)</li>
 <li>End of run summary with metric to help perform a state of health check</li>
 <li>
-<p>Flexible commandline utilities to run jobs</p>
+<p>Flexible command line utilities to run jobs</p>
 <details class="example">
 <summary>Example</summary>
 <div class="language-bash highlight"><span class="filename">Bash</span><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mujoco-mojo<span class="w"> </span>run<span class="w"> </span>monte-carlo<span class="w"> </span><span class="se">\</span>
@@ -704,7 +705,7 @@
 <li>
 <p>Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection</p>
 </li>
-<li>Built in Rich logging for terminal and a rotating file handler for persistant logs</li>
+<li>Built in Rich logging for terminal and a rotating file handler for persistent logs</li>
 </ul>
 
 
