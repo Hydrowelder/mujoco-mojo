@@ -1,3 +1,7 @@
+<p align="center" class="mojo-splash">
+  <img src="assets/light-logo.png" width="320" alt="MuJoCo Mojo Logo">
+</p>
+
 # MuJoCo Mojo
 
 A **Pythonic MJCF generation and validation toolkit** for MuJoCo, built on **Pydantic v2**.
@@ -17,7 +21,7 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 
 === "`pip`"
 
-    ```
+    ```bash
     pip install mujoco-mojo
     ```
 
@@ -57,5 +61,6 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
             --n-trial 10 \
             --n-proc 1
         ```
+
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
 * Built in Rich logging for terminal and a rotating file handler for persistant logs

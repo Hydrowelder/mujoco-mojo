@@ -12,6 +12,34 @@
       html.dark {
         background-color: #0f172a;
       }
+
+      #header-logo {
+        /* Default: Light Mode - Matches Card Style */
+        border: 1px solid #94a3b8; /* slate-400 */
+        border-radius: 0.75rem; /* rounded-xl */
+        background-color: #ffffff;
+        /* Mimics Tailwind shadow-md for the logo shape */
+        filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.07))
+          drop-shadow(0 2px 2px rgba(0, 0, 0, 0.06));
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Dark Mode Adjustments */
+      html.dark #header-logo {
+        border: 1px solid #334155; /* slate-700 */
+        background-color: #1e293b; /* slate-800 */
+        /* Remove shadow in dark mode to prevent "muddy" edges */
+        filter: none;
+      }
+
+      /* Unified Hover Mojo */
+      #header-logo:hover {
+        transform: scale(1.1);
+        border-color: #06b6d4; /* cyan-500 */
+        /* Intense Cyan Glow on Hover */
+        filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.6)) !important;
+        z-index: 10;
+      }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="/static/tailwind.min.js"></script>
@@ -28,6 +56,41 @@
         document.documentElement.classList.remove("dark");
       }
     </script>
+
+    <link
+      id="favicon"
+      rel="icon"
+      type="image/png"
+      href="/static/light-logo.png"
+    />
+
+    <script>
+      // Function to sync logos based on the 'dark' class
+      function syncMojoLogos() {
+        const isDark = document.documentElement.classList.contains("dark");
+        const favicon = document.getElementById("favicon");
+        const headerLogo = document.getElementById("header-logo");
+
+        if (isDark) {
+          if (favicon) favicon.href = "/static/dark-logo.png";
+          if (headerLogo) headerLogo.src = "/static/dark-logo.png";
+        } else {
+          if (favicon) favicon.href = "/static/light-logo.png";
+          if (headerLogo) headerLogo.src = "/static/light-logo.png";
+        }
+      }
+
+      // Run on load and whenever the theme changes
+      window.addEventListener("DOMContentLoaded", syncMojoLogos);
+
+      // Create an observer to watch for the 'dark' class toggle
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.attributeName === "class") syncMojoLogos();
+        });
+      });
+      observer.observe(document.documentElement, { attributes: true });
+    </script>
   </head>
   <body
     class="min-h-screen bg-slate-200 text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans transition-colors duration-300"
@@ -40,10 +103,25 @@
         class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-slate-400 dark:border-slate-700 pb-6 gap-4"
       >
         <div class="flex-1 min-w-0">
-          <h1 class="text-4xl font-black tracking-tight text-cyan-500">
-            MUJOCO MOJO
-          </h1>
+          <div class="flex items-center gap-4">
+            <a
+              href="https://hydrowelder.github.io/mujoco-mojo/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="transition-transform duration-300 hover:scale-110 active:scale-95"
+            >
+              <img
+                id="header-logo"
+                src="/static/light-logo.png"
+                alt="Mojo Logo"
+                class="w-12 h-12 p-1 object-contain cursor-pointer"
+              />
+            </a>
 
+            <h1 class="text-4xl font-black tracking-tight text-cyan-500">
+              MUJOCO MOJO
+            </h1>
+          </div>
           <div class="flex items-center gap-2 mt-1 max-w-[280px] md:max-w-none">
             <span class="text-slate-500 shrink-0 text-sm font-bold"
               >Owner:</span

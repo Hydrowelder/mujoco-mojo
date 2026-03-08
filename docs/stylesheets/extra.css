@@ -1,0 +1,182 @@
+/* ==========================================================
+   MUJOCO MOJO - CUSTOM DOCS STYLING
+   Syncs MkDocs Material with the Dashboard '70s Aesthetic
+   ========================================================== */
+
+:root {
+    /* 1. FONT STACK SYNC (Matches Tailwind Default) */
+    --md-text-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --md-code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    /* Primary Mojo Accent (Cyan-500) */
+    --md-primary-fg-color: #06b6d4;
+    --md-primary-fg-color--transparent: rgba(6, 182, 212, 0.1);
+    --md-accent-fg-color: #06b6d4;
+}
+
+/* ----------------------------------------------------------
+   1. THEME COLOR SYNC (Dashboard Palettes)
+   ---------------------------------------------------------- */
+
+/* Light Mode Sync */
+[data-md-color-scheme="default"] {
+    --md-default-bg-color: #e2e8f0;
+    /* Slate-200 */
+    --md-default-fg-color: #1e293b;
+    /* Slate-800 */
+    --md-footer-bg-color: #cbd5e1;
+    /* Slate-300 (Nav Bar) */
+    --md-footer-bg-color--dark: #e2e8f0;
+    /* Slate-200 (Meta Bar) */
+}
+
+/* Dark Mode Sync */
+[data-md-color-scheme="slate"] {
+    --md-default-bg-color: #0f172a;
+    /* Slate-900 */
+    --md-default-fg-color: #f1f5f9;
+    /* Slate-100 */
+    --md-card-bg-color: #1e293b;
+    /* Slate-800 */
+    --md-header-bg-color: #0f172a;
+    /* Slate-900 */
+    --md-footer-bg-color: #020617;
+    /* Slate-950 (Nav Bar) */
+    --md-footer-bg-color--dark: #0f172a;
+    /* Slate-900 (Meta Bar) */
+}
+
+/* ----------------------------------------------------------
+   2. TYPOGRAPHY ('70s Bold Aesthetic)
+   ---------------------------------------------------------- */
+
+/* Standard text weight */
+body {
+    font-weight: 400;
+}
+
+h1,
+h2,
+h3 {
+    font-weight: 900 !important;
+    letter-spacing: -0.025em;
+    color: var(--md-default-fg-color);
+}
+
+h1,
+.md-header__topic {
+    text-transform: uppercase;
+}
+
+code,
+kbd,
+pre {
+    font-family: var(--md-code-font) !important;
+}
+
+
+
+/* ----------------------------------------------------------
+   3. ADAPTIVE LOGO & HOVER EFFECTS
+   ---------------------------------------------------------- */
+
+[data-md-color-scheme="slate"] .md-header__button.md-logo img {
+    content: url("../assets/dark-logo.png");
+}
+
+.md-header__button.md-logo img {
+    height: 2rem;
+    width: auto;
+    border-radius: 4px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.3s ease-in-out;
+}
+
+.md-header__button.md-logo:hover img {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.6)) drop-shadow(0 0 12px rgba(6, 182, 212, 0.3));
+}
+
+/* ----------------------------------------------------------
+   4. FOOTER NAVIGATOR
+   ---------------------------------------------------------- */
+
+/* Copyright & Nav Text Colors */
+.md-footer__link,
+.md-footer-meta__inner,
+.md-copyright,
+.md-copyright__highlight,
+.md-copyright__highlight a {
+    color: var(--md-default-fg-color) !important;
+    transition: color 0.2s ease;
+}
+
+/* Specific Copyright Link Hover */
+.md-copyright__highlight a:hover {
+    color: #06b6d4 !important;
+    /* Cyan-500 */
+    text-decoration: none;
+}
+
+/* Nav Link Hover */
+.md-footer__link:hover {
+    color: #06b6d4 !important;
+}
+
+/* Secondary footer text labels */
+.md-footer__direction {
+    opacity: 0.6;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+}
+
+/* ----------------------------------------------------------
+   5. PROGRESS BAR SYNC (Matching Dashboard)
+   ---------------------------------------------------------- */
+
+.md-progress {
+    background-color: #06b6d4;
+    background-image: linear-gradient(to right, #0891b2, #3b82f6);
+}
+
+::selection {
+    background-color: rgba(6, 182, 212, 0.2);
+}
+
+
+/* Center the splash and give it some breathing room */
+.mojo-splash {
+    margin: 2rem 0 3rem 0;
+}
+
+/* Splash Hover Effect - Matches your brand growth */
+.mojo-splash img {
+    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.mojo-splash img:hover {
+    transform: scale(1.05);
+}
+
+/* Dark Mode Swap for Splash */
+[data-md-color-scheme="slate"] .mojo-splash img {
+    content: url("../assets/dark-logo.png");
+}
+
+/* Optional: Add a fade-in animation for that "Splash" feel */
+@keyframes mojoFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mojo-splash {
+    animation: mojoFadeIn 1s ease-out;
+}

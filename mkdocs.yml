@@ -14,24 +14,27 @@ watch:
 nav:
   - Home: index.md
   - User Guide: user-guide.md
-  - Code Reference: reference/
+  # - Code Reference: reference/
 
 theme:
   name: material
+  logo: assets/light-logo.png
+  favicon: assets/light-logo.png
+  font: false
 
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: black
-      accent: lime
+      accent: cyan
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
 
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
-      accent: lime
+      primary: custom
+      accent: cyan
       toggle:
         icon: material/weather-night
         name: Switch to light mode
@@ -39,7 +42,7 @@ theme:
   features:
     - navigation.tabs
     - navigation.instant
-    - navigation.instant.preview
+    # - navigation.instant.preview
     - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.top
@@ -63,9 +66,9 @@ plugins:
   - search
   - open-in-new-tab:
       add_icon: true
-  - gen-files:
-      scripts:
-        - scripts/gen_ref_pages.py
+  # - gen-files:
+  #     scripts:
+  #       - scripts/gen_ref_pages.py
   - literate-nav:
       nav_file: SUMMARY.md
   - section-index
@@ -90,8 +93,8 @@ plugins:
             separate_signature: true
             summary: false # set to true to get summary tables
             inherited_members: true
-            inheritance_diagram_direction: TD
-            show_inheritance_diagram: true
+            # inheritance_diagram_direction: TD
+            # show_inheritance_diagram: true
             show_attribute_values: true
             signature_crossrefs: true
             extensions:
@@ -140,7 +143,14 @@ markdown_extensions:
   - pymdownx.mark
   - pymdownx.tilde
 
+extra:
+  generator: false
+
 extra_javascript:
   - https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js
   - https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js
   - javascripts/tablesort.js
+  - javascripts/favicon-switcher.js
+
+extra_css:
+  - stylesheets/extra.css
