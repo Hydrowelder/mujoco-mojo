@@ -19,8 +19,8 @@ nav:
 
 theme:
   name: material
-  logo: assets/light-logo.svg
-  favicon: assets/light-logo.svg
+  logo: assets/dark-logo.svg
+  favicon: assets/dakr-logo.svg
   font: false
 
   palette:

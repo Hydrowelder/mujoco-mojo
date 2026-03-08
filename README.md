@@ -5,13 +5,14 @@
   </picture>
 </p>
 
-A **Pythonic MJCF generation and validation toolkit** for MuJoCo, built on **Pydantic v2**.
+A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
 
-MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instead of handwritten XML, with:
+**MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 
-* Static typing
-* Runtime validation
-* Programmatic composition of complex models
+* **Model:** Build MJCFs via **validated Python objects**—no more manual XML hacking.
+* **Scale:** Execute **multi-threaded Monte Carlo trials** with built-in resume logic.
+* **Monitor:** Track progress via a **zero-dependency web dashboard** and persistent logs.
+* **Reproduce:** Automatic **environment snapshotting** (`requirements.txt`) for every job.
 
 > [Documentation](https://hydrowelder.github.io/mujoco-mojo/)
 

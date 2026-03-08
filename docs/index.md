@@ -14,13 +14,14 @@ hide:
   <img src="assets/light-hero-logo.svg" alt="MuJoCo Mojo Logo">
 </p>
 
-A **Pythonic MJCF generation and validation toolkit** for MuJoCo, built on **Pydantic v2**.
+A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
 
-MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instead of handwritten XML, with:
+**MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 
-* Static typing
-* Runtime validation
-* Programmatic composition of complex models
+* **Model:** Build MJCFs via **validated Python objects**—no more manual XML hacking.
+* **Scale:** Execute **multi-threaded Monte Carlo trials** with built-in resume logic.
+* **Monitor:** Track progress via a **zero-dependency web dashboard** and persistent logs.
+* **Reproduce:** Automatic **environment snapshotting** (`requirements.txt`) for every job.
 
 ## Installation
 
@@ -60,7 +61,7 @@ Install `mujoco-mojo` in your project using the following:
 * Resume a previously started job without rerunning previous cases
 * Automatically record installed Python packages to `requirements.txt` for job recreation (works with `uv` or `pip`)
 * End of run summary with metric to help perform a state of health check
-* Flexible commandline utilities to run jobs
+* Flexible command line utilities to run jobs
 
     ??? example
         ```bash
@@ -76,4 +77,4 @@ Install `mujoco-mojo` in your project using the following:
         ```
 
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
-* Built in Rich logging for terminal and a rotating file handler for persistant logs
+* Built in Rich logging for terminal and a rotating file handler for persistent logs
