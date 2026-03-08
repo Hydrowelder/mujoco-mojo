@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
-from numpydantic import NDArray
 
 import mujoco_mojo as mojo
 from mujoco_mojo.utils.log import get_logger
@@ -21,64 +20,54 @@ def cached_method(x: str = "asdf"):
     return
 
 
-def generate(
-    trial_num: int,
-    overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
-    *args,
-    **kwargs,
-) -> mojo.MojoModel:
+def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     # print(f"generating nothing {trial_num}!")
     # print(f"Args used: {args}!")
     # print(f"Kwargs used: {kwargs}!")
-    logger.info(f"generating nothing {trial_num}!")
+    logger.info(f"generating nothing {mojo_model.values.trial_num}!")
 
     cached_method()
-    if not trial_num % 5:
+    if not mojo_model.values.trial_num % 5:
         raise ValueError("askflaskfhl")
 
-    asset = mojo.mjcf.Asset(
-        textures=[
-            texture := mojo.mjcf.Texture(
-                name=mojo.TextureName("a_texture"),
-                file=mojo.DepPath(__file__).parent / "asset_image.png",
-            ),
-        ],
-        materials=[
-            material := mojo.mjcf.Material(
-                name=mojo.MaterialName("nickleback"), texture=texture.name
-            )
-        ],
-    )
-    body = mojo.mjcf.Body(geoms=[mojo.mjcf.GeomBox(material=material.name)])
-
-    mojo_model = mojo.MojoModel(
-        mjcf=mojo.mjcf.Mujoco(
-            model=mojo.ModelName(f"monte_carlo_test_{trial_num}"),
-            assets=[asset],
-            worldbody=mojo.mjcf.WorldBody(bodies=[body]),
-        ),
-        values=mojo.Values(seed=SEED, trial_num=trial_num),
-    )
-    time.sleep(0.0001)
-    _normal_draw = (
-        (
-            mojo.NormalDistribution(
-                name=mojo.DistName("normal_draw"),
-                mu=5,
-                sigma=10,
-                seed=SEED,
-            )
+    mojo_model.mjcf.assets = [
+        mojo.Asset(
+            textures=[
+                texture := mojo.Texture(
+                    name=mojo.TextureName("a_texture"),
+                    file=mojo.DepPath(__file__).parent / "asset_image.png",
+                ),
+            ],
+            materials=[
+                material := mojo.Material(
+                    name=mojo.MaterialName("nickleback"), texture=texture.name
+                )
+            ],
         )
-        .with_seed(SEED)
-        .with_trial_num(trial_num)
-        .sample_and_update_dicts(
-            dist_dict=mojo_model.values.dists, named_value_dict=mojo_model.values.named
+    ]
+
+    body = mojo.Body(
+        geoms=[
+            mojo.GeomBox(
+                material=material.name,
+                size=np.array([1, 1, 1]),
+            )
+        ]
+    )
+    mojo_model.mjcf.model = mojo.ModelName(
+        f"monte_carlo_test_{mojo_model.values.trial_num}"
+    )
+    mojo_model.mjcf.worldbody = mojo.WorldBody(bodies=[body])
+
+    time.sleep(1)
+    _normal_draw = mojo_model.sample_dist(
+        mojo.NormalDistribution(
+            name=mojo.DistName("normal_draw"),
+            nominal=5,
+            mu=5,
+            sigma=10,
         )
     )
-
-    nv = mojo.NamedValue[NDArray](name=mojo.ValueName("value"))
-    nv.value = np.array([12.3])
-    mojo_model.values.named.update(nv)
 
     return mojo_model
 
@@ -87,7 +76,7 @@ def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # print("running nothing!")
     if mojo_model.values.trial_num == 7:
         raise ValueError("blah blah blah")
-    time.sleep(0.0002)
+    time.sleep(2)
 
     return None
 
@@ -95,16 +84,11 @@ def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
 @dataclass
 class Experiment:
     @staticmethod
-    def generate(
-        trial_num: int,
-        overrides: mojo.NamedValueDict = mojo.NamedValueDict(),
-        *args,
-        **kwargs,
-    ) -> mojo.MojoModel:
-        return generate(trial_num, overrides, *args, **kwargs)
+    def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+        return generate(mojo_model, *args, **kwargs)
 
     @staticmethod
-    def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
+    def runtime(mojo_model: mojo.MojoModel, *args, **kwargs) -> None:
         return runtime(mojo_model, *args, **kwargs)
 
 

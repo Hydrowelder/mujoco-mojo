@@ -165,6 +165,7 @@ class JobStatus(MojoBaseModel):
     n_trial: int
     n_proc: int
     padding_style: str
+    seed: int | None
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     elapsed: timedelta = Field(default=timedelta(0))
     average_trial_duration: timedelta = Field(default=timedelta(0))
