@@ -153,6 +153,7 @@ pre {
 /* Splash Hover Effect - Matches your brand growth */
 .mojo-splash img {
     transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    height: 10.0em;
 }
 
 .mojo-splash img:hover {
@@ -187,4 +188,25 @@ pre {
     /* Optional: controls the speed curve */
     animation-fill-mode: forwards;
     /* Ensures the element remains visible after the animation finishes */
+}
+
+/* --- Mojo Auto-Highlighting --- */
+
+/* For "MuJoCo Mojo" in regular text */
+.mojo-text-highlight {
+    color: #06b6d4;
+    /* Cyan-500 */
+    font-weight: 900;
+    /* Extra Bold '70s feel */
+    letter-spacing: -0.01em;
+}
+
+/* For `mujoco-mojo` or `mujoco_mojo` in code blocks */
+code.mojo-code-highlight,
+.mojo-code-highlight code {
+    color: #22d3ee !important;
+    /* Slightly lighter Cyan-400 for better code contrast */
+    font-weight: 700;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    background-color: rgba(6, 182, 212, 0.05) !important;
 }
