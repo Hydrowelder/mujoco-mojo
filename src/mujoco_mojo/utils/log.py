@@ -76,7 +76,7 @@ def setup_logger(
             show_path=True,
             enable_link_path=False,
             # highlighter=None,
-            # markup=True, # allows color in the log message itself currently disabled in case an array is logged. Square brackets will break logging.
+            markup=True,  # allows color in the log message itself currently disabled in case an array is logged. Square brackets will break logging.
             rich_tracebacks=True,
         )
         rich_handler.addFilter(TerminalFilter())
