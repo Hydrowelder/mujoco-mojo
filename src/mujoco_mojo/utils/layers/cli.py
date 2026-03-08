@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 
@@ -29,6 +28,8 @@ from ..defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
+
+console = Console()
 
 
 def get_local_ip():
@@ -71,7 +72,7 @@ def _load_func(path: str) -> Any:
 
     if mod is None or attr_parts is None:
         logger = get_logger(__name__)
-        rprint(
+        console.print(
             f"[bold red]Error:[/bold red] Could not find module for [bold green]`{path}`[/bold green]"
         )
         logger.error(f"Could not find module for `{path}`", extra={"file_only": True})
@@ -85,7 +86,7 @@ def _load_func(path: str) -> Any:
         return obj
     except AttributeError as e:
         logger = get_logger(__name__)
-        rprint(
+        console.print(
             f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] not found: {e}"
         )
         logger.exception(f"`{path}`not found: {e}", extra={"file_only": True})
@@ -108,7 +109,7 @@ def _process_kwargs(kwargs: list[str]) -> dict[str, Any]:
     for kv in kwargs:
         if "=" not in kv:
             logger = get_logger(__name__)
-            rprint(
+            console.print(
                 f"[bold red]Error:[/bold red] Invalid Key-Value pair '{kv}'. Use `'key=value'`."
             )
             logger.error(
@@ -345,7 +346,7 @@ cli_app = typer.Typer(
 
 def version_callback(value: bool):
     if value:
-        rprint(
+        console.print(
             f"[bold cyan]mujoco-mojo[/bold cyan] [bold white]{version('mujoco-mojo')}"
         )
         raise typer.Exit()
@@ -495,7 +496,7 @@ def run_monte_carlo(
     runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc)
 
     # 3. run
-    rprint(
+    console.print(
         f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
     )
     logger.info(
@@ -524,7 +525,7 @@ def run_monte_carlo(
             f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
             extra={"file_only": True},
         )
-    rprint(
+    console.print(
         f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
     )
 
@@ -567,7 +568,7 @@ def run_dashboard(
     else:
         connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
 
-    Console().print(
+    console.print(
         Panel(
             f"""[bold green]MuJoCo Mojo Dashboard is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop the dashboard[/yellow]""",
             border_style="green",
@@ -585,7 +586,7 @@ def run_optimizer(
 ) -> None:
     """[dim]Placeholder for future optimization command...[/dim]"""
     _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-    rprint("[yellow]Optimization engine coming soon![/yellow]")
+    console.print("[yellow]Optimization engine coming soon![/yellow]")
 
 
 if __name__ == "__main__":

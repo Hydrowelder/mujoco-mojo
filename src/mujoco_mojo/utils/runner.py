@@ -357,6 +357,7 @@ class MojoRunner:
         execution_mode: ExecutionMode = ExecutionMode.LOCAL,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
+        """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
         match execution_mode:
             case ExecutionMode.LOCAL:
                 return self.run_local(
@@ -366,7 +367,7 @@ class MojoRunner:
                     trial_ids=trial_ids,
                 )
             case ExecutionMode.SLURM:
-                return self.run_slurm(
+                return self.orchestrate_slurm(
                     global_overrides=global_overrides,
                     resume=resume,
                     clean_workdir=clean_workdir,
@@ -421,25 +422,21 @@ class MojoRunner:
         tid = os.getenv("SLURM_ARRAY_TASK_ID")
         return int(tid) if tid is not None else None
 
-    def run_slurm(
+    def orchestrate_slurm(
         self,
-        global_overrides: NamedValueDict | None = None,
+        global_overrides: NamedValueDict[NDArray],
         resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
-        msg = "SLURM is not implemented"
-        logger.error(msg)
-        raise NotImplementedError(msg)
-
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / "logs").mkdir(parents=True, exist_ok=True)
 
         self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
-            result, had_fails = self.run_slurm_monte_carlo(
+            result, had_fails = self.orchestrate_slurm_monte_carlo(
                 global_overrides=global_overrides,
                 resume=resume,
                 trial_ids=trial_ids,
@@ -481,10 +478,7 @@ class MojoRunner:
         resume: bool = True,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
-        """
-        Orchestrates a Monte Carlo job.
-
-        """
+        """Orchestrates a Monte Carlo job."""
         if self.slurm_trial_id is not None:
             tn = self.slurm_trial_id
             logger.info(f"SLURM Worker detected. Executing Trial {tn}")
@@ -601,27 +595,68 @@ class MojoRunner:
         status_tracker.generate_report(n_proc=self.config.n_proc, alert_generation=True)
         return results, bool(status_tracker.failed_trial_nums)
 
-    def run_slurm_monte_carlo(
+    @staticmethod
+    def get_slurm_partitions() -> tuple[list[str], str | None]:
+        """Queries sinfo for available partitions and identifies the default."""
+        try:
+            result = subprocess.run(
+                ["sinfo", "-h", "--format=%P"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                raw_partitions = [
+                    p.strip() for p in result.stdout.splitlines() if p.strip()
+                ]
+
+                default_partition = None
+                clean_partitions = []
+
+                for p in raw_partitions:
+                    if p.endswith("*"):
+                        name = p.replace("*", "")
+                        default_partition = name
+                        clean_partitions.append(name)
+                    else:
+                        clean_partitions.append(p)
+
+                return sorted(list(set(clean_partitions))), default_partition
+        except Exception:
+            pass
+        return [], None
+
+    def orchestrate_slurm_monte_carlo(
         self,
-        global_overrides: NamedValueDict | None = None,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = True,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Orchestrates a Monte Carlo SLURM submission."""
-        msg = "SLURM is not implemented"
-        logger.error(msg)
-        raise NotImplementedError(msg)
-        # initialize the status tracker
+        from rich.console import Console
+        from rich.prompt import Confirm, Prompt
 
+        console = Console()
+        self.workdir.mkdir(parents=True, exist_ok=True)
+
+        # persist overrides so workers can access them
+        overrides_path = self.workdir.resolve() / "global_overrides.json"
+        if len(global_overrides) > 0:
+            logger.info(f"Persisting global overrides to {overrides_path}")
+            overrides_path.write_text(global_overrides.model_dump_json(indent=4))
+
+        # initialize the status tracker
         if trial_ids:
             to_run = trial_ids
         else:
+            # use status tracker to find jobs if specific trial ids wernt provided
             status_tracker = JobStatus(
                 workdir=self.workdir.resolve(),
                 job_type=JobType.MONTE_CARLO,
                 execution_mode=ExecutionMode.SLURM,
                 n_trial=self.config.n_trial,
                 n_proc=self.config.n_proc,
+                seed=self.seed,
                 padding_style=self.config.padding_style,
                 generator=MojoRunner.inspect_protocol(self.generator),
                 runtime=MojoRunner.inspect_protocol(self.runtime),
@@ -629,6 +664,10 @@ class MojoRunner:
                 gen_kwargs_used=bool(self.gen_kwargs),
                 run_args_used=bool(self.run_args),
                 run_kwargs_used=bool(self.run_kwargs),
+            )
+            # configure the registry to see all trial_nums
+            status_tracker._registry = dict(
+                [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
             )
 
             # decide which trials to execute
@@ -640,49 +679,115 @@ class MojoRunner:
             logger.info("All trials were already completed. Nothing to do.")
             return [], False
 
-        # generate the .sh script
-        array_range = ",".join(map(str, to_run))
-        script_path = self.workdir / "mujoco_mojo_submit.sh"
+        # reconstruct the CLI command for the worker
+        gen_args_str = " ".join([f'--gen-arg "{a}"' for a in self.gen_args])
+        gen_kwargs_str = " ".join(
+            [f'--gen-kwarg "{k}={v}"' for k, v in self.gen_kwargs.items()]
+        )
+        run_args_str = " ".join([f'--run-arg "{a}"' for a in self.run_args])
+        run_kwargs_str = " ".join(
+            [f'--run-kwarg "{k}={v}"' for k, v in self.run_kwargs.items()]
+        )
 
-        runtime_str = f'--runtime "{self.runtime_path}"' if self.runtime_path else ""
-        project_root = Path.cwd().resolve()
+        runtime_flag = f'--runtime "{self.runtime_path}"' if self.runtime_path else ""
+        seed_flag = f"--seed {self.seed}" if self.seed is not None else ""
+        overrides_flag = (
+            f'--overrides "{overrides_path}"' if len(global_overrides) > 0 else ""
+        )
+
         cmd = (
             f"{sys.executable} -m mujoco_mojo run monte-carlo "
             f'--generator "{self.generator_path}" '
-            f"{runtime_str} "
+            f"{runtime_flag} {seed_flag} {overrides_flag} "
             f'--workdir "{self.workdir.resolve()}" '
-            f"--trial-id $SLURM_ARRAY_TASK_ID "
-            f"--execution-mode local"  # The worker runs its specific trial locally
+            f"{gen_args_str} {gen_kwargs_str} "
+            f"{run_args_str} {run_kwargs_str} "
+            f"--trial-id $SLURM_ARRAY_TASK_ID "  # execute its onw trial_num
+            f"--execution-mode local "  # using local since slurm will just send us back to this method
+            f"--n-proc 1"  # A worker only needs 1 process
         )
+
+        # ask for sbatch settings with a bunch of console inputs with default values
+        available_partitions, default_partition = self.get_slurm_partitions()
+
+        console.print(
+            "\n[bold cyan] MuJoCo Mojo Orchestrator: SLURM Resource Setup[/bold cyan]"
+        )
+
+        # Standard colors only for Rich compatibility
+        cpus_per_task = Prompt.ask("  [white]CPUs per task[/]", default="1")
+        mem_per_node = Prompt.ask(
+            "  [white]Memory per node[/] (e.g., 4G)", default="4G"
+        )
+        time_limit = Prompt.ask("  [white]Time limit[/] (HH:MM:SS)", default="01:00:00")
+
+        if available_partitions:
+            # Use the actual SLURM default if we found one, otherwise the first in list
+            initial_default = (
+                default_partition if default_partition else available_partitions[0]
+            )
+            console.print(
+                f"  Available partitions: [magenta bold]{', '.join(available_partitions)}[/magenta bold]"
+            )
+
+            partition = Prompt.ask(
+                "  [white]Partition[/]",
+                choices=available_partitions,
+                default=initial_default,
+                show_choices=False,
+            )
+        else:
+            partition = Prompt.ask(
+                "  [white]Partition[/] [dim](optional)[/]", default=""
+            )
+
+        partition_line = f"#SBATCH --partition={partition}" if partition else ""
+
+        # generate the .sh script
+        array_range = ",".join(map(str, to_run))
+        script_path = self.workdir / "mujoco_mojo_submit.sh"
+        project_root = Path.cwd().resolve()
+
         sbatch_content = f"""#!/bin/bash
 #SBATCH --job-name=mojo
 #SBATCH --array={array_range}
 #SBATCH --output={self.workdir.resolve()}/logs/trial_%a.log
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=4G
-#SBATCH --time=01:00:00
+#SBATCH --cpus-per-task={cpus_per_task}
+#SBATCH --mem={mem_per_node}
+#SBATCH --time={time_limit}
+{partition_line}
 
-# Move to where the code lives
+# Move to the project root so imports work
 cd {project_root}
-
-# Ensure local modules are importable
 export PYTHONPATH=$PYTHONPATH:{project_root}
 
-# Execute the worker
+# Execute the worker command
 {cmd}
 """
 
         script_path.write_text(sbatch_content, encoding="utf-8")
+        logger.info(f"SLURM submission script written to {script_path}")
 
-        # submit to sbatch
-        logger.info(f"Submitting {len(to_run)} trials to SLURM...")
-        result = subprocess.run(
-            ["sbatch", str(script_path)], capture_output=True, text=True
-        )
-
-        if result.returncode == 0:
-            logger.info(f"SLURM Job submitted: {result.stdout.strip()}")
-            return [], False
+        # final submission
+        if Confirm.ask(
+            f"\n[cyan]Submit {len(to_run)} trials to SLURM now?[/]", default=True
+        ):
+            # automatic submission
+            logger.info(f"Submitting {len(to_run)} trials...")
+            result = subprocess.run(
+                ["sbatch", str(script_path)], capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                console.print(
+                    f"\n[bold green]Success![/] SLURM Job ID: {result.stdout.strip()}"
+                )
+                return [], False
+            else:
+                logger.error(f"SLURM Submission Failed: {result.stderr}")
+                return [], True
         else:
-            logger.error(f"SLURM Submission Failed: {result.stderr}")
-            return [], True
+            # deffered submission
+            console.print(
+                f"\n[yellow]Orchestration complete.[/] Submit manually with:\n[bold green]sbatch {script_path}[/]"
+            )
+            return [], False
