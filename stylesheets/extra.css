@@ -81,7 +81,7 @@ pre {
    ---------------------------------------------------------- */
 
 [data-md-color-scheme="slate"] .md-header__button.md-logo img {
-    content: url("../assets/dark-logo.png");
+    content: url("../assets/dark-logo.svg");
 }
 
 .md-header__button.md-logo img {
@@ -161,14 +161,14 @@ pre {
 
 /* Dark Mode Swap for Splash */
 [data-md-color-scheme="slate"] .mojo-splash img {
-    content: url("../assets/dark-logo.png");
+    content: url("../assets/dark-hero-logo.svg");
 }
 
 /* Optional: Add a fade-in animation for that "Splash" feel */
 @keyframes mojoFadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(0px);
     }
 
     to {
@@ -178,5 +178,13 @@ pre {
 }
 
 .mojo-splash {
-    animation: mojoFadeIn 1s ease-out;
+    opacity: 0;
+    /* Ensures the element is hidden initially, before the animation starts */
+    animation-name: mojoFadeIn;
+    animation-duration: 2s;
+    /* Adjust the duration as needed (e.g., 1s, 0.5s) */
+    animation-timing-function: ease-in-out;
+    /* Optional: controls the speed curve */
+    animation-fill-mode: forwards;
+    /* Ensures the element remains visible after the animation finishes */
 }

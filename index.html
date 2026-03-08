@@ -15,7 +15,7 @@
         
       
       
-      <link rel="icon" href="assets/light-logo.png">
+      <link rel="icon" href="assets/light-logo.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.2">
     
     
@@ -81,7 +81,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mujoco-mojo" class="md-skip">
+        <a href="#installation" class="md-skip">
           Skip to content
         </a>
       
@@ -99,7 +99,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="." title="MuJoCo Mojo" class="md-header__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
-  <img src="assets/light-logo.png" alt="logo">
+  <img src="assets/light-logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -279,7 +279,9 @@
           
             
               
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -292,7 +294,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="." title="MuJoCo Mojo" class="md-nav__button md-logo" aria-label="MuJoCo Mojo" data-md-component="logo">
       
-  <img src="assets/light-logo.png" alt="logo">
+  <img src="assets/light-logo.svg" alt="logo">
 
     </a>
     MuJoCo Mojo
@@ -324,8 +326,6 @@
       
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
-      
-        
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
@@ -368,8 +368,6 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
-  
-    
   
   
     <label class="md-nav__title" for="__toc">
@@ -471,6 +469,8 @@
             
             
               
+                
+              
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -479,8 +479,6 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
-  
-    
   
   
     <label class="md-nav__title" for="__toc">
@@ -552,6 +550,8 @@
               
                 
 
+  
+
 
 
   
@@ -561,6 +561,8 @@
               <article class="md-content__inner md-typeset">
                 
                   
+  
+
 
 
   
@@ -580,11 +582,19 @@
   
 
 
+  <h1>Home</h1>
+
+<style>
+  .md-typeset h1,
+  .md-content__button {
+    display: none;
+  }
+</style>
+
 <p align="center" class="mojo-splash">
-  <a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="assets/light-logo.png" data-desc-position="bottom"><img src="assets/light-logo.png" width="320" alt="MuJoCo Mojo Logo"></a>
+  <a class="glightbox" data-type="image" data-width="auto" data-height="auto" href="assets/light-hero-logo.svg" data-desc-position="bottom"><img src="assets/light-hero-logo.svg" height="512" alt="MuJoCo Mojo Logo"></a>
 </p>
 
-<h1 id="mujoco-mojo">MuJoCo Mojo<a class="headerlink" href="#mujoco-mojo" title="Permanent link">¶</a></h1>
 <p>A <strong>Pythonic MJCF generation and validation toolkit</strong> for MuJoCo, built on <strong>Pydantic v2</strong>.</p>
 <p>MuJoCo Mojo lets you construct MJCF models using <strong>typed Python objects</strong> instead of handwritten XML, with:</p>
 <ul>
@@ -656,8 +666,13 @@
 
 
 
+  
+  
 
 
+
+
+  
 
 
 
@@ -682,6 +697,8 @@
         <footer class="md-footer">
   
     
+      
+        
       
       <nav class="md-footer__inner md-grid" aria-label="Footer">
         
