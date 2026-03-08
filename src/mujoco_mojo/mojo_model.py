@@ -14,6 +14,9 @@ from mujoco_mojo.process_manager import (
     NamedValue,
     NamedValueDict,
 )
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["MojoModel", "Values"]
 
@@ -24,21 +27,58 @@ class Values(MojoBaseModel):
     dists: DistributionDict = Field(default_factory=DistributionDict)
     named: NamedValueDict[NDArray] = Field(default_factory=NamedValueDict[NDArray])
 
-    def sample_dist(self, dist: Dist, size: int = 1) -> NamedValue[NDArray]:
+    def sample_dist(
+        self,
+        dist: Dist,
+        size: int = 1,
+        force: bool = False,
+        warn: bool = True,
+    ) -> NamedValue[NDArray]:
         """
         Sets the seed and trial number of the distribution, sample, registers it and the sampled value to the MuJoCo model, and returns the named value.
 
         If the NamedValue is already registered, the registered named value is returned.
+
+        Args:
+            dist (Dist): Distribution to sample and register.
+            size (int, optional): Number of samples to take. Will be embedded in the returned NamedValue. Defaults to 1.
+            force (bool, optional): Force the sampled value into the NamedValueDict if it already exists. Defaults to False.
+            warn (bool, optional): Whether or not to warn if there is a conflict while forcing. Defaults to True.
+
+        Returns:
+            NamedValue[NDArray]: NamedValue containing the random draw.
+
         """
         dist.with_seed(self.seed).with_trial_num(self.trial_num)
         self.dists.update(dist)
 
         nv = dist.sample_to_named_value(size=size)
-        if nv in self.named:
-            return self.named[nv.name]
 
-        self.named.update(nv)
-        return nv  # pyright: ignore[reportReturnType]
+        if nv in self.named and not force:
+            if warn:
+                logger.warning(
+                    f"NamedValue [bold cyan]{nv.name}[/bold cyan] already registered. Returning it instead of the sampled value.",
+                    extra={"terminal_only": True},
+                )
+                logger.warning(
+                    f"NamedValue {nv.name} already registered. Returning it instead of the sampled value.",
+                    extra={"file_only": True},
+                )
+            return self.named[nv.name]
+        elif nv in self.named and force:
+            if warn:
+                logger.warning(
+                    f"NamedValue [bold cyan]{nv.name}[/bold cyan] already registered. Force setting it to the new value in the registry.",
+                    extra={"terminal_only": True},
+                )
+                logger.warning(
+                    f"NamedValue {nv.name} already registered. Force setting it to the new value in the registry.",
+                    extra={"file_only": True},
+                )
+            self.named.force_update(nv, warn=False)
+        else:
+            self.named.update(nv)
+        return nv
 
     def with_override(self, override: NamedValueDict[NDArray]) -> None:
         """
@@ -61,13 +101,29 @@ class MojoModel(MojoBaseModel):
     mjcf: Mujoco = Field(default_factory=Mujoco)
     values: Values = Field(default_factory=Values)
 
-    def sample_dist(self, dist: Dist, size: int = 1) -> NamedValue[NDArray]:
+    def sample_dist(
+        self,
+        dist: Dist,
+        size: int = 1,
+        force: bool = False,
+        warn: bool = True,
+    ) -> NamedValue[NDArray]:
         """
         Sets the seed and trial number of the distribution, sample, registers it and the sampled value to the MuJoCo model, and returns the named value.
 
         If the NamedValue is already registered, the registered named value is returned.
+
+        Args:
+            dist (Dist): Distribution to sample and register.
+            size (int, optional): Number of samples to take. Will be embedded in the returned NamedValue. Defaults to 1.
+            force (bool, optional): Force the sampled value into the NamedValueDict if it already exists. Defaults to False.
+            warn (bool, optional): Whether or not to warn if there is a conflict while forcing. Defaults to True.
+
+        Returns:
+            NamedValue[NDArray]: NamedValue containing the random draw.
+
         """
-        return self.values.sample_dist(dist=dist, size=size)
+        return self.values.sample_dist(dist=dist, size=size, force=force, warn=warn)
 
     def with_overrides(self, overrides: NamedValueDict[NDArray]) -> Self:
         """

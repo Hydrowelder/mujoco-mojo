@@ -276,6 +276,14 @@ if True:
             help="Seed to use for the job.",
         ),
     ]
+    OverridesType = Annotated[
+        Path | None,
+        typer.Option(
+            "--overrides",
+            "-o",
+            help="File which contains NamedValue overrides to use in all trials.",
+        ),
+    ]
 
     # monte carlo
     NTrialType = Annotated[
@@ -428,6 +436,7 @@ def run_monte_carlo(
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
+    overrides: OverridesType = None,
     trial_ids: TrialIdType = [],
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
@@ -441,9 +450,29 @@ def run_monte_carlo(
 
     This command handles the directory setup, distribution salting, and parallel execution of physics trials.
     """
+    from numpydantic import NDArray
+
+    from mujoco_mojo.process_manager import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+
+    global_overrides = None
+    if overrides:
+        overrides = overrides.resolve()
+        logger.info(f"Retrieving global NamedValue overrides from `{overrides}`")
+        global_overrides = NamedValueDict[NDArray].model_validate_json(
+            overrides.read_text()
+        )
+
+        if len(global_overrides) == 0:
+            logger.warning(
+                "Global NamedValue overrides had no entries. Continuing anyway."
+            )
+        else:
+            logger.info(
+                f"Global NamedValue overrides had {len(global_overrides)} entries."
+            )
 
     if n_trial != 0 and trial_ids:
         logger.warning(
@@ -477,6 +506,9 @@ def run_monte_carlo(
     )
     _results, had_fails = runner.run(
         resume=resume,
+        global_overrides=global_overrides
+        if global_overrides
+        else NamedValueDict[NDArray](),
         clean_workdir=clean_workdir,
         execution_mode=execution_mode,
         trial_ids=trial_ids,
