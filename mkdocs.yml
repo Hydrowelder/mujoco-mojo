@@ -18,8 +18,8 @@ nav:
 
 theme:
   name: material
-  logo: assets/light-logo.png
-  favicon: assets/light-logo.png
+  logo: assets/light-logo.svg
+  favicon: assets/light-logo.svg
   font: false
 
   palette:

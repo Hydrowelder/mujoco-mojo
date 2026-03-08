@@ -1,8 +1,18 @@
-<p align="center" class="mojo-splash">
-  <img src="assets/light-logo.png" width="320" alt="MuJoCo Mojo Logo">
-</p>
+---
+hide:
+  - navigation
+#   - toc
+---
+<style>
+  .md-typeset h1,
+  .md-content__button {
+    display: none;
+  }
+</style>
 
-# MuJoCo Mojo
+<p align="center" class="mojo-splash">
+  <img src="assets/light-hero-logo.svg" height="512" alt="MuJoCo Mojo Logo">
+</p>
 
 A **Pythonic MJCF generation and validation toolkit** for MuJoCo, built on **Pydantic v2**.
 
