@@ -1,9 +1,7 @@
-# MuJoCo Mojo
-
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dark-logo.png">
-    <img alt="MuJoCo Mojo" src="docs/assets/light-logo.png" width="320">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dark-hero-logo.svg">
+    <img alt="MuJoCo Mojo" src="docs/assets/light-hero-logo.svg" height="512">
   </picture>
 </p>
 

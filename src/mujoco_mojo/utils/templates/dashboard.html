@@ -60,8 +60,8 @@
     <link
       id="favicon"
       rel="icon"
-      type="image/png"
-      href="/static/light-logo.png"
+      type="image/svg"
+      href="/static/light-logo.svg"
     />
 
     <script>
@@ -72,11 +72,11 @@
         const headerLogo = document.getElementById("header-logo");
 
         if (isDark) {
-          if (favicon) favicon.href = "/static/dark-logo.png";
-          if (headerLogo) headerLogo.src = "/static/dark-logo.png";
+          if (favicon) favicon.href = "/static/dark-logo.svg";
+          if (headerLogo) headerLogo.src = "/static/dark-logo.svg";
         } else {
-          if (favicon) favicon.href = "/static/light-logo.png";
-          if (headerLogo) headerLogo.src = "/static/light-logo.png";
+          if (favicon) favicon.href = "/static/light-logo.svg";
+          if (headerLogo) headerLogo.src = "/static/light-logo.svg";
         }
       }
 
@@ -112,7 +112,7 @@
             >
               <img
                 id="header-logo"
-                src="/static/light-logo.png"
+                src="/static/light-logo.svg"
                 alt="Mojo Logo"
                 class="w-12 h-12 p-1 object-contain cursor-pointer"
               />

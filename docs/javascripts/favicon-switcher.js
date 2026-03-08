@@ -6,7 +6,7 @@ const syncSystemFavicon = () => {
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
     // Use absolute paths if your site is in a subfolder (like /mujoco-mojo/)
-    const path = isDark ? "assets/dark-logo.png" : "assets/light-logo.png";
+    const path = isDark ? "assets/dark-logo.svg" : "assets/light-logo.svg";
 
     // Force the browser to refresh the icon by clearing and re-setting
     favicon.href = "";

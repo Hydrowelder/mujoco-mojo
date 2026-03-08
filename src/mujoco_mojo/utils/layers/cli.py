@@ -307,9 +307,7 @@ if True:
     # dashboard
     DashboardWorkdirType = Annotated[
         Path,
-        typer.Option(
-            "--workdir",
-            "-w",
+        typer.Argument(
             help="Workspace directory to build the dashboard for. This should be the same argument as what is used for other mujoco-mojo run commands.",
         ),
     ]
