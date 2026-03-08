@@ -20,7 +20,7 @@ nav:
 theme:
   name: material
   logo: assets/dark-logo.svg
-  favicon: assets/dakr-logo.svg
+  favicon: assets/dark-logo.svg
   font: false
 
   palette:
@@ -114,6 +114,7 @@ markdown_extensions:
   - attr_list
   - md_in_html
   - def_list
+  - footnotes
   - pymdownx.tasklist:
       custom_checkbox: true
   - toc:
@@ -147,6 +148,13 @@ markdown_extensions:
 
 extra:
   generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Hydrowelder
+      name: My GitHub
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/david-gable/
+      name: My LinkedIn
 
 extra_javascript:
   - https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js

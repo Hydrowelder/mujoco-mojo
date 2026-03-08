@@ -105,6 +105,7 @@ pre {
 .md-footer__link,
 .md-footer-meta__inner,
 .md-copyright,
+.md-social,
 .md-copyright__highlight,
 .md-copyright__highlight a {
     color: var(--md-default-fg-color) !important;
@@ -112,6 +113,7 @@ pre {
 }
 
 /* Specific Copyright Link Hover */
+.md-social a:hover,
 .md-copyright__highlight a:hover {
     color: #06b6d4 !important;
     /* Cyan-500 */
