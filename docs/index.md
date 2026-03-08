@@ -11,7 +11,7 @@ hide:
 </style>
 
 <p align="center" class="mojo-splash">
-  <img src="assets/light-hero-logo.svg" height="512" alt="MuJoCo Mojo Logo">
+  <img src="assets/light-hero-logo.svg" alt="MuJoCo Mojo Logo">
 </p>
 
 A **Pythonic MJCF generation and validation toolkit** for MuJoCo, built on **Pydantic v2**.
@@ -23,6 +23,9 @@ MuJoCo Mojo lets you construct MJCF models using **typed Python objects** instea
 * Programmatic composition of complex models
 
 ## Installation
+
+Install `mujoco-mojo` in your project using the following:
+
 === "`uv` (recommended)"
 
     ```bash

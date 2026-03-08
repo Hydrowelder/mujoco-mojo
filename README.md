@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dark-hero-logo.svg">
-    <img alt="MuJoCo Mojo" src="docs/assets/light-hero-logo.svg" height="512">
+    <img alt="MuJoCo Mojo" src="docs/assets/light-hero-logo.svg" style="height: 10.0em">
   </picture>
 </p>
 
@@ -66,3 +66,7 @@ pip install mujoco-mojo
 
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
 * Built in Rich logging for terminal and a rotating file handler for persistant logs
+
+> ![NOTE]
+> **MuJoCo Mojo** is an independently developed open-source toolbox. It is **not** affiliated with, sponsored by, or endorsed by **Google DeepMind** or the official **MuJoCo** development team.
+> MuJoCo® is a registered trademark of Google LLC. All MJCF schemas and MuJoCo-related terminology used within this project are for compatibility and documentation purposes only.
