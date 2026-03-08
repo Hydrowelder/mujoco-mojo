@@ -1,27 +1,20 @@
-// Function to swap the favicon based on the active palette
-const syncFavicon = () => {
-    const palette = document.body.getAttribute("data-md-color-scheme")
-    const favicon = document.querySelector("link[rel='icon']")
+const syncSystemFavicon = () => {
+    const favicon = document.querySelector("link[rel='icon']");
+    if (!favicon) return;
 
-    if (!favicon) return
+    // Check if the user's OS is in Dark Mode
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    if (palette === "slate") {
-        favicon.href = "assets/dark-logo.png"
-    } else {
-        favicon.href = "assets/light-logo.png"
-    }
+    // Use absolute paths if your site is in a subfolder (like /mujoco-mojo/)
+    const path = isDark ? "assets/dark-logo.png" : "assets/light-logo.png";
+
+    // Force the browser to refresh the icon by clearing and re-setting
+    favicon.href = "";
+    favicon.href = path;
 }
 
-// 1. Run on initial load
-document.addEventListener("DOMContentLoaded", syncFavicon)
+// Run once on load
+syncSystemFavicon();
 
-// 2. Watch for theme toggles without a page reload
-const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-        if (mutation.type === "attributes" && mutation.attributeName === "data-md-color-scheme") {
-            syncFavicon()
-        }
-    })
-})
-
-observer.observe(document.body, { attributes: true })
+// Watch for changes to the System Theme (OS level)
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncSystemFavicon);
