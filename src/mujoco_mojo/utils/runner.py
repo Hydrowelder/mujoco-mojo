@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+from numpydantic import NDArray
 from pydantic import field_validator
 
 from mujoco_mojo.base import MojoBaseModel
@@ -23,6 +24,7 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_MODEL_CONFIG_NAME,
     DEFAULT_RESUME,
     DEFAULT_RUNTIME,
+    DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
@@ -48,7 +50,7 @@ class MojoGenerator(Protocol):
     """Definition of a function that generates a MojoModel model instance."""
 
     def __call__(
-        self, trial_num: int, overrides: NamedValueDict, /, *args: Any, **kwargs: Any
+        self, mojo_model: MojoModel, /, *args: Any, **kwargs: Any
     ) -> MojoModel: ...
 
 
@@ -180,7 +182,8 @@ class Trial:
         self,
         generator: MojoGenerator,
         runtime: MojoRuntime | None,
-        overrides: NamedValueDict,
+        seed: int | None,
+        overrides: NamedValueDict[NDArray],
         gen_args: list[Any],
         gen_kwargs: dict[str, Any],
         run_args: list[Any],
@@ -197,6 +200,7 @@ class Trial:
         Args:
             generator: Function that returns a `MojoModel` instance.
             runtime: Optional function to run the simulation (MuJoCo).
+            seed: Seed to use to define the trial.
             overrides: Key-value pairs that override random distributions.
             gen_args: Positional arguments for the generator.
             gen_kwargs: Keyword arguments for the generator.
@@ -218,9 +222,13 @@ class Trial:
             # 1. Generate
             with status.record_step(step_name="generating"):
                 logger.info(f"Generating trial_num={self.trial_num}")
-                mojo_model = generator(
-                    self.trial_num, overrides, *gen_args, **gen_kwargs
+                mojo_model = (
+                    MojoModel()
+                    .with_overrides(overrides=overrides)
+                    .with_seed(seed=seed)
+                    .with_trial_num(self.trial_num)
                 )
+                mojo_model = generator(mojo_model, overrides, *gen_args, **gen_kwargs)
 
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
@@ -275,6 +283,7 @@ class MojoRunner:
     generator_path: str | None = None  # e.g., "sim.generate"
     runtime: MojoRuntime | None = DEFAULT_RUNTIME
     runtime_path: str | None = None  # e.g., "sim.runtime"
+    seed: int | None = DEFAULT_SEED
     workdir: Path = DEFAULT_WORKDIR
     model_config_name: str = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
@@ -342,7 +351,7 @@ class MojoRunner:
 
     def run(
         self,
-        global_overrides: NamedValueDict | None = None,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
         execution_mode: ExecutionMode = ExecutionMode.LOCAL,
@@ -370,7 +379,7 @@ class MojoRunner:
 
     def run_local(
         self,
-        global_overrides: NamedValueDict | None = None,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
         trial_ids: list[int] | None = None,
@@ -442,9 +451,11 @@ class MojoRunner:
         return result, had_fails
 
     def execute_single_trial(
-        self, trial_num: int, overrides: NamedValueDict
+        self, trial_num: int, overrides_payload: dict
     ) -> tuple[Any | MojoModel | None, TrialStatus]:
         """Helper to package a Trial and run it."""
+        overrides = NamedValueDict[NDArray].model_validate(overrides_payload)
+
         trial = Trial(
             trial_num=trial_num,
             base_dir=self.workdir,
@@ -454,18 +465,19 @@ class MojoRunner:
         )
 
         return trial.run(
-            self.generator,
-            self.runtime,
-            overrides,
-            self.gen_args,
-            self.gen_kwargs,
-            self.run_args,
-            self.run_kwargs,
+            generator=self.generator,
+            runtime=self.runtime,
+            seed=self.seed,
+            overrides=overrides,
+            gen_args=self.gen_args,
+            gen_kwargs=self.gen_kwargs,
+            run_args=self.run_args,
+            run_kwargs=self.run_kwargs,
         )
 
     def run_monte_carlo(
         self,
-        global_overrides: NamedValueDict | None = None,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = True,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
@@ -473,12 +485,12 @@ class MojoRunner:
         Orchestrates a Monte Carlo job.
 
         """
-        overrides = global_overrides or NamedValueDict()
-
         if self.slurm_trial_id is not None:
             tn = self.slurm_trial_id
             logger.info(f"SLURM Worker detected. Executing Trial {tn}")
-            result, trial_status = self.execute_single_trial(tn, overrides)
+            result, trial_status = self.execute_single_trial(
+                trial_num=tn, overrides_payload=global_overrides.model_dump()
+            )
 
             return [result], trial_status.completion == Completion.FAILED
 
@@ -489,6 +501,7 @@ class MojoRunner:
             execution_mode=ExecutionMode.LOCAL,
             n_trial=self.config.n_trial,
             n_proc=self.config.n_proc,
+            seed=self.seed,
             padding_style=self.config.padding_style,
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
@@ -523,7 +536,11 @@ class MojoRunner:
             executor = ProcessPoolExecutor(max_workers=self.config.n_proc)
             try:
                 future_to_tn = {
-                    executor.submit(self.execute_single_trial, tn, overrides): tn
+                    executor.submit(
+                        self.execute_single_trial,
+                        tn,
+                        global_overrides.model_dump(),
+                    ): tn
                     for tn in to_run
                 }
                 for f in as_completed(future_to_tn):
@@ -559,7 +576,8 @@ class MojoRunner:
             for tn in to_run:
                 try:
                     result, trial_status = self.execute_single_trial(
-                        trial_num=tn, overrides=overrides
+                        trial_num=tn,
+                        overrides_payload=global_overrides.model_dump(),
                     )
                     results.append(result)
                     status_tracker.update_trial(

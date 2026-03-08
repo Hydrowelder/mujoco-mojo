@@ -25,6 +25,7 @@ from ..defaults import (
     DEFAULT_MODEL_CONFIG_NAME,
     DEFAULT_RESUME,
     DEFAULT_RUNTIME,
+    DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
@@ -267,6 +268,14 @@ if True:
             help="Specific trial IDs to run ([italic]-tid 5 -tid 42[/italic])",
         ),
     ]
+    SeedType = Annotated[
+        int | None,
+        typer.Option(
+            "--seed",
+            "-s",
+            help="Seed to use for the job.",
+        ),
+    ]
 
     # monte carlo
     NTrialType = Annotated[
@@ -366,6 +375,7 @@ def _prepare_runner(
     runtime: RuntimeType,
     workdir: WorkdirType,
     model_config_name: ModelConfigNameType,
+    seed: SeedType,
     xml_name: XMLNameType,
     gen_args: GenArgsType,
     gen_kwargs: GenKwargsType,
@@ -394,6 +404,7 @@ def _prepare_runner(
         runtime=run_func,
         runtime_path=runtime,  # needed for SLURM
         workdir=workdir,
+        seed=seed,
         model_config_name=model_config_name,
         xml_name=xml_name,
         gen_args=processed_gen_args,
@@ -412,6 +423,7 @@ def run_monte_carlo(
     n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
     n_proc: NProcType = DEFAULT_MC_N_PROC,
     resume: ResumeType = DEFAULT_RESUME,
+    seed: SeedType = DEFAULT_SEED,
     clean_workdir: CleanWorkdirType = False,
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
@@ -444,6 +456,7 @@ def run_monte_carlo(
         runtime=runtime,
         workdir=workdir,
         model_config_name=model_config_name,
+        seed=seed,
         xml_name=xml_name,
         gen_args=gen_args,
         gen_kwargs=gen_kwargs,
