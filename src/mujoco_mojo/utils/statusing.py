@@ -15,15 +15,18 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
 from mujoco_mojo.utils.log import get_logger
 
-__all__ = ["STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
+__all__ = ["TRIAL_STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
 
 logger = get_logger(__name__)
 
 Step = Literal["pending", "generating", "solving", "done"]
 """Steps a trial can have"""
 
-STATUS_FNAME = "status.json"
-"""Filename of status files."""
+TRIAL_STATUS_FNAME = "status.json"
+"""Filename of trial status files."""
+
+JOB_STATUS_FNAME = "job_status.json"
+"""Filename of job status files."""
 
 
 class JobType(StrEnum):
@@ -199,7 +202,9 @@ class JobStatus(MojoBaseModel):
         2. Parallel pooling to process the globbed files to reduce I/O wait time.
         """
         # discover started trials
-        status_files = list((self.workdir / "trials").glob(f"trial_*/{STATUS_FNAME}"))
+        status_files = list(
+            (self.workdir / "trials").glob(f"trial_*/{TRIAL_STATUS_FNAME}")
+        )
 
         # map of trial_num to path
         found_map: dict[int, Path] = {}
@@ -399,7 +404,7 @@ class JobStatus(MojoBaseModel):
         self.elapsed = datetime.now(UTC) - self.start_time
 
         if save:
-            status_path = self.workdir / STATUS_FNAME
+            status_path = self.workdir / JOB_STATUS_FNAME
             self.dump_to_path(status_path, indent=4)
 
     @property
@@ -540,7 +545,7 @@ class JobStatus(MojoBaseModel):
     def to_dashboard_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         # We trigger the disk refresh here so the data is fresh
-        self = self.model_validate_json((self.workdir / STATUS_FNAME).read_text())
+        self = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
         self.refresh_from_disk(n_proc=self.n_proc if n_proc is None else n_proc)
 
         avg_seconds = self.average_trial_duration.total_seconds()
