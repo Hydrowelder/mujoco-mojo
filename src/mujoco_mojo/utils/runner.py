@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,7 +32,7 @@ from mujoco_mojo.utils.defaults import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import (
-    STATUS_FNAME,
+    TRIAL_STATUS_FNAME,
     Completion,
     ExecutionMode,
     JobStatus,
@@ -212,7 +214,7 @@ class Trial:
 
         """
         status = TrialStatus(trial_num=self.trial_num)
-        status._path = self.trial_dir / STATUS_FNAME
+        status._path = self.trial_dir / TRIAL_STATUS_FNAME
 
         with status.record_step(step_name="pending"):
             pass
@@ -431,16 +433,21 @@ class MojoRunner:
     ) -> tuple[list[Any], bool]:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
         self.workdir.mkdir(parents=True, exist_ok=True)
-        (self.workdir / "logs").mkdir(parents=True, exist_ok=True)
+        (self.workdir / "logs").mkdir(exist_ok=True)
 
         self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
-            result, had_fails = self.orchestrate_slurm_monte_carlo(
-                global_overrides=global_overrides,
-                resume=resume,
-                trial_ids=trial_ids,
-            )
+            try:
+                result, had_fails = self.orchestrate_slurm_monte_carlo(
+                    global_overrides=global_overrides,
+                    resume=resume,
+                    trial_ids=trial_ids,
+                )
+            except (BdbQuit, KeyboardInterrupt):
+                print("\n")
+                logger.error("Aborted SLURM orchestration!")
+                result, had_fails = ([], True)
         else:
             msg = f"A SLURM configuration for {self.config.__class__.__name__} has not been implemented."
             logger.error(msg)
@@ -596,6 +603,27 @@ class MojoRunner:
         return results, bool(status_tracker.failed_trial_nums)
 
     @staticmethod
+    def get_slurm_array_string(ids: list[int]) -> str:
+        """Collapses [0, 1, 2, 5, 6] into '0-2,5-6' for SLURM."""
+        if not ids:
+            return ""
+
+        ranges = []
+        # Identify groups of consecutive integers
+        for _, group in itertools.groupby(
+            enumerate(sorted(ids)), lambda x: x[1] - x[0]
+        ):
+            group = list(group)
+            start = group[0][1]
+            end = group[-1][1]
+            if start == end:
+                ranges.append(str(start))
+            else:
+                ranges.append(f"{start}-{end}")
+
+        return ",".join(ranges)
+
+    @staticmethod
     def get_slurm_partitions() -> tuple[list[str], str | None]:
         """Queries sinfo for available partitions and identifies the default."""
         try:
@@ -626,6 +654,159 @@ class MojoRunner:
             pass
         return [], None
 
+    @staticmethod
+    def normalize_to_mb(mem_str: str) -> int:
+        """Converts SLURM memory strings (e.g., '1000', '1G', '1024M') to integer MB."""
+        # Split the number from the unit (e.g., '1024M' -> '1024', 'M')
+        match = re.match(r"(\d+)([KMGTP]?)", mem_str.upper())
+        if not match:
+            return 0
+
+        value, unit = match.groups()
+        value = int(value)
+
+        # SLURM units are powers of 1024
+        multipliers = {
+            "K": 1 / 1024,  # Kilobytes to MB
+            "M": 1,  # Megabytes
+            "G": 1024,  # Gigabytes to MB
+            "T": 1024**2,  # Terabytes to MB
+            "P": 1024**3,  # Petabytes to MB
+        }
+
+        return int(value * multipliers.get(unit or "M", 1))
+
+    @staticmethod
+    def format_bytes(mb_value: int) -> str:
+        """Scales MB back up to the most readable unit (G, T, etc.)."""
+        units = ["M", "G", "T", "P"]
+        value = float(mb_value)
+        unit_index = 0
+
+        # Keep dividing by 1024 as long as it's a clean multiple
+        while value >= 1024 and unit_index < len(units) - 1:
+            value /= 1024
+            unit_index += 1
+
+        # If it's a whole number (like 1.0G), show it as 1G.
+        # Otherwise, show one decimal place (like 1.5G).
+        if value.is_integer():
+            return f"{int(value)}{units[unit_index]}"
+        return f"{value:.1f}{units[unit_index]}"
+
+    @staticmethod
+    def get_slurm_node_mem_limit(partition_name: str) -> str:
+        """Finds the MINIMUM RealMemory limit, normalized to MB."""
+        try:
+            # 1. Get nodes from partition
+            part_info = subprocess.run(
+                ["scontrol", "show", "partition", partition_name, "-o"],
+                capture_output=True,
+                text=True,
+            ).stdout
+            node_match = re.search(r"\bNodes=(\S+)", part_info)
+            if not node_match:
+                return "<UNKNOWN>"
+
+            # 2. Get node info (can handle ranges like c[1-2])
+            node_info = subprocess.run(
+                ["scontrol", "show", "node", node_match.group(1), "-o"],
+                capture_output=True,
+                text=True,
+            ).stdout
+
+            # 3. Find all RealMemory values (capturing optional suffixes)
+            # Regex captures digits and any trailing letters (like G or M)
+            mem_matches = re.findall(r"\bRealMemory=(\d+[KMGTP]?)", node_info)
+            if mem_matches:
+                # Normalize every match to MB and find the lowest one
+                min_mb = min(MojoRunner.normalize_to_mb(m) for m in mem_matches)
+                return MojoRunner.format_bytes(min_mb)
+
+        except Exception:
+            pass
+
+        return "<UNKNOWN>"
+
+    @staticmethod
+    def get_slurm_cpu_limit(partition_name: str) -> str:
+        """Finds the minimum of the max allowed CPUs (CPUTot) among nodes in a partition."""
+        try:
+            # 1. Get the nodes in the partition
+            part_cmd = ["scontrol", "show", "partition", partition_name, "-o"]
+            part_info = subprocess.run(part_cmd, capture_output=True, text=True).stdout
+
+            node_match = re.search(r"\bNodes=(\S+)", part_info)
+            if not node_match:
+                return "<UNKNOWN>"
+
+            # 2. Get the node info
+            node_cmd = ["scontrol", "show", "node", node_match.group(1), "-o"]
+            nodes_info = subprocess.run(node_cmd, capture_output=True, text=True).stdout
+
+            # 3. Find all CPUTot values (The total physical/logical CPUs on the node)
+            cpu_values = re.findall(r"\bCPUTot=(\d+)", nodes_info)
+
+            if cpu_values:
+                # Find the minimum to ensure any node can handle the task
+                return str(min(int(v) for v in cpu_values))
+
+        except Exception:
+            pass
+
+        return "<UNKNOWN>"
+
+    @staticmethod
+    def slurm_time_to_seconds(time_str: str) -> int:
+        """Converts SLURM time (D-HH:MM:SS or HH:MM:SS) to total seconds."""
+        if time_str.upper() == "UNLIMITED":
+            return -1
+
+        # Format: Days-Hours:Minutes:Seconds
+        days = 0
+        if "-" in time_str:
+            days_part, time_str = time_str.split("-")
+            days = int(days_part)
+
+        parts = list(map(int, time_str.split(":")))
+        if len(parts) == 3:  # HH:MM:SS
+            return days * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
+        if len(parts) == 2:  # MM:SS
+            return days * 86400 + parts[0] * 60 + parts[1]
+        if len(parts) == 1:  # MM
+            return days * 86400 + parts[0] * 60
+        return 0
+
+    @staticmethod
+    def get_slurm_time_limit(partition_name: str) -> str:
+        """Finds the MaxTime limit for a specific partition."""
+        try:
+            # Get partition info
+            part_cmd = ["scontrol", "show", "partition", partition_name, "-o"]
+            part_info = subprocess.run(part_cmd, capture_output=True, text=True).stdout
+
+            # Look for MaxTime= followed by the time string (e.g., 1-00:00:00 or UNLIMITED)
+            time_match = re.search(r"\bMaxTime=(\S+)", part_info)
+            if time_match:
+                return time_match.group(1)
+
+        except Exception:
+            pass
+
+        return "<UNKNOWN>"
+
+    @staticmethod
+    def get_max_array_size() -> int:
+        """Queries the global SLURM configuration for MaxArraySize."""
+        try:
+            result = subprocess.run(
+                ["scontrol", "show", "config"], capture_output=True, text=True
+            ).stdout
+            match = re.search(r"MaxArraySize=(\d+)", result)
+            return int(match.group(1)) if match else 1001
+        except Exception:
+            return 1001
+
     def orchestrate_slurm_monte_carlo(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
@@ -637,7 +818,10 @@ class MojoRunner:
         from rich.prompt import Confirm, Prompt
 
         console = Console()
+
+        project_root = Path.cwd().resolve()
         self.workdir.mkdir(parents=True, exist_ok=True)
+        (self.workdir / "logs").mkdir(exist_ok=True)
 
         # persist overrides so workers can access them
         overrides_path = self.workdir.resolve() / "global_overrides.json"
@@ -678,6 +862,8 @@ class MojoRunner:
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
             return [], False
+        else:
+            logger.info(f"{len(to_run)} trials were identified for running.")
 
         # reconstruct the CLI command for the worker
         gen_args_str = " ".join([f'--gen-arg "{a}"' for a in self.gen_args])
@@ -695,13 +881,18 @@ class MojoRunner:
             f'--overrides "{overrides_path}"' if len(global_overrides) > 0 else ""
         )
 
+        # get the path to the mujoco-mojo CLI executable
+        py_bin_dir = Path(sys.executable).parent.resolve()
+        mojo_cmd = py_bin_dir / "mujoco-mojo"
+
         cmd = (
-            f"{sys.executable} -m mujoco_mojo run monte-carlo "
+            f"{mojo_cmd} run monte-carlo "
             f'--generator "{self.generator_path}" '
             f"{runtime_flag} {seed_flag} {overrides_flag} "
             f'--workdir "{self.workdir.resolve()}" '
             f"{gen_args_str} {gen_kwargs_str} "
             f"{run_args_str} {run_kwargs_str} "
+            f"--n-trials 0 "  # force to zero to prevent an expected warning
             f"--trial-id $SLURM_ARRAY_TASK_ID "  # execute its onw trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method
             f"--n-proc 1"  # A worker only needs 1 process
@@ -711,45 +902,117 @@ class MojoRunner:
         available_partitions, default_partition = self.get_slurm_partitions()
 
         console.print(
-            "\n[bold cyan] MuJoCo Mojo Orchestrator: SLURM Resource Setup[/bold cyan]"
+            "\n[bold cyan]MuJoCo Mojo Orchestrator: SLURM Resource Setup[/bold cyan]"
         )
+        console.print(f"\t            [dim]Python:[/dim] {sys.executable}")
+        console.print(f"\t              [dim]Root:[/dim] {project_root}")
+        console.print(f"\t[dim]mujoco-mojo binary:[/dim] {mojo_cmd}\n")
 
         # Standard colors only for Rich compatibility
-        cpus_per_task = Prompt.ask("  [white]CPUs per task[/]", default="1")
-        mem_per_node = Prompt.ask(
-            "  [white]Memory per node[/] (e.g., 4G)", default="4G"
-        )
-        time_limit = Prompt.ask("  [white]Time limit[/] (HH:MM:SS)", default="01:00:00")
-
+        job_name = Prompt.ask("  [white]Job Name[/]", default="mojo-sim")
         if available_partitions:
             # Use the actual SLURM default if we found one, otherwise the first in list
             initial_default = (
                 default_partition if default_partition else available_partitions[0]
-            )
-            console.print(
-                f"  Available partitions: [magenta bold]{', '.join(available_partitions)}[/magenta bold]"
             )
 
             partition = Prompt.ask(
                 "  [white]Partition[/]",
                 choices=available_partitions,
                 default=initial_default,
-                show_choices=False,
             )
         else:
             partition = Prompt.ask(
                 "  [white]Partition[/] [dim](optional)[/]", default=""
             )
 
+        # === get partition limits ===
+        cpu_limit = self.get_slurm_cpu_limit(partition)
+        mem_limit = self.get_slurm_node_mem_limit(partition)
+        time_limit_hint = self.get_slurm_time_limit(partition)
+
+        # === get cpus per task ===
+        cpus_per_task = Prompt.ask(
+            f"  [white]CPUs per task[/] [dim](Node Limit: {cpu_limit})[/]",
+            default="1",
+        )
+        cpus_per_task = max([1, int(cpus_per_task)])
+        if cpu_limit != "<UNKNOWN>" and cpus_per_task > int(cpu_limit):
+            console.print(
+                f"\n[bold red]WARNING:[/] Requested CPUs ({cpus_per_task}) exceeds "
+                f"the physical node limit ({cpu_limit})."
+            )
+            if not Confirm.ask("Do you want to proceed anyway?", default=False):
+                return [], True
+
+        # === get memory ===
+        mem_per_node = Prompt.ask(
+            f"  [white]Memory per node[/] (e.g., 256M) [dim](Node Limit: {mem_limit})[/]",
+            default=mem_limit,
+        )
+        if self.normalize_to_mb(mem_limit) > 0 and self.normalize_to_mb(
+            mem_per_node
+        ) > self.normalize_to_mb(mem_limit):
+            console.print(
+                f"\n[bold red]WARNING:[/] Requested memory ({mem_per_node}) exceeds "
+                f"the partition node limit ({mem_limit})."
+            )
+            console.print("[red]This job will likely be rejected by SLURM.[/]\n")
+            if not Confirm.ask("Do you want to proceed anyway?", default=False):
+                return [], True
+
+        # === get time ===
+        time_limit = Prompt.ask(
+            f"  [white]Time limit[/] (HH:MM:SS) [dim](Partition Limit: {time_limit_hint})[/]",
+            default="01:00:00",
+        )
+        requested_seconds = self.slurm_time_to_seconds(time_limit)
+        max_seconds = self.slurm_time_to_seconds(time_limit_hint)
+        if requested_seconds > max_seconds and max_seconds != -1:  # -1 means infinite
+            console.print(
+                f"\n[bold red]WARNING:[/] Requested time ({time_limit}) exceeds "
+                f"partition MaxTime ({time_limit_hint})."
+            )
+            if not Confirm.ask("Proceed anyway?", default=False):
+                return [], True
+
+        current_pythonpath = os.getenv("PYTHONPATH", "")
+        if str(project_root) not in current_pythonpath:
+            console.print(
+                f"\n[yellow]Warning:[/] Project root [italic]{project_root}[/] is not in your PYTHONPATH."
+            )
+            if Confirm.ask(
+                "Should Mojo automatically include it in the SLURM submission?",
+                default=True,
+            ):
+                # We'll handle this in the sbatch content generation
+                include_root_in_path = True
+            else:
+                include_root_in_path = False
+        else:
+            include_root_in_path = True
+
         partition_line = f"#SBATCH --partition={partition}" if partition else ""
+        python_path_line = (
+            f"export PYTHONPATH=$PYTHONPATH:{project_root}"
+            if include_root_in_path
+            else ""
+        )
 
         # generate the .sh script
-        array_range = ",".join(map(str, to_run))
-        script_path = self.workdir / "mujoco_mojo_submit.sh"
-        project_root = Path.cwd().resolve()
+        max_array = self.get_max_array_size()
+        if len(to_run) > max_array:
+            console.print(
+                f"\n[bold red]ERROR:[/] Trial count ({len(to_run)}) exceeds "
+                f"SLURM MaxArraySize ({max_array})."
+            )
+            if not Confirm.ask("Proceed anyway?", default=False):
+                return [], True
+        array_range = self.get_slurm_array_string(to_run)
+        script_path = (self.workdir / "mujoco_mojo_submit.sh").resolve()
 
         sbatch_content = f"""#!/bin/bash
-#SBATCH --job-name=mojo
+#SBATCH --job-name={job_name}
 #SBATCH --array={array_range}
 #SBATCH --output={self.workdir.resolve()}/logs/trial_%a.log
 #SBATCH --cpus-per-task={cpus_per_task}
@@ -759,7 +1022,7 @@ class MojoRunner:
 
 # Move to the project root so imports work
 cd {project_root}
-export PYTHONPATH=$PYTHONPATH:{project_root}
+{python_path_line}
 
 # Execute the worker command
 {cmd}
@@ -778,8 +1041,29 @@ export PYTHONPATH=$PYTHONPATH:{project_root}
                 ["sbatch", str(script_path)], capture_output=True, text=True
             )
             if result.returncode == 0:
+                job_id_msg = result.stdout.strip()
+                # Extract just the numeric ID if possible (e.g. "Submitted batch job 2" -> "2")
+                job_id = job_id_msg.split()[-1] if job_id_msg else "UNKNOWN"
+
+                console.print(f"\n[bold green]Success![/] {job_id_msg}")
+
+                # === Monitoring Dashboard ===
+                console.print("\n[bold cyan]Monitoring Status:[/bold cyan]")
                 console.print(
-                    f"\n[bold green]Success![/] SLURM Job ID: {result.stdout.strip()}"
+                    f"  - [white]Check status:[/]       [green]squeue -j {job_id}[/]"
+                )
+                console.print(
+                    f"  - [white]Watch live:[/]         [green]watch -n 1 squeue -j {job_id}[/]"
+                )
+                console.print(
+                    f"  - [white]View first log:[/]     [green]tail -f {self.workdir.resolve()}/logs/trial_0.log[/]"
+                )
+                console.print(
+                    f"  - [white]Cancel all trials:[/]  [green]scancel {job_id}[/]"
+                )
+
+                console.print(
+                    f"\n[dim]Logs are being written to: {self.workdir.resolve()}/logs/[/]"
                 )
                 return [], False
             else:

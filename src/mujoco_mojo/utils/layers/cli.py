@@ -255,8 +255,8 @@ if True:
     ExecutionModeType = Annotated[
         ExecutionMode,
         typer.Option(
-            "--mode",
-            "-m",
+            "--execution-mode",
+            "-em",
             help="The strategy used to execute trials.",
             case_sensitive=False,
         ),
@@ -456,6 +456,8 @@ def run_monte_carlo(
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
+    workdir = workdir.resolve()
+
     global_overrides = None
     if overrides:
         overrides = overrides.resolve()
@@ -513,21 +515,41 @@ def run_monte_carlo(
         trial_ids=trial_ids,
     )
 
-    if had_fails:
-        preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
-        logger.error(
-            f"Monte Carlo finished with failures! See results in {runner.workdir.resolve()}",
-            extra={"file_only": True},
-        )
-    else:
-        preamble = "[bold green]Monte Carlo finished![/bold green]"
-        logger.info(
-            f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
-            extra={"file_only": True},
-        )
-    console.print(
-        f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
-    )
+    match execution_mode:
+        case ExecutionMode.LOCAL:
+            if had_fails:
+                preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
+                logger.error(
+                    f"Monte Carlo finished with failures! See results in {runner.workdir.resolve()}",
+                    extra={"file_only": True},
+                )
+            else:
+                preamble = "[bold green]Monte Carlo finished![/bold green]"
+                logger.info(
+                    f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
+                    extra={"file_only": True},
+                )
+            console.print(
+                f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
+            )
+        case ExecutionMode.SLURM:
+            if had_fails:
+                finished_msg = (
+                    "[bold red]Failed to orchestrate SLURM Monte Carlo![/bold red]"
+                )
+                logger.error(
+                    "Failed to orchestrate SLURM Monte Carlo!",
+                    extra={"file_only": True},
+                )
+            else:
+                finished_msg = (
+                    "[bold green]SLURM Monte Carlo orchestration finished![/bold green]"
+                )
+                logger.info(
+                    "SLURM Monte Carlo orchestration finished!",
+                    extra={"file_only": True},
+                )
+            console.print(f"\n{finished_msg}")
 
     raise typer.Exit()
 
@@ -553,9 +575,9 @@ def run_dashboard(
 
     import mujoco_mojo.utils.dashboard
     from mujoco_mojo.utils.dashboard import dashboard_app
-    from mujoco_mojo.utils.statusing import STATUS_FNAME, JobStatus
+    from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
 
-    job = JobStatus.model_validate_json((workdir / STATUS_FNAME).read_text())
+    job = JobStatus.model_validate_json((workdir / JOB_STATUS_FNAME).read_text())
     job.refresh_from_disk(n_proc=n_proc)
     mujoco_mojo.utils.dashboard.CURRENT_JOB = job
 

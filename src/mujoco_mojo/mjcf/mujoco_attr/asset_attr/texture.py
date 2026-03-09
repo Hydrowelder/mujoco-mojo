@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import mimetypes
+from pathlib import Path
 from typing import ClassVar, Self
 
 import mujoco
@@ -138,68 +138,51 @@ class Texture(XMLModel):
         if not single_file and not cube_files:
             return self
 
-        # gather MIME types and validate
-        # this ensures a few things
-        # * all MIMES are matching
-        # * content_type matches the MIMEs
-        # * content_type is defined
+        # 3. Extension Mapping
+        # Maps common extensions to your TextureMIME enum
+        EXT_TO_MIME = {
+            ".png": TextureMIME.PNG,
+            ".ktx": TextureMIME.KTX,
+            ".ktx2": TextureMIME.KTX,
+            ".mjr": TextureMIME.VND,  # Typical extension for mujoco custom textures
+        }
 
         paths = [single_file] if single_file else cube_files
         invalid_paths = []
-        content_type = None
+        detected_mime = None
+
+        # 4. Process and Validate
         for path in paths:
-            mime, _ = mimetypes.guess_file_type(path, strict=True)
-            if mime is None:
-                invalid_paths.append((path, "unable to determine type"))
-            else:
-                try:
-                    path_mime = TextureMIME(mime)
+            ext = Path(path).suffix.lower()
+            path_mime = EXT_TO_MIME.get(ext)
 
-                    # compare if the content type is already a MIME
-                    if isinstance(self.content_type, TextureMIME):
-                        if path_mime != self.content_type:
-                            msg = (
-                                f"MIME type for {path} did not match what was defined."
-                            )
-                            logger.error(msg)
-                            raise Exception(msg)
-                    else:
-                        if content_type is None:
-                            content_type = path_mime
-                        else:
-                            if path_mime != content_type:
-                                msg = f"MIME type for {path} did not match what was defined."
-                                logger.error(msg)
-                                raise Exception(msg)
-                except Exception:
-                    invalid_paths.append((path, mime))
-                    continue
+            if path_mime is None:
+                invalid_paths.append((path, f"Unsupported extension '{ext}'"))
+                continue
 
-        # print invalid paths and mimes before raising validation error
-        if invalid_paths:
-
-            def _format_invalid_paths(
-                invalid_paths: list[tuple[DepPath, str]],
-                expected: TextureMIME | None,
-            ) -> str:
-                lines = []
-                for path, mime in invalid_paths:
-                    lines.append(f"  - {path!s} (detected: {mime!r})")
-
-                expected_line = (
-                    f"\nExpected MIME: {expected.value}"
-                    if expected is not None
-                    else "\nExpected MIME: one of "
-                    + ", ".join(m.value for m in TextureMIME)
+            # Ensure all files in the group (like a skybox) share the same type
+            if detected_mime is None:
+                detected_mime = path_mime
+            elif path_mime != detected_mime:
+                invalid_paths.append(
+                    (path, f"Mismatched type (expected {detected_mime.name})")
                 )
 
-                return "\n".join(lines) + expected_line
+        # 5. Cross-reference with defined content_type
+        if detected_mime:
+            if self.content_type is not None:
+                # Ensure the provided content_type matches the files found
+                if self.content_type != detected_mime:
+                    msg = f"Detected {detected_mime.value} but content_type is {self.content_type}"
+                    raise ValueError(msg)
+            else:
+                # Automatically assign if missing
+                self.content_type = detected_mime
 
-            msg = "Invalid texture file MIME types detected:\n" + _format_invalid_paths(
-                invalid_paths, self.content_type
-            )
-            logger.error(msg)
-            raise ValueError(msg)
+        # 6. Error Reporting
+        if invalid_paths:
+            error_msg = "\n".join([f"  - {p}: {err}" for p, err in invalid_paths])
+            raise ValueError(f"Texture validation failed:\n{error_msg}")
 
         return self
 

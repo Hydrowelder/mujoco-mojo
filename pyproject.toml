@@ -7,7 +7,7 @@ name = "mujoco-mojo"
 version = "1.1.0"
 description = "A complete MJCF lifecycle and trial orchestration suite for MuJoCo, powered by Pydantic v2."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "coacd>=1.0.7",
     "fastapi>=0.134.0",
