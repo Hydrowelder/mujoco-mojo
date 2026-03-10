@@ -5,6 +5,7 @@ import itertools
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from bdb import BdbQuit
@@ -32,6 +33,7 @@ from mujoco_mojo.utils.defaults import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import (
+    JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
     Completion,
     ExecutionMode,
@@ -351,6 +353,62 @@ class MojoRunner:
             encoding="utf-8",
         )
 
+    @staticmethod
+    def force_remove_workdir(path: Path):
+        if not path.exists():
+            return
+
+        import time
+
+        from rich.live import Live
+        from rich.panel import Panel
+
+        with Live(refresh_per_second=4) as live:
+            for i in range(10, 0, -1):
+                live.update(
+                    Panel(
+                        f"[bold red]DANGER:[/] clean_workdir is active. \n"
+                        f"Deleting: [cyan]{path}[/]\n"
+                        f"Continuing in [bold yellow]{i}[/] seconds... ([bold yellow]Ctrl+C[/] to abort)",
+                        title="Cleanup Countdown",
+                        border_style="red",
+                    )
+                )
+                time.sleep(1)
+        logger.info(f"Countdown finished. Commencing cleanup of {path}")
+
+        # try to chmod and remove first
+        try:
+            for root, dirs, files in os.walk(path):
+                for d in dirs:
+                    d_path = os.path.join(root, d)
+                    try:
+                        os.chmod(d_path, os.stat(d_path).st_mode | stat.S_IRWXU)
+                    except PermissionError:
+                        pass  # move to rm -rf instead
+                for f in files:
+                    f_path = os.path.join(root, f)
+                    try:
+                        os.chmod(f_path, os.stat(f_path).st_mode | stat.S_IWUSR)
+                    except PermissionError:
+                        pass
+
+            shutil.rmtree(path)
+            return
+        except Exception:
+            logger.warning(
+                f"Python-native cleanup failed for {path}. Attempting system rm -rf..."
+            )
+
+        # nuclear option!
+        try:
+            subprocess.run(["rm", "-rf", str(path.resolve())], check=True)
+            logger.info(f"System rm -rf successfully cleared {path}")
+        except subprocess.CalledProcessError as e:
+            msg = f"Ultimate cleanup failure: {path} is being held by the system. Error: {e}"
+            logger.error(msg)
+            raise RuntimeError(msg)
+
     def run(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
@@ -360,19 +418,30 @@ class MojoRunner:
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
+        if clean_workdir:
+            if resume:
+                msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
+                logger.error(msg)
+                raise ValueError(msg)
+
+            self.force_remove_workdir(self.workdir)
+
+        self.workdir.mkdir(parents=True, exist_ok=True)
+        if not (self.workdir / ".gitignore").exists():
+            (self.workdir / ".gitignore").write_text("*", encoding="utf-8")
+        self.capture_environment()
+
         match execution_mode:
             case ExecutionMode.LOCAL:
                 return self.run_local(
                     global_overrides=global_overrides,
                     resume=resume,
-                    clean_workdir=clean_workdir,
                     trial_ids=trial_ids,
                 )
             case ExecutionMode.SLURM:
                 return self.orchestrate_slurm(
                     global_overrides=global_overrides,
                     resume=resume,
-                    clean_workdir=clean_workdir,
                     trial_ids=trial_ids,
                 )
             case _:
@@ -384,27 +453,8 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = DEFAULT_RESUME,
-        clean_workdir: bool = False,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
-
-        if clean_workdir and resume:
-            msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if clean_workdir:
-            try:
-                shutil.rmtree(self.workdir)
-            except Exception as e:
-                msg = f"Failed to delete workdir {self.workdir}: {e}"
-                logger.exception(msg)
-                raise RuntimeError(msg)
-
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        if not (self.workdir / ".gitignore").exists():
-            (self.workdir / ".gitignore").write_text("*", encoding="utf-8")
-        self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
             result, had_fails = self.run_monte_carlo(
@@ -428,14 +478,10 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray],
         resume: bool = DEFAULT_RESUME,
-        clean_workdir: bool = False,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
-        self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / "logs").mkdir(exist_ok=True)
-
-        self.capture_environment()
 
         if isinstance(self.config, MonteCarloConfig):
             try:
@@ -495,12 +541,13 @@ class MojoRunner:
 
             return [result], trial_status.completion == Completion.FAILED
 
+        job_trial_nums = trial_ids if trial_ids else self.config.trial_nums
+
         # initialize the status tracker
         status_tracker = JobStatus(
             workdir=self.workdir.resolve(),
             job_type=JobType.MONTE_CARLO,
             execution_mode=ExecutionMode.LOCAL,
-            n_trial=self.config.n_trial,
             n_proc=self.config.n_proc,
             seed=self.seed,
             padding_style=self.config.padding_style,
@@ -510,19 +557,14 @@ class MojoRunner:
             gen_kwargs_used=bool(self.gen_kwargs),
             run_args_used=bool(self.run_args),
             run_kwargs_used=bool(self.run_kwargs),
+            trial_nums=job_trial_nums,
         )
-        if trial_ids:
-            status_tracker._registry = dict(
-                [(tn, Completion.INCOMPLETE) for tn in trial_ids]
-            )
-        else:
-            status_tracker._registry = dict(
-                [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
-            )
 
         # decide which trials to execute
         if resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
+        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+
         to_run = status_tracker.pending_trial_nums
 
         results = []
@@ -549,11 +591,7 @@ class MojoRunner:
                     try:
                         result, trial_status = f.result()
                         results.append(result)
-                        status_tracker.update_trial(
-                            trial_num=tn,
-                            trial_timedelta=trial_status.td,
-                            completion=trial_status.completion,
-                        )
+                        status_tracker.update_trial(status=trial_status)
                     except (BdbQuit, KeyboardInterrupt):
                         # user is quitting from breakpoint() or CTRL+C
                         raise
@@ -561,11 +599,11 @@ class MojoRunner:
                         logger.exception(f"Trial {tn} failed: {e}")
                         results.append(None)
                         status_tracker.update_trial(
-                            trial_num=tn,
-                            trial_timedelta=None,
-                            completion=Completion.FAILED,
+                            status=TrialStatus(
+                                trial_num=tn, completion=Completion.FAILED
+                            )
                         )
-                    status_tracker.generate_report(n_proc=self.config.n_proc)
+                    status_tracker.generate_report()
             except (BdbQuit, KeyboardInterrupt):
                 # allows killing the job with one CTRL+C
                 logger.warning("Interrupt recieved. Stopping all trials.")
@@ -582,9 +620,7 @@ class MojoRunner:
                     )
                     results.append(result)
                     status_tracker.update_trial(
-                        trial_num=tn,
-                        trial_timedelta=trial_status.td,
-                        completion=trial_status.completion,
+                        status=trial_status,
                     )
                 except (BdbQuit, KeyboardInterrupt):
                     # user is quitting from breakpoint() or CTRL+C
@@ -593,13 +629,11 @@ class MojoRunner:
                     logger.exception(f"A trial failed with error: {e}")
                     results.append(None)
                     status_tracker.update_trial(
-                        trial_num=tn,
-                        trial_timedelta=None,
-                        completion=Completion.FAILED,
+                        status=TrialStatus(trial_num=tn, completion=Completion.FAILED)
                     )
-                status_tracker.generate_report(n_proc=self.config.n_proc)
+                status_tracker.generate_report()
 
-        status_tracker.generate_report(n_proc=self.config.n_proc, alert_generation=True)
+        status_tracker.generate_report(alert_generation=True)
         return results, bool(status_tracker.failed_trial_nums)
 
     @staticmethod
@@ -820,8 +854,6 @@ class MojoRunner:
         console = Console()
 
         project_root = Path.cwd().resolve()
-        self.workdir.mkdir(parents=True, exist_ok=True)
-        (self.workdir / "logs").mkdir(exist_ok=True)
 
         # persist overrides so workers can access them
         overrides_path = self.workdir.resolve() / "global_overrides.json"
@@ -830,34 +862,30 @@ class MojoRunner:
             overrides_path.write_text(global_overrides.model_dump_json(indent=4))
 
         # initialize the status tracker
-        if trial_ids:
-            to_run = trial_ids
-        else:
-            # use status tracker to find jobs if specific trial ids wernt provided
-            status_tracker = JobStatus(
-                workdir=self.workdir.resolve(),
-                job_type=JobType.MONTE_CARLO,
-                execution_mode=ExecutionMode.SLURM,
-                n_trial=self.config.n_trial,
-                n_proc=self.config.n_proc,
-                seed=self.seed,
-                padding_style=self.config.padding_style,
-                generator=MojoRunner.inspect_protocol(self.generator),
-                runtime=MojoRunner.inspect_protocol(self.runtime),
-                gen_args_used=bool(self.gen_args),
-                gen_kwargs_used=bool(self.gen_kwargs),
-                run_args_used=bool(self.run_args),
-                run_kwargs_used=bool(self.run_kwargs),
-            )
-            # configure the registry to see all trial_nums
-            status_tracker._registry = dict(
-                [(tn, Completion.INCOMPLETE) for tn in self.config.trial_nums]
-            )
+        job_trial_nums = trial_ids if trial_ids else self.config.trial_nums
 
-            # decide which trials to execute
-            if resume:
-                status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
-            to_run = status_tracker.pending_trial_nums
+        status_tracker = JobStatus(
+            workdir=self.workdir.resolve(),
+            job_type=JobType.MONTE_CARLO,
+            execution_mode=ExecutionMode.SLURM,
+            n_proc=self.config.n_proc,
+            seed=self.seed,
+            padding_style=self.config.padding_style,
+            generator=MojoRunner.inspect_protocol(self.generator),
+            runtime=MojoRunner.inspect_protocol(self.runtime),
+            gen_args_used=bool(self.gen_args),
+            gen_kwargs_used=bool(self.gen_kwargs),
+            run_args_used=bool(self.run_args),
+            run_kwargs_used=bool(self.run_kwargs),
+            trial_nums=job_trial_nums,
+        )
+
+        # decide which trials to execute
+        if resume:
+            status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
+        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+
+        to_run = status_tracker.pending_trial_nums
 
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")

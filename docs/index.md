@@ -76,5 +76,6 @@ Install `mujoco-mojo` in your project using the following:
             --n-proc 1
         ```
 
+* Support for running jobs with SLURM for distributed compute
 * Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection
 * Built in Rich logging for terminal and a rotating file handler for persistent logs

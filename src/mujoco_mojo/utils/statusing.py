@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 Step = Literal["pending", "generating", "solving", "done"]
 """Steps a trial can have"""
 
-TRIAL_STATUS_FNAME = "status.json"
+TRIAL_STATUS_FNAME = "trial_status.json"
 """Filename of trial status files."""
 
 JOB_STATUS_FNAME = "job_status.json"
@@ -31,6 +31,7 @@ JOB_STATUS_FNAME = "job_status.json"
 
 class JobType(StrEnum):
     MONTE_CARLO = "monte_carlo"
+    OPTIMIZE = "optimize"
 
 
 class ExecutionMode(StrEnum):
@@ -162,130 +163,142 @@ class JobStatus(MojoBaseModel):
     """
 
     started_by: str = Field(default_factory=getpass.getuser)
+    """Who owns the job."""
+
     job_type: JobType
+    """What type of job it is."""
+
     execution_mode: ExecutionMode
+    """What execution mode the job was run with."""
+
     workdir: Path
-    n_trial: int
+    """Job workdir."""
+
     n_proc: int
+    """Number of processors used to define the job."""
+
     padding_style: str
+    """Trial folder number padding style."""
+
     seed: int | None
+    """Seed used to generate the job."""
+
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    """Initial start time of the job."""
+
     elapsed: timedelta = Field(default=timedelta(0))
+    """Time elapsed running the job."""
+
     average_trial_duration: timedelta = Field(default=timedelta(0))
+
     generator: tuple[str, Path | None, int | None]
+    """What generator was used. Name of runtime, Path to the runtime, and linenumber."""
+
     runtime: tuple[str, Path | None, int | None]
+    """What runtime was used. Name of runtime, Path to the runtime, and linenumber."""
+
     gen_args_used: bool
+    """Whether or not *args were used for the generator."""
+
     gen_kwargs_used: bool
+    """Whether or not **kwargs were used for the generator."""
+
     run_args_used: bool
+    """Whether or not *args were used for the runtime."""
+
     run_kwargs_used: bool
-    _registry: dict[int, Completion] = PrivateAttr(default_factory=dict)
+    """Whether or not **kwargs were used for the runtime."""
+
+    trial_nums: list[int]
+    """The exhaustive list of trial identifiers expected for this job."""
+
+    _cache: dict[int, TrialStatus] = PrivateAttr(default_factory=dict)
+    """Internal cache of TrialStatus objects to avoid redundant I/O."""
 
     @property
-    def trial_nums(self) -> list[int]:
-        from mujoco_mojo.utils.runner import MonteCarloConfig
+    def _registry(self) -> dict[int, Completion]:
+        """Provides a mapping of trial_num to its last known completion status."""
+        reg = {tn: Completion.INCOMPLETE for tn in self.trial_nums}
+        for tn, status in self._cache.items():
+            reg[tn] = status.completion
 
-        return MonteCarloConfig._trial_nums(self.n_trial)
+        return reg
+
+    @property
+    def n_trial(self) -> int:
+        """Number of trials used to define the job."""
+        return len(self.trial_nums)
 
     @property
     def n_remaining(self) -> int:
-        return self.n_trial - len(self._registry)
+        return self.n_trial - self.n_done
 
     def trial_num_to_path(self, trial_num: int) -> Path:
         return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
 
-    def trial_statuses(self, n_proc: int = 1) -> dict[int, TrialStatus | None]:
-        """
-        Scans the workdir to serialize trial statuses.
-
-        This is done using:
-        1. `glob` to quickly find the trials which at least started.
-        2. Parallel pooling to process the globbed files to reduce I/O wait time.
-        """
-        # discover started trials
-        status_files = list(
-            (self.workdir / "trials").glob(f"trial_*/{TRIAL_STATUS_FNAME}")
-        )
-
-        # map of trial_num to path
-        found_map: dict[int, Path] = {}
-        for p in status_files:
-            try:
-                tn = int(p.parent.name.split("_")[-1])
-                found_map[tn] = p
-            except (ValueError, IndexError):
-                continue
-
-        def _check_file(tn: int) -> TrialStatus | None:
-            """Worker function for the TreadPool."""
-            # if the status file didnt exist the trial is pending
-            if tn not in found_map:
-                return None
-
-            try:
-                status = TrialStatus.model_validate_json(found_map[tn].read_text())
-                if status.completion == Completion.INCOMPLETE:
-                    return None
-                else:
-                    return status
-            except Exception:
-                # if the JSON was corrupted, assume it needs to be rerun
-                return None
-
-        # run the checks in parallel
-        max_workers = n_proc if n_proc > 1 else 1
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_check_file, self.trial_nums))
-
-        return {
-            tn: status
-            for tn, status in zip(self.trial_nums, results)
-            if status is not None
-        }
-
     def refresh_from_disk(self, n_proc: int = 1) -> None:
         """
-        Scans the workdir to identify which trials still need execution.
-
-        This is done using:
-        1. `glob` to quickly find the trials which at least started.
-        2. Parallel pooling to process the globbed files to reduce I/O wait time.
+        Scans the workdir to identify which trials still need execution, but only for runs not already in the cache (i.e., completed).
         """
-        if n_proc < 1:
-            n_proc = 1
+        max_workers = max(1, n_proc)
 
-        for tn, status in self.trial_statuses(n_proc=n_proc).items():
-            self._registry[tn] = (
-                status.completion if status is not None else Completion.INCOMPLETE
-            )
+        needed_tns = [
+            tn
+            for tn in self.trial_nums
+            if tn not in self._cache
+            or self._cache[tn].completion == Completion.INCOMPLETE
+        ]
+
+        if not needed_tns:
+            return
+
+        def _load_status(tn: int) -> tuple[int, TrialStatus | None]:
+            path = self.trial_num_to_path(tn) / TRIAL_STATUS_FNAME
+            if not path.exists():
+                return tn, None
+            try:
+                return tn, TrialStatus.model_validate_json(path.read_text())
+            except Exception:
+                return tn, None
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(_load_status, needed_tns))
+
+        for tn, status in results:
+            if status is not None:
+                self._cache[tn] = status
+
+        success_durations = [
+            s.td.total_seconds()
+            for s in self._cache.values()
+            if s.completion == Completion.SUCCESS
+        ]
+        if success_durations:
+            avg_sec = sum(success_durations) / len(success_durations)
+            self.average_trial_duration = timedelta(seconds=avg_sec)
+
+        self.elapsed = datetime.now(UTC) - self.start_time
+        self.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
 
     def total_runtimes(
-        self, n_proc: int = 1
+        self,
     ) -> dict[Literal["pending", "generating", "solving", "total"], float]:
-        time_pending = 0
-        time_generating = 0
-        time_solving = 0
-        for tn, status in self.trial_statuses(n_proc=n_proc).items():
-            if status is None:
-                continue
+        totals = {"pending": 0.0, "generating": 0.0, "solving": 0.0}
 
-            if status.pending.elapsed is None:
-                continue
-            time_pending += status.pending.elapsed
+        for status in self._cache.values():
+            for step_name in totals.keys():
+                step_obj: StepStatus = getattr(status, step_name)
 
-            if status.generating.elapsed is None:
-                continue
-            time_generating += status.generating.elapsed
+                if step_obj.elapsed is not None:
+                    # step is finished, add the recorded duration
+                    totals[step_name] += step_obj.elapsed
+                elif step_obj.started is not None:
+                    # step is currently running, add time spent so far
+                    now = datetime.now(UTC)
+                    totals[step_name] += (now - step_obj.started).total_seconds()
 
-            if status.solving.elapsed is None:
-                continue
-            time_solving += status.solving.elapsed
-
-        return {
-            "pending": time_pending,
-            "generating": time_generating,
-            "solving": time_solving,
-            "total": time_pending + time_generating + time_solving,
-        }
+        totals["total"] = sum(totals.values())
+        return totals  # pyright: ignore[reportReturnType]
 
     @property
     def pending_trial_nums(self) -> list[int]:
@@ -377,35 +390,25 @@ class JobStatus(MojoBaseModel):
                 failed_tn.append(tn)
         return sorted(failed_tn)
 
-    def update_trial(
-        self,
-        trial_num: int,
-        trial_timedelta: timedelta | None,
-        completion: Completion,
-        save: bool = True,
-    ):
+    def update_trial(self, status: TrialStatus, save: bool = True):
         """Updates the internal registry and average trial duration and optionally persists the global status."""
-        # this updater MUST be called before the registry is updated since n_done will change
-        # this avoids incorrect math (n_done would be off by 1) as well as a divide by 0
-        # failed runs do not return a timedelta and it is mathematically better to not include them
-        # instead of include with a runtime of 0.
+        self._cache[status.trial_num] = status
 
-        # for that same reason, n_success is used instead of n_done since that is more accurate
-        if trial_timedelta is not None and completion == Completion.SUCCESS:
-            # including average_trial_duration as an attribute allows us to stop a job and resume it
-            # without having a terrible estimated time remaining. As mentioned before, this comes at the
-            # cost of accuracy for jobs which have failures. But if you have a job with failures, maybe
-            # you should be figuring out why that is instead of being mad that the ETA is off
-            self.average_trial_duration += (
-                trial_timedelta - self.average_trial_duration
-            ) / (self.n_success + 1)
+        success_durations = [
+            s.td.total_seconds()
+            for s in self._cache.values()
+            if s.completion == Completion.SUCCESS and s.td is not None
+        ]
 
-        self._registry[trial_num] = completion
+        if success_durations:
+            self.average_trial_duration = timedelta(
+                seconds=sum(success_durations) / len(success_durations)
+            )
+
         self.elapsed = datetime.now(UTC) - self.start_time
 
         if save:
-            status_path = self.workdir / JOB_STATUS_FNAME
-            self.dump_to_path(status_path, indent=4)
+            self.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
 
     @property
     def is_done(self) -> bool:
@@ -462,7 +465,7 @@ class JobStatus(MojoBaseModel):
         }
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
-    def _run_time_series(self, n_proc: int = 1) -> pd.DataFrame:
+    def _run_time_series(self) -> pd.DataFrame:
         data = {
             "Total Elapsed": str(self.elapsed).split(".")[0],
             "Total Remaining": str(self.time_remaining_average_success).split(".")[0],
@@ -474,7 +477,7 @@ class JobStatus(MojoBaseModel):
 
         if self.is_done:
             # only run this part if the job is done (it is a slow method)
-            runtimes = self.total_runtimes(n_proc=n_proc)
+            runtimes = self.total_runtimes()
             data.update(
                 {
                     "Elapsed Pending": f"{str(timedelta(seconds=runtimes['pending'])).split('.')[0]} ({runtimes['pending'] / runtimes['total']:.2%})",
@@ -496,7 +499,6 @@ class JobStatus(MojoBaseModel):
     def generate_report(
         self,
         filename: str = "MOJO_RUNTIME_REPORT.md",
-        n_proc: int = 1,
         alert_generation: bool = False,
     ) -> None:
         report_path = self.workdir / filename
@@ -525,7 +527,7 @@ class JobStatus(MojoBaseModel):
 ---
 
 ## Run Times:
-{self._run_time_series(n_proc=n_proc).to_markdown(index=False)}
+{self._run_time_series().to_markdown(index=False)}
 
 ---
 
@@ -545,37 +547,37 @@ class JobStatus(MojoBaseModel):
     def to_dashboard_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         # We trigger the disk refresh here so the data is fresh
-        self = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
-        self.refresh_from_disk(n_proc=self.n_proc if n_proc is None else n_proc)
+        obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
+        obj.refresh_from_disk(n_proc=obj.n_proc if n_proc is None else n_proc)
 
-        avg_seconds = self.average_trial_duration.total_seconds()
+        avg_seconds = obj.average_trial_duration.total_seconds()
 
         # Avoid divide by zero if no trials have finished yet
         throughput = 0
         if avg_seconds > 0:
-            throughput = (60.0 / avg_seconds) * self.n_proc
+            throughput = (60.0 / avg_seconds) * obj.n_proc
 
         success_tns = [
-            tn for tn, comp in self._registry.items() if comp == Completion.SUCCESS
+            tn for tn, comp in obj._registry.items() if comp == Completion.SUCCESS
         ]
         last_success_tn = max(success_tns) if success_tns else None
 
         return {
-            "progress": self.progress * 100,
-            "n_success": self.n_success,
-            "n_failed": self.n_failed,
-            "n_trial": self.n_trial,
-            "n_done": self.n_done,
-            "n_remaining": self.n_remaining,
-            "failure_rate": self.failure_rate,
+            "progress": obj.progress * 100,
+            "n_success": obj.n_success,
+            "n_failed": obj.n_failed,
+            "n_trial": obj.n_trial,
+            "n_done": obj.n_done,
+            "n_remaining": obj.n_remaining,
+            "failure_rate": obj.failure_rate,
             "throughput": round(throughput, 1),
-            "avg_duration": str(self.average_trial_duration).split(".")[0],
-            "time_remaining": str(self.time_remaining_average_success).split(".")[0],
-            "elapsed": str(self.elapsed).split(".")[0],
-            "is_complete": self.progress >= 1.0,
-            "failure_tns": self.failed_trial_nums,
+            "avg_duration": str(obj.average_trial_duration).split(".")[0],
+            "time_remaining": str(obj.time_remaining_average_success).split(".")[0],
+            "elapsed": str(obj.elapsed).split(".")[0],
+            "is_complete": obj.progress >= 1.0,
+            "failure_tns": obj.failed_trial_nums,
             "last_success_tn": last_success_tn,
-            "start_time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
-            "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
+            "start_time": f"{obj._utc_to_local(obj.start_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
+            "end_time": f"{obj._utc_to_local(obj.end_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
             "version": f"mujoco-mojo v{version('mujoco-mojo')}",
         }

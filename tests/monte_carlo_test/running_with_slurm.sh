@@ -23,11 +23,11 @@ source .slurm_venv/bin/activate
 mujoco-mojo run monte-carlo \
     -g mujoco-mojo.tests.monte_carlo_test.monte_carlo.generate \
     -r mujoco-mojo.tests.monte_carlo_test.monte_carlo.runtime \
-    -w /home/mujoco-mojo-dev/mujoco-mojo/tests/monte_carlo_test/mc_test \
+    -w mujoco-mojo/tests/monte_carlo_test/mc_test \
     -nt 100 \
     --no-resume \
     -cw \
     -np 1 \
     --seed 42 \
-    --overrides /home/mujoco-mojo-dev/mujoco-mojo/tests/monte_carlo_test/overrides.json \
+    --overrides mujoco-mojo/tests/monte_carlo_test/overrides.json \
     --execution-mode slurm
