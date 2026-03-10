@@ -458,6 +458,20 @@ def run_monte_carlo(
 
     workdir = workdir.resolve()
 
+    logger.info("Initializing Monte Carlo with CLI!")
+
+    dashboard_cmd = f"mujoco-mojo run dashboard {workdir}"
+    console.print(
+        Panel(
+            "[bold green]Campaign Initialized![/]\n\n"
+            "[white]To monitor progress and view results, run:[/]\n"
+            f"    [bold yellow]{dashboard_cmd}[/]",
+            title="[cyan]Launch Control[/]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
     global_overrides = None
     if overrides:
         overrides = overrides.resolve()
@@ -583,10 +597,12 @@ def run_dashboard(
 
     # detect ip
     local_ip = get_local_ip()
-    connection_info = f"Local: [bold cyan]http://127.0.0.1:{port}[/bold cyan]"
+    connection_info = f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
 
     if host == "0.0.0.0":
-        connection_info += f"\nMobile: [bold cyan]http://{local_ip}:{port}[/bold cyan]"
+        connection_info += (
+            f"\nMobile: [bold cyan u]http://{local_ip}:{port}[/bold cyan u]"
+        )
     else:
         connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
 
