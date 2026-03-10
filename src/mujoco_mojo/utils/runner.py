@@ -248,9 +248,7 @@ class Trial:
 
                 # save XML (with modified DepPath)
                 mojo_model.mjcf.write_xml(self.xml_path)
-                self.model_config_path.write_text(
-                    mojo_model.model_dump_json(indent=4), encoding="utf-8"
-                )
+                mojo_model.dump_to_path(self.model_config_path)
 
             with status.record_step(step_name="solving"):
                 # 3. Execute (if runtime provided)
@@ -563,7 +561,7 @@ class MojoRunner:
         # decide which trials to execute
         if resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
-        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
         to_run = status_tracker.pending_trial_nums
 
@@ -859,7 +857,7 @@ class MojoRunner:
         overrides_path = self.workdir.resolve() / "global_overrides.json"
         if len(global_overrides) > 0:
             logger.info(f"Persisting global overrides to {overrides_path}")
-            overrides_path.write_text(global_overrides.model_dump_json(indent=4))
+            overrides_path.write_text(global_overrides.model_dump_json())
 
         # initialize the status tracker
         job_trial_nums = trial_ids if trial_ids else self.config.trial_nums
@@ -883,7 +881,7 @@ class MojoRunner:
         # decide which trials to execute
         if resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
-        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
         to_run = status_tracker.pending_trial_nums
 

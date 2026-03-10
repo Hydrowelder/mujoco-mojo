@@ -277,8 +277,9 @@ class JobStatus(MojoBaseModel):
             avg_sec = sum(success_durations) / len(success_durations)
             self.average_trial_duration = timedelta(seconds=avg_sec)
 
-        self.elapsed = datetime.now(UTC) - self.start_time
-        self.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+        if not self.is_done:
+            self.elapsed = datetime.now(UTC) - self.start_time
+        self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     def total_runtimes(
         self,
@@ -408,7 +409,7 @@ class JobStatus(MojoBaseModel):
         self.elapsed = datetime.now(UTC) - self.start_time
 
         if save:
-            self.dump_to_path(self.workdir / JOB_STATUS_FNAME, indent=4)
+            self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     @property
     def is_done(self) -> bool:
