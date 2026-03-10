@@ -109,6 +109,7 @@
               target="_blank"
               rel="noopener noreferrer"
               class="transition-transform duration-300 hover:scale-110 active:scale-95"
+              title="View Documentation"
             >
               <img
                 id="header-logo"
@@ -123,11 +124,11 @@
           </div>
 
           <div
-            class="space-y-1.5 bg-slate-300/30 dark:bg-slate-800/30 p-3 rounded-xl border border-slate-400/20 dark:border-slate-700/50"
+            class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md transition-transform hover:scale-[1.01] space-y-2"
           >
             <div class="flex items-center gap-2">
               <span
-                class="text-[10px] uppercase font-black text-slate-500 w-16 shrink-0"
+                class="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 w-16 shrink-0"
                 >Owner</span
               >
               <p
@@ -139,7 +140,7 @@
             </div>
             <div class="flex items-center gap-2">
               <span
-                class="text-[10px] uppercase font-black text-slate-500 w-16 shrink-0"
+                class="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 w-16 shrink-0"
                 >Workdir</span
               >
               <p
@@ -185,13 +186,12 @@
               @click="toggleAutoRefresh()"
               class="h-full px-3 border-y border-r border-slate-300 dark:border-slate-700 rounded-r-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
               :class="isAutoRefresh ? 'bg-cyan-500 text-white border-cyan-600 shadow-inner' : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-300 dark:border-slate-700'"
-              title="Toggle Auto-refresh"
+              :title="isAutoRefresh ? 'Disable Auto-refresh' : 'Enable Auto-refresh'"
             >
               <div
                 class="w-2 h-2 rounded-full shrink-0"
                 :class="isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-slate-400'"
               ></div>
-
               <span
                 class="text-[10px] font-black uppercase tracking-widest hidden sm:inline-block w-10 text-center"
                 x-text="isAutoRefresh ? 'Auto' : 'Off'"
@@ -203,6 +203,7 @@
             @click="isMuted = !isMuted; localStorage.setItem('mojo_muted', isMuted)"
             class="h-9 w-9 rounded-lg border transition-all duration-200 flex items-center justify-center hover:scale-105 active:scale-95"
             :class="isMuted ? 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400' : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-500 text-cyan-500 shadow-sm'"
+            :title="isMuted ? 'Unmute completion chime' : 'Mute completion chime'"
           >
             <svg
               x-show="isMuted"
@@ -242,25 +243,14 @@
           </button>
 
           <div
-            x-data="{
-    theme: localStorage.theme || 'system',
-    setTheme(val) {
-      this.theme = val;
-      if (val === 'system') {
-        localStorage.removeItem('theme');
-        document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
-      } else {
-        localStorage.theme = val;
-        document.documentElement.classList.toggle('dark', val === 'dark');
-      }
-    }
-  }"
+            x-data="{ theme: localStorage.theme || 'system', setTheme(val) { this.theme = val; if (val === 'system') { localStorage.removeItem('theme'); document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches); } else { localStorage.theme = val; document.documentElement.classList.toggle('dark', val === 'dark'); } } }"
             class="flex h-9 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg border border-slate-300 dark:border-slate-700"
           >
             <button
               @click="setTheme('light')"
               class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
               :class="theme === 'light' ? 'bg-white shadow-sm text-amber-500' : 'text-slate-500'"
+              title="Light Mode"
             >
               <svg
                 class="w-4 h-4"
@@ -276,11 +266,11 @@
                 />
               </svg>
             </button>
-
             <button
               @click="setTheme('system')"
               class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
               :class="theme === 'system' ? 'bg-white/50 dark:bg-slate-700 shadow-sm text-cyan-500' : 'text-slate-500'"
+              title="Follow System Theme"
             >
               <svg
                 class="w-4 h-4"
@@ -296,11 +286,11 @@
                 />
               </svg>
             </button>
-
             <button
               @click="setTheme('dark')"
               class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
               :class="theme === 'dark' ? 'bg-slate-700 shadow-sm text-blue-400' : 'text-slate-500'"
+              title="Dark Mode"
             >
               <svg
                 class="w-4 h-4"
