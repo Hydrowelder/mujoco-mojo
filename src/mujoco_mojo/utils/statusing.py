@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 import pandas as pd
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, computed_field
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
@@ -383,6 +383,7 @@ class JobStatus(MojoBaseModel):
     def n_failed(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.FAILED)
 
+    @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
         failed_tn = []
