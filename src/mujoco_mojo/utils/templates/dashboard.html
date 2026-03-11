@@ -1,3 +1,4 @@
+<!doctype html>
 <html lang="en">
   <head>
     <title>MuJoCo Mojo Dashboard</title>
@@ -5,7 +6,6 @@
       [x-cloak] {
         display: none !important;
       }
-      /* Anti-glare root background */
       html {
         background-color: #e2e8f0;
       }
@@ -14,35 +14,28 @@
       }
 
       #header-logo {
-        /* Default: Light Mode - Matches Card Style */
-        border: 1px solid #94a3b8; /* slate-400 */
-        border-radius: 0.75rem; /* rounded-xl */
+        border: 1px solid #94a3b8;
+        border-radius: 0.75rem;
         background-color: #ffffff;
-        /* Mimics Tailwind shadow-md for the logo shape */
         filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.07))
           drop-shadow(0 2px 2px rgba(0, 0, 0, 0.06));
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
-
-      /* Dark Mode Adjustments */
       html.dark #header-logo {
-        border: 1px solid #334155; /* slate-700 */
-        background-color: #1e293b; /* slate-800 */
-        /* Remove shadow in dark mode to prevent "muddy" edges */
+        border: 1px solid #334155;
+        background-color: #1e293b;
         filter: none;
       }
-
-      /* Unified Hover Mojo */
       #header-logo:hover {
         transform: scale(1.1);
-        border-color: #06b6d4; /* cyan-500 */
-        /* Intense Cyan Glow on Hover */
+        border-color: #06b6d4;
         filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.6)) !important;
         z-index: 10;
       }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="/static/tailwind.min.js"></script>
+    <script src="/static/confetti.browser.min.js"></script>
     <script defer src="/static/alpine.min.js"></script>
     <script>
       tailwind.config = { darkMode: "class" };
@@ -56,21 +49,17 @@
         document.documentElement.classList.remove("dark");
       }
     </script>
-
     <link
       id="favicon"
       rel="icon"
       type="image/svg"
       href="/static/light-logo.svg"
     />
-
     <script>
-      // Function to sync logos based on the 'dark' class
       function syncMojoLogos() {
         const isDark = document.documentElement.classList.contains("dark");
         const favicon = document.getElementById("favicon");
         const headerLogo = document.getElementById("header-logo");
-
         if (isDark) {
           if (favicon) favicon.href = "/static/dark-logo.svg";
           if (headerLogo) headerLogo.src = "/static/dark-logo.svg";
@@ -79,11 +68,7 @@
           if (headerLogo) headerLogo.src = "/static/light-logo.svg";
         }
       }
-
-      // Run on load and whenever the theme changes
       window.addEventListener("DOMContentLoaded", syncMojoLogos);
-
-      // Create an observer to watch for the 'dark' class toggle
       const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
           if (mutation.attributeName === "class") syncMojoLogos();
@@ -446,13 +431,11 @@
       function formatTimeAgo(seconds) {
         if (!seconds || seconds < 60) return `${seconds || 0}s ago`;
         const mins = Math.floor(seconds / 60);
-        if (mins < 60) return `${mins}m ago`;
-        return `${Math.floor(mins / 60)}h ago`;
+        return mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
       }
 
       function dashboard() {
         return {
-          // --- Data State ---
           status: {
             n_done: 0,
             n_success: 0,
@@ -461,48 +444,68 @@
             progress: 0,
           },
           stats: [],
-
-          // --- UI State ---
           lastUpdate: null,
           secondsSinceUpdate: 0,
           timer: null,
-          isLoading: false, // Controls the refresh icon spin
-          isAutoRefresh: true, // Controls the 5s interval
+          isLoading: false,
+          isAutoRefresh: true,
           chimePlayed: false,
-          isMuted: localStorage.getItem("mojo_muted") === "true",
+          // Muted by default: starts true unless user unmuted in a previous session
+          isMuted: localStorage.getItem("mojo_muted") !== "false",
 
-          // --- Life Cycle ---
           async init() {
             this.startPolling();
-
-            // Update the "Sync: Xs ago" ticker every second
             setInterval(() => {
-              if (this.lastUpdate) {
+              if (this.lastUpdate)
                 this.secondsSinceUpdate = Math.floor(
                   (Date.now() - this.lastUpdate) / 1000,
                 );
-              }
             }, 1000);
-
-            await this.update(); // Initial load
+            await this.update();
           },
 
-          // --- Methods ---
+          fireConfetti() {
+            const duration = 3 * 1000;
+            const animationEnd = Date.now() + duration;
+            const defaults = {
+              startVelocity: 30,
+              spread: 360,
+              ticks: 60,
+              zIndex: 1000,
+            };
+            const randomInRange = (min, max) =>
+              Math.random() * (max - min) + min;
+
+            const interval = setInterval(function () {
+              const timeLeft = animationEnd - Date.now();
+              if (timeLeft <= 0) return clearInterval(interval);
+              const particleCount = 50 * (timeLeft / duration);
+              confetti({
+                ...defaults,
+                particleCount,
+                origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+                colors: ["#06b6d4", "#3b82f6", "#22c55e"],
+              });
+              confetti({
+                ...defaults,
+                particleCount,
+                origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+                colors: ["#06b6d4", "#3b82f6", "#22c55e"],
+              });
+            }, 250);
+          },
+
           toggleAutoRefresh() {
             this.isAutoRefresh = !this.isAutoRefresh;
-            if (this.isAutoRefresh) {
-              this.startPolling();
-              this.update();
-            } else {
-              this.stopPolling();
-            }
+            this.isAutoRefresh
+              ? (this.startPolling(), this.update())
+              : this.stopPolling();
           },
 
           startPolling() {
-            this.stopPolling(); // Ensure no duplicates
-            if (!this.status.is_complete) {
+            this.stopPolling();
+            if (!this.status.is_complete)
               this.timer = setInterval(() => this.update(), 5000);
-            }
           },
 
           stopPolling() {
@@ -517,13 +520,11 @@
             try {
               const resp = await fetch("/api/status");
               if (!resp.ok) return;
-
               const data = await resp.json();
               this.status = data;
               this.lastUpdate = Date.now();
               this.secondsSinceUpdate = 0;
 
-              // --- Recalculate Stats Card Display ---
               const totalDone = this.status.n_done || 0;
               const n_trial = this.status.n_trial || 1;
               const successPerc =
@@ -535,18 +536,25 @@
                   ? ((this.status.n_failed / totalDone) * 100).toFixed(1)
                   : 0;
               const donePerc = ((totalDone / n_trial) * 100).toFixed(1);
-
-              const lastSuccess = this.status.last_success_tn || "None";
-              const fails = this.status.failure_tns || [];
               const lastFailure =
-                fails.length > 0 ? fails[fails.length - 1] : "None";
+                this.status.failure_tns.length > 0
+                  ? this.status.failure_tns[this.status.failure_tns.length - 1]
+                  : "None";
+
+              // FIX: Defined variables before using them in the stats array
+              const finalETA = this.status.is_complete
+                ? "Job Complete"
+                : `ETA: ${this.status.end_time}`;
+              const remainingVal = this.status.is_complete
+                ? "00:00:00"
+                : this.status.time_remaining;
 
               this.stats = [
                 {
                   label: "Successes",
                   value: `${this.status.n_success} (${successPerc}%)`,
                   color: "text-emerald-500",
-                  subValue: `Last Success: Trial ${lastSuccess}`,
+                  subValue: `Last: Trial ${this.status.last_success_tn || "None"}`,
                 },
                 {
                   label: "Failures",
@@ -576,31 +584,28 @@
                   label: this.status.is_complete
                     ? "Finished"
                     : "Est. Remaining",
-                  value: this.status.time_remaining,
+                  value: remainingVal,
                   color: "text-slate-500",
-                  subValue: `ETA: ${this.status.end_time}`,
+                  subValue: finalETA,
                 },
               ];
 
-              // --- Check Completion ---
               if (this.status.is_complete) {
                 this.stopPolling();
-
-                // Play Chime once
-                if (!this.chimePlayed && !this.isMuted) {
-                  const chime = document.getElementById("chime");
-                  chime
-                    .play()
-                    .then(() => {
-                      this.chimePlayed = true;
-                    })
-                    .catch((e) => console.warn("Audio blocked by browser"));
+                if (!this.chimePlayed) {
+                  if (!this.isMuted) {
+                    document
+                      .getElementById("chime")
+                      .play()
+                      .catch(() => {});
+                  }
+                  this.fireConfetti();
+                  this.chimePlayed = true;
                 }
               }
             } catch (err) {
-              console.warn("Mojo Dashboard: Network Offline");
+              console.warn("Mojo Offline");
             } finally {
-              // Keep the spinner visible for at least 300ms for visual feedback
               setTimeout(() => {
                 this.isLoading = false;
               }, 300);
