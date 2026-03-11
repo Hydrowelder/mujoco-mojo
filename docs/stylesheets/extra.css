@@ -106,6 +106,7 @@ pre {
 .md-footer-meta__inner,
 .md-copyright,
 .md-social,
+.md-social a,
 .md-copyright__highlight,
 .md-copyright__highlight a {
     color: var(--md-default-fg-color) !important;
