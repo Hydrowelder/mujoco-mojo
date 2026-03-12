@@ -83,6 +83,23 @@
     x-init="init()"
     x-effect="document.title = `(${status.progress.toFixed(1)}%) Mojo Dashboard`"
   >
+    <div
+      class="fixed top-0 left-0 w-full h-1 z-[100] bg-transparent pointer-events-none"
+      x-show="isSyncing"
+      x-transition:leave="transition opacity-100 duration-500"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      x-cloak
+    >
+      <div
+        class="h-full transition-all duration-300 ease-out"
+        :style="`
+    width: ${syncProgress}%;
+    background: linear-gradient(to right, transparent 0%, rgba(6, 182, 212, 0.4) 50%, #06b6d4 100%);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+  `"
+      ></div>
+    </div>
     <div class="max-w-6xl mx-auto p-4 md:p-8 md:pb-0">
       <header
         class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b border-slate-400 dark:border-slate-700 pb-6 gap-6"
@@ -451,11 +468,15 @@
           isLoading: false,
           isAutoRefresh: true,
           chimePlayed: false,
-          // Muted by default: starts true unless user unmuted in a previous session
           isMuted: localStorage.getItem("mojo_muted") !== "false",
+
+          // Top Progress Bar State
+          syncProgress: 0,
+          isSyncing: false,
 
           async init() {
             this.startPolling();
+            // Update the "Seconds ago" timer every second
             setInterval(() => {
               if (this.lastUpdate)
                 this.secondsSinceUpdate = Math.floor(
@@ -463,6 +484,169 @@
                 );
             }, 1000);
             await this.update();
+          },
+
+          // Logic to transform the raw JSON status into UI-friendly stat cards
+          refreshStats() {
+            const totalDone = this.status.n_done || 0;
+            const n_trial = this.status.n_trial || 1;
+            const successPerc =
+              totalDone > 0
+                ? ((this.status.n_success / totalDone) * 100).toFixed(1)
+                : 0;
+            const failurePerc =
+              totalDone > 0
+                ? ((this.status.n_failed / totalDone) * 100).toFixed(1)
+                : 0;
+            const donePerc = ((totalDone / n_trial) * 100).toFixed(1);
+            const lastFailure =
+              this.status.failure_tns.length > 0
+                ? this.status.failure_tns[this.status.failure_tns.length - 1]
+                : "None";
+
+            const finalETA = this.status.is_complete
+              ? "Job Complete"
+              : `ETA: ${this.status.end_time}`;
+            const remainingVal = this.status.is_complete
+              ? "00:00:00"
+              : this.status.time_remaining;
+
+            this.stats = [
+              {
+                label: "Successes",
+                value: `${this.status.n_success} (${successPerc}%)`,
+                color: "text-emerald-500",
+                subValue: `Last: Trial ${this.status.last_success_tn || "None"}`,
+              },
+              {
+                label: "Failures",
+                value: `${this.status.n_failed} (${failurePerc}%)`,
+                color: "text-rose-500",
+                subValue: `Last Failure: Trial ${lastFailure}`,
+              },
+              {
+                label: "Remaining",
+                value: `${this.status.n_remaining} (${(100 - donePerc).toFixed(1)}%)`,
+                color: "text-amber-500",
+                subValue: `${this.status.throughput} trials/min (${this.status.avg_duration} per trial)`,
+              },
+              {
+                label: "Time Elapsed",
+                value: this.status.elapsed,
+                color: "text-slate-500",
+                subValue: `Started: ${this.status.start_time}`,
+              },
+              {
+                label: "Total Done",
+                value: `${totalDone}`,
+                color: "text-cyan-500",
+                subValue: `Target: ${n_trial} trials`,
+              },
+              {
+                label: this.status.is_complete ? "Finished" : "Est. Remaining",
+                value: remainingVal,
+                color: "text-slate-500",
+                subValue: finalETA,
+              },
+            ];
+          },
+
+          // Helper to generate the dynamic horizontal gradient string for the laser tail effect.
+          // This is not dynamic because it is percentage based within the bar's width.
+          // The bar itself grows, which stretches the gradient. This is the logic for a controllable percentage-based tail.
+          // Adjust the first stop (0%) and the second stop (25%) to change the fade logic.
+          getSyncGradient() {
+            return "linear-gradient(to right, transparent 0%, #06b6d4 25%, #06b6d4 100%)";
+          },
+
+          async update() {
+            if (this.isSyncing) return;
+
+            const startTime = Date.now();
+            this.isLoading = true;
+            this.isSyncing = true;
+            this.syncProgress = 0;
+
+            // Listen to the SSE stream from the Python backend
+            const source = new EventSource("/api/status/stream");
+
+            source.onmessage = (event) => {
+              const data = JSON.parse(event.data);
+
+              // Update the Top Loader progress bar
+              if (data.type === "progress") {
+                this.syncProgress = data.value;
+              }
+
+              // When the server is done scanning, update the whole UI
+              if (data.type === "final") {
+                // 1. Update the data
+                this.status = data.status;
+                this.syncProgress = 100;
+
+                // 2. CHECK FOR COMPLETION: Stop the timer if we are done
+                if (this.status.is_complete) {
+                  console.log("Mojo Job Finished. Stopping auto-refresh.");
+                  this.stopPolling();
+
+                  // Only fire celebration once
+                  if (!this.chimePlayed) {
+                    if (!this.isMuted) {
+                      document
+                        .getElementById("chime")
+                        .play()
+                        .catch(() => {});
+                    }
+                    this.fireConfetti();
+                    this.chimePlayed = true;
+                  }
+                }
+
+                // 3. The rest of your UI cleanup...
+                this.$nextTick(() => {
+                  this.refreshStats();
+                  this.lastUpdate = Date.now();
+                  this.secondsSinceUpdate = 0;
+
+                  // 3. Add a purposeful delay to let the user "see" the 100% and the new data
+                  setTimeout(() => {
+                    this.isSyncing = false;
+                    // Fade the spinny icon slightly later for a layered feel
+                    setTimeout(() => {
+                      this.isLoading = false;
+                    }, 200);
+                    source.close();
+                  }, 400);
+                });
+              }
+            };
+
+            source.onerror = () => {
+              console.warn("Mojo Sync Connection Interrupted");
+              this.isLoading = false;
+              this.isSyncing = false;
+              source.close();
+            };
+          },
+
+          startPolling() {
+            this.stopPolling();
+            if (!this.status.is_complete)
+              this.timer = setInterval(() => this.update(), 5000);
+          },
+
+          stopPolling() {
+            if (this.timer) {
+              clearInterval(this.timer);
+              this.timer = null;
+            }
+          },
+
+          toggleAutoRefresh() {
+            this.isAutoRefresh = !this.isAutoRefresh;
+            this.isAutoRefresh
+              ? (this.startPolling(), this.update())
+              : this.stopPolling();
           },
 
           fireConfetti() {
@@ -494,131 +678,6 @@
                 colors: ["#06b6d4", "#3b82f6", "#22c55e"],
               });
             }, 250);
-          },
-
-          toggleAutoRefresh() {
-            this.isAutoRefresh = !this.isAutoRefresh;
-            this.isAutoRefresh
-              ? (this.startPolling(), this.update())
-              : this.stopPolling();
-          },
-
-          startPolling() {
-            this.stopPolling();
-            if (!this.status.is_complete)
-              this.timer = setInterval(() => this.update(), 5000);
-          },
-
-          stopPolling() {
-            if (this.timer) {
-              clearInterval(this.timer);
-              this.timer = null;
-            }
-          },
-
-          async update() {
-            if (this.isLoading) return;
-
-            const startTime = Date.now();
-            this.isLoading = true;
-            try {
-              const resp = await fetch("/api/status");
-              if (!resp.ok) return;
-              const data = await resp.json();
-              this.status = data;
-              this.lastUpdate = Date.now();
-              this.secondsSinceUpdate = 0;
-
-              const totalDone = this.status.n_done || 0;
-              const n_trial = this.status.n_trial || 1;
-              const successPerc =
-                totalDone > 0
-                  ? ((this.status.n_success / totalDone) * 100).toFixed(1)
-                  : 0;
-              const failurePerc =
-                totalDone > 0
-                  ? ((this.status.n_failed / totalDone) * 100).toFixed(1)
-                  : 0;
-              const donePerc = ((totalDone / n_trial) * 100).toFixed(1);
-              const lastFailure =
-                this.status.failure_tns.length > 0
-                  ? this.status.failure_tns[this.status.failure_tns.length - 1]
-                  : "None";
-
-              // FIX: Defined variables before using them in the stats array
-              const finalETA = this.status.is_complete
-                ? "Job Complete"
-                : `ETA: ${this.status.end_time}`;
-              const remainingVal = this.status.is_complete
-                ? "00:00:00"
-                : this.status.time_remaining;
-
-              this.stats = [
-                {
-                  label: "Successes",
-                  value: `${this.status.n_success} (${successPerc}%)`,
-                  color: "text-emerald-500",
-                  subValue: `Last: Trial ${this.status.last_success_tn || "None"}`,
-                },
-                {
-                  label: "Failures",
-                  value: `${this.status.n_failed} (${failurePerc}%)`,
-                  color: "text-rose-500",
-                  subValue: `Last Failure: Trial ${lastFailure}`,
-                },
-                {
-                  label: "Remaining",
-                  value: `${this.status.n_remaining} (${(100 - donePerc).toFixed(1)}%)`,
-                  color: "text-amber-500",
-                  subValue: `${this.status.throughput} trials/min (${this.status.avg_duration} per trial)`,
-                },
-                {
-                  label: "Time Elapsed",
-                  value: this.status.elapsed,
-                  color: "text-slate-500",
-                  subValue: `Started: ${this.status.start_time}`,
-                },
-                {
-                  label: "Total Done",
-                  value: `${totalDone}`,
-                  color: "text-cyan-500",
-                  subValue: `Target: ${n_trial} trials`,
-                },
-                {
-                  label: this.status.is_complete
-                    ? "Finished"
-                    : "Est. Remaining",
-                  value: remainingVal,
-                  color: "text-slate-500",
-                  subValue: finalETA,
-                },
-              ];
-
-              if (this.status.is_complete) {
-                this.stopPolling();
-                if (!this.chimePlayed) {
-                  if (!this.isMuted) {
-                    document
-                      .getElementById("chime")
-                      .play()
-                      .catch(() => {});
-                  }
-                  this.fireConfetti();
-                  this.chimePlayed = true;
-                }
-              }
-            } catch (err) {
-              console.warn("Mojo Offline");
-            } finally {
-              // 2. Minimum Animation Duration Logic
-              const elapsed = Date.now() - startTime;
-              const minDuration = 1500;
-              const delay = Math.max(0, minDuration - elapsed);
-
-              setTimeout(() => {
-                this.isLoading = false;
-              }, delay);
-            }
           },
         };
       }
