@@ -51,6 +51,7 @@ class Inertial(XMLModel):
 
     @property
     def using_diag(self) -> bool:
+        """Returns True if the element uses diaginertia, False if using fullinertia."""
         if self.diaginertia is not None and self.fullinertia is None:
             return True
         if self.diaginertia is None and self.fullinertia is not None:
@@ -65,6 +66,7 @@ class Inertial(XMLModel):
 
     @property
     def inertia_matrix(self) -> np.ndarray:
+        """Returns the 3x3 inertia matrix reconstruction."""
         if self.using_diag:
             d = self.diaginertia
             assert d is not None
@@ -207,7 +209,15 @@ class Inertial(XMLModel):
         return self
 
     def get_body_frame_inertia(self) -> np.ndarray:
-        """Calculates the 3x3 inertia matrix expressed in the parent body's frame using the Parallel Axis Theorem."""
+        """
+        Calculates the 3x3 inertia matrix expressed in the parent body's frame.
+
+        This uses the Parallel Axis Theorem (Steiner's Theorem) to shift the moment of inertia from the center of mass to the parent body origin based on the 'pos' and 'orientation' attributes.
+
+        Returns:
+            np.ndarray: A 3x3 symmetric inertia matrix in the body frame.
+
+        """
         # rotate into body frame axes
         R = self.orientation.as_matrix() if self.orientation else np.eye(3)
         I_local = self.inertia_matrix
@@ -228,9 +238,18 @@ class Inertial(XMLModel):
         cls, mass: float, pos: Vec3, inertia_matrix: np.ndarray
     ) -> Self:
         """
-        Fatory to create an Inertial element from properties expressed in a parent frame.
+        Factory to create an Inertial element from properties in a parent frame.
 
-        Diagonalizes the matrix to find the principal axes.
+        This method shifts the inertia from the parent body frame back to the center of mass and diagonalizes the resulting matrix to find the principal axes (orientation) and principal moments (diaginertia).
+
+        Args:
+            mass (float): Total mass of the body.
+            pos (Vec3): Position of the center of mass in the parent frame.
+            inertia_matrix (np.ndarray): The 3x3 inertia matrix expressed in the parent frame.
+
+        Returns:
+            Inertial: A new instance with diagonalized inertial properties.
+
         """
         # shift inertia from body frame back to the center of mass
         p = np.asarray(pos)
@@ -252,7 +271,18 @@ class Inertial(XMLModel):
         )
 
     def __add__(self, other: Inertial) -> Inertial:
-        """Combine two inertials into one."""
+        """
+        Combines two Inertial elements into one.
+
+        Calculates the compound mass, center of mass, and resulting principal inertia properties using the Parallel Axis Theorem.
+
+        Args:
+            other (Inertial): The other Inertial element to add.
+
+        Returns:
+            Inertial: The combined inertial properties.
+
+        """
         if not isinstance(other, Inertial):
             return NotImplemented
 
@@ -280,10 +310,18 @@ class Inertial(XMLModel):
 
     def __sub__(self, other: Inertial) -> Inertial:
         """
-        Subtracts one inertial from another.
+        Subtracts one Inertial element from another.
 
-        Warning:
-            Subtracting valid mass properties can result in a non-physical mass property. This method will raise an error if so.
+        This is useful for modeling material removal. Note that subtracting valid physical properties can result in a non-physical remainder (e.g., an inertia matrix that is no longer positive-definite).
+
+        Args:
+            other (Inertial): The Inertial element to subtract.
+
+        Raises:
+            ValueError: If the resulting mass is non-positive or the resulting inertia matrix is non-physical.
+
+        Returns:
+            Inertial: The remaining inertial properties.
 
         """
         # new mass
@@ -336,7 +374,28 @@ class Inertial(XMLModel):
         orientation: Orientation | None = None,
         max_retries: int = 10,
     ) -> Inertial:
-        """Generates an Inertial element by sampline from provided distributions. Supports both vector-level distributions and component-level distributions."""
+        """
+        Generates an Inertial element by sampling from provided distributions.
+
+        Supports both vector-level and component-level randomization. This method will re-sample until a physically valid configuration is found or max_retries is reached.
+
+        Args:
+            mojo_model (MojoModel): The MojoModel instance for sampling and registration.
+            mass (float | Dist): Mass value or distribution.
+            pos (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist]): Position vector or tuple of component distributions.
+            diaginertia (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist] | None, optional): Principal moments or tuple of component distributions. Defaults to None.
+            fullinertia (Vec6 | tuple[ float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, ] | None, optional): Full inertia vector or tuple of component distributions. Defaults to None.
+            orientation (Orientation | None, optional): Fixed orientation for the inertial frame. Defaults to None.
+            max_retries (int, optional): Maximum number of re-samples on physics failure. Defaults to 10.
+
+        Raises:
+            ValueError: If neither diaginertia nor fullinertia are provided.
+            RuntimeError: If a valid configuration is not found within max_retries.
+
+        Returns:
+            Inertial: A physically valid randomized Inertial element.
+
+        """
         if diaginertia is None and fullinertia is None:
             msg = "diaginertia or fullinertia must be defined"
             logger.exception(msg)
