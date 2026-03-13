@@ -20,6 +20,17 @@ class Pos(XMLModel):
         """Returns the euclidian distance to another position."""
         return np.linalg.norm(self - other).astype(float)
 
+    def lerp(self, other: Pos | Vec3 | list | tuple, t: float) -> Pos:
+        """
+        Linearly interpolates between this position and another.
+
+        Args:
+            other: The target position.
+            t: The interpolation factor (0.0 = self, 1.0 = other).
+
+        """
+        return self * (1.0 - t) + np.asarray(other) * t
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Pos):
             return NotImplemented
