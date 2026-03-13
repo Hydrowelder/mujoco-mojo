@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 import numpy as np
 from pydantic import Field
@@ -148,6 +148,14 @@ class Quat(OrientationBase):
         if not isinstance(other, Quat):
             return NotImplemented
         return np.array_equal(np.asarray(self.quat), np.asarray(other.quat))
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Create a Quat orientation from a 3x3 rotation matrix."""
+        rot = R.from_matrix(matrix)
+        q = rot.as_quat()
+
+        return cls(quat=np.array([q[3], q[0], q[1], q[2]]))
 
 
 class AxisAngle(OrientationBase):

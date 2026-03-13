@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Self
+
 import numpy as np
 from pydantic import field_validator, model_validator
 
-from mujoco_mojo.mjcf.orientation import Orientation
+from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.process_manager import Dist, Distribution, NamedValue
 from mujoco_mojo.typing import Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.mojo_model import MojoModel
 
 logger = get_logger(__name__)
 
@@ -171,7 +177,7 @@ class Inertial(XMLModel):
         return arr
 
     @model_validator(mode="after")
-    def validate_inertia_physics(self) -> Inertial:
+    def validate_inertia_physics(self) -> Self:
         if self.diaginertia is None and self.fullinertia is None:
             msg = "Either diaginertia or fullinertia must be specified"
             logger.error(msg)
@@ -199,3 +205,212 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         return self
+
+    def get_body_frame_inertia(self) -> np.ndarray:
+        """Calculates the 3x3 inertia matrix expressed in the parent body's frame using the Parallel Axis Theorem."""
+        # rotate into body frame axes
+        R = self.orientation.as_matrix() if self.orientation else np.eye(3)
+        I_local = self.inertia_matrix
+        I_rot = R @ I_local @ R.T
+
+        # parallel axis theorem
+        # I_body = I_com + m ([r_skew]^2) -> I_com + m * ( (p.T @ p) * eye(3) - p @ p.T )
+        p = np.asarray(self.pos)
+        m = self.mass
+
+        # cross product matrix
+        p_sq = np.dot(p, p) * np.eye(3) - np.outer(p, p)
+
+        return I_rot + m * p_sq
+
+    @classmethod
+    def from_body_frame(
+        cls, mass: float, pos: Vec3, inertia_matrix: np.ndarray
+    ) -> Self:
+        """
+        Fatory to create an Inertial element from properties expressed in a parent frame.
+
+        Diagonalizes the matrix to find the principal axes.
+        """
+        # shift inertia from body frame back to the center of mass
+        p = np.asarray(pos)
+        p_sq = np.dot(p, p) * np.eye(3) - np.outer(p, p)
+        I_com = inertia_matrix - mass * p_sq
+
+        # diagonalize
+        eigvals, eigvecs = np.linalg.eigh(I_com)
+
+        # ensure positive definite
+        if np.linalg.det(eigvecs) < 0:
+            eigvecs[:, 2] *= -1
+
+        return cls(
+            mass=mass,
+            pos=Pos(pos=pos),
+            orientation=Quat.from_matrix(eigvecs),
+            diaginertia=eigvals,
+        )
+
+    def __add__(self, other: Inertial) -> Inertial:
+        """Combine two inertials into one."""
+        if not isinstance(other, Inertial):
+            return NotImplemented
+
+        # new mass
+        m1 = self.mass
+        m2 = other.mass
+        m_total = m1 + m2
+
+        if m_total <= 0:
+            logger.warning(
+                f"Adding inertials would result in a negative mass ({m1} + {m2} = {m_total})"
+            )
+            return self
+
+        # new CoM
+        p1, p2 = np.asarray(self.pos), np.asarray(other.pos)
+        pos_total = (m1 * p1 + m2 * p2) / m_total
+
+        # sum inertias in the common body frame
+        I_total_body = self.get_body_frame_inertia() + other.get_body_frame_inertia()
+
+        return Inertial.from_body_frame(
+            mass=m_total, pos=pos_total, inertia_matrix=I_total_body
+        )
+
+    def __sub__(self, other: Inertial) -> Inertial:
+        """
+        Subtracts one inertial from another.
+
+        Warning:
+            Subtracting valid mass properties can result in a non-physical mass property. This method will raise an error if so.
+
+        """
+        # new mass
+        m1 = self.mass
+        m2 = other.mass
+        m_total = m1 - m2
+
+        if m_total <= 0:
+            msg = f"Inertial subtraction resulted in non-positive mass: {m1} - {m2} = {m_total}"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        # new CoM
+        p1, p2 = np.asarray(self.pos), np.asarray(other.pos)
+        pos_total = (m1 * p1 - m2 * p2) / m_total
+
+        # sum inertias in the common body frame
+        I_total_body = self.get_body_frame_inertia() - other.get_body_frame_inertia()
+
+        # this one also may fail the eigenvalue calculation
+        try:
+            return Inertial.from_body_frame(
+                mass=m_total, pos=pos_total, inertia_matrix=I_total_body
+            )
+        except ValueError as e:
+            # resulting inertial was not valid (such as subtracting a Venn-diagram).
+            msg = f"Resulting inertia matrix is non-physical: {e}"
+            logger.exception(msg)
+            raise ValueError(msg)
+
+    @classmethod
+    def from_random(
+        cls,
+        mojo_model: MojoModel,
+        mass: float | Dist,
+        pos: Vec3 | tuple[float | Dist, float | Dist, float | Dist],
+        diaginertia: Vec3
+        | tuple[float | Dist, float | Dist, float | Dist]
+        | None = None,
+        fullinertia: Vec6
+        | tuple[
+            float | Dist,
+            float | Dist,
+            float | Dist,
+            float | Dist,
+            float | Dist,
+            float | Dist,
+        ]
+        | None = None,
+        orientation: Orientation | None = None,
+        max_retries: int = 10,
+    ) -> Inertial:
+        """Generates an Inertial element by sampline from provided distributions. Supports both vector-level distributions and component-level distributions."""
+        if diaginertia is None and fullinertia is None:
+            msg = "diaginertia or fullinertia must be defined"
+            logger.exception(msg)
+            raise ValueError(msg)
+
+        def _resolve_and_track(input_val: Any) -> tuple[np.ndarray, list[NamedValue]]:
+            """Samples distributions and prepares NamedValues for registration."""
+            resolved_values = []
+            pending_named_values = []
+
+            # case 1: tuple/list of components [(Dist|float), ...]
+            if isinstance(input_val, (list, tuple)):
+                for item in input_val:
+                    if isinstance(item, Distribution):
+                        # sample raw, but create the NamedValue container
+                        item.with_seed(mojo_model.values.seed).with_trial_num(
+                            mojo_model.values.trial_num
+                        )
+                        nv = item.sample_to_named_value()
+                        resolved_values.append(nv.squeeze())
+                        pending_named_values.append(nv)
+                    else:
+                        resolved_values.append(item)
+                return np.asarray(resolved_values), pending_named_values
+
+            # case 2: single vector-level distribution
+            if isinstance(input_val, Distribution):
+                input_val.with_seed(mojo_model.values.seed).with_trial_num(
+                    mojo_model.values.trial_num
+                )
+                nv = input_val.sample_to_named_value()
+                return nv.value.squeeze(), [nv]
+
+            # case 3: raw numeric value
+            return np.asarray(input_val), []
+
+        attempts = 0
+        while attempts < max_retries:
+            # gather all potential random values for this attempt
+            m_val, m_nv = _resolve_and_track(mass)
+            p_val, p_nv = _resolve_and_track(pos)
+            d_val, d_nv = (
+                _resolve_and_track(diaginertia)
+                if diaginertia is not None
+                else (None, [])
+            )
+            f_val, f_nv = (
+                _resolve_and_track(fullinertia)
+                if fullinertia is not None
+                else (None, [])
+            )
+
+            try:
+                instance = cls(
+                    mass=float(m_val),
+                    pos=Pos(pos=p_val),  # shouldnt this be p_val?
+                    diaginertia=d_val,
+                    fullinertia=f_val,
+                    orientation=orientation,
+                )
+
+                # success! commiting all Namedvalues to the registry
+                all_pending = m_nv + p_nv + d_nv + f_nv
+                for nv in all_pending:
+                    mojo_model.values.named.force_update(nv, warn=False)
+
+                return instance
+
+            except ValueError as e:
+                attempts += 1
+                logger.warning(
+                    f"Random Inertial attempt {attempts} failed physics check: {e}"
+                )
+
+        msg = f"Failed to generate valid Inertial after {max_retries} retries."
+        logger.error(msg)
+        raise RuntimeError(msg)
