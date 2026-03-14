@@ -22,7 +22,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from mujoco_mojo.runtime.result_manager import ResultsManager
+    from mujoco_mojo.runtime.results_manager import ResultsManager
 
 logger = get_logger(__name__)
 
@@ -111,12 +111,12 @@ class SiteBase(XMLModel):
     def request(
         self,
         results_manager: ResultsManager,
-        attrs: tuple[Literal["xpos", "xmat", "xvelp", "xvelr"], ...] = (
+        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr"]] = [
             "xpos",
             "xmat",
             "xvelp",
             "xvelr",
-        ),
+        ],
     ):
         """Registers specific site attributes for logging. Requires a named site."""
         if self.name is None:
@@ -127,15 +127,23 @@ class SiteBase(XMLModel):
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             sid = self.get_id(mj_model)
             for attr in attrs:
-                val = getattr(mj_data, f"site_{attr}")[sid]
+                # Handle attributes that MuJoCo doesn't pre-calculate in mjData
+                if attr == "xvelp":
+                    val = self.rt_vel(mj_model, mj_data)
+                elif attr == "xvelr":
+                    val = self.rt_ang_vel(mj_model, mj_data)
+                else:
+                    # Standard pull for xpos, xmat
+                    val = getattr(mj_data, f"site_{attr}")[sid]
 
+                # Logging logic
                 if val.ndim == 1:
                     for i, k in enumerate("xyz"[: len(val)]):
                         results_manager.post(f"{self.name}_{attr}_{k}", val[i])
                 else:
                     results_manager.post(f"{self.name}_{attr}", val.copy())
 
-        results_manager.add_harvest_task(harvest)
+        results_manager.schedule_harvest_task(harvest)
 
 
 class SiteSphere(SiteBase):

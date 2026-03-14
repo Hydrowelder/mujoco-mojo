@@ -12,8 +12,9 @@ from bdb import BdbQuit
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
+import mujoco
 import numpy as np
 from numpydantic import NDArray
 from pydantic import field_validator
@@ -42,6 +43,9 @@ from mujoco_mojo.utils.statusing import (
     TrialStatus,
 )
 
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
 logger = get_logger(__name__)
 
 __all__ = ["MojoGenerator", "MojoRunner", "MojoRuntime", "MonteCarloConfig", "Trial"]
@@ -61,7 +65,16 @@ class MojoGenerator(Protocol):
 class MojoRuntime(Protocol):
     """Definition of a function that executes a generated MojoModel model."""
 
-    def __call__(self, mojo_model: MojoModel, /, *args: Any, **kwargs: Any) -> Any: ...
+    def __call__(
+        self,
+        mojo_model: MojoModel,
+        runtime_manager: RuntimeManager,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any: ...
 
 
 # --- Models ---
@@ -254,7 +267,22 @@ class Trial:
                 # 3. Execute (if runtime provided)
                 if runtime is not None:
                     logger.info(f"Executing trial_num={self.trial_num} runtime")
-                    result = runtime(mojo_model, *run_args, **run_kwargs)
+                    import mujoco_mojo.runtime as rt
+
+                    runtime_manager = rt.RuntimeManager(
+                        results_manager=rt.ResultsManager(
+                            db_path=self.trial_dir / rt.ResultsManager.default_db_name()
+                        )
+                    )
+                    mj_model, mj_data = mojo_model.mjcf.prep_for_sim()
+                    result = runtime(
+                        mojo_model,
+                        runtime_manager,
+                        mj_model,
+                        mj_data,
+                        *run_args,
+                        **run_kwargs,
+                    )
                 else:
                     logger.info(
                         f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
@@ -352,7 +380,7 @@ class MojoRunner:
         )
 
     @staticmethod
-    def force_remove_workdir(path: Path):
+    def force_remove_workdir(countdown_from: int, path: Path):
         if not path.exists():
             return
 
@@ -362,7 +390,7 @@ class MojoRunner:
         from rich.panel import Panel
 
         with Live(refresh_per_second=4) as live:
-            for i in range(10, 0, -1):
+            for i in range(countdown_from, 0, -1):
                 live.update(
                     Panel(
                         f"[bold red]DANGER:[/] clean_workdir is active. \n"
@@ -412,6 +440,7 @@ class MojoRunner:
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
+        cleanup_delay: int = 10,
         execution_mode: ExecutionMode = ExecutionMode.LOCAL,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
@@ -422,7 +451,7 @@ class MojoRunner:
                 logger.error(msg)
                 raise ValueError(msg)
 
-            self.force_remove_workdir(self.workdir)
+            self.force_remove_workdir(countdown_from=cleanup_delay, path=self.workdir)
 
         self.workdir.mkdir(parents=True, exist_ok=True)
         if not (self.workdir / ".gitignore").exists():

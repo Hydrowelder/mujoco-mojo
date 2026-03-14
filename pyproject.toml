@@ -21,6 +21,7 @@ dependencies = [
     "pandas>=3.0.0",
     "polars>=1.39.0",
     "process-manager",
+    "pyarrow>=23.0.1",
     "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",
     "rich>=14.3.3",

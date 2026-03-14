@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
-from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.runtime.forcing_function import GeneralForce, PointToPointForce
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.typing import SiteName
@@ -96,8 +95,7 @@ def test_runtime_manager_integration(basic_mj_setup):
     model, data = basic_mj_setup
 
     # We need a MojoModel to initialize the manager
-    mojo = MojoModel()
-    mgr = RuntimeManager(mojo_model=mojo)
+    mgr = RuntimeManager()
 
     s1 = SiteSphere(name=SiteName("site1"), size=1)
     s2 = SiteSphere(name=SiteName("site2"), size=1)
@@ -119,7 +117,7 @@ def test_runtime_manager_integration(basic_mj_setup):
     data.qfrc_applied[:] = 0.0
 
     # Apply the step
-    mgr.apply_step(model, data)
+    mgr.step(model, data)
 
     # For freejoints, indices [0:3] are the global translation forces for body1
     # Body 1 (action) is at x=0, Body 2 (xtion) is at x=1.

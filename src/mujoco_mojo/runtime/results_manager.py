@@ -1,20 +1,33 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import duckdb
 import mujoco
 import polars as pl
 
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ResultsManager:
     db_path: Path
+    """Where the DuckDB file should be saved."""
+
     table_name: str = "result"
-    batch_size: int = 1000  # Number of steps before flushing to disk
+    """Name of the DuckDB table."""
+
+    batch_size: int = 1000
+    """Number of steps before flushing to disk."""
+
+    record_decimation: int = 1
+    """How many steps between each recording should be performed."""
 
     ledger: dict[str, Any] = field(default_factory=dict, init=False)
+    """Values to be recorded. This dictionary is flushed on every timestep."""
 
     _harvest_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], None]] = field(
         default_factory=list, init=False
@@ -22,26 +35,37 @@ class ResultsManager:
 
     _conn: duckdb.DuckDBPyConnection = field(init=False)
     _buffer: list[dict] = field(default_factory=list, init=False)
+    _step_count: int = -1
+
+    @staticmethod
+    def default_db_name() -> Literal["telemetry.duckdb"]:
+        return "telemetry.duckdb"
 
     def __post_init__(self):
         # Ensure directory exists and connect
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = duckdb.connect(str(self.db_path))
 
-    def add_harvest_task(self, task: Callable):
+    def schedule_harvest_task(self, task: Callable):
         self._harvest_tasks.append(task)
 
-    def start_step(self):
+    def flush_ledger(self):
         """Clear the ledger for a new timestep."""
         self.ledger = {}
 
     def post(self, key: str, value: Any):
         """Allows an object to inject a value into the ledger to be recorded in the results file."""
+        if key in self.ledger:
+            logger.warning(
+                f"Key collision in ResultsManager: '{key}' is being overwritten. Ensure your object names and output requests are unique."
+            )
         self.ledger[key] = value
 
     def record(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Finalizes the ledger and sends to the buffer/results file."""
-        self.start_step()
+        self._step_count += 1
+        if self._step_count % self.record_decimation != 0:
+            return
 
         for task in self._harvest_tasks:
             task(mj_model, mj_data)

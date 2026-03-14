@@ -1,15 +1,21 @@
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import Self
+from typing import TYPE_CHECKING, Literal, Self
 
 import mujoco
 import numpy as np
-from pydantic import model_validator
+from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.process_manager import NamedValue
-from mujoco_mojo.runtime.result_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+logger = get_logger(__name__)
 
 
 def _ideal_force_logic(
@@ -47,8 +53,8 @@ class ForcingFunction(MojoBaseModel):
     rel_to_site: Site | None = None
     """Frame of reference for the calculated force. If None, uses worldbody."""
 
-    log_to_results: bool = False
-    """If True, the forcing function force/torque values will be logged at every step."""
+    _last_f: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
 
     def resolve_ids(self, mj_model: mujoco.MjModel):
         """Caches the integer IDs from the compiled MuJoCo model."""
@@ -96,6 +102,10 @@ class ForcingFunction(MojoBaseModel):
 
         """
 
+    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
+        runtime_manager.add_load(self)
+        return self
+
     def apply_load(
         self,
         mj_model: mujoco.MjModel,
@@ -108,11 +118,8 @@ class ForcingFunction(MojoBaseModel):
         f_world, t_world = self.calculate(
             mj_model=mj_model, mj_data=mj_data, results_manager=results_manager
         )
-
-        if self.log_to_results and results_manager:
-            for i, k in enumerate("xyz"):
-                results_manager.post(f"{self.name}_force_{k}", f_world[i])
-                results_manager.post(f"{self.name}_torque_{k}", t_world[i])
+        self._last_f = np.append(f_world, np.linalg.norm(f_world))
+        self._last_t = np.append(t_world, np.linalg.norm(t_world))
 
         # apply to action site
         mujoco.mj_applyFT(
@@ -138,6 +145,21 @@ class ForcingFunction(MojoBaseModel):
                 body=self.xtion_site.rt_parent_body(mj_model),
                 qfrc_target=mj_data.qfrc_applied,
             )
+
+    def request(
+        self,
+        results_manager: ResultsManager,
+        attrs: list[Literal["force", "torque"]] = ["force", "torque"],
+    ):
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            if "force" in attrs:
+                for i, k in enumerate("xyzm"):
+                    results_manager.post(f"{self.name}_force_{k}", self._last_f[i])
+            if "torque" in attrs:
+                for i, k in enumerate("xyzm"):
+                    results_manager.post(f"{self.name}_torque_{k}", self._last_t[i])
+
+        results_manager.schedule_harvest_task(harvest)
 
 
 class PointToPointForce(ForcingFunction):

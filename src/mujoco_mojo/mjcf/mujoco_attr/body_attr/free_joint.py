@@ -21,7 +21,7 @@ class FreeJoint(XMLModel):
     While this joint can evidently be created with the joint element, default joint settings could affect it. This is usually undesirable as physical free bodies do not have nonzero stiffness, damping, friction or armature. To avoid this complication, the freejoint element was introduced, ensuring joint defaults are not inherited. If the XML model is saved, it will appear as a regular joint of type free.
     """
 
-    tag = "joint"
+    tag = "freejoint"
 
     type: ClassVar[JointType] = JointType.FREE
 
