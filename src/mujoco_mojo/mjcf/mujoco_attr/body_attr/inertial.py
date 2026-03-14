@@ -466,9 +466,10 @@ class Inertial(XMLModel):
 
             except ValueError as e:
                 attempts += 1
-                logger.warning(
-                    f"Random Inertial attempt {attempts} failed physics check: {e}"
-                )
+                if attempts > max_retries // 2:
+                    logger.warning(
+                        f"High rejection rate detected for Inertial sampling. Current attempt: {attempts}/{max_retries}. Latest error: {e}"
+                    )
 
         msg = f"Failed to generate valid Inertial after {max_retries} retries."
         logger.error(msg)
