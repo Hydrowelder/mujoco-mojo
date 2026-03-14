@@ -15,7 +15,7 @@ from xml.etree.ElementTree import Element
 
 import mujoco
 import numpy as np
-from pydantic import model_validator
+from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
@@ -85,6 +85,9 @@ class XMLModel(MojoBaseModel):
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = None
     """Attribute used to perform MjModel ID lookups."""
+
+    _id_cache: int = PrivateAttr(-1)
+    """MuJoCo runtime ID."""
 
     @model_validator(mode="after")
     def warn_rgba(self) -> Self:
@@ -261,6 +264,10 @@ class XMLModel(MojoBaseModel):
         """
         Generic ID lookup that works for any subclass defining mjt_obj and name.
         """
+        # early exit if the ID has already been found
+        if self._id_cache != -1:
+            return self._id_cache
+
         # 1. Check if this specific class supports ID lookup
         if self._mjt_obj is None:
             msg = f"Class '{self.__class__.__name__}' does not map to a MuJoCo runtime object."
@@ -287,6 +294,7 @@ class XMLModel(MojoBaseModel):
             logger.error(msg)
             raise ValueError(msg)
 
+        self._id_cache = obj_id
         return obj_id
 
     def _iter_tree(

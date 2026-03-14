@@ -78,6 +78,14 @@ def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
         raise ValueError("blah blah blah")
     time.sleep(2e-8)
 
+    # initialize managers
+
+    # enter runtime loop
+    # defines some forces and outputs
+
+    # exit runtime loop
+    # dump duckdb to workdir (or maybe the results manager should be returned by this function and the dumping is handled by the process which called this method)
+
     return None
 
 
