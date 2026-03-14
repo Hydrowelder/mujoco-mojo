@@ -13,6 +13,8 @@ class Pos(XMLModel):
 
     tag = ""
 
+    attributes = ("pos",)
+
     pos: Vec3 = np.array((0, 0, 0))
     """Position (in (x, y, z))"""
 
