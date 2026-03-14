@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "coacd>=1.0.7",
+    "duckdb>=1.5.0",
     "fastapi>=0.134.0",
     "fastparquet>=2025.12.0",
     "jinja2>=3.1.6",
@@ -18,6 +19,7 @@ dependencies = [
     "numpy>=2.4.1",
     "numpydantic>=1.7.0",
     "pandas>=3.0.0",
+    "polars>=1.39.0",
     "process-manager",
     "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",

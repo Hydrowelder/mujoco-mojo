@@ -80,7 +80,7 @@ def test_general_force_rotation(basic_mj_setup):
 
     # Apply a constant 10N in local Z
     thrust = GeneralForce(
-        name="thruster", action_site=s1, fz=lambda t: 10.0, relative_to=s1
+        name="thruster", action_site=s1, fz=lambda t: 10.0, rel_to_site=s1
     )
     thrust.resolve_ids(model)
 
@@ -132,25 +132,30 @@ def test_runtime_manager_integration(basic_mj_setup):
 
 
 def test_compression_spring_limit(basic_mj_setup):
-    """Verifies that compression springs are inactive when extended."""
-    model, data = basic_mj_setup
+    model, data = basic_mj_setup  # mj_forward already called in fixture
     s1 = SiteSphere(name=SiteName("site1"), size=1)
     s2 = SiteSphere(name=SiteName("site2"), size=1)
 
     # Rest is 0.5, current dist is 1.0 (Extended).
-    # Compression spring should be inactive.
     bumper = PointToPointForce.compression_spring(
         name="bumper", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
     )
     bumper.resolve_ids(model)
 
     force, _ = bumper.calculate(model, data)
-    assert np.all(np.asarray(force) == 0)
+    assert np.all(np.asarray(force) == 0)  # Verified: No force when extended
 
-    # Move body2 so they are compressed (dist = 0.2)
-    data.qpos[7] = 0.2  # Move Body 2 from x=1.0 to x=0.2
+    # --- MOVEMENT PHASE ---
+    # Move Body 2 to x=0.2. Now Body 1 is at 0 and Body 2 is at 0.2.
+    data.qpos[7] = 0.2
+
+    # CRITICAL: We changed qpos, so we MUST sync Cartesian positions
     mujoco.mj_forward(model, data)
 
     force_active, _ = bumper.calculate(model, data)
-    # Dist 0.2 < 0.5. F = -100 * (0.2 - 0.5) = +30N (Pushing away)
+
+    # Logic: Unit vector (p1-p2) points toward -X.
+    # Compression should push Body 1 further -X.
+    # F_mag = -100 * (0.2 - 0.5) = +30.
+    # Force = +30 * [-1, 0, 0] = [-30, 0, 0]
     assert np.asarray(force_active)[0] < 0

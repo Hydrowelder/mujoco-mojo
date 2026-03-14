@@ -4,12 +4,12 @@ from typing import Self
 
 import mujoco
 import numpy as np
-from pydantic import PrivateAttr, model_validator
+from pydantic import model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.process_manager import NamedValue
-from mujoco_mojo.typing import Vec3
+from mujoco_mojo.runtime.result_manager import ResultsManager
 
 
 def _ideal_force_logic(
@@ -44,103 +44,100 @@ class ForcingFunction(MojoBaseModel):
 
     This is called xtion to limit confusion between "reaction" and "relative"."""
 
-    relative_to: Site | None = None
+    rel_to_site: Site | None = None
     """Frame of reference for the calculated force. If None, uses worldbody."""
 
-    _action_id: int = PrivateAttr(-1)
-    _xtion_id: int = PrivateAttr(-1)
-    _relative_id: int = PrivateAttr(-1)
+    log_to_results: bool = False
+    """If True, the forcing function force/torque values will be logged at every step."""
 
     def resolve_ids(self, mj_model: mujoco.MjModel):
         """Caches the integer IDs from the compiled MuJoCo model."""
-        self._action_id = self.action_site.get_id(mj_model)
+        self.action_site.get_id(mj_model)
         if self.xtion_site:
-            self._xtion_id = self.xtion_site.get_id(mj_model)
-        if self.relative_to:
-            self._relative_id = self.relative_to.get_id(mj_model)
-
-    @staticmethod
-    def _site_pos(site_id: int, mj_data: mujoco.MjData) -> Vec3:
-        return mj_data.site_xpos[site_id]
-
-    def action_pos(self, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_pos(self._action_id, mj_data)
-
-    def xtion_pos(self, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_pos(self._xtion_id, mj_data)
-
-    def rel_to_pos(self, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_pos(self._relative_id, mj_data)
-
-    @staticmethod
-    def _site_vel(
-        site_id: int, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> Vec3:
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
-        mujoco.mj_objectVelocity(
-            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, site_id, res, 0
-        )
-        return res[3:6]
-
-    def action_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_vel(self._action_id, mj_model, mj_data)
-
-    def xtion_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_vel(self._xtion_id, mj_model, mj_data)
-
-    def rel_to_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_vel(self._relative_id, mj_model, mj_data)
-
-    @staticmethod
-    def _site_ang_vel(
-        site_id: int, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> Vec3:
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
-        mujoco.mj_objectVelocity(
-            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, site_id, res, 0
-        )
-        return res[0:3]
-
-    def action_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_ang_vel(self._action_id, mj_model, mj_data)
-
-    def xtion_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_ang_vel(self._xtion_id, mj_model, mj_data)
-
-    def rel_to_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return self._site_ang_vel(self._relative_id, mj_model, mj_data)
+            self.xtion_site.get_id(mj_model)
+        if self.rel_to_site:
+            self.rel_to_site.get_id(mj_model)
 
     def _get_world_vectors(
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        f_local: Vec3,
-        t_local: Vec3,
-    ) -> tuple[Vec3, Vec3]:
+        f_local: np.ndarray,
+        t_local: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Rotates local force/torque into world coordinates based on relative_to."""
-        if self.relative_to is None:
+        if self.rel_to_site is None:
             return f_local, t_local
 
         # Get the 3x3 rotation matrix for the reference site
         # MuJoCo stores this as a flat 9-element array in site_xmat
-        rot = mj_data.site_xmat[self._relative_id].reshape(3, 3)
+        rot: np.ndarray = mj_data.site_xmat[self.rel_to_site.get_id(mj_model)].reshape(
+            3, 3
+        )
         return rot @ f_local, rot @ t_local
 
     @abstractmethod
     def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[Vec3, Vec3]:  # TODO write docstring
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        results_manager: ResultsManager | None,
+    ) -> tuple[np.ndarray, np.ndarray]:  # TODO write docstring
         """
         Calculate the force for the timestep.
 
         Args:
             mj_model (mujoco.MjModel): _description_
             mj_data (mujoco.MjData): _description_
+            results_manager (ResultsManager): _description_
 
         Returns:
-            tuple[Vec3, Vec3]: The force and toque vector output.
+            tuple[np.ndarray, np.ndarray]: The force and toque vector output.
 
         """
+
+    def apply_load(
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        results_manager: ResultsManager | None = None,
+    ):
+        if not self.active:
+            return
+
+        f_world, t_world = self.calculate(
+            mj_model=mj_model, mj_data=mj_data, results_manager=results_manager
+        )
+
+        if self.log_to_results and results_manager:
+            for i, k in enumerate("xyz"):
+                results_manager.post(f"{self.name}_force_{k}", f_world[i])
+                results_manager.post(f"{self.name}_torque_{k}", t_world[i])
+
+        # apply to action site
+        mujoco.mj_applyFT(
+            m=mj_model,
+            d=mj_data,
+            force=f_world,
+            torque=t_world,
+            point=self.action_site.rt_pos(mj_model, mj_data),
+            body=self.action_site.rt_parent_body(mj_model),
+            # target generalized force array
+            qfrc_target=mj_data.qfrc_applied,
+        )
+
+        # apply reaction force
+        if self.xtion_site is not None:
+            # Newton's 3rd Law
+            mujoco.mj_applyFT(
+                m=mj_model,
+                d=mj_data,
+                force=-f_world,
+                torque=-t_world,
+                point=self.xtion_site.rt_pos(mj_model, mj_data),
+                body=self.xtion_site.rt_parent_body(mj_model),
+                qfrc_target=mj_data.qfrc_applied,
+            )
 
 
 class PointToPointForce(ForcingFunction):
@@ -151,18 +148,21 @@ class PointToPointForce(ForcingFunction):
 
     @model_validator(mode="after")
     def _validate_frame(self) -> Self:
-        if self.relative_to is not None:
+        if self.rel_to_site is not None:
             raise ValueError(
                 f"PointToPointForce '{self.name}' cannot use 'relative_to'. It is natively defined by the line-of-sight between sites."
             )
         return self
 
     def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[Vec3, Vec3]:
-        p1 = np.asarray(self.action_pos(mj_data))
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        results_manager: ResultsManager | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        p1 = self.action_site.rt_pos(mj_model, mj_data)
         p2 = (
-            np.asarray(self.xtion_pos(mj_data))
+            self.xtion_site.rt_pos(mj_model, mj_data)
             if self.xtion_site is not None
             else np.zeros(3)
         )
@@ -172,9 +172,9 @@ class PointToPointForce(ForcingFunction):
         unit_vec = r_vec / dist if dist > 1e-9 else np.zeros(3)
 
         # simple velocity approximation along the line for damping
-        v1 = np.asarray(self.action_vel(mj_model, mj_data))
+        v1 = self.action_site.rt_vel(mj_model, mj_data)
         v2 = (
-            np.asarray(self.xtion_vel(mj_model, mj_data))
+            self.xtion_site.rt_vel(mj_model, mj_data)
             if self.xtion_site is not None
             else np.zeros(3)
         )
@@ -272,8 +272,11 @@ class GeneralForce(ForcingFunction):
     tz: Callable[[float], float] = lambda t: 0.0
 
     def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[Vec3, Vec3]:
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        results_manager: ResultsManager | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         t = mj_data.time
         f_raw = np.array([self.fx(t), self.fy(t), self.fz(t)])
         t_raw = np.array([self.tx(t), self.ty(t), self.tz(t)])

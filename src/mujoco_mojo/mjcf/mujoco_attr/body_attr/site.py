@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 import mujoco
 import numpy as np
@@ -19,6 +19,12 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.result_manager import ResultsManager
+
+logger = get_logger(__name__)
 
 __all__ = [
     "Site",
@@ -79,6 +85,57 @@ class SiteBase(XMLModel):
 
     user: VecN | None = None
     """See User parameters."""
+
+    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
+        return mj_model.site_bodyid[self.get_id(mj_model)]
+
+    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        return mj_data.site_xpos[self.get_id(mj_model)]
+
+    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
+        mujoco.mj_objectVelocity(
+            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, self.get_id(mj_model), res, 0
+        )
+        return res[3:6]
+
+    def rt_ang_vel(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
+        mujoco.mj_objectVelocity(
+            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, self.get_id(mj_model), res, 0
+        )
+        return res[0:3]
+
+    def request(
+        self,
+        results_manager: ResultsManager,
+        attrs: tuple[Literal["xpos", "xmat", "xvelp", "xvelr"], ...] = (
+            "xpos",
+            "xmat",
+            "xvelp",
+            "xvelr",
+        ),
+    ):
+        """Registers specific site attributes for logging. Requires a named site."""
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}. Please assign a 'name' to the site before requesting outputs."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            sid = self.get_id(mj_model)
+            for attr in attrs:
+                val = getattr(mj_data, f"site_{attr}")[sid]
+
+                if val.ndim == 1:
+                    for i, k in enumerate("xyz"[: len(val)]):
+                        results_manager.post(f"{self.name}_{attr}_{k}", val[i])
+                else:
+                    results_manager.post(f"{self.name}_{attr}", val.copy())
+
+        results_manager.add_harvest_task(harvest)
 
 
 class SiteSphere(SiteBase):
