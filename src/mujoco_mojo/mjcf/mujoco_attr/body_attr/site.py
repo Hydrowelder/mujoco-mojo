@@ -86,6 +86,15 @@ class SiteBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
+    def rot(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        return np.asarray(mj_data.site_xmat[self.get_id(mj_model)]).reshape(3, 3)
+
+    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
+        return mj_model.site_bodyid[self.get_id(mj_model)]
+
+    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        return mj_data.site_xpos[self.get_id(mj_model)]
+
     def rt_displacements(
         self,
         other: Site | None,
@@ -104,8 +113,8 @@ class SiteBase(XMLModel):
             return dr_world
 
         # rotate into relative_to frame: R^T * dr_world
-        rot = mj_data.site_xmat[relative_to.get_id(mj_model)].reshape(3, 3)
-        return rot.T @ dr_world
+        rot_t = relative_to.rot(mj_model, mj_data).T
+        return rot_t @ dr_world
 
     def rt_dx(
         self,
@@ -173,36 +182,406 @@ class SiteBase(XMLModel):
     def rt_dm(
         self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
-        """Returns the runtime euclidian distance between two sites. If `other` is None this will just be the position of self."""
+        """Returns the runtime distance magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
             np.linalg.norm(
                 self.rt_displacements(other=other, mj_model=mj_model, mj_data=mj_data)
             )
         )
 
-    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
-        return mj_model.site_bodyid[self.get_id(mj_model)]
-
-    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
-        return mj_data.site_xpos[self.get_id(mj_model)]
-
     def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Returns the 6D velocity vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
+        res = np.zeros(6)  # 6 element buffer for angular, linear
         mujoco.mj_objectVelocity(
             mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
         )
-        return res[3:6]
+        return res
+
+    def rt_lin_vel(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Returns the 3D linear velocity vector in the world frame."""
+        return self.rt_vel(mj_model, mj_data)[3:6]
 
     def rt_ang_vel(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> np.ndarray:
+        """Returns the 3D angular velocity vector in the world frame."""
+        return self.rt_vel(mj_model, mj_data)[0:3]
+
+    def rt_velocities(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> np.ndarray:
+        """Returns the 6D velocity vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
+        # in world frame
+        world_self = self.rt_vel(mj_model, mj_data)
+
+        if other:
+            world_other = other.rt_vel(mj_model, mj_data)
+        else:
+            world_other = np.zeros(6)
+
+        world_rel = world_self - world_other
+
+        if relative_to is None:
+            return world_rel
+
+        # rotate into relative_to coordinate frame
+        rot_t = rot_t = relative_to.rot(mj_model, mj_data).T
+        rel_local = np.zeros(6)
+        rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
+        rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
+        return rel_local
+
+    def rt_lin_vx(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime X linear velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[3]
+        )
+
+    def rt_lin_vy(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Y linear velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[4]
+        )
+
+    def rt_lin_vz(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Z linear velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[5]
+        )
+
+    def rt_lin_vm(
+        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> float:
+        """Returns the runtime linear velocity magnitude between two sites. If `other` is None this will just be the position of self."""
+        return float(
+            np.linalg.norm(
+                self.rt_velocities(other=other, mj_model=mj_model, mj_data=mj_data)[3:6]
+            )
+        )
+
+    def rt_ang_vx(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime X angular velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[0]
+        )
+
+    def rt_ang_vy(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Y angular velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[1]
+        )
+
+    def rt_ang_vz(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Z angular velocity between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_velocities(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[2]
+        )
+
+    def rt_ang_vm(
+        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> float:
+        """Returns the runtime angular velocity magnitude between two sites. If `other` is None this will just be the position of self."""
+        return float(
+            np.linalg.norm(
+                self.rt_velocities(other=other, mj_model=mj_model, mj_data=mj_data)[0:3]
+            )
+        )
+
+    def rt_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
-        mujoco.mj_objectVelocity(
+        res = np.zeros(6)  # 6 element buffer for angular, linear
+        mujoco.mj_objectAcceleration(
             mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
         )
-        return res[0:3]
+        return res
+
+    def rt_lin_acc(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Returns the 3D linear acceleration vector in the world frame."""
+        return self.rt_acc(mj_model, mj_data)[3:6]
+
+    def rt_ang_acc(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Returns the 3D angular acceleration vector in the world frame."""
+        return self.rt_acc(mj_model, mj_data)[0:3]
+
+    def rt_accelerations(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> np.ndarray:
+        """Returns the 6D acceleration vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
+        # in world frame
+        world_self = self.rt_acc(mj_model, mj_data)
+
+        if other:
+            world_other = other.rt_acc(mj_model, mj_data)
+        else:
+            world_other = np.zeros(6)
+
+        world_rel = world_self - world_other
+
+        if relative_to is None:
+            return world_rel
+
+        # rotate into relative_to coordinate frame
+        rot_t = relative_to.rot(mj_model, mj_data).T
+        rel_local = np.zeros(6)
+        rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
+        rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
+        return rel_local
+
+    def rt_lin_ax(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime X linear acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[3]
+        )
+
+    def rt_lin_ay(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Y linear acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[4]
+        )
+
+    def rt_lin_az(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Z linear acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[5]
+        )
+
+    def rt_lin_am(
+        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> float:
+        """Returns the runtime linear acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
+        return float(
+            np.linalg.norm(
+                self.rt_accelerations(other=other, mj_model=mj_model, mj_data=mj_data)[
+                    3:6
+                ]
+            )
+        )
+
+    def rt_ang_ax(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime X angular acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[0]
+        )
+
+    def rt_ang_ay(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Y angular acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[1]
+        )
+
+    def rt_ang_az(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Z angular acceleration between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_accelerations(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[2]
+        )
+
+    def rt_ang_am(
+        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> float:
+        """Returns the runtime angular acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
+        return float(
+            np.linalg.norm(
+                self.rt_accelerations(other=other, mj_model=mj_model, mj_data=mj_data)[
+                    0:3
+                ]
+            )
+        )
 
     def request(
         self,
@@ -225,7 +604,7 @@ class SiteBase(XMLModel):
             for attr in attrs:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 if attr == "xvelp":
-                    val = self.rt_vel(mj_model, mj_data)
+                    val = self.rt_lin_vel(mj_model, mj_data)
                 elif attr == "xvelr":
                     val = self.rt_ang_vel(mj_model, mj_data)
                 else:
