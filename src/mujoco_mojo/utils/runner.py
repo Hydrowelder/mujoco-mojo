@@ -260,7 +260,8 @@ class Trial:
                 )
 
                 # save XML (with modified DepPath)
-                # mojo_model.mjcf.write_xml(self.xml_path)
+                if runtime is None:
+                    mojo_model.mjcf.write_xml(self.xml_path)
                 mojo_model.dump_to_path(self.model_config_path)
 
             with status.record_step(step_name="solving"):
