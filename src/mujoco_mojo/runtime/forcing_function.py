@@ -131,33 +131,43 @@ class ForcingFunction(MojoBaseModel):
 
         # apply to action site
         action_pos = self.action_site.rt_pos(mj_model, mj_data)
+        action_bid = self.action_site.rt_parent_body(mj_model)
         mujoco.mj_applyFT(
             m=mj_model,
             d=mj_data,
             force=f_world,
             torque=t_world,
             point=action_pos,
-            body=self.action_site.rt_parent_body(mj_model),
+            body=action_bid,
             # target generalized force array
             qfrc_target=mj_data.qfrc_applied,
         )
 
+        # shadow for visualization (action)
+        # xfrc_applied is [fx, fy, fz, tx, ty, tz]
+        mj_data.xfrc_applied[action_bid][:3] += f_world
+        mj_data.xfrc_applied[action_bid][3:] += t_world
+
         # apply reaction force
         if self.xtion_site is not None:
-            if isinstance(self, PointToPointForce):
-                reaction_pos = self.xtion_site.rt_pos(mj_model, mj_data)
-            else:
-                reaction_pos = action_pos
+            xtion_pos = (
+                self.xtion_site.rt_pos(mj_model, mj_data)
+                if isinstance(self, PointToPointForce)
+                else action_pos
+            )
+            xtion_bid = self.xtion_site.rt_parent_body(mj_model)
 
             mujoco.mj_applyFT(
                 m=mj_model,
                 d=mj_data,
                 force=-f_world,  # some nerd came up with this
                 torque=-t_world,
-                point=reaction_pos,
-                body=self.xtion_site.rt_parent_body(mj_model),
+                point=xtion_pos,
+                body=xtion_bid,
                 qfrc_target=mj_data.qfrc_applied,
             )
+            mj_data.xfrc_applied[xtion_bid][:3] += -f_world
+            mj_data.xfrc_applied[xtion_bid][3:] += -t_world
 
     def request(
         self,
@@ -236,7 +246,7 @@ class PointToPointForce(ForcingFunction):
         )
 
     @classmethod
-    def stroke_spring(
+    def stroke_compression_spring(
         cls,
         name: str,
         action_site: Site,
@@ -257,7 +267,8 @@ class PointToPointForce(ForcingFunction):
             delta_d = d - r0
 
             if 0 <= delta_d <= d_f:
-                return -1.0 * (f_0 + k * delta_d + c * v)
+                f_mag = f_0 - (k * delta_d) - (c * v)
+                return max(0.0, f_mag)
             return 0.0
 
         return cls(

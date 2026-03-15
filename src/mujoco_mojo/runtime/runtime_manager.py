@@ -15,6 +15,8 @@ class RuntimeManager:
     forcing_functions: list[ForcingFunction] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
+    _resolved: bool = False
+
     def __enter__(self) -> Self:
         """Prime the model and prepare results."""
         return self
@@ -31,6 +33,7 @@ class RuntimeManager:
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.forcing_functions:
             load.resolve_ids(mj_model, mj_data)
+        self._resolved = True
 
     def add_load(self, load: ForcingFunction):
         self.forcing_functions.append(load)
@@ -42,23 +45,38 @@ class RuntimeManager:
         """
         Calculates and injects forces into qfrc_applied or xfrc_applied.
 
-        1. Calls mj_step (physics)
-        2. Calls apply_load (custom forces)
+        1. Calls apply_load (custom forces)
+        2. Calls mj_step (physics)
         3. Calls record (telemetry)
         """
         if self.results_manager:
             self.results_manager.flush_ledger()
 
-        # integrate physics
-        mujoco.mj_step(mj_model, mj_data)
+        # sync state variables and clear render buffer
+        mujoco.mj_forward(mj_model, mj_data)
+        mj_data.xfrc_applied.fill(0)
 
-        # phics objects post to the fresh ledger
+        # resolve IDs and initial distances
+        if not self._resolved:
+            self.resolve(mj_model, mj_data)
+
+        # physics objects post to the fresh ledger
         for load in self.forcing_functions:
             load.apply_load(mj_model, mj_data, self.results_manager)
+
+        # record if t=0
+        if mj_data.time == 0 and self.results_manager:
+            mujoco.mj_forward(mj_model, mj_data)
+            self.results_manager.record(mj_model, mj_data)
+            self.results_manager.flush_ledger()
+
+        # integrate physics (advances the time)
+        mujoco.mj_step(mj_model, mj_data)
 
         # telemetry objects harvest to the same ledger
         if self.results_manager:
             self.results_manager.record(mj_model, mj_data)
 
+        # record any frames which are due
         for recorder in self.video_recorders:
             recorder.capture_frame(mj_data)

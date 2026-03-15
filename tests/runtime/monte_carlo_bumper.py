@@ -3,6 +3,7 @@ from pathlib import Path
 import duckdb
 import mujoco
 import numpy as np
+import polars as pl
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -10,6 +11,7 @@ import mujoco_mojo.runtime as rt
 logger = mojo.utils.get_logger(__name__)
 
 FIXED_CAMERA_NAME = mojo.CameraName("static")
+BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 
@@ -40,19 +42,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     texrepeat=np.array((1, 1)),
                 )
             ],
-        ),
-        # add box colors
-        mojo.Asset(
-            materials=[
-                box_mat_1 := mojo.Material(
-                    name=mojo.MaterialName("box_mat_1"),
-                    rgba=mojo.utils.Color.CYAN_500.rgba,
-                ),
-                box_mat_2 := mojo.Material(
-                    name=mojo.MaterialName("box_mat_2"),
-                    rgba=mojo.utils.Color.ROSE_500.rgba,
-                ),
-            ]
         ),
     ]
 
@@ -95,11 +84,42 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             gravity=np.array((0, 0, 0)),
         )
     ]
+    mojo_model.mjcf.visuals = [
+        mojo.Visual(
+            map=mojo.VisualMap(force=100),
+            scale=mojo.VisualScale(forcewidth=0.1),
+        )
+    ]
 
     # 2. Sample initial separation from a distribution
     mojo_model.sample_dist(
         mojo.TruncatedNormalDistribution(
-            name=mojo.DistName("stiffness"), nominal=100, mu=100, sigma=30
+            name=mojo.DistName("pz_stiffness"), nominal=50, mu=50, sigma=15, low=0
+        )
+    ).squeeze()
+    mojo_model.sample_dist(
+        mojo.TruncatedNormalDistribution(
+            name=mojo.DistName("mz_stiffness"), nominal=50, mu=50, sigma=15, low=0
+        )
+    ).squeeze()
+    mojo_model.sample_dist(
+        mojo.TruncatedNormalDistribution(
+            name=mojo.DistName("pz_stroke"),
+            nominal=0.25,
+            mu=0.25,
+            sigma=0.1,
+            low=0.2,
+            high=0.3,
+        )
+    ).squeeze()
+    mojo_model.sample_dist(
+        mojo.TruncatedNormalDistribution(
+            name=mojo.DistName("mz_stroke"),
+            nominal=0.25,
+            mu=0.25,
+            sigma=0.1,
+            low=0.2,
+            high=0.3,
         )
     ).squeeze()
 
@@ -113,17 +133,24 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             mojo.GeomBox(
                 name=mojo.GeomName("g1"),
                 size=np.array([0.5, 0.5, 0.5]),
-                material=box_mat_1.name,
+                rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                 contype=0,
                 conaffinity=0,
             )
         ],
         sites=[
             mojo.SiteSphere(
-                name=mojo.SiteName("s1"),
+                name=mojo.SiteName("pz_spring_tip_site"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([-0.49, 0, 0])),
-            )
+                pos=mojo.Pos(pos=np.array([-0.4, 0, 0.5])),
+                rgba=mojo.utils.Color.BLUE_500.rgba,
+            ),
+            mojo.SiteSphere(
+                name=mojo.SiteName("mz_spring_tip_site"),
+                size=0.1,
+                pos=mojo.Pos(pos=np.array([-0.4, 0, -0.5])),
+                rgba=mojo.utils.Color.BLUE_500.rgba,
+            ),
         ],
     )
 
@@ -136,26 +163,31 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             mojo.GeomBox(
                 name=mojo.GeomName("g2"),
                 size=np.array([0.5, 0.5, 0.5]),
-                material=box_mat_2.name,
+                rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
                 contype=0,
                 conaffinity=0,
             )
         ],
         sites=[
             mojo.SiteSphere(
-                name=mojo.SiteName("s2"),
+                name=mojo.SiteName("pz_spring_base_site"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([0.49, 0, 0])),
-                rgba=mojo.utils.Color.WHITE.invisible,
-            )
+                pos=mojo.Pos(pos=np.array([0.4, 0, 0.5])),
+                rgba=mojo.utils.Color.RED_500.with_alpha(0.2),
+            ),
+            mojo.SiteSphere(
+                name=mojo.SiteName("mz_spring_base_site"),
+                size=0.1,
+                pos=mojo.Pos(pos=np.array([0.4, 0, -0.5])),
+                rgba=mojo.utils.Color.RED_500.with_alpha(0.2),
+            ),
         ],
         cameras=[
             mojo.Camera(
-                name=TRACKING_CAMERA_NAME,
-                pos=mojo.Pos(pos=np.array((-0.49, 0, 0))),
-                fovy=30,
-                mode=mojo.TrackingMode.TARGETBODY,
-                target=box1.name,
+                name=BOX_CAMERA_NAME,
+                pos=mojo.Pos(pos=np.array((0.4, 0, 0))),
+                orientation=mojo.Euler(euler=np.array((90, -90, 0))),
+                fovy=120,
             ),
         ],
     )
@@ -165,8 +197,16 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
             name=FIXED_CAMERA_NAME,
-            pos=mojo.Pos(pos=np.array((0, 0, 10))),
-            fovy=60,
+            pos=mojo.Pos(pos=np.array((0, -10, 0))),
+            orientation=mojo.Euler(euler=np.array((90, 0, 0))),
+            fovy=30,
+        ),
+        mojo.Camera(
+            name=TRACKING_CAMERA_NAME,
+            pos=mojo.Pos(pos=np.array((0, -10, 0))),
+            fovy=30,
+            mode=mojo.TrackingMode.TARGETBODY,
+            target=box1.name,
         ),
     ]
     return mojo_model
@@ -184,46 +224,82 @@ def runtime(
     # Identify our sites from the generated model
     # Note: We can find them by name in the worldbody
     assert mojo_model.mjcf.worldbody is not None
-    s1 = next(
-        s for b in mojo_model.mjcf.worldbody.bodies for s in b.sites if s.name == "s1"
+    pz_spring_tip = next(
+        s
+        for b in mojo_model.mjcf.worldbody.bodies
+        for s in b.sites
+        if s.name == "pz_spring_tip_site"
     )
-    s2 = next(
-        s for b in mojo_model.mjcf.worldbody.bodies for s in b.sites if s.name == "s2"
+    pz_spring_base = next(
+        s
+        for b in mojo_model.mjcf.worldbody.bodies
+        for s in b.sites
+        if s.name == "pz_spring_base_site"
+    )
+    mz_spring_tip = next(
+        s
+        for b in mojo_model.mjcf.worldbody.bodies
+        for s in b.sites
+        if s.name == "mz_spring_tip_site"
+    )
+    mz_spring_base = next(
+        s
+        for b in mojo_model.mjcf.worldbody.bodies
+        for s in b.sites
+        if s.name == "mz_spring_base_site"
     )
 
     with runtime_manager as rm:
         assert rm.results_manager is not None
-        rm.results_manager.record_decimation = 100  # only record every 100 steps
+        rm.results_manager.record_decimation = 1
 
         if mojo_model.is_nominal:
             rt.VideoRecorder(
-                path=Path("fixed_camera.mp4"), camera_name=FIXED_CAMERA_NAME
+                path=Path("fixed_camera.mp4"),
+                camera_name=FIXED_CAMERA_NAME,
+                show_force=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
-                path=Path("tracking_camera.mp4"), camera_name=TRACKING_CAMERA_NAME
+                path=Path("tracking_camera.mp4"),
+                camera_name=TRACKING_CAMERA_NAME,
+                show_force=True,
+            ).setup(mj_model).register_to_rm(rm)
+
+            rt.VideoRecorder(
+                path=Path("box_camera.mp4"),
+                camera_name=BOX_CAMERA_NAME,
+                show_force=False,
             ).setup(mj_model).register_to_rm(rm)
 
         # Create a compression-only spring (Bumper)
         # Rest length is 0.5. If boxes are closer, they push away.
-        bumper = rt.PointToPointForce.compression_spring(
-            name="box_bumper",
-            action_site=s1,
-            xtion_site=s2,
-            stiffness=float(mojo_model.named["stiffness"]),
-            damping=10.0,
-            rest_length=0.5,
+        pz_bumper = rt.PointToPointForce.stroke_compression_spring(
+            name="pz_box_bumper",
+            action_site=pz_spring_base,  # red box
+            xtion_site=pz_spring_tip,  # blue box
+            stiffness=float(mojo_model.named["pz_stiffness"]),
+            max_stroke=float(mojo_model.named["pz_stroke"]),
+            preload=25,
+        ).register_to_rm(rm)
+        mz_bumper = rt.PointToPointForce.stroke_compression_spring(
+            name="mz_box_bumper",
+            action_site=mz_spring_base,  # red box
+            xtion_site=mz_spring_tip,  # blue box
+            stiffness=float(mojo_model.named["mz_stiffness"]),
+            max_stroke=float(mojo_model.named["mz_stroke"]),
+            preload=24,
         ).register_to_rm(rm)
 
         # Request standard telemetry for the boxes
-        s1.request(rm.results_manager)
-        s2.request(rm.results_manager)
-        bumper.request(rm.results_manager)
+        pz_spring_tip.request(rm.results_manager)
+        pz_spring_base.request(rm.results_manager)
+        mz_spring_tip.request(rm.results_manager)
+        mz_spring_base.request(rm.results_manager)
+        pz_bumper.request(rm.results_manager)
+        mz_bumper.request(rm.results_manager)
         for b in mojo_model.mjcf.worldbody.bodies:
             b.request(rm.results_manager)
-
-        # record t = 0
-        rm.results_manager.record(mj_model, mj_data)
 
         # Run for 2 seconds
         while mj_data.time < 2.0:
@@ -233,17 +309,58 @@ def runtime(
 
 
 def post_process(workdir: Path):
+    import matplotlib.pyplot as plt
+
     tn = 0
     db_path = workdir / "trials" / f"trial_{tn}" / "telemetry.duckdb"
     conn = duckdb.connect(db_path)
 
     df = conn.execute("SELECT * FROM result").pl()
-    # _df["box_bumper"]
+    df = df.with_columns(
+        dist=(
+            (pl.col("pz_spring_tip_site_xpos_x") - pl.col("pz_spring_base_site_xpos_x"))
+            ** 2
+            + (
+                pl.col("pz_spring_tip_site_xpos_y")
+                - pl.col("pz_spring_base_site_xpos_y")
+            )
+            ** 2
+            + (
+                pl.col("pz_spring_tip_site_xpos_z")
+                - pl.col("pz_spring_base_site_xpos_z")
+            )
+            ** 2
+        ).sqrt()
+    )
+    r0 = df["dist"][0]
+    df = df.with_columns(stroke=pl.col("dist") - r0)
 
-    print(df)
-    print(df["box_bumper_force_m"])
-    print(df.columns)
-    # breakpoint()
+    def plot_spring_force():
+        active_df = df.filter(pl.col("stroke") <= 0.5)
+        # breakpoint()
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(
+            active_df["stroke"],
+            active_df["pz_box_bumper_force_m"],
+            label="Spring Force",
+            color=mojo.utils.Color.CYAN_500,
+            linewidth=2,
+        )
+
+        # Formatting
+        plt.title(f"Force vs. Stroke (Trial {tn})", fontsize=14)
+        plt.xlabel("Stroke [m] (extension > 0, compression < 0)", fontsize=12)
+        plt.ylabel("Force Magnitude [N]", fontsize=12)
+        plt.grid(True, linestyle="--", alpha=0.7)
+        plt.legend()
+        plt.tight_layout()
+
+        # Save the plot
+        plot_path = workdir / "force_stroke_plot.png"
+        plt.savefig(plot_path)
+
+    plot_spring_force()
 
 
 if __name__ == "__main__":

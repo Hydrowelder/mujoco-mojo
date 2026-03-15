@@ -17,12 +17,15 @@ logger = get_logger(__name__)
 class VideoRecorder:
     path: Path
     camera_name: CameraName
+    show_force: bool = False
     fps: int = 30
     width: int = 640
     height: int = 480
 
     _frames: list = field(default_factory=list)
     _renderer: mujoco.Renderer = field(init=False)
+    _vopt: mujoco.MjvOption = field(default_factory=mujoco.MjvOption, init=False)
+
     _next_record_time: float = field(default=0.0, init=False)
 
     def setup(self, mj_model: mujoco.MjModel) -> Self:
@@ -35,12 +38,25 @@ class VideoRecorder:
             msg = "Failed to initialize the MuJoCo Renderer. If on a server, try setting 'export MUJOCO_GL=egl' in your terminal."
             logger.error(msg)
             raise RuntimeError(msg) from e
+
+        # initialize the vopt with defaults
+        mujoco.mjv_defaultOption(self._vopt)
+
+        # whether or not to show foces
+        if self.show_force:
+            self._vopt.flags[mujoco.mjtVisFlag.mjVIS_PERTFORCE] = 1
+        else:
+            self._vopt.flags[mujoco.mjtVisFlag.mjVIS_PERTFORCE] = 0
         return self
 
     def capture_frame(self, mj_data):
         """Captures the current state as a video frame."""
         if mj_data.time >= self._next_record_time:
-            self._renderer.update_scene(data=mj_data, camera=self.camera_name)
+            self._renderer.update_scene(
+                data=mj_data,
+                camera=self.camera_name,
+                scene_option=self._vopt,
+            )
             self._frames.append(self._renderer.render())
 
             # increment the clock for the next frame
