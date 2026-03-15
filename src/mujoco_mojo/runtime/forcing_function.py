@@ -195,31 +195,23 @@ class PointToPointForce(ForcingFunction):
         mj_data: mujoco.MjData,
         results_manager: ResultsManager | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        p1 = self.action_site.rt_pos(mj_model, mj_data)
-        p2 = (
-            self.xtion_site.rt_pos(mj_model, mj_data)
-            if self.xtion_site is not None
-            else np.zeros(3)
-        )
+        # get euclidian distance
+        dist = self.action_site.rt_dm(self.xtion_site, mj_model, mj_data)
 
-        r_vec = p1 - p2
-        dist = float(np.linalg.norm(r_vec))
-        unit_vec = r_vec / dist if dist > 1e-9 else np.zeros(3)
+        # get relative displacement vector in world frame
+        dr_world = self.action_site.rt_displacements(self.xtion_site, mj_model, mj_data)
+        unit_vec = dr_world / dist if dist > 1e-9 else np.zeros(3)
 
-        # simple velocity approximation along the line for damping
-        v1 = self.action_site.rt_vel(mj_model, mj_data)
-        v2 = (
-            self.xtion_site.rt_vel(mj_model, mj_data)
-            if self.xtion_site is not None
-            else np.zeros(3)
-        )
-        vel = np.dot(v1 - v2, unit_vec)
+        # get relative velocity along line-of-action
+        v_rel_world = self.action_site.rt_velocities(
+            self.xtion_site, mj_model, mj_data
+        )[3:6]
+        vel = np.dot(v_rel_world, unit_vec)
 
-        # user defined logic (spring, spring damper, etc.)
+        # user defined logic
         f_mag = self.magnitude_func(dist, vel, self._r0_mag)
-        f_vec = unit_vec * f_mag
 
-        return f_vec, np.zeros(3)
+        return unit_vec * f_mag, np.zeros(3)
 
     @classmethod
     def ideal_spring(
