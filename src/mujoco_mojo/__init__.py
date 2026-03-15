@@ -155,7 +155,7 @@ from .mjcf import (
     XYAxes,
     ZAxis,
 )
-from .mojo_model import MojoModel, Values
+from .mojo_model import MojoModel
 from .process_manager import (
     NOMINAL_TRIAL_NUM,
     BaseDict,
@@ -473,7 +473,6 @@ __all__ = [
     "TruncatedNormalDistribution",
     "UniformDistribution",
     "ValueName",
-    "Values",
     "Vec2",
     "Vec3",
     "Vec4",

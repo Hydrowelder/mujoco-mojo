@@ -27,10 +27,10 @@ class RuntimeManager:
         for recorder in self.video_recorders:
             recorder.save()
 
-    def resolve(self, mj_model: mujoco.MjModel):
+    def resolve(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.forcing_functions:
-            load.resolve_ids(mj_model)
+            load.resolve_ids(mj_model, mj_data)
 
     def add_load(self, load: ForcingFunction):
         self.forcing_functions.append(load)

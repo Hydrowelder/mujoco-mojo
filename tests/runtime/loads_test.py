@@ -9,7 +9,7 @@ from mujoco_mojo.typing import SiteName
 
 
 @pytest.fixture
-def basic_mj_setup():
+def basic_mj_setup() -> tuple[mujoco.MjModel, mujoco.MjData]:
     """Creates a minimal model with two sites for testing."""
     xml = """
     <mujoco>
@@ -33,7 +33,7 @@ def basic_mj_setup():
     return model, data
 
 
-def test_ideal_spring_magnitude(basic_mj_setup):
+def test_ideal_spring_magnitude(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
     model, data = basic_mj_setup
     s1 = SiteSphere(name=SiteName("site1"), size=1)
     s2 = SiteSphere(name=SiteName("site2"), size=1)
@@ -46,7 +46,7 @@ def test_ideal_spring_magnitude(basic_mj_setup):
         stiffness=100.0,
         rest_length=0.5,
     )
-    spring.resolve_ids(model)
+    spring.resolve_ids(model, data)
     force, _ = spring.calculate(model, data)
 
     # Distance is 1.0 along X. Unit vector is [1, 0, 0].
@@ -54,7 +54,7 @@ def test_ideal_spring_magnitude(basic_mj_setup):
     assert np.allclose(np.asarray(force), [50.0, 0, 0])
 
 
-def test_tension_only_spring(basic_mj_setup):
+def test_tension_only_spring(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
     model, data = basic_mj_setup
     s1 = SiteSphere(name=SiteName("site1"), size=1)
     s2 = SiteSphere(name=SiteName("site2"), size=1)
@@ -63,13 +63,13 @@ def test_tension_only_spring(basic_mj_setup):
     cable = PointToPointForce.tension_spring(
         name="cable", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=1.5
     )
-    cable.resolve_ids(model)
+    cable.resolve_ids(model, data)
 
     force, _ = cable.calculate(model, data)
     assert np.all(force == 0)  # Should be slack
 
 
-def test_general_force_rotation(basic_mj_setup):
+def test_general_force_rotation(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
     model, data = basic_mj_setup
     s1 = SiteSphere(name=SiteName("site1"), size=1)
 
@@ -81,7 +81,7 @@ def test_general_force_rotation(basic_mj_setup):
     thrust = GeneralForce(
         name="thruster", action_site=s1, fz=lambda t: 10.0, rel_to_site=s1
     )
-    thrust.resolve_ids(model)
+    thrust.resolve_ids(model, data)
 
     f_world, _ = thrust.calculate(model, data)
 
@@ -90,7 +90,9 @@ def test_general_force_rotation(basic_mj_setup):
     assert np.allclose(np.asarray(f_world)[1:3], [0, 0], atol=1e-5)
 
 
-def test_runtime_manager_integration(basic_mj_setup):
+def test_runtime_manager_integration(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
     """Verifies that the manager correctly injects forces into MuJoCo."""
     model, data = basic_mj_setup
 
@@ -111,7 +113,7 @@ def test_runtime_manager_integration(basic_mj_setup):
     )
 
     mgr.add_load(spring)
-    mgr.resolve(model)
+    mgr.resolve(model, data)
 
     # Ensure buffer is clean
     data.qfrc_applied[:] = 0.0
@@ -129,7 +131,7 @@ def test_runtime_manager_integration(basic_mj_setup):
     assert data.qfrc_applied[6] == pytest.approx(-50.0)
 
 
-def test_compression_spring_limit(basic_mj_setup):
+def test_compression_spring_limit(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
     model, data = basic_mj_setup  # mj_forward already called in fixture
     s1 = SiteSphere(name=SiteName("site1"), size=1)
     s2 = SiteSphere(name=SiteName("site2"), size=1)
@@ -138,7 +140,7 @@ def test_compression_spring_limit(basic_mj_setup):
     bumper = PointToPointForce.compression_spring(
         name="bumper", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
     )
-    bumper.resolve_ids(model)
+    bumper.resolve_ids(model, data)
 
     force, _ = bumper.calculate(model, data)
     assert np.all(np.asarray(force) == 0)  # Verified: No force when extended

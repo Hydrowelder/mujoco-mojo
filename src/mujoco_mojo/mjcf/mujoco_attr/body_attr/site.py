@@ -86,6 +86,100 @@ class SiteBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
+    def rt_displacements(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> np.ndarray:
+        """Returns the 3D displacement vector from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
+        p1 = self.rt_pos(mj_model, mj_data)
+        p2 = other.rt_pos(mj_model, mj_data) if other else np.zeros(3)
+
+        # world displacement
+        dr_world = p1 - p2
+
+        if relative_to is None:
+            return dr_world
+
+        # rotate into relative_to frame: R^T * dr_world
+        rot = mj_data.site_xmat[relative_to.get_id(mj_model)].reshape(3, 3)
+        return rot.T @ dr_world
+
+    def rt_dx(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime X displacement between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_displacements(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[0]
+        )
+
+    def rt_dy(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Y displacement between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_displacements(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[1]
+        )
+
+    def rt_dz(
+        self,
+        other: Site | None,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        relative_to: Site | None = None,
+    ) -> float:
+        """
+        Returns the runtime Z displacement between this site and 'other'.
+
+        If 'relative_to' is provided the coordinate system for that site will be used.
+        """
+        return float(
+            self.rt_displacements(
+                other=other,
+                mj_model=mj_model,
+                mj_data=mj_data,
+                relative_to=relative_to,
+            )[2]
+        )
+
+    def rt_dm(
+        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> float:
+        """Returns the runtime euclidian distance between two sites. If `other` is None this will just be the position of self."""
+        return float(
+            np.linalg.norm(
+                self.rt_displacements(other=other, mj_model=mj_model, mj_data=mj_data)
+            )
+        )
+
     def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
         return mj_model.site_bodyid[self.get_id(mj_model)]
 

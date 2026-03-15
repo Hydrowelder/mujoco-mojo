@@ -24,10 +24,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     # print(f"generating nothing {trial_num}!")
     # print(f"Args used: {args}!")
     # print(f"Kwargs used: {kwargs}!")
-    logger.info(f"generating nothing {mojo_model.values.trial_num}!")
+    logger.info(f"generating nothing {mojo_model.trial_num}!")
 
     cached_method()
-    if not mojo_model.values.trial_num % 5:
+    if not mojo_model.trial_num % 5:
         raise ValueError("askflaskfhl")
 
     mojo_model.mjcf.assets = [
@@ -54,9 +54,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             )
         ]
     )
-    mojo_model.mjcf.model = mojo.ModelName(
-        f"monte_carlo_test_{mojo_model.values.trial_num}"
-    )
+    mojo_model.mjcf.model = mojo.ModelName(f"monte_carlo_test_{mojo_model.trial_num}")
     mojo_model.mjcf.worldbody = mojo.WorldBody(bodies=[body])
 
     time.sleep(1e-8)
@@ -74,7 +72,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
 def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # print("running nothing!")
-    if mojo_model.values.trial_num == 7:
+    if mojo_model.trial_num == 7:
         raise ValueError("blah blah blah")
     time.sleep(2e-8)
 
