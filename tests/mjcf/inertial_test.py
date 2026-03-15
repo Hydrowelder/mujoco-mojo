@@ -96,13 +96,13 @@ def test_from_random_vector_draw(mojo_model: MojoModel):
     )
 
     assert item.mass > 0
-    assert "rand_mass" in mojo_model.values.named
-    assert "rand_pos_x" in mojo_model.values.named
-    assert "rand_pos_y" in mojo_model.values.named
-    assert "rand_pos_z" in mojo_model.values.named
+    assert "rand_mass" in mojo_model.named
+    assert "rand_pos_x" in mojo_model.named
+    assert "rand_pos_y" in mojo_model.named
+    assert "rand_pos_z" in mojo_model.named
 
 
-def test_from_random_component_draw(mojo_model):
+def test_from_random_component_draw(mojo_model: MojoModel):
     """Test sampling individual X, Y, Z components of the position."""
     x_dist = UniformDistribution(name=DistName("pos_x"), low=5, high=6)
 
@@ -116,10 +116,10 @@ def test_from_random_component_draw(mojo_model):
 
     assert 5 <= item.pos[0] <= 6
     assert item.pos[1] == 0.0
-    assert "pos_x" in mojo_model.values.named
+    assert "pos_x" in mojo_model.named
 
 
-def test_from_random_max_retries(mojo_model):
+def test_from_random_max_retries(mojo_model: MojoModel):
     """Verify the retry logic when a distribution is physically impossible."""
     # Force a failure: Mass is positive, but diaginertia is zero/negative
     # (Uniform low=0 effectively creates invalid non-positive-definite matrices)

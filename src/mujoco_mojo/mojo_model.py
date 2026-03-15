@@ -18,10 +18,14 @@ from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 
-__all__ = ["MojoModel", "Values"]
+__all__ = ["MojoModel"]
 
 
-class Values(MojoBaseModel):
+class MojoModel(MojoBaseModel):
+    """Mojo is the highest level watcher which manages running jobs."""
+
+    mjcf: Mujoco = Field(default_factory=Mujoco)
+
     trial_num: int = NOMINAL_TRIAL_NUM
     seed: int | None = None
     dists: DistributionDict = Field(default_factory=DistributionDict)
@@ -80,58 +84,13 @@ class Values(MojoBaseModel):
             self.named.update(nv)
         return nv
 
-    def with_override(self, override: NamedValueDict[NDArray]) -> None:
-        """
-        Sets the NamedValueDict to the provided override.
-
-        This is useful for manually setting some named values to be used.
-        """
-        self.named = override
-
-    def with_seed(self, seed: int | None = None) -> None:
-        self.seed = seed
-
-    def with_trial_num(self, trial_num: int) -> None:
-        self.trial_num = trial_num
-
-
-class MojoModel(MojoBaseModel):
-    """Mojo is the highest level watcher which manages running jobs."""
-
-    mjcf: Mujoco = Field(default_factory=Mujoco)
-    values: Values = Field(default_factory=Values)
-
-    def sample_dist(
-        self,
-        dist: Dist,
-        size: int = 1,
-        force: bool = False,
-        warn: bool = True,
-    ) -> NamedValue[NDArray]:
-        """
-        Sets the seed and trial number of the distribution, sample, registers it and the sampled value to the MuJoCo model, and returns the named value.
-
-        If the NamedValue is already registered, the registered named value is returned.
-
-        Args:
-            dist (Dist): Distribution to sample and register.
-            size (int, optional): Number of samples to take. Will be embedded in the returned NamedValue. Defaults to 1.
-            force (bool, optional): Force the sampled value into the NamedValueDict if it already exists. Defaults to False.
-            warn (bool, optional): Whether or not to warn if there is a conflict while forcing. Defaults to True.
-
-        Returns:
-            NamedValue[NDArray]: NamedValue containing the random draw.
-
-        """
-        return self.values.sample_dist(dist=dist, size=size, force=force, warn=warn)
-
     def with_overrides(self, overrides: NamedValueDict[NDArray]) -> Self:
         """
         Sets the NamedValueDict to the provided override.
 
         This is useful for manually setting some named values to be used.
         """
-        self.values.with_override(overrides)
+        self.named = overrides
         return self
 
     def with_seed(self, seed: int | None = None) -> Self:
@@ -140,7 +99,9 @@ class MojoModel(MojoBaseModel):
 
         This is useful for initializaing the model.
         """
-        self.values.with_seed(seed=seed)
+        self.seed = seed
+        for _, dist in self.dists.items():
+            dist.with_seed(seed)
         return self
 
     def with_trial_num(self, trial_num: int) -> Self:
@@ -149,5 +110,20 @@ class MojoModel(MojoBaseModel):
 
         This is useful for initializaing the model.
         """
-        self.values.with_trial_num(trial_num=trial_num)
+        self.trial_num = trial_num
+        for _, dist in self.dists.items():
+            dist.with_trial_num(trial_num)
         return self
+
+    def with_override(self, override: NamedValueDict[NDArray]) -> Self:
+        """
+        Sets the NamedValueDict to the provided override.
+
+        This is useful for manually setting some named values to be used.
+        """
+        self.named = override
+        return self
+
+    @property
+    def is_nominal(self) -> bool:
+        return self.trial_num == NOMINAL_TRIAL_NUM

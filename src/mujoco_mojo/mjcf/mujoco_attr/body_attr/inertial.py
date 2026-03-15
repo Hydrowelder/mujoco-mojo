@@ -431,8 +431,8 @@ class Inertial(XMLModel):
                 for item in input_val:
                     if isinstance(item, Distribution):
                         # sample raw, but create the NamedValue container
-                        item.with_seed(mojo_model.values.seed).with_trial_num(
-                            mojo_model.values.trial_num
+                        item.with_seed(mojo_model.seed).with_trial_num(
+                            mojo_model.trial_num
                         )
                         nv = item.sample_to_named_value()
                         resolved_values.append(nv.squeeze())
@@ -443,8 +443,8 @@ class Inertial(XMLModel):
 
             # case 2: single vector-level distribution
             if isinstance(input_val, Distribution):
-                input_val.with_seed(mojo_model.values.seed).with_trial_num(
-                    mojo_model.values.trial_num
+                input_val.with_seed(mojo_model.seed).with_trial_num(
+                    mojo_model.trial_num
                 )
                 nv = input_val.sample_to_named_value()
                 return nv.value.squeeze(), [nv]
@@ -480,7 +480,7 @@ class Inertial(XMLModel):
                 # success! commiting all Namedvalues to the registry
                 all_pending = m_nv + p_nv + d_nv + f_nv
                 for nv in all_pending:
-                    mojo_model.values.named.force_update(nv, warn=False)
+                    mojo_model.named.force_update(nv, warn=False)
 
                 return instance
 

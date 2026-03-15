@@ -54,32 +54,39 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 ),
             ]
         ),
-        # add a skybox
-        mojo.Asset(
-            textures=[
-                mojo.Texture(
-                    name=mojo.TextureName("skybox_texture_colors"),
-                    type=mojo.TextureType.SKYBOX,
-                    fileback=skybox_folder / "nz.png",
-                    filedown=skybox_folder / "ny.png",
-                    filefront=skybox_folder / "pz.png",
-                    fileleft=skybox_folder / "nx.png",
-                    fileright=skybox_folder / "px.png",
-                    fileup=skybox_folder / "py.png",
-                )
-            ]
-        ),
     ]
+
+    # add a skybox
+    if mojo_model.is_nominal:
+        mojo_model.mjcf.assets.append(
+            mojo.Asset(
+                textures=[
+                    mojo.Texture(
+                        name=mojo.TextureName("skybox_texture_colors"),
+                        type=mojo.TextureType.SKYBOX,
+                        fileback=skybox_folder / "nz.png",
+                        filedown=skybox_folder / "ny.png",
+                        filefront=skybox_folder / "pz.png",
+                        fileleft=skybox_folder / "nx.png",
+                        fileright=skybox_folder / "px.png",
+                        fileup=skybox_folder / "py.png",
+                    )
+                ]
+            ),
+        )
+
     mojo_model.mjcf.worldbody = mojo.WorldBody(
-        geoms=[
-            # mojo.GeomPlane(
-            #     name=mojo.GeomName("floor"),
-            #     size=np.array([0, 0, 0.1]),
-            #     pos=mojo.Pos(pos=np.array((0, 0, -5))),
-            #     material=grid_mat.name,
-            #     contype=0,
-            #     conaffinity=0,
-            # ),
+        geoms=[]
+        if mojo_model.is_nominal
+        else [
+            mojo.GeomPlane(
+                name=mojo.GeomName("floor"),
+                size=np.array([0, 0, 0.1]),
+                pos=mojo.Pos(pos=np.array((0, 0, -5))),
+                material=grid_mat.name,
+                contype=0,
+                conaffinity=0,
+            ),
         ]
     )
     mojo_model.mjcf.options = [
@@ -188,13 +195,14 @@ def runtime(
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 100  # only record every 100 steps
 
-        rt.VideoRecorder(
-            path=Path("fixed_camera.mp4"), camera_name=FIXED_CAMERA_NAME
-        ).setup(mj_model).register_to_rm(rm)
+        if mojo_model.is_nominal:
+            rt.VideoRecorder(
+                path=Path("fixed_camera.mp4"), camera_name=FIXED_CAMERA_NAME
+            ).setup(mj_model).register_to_rm(rm)
 
-        rt.VideoRecorder(
-            path=Path("tracking_camera.mp4"), camera_name=TRACKING_CAMERA_NAME
-        ).setup(mj_model).register_to_rm(rm)
+            rt.VideoRecorder(
+                path=Path("tracking_camera.mp4"), camera_name=TRACKING_CAMERA_NAME
+            ).setup(mj_model).register_to_rm(rm)
 
         # Create a compression-only spring (Bumper)
         # Rest length is 0.5. If boxes are closer, they push away.
@@ -202,7 +210,7 @@ def runtime(
             name="box_bumper",
             action_site=s1,
             xtion_site=s2,
-            stiffness=float(mojo_model.values.named["stiffness"]),
+            stiffness=float(mojo_model.named["stiffness"]),
             damping=10.0,
             rest_length=0.5,
         ).register_to_rm(rm)
@@ -221,7 +229,7 @@ def runtime(
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
 
-    return f"Trial {mojo_model.values.trial_num} complete."
+    return f"Trial {mojo_model.trial_num} complete."
 
 
 def post_process(workdir: Path):
@@ -252,7 +260,9 @@ if __name__ == "__main__":
         config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
     )
 
-    results, had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
+    results, had_fails = runner.run(
+        resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
+    )
 
     if not had_fails and runner.runtime is not None:
         post_process(workdir=workdir)

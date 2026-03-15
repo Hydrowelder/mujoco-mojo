@@ -32,10 +32,9 @@ class VideoRecorder:
                 model=mj_model, height=self.height, width=self.width
             )
         except Exception as e:
-            logger.error(
-                "Failed to initialize the MuJoCo Renderer. If on a server, try setting 'export MUJOCO_GL=egl' in your terminal."
-            )
-            raise e
+            msg = "Failed to initialize the MuJoCo Renderer. If on a server, try setting 'export MUJOCO_GL=egl' in your terminal."
+            logger.error(msg)
+            raise RuntimeError(msg) from e
         return self
 
     def capture_frame(self, mj_data):

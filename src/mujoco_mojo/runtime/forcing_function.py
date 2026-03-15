@@ -54,15 +54,23 @@ class ForcingFunction(MojoBaseModel):
     """Frame of reference for the calculated force. If None, uses worldbody."""
 
     _last_f: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
-    _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    """Previous timestep's force values. Used for request management."""
 
-    def resolve_ids(self, mj_model: mujoco.MjModel):
+    _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    """Previous timestep's torque values. Used for request management."""
+
+    _r0_mag: float = PrivateAttr(default=0.0)
+    """Initial distance between action and reaction sites."""
+
+    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
         self.action_site.get_id(mj_model)
         if self.xtion_site:
             self.xtion_site.get_id(mj_model)
         if self.rel_to_site:
             self.rel_to_site.get_id(mj_model)
+
+        self._r0_mag = self.action_site.rt_dm(self.xtion_site, mj_model, mj_data)
 
     def _get_world_vectors(
         self,
@@ -170,8 +178,8 @@ class ForcingFunction(MojoBaseModel):
 class PointToPointForce(ForcingFunction):
     """Acts along the line-of-sight between two sites."""
 
-    magnitude_func: Callable[[float, float], float]
-    """Func(distance, velocity) -> scalar_force. Can be a regular function, lambda, etc."""
+    magnitude_func: Callable[[float, float, float], float]
+    """Func(distance, velocity, initial distance) -> scalar_force. Can be a regular function, lambda, etc."""
 
     @model_validator(mode="after")
     def _validate_frame(self) -> Self:
@@ -208,7 +216,7 @@ class PointToPointForce(ForcingFunction):
         vel = np.dot(v1 - v2, unit_vec)
 
         # user defined logic (spring, spring damper, etc.)
-        f_mag = self.magnitude_func(dist, vel)
+        f_mag = self.magnitude_func(dist, vel, self._r0_mag)
         f_vec = unit_vec * f_mag
 
         return f_vec, np.zeros(3)
@@ -225,8 +233,40 @@ class PointToPointForce(ForcingFunction):
     ) -> Self:
         """Standard linear spring-damper (works in both tension and compression)."""
 
-        def logic(d: float, v: float) -> float:
+        def logic(d: float, v: float, r0: float) -> float:
             return _ideal_force_logic(d, v, stiffness, damping, rest_length)
+
+        return cls(
+            name=name,
+            action_site=action_site,
+            xtion_site=xtion_site,
+            magnitude_func=logic,
+        )
+
+    @classmethod
+    def stroke_spring(
+        cls,
+        name: str,
+        action_site: Site,
+        xtion_site: Site,
+        stiffness: float | NamedValue[float] = 0.0,
+        damping: float | NamedValue[float] = 0.0,
+        preload: float | NamedValue[float] = 0.0,
+        max_stroke: float | NamedValue[float] = 0.1,
+    ) -> Self:
+        """Creates a spring-damper that only acts when the runtime length is between rest_length and (rest_legnth + stroke_length)"""
+
+        def logic(d: float, v: float, r0: float) -> float:
+            k = stiffness.value if isinstance(stiffness, NamedValue) else stiffness
+            c = damping.value if isinstance(damping, NamedValue) else damping
+            f_0 = preload.value if isinstance(preload, NamedValue) else preload
+            d_f = max_stroke.value if isinstance(max_stroke, NamedValue) else max_stroke
+
+            delta_d = d - r0
+
+            if 0 <= delta_d <= d_f:
+                return -1.0 * (f_0 + k * delta_d + c * v)
+            return 0.0
 
         return cls(
             name=name,
@@ -249,7 +289,7 @@ class PointToPointForce(ForcingFunction):
         Creates a spring-damper that only acts when compressed (dist < rest_length). Useful for bumpers, feet, push-off springs, or end-stops.
         """
 
-        def logic(d: float, v: float) -> float:
+        def logic(d: float, v: float, r0: float) -> float:
             if d < rest_length:
                 return _ideal_force_logic(d, v, stiffness, damping, rest_length)
             return 0.0
@@ -275,7 +315,7 @@ class PointToPointForce(ForcingFunction):
         Creates a spring-damper that only acts when extended (dist > rest_length). Useful for cables, bungees, or tendons.
         """
 
-        def logic(d: float, v: float) -> float:
+        def logic(d: float, v: float, r0: float) -> float:
             if d > rest_length:
                 return _ideal_force_logic(d, v, stiffness, damping, rest_length)
             return 0.0
