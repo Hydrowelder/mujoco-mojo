@@ -264,6 +264,10 @@ class Color(StrEnum):
     ROSE_900 = "#881337"
     ROSE_950 = "#4C0519"
 
+    @property
+    def invisible(self) -> Vec4:
+        return self.with_alpha(0)
+
     @classmethod
     def random_rgba(cls) -> Vec4:
         return np.append((rng.random(3)), 1)

@@ -260,7 +260,7 @@ class Trial:
                 )
 
                 # save XML (with modified DepPath)
-                mojo_model.mjcf.write_xml(self.xml_path)
+                # mojo_model.mjcf.write_xml(self.xml_path)
                 mojo_model.dump_to_path(self.model_config_path)
 
             with status.record_step(step_name="solving"):
@@ -274,7 +274,7 @@ class Trial:
                             db_path=self.trial_dir / rt.ResultsManager.default_db_name()
                         )
                     )
-                    mj_model, mj_data = mojo_model.mjcf.prep_for_sim()
+                    mj_model, mj_data = mojo_model.mjcf.prep_for_sim(self.xml_path)
                     result = runtime(
                         mojo_model,
                         runtime_manager,
