@@ -20,6 +20,7 @@ dependencies = [
     "numpy>=2.4.1",
     "numpydantic>=1.7.0",
     "pandas>=3.0.0",
+    "pillow>=12.1.1",
     "polars>=1.39.0",
     "process-manager",
     "pyarrow>=23.0.1",

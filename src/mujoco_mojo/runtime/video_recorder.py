@@ -68,7 +68,22 @@ class VideoRecorder:
             return
         import mediapy as media
 
-        media.write_video(path=self.path, images=self._frames, fps=self.fps)
+        if self.path.suffix.lower() == ".gif":
+            from PIL import Image
+
+            # convert arrays to PIL images
+            pil_images = [Image.fromarray(frame) for frame in self._frames]
+
+            # save gif
+            pil_images[0].save(
+                self.path,
+                save_all=True,
+                append_images=pil_images[1:],
+                duration=int(1000 / self.fps),  # ms per frame
+                loop=0,  # loop forever
+            )
+        else:
+            media.write_video(path=self.path, images=self._frames, fps=self.fps)
         logger.info(f"Video saved to {self.path}")
 
     def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
