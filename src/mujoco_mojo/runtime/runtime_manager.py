@@ -5,6 +5,7 @@ import mujoco
 
 from mujoco_mojo.runtime.forcing_function import ForcingFunction
 from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.video_recorder import VideoRecorder
 
 
 @dataclass
@@ -12,6 +13,7 @@ class RuntimeManager:
     results_manager: ResultsManager | None = None
 
     forcing_functions: list[ForcingFunction] = field(default_factory=list)
+    video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     def __enter__(self) -> Self:
         """Prime the model and prepare results."""
@@ -22,6 +24,9 @@ class RuntimeManager:
         if self.results_manager:
             self.results_manager.close()
 
+        for recorder in self.video_recorders:
+            recorder.save()
+
     def resolve(self, mj_model: mujoco.MjModel):
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.forcing_functions:
@@ -29,6 +34,9 @@ class RuntimeManager:
 
     def add_load(self, load: ForcingFunction):
         self.forcing_functions.append(load)
+
+    def add_video_recorder(self, video_recorder: VideoRecorder):
+        self.video_recorders.append(video_recorder)
 
     def step(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """
@@ -51,3 +59,6 @@ class RuntimeManager:
         # telemetry objects harvest to the same ledger
         if self.results_manager:
             self.results_manager.record(mj_model, mj_data)
+
+        for recorder in self.video_recorders:
+            recorder.capture_frame(mj_data)

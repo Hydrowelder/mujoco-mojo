@@ -71,7 +71,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     # 2. Sample initial separation from a distribution
     mojo_model.sample_dist(
         mojo.TruncatedNormalDistribution(
-            name=mojo.DistName("stiffness"), nominal=250, mu=250, sigma=100
+            name=mojo.DistName("stiffness"), nominal=100, mu=100, sigma=30
         )
     ).squeeze()
 
@@ -94,7 +94,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             mojo.SiteSphere(
                 name=mojo.SiteName("s1"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([0.1, 0, 0])),
+                pos=mojo.Pos(pos=np.array([-0.49, 0, 0])),
             )
         ],
     )
@@ -117,12 +117,20 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             mojo.SiteSphere(
                 name=mojo.SiteName("s2"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([-0.1, 0, 0])),
+                pos=mojo.Pos(pos=np.array([0.49, 0, 0])),
             )
         ],
     )
 
     mojo_model.mjcf.worldbody.bodies.extend([box1, box2])
+
+    mojo_model.mjcf.worldbody.cameras = [
+        mojo.Camera(
+            name=mojo.CameraName("cam"),
+            pos=mojo.Pos(pos=np.array((0, 0, 10))),
+            fovy=20,
+        )
+    ]
     return mojo_model
 
 
@@ -144,10 +152,16 @@ def runtime(
     s2 = next(
         s for b in mojo_model.mjcf.worldbody.bodies for s in b.sites if s.name == "s2"
     )
+    cam = mojo_model.mjcf.worldbody.cameras[0]
+    assert cam.name is not None
 
     with runtime_manager as rm:
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 100  # only record every 100 steps
+
+        rt.VideoRecorder(path=Path("camera.mp4"), camera_name=cam.name).setup(
+            mj_model
+        ).register_to_rm(rm)
 
         # Create a compression-only spring (Bumper)
         # Rest length is 0.5. If boxes are closer, they push away.
@@ -164,6 +178,8 @@ def runtime(
         s1.request(rm.results_manager)
         s2.request(rm.results_manager)
         bumper.request(rm.results_manager)
+        for b in mojo_model.mjcf.worldbody.bodies:
+            b.request(rm.results_manager)
 
         # record t = 0
         rm.results_manager.record(mj_model, mj_data)
@@ -185,6 +201,7 @@ def post_process(workdir: Path):
 
     print(df)
     print(df["box_bumper_force_m"])
+    print(df.columns)
     # breakpoint()
 
 
@@ -204,6 +221,6 @@ if __name__ == "__main__":
 
     results, had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
 
-    if not had_fails:
+    if not had_fails and runner.runtime is not None:
         post_process(workdir=workdir)
     print(f"Finished with {had_fails=}")

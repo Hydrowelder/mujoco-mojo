@@ -88,7 +88,7 @@ class ForcingFunction(MojoBaseModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         results_manager: ResultsManager | None,
-    ) -> tuple[np.ndarray, np.ndarray]:  # TODO write docstring
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the force for the timestep.
 
@@ -122,12 +122,13 @@ class ForcingFunction(MojoBaseModel):
         self._last_t = np.append(t_world, np.linalg.norm(t_world))
 
         # apply to action site
+        action_pos = self.action_site.rt_pos(mj_model, mj_data)
         mujoco.mj_applyFT(
             m=mj_model,
             d=mj_data,
             force=f_world,
             torque=t_world,
-            point=self.action_site.rt_pos(mj_model, mj_data),
+            point=action_pos,
             body=self.action_site.rt_parent_body(mj_model),
             # target generalized force array
             qfrc_target=mj_data.qfrc_applied,
@@ -135,13 +136,17 @@ class ForcingFunction(MojoBaseModel):
 
         # apply reaction force
         if self.xtion_site is not None:
-            # Newton's 3rd Law
+            if isinstance(self, PointToPointForce):
+                reaction_pos = self.xtion_site.rt_pos(mj_model, mj_data)
+            else:
+                reaction_pos = action_pos
+
             mujoco.mj_applyFT(
                 m=mj_model,
                 d=mj_data,
-                force=-f_world,
+                force=-f_world,  # some nerd came up with this
                 torque=-t_world,
-                point=self.xtion_site.rt_pos(mj_model, mj_data),
+                point=reaction_pos,
                 body=self.xtion_site.rt_parent_body(mj_model),
                 qfrc_target=mj_data.qfrc_applied,
             )
