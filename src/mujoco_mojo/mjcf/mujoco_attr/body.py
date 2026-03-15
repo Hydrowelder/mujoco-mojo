@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import mujoco
 import numpy as np
@@ -22,7 +22,13 @@ from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import BodyName, Sleep, VecN
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.results_manager import ResultsManager
+
+logger = get_logger(__name__)
 
 __all__ = ["Body", "WorldBody"]
 
@@ -174,6 +180,89 @@ class Body(XMLModel):
     )
     """Bodies assigned to body. Handled recursively."""
 
+    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
+        return mj_model.body_parentid[self.get_id(mj_model)]
+
+    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        return mj_data.xpos[self.get_id(mj_model)]
+
+    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        assert self._mjt_obj is not None
+        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
+        mujoco.mj_objectVelocity(
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+        )
+        return res[3:6]
+
+    def rt_ang_vel(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        assert self._mjt_obj is not None
+        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
+        mujoco.mj_objectVelocity(
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+        )
+        return res[0:3]
+
+    def request(
+        self,
+        results_manager: ResultsManager,
+        attrs: list[Literal["xpos", "xvelp", "xvelr"]] = ["xpos", "xvelp", "xvelr"],
+    ):
+        """Registers specific site attributes for logging. Requires a named site."""
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}. Please assign a 'name' to the site before requesting outputs."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            sid = self.get_id(mj_model)
+            for attr in attrs:
+                if attr == "xpos":
+                    val = mj_data.xpos[sid]
+                elif attr == "xvelp":
+                    val = self.rt_vel(mj_model, mj_data)
+                elif attr == "xvelr":
+                    val = self.rt_ang_vel(mj_model, mj_data)
+                else:
+                    continue
+
+                for i, k in enumerate("xyz"):
+                    results_manager.post(f"{self.name}_{attr}_{k}", val[i])
+
+        results_manager.schedule_harvest_task(harvest)
+
+    def set_initial_velocity(
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        v_point: np.ndarray,
+        omega: np.ndarray,
+        point: np.ndarray,
+    ):
+        """
+        Sets the initial qvel for this body based on a velocity condition about a point.
+
+        Calculates: v_body = v_point + omega x (r_body - point)
+        """
+        if not self.freejoints:
+            logger.warning(
+                "Attempting to set initial velocity conditions for a body which does not have a free joint."
+            )
+
+        r_body = self.rt_pos(mj_model, mj_data)
+
+        # rigid body velo. mapping
+        v_body = v_point + np.cross(omega, (r_body - point))
+
+        # find the joint addresses for the body
+        jnt_adr = mj_model.body_jntadr[self.get_id(mj_model)]
+        qvel_adr = mj_model.jnt_dofadr[jnt_adr]
+
+        # apply to mj_data.qvel
+        mj_data.qvel[qvel_adr : qvel_adr + 3] = v_body
+        mj_data.qvel[qvel_adr + 3 : qvel_adr + 6] = omega
+
 
 _temp_list = list(_body_children)
 for not_in in ("inertial", "joints"):
@@ -188,3 +277,24 @@ class WorldBody(Body):
 
     attributes = ()
     children = _world_body_children
+
+    @staticmethod
+    def get_world_com(
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        bodies: list[Body],
+    ) -> tuple[float, np.ndarray]:
+        """Calculates the combined center of mass in world coordniates for multiple bodies."""
+        total_mass = 0.0
+        weighted_pos = np.zeros(3)
+
+        for body in bodies:
+            bid = body.get_id(mj_model)
+
+            m = mj_model.body_mass[bid]
+            p = mj_data.xipos[bid]
+
+            total_mass += m
+            weighted_pos += m * p
+
+        return total_mass, weighted_pos / total_mass if total_mass > 0 else np.zeros(3)

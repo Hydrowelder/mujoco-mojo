@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Self
 
+import mujoco
 import numpy as np
 from pydantic import field_validator, model_validator
 
@@ -207,6 +208,25 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         return self
+
+    def rt_world_pos(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """
+        Calculates the world-space position of this center of mass.
+
+        Requires the body's world transform from mjData.
+        """
+        # get the parent body ID
+        body_id = mj_model.body_parentid[self.get_id(mj_model)]
+
+        # get the body world transform
+        xpos = mj_data.xpos[body_id]
+        xmat = mj_data.xmat[body_id].reshape(3, 3)
+
+        # transform local offset to world space
+        # r_world = r_body + R_body @ offset_local
+        return xpos + xmat @ np.asarray(self.pos)
 
     def get_body_frame_inertia(self) -> np.ndarray:
         """

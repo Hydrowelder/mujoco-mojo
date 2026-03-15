@@ -93,18 +93,20 @@ class SiteBase(XMLModel):
         return mj_data.site_xpos[self.get_id(mj_model)]
 
     def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
         mujoco.mj_objectVelocity(
-            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, self.get_id(mj_model), res, 0
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
         )
         return res[3:6]
 
     def rt_ang_vel(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> np.ndarray:
+        assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
         mujoco.mj_objectVelocity(
-            mj_model, mj_data, mujoco.mjtObj.mjOBJ_SITE, self.get_id(mj_model), res, 0
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
         )
         return res[0:3]
 
