@@ -261,7 +261,7 @@ def runtime(
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
-                path=Path("tracking_camera.mp4"),
+                path=Path("tracking_camera.gif"),
                 camera_name=TRACKING_CAMERA_NAME,
                 show_force=True,
             ).setup(mj_model).register_to_rm(rm)
