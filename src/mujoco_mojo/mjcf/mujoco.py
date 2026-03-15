@@ -180,7 +180,13 @@ class Mujoco(XMLModel):
         """Creates an MjModel from the Mujoco instance."""
         return mujoco.MjModel.from_xml_string(to_pretty_xml(self.to_xml()))
 
-    def prep_for_sim(self) -> tuple[mujoco.MjModel, mujoco.MjData]:
+    def prep_for_sim(
+        self, save_path: Path | None = None
+    ) -> tuple[mujoco.MjModel, mujoco.MjData]:
         """Creates a MuJoCo MjModel and MjData from the Mujoco instance."""
-        model = self.to_mj_model()
+        if save_path:
+            self.write_xml(save_path)
+            model = mujoco.MjModel.from_xml_path(str(save_path))
+        else:
+            model = self.to_mj_model()
         return model, mujoco.MjData(model)

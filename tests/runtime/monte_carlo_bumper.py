@@ -9,9 +9,15 @@ import mujoco_mojo.runtime as rt
 
 logger = mojo.utils.get_logger(__name__)
 
+FIXED_CAMERA_NAME = mojo.CameraName("static")
+TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
+
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     """Generates two boxes at varying distances."""
+    # Download this skybox from here: https://www.david-gable.com/work/photography/Space/Star-Skybox/p1/
+    skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
+
     # 1. Setup Assets
     mojo_model.mjcf.assets = [
         # add a checkerboard
@@ -48,17 +54,32 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 ),
             ]
         ),
+        # add a skybox
+        mojo.Asset(
+            textures=[
+                mojo.Texture(
+                    name=mojo.TextureName("skybox_texture_colors"),
+                    type=mojo.TextureType.SKYBOX,
+                    fileback=skybox_folder / "nz.png",
+                    filedown=skybox_folder / "ny.png",
+                    filefront=skybox_folder / "pz.png",
+                    fileleft=skybox_folder / "nx.png",
+                    fileright=skybox_folder / "px.png",
+                    fileup=skybox_folder / "py.png",
+                )
+            ]
+        ),
     ]
     mojo_model.mjcf.worldbody = mojo.WorldBody(
         geoms=[
-            mojo.GeomPlane(
-                name=mojo.GeomName("floor"),
-                size=np.array([0, 0, 0.1]),
-                pos=mojo.Pos(pos=np.array((0, 0, -5))),
-                material=grid_mat.name,
-                contype=0,
-                conaffinity=0,
-            ),
+            # mojo.GeomPlane(
+            #     name=mojo.GeomName("floor"),
+            #     size=np.array([0, 0, 0.1]),
+            #     pos=mojo.Pos(pos=np.array((0, 0, -5))),
+            #     material=grid_mat.name,
+            #     contype=0,
+            #     conaffinity=0,
+            # ),
         ]
     )
     mojo_model.mjcf.options = [
@@ -118,7 +139,17 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 name=mojo.SiteName("s2"),
                 size=0.1,
                 pos=mojo.Pos(pos=np.array([0.49, 0, 0])),
+                rgba=mojo.utils.Color.WHITE.invisible,
             )
+        ],
+        cameras=[
+            mojo.Camera(
+                name=TRACKING_CAMERA_NAME,
+                pos=mojo.Pos(pos=np.array((-0.49, 0, 0))),
+                fovy=30,
+                mode=mojo.TrackingMode.TARGETBODY,
+                target=box1.name,
+            ),
         ],
     )
 
@@ -126,10 +157,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
-            name=mojo.CameraName("cam"),
+            name=FIXED_CAMERA_NAME,
             pos=mojo.Pos(pos=np.array((0, 0, 10))),
-            fovy=20,
-        )
+            fovy=60,
+        ),
     ]
     return mojo_model
 
@@ -152,16 +183,18 @@ def runtime(
     s2 = next(
         s for b in mojo_model.mjcf.worldbody.bodies for s in b.sites if s.name == "s2"
     )
-    cam = mojo_model.mjcf.worldbody.cameras[0]
-    assert cam.name is not None
 
     with runtime_manager as rm:
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 100  # only record every 100 steps
 
-        rt.VideoRecorder(path=Path("camera.mp4"), camera_name=cam.name).setup(
-            mj_model
-        ).register_to_rm(rm)
+        rt.VideoRecorder(
+            path=Path("fixed_camera.mp4"), camera_name=FIXED_CAMERA_NAME
+        ).setup(mj_model).register_to_rm(rm)
+
+        rt.VideoRecorder(
+            path=Path("tracking_camera.mp4"), camera_name=TRACKING_CAMERA_NAME
+        ).setup(mj_model).register_to_rm(rm)
 
         # Create a compression-only spring (Bumper)
         # Rest length is 0.5. If boxes are closer, they push away.
