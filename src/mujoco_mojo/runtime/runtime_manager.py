@@ -72,9 +72,8 @@ class RuntimeManager:
         if not self._resolved:
             self.resolve(mj_model, mj_data)
 
-        # physics objects post to the fresh ledger
         for load in self.forcing_functions:
-            load.apply_load(mj_model, mj_data, self.results_manager)
+            load.apply_load(mj_model, mj_data)
 
         # record if t=0
         if mj_data.time == 0 and self.results_manager:
