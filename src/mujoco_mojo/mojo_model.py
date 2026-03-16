@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Self
+from typing import Any, Self
 
 from numpydantic import NDArray
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
@@ -30,6 +30,8 @@ class MojoModel(MojoBaseModel):
     seed: int | None = None
     dists: DistributionDict = Field(default_factory=DistributionDict)
     named: NamedValueDict[NDArray] = Field(default_factory=NamedValueDict[NDArray])
+
+    _user_data: Any = PrivateAttr(default=None)
 
     def sample_dist(
         self,

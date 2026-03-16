@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Self
 
@@ -6,6 +7,9 @@ import mujoco
 from mujoco_mojo.runtime.forcing_function import ForcingFunction
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -22,12 +26,20 @@ class RuntimeManager:
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        """Ensure all telemetry is flushed even if the simulation crashed."""
+        """Ensure all telemetry is flushed even if the simulation crashed. Also saves recordings"""
         if self.results_manager:
             self.results_manager.close()
 
-        for recorder in self.video_recorders:
-            recorder.save()
+        if self.video_recorders:
+            self.save_recordings()
+
+    def save_recordings(self):
+        logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")
+        with ThreadPoolExecutor() as executor:
+            for recorder in self.video_recorders:
+                executor.submit(recorder.save)
+
+        logger.info("All video encoding tasks complete.")
 
     def resolve(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Call this once after mj_loadXML to prime the caches."""
