@@ -49,7 +49,7 @@ class VideoRecorder:
             self._vopt.flags[mujoco.mjtVisFlag.mjVIS_PERTFORCE] = 0
         return self
 
-    def capture_frame(self, mj_data):
+    def capture_frame(self, mj_data: mujoco.MjData):
         """Captures the current state as a video frame."""
         if mj_data.time >= self._next_record_time:
             self._renderer.update_scene(

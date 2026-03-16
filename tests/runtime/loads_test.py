@@ -79,7 +79,7 @@ def test_general_force_rotation(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjD
 
     # Apply a constant 10N in local Z
     thrust = GeneralForce(
-        name="thruster", action_site=s1, fz=lambda t: 10.0, rel_to_site=s1
+        name="thruster", action_site=s1, fz=lambda t, model, data: 10.0, rel_to_site=s1
     )
     thrust.resolve_ids(model, data)
 
