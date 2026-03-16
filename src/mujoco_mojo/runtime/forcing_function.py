@@ -55,9 +55,6 @@ class ForcingFunction(MojoBaseModel, ABC):
     _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
 
-    _r0_mag: float = PrivateAttr(default=0.0)
-    """Initial distance between action and reaction sites."""
-
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
         self.action_site.get_id(mj_model)
@@ -147,35 +144,6 @@ class ForcingFunction(MojoBaseModel, ABC):
         results_manager.schedule_harvest_task(harvest)
 
 
-class BodyReactionForce(ForcingFunction):
-    xtion_body: Body | None
-
-    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-        super().resolve_ids(mj_model, mj_data)
-        if self.xtion_body:
-            self.xtion_body.get_id(mj_model)
-
-    def apply_load(self, mj_model, mj_data):
-        super().apply_load(mj_model, mj_data)
-
-        if self.xtion_body is None:
-            return
-
-        f_world = self._last_f[:3]
-        t_world = self._last_t[:3]
-
-        # Reaction applied at the action_site position but to the reaction body
-        mujoco.mj_applyFT(
-            mj_model,
-            mj_data,
-            -f_world,
-            -t_world,
-            self.action_site.rt_pos(mj_model, mj_data),
-            self.xtion_body.get_id(mj_model),
-            mj_data.qfrc_applied,
-        )
-
-
 class PointToPointForce(ForcingFunction):
     """Acts along the line-of-sight between two sites."""
 
@@ -188,6 +156,9 @@ class PointToPointForce(ForcingFunction):
         [float, float, float, mujoco.MjModel, mujoco.MjData], float
     ]
     """Func(distance, velocity, initial distance, MjModel, MjData) -> scalar_force. Can be a regular function, lambda, etc."""
+
+    _r0_mag: float = PrivateAttr(default=0.0)
+    """Initial distance between action and reaction sites."""
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
@@ -379,7 +350,81 @@ class PointToPointForce(ForcingFunction):
         )
 
 
-class VectorForce(ForcingFunction):
+class BodyReactionForce(ForcingFunction):
+    xtion_body: Body | None = None
+    """Body on which the load should be acted on. If None the world will be used."""
+
+    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        super().resolve_ids(mj_model, mj_data)
+        if self.xtion_body:
+            self.xtion_body.get_id(mj_model)
+
+    def apply_load(self, mj_model, mj_data):
+        super().apply_load(mj_model, mj_data)
+
+        if self.xtion_body is None:
+            return
+
+        f_world = self._last_f[:3]
+        t_world = self._last_t[:3]
+
+        # Reaction applied at the action_site position but to the reaction body
+        mujoco.mj_applyFT(
+            mj_model,
+            mj_data,
+            -f_world,
+            -t_world,
+            self.action_site.rt_pos(mj_model, mj_data),
+            self.xtion_body.get_id(mj_model),
+            mj_data.qfrc_applied,
+        )
+
+
+class ScalarForce(BodyReactionForce):
+    """Applies a scalar force along the local X-axis of the action_site."""
+
+    scalar_func: Callable[[float, np.ndarray, mujoco.MjModel, mujoco.MjData], float] = (
+        lambda t, unit_vec, m, d: 0.0
+    )
+    """Func(time, action_site x axis unit vector, MjModel, MjData) -> scalar force value."""
+
+    def calculate(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> tuple[np.ndarray, np.ndarray]:
+        t = mj_data.time
+
+        sid = self.action_site.get_id(mj_model)
+        unit_vec = np.asarray(mj_data.site_xmat[sid]).reshape(3, 3)[:, 0]
+
+        mag = self.scalar_func(t, unit_vec, mj_model, mj_data)
+
+        f_world = unit_vec * mag
+        return f_world, np.zeros(3)
+
+
+class ScalarTorque(BodyReactionForce):
+    """Applies a scalar torque along the local X-axis of the action_site."""
+
+    scalar_func: Callable[[float, np.ndarray, mujoco.MjModel, mujoco.MjData], float] = (
+        lambda t, unit_vec, m, d: 0.0
+    )
+    """Func(time, action_site x-axis unit vector, MjModel, MjData) -> scalar torque value."""
+
+    def calculate(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> tuple[np.ndarray, np.ndarray]:
+        t = mj_data.time
+
+        sid = self.action_site.get_id(mj_model)
+        unit_vec = np.asarray(mj_data.site_xmat[sid]).reshape(3, 3)[:, 0]
+
+        mag = self.scalar_func(t, unit_vec, mj_model, mj_data)
+
+        t_world = unit_vec * mag
+        return np.zeros(3), t_world
+
+
+class VectorForce(BodyReactionForce):
     fx: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
     fy: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
     fz: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
@@ -400,7 +445,7 @@ class VectorForce(ForcingFunction):
         return self._get_world_vectors(mj_model, mj_data, f_raw), np.zeros(3)
 
 
-class VectorTorque(ForcingFunction):
+class VectorTorque(BodyReactionForce):
     tx: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
     ty: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
     tz: Callable[[float, mujoco.MjModel, mujoco.MjData], float] = lambda t, m, d: 0.0
