@@ -482,15 +482,49 @@
           hasInitialData: false,
 
           async init() {
-            this.startPolling();
-            // Update the "Seconds ago" timer every second
+            // 1. Initial REST Bootstrap
+            try {
+              const resp = await fetch("/api/status");
+              const data = await resp.json();
+              if (data && !data.error) {
+                this.status = data;
+                this.hasInitialData = true;
+                this.refreshStats();
+
+                // NEW: Trigger celebration for already finished jobs
+                if (this.status.is_complete) {
+                  this.stopPolling();
+
+                  // Use sessionStorage so it only pops once per browser session
+                  const hasCelebrated = sessionStorage.getItem(
+                    `mojo_done_${this.status.n_done}`,
+                  );
+                  if (!hasCelebrated && !this.chimePlayed) {
+                    this.handleCompletion();
+                    sessionStorage.setItem(
+                      `mojo_done_${this.status.n_done}`,
+                      "true",
+                    );
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("Initial bootstrap failed.", e);
+            }
+
+            // 2. Start streaming only if still running
+            if (!this.status.is_complete) {
+              this.startPolling();
+              this.update();
+            }
+
+            // 3. UI Timer
             setInterval(() => {
               if (this.lastUpdate)
                 this.secondsSinceUpdate = Math.floor(
                   (Date.now() - this.lastUpdate) / 1000,
                 );
             }, 1000);
-            await this.update();
           },
 
           async update() {
@@ -512,16 +546,8 @@
                 this.syncProgress = 100;
 
                 if (this.status.is_complete) {
-                  this.stopPolling(); // STOP at 100%
-                  if (!this.chimePlayed) {
-                    if (!this.isMuted)
-                      document
-                        .getElementById("chime")
-                        .play()
-                        .catch(() => {});
-                    this.fireConfetti();
-                    this.chimePlayed = true;
-                  }
+                  this.stopPolling();
+                  this.handleCompletion(); // Clean and shared logic
                 }
 
                 this.$nextTick(() => {
@@ -571,7 +597,7 @@
                 label: "Successes",
                 value: `${this.status.n_success} (${successPerc}%)`,
                 color: "text-emerald-500",
-                subValue: `Last: Trial ${this.status.last_success_tn || "None"}`,
+                subValue: `Last Success: Trial ${this.status.last_success_tn || "None"}`,
               },
               {
                 label: "Failures",
@@ -604,6 +630,18 @@
                 subValue: finalETA,
               },
             ];
+          },
+
+          handleCompletion() {
+            if (this.chimePlayed) return;
+
+            if (!this.isMuted) {
+              const audio = document.getElementById("chime");
+              if (audio) audio.play().catch(() => {});
+            }
+
+            this.fireConfetti();
+            this.chimePlayed = true;
           },
 
           startPolling() {

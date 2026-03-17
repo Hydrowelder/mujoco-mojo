@@ -1,4 +1,5 @@
 import getpass
+import math
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -352,15 +353,14 @@ class JobStatus(MojoBaseModel):
 
         For simulations which were resumed, this property is more accurate than the time_remaining_wall_clock property.
         """
-        if self.n_remaining <= 0 or self.average_trial_duration.total_seconds() == 0:
+        avg_sec = self.average_trial_duration.total_seconds()
+        if self.n_remaining <= 0 or avg_sec == 0:
             return timedelta(0)
 
         # the number of processors used will change the estimate!
-        total_remaining_seconds = (
-            self.n_remaining
-            * self.average_trial_duration.total_seconds()
-            / max(1, self.n_proc)
-        )
+        waves_remaining = math.ceil(self.n_remaining / max(1, self.n_proc))
+        total_remaining_seconds = waves_remaining * avg_sec
+
         return timedelta(seconds=int(total_remaining_seconds))
 
     @property

@@ -57,7 +57,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.model = mojo.ModelName(f"monte_carlo_test_{mojo_model.trial_num}")
     mojo_model.mjcf.worldbody = mojo.WorldBody(bodies=[body])
 
-    time.sleep(1e-8)
+    time.sleep(1)
     _normal_draw = mojo_model.sample_dist(
         mojo.NormalDistribution(
             name=mojo.DistName("normal_draw"),
