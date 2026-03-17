@@ -613,10 +613,16 @@ class SiteBase(XMLModel):
 
                 # Logging logic
                 if val.ndim == 1:
+                    # 1D array
                     for i, k in enumerate("xyz"[: len(val)]):
                         results_manager.post(f"{self.name}_{attr}_{k}", val[i])
                 else:
-                    results_manager.post(f"{self.name}_{attr}", val.copy())
+                    # Handle Matrices (2D) - Flatten to individual entries
+                    val_flat = val.flatten()
+                    for i in range(len(val_flat)):
+                        results_manager.post(
+                            f"{self.name}_{attr}_{i}", float(val_flat[i])
+                        )
 
         results_manager.schedule_harvest_task(harvest)
 
