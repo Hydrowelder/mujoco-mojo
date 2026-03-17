@@ -1,12 +1,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import duckdb
 import mujoco
 import polars as pl
 
+from mujoco_mojo.process_manager import NamedValue, NamedValueDict, ValueName
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +27,9 @@ class ResultsManager:
     record_decimation: int = 1
     """How many steps between each recording should be performed."""
 
-    ledger: dict[str, Any] = field(default_factory=dict, init=False)
+    ledger: NamedValueDict[float] = field(
+        default_factory=NamedValueDict[float], init=False
+    )
     """Values to be recorded. This dictionary is flushed on every timestep."""
 
     _harvest_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], None]] = field(
@@ -34,7 +37,7 @@ class ResultsManager:
     )
 
     _conn: duckdb.DuckDBPyConnection = field(init=False)
-    _buffer: list[dict] = field(default_factory=list, init=False)
+    _buffer: list[dict[str, float]] = field(default_factory=list, init=False)
     _step_count: int = -1
 
     @staticmethod
@@ -51,14 +54,14 @@ class ResultsManager:
 
     def flush_ledger(self):
         """Clear the ledger for a new timestep."""
-        self.ledger = {}
+        self.ledger = NamedValueDict[float]()
 
-    def post(self, key: str, value: Any):
+    def post(self, key: ValueName | str, value: float | NamedValue[float]):
         """Allows an object to inject a value into the ledger to be recorded in the results file."""
-        if key in self.ledger:
-            logger.warning(
-                f"Key collision in ResultsManager: '{key}' is being overwritten. Ensure your object names and output requests are unique."
-            )
+        # coerce to a named value
+        if not isinstance(value, NamedValue):
+            value = NamedValue[float](name=ValueName(key), stored_value=float(value))
+
         self.ledger[key] = value
 
     def record(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
@@ -72,10 +75,11 @@ class ResultsManager:
 
         self.log_step(timestamp=mj_data.time, data=self.ledger)
 
-    def log_step(self, timestamp: float, data: dict[str, Any]):
+    def log_step(self, timestamp: float, data: NamedValueDict[float]):
         """Appends a row to the memory buffer."""
         row = {"time": timestamp}
-        row.update(data)
+        row.update({k: nv.value for k, nv in data.items()})
+
         self._buffer.append(row)
 
         if len(self._buffer) >= self.batch_size:
