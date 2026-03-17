@@ -1,6 +1,7 @@
 import getpass
 import time
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -236,12 +237,15 @@ class JobStatus(MojoBaseModel):
     def trial_num_to_path(self, trial_num: int) -> Path:
         return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
 
-    def refresh_from_disk(self, n_proc: int = 1) -> None:
+    def refresh_from_disk(
+        self, n_proc: int = 1, progress_callback: Callable[[float], None] | None = None
+    ) -> None:
         """
         Scans the workdir to identify which trials still need execution, but only for runs not already in the cache (i.e., completed).
         """
         max_workers = max(1, n_proc)
 
+        # identify work
         needed_tns = [
             tn
             for tn in self.trial_nums
@@ -250,6 +254,8 @@ class JobStatus(MojoBaseModel):
         ]
 
         if not needed_tns:
+            if progress_callback:
+                return progress_callback(100.0)
             return
 
         def _load_status(tn: int) -> tuple[int, TrialStatus | None]:
@@ -261,13 +267,28 @@ class JobStatus(MojoBaseModel):
             except Exception:
                 return tn, None
 
+        # execute with real-time tracking
+        total_tasks = len(needed_tns)
+        completed_count = 0
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(_load_status, needed_tns))
+            future_to_tn = {executor.submit(_load_status, tn): tn for tn in needed_tns}
 
-        for tn, status in results:
-            if status is not None:
-                self._cache[tn] = status
+            # as completed yields futures as soon as done
+            for future in as_completed(future_to_tn):
+                tn, status = future.result()
 
+                # update the cache immediately
+                if status is not None:
+                    self._cache[tn] = status
+
+                # broadcast status
+                completed_count += 1
+                if progress_callback:
+                    pct = (completed_count / total_tasks) * 100
+                    progress_callback(pct)
+
+        # post calculations
         success_durations = [
             s.td.total_seconds()
             for s in self._cache.values()
