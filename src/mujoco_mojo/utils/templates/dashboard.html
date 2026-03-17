@@ -299,90 +299,125 @@
         </div>
       </header>
 
-      <section class="mb-12">
-        <div class="flex justify-between mb-2 items-center">
-          <span class="text-slate-500 dark:text-slate-400 text-xl font-bold"
-            >Overall Progress</span
+      <main class="relative min-h-[500px]">
+        <div
+          x-show="!hasInitialData && !status.is_complete"
+          class="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl transition-all duration-300"
+          x-transition:leave="transition opacity-100 duration-300"
+          x-transition:leave-start="opacity-100"
+          x-transition:leave-end="opacity-0"
+          x-cloak
+        >
+          <div
+            class="flex flex-col items-center gap-4 bg-white/80 dark:bg-slate-800/80 p-8 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xl"
           >
-          <span
-            class="text-3xl font-black text-cyan-500"
-            x-text="status.progress.toFixed(1) + '%'"
-          ></span>
+            <div
+              class="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"
+            ></div>
+            <div class="text-center">
+              <p
+                class="text-slate-600 dark:text-slate-200 font-black uppercase tracking-[0.3em] text-sm animate-pulse"
+              >
+                Initializing Dashboard
+              </p>
+              <p
+                class="text-slate-500 dark:text-slate-400 text-xs font-mono mt-2"
+              >
+                Synchronizing with simulation process...
+              </p>
+            </div>
+          </div>
         </div>
 
         <div
-          class="w-full bg-white dark:bg-slate-800 rounded-full h-8 overflow-hidden border border-slate-400 dark:border-slate-700 shadow-md transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default"
+          class="transition-all duration-300 ease-out"
+          :class="!hasInitialData ? 'opacity-0 blur-md scale-98 pointer-events-none' : 'opacity-100 blur-0 scale-100'"
         >
-          <div
-            class="bg-gradient-to-r from-cyan-600 to-blue-500 h-full transition-all duration-500 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
-            :style="`width: ${status.progress}%`"
-            :class="status.is_complete ? 'from-green-500 to-emerald-600' : ''"
-          ></div>
-        </div>
-      </section>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <template x-for="(stat, index) in stats" :key="index">
-          <div
-            class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]"
-          >
-            <div>
-              <p
-                class="text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-widest mb-2"
-                x-text="stat.label"
-              ></p>
-              <p
-                class="text-3xl font-black"
-                :class="stat.color"
-                x-text="stat.value"
-              ></p>
+          <section class="mb-12">
+            <div class="flex justify-between mb-2 items-center">
+              <span class="text-slate-500 dark:text-slate-400 text-xl font-bold"
+                >Overall Progress</span
+              >
+              <span
+                class="text-3xl font-black text-cyan-500"
+                x-text="status.progress.toFixed(1) + '%'"
+              ></span>
             </div>
 
             <div
-              class="mt-4 border-t border-slate-100 dark:border-slate-700/50 pt-3 flex flex-col gap-1"
+              class="w-full bg-white dark:bg-slate-800 rounded-full h-8 overflow-hidden border border-slate-400 dark:border-slate-700 shadow-md transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default"
             >
-              <template x-if="stat.subValue">
-                <p
-                  class="text-[10px] font-mono uppercase tracking-tighter text-slate-400"
-                  x-text="stat.subValue"
-                ></p>
-              </template>
+              <div
+                class="bg-gradient-to-r from-cyan-600 to-blue-500 h-full transition-all duration-500 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                :style="`width: ${status.progress}%`"
+                :class="status.is_complete ? 'from-green-500 to-emerald-600' : ''"
+              ></div>
             </div>
-          </div>
-        </template>
-      </div>
+          </section>
 
-      <section class="mt-8" x-show="status.failure_tns.length > 0" x-cloak>
-        <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
-          <svg
-            class="w-6 h-6 mr-2 stroke-current"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2.5"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-          Failed Trials
-        </h2>
-        <div
-          class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md"
-        >
-          <div
-            class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3"
-          >
-            <template x-for="tn in status.failure_tns" :key="tn">
-              <span
-                class="inline-flex items-center justify-center px-2 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl"
-                x-text="tn"
-              ></span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <template x-for="(stat, index) in stats" :key="index">
+              <div
+                class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md flex flex-col justify-between transition-transform hover:scale-[1.02]"
+              >
+                <div>
+                  <p
+                    class="text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-widest mb-2"
+                    x-text="stat.label"
+                  ></p>
+                  <p
+                    class="text-3xl font-black"
+                    :class="stat.color"
+                    x-text="stat.value"
+                  ></p>
+                </div>
+                <div
+                  class="mt-4 border-t border-slate-100 dark:border-slate-700/50 pt-3 flex flex-col gap-1"
+                >
+                  <template x-if="stat.subValue">
+                    <p
+                      class="text-[10px] font-mono uppercase tracking-tighter text-slate-400"
+                      x-text="stat.subValue"
+                    ></p>
+                  </template>
+                </div>
+              </div>
             </template>
           </div>
+
+          <section class="mt-8" x-show="status.failure_tns.length > 0" x-cloak>
+            <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
+              <svg
+                class="w-6 h-6 mr-2 stroke-current"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2.5"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+              Failed Trials
+            </h2>
+            <div
+              class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md"
+            >
+              <div
+                class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3"
+              >
+                <template x-for="tn in status.failure_tns" :key="tn">
+                  <span
+                    class="inline-flex items-center justify-center px-2 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl"
+                    x-text="tn"
+                  ></span>
+                </template>
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </main>
     </div>
 
     <footer
@@ -397,7 +432,7 @@
             :class="status.is_complete ? 'bg-cyan-500' : (secondsSinceUpdate < 10 ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')"
           ></span>
           <span
-            x-text="status.is_complete ? 'Final Data' : `Sync: ${formatTimeAgo(secondsSinceUpdate)}`"
+            x-text="status.is_complete ? 'Final Data' : (!lastUpdate ? 'Connecting...' : `Sync: ${formatTimeAgo(secondsSinceUpdate)}` )"
           ></span>
         </div>
         <div><span x-text="status.version || '0.0.0'"></span></div>
@@ -444,6 +479,7 @@
           isMuted: localStorage.getItem("mojo_muted") !== "false",
           syncProgress: 0,
           isSyncing: false,
+          hasInitialData: false,
 
           async init() {
             this.startPolling();
@@ -458,7 +494,7 @@
           },
 
           async update() {
-            if (this.isSyncing) return;
+            if (this.isSyncing || this.status.is_complete) return;
             this.isSyncing = true;
             this.syncProgress = 0;
 
@@ -472,6 +508,7 @@
 
               if (data.type === "final") {
                 this.status = data.status;
+                this.hasInitialData = true;
                 this.syncProgress = 100;
 
                 if (this.status.is_complete) {
