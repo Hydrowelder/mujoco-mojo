@@ -404,14 +404,22 @@ class JobStatus(MojoBaseModel):
     def n_failed(self) -> int:
         return sum(1 for c in self._registry.values() if c == Completion.FAILED)
 
+    @property
+    def success_trial_nums(self) -> list[int]:
+        tns = []
+        for tn in self._registry.keys():
+            if self._registry[tn] == Completion.SUCCESS:
+                tns.append(tn)
+        return sorted(tns)
+
     @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
-        failed_tn = []
+        tns = []
         for tn in self._registry.keys():
             if self._registry[tn] == Completion.FAILED:
-                failed_tn.append(tn)
-        return sorted(failed_tn)
+                tns.append(tn)
+        return sorted(tns)
 
     def update_trial(self, status: TrialStatus, save: bool = True):
         """Updates the internal registry and average trial duration and optionally persists the global status."""
@@ -598,6 +606,7 @@ class JobStatus(MojoBaseModel):
             "time_remaining": str(obj.time_remaining_average_success).split(".")[0],
             "elapsed": str(obj.elapsed).split(".")[0],
             "is_complete": obj.progress >= 1.0,
+            "success_tns": obj.success_trial_nums,
             "failure_tns": obj.failed_trial_nums,
             "last_success_tn": last_success_tn,
             "start_time": f"{obj._utc_to_local(obj.start_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
