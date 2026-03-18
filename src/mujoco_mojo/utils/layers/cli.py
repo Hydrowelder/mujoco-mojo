@@ -587,13 +587,13 @@ def run_dashboard(
 
     import uvicorn
 
-    import mujoco_mojo.utils.dashboard
-    from mujoco_mojo.utils.dashboard import dashboard_app
+    import mujoco_mojo.utils.layers.dojo.routers.dashboard
+    from mujoco_mojo.utils.layers.dojo.routers.dashboard import dashboard_app
     from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
 
     job = JobStatus.model_validate_json((workdir / JOB_STATUS_FNAME).read_text())
     job.refresh_from_disk(n_proc=n_proc)
-    mujoco_mojo.utils.dashboard.CURRENT_JOB = job
+    mujoco_mojo.utils.layers.dojo.routers.dashboard.CURRENT_JOB = job
 
     # detect ip
     local_ip = get_local_ip()

@@ -14,7 +14,7 @@ from mujoco_mojo.utils.statusing import JobStatus
 
 logger = get_logger(__name__)
 
-HERE = Path(__file__).parent
+HERE = Path(__file__).parent.parent
 CURRENT_JOB: JobStatus | None = None
 AUTOREFRESH_PERIOD = 5.0
 
