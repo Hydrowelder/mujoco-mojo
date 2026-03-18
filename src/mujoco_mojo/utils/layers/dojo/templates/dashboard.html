@@ -385,6 +385,40 @@
             </template>
           </div>
 
+          <section class="mt-8" x-show="status.success_tns.length > 0" x-cloak>
+            <h2
+              class="text-xl font-bold text-emerald-500 mb-4 flex items-center"
+            >
+              <svg
+                class="w-6 h-6 mr-2 stroke-current"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2.5"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M22.9 3.7l-15.2 16.6-6.6-7.1"
+                />
+              </svg>
+              Success Trials
+            </h2>
+            <div
+              class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md"
+            >
+              <div
+                class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3"
+              >
+                <template x-for="tn in status.success_tns" :key="tn">
+                  <span
+                    class="inline-flex items-center justify-center px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-400 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl"
+                    x-text="tn"
+                  ></span>
+                </template>
+              </div>
+            </div>
+          </section>
+
           <section class="mt-8" x-show="status.failure_tns.length > 0" x-cloak>
             <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
               <svg
@@ -438,16 +472,14 @@
         <div><span x-text="status.version || '0.0.0'"></span></div>
       </div>
 
-      <div class="italic opacity-50 transition-opacity hover:opacity-100">
-        <a
-          href="https://www.david-gable.com/"
-          target="_blank"
-          class="text-inherit no-underline cursor-pointer hover:text-cyan-500 transition-colors"
-          title="Visit david-gable.com"
-        >
-          &copy; 2026 David Gable
-        </a>
-      </div>
+      <a
+        href="https://www.david-gable.com/"
+        target="_blank"
+        class="text-inherit no-underline cursor-pointer hover:text-cyan-500 transition-colors opacity-50 transition-opacity hover:opacity-100"
+        title="Visit david-gable.com"
+      >
+        &copy; 2026 David Gable
+      </a>
     </footer>
 
     <!-- mixkit-fantasy-game-success-notification-270 -->
@@ -466,6 +498,7 @@
             n_done: 0,
             n_success: 0,
             n_failed: 0,
+            success_tns: [],
             failure_tns: [],
             progress: 0,
           },
@@ -580,6 +613,10 @@
                 ? ((this.status.n_failed / totalDone) * 100).toFixed(1)
                 : 0;
             const donePerc = ((totalDone / n_trial) * 100).toFixed(1);
+            const lastSuccess =
+              this.status.success_tns.length > 0
+                ? this.status.success_tns[this.status.success_tns.length - 1]
+                : "None";
             const lastFailure =
               this.status.failure_tns.length > 0
                 ? this.status.failure_tns[this.status.failure_tns.length - 1]
@@ -597,7 +634,7 @@
                 label: "Successes",
                 value: `${this.status.n_success} (${successPerc}%)`,
                 color: "text-emerald-500",
-                subValue: `Last Success: Trial ${this.status.last_success_tn || "None"}`,
+                subValue: `Last Success: Trial ${lastSuccess}`,
               },
               {
                 label: "Failures",
