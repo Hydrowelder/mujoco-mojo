@@ -5,20 +5,31 @@
   <title>{% block title %}Mojo{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="view-transition" content="same-origin" />
+
+  <meta name="theme-color" content="#e2e8f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+
   <link rel="stylesheet" href="/static/main.css" />
-  <link id="favicon" rel="icon" type="image/svg" href="/static/light-logo.svg" />
+
+  <link rel="icon" type="image/svg+xml" href="/static/light-logo.svg">
+  <link rel="apple-touch-icon" href="/static/light-logo.svg">
+  <link rel="mask-icon" href="/static/light-logo.svg" color="#06b6d4">
+
   <script src="/static/tailwind.min.js"></script>
   <script src="/static/main.js"></script>
   <script defer src="/static/alpine.min.js"></script>
   <script>
-    // 2. BLOCKING THEME CHECK
+    // 1. BLOCKING THEME CHECK
     tailwind.config = { darkMode: "class" };
     const isDark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
     if (isDark) {
       document.documentElement.classList.add('dark');
-      // 3. Update Favicon IMMEDIATELY before paint
-      document.getElementById("favicon").href = "/static/dark-logo.svg";
+      const darkPath = "/static/dark-logo.svg";
+
+      // Update all icon types at once
+      document.querySelectorAll('link[rel*="icon"], link[rel="apple-touch-icon"], link[rel="mask-icon"]')
+        .forEach(link => link.href = darkPath);
     }
   </script>
   {% block extra_head %}{% endblock %}
