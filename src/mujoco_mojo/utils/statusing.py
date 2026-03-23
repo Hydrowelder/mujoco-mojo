@@ -577,6 +577,8 @@ class JobStatus(MojoBaseModel):
 
     def to_monitor_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
+        from mujoco_mojo.runtime.results_manager import ResultsManager
+
         # We trigger the disk refresh here so the data is fresh
         obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
         obj.refresh_from_disk(n_proc=obj.n_proc if n_proc is None else n_proc)
@@ -593,6 +595,12 @@ class JobStatus(MojoBaseModel):
         ]
         last_success_tn = max(success_tns) if success_tns else None
 
+        failed_with_db = []
+        failed_tns = obj.failed_trial_nums
+        for tn in failed_tns:
+            if (obj.trial_num_to_path(tn) / ResultsManager.default_db_name()).exists():
+                failed_with_db.append(tn)
+
         return {
             "progress": obj.progress * 100,
             "n_success": obj.n_success,
@@ -607,9 +615,11 @@ class JobStatus(MojoBaseModel):
             "elapsed": str(obj.elapsed).split(".")[0],
             "is_complete": obj.progress >= 1.0,
             "success_tns": obj.success_trial_nums,
-            "failure_tns": obj.failed_trial_nums,
+            "failure_tns": failed_tns,
             "last_success_tn": last_success_tn,
             "start_time": f"{obj._utc_to_local(obj.start_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
             "end_time": f"{obj._utc_to_local(obj.end_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
             "version": f"mujoco-mojo v{version('mujoco-mojo')}",
+            "padding_style": obj.padding_style,
+            "failure_tns_with_db": failed_with_db,
         }
