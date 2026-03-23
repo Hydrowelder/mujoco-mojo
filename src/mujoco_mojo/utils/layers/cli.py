@@ -587,9 +587,8 @@ def run_dojo(
 
     import uvicorn
 
+    import mujoco_mojo.utils.layers.dojo.shared as shared
     from mujoco_mojo.utils.layers.dojo.main import dojo_app
-    from mujoco_mojo.utils.layers.dojo.routers import monitor
-    from mujoco_mojo.utils.layers.dojo.shared import set_globals
     from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
 
     status_file = (workdir / JOB_STATUS_FNAME).resolve()
@@ -602,9 +601,9 @@ def run_dojo(
     # read job status file for monitoring and inject
     job = JobStatus.model_validate_json(status_file.read_text())
     job.refresh_from_disk(n_proc=n_proc)
-    monitor.CURRENT_JOB = job
 
-    set_globals(workdir=workdir, owner=job.started_by)
+    shared.CURRENT_JOB = job
+    shared.set_globals(workdir=workdir, owner=job.started_by)
 
     # detect ip
     local_ip = get_local_ip()
