@@ -4,6 +4,7 @@
 <head>
   <title>{% block title %}Mojo{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="view-transition" content="same-origin" />
   <link rel="stylesheet" href="/static/main.css" />
   <link id="favicon" rel="icon" type="image/svg" href="/static/light-logo.svg" />
   <script src="/static/tailwind.min.js"></script>
@@ -42,7 +43,7 @@
       <!-- logo, title, and nav selection -->
       <div class="w-full md:w-auto flex flex-col gap-4">
         <div class="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
-          <a href="https://hydrowelder.github.io/mujoco-mojo/" target="_blank" class="flex-shrink-0 transition-transform duration-300 active:scale-95">
+          <a href="https://hydrowelder.github.io/mujoco-mojo/" target="_blank" class="logo-link flex-shrink-0 transition-transform duration-300 active:scale-95">
 
             <img src="/static/light-logo.svg" alt="Mojo Logo" class="logo-style dark:hidden w-10 h-10 md:w-12 md:h-12 p-1.5 object-contain block" />
 
