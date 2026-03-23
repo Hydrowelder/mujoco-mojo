@@ -1,0 +1,21 @@
+{% extends "base.html" %} {% block title %}Mosiac | MuJoCo Mojo{% endblock %}
+{% block content %}
+<div class="p-8 bg-white dark:bg-slate-800 rounded-2xl border border-slate-400 dark:border-slate-700 shadow-xl">
+    <p class="text-slate-500 font-mono">Nothing to see here yet. Waiting for data...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tell the global store this page is done "initializing"
+    // so the blur overlay disappears.
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('dojo').setPageReady(true);
+    });
+
+    // If Alpine is already initialized (common during navigation), fire it immediately
+    if (window.Alpine) {
+        Alpine.store('dojo').setPageReady(true);
+    }
+</script>
+{% endblock %}
