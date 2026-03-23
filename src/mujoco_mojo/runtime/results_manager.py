@@ -18,9 +18,6 @@ class ResultsManager:
     db_path: Path
     """Where the DuckDB file should be saved."""
 
-    table_name: str = "result"
-    """Name of the DuckDB table."""
-
     batch_size: int = 1000
     """Number of steps before flushing to disk."""
 
@@ -43,6 +40,18 @@ class ResultsManager:
     @staticmethod
     def default_db_name() -> Literal["telemetry.duckdb"]:
         return "telemetry.duckdb"
+
+    @property
+    def db_name(self) -> str:
+        return self.default_db_name()
+
+    @staticmethod
+    def default_table_name() -> Literal["result"]:
+        return "result"
+
+    @property
+    def table_name(self) -> str:
+        return self.default_table_name()
 
     def __post_init__(self):
         # Ensure directory exists and connect

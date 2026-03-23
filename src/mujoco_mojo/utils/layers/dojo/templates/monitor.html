@@ -34,38 +34,53 @@
   </div>
 
   <!-- success trials list -->
-  <section class="mt-8" x-show="status.success_tns.length > 0" x-cloak>
+  <section class="mt-8" x-show="status.success_tns && status.success_tns.length > 0" x-cloak>
     <h2 class="text-xl font-bold text-emerald-500 mb-4 flex items-center">
       <svg class="w-6 h-6 mr-2 stroke-current" fill="none" viewBox="0 0 24 24" stroke-width="2.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M22.9 3.7l-15.2 16.6-6.6-7.1" />
       </svg>
       Success Trials
     </h2>
-    <div class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md">
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3">
+
+    <div class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md custom-scrollbar">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-3">
         <template x-for="tn in status.success_tns" :key="tn">
-          <span class="inline-flex items-center justify-center px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-400 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl" x-text="tn"></span>
+          <a :href="`/mosaic/trial_${String(tn).padStart(parseInt(status.padding_style) || 0, '0')}`" class="inline-flex items-center justify-center px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-400 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400 rounded-md font-mono text-sm transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-emerald-100 dark:hover:bg-emerald-800/50" x-text="String(tn).padStart(parseInt(status.padding_style) || 0, '0')">
+          </a>
         </template>
       </div>
     </div>
   </section>
 
   <!-- failed trials list -->
-  <section class="mt-8" x-show="status.failure_tns.length > 0" x-cloak>
+  <section class="mt-8" x-show="status.failure_tns && status.failure_tns.length > 0" x-cloak>
     <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
       <svg class="w-6 h-6 mr-2 stroke-current" fill="none" viewBox="0 0 24 24" stroke-width="2.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
       Failed Trials
     </h2>
-    <div class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md">
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(3.5rem,1fr))] gap-3">
+
+    <div class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl p-4 max-h-60 overflow-y-auto shadow-md custom-scrollbar">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-3">
         <template x-for="tn in status.failure_tns" :key="tn">
-          <span class="inline-flex items-center justify-center px-2 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm transition-all duration-200 cursor-default origin-center shadow-md hover:scale-110 hover:shadow-xl" x-text="tn"></span>
+          <div class="contents">
+            <template x-if="status.failure_tns_with_db.includes(tn)">
+              <a :href="`/mosaic/trial_${String(tn).padStart(status.padding_style.match(/\d+/)[0], '0')}`" class="inline-flex items-center justify-center px-2 py-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 rounded-md font-mono text-sm transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-rose-100 dark:hover:bg-rose-800/50" x-text="String(tn).padStart(status.padding_style.match(/\d+/)[0], '0')">
+              </a>
+            </template>
+
+            <template x-if="!status.failure_tns_with_db.includes(tn)">
+              <span class="inline-flex items-center justify-center px-2 py-1 bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 rounded-md font-mono text-sm cursor-not-allowed opacity-60" title="No telemetry data available" x-text="String(tn).padStart(status.padding_style.match(/\d+/)[0], '0')">
+              </span>
+            </template>
+          </div>
         </template>
       </div>
     </div>
   </section>
+
+  <!-- sound the bell -->
   <audio id="chime" src="/static/chime.mp3"></audio>
 </div>
 {% endblock %} {% block scripts %}
