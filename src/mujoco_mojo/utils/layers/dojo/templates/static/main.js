@@ -5,16 +5,6 @@ const formatTimeAgo = (seconds) => {
     return mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
 };
 
-// Logo Sync Logic
-function syncMojoLogos() {
-    const isDark = document.documentElement.classList.contains("dark");
-    const favicon = document.getElementById("favicon");
-    const headerLogo = document.getElementById("header-logo");
-    const path = isDark ? "/static/dark-logo.svg" : "/static/light-logo.svg";
-    if (favicon) favicon.href = path;
-    if (headerLogo) headerLogo.src = path;
-}
-
 // Global Alpine Initialization
 document.addEventListener('alpine:init', () => {
     Alpine.store('dojo', {
@@ -40,7 +30,9 @@ document.addEventListener('alpine:init', () => {
             this.isAutoRefresh = !this.isAutoRefresh;
             console.log(`Auto-refresh toggled: ${this.isAutoRefresh}`);
             localStorage.setItem('mojo_auto', this.isAutoRefresh);
-            window.dispatchEvent(new CustomEvent('auto-refresh-toggled', { detail: this.isAutoRefresh }));
+            window.dispatchEvent(new CustomEvent('auto-refresh-toggled', {
+                detail: this.isAutoRefresh
+            }));
         },
         startSync() {
             this.isSyncing = true;

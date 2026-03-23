@@ -14,8 +14,11 @@ function monitor() {
         async init() {
             // Listen for global toggle events from the header
             window.addEventListener('auto-refresh-toggled', (e) => {
-                if (e.detail) this.startPolling();
-                else this.stopPolling();
+                if (e.detail) {
+                    this.startStreaming();
+                } else {
+                    this.stopStreaming();
+                }
             });
 
             try {
@@ -27,7 +30,6 @@ function monitor() {
                     this.hasInitialData = true;
                     this.refreshStats();
 
-                    // Notify Global Store: We have data, and tell it if the job is done
                     Alpine.store('dojo').updateSync(Date.now(), this.status.is_complete);
 
                     if (this.status.is_complete) {
@@ -39,7 +41,7 @@ function monitor() {
                 Alpine.store('dojo').setPageReady(true);
             }
 
-            // Start the persistent live stream if needed
+            // Start live updates only if the job isn't finished AND the user has Auto-Refresh ON
             if (!this.status.is_complete && Alpine.store('dojo').isAutoRefresh) {
                 this.startStreaming();
             }
@@ -48,10 +50,13 @@ function monitor() {
         startStreaming() {
             this.stopStreaming(); // Close any existing connection first
 
+            if (this.status.is_complete || !Alpine.store('dojo').isAutoRefresh) return;
+
             this.source = new EventSource("/monitor/api/status/stream");
             this.isSyncing = true;
 
             this.source.onmessage = (event) => {
+
                 const data = JSON.parse(event.data);
 
                 // Start the 'Laser Beam' in the global store
