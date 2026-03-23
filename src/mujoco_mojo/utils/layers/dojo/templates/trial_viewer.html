@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Trial {{ trial_id }} | Mojo{% endblock %}
+
+{% block extra_head %}
+<script src="/static/plotly-3.4.0.min.js"></script>
+<script src="/static/viewer.js"></script>
+{% endblock %}
+
+{% block content %}
+<div x-data="trialViewer('{{ trial_id }}')" class="space-y-6">
+    <div class="flex items-center justify-between border-b border-slate-300 dark:border-slate-700 pb-4">
+        <nav class="flex items-center gap-2 text-sm font-mono">
+            <a href="/mosaic" class="text-slate-400 hover:text-cyan-500 transition-colors">Mosaic</a>
+            <span class="text-slate-600">/</span>
+            <span class="text-cyan-500 font-bold">{{ trial_id }}</span>
+        </nav>
+        <div class="flex gap-2">
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-4 min-h-[600px] relative overflow-hidden">
+        <div id="plot-area" class="w-full h-[600px]"></div>
+
+        <div x-show="loading" class="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center backdrop-blur-sm">
+            <p class="font-mono text-cyan-500 animate-pulse">Querying DuckDB...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

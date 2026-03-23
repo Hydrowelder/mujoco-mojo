@@ -75,7 +75,7 @@ document.addEventListener('alpine:init', () => {
 });
 
 // Watch for theme changes globally
-window.addEventListener("DOMContentLoaded", () => {
-    syncMojoLogos();
-    new MutationObserver(() => syncMojoLogos()).observe(document.documentElement, { attributes: true });
-});
+// window.addEventListener("DOMContentLoaded", () => {
+//     syncMojoLogos();
+//     new MutationObserver(() => syncMojoLogos()).observe(document.documentElement, { attributes: true });
+// });

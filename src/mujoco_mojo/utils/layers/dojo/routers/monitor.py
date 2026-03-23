@@ -6,15 +6,14 @@ from fastapi.responses import HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.statusing import JobStatus
 
-from ..shared import templates
+from .. import shared
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
-CURRENT_JOB: JobStatus | None = None
+
 AUTOREFRESH_PERIOD = 5.0
 ACTIVE_CONNECTIONS: set[asyncio.Queue] = set()
 
@@ -30,7 +29,7 @@ async def broadcast_updates():
 
     while True:
         try:
-            job = CURRENT_JOB
+            job = shared.CURRENT_JOB
             if not job or not ACTIVE_CONNECTIONS:
                 await asyncio.sleep(AUTOREFRESH_PERIOD)
                 continue
@@ -89,18 +88,18 @@ async def _emit_to_all(message_dict: dict):
 @router.get("/", response_class=HTMLResponse)
 async def get_monitor(request: Request):
     """Serves the initial monitor frame."""
-    return templates.TemplateResponse(
-        name="monitor.html", context={"request": request, "job": CURRENT_JOB}
+    return shared.templates.TemplateResponse(
+        name="monitor.html", context={"request": request, "job": shared.CURRENT_JOB}
     )
 
 
 @router.get("/api/status")
 async def get_status():
     """The 'Pulse' endpoint for Alpine.js."""
-    if not CURRENT_JOB:
+    if not shared.CURRENT_JOB:
         return {"error": "No job loaded"}
 
-    return CURRENT_JOB.to_monitor_json()
+    return shared.CURRENT_JOB.to_monitor_json()
 
 
 @router.get("/api/status/stream")

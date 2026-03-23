@@ -374,12 +374,13 @@ if __name__ == "__main__":
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
+        config=mojo.utils.MonteCarloConfig(n_trial=100, n_proc=10),
     )
 
-    results, had_fails = runner.run(
-        resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
-    )
+    # results, had_fails = runner.run(
+    #     resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
+    # )
+    results, had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
 
     if not had_fails and runner.runtime is not None:
         post_process(workdir=workdir)
