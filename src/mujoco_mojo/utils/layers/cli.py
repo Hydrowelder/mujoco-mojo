@@ -300,32 +300,32 @@ if True:
         typer.Option(
             "--n-proc",
             "-np",
-            help="Parallel processes to use in executing tasks (such as running Monte Carlo or status file proccessing for the dashboard)."
+            help="Parallel processes to use in executing tasks (such as running Monte Carlo or status file proccessing for the Dojo process)."
             " [bold red underline]Be a good citizen.[/bold red underline] It is easy to abuse this command. Only use what resouces you [bold white underline]absolutely need[/bold white underline].",
         ),
     ]
 
-    # dashboard
-    DashboardWorkdirType = Annotated[
+    # Dojo
+    DojoWorkdirType = Annotated[
         Path,
         typer.Argument(
-            help="Workspace directory to build the dashboard for. This should be the same argument as what is used for other mujoco-mojo run commands.",
+            help="Workspace directory to build the Dojo process for. This should be the same argument as what is used for other mujoco-mojo run commands.",
         ),
     ]
-    DashboardHostType = Annotated[
+    DojoHostType = Annotated[
         str,
         typer.Option(
             "--host",
             "-h",
-            help="What host IP should be used to serve the dashboard.",
+            help="What host IP should be used to serve the Dojo process.",
         ),
     ]
-    DashboardPortType = Annotated[
+    DojoPortType = Annotated[
         int,
         typer.Option(
             "--port",
             "-p",
-            help="Port number to use to serve the dashboard.",
+            help="Port number to use to serve the Dojo process.",
         ),
     ]
 
@@ -354,7 +354,7 @@ def version_callback(value: bool):
 
 # create a run group for the run commands
 run_app = typer.Typer(
-    help="Execution commands for various Mojo functions (Monte Carlo, dashboard, etc.)."
+    help="Execution commands for various Mojo functions (Monte Carlo, Dojo, etc.)."
 )
 cli_app.add_typer(run_app, name="run")
 
@@ -460,12 +460,12 @@ def run_monte_carlo(
 
     logger.info("Initializing Monte Carlo with CLI!")
 
-    dashboard_cmd = f"mujoco-mojo run dashboard {workdir}"
+    dojo_cmd = f"mujoco-mojo dojo {workdir}"
     console.print(
         Panel(
             "[bold green]Campaign Initialized![/]\n\n"
             "[white]To monitor progress and view results, run:[/]\n"
-            f"    [bold yellow]{dashboard_cmd}[/]",
+            f"    [bold yellow]{dojo_cmd}[/]",
             title="[cyan]Launch Control[/]",
             expand=False,
             border_style="cyan",
@@ -568,32 +568,43 @@ def run_monte_carlo(
     raise typer.Exit()
 
 
-@run_app.command(name="dashboard")
-def run_dashboard(
+@cli_app.command(name="dojo")
+def run_dojo(
     ctx: typer.Context,
-    workdir: DashboardWorkdirType,
-    host: DashboardHostType = "127.0.0.1",
-    port: DashboardPortType = 8000,
+    workdir: DojoWorkdirType,
+    host: DojoHostType = "127.0.0.1",
+    port: DojoPortType = 8000,
     n_proc: NProcType = 1,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
     """
-    [bold yellow]Launch the Mojo Monitor Dashboard to monitor the progress of a running job.[/bold yellow]
+    [bold yellow]Launch the Mojo Dojo to monitor the progress of a running job.[/bold yellow]
 
-    This command reads status files in the workdir to give live updates on the job as they are completed.
+    This command reads status files in the workdir to give live updates.
     """
     _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
     import uvicorn
 
-    import mujoco_mojo.utils.layers.dojo.routers.dashboard
-    from mujoco_mojo.utils.layers.dojo.routers.dashboard import dashboard_app
+    from mujoco_mojo.utils.layers.dojo.main import dojo_app
+    from mujoco_mojo.utils.layers.dojo.routers import monitor
+    from mujoco_mojo.utils.layers.dojo.shared import set_globals
     from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
 
-    job = JobStatus.model_validate_json((workdir / JOB_STATUS_FNAME).read_text())
+    status_file = (workdir / JOB_STATUS_FNAME).resolve()
+    if not status_file.exists():
+        console.print(
+            f"[bold red]Error:[/bold red] No status file found at {status_file}"
+        )
+        raise typer.Exit(code=1)
+
+    # read job status file for monitoring and inject
+    job = JobStatus.model_validate_json(status_file.read_text())
     job.refresh_from_disk(n_proc=n_proc)
-    mujoco_mojo.utils.layers.dojo.routers.dashboard.CURRENT_JOB = job
+    monitor.CURRENT_JOB = job
+
+    set_globals(workdir=workdir, owner=job.started_by)
 
     # detect ip
     local_ip = get_local_ip()
@@ -608,13 +619,13 @@ def run_dashboard(
 
     console.print(
         Panel(
-            f"""[bold green]MuJoCo Mojo Dashboard is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop the dashboard[/yellow]""",
-            border_style="green",
-            title="Mojo Monitor",
+            f"""[bold green]MuJoCo Mojo Dojo is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
+            border_style="cyan",
+            title="Mojo Dojo",
             subtitle=f"Workers: {n_proc}",
         )
     )
-    uvicorn.run(dashboard_app, host=host, port=port, log_level="warning")
+    uvicorn.run(dojo_app, host=host, port=port, log_level="warning")
 
 
 @run_app.command(name="optimize")

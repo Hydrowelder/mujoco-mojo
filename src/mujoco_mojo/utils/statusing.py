@@ -575,7 +575,7 @@ class JobStatus(MojoBaseModel):
         if alert_generation:
             logger.info(f"MuJoCo Mojo report generated at {report_path}")
 
-    def to_dashboard_json(self, n_proc: int | None = None) -> dict:
+    def to_monitor_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         # We trigger the disk refresh here so the data is fresh
         obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())

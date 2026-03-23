@@ -40,7 +40,7 @@ dependencies = [
 mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 
 [tool.setuptools.package-data]
-"*" = ["*.html", "*.js", "*.mp3", "*.svg"]
+"*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
 
 [dependency-groups]
 dev = [
