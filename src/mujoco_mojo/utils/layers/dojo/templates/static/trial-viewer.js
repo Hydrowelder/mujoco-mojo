@@ -49,7 +49,13 @@ function trialViewer(trialId) {
 
                     this.$nextTick(() => {
                         this.renderPlot();
-                        setTimeout(() => Plotly.Plots.resize('plot-area'), 100);
+                        // GUARDED RESIZE: Only resize if the div is actually visible
+                        setTimeout(() => {
+                            const el = document.getElementById('plot-area');
+                            if (el && el.offsetParent !== null) {
+                                Plotly.Plots.resize(el);
+                            }
+                        }, 100);
                     });
                 } else { this.errorState = 'empty'; }
             } catch (e) { this.data = null; } finally {
@@ -101,7 +107,16 @@ function trialViewer(trialId) {
             localStorage.setItem('mojo_markers', this.markerMode);
             localStorage.setItem('mojo_interp', this.lineInterpolation);
             localStorage.setItem('mojo_hover', this.hoverMode);
+
             this.renderPlot();
+
+            // Also guard resize here in case signals were added to an empty plot
+            this.$nextTick(() => {
+                const el = document.getElementById('plot-area');
+                if (el && el.offsetParent !== null) {
+                    Plotly.Plots.resize(el);
+                }
+            });
         },
 
         toggleY(col) {
@@ -120,8 +135,13 @@ function trialViewer(trialId) {
 
             const isDark = document.documentElement.classList.contains('dark');
             const colors = ['#06b6d4', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444'];
+
+            // Theme Contrast Corrections
             const textColor = isDark ? '#94a3b8' : '#475569';
-            const gridColor = isDark ? '#334155' : '#e2e8f0';
+            const majorGrid = isDark ? '#475569' : '#e2e8f0'; // Brightened for dark mode
+            const minorGrid = isDark ? '#334155' : '#f1f5f9'; // Brightened for dark mode
+            const tooltipBg = isDark ? '#0f172a' : '#ffffff';
+            const tooltipBorder = isDark ? '#06b6d4' : '#cbd5e1';
 
             const traces = this.selectedY.map((key, i) => ({
                 x: this.data[this.selectedX],
@@ -129,12 +149,9 @@ function trialViewer(trialId) {
                 name: key,
                 mode: this.markerMode,
                 type: 'scatter',
-                line: {
-                    width: 2,
-                    color: colors[i % colors.length],
-                    shape: this.lineInterpolation
-                },
-                marker: { size: 6 }
+                line: { width: 2, color: colors[i % colors.length], shape: this.lineInterpolation },
+                marker: { size: 6 },
+                namelength: -1 // Prevents signal name truncation in hover
             }));
 
             const layout = {
@@ -143,28 +160,35 @@ function trialViewer(trialId) {
                 margin: { t: 20, r: 20, b: 40, l: 60 },
                 hovermode: this.hoverMode,
                 hoverlabel: {
-                    bgcolor: isDark ? '#1e293b' : '#ffffff',
-                    font: { family: 'monospace', color: isDark ? '#f8fafc' : '#0f172a' }
+                    bgcolor: tooltipBg,
+                    bordercolor: tooltipBorder,
+                    font: { family: 'monospace', size: 12, color: isDark ? '#f8fafc' : '#0f172a' },
+                    align: 'left'
                 },
                 showlegend: true,
                 legend: { font: { size: 10, color: textColor }, orientation: 'h', y: -0.2 },
                 xaxis: {
-                    gridcolor: gridColor,
+                    gridcolor: majorGrid,
                     showgrid: this.gridMode !== 'none',
-                    minor: { showgrid: this.gridMode === 'all', gridcolor: isDark ? '#1e293b' : '#f1f5f9' },
+                    minor: { showgrid: this.gridMode === 'all', gridcolor: minorGrid },
                     zeroline: false,
+                    tickfont: { color: textColor },
                     title: { text: this.selectedX, font: { size: 10, color: textColor } }
                 },
                 yaxis: {
-                    gridcolor: gridColor,
+                    gridcolor: majorGrid,
                     showgrid: this.gridMode !== 'none',
-                    minor: { showgrid: this.gridMode === 'all', gridcolor: isDark ? '#1e293b' : '#f1f5f9' },
-                    zeroline: false
+                    minor: { showgrid: this.gridMode === 'all', gridcolor: minorGrid },
+                    zeroline: false,
+                    tickfont: { color: textColor }
                 }
             };
 
-            // DisplayModeBar set to true to restore download/resize tools
-            Plotly.newPlot('plot-area', traces, layout, { responsive: true, displayModeBar: true });
+            Plotly.newPlot('plot-area', traces, layout, {
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            });
         }
     }
 }
