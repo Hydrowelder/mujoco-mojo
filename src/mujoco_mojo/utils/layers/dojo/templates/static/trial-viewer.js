@@ -18,7 +18,7 @@ function trialViewer(trialId) {
         selectedY: [],
 
         // Plot Customization State
-        gridMode: 'major', // none, major, all
+        gridMode: 'all', // none, major, all
         markerMode: 'lines', // lines, markers, lines+markers
         lineInterpolation: 'linear', // linear, spline, vh, hv
         hoverMode: 'x unified', // x, y, closest, x unified
@@ -26,6 +26,16 @@ function trialViewer(trialId) {
         async init() {
             const currentNum = parseInt(this.trialId.split('_').pop());
             this.warpId = isNaN(currentNum) ? null : currentNum;
+
+            // 1. Listen for Theme Changes (Auto-Redraw)
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'class' && this.data && this.selectedY.length > 0) {
+                        this.renderPlot();
+                    }
+                });
+            });
+            observer.observe(document.documentElement, { attributes: true });
 
             try {
                 const statusResp = await fetch("/monitor/api/status");
@@ -45,11 +55,12 @@ function trialViewer(trialId) {
                 if (json && Object.keys(json).length > 0) {
                     this.data = json;
                     this.columns = Object.keys(json).sort();
+
+                    // Prioritize 'time' column for initial load
                     this.loadConfig();
 
                     this.$nextTick(() => {
                         this.renderPlot();
-                        // GUARDED RESIZE: Only resize if the div is actually visible
                         setTimeout(() => {
                             const el = document.getElementById('plot-area');
                             if (el && el.offsetParent !== null) {
@@ -88,13 +99,17 @@ function trialViewer(trialId) {
         loadConfig() {
             const savedX = localStorage.getItem('mojo_viewer_x');
             const savedY = localStorage.getItem('mojo_viewer_y');
-            this.selectedX = (savedX && this.columns.includes(savedX)) ? savedX : (this.columns.includes('time') ? 'time' : this.columns[0]);
+
+            // Force X to 'time' if it exists and no preference is saved
+            const hasTime = this.columns.includes('time');
+            this.selectedX = (savedX && this.columns.includes(savedX)) ? savedX : (hasTime ? 'time' : this.columns[0]);
+
             if (savedY) {
                 this.selectedY = JSON.parse(savedY).filter(col => this.columns.includes(col));
             }
 
             // Load Plot Settings
-            this.gridMode = localStorage.getItem('mojo_grid') || 'major';
+            this.gridMode = localStorage.getItem('mojo_grid') || 'all';
             this.markerMode = localStorage.getItem('mojo_markers') || 'lines';
             this.lineInterpolation = localStorage.getItem('mojo_interp') || 'linear';
             this.hoverMode = localStorage.getItem('mojo_hover') || 'x unified';
@@ -138,10 +153,13 @@ function trialViewer(trialId) {
 
             // Theme Contrast Corrections
             const textColor = isDark ? '#94a3b8' : '#475569';
-            const majorGrid = isDark ? '#475569' : '#e2e8f0'; // Brightened for dark mode
-            const minorGrid = isDark ? '#334155' : '#f1f5f9'; // Brightened for dark mode
+            const majorGrid = isDark ? '#334155' : '#f1f5f9';
+            const minorGrid = isDark ? '#1e293b' : '#f8fafc';
             const tooltipBg = isDark ? '#0f172a' : '#ffffff';
-            const tooltipBorder = isDark ? '#06b6d4' : '#cbd5e1';
+            const tooltipBorder = isDark ? '#06b6d4' : '#06b6d4';
+
+            // Fix: Spike needs to be bright in dark mode to be visible
+            const spikeColor = isDark ? '#06b6d4' : '#94a3b8';
 
             const traces = this.selectedY.map((key, i) => ({
                 x: this.data[this.selectedX],
@@ -151,7 +169,13 @@ function trialViewer(trialId) {
                 type: 'scatter',
                 line: { width: 2, color: colors[i % colors.length], shape: this.lineInterpolation },
                 marker: { size: 6 },
-                namelength: -1 // Prevents signal name truncation in hover
+                namelength: -1,
+                // --- FIX: Force uniform background color per trace ---
+                hoverlabel: {
+                    bgcolor: tooltipBg,
+                    bordercolor: tooltipBorder,
+                    font: { family: 'monospace', size: 12, color: isDark ? '#f8fafc' : '#0f172a' }
+                }
             }));
 
             const layout = {
@@ -159,6 +183,7 @@ function trialViewer(trialId) {
                 plot_bgcolor: 'rgba(0,0,0,0)',
                 margin: { t: 20, r: 20, b: 40, l: 60 },
                 hovermode: this.hoverMode,
+                // Global hoverlabel settings for the X-axis part
                 hoverlabel: {
                     bgcolor: tooltipBg,
                     bordercolor: tooltipBorder,
@@ -173,7 +198,20 @@ function trialViewer(trialId) {
                     minor: { showgrid: this.gridMode === 'all', gridcolor: minorGrid },
                     zeroline: false,
                     tickfont: { color: textColor },
-                    title: { text: this.selectedX, font: { size: 10, color: textColor } }
+                    title: { text: this.selectedX, font: { size: 10, color: textColor, family: 'monospace' } },
+
+                    // --- Spike & Unified Hover Label Styling ---
+                    showspikes: true,
+                    spikemode: 'across',
+                    spikesnap: 'cursor',
+                    spikelinecolor: spikeColor,
+                    spikethickness: 1,
+                    spikedash: 'solid',
+                    // Specifically style the x-axis label background
+                    hoverlabel: {
+                        bgcolor: tooltipBg,
+                        font: { color: isDark ? '#f8fafc' : '#0f172a' }
+                    }
                 },
                 yaxis: {
                     gridcolor: majorGrid,
