@@ -1,17 +1,32 @@
 function trialViewer(trialId) {
     return {
         trialId: trialId,
-        warpId: '',      // Bound to the text box
-        paddingLen: 2,   // Fallback padding
+        warpId: null,
+        paddingLen: 2,
         loading: true,
         data: null,
+        errorState: null,
+
+        // Menu States
+        yMenuOpen: false,
+        settingsOpen: false,
+        ySearch: '',
+
+        // Axis & Signal State
+        columns: [],
+        selectedX: 'time',
+        selectedY: [],
+
+        // Plot Customization State
+        gridMode: 'major', // none, major, all
+        markerMode: 'lines', // lines, markers, lines+markers
+        lineInterpolation: 'linear', // linear, spline, vh, hv
+        hoverMode: 'x unified', // x, y, closest, x unified
 
         async init() {
-            // preconfigure trial number into warp box
             const currentNum = parseInt(this.trialId.split('_').pop());
             this.warpId = isNaN(currentNum) ? null : currentNum;
 
-            // 1. Bootstrap pulse + grab padding length
             try {
                 const statusResp = await fetch("/monitor/api/status");
                 const statusData = await statusResp.json();
@@ -20,53 +35,78 @@ function trialViewer(trialId) {
                     const match = statusData.padding_style.match(/\d+/);
                     this.paddingLen = match ? parseInt(match[0]) : 2;
                 }
-            } catch (e) { console.warn("Bootstrap failed", e); }
+            } catch (e) { console.warn("Dojo offline", e); }
 
-            // 2. Fetch the Plotly data
             try {
                 const resp = await fetch(`/mosaic/${this.trialId}/data`);
-                if (!resp.ok) throw new Error("Data fetch failed");
-                const json = await resp.json();
+                if (resp.status === 404) { this.errorState = 'not_found'; throw new Error(); }
 
-                // Check if the data is actually populated
+                const json = await resp.json();
                 if (json && Object.keys(json).length > 0) {
                     this.data = json;
-                    this.renderPlot();
-                } else {
-                    this.data = null;
-                }
-            } catch (e) {
-                console.error(e);
-                this.data = null;
-            } finally {
+                    this.columns = Object.keys(json).sort();
+                    this.loadConfig();
+
+                    this.$nextTick(() => {
+                        this.renderPlot();
+                        setTimeout(() => Plotly.Plots.resize('plot-area'), 100);
+                    });
+                } else { this.errorState = 'empty'; }
+            } catch (e) { this.data = null; } finally {
                 this.loading = false;
                 Alpine.store('dojo').startGlobalSync();
                 Alpine.store('dojo').setPageReady(true);
             }
 
-            // 4. Keyboard Navigation
             window.addEventListener('keydown', (e) => {
                 if (e.repeat) return;
-
-                // Handle '/' to focus warp box
                 if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
                     e.preventDefault();
-                    const input = document.querySelector('input[type="number"]');
-                    if (input) input.focus();
+                    document.querySelector('input[type="number"]')?.focus();
                 }
-
-                // Handle ESC to blur
-                if (e.key === 'Escape' && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
-                    e.target.blur();
+                if (e.key === 'Escape') {
+                    this.yMenuOpen = false;
+                    this.settingsOpen = false;
+                    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) e.target.blur();
                 }
-
-                // Block nav if typing
                 if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-
-                // Nav logic
                 if (e.key === 'ArrowLeft') document.getElementById('nav-prev')?.click();
                 if (e.key === 'ArrowRight') document.getElementById('nav-next')?.click();
             });
+        },
+
+        get filteredCols() {
+            return !this.ySearch ? this.columns : this.columns.filter(c => c.toLowerCase().includes(this.ySearch.toLowerCase()));
+        },
+
+        loadConfig() {
+            const savedX = localStorage.getItem('mojo_viewer_x');
+            const savedY = localStorage.getItem('mojo_viewer_y');
+            this.selectedX = (savedX && this.columns.includes(savedX)) ? savedX : (this.columns.includes('time') ? 'time' : this.columns[0]);
+            if (savedY) {
+                this.selectedY = JSON.parse(savedY).filter(col => this.columns.includes(col));
+            }
+
+            // Load Plot Settings
+            this.gridMode = localStorage.getItem('mojo_grid') || 'major';
+            this.markerMode = localStorage.getItem('mojo_markers') || 'lines';
+            this.lineInterpolation = localStorage.getItem('mojo_interp') || 'linear';
+            this.hoverMode = localStorage.getItem('mojo_hover') || 'x unified';
+        },
+
+        saveAndRender() {
+            localStorage.setItem('mojo_viewer_x', this.selectedX);
+            localStorage.setItem('mojo_viewer_y', JSON.stringify(this.selectedY));
+            localStorage.setItem('mojo_grid', this.gridMode);
+            localStorage.setItem('mojo_markers', this.markerMode);
+            localStorage.setItem('mojo_interp', this.lineInterpolation);
+            localStorage.setItem('mojo_hover', this.hoverMode);
+            this.renderPlot();
+        },
+
+        toggleY(col) {
+            this.selectedY = this.selectedY.includes(col) ? this.selectedY.filter(c => c !== col) : [...this.selectedY, col];
+            this.saveAndRender();
         },
 
         warpToTrial() {
@@ -76,30 +116,55 @@ function trialViewer(trialId) {
         },
 
         renderPlot() {
-            if (!this.data) return;
-            const time = this.data.time || this.data.timestamp || [];
-            const traces = Object.keys(this.data)
-                .filter(key => key !== 'time' && key !== 'timestamp')
-                .map(key => ({
-                    x: time, y: this.data[key], name: key,
-                    type: 'scatter', mode: 'lines', line: { width: 2 }
-                }));
+            if (!this.data || this.selectedY.length === 0) return;
+
+            const isDark = document.documentElement.classList.contains('dark');
+            const colors = ['#06b6d4', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444'];
+            const textColor = isDark ? '#94a3b8' : '#475569';
+            const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+            const traces = this.selectedY.map((key, i) => ({
+                x: this.data[this.selectedX],
+                y: this.data[key],
+                name: key,
+                mode: this.markerMode,
+                type: 'scatter',
+                line: {
+                    width: 2,
+                    color: colors[i % colors.length],
+                    shape: this.lineInterpolation
+                },
+                marker: { size: 6 }
+            }));
 
             const layout = {
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(0,0,0,0)',
-                margin: { t: 40, r: 20, b: 40, l: 60 },
-                hovermode: 'closest',
-                showlegend: true,
-                font: {
-                    family: 'monospace',
-                    color: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#475569'
+                margin: { t: 20, r: 20, b: 40, l: 60 },
+                hovermode: this.hoverMode,
+                hoverlabel: {
+                    bgcolor: isDark ? '#1e293b' : '#ffffff',
+                    font: { family: 'monospace', color: isDark ? '#f8fafc' : '#0f172a' }
                 },
-                xaxis: { gridcolor: '#334155', zeroline: false },
-                yaxis: { gridcolor: '#334155', zeroline: false }
+                showlegend: true,
+                legend: { font: { size: 10, color: textColor }, orientation: 'h', y: -0.2 },
+                xaxis: {
+                    gridcolor: gridColor,
+                    showgrid: this.gridMode !== 'none',
+                    minor: { showgrid: this.gridMode === 'all', gridcolor: isDark ? '#1e293b' : '#f1f5f9' },
+                    zeroline: false,
+                    title: { text: this.selectedX, font: { size: 10, color: textColor } }
+                },
+                yaxis: {
+                    gridcolor: gridColor,
+                    showgrid: this.gridMode !== 'none',
+                    minor: { showgrid: this.gridMode === 'all', gridcolor: isDark ? '#1e293b' : '#f1f5f9' },
+                    zeroline: false
+                }
             };
 
-            Plotly.newPlot('plot-area', traces, layout, { responsive: true });
+            // DisplayModeBar set to true to restore download/resize tools
+            Plotly.newPlot('plot-area', traces, layout, { responsive: true, displayModeBar: true });
         }
     }
 }
