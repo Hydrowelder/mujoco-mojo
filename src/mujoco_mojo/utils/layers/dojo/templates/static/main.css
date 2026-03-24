@@ -115,3 +115,30 @@ button:active {
 .fixed.top-0 {
     view-transition-name: sync-laser;
 }
+
+kbd {
+    display: inline-block;
+    padding: 2px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: #06b6d4;
+    /* Cyan-500 */
+    background-color: #f8fafc;
+    /* Slate-50 */
+    border: 1px solid #cbd5e1;
+    /* Slate-300 */
+    border-radius: 4px;
+    box-shadow: 0 2px 0 #94a3b8;
+    /* Depth shadow */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dark kbd {
+    background-color: #1e293b;
+    /* Slate-800 */
+    border-color: #334155;
+    /* Slate-700 */
+    box-shadow: 0 2px 0 #0f172a;
+    /* Deeper shadow for dark mode */
+}
