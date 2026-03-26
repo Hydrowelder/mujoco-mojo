@@ -43,6 +43,7 @@ function trialViewer(trialId) {
     errorState: null,
 
     // --- UI / MENU STATES ---
+    theme: "dark",
     yMenuOpen: false,
     settingsOpen: false,
     editorOpen: false, // Controls the visibility of the JSON editor drawer
@@ -60,7 +61,6 @@ function trialViewer(trialId) {
       linemode: "lines", // Renamed from markerMode for clarity
       interp: "linear", // line interpolation (linear, spline, etc)
       hover: "x unified",
-      theme: "dark",
     },
 
     // --- JSON EDITOR STATE ---
@@ -69,7 +69,7 @@ function trialViewer(trialId) {
 
     async init() {
       // Set initial theme
-      this.config.theme = document.documentElement.classList.contains("dark")
+      this.theme = document.documentElement.classList.contains("dark")
         ? "dark"
         : "light";
 
@@ -82,9 +82,7 @@ function trialViewer(trialId) {
           (m) => m.attributeName === "class",
         );
         if (isThemeChange) {
-          this.config.theme = document.documentElement.classList.contains(
-            "dark",
-          )
+          this.theme = document.documentElement.classList.contains("dark")
             ? "dark"
             : "light";
           if (this.data && this.config.yAxes.length > 0) this.renderPlot();
@@ -228,12 +226,9 @@ function trialViewer(trialId) {
       try {
         const decoded = atob(blob.replace(/-/g, "+").replace(/_/g, "/"));
         const parsed = JSON.parse(decoded);
-        this.config = { ...this.config, ...parsed };
 
-        // Apply theme to DOM
-        if (this.config.theme === "dark")
-          document.documentElement.classList.add("dark");
-        else document.documentElement.classList.remove("dark");
+        // We only merge the config; we no longer touch documentElement.classList
+        this.config = { ...this.config, ...parsed };
 
         this.toastMessage = "Shared view loaded";
         this.showToast = true;
