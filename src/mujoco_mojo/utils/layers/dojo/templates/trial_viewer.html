@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="trialViewer('{{ trial_id }}')"
+<div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}')"
      class="space-y-4 relative">
     <!-- toast for sharable link (teleported to body so it is sticky)-->
     <template x-teleport="body">

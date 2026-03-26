@@ -32,10 +32,11 @@ const tw = {
  * trialViewer - Alpine.js Component
  * Handles telemetry data retrieval, Plotly rendering, and JSON configuration state.
  */
-function trialViewer(trialId) {
+function trialViewer(trialId, externalUrl) {
   return {
     // --- BASE STATE ---
     trialId: trialId,
+    externalUrl: externalUrl,
     warpId: null,
     paddingLen: 2,
     loading: true,
@@ -250,19 +251,52 @@ function trialViewer(trialId) {
           .replace(/\+/g, "-")
           .replace(/\//g, "_")
           .replace(/=+$/, "");
-        const url = new URL(window.location.href);
-        url.searchParams.set("v", encoded);
-        navigator.clipboard.writeText(url.toString());
 
-        // Use Toast
-        this.toastMessage = "Shareable link copied!";
-        this.showToast = true;
-        setTimeout(() => {
-          this.showToast = false;
-        }, 3000);
+        const shareBase = this.externalUrl + window.location.pathname;
+        const finalUrl = `${shareBase}?v=${encoded}`;
+
+        // 1. Attempt the modern "Kosher" way first
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(finalUrl).then(() => {
+            this.notifySuccess();
+          });
+        } else {
+          // 2. Fallback for Local IPs / Insecure Contexts
+          const textArea = document.createElement("textarea");
+          textArea.value = finalUrl;
+
+          // Ensure it's invisible but part of the DOM
+          textArea.style.position = "fixed";
+          textArea.style.left = "-9999px";
+          textArea.style.top = "0";
+          document.body.appendChild(textArea);
+
+          textArea.focus();
+          textArea.select();
+
+          try {
+            // for now, this method is a fallback. execCommand is only being used
+            // since this feature is only useful while not on localhost or https
+            // dojo is most likely served on http so this is needed
+            const successful = document.execCommand("copy");
+            if (successful) this.notifySuccess();
+          } catch (err) {
+            console.error("Fallback copy failed", err);
+          }
+
+          document.body.removeChild(textArea);
+        }
       } catch (e) {
-        console.error("Link gen failed", e);
+        console.error("Link generation failed", e);
       }
+    },
+
+    notifySuccess() {
+      this.toastMessage = "Shareable link copied!";
+      this.showToast = true;
+      setTimeout(() => {
+        this.showToast = false;
+      }, 3000);
     },
 
     /**
