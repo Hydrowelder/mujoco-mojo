@@ -48,6 +48,8 @@ function trialViewer(trialId) {
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     ySearch: "",
     columns: [],
+    showToast: false,
+    toastMessage: "",
 
     // --- SINGLE SOURCE OF TRUTH: PLOT CONFIGURATION ---
     // This object is the master state. Changes here trigger re-renders.
@@ -58,6 +60,7 @@ function trialViewer(trialId) {
       linemode: "lines", // Renamed from markerMode for clarity
       interp: "linear", // line interpolation (linear, spline, etc)
       hover: "x unified",
+      theme: "dark",
     },
 
     // --- JSON EDITOR STATE ---
@@ -65,17 +68,26 @@ function trialViewer(trialId) {
     isValidJson: true, // Tracks if the user's manual JSON input is valid
 
     async init() {
-      // Extract trial number for the "Warp" navigation feature
+      // Set initial theme
+      this.config.theme = document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
+
       const currentNum = parseInt(this.trialId.split("_").pop());
       this.warpId = isNaN(currentNum) ? null : currentNum;
 
-      // 1. Theme Observer: Redraw plot if the 'dark' class is toggled on <html>
+      // 1. Updated Theme Observer: Redraws plot AND updates config.theme
       const observer = new MutationObserver((mutations) => {
         const isThemeChange = mutations.some(
           (m) => m.attributeName === "class",
         );
-        if (isThemeChange && this.data && this.config.yAxes.length > 0) {
-          this.renderPlot();
+        if (isThemeChange) {
+          this.config.theme = document.documentElement.classList.contains(
+            "dark",
+          )
+            ? "dark"
+            : "light";
+          if (this.data && this.config.yAxes.length > 0) this.renderPlot();
         }
       });
       observer.observe(document.documentElement, { attributes: true });
@@ -112,8 +124,14 @@ function trialViewer(trialId) {
           this.data = json;
           this.columns = Object.keys(json).sort();
 
-          // Hydrate configuration from LocalStorage
-          this.loadConfig();
+          // Check for shared config in URL
+          const params = new URLSearchParams(window.location.search);
+          const shared = params.get("v");
+          if (shared) {
+            this.hydrateFromUrl(shared);
+          } else {
+            this.loadConfig();
+          }
 
           this.$nextTick(() => {
             this.renderPlot();
@@ -169,18 +187,103 @@ function trialViewer(trialId) {
     },
 
     /**
-     * Manual JSON Input: Updates the internal config object from the text editor
+     * GETTER: highlightedJson
+     * Injects Tailwind CSS classes for syntax highlighting.
+     */
+    get highlightedJson() {
+      if (!this.configRaw) return "";
+
+      // 1. Escape HTML
+      let html = this.configRaw
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      // 2. Comprehensive RegEx: Keys, Strings, Numbers, Booleans, Null, and Structural ( { } [ ] , )
+      const regex =
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])/g;
+
+      return html.replace(regex, (match) => {
+        let cls = "text-slate-400 dark:text-slate-500"; // Default: Structural (braces/commas)
+
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = "text-cyan-700 dark:text-cyan-400"; // Keys
+          } else {
+            cls = "text-emerald-600 dark:text-emerald-400"; // Strings
+          }
+        } else if (/true|false/.test(match)) {
+          cls = "text-violet-600 dark:text-violet-400"; // Booleans
+        } else if (/null/.test(match)) {
+          cls = "text-rose-500"; // Null
+        } else if (/-?\d/.test(match)) {
+          cls = "text-amber-600 dark:text-amber-500"; // Numbers
+        }
+
+        return `<span class="${cls}">${match}</span>`;
+      });
+    },
+
+    hydrateFromUrl(blob) {
+      try {
+        const decoded = atob(blob.replace(/-/g, "+").replace(/_/g, "/"));
+        const parsed = JSON.parse(decoded);
+        this.config = { ...this.config, ...parsed };
+
+        // Apply theme to DOM
+        if (this.config.theme === "dark")
+          document.documentElement.classList.add("dark");
+        else document.documentElement.classList.remove("dark");
+
+        this.toastMessage = "Shared view loaded";
+        this.showToast = true;
+        setTimeout(() => (this.showToast = false), 3000);
+      } catch (e) {
+        this.loadConfig();
+      }
+    },
+
+    /**
+     * Share Functionality:
+     * Minifies the JSON and (optionally) compresses it for the URL.
+     * For now, we'll use standard Base64 until we pull in LZ-String.
+     */
+    copyShareLink() {
+      try {
+        const minified = JSON.stringify(this.config);
+        const encoded = btoa(minified)
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        const url = new URL(window.location.href);
+        url.searchParams.set("v", encoded);
+        navigator.clipboard.writeText(url.toString());
+
+        // Use Toast
+        this.toastMessage = "Shareable link copied!";
+        this.showToast = true;
+        setTimeout(() => {
+          this.showToast = false;
+        }, 3000);
+      } catch (e) {
+        console.error("Link gen failed", e);
+      }
+    },
+
+    /**
+     * Input Handler for JSON Editor
+     * Uses Object.assign to maintain reactivity without breaking the object reference.
      */
     updateFromRaw() {
       try {
         const parsed = JSON.parse(this.configRaw);
-        // Validation: ensure required keys exist before applying
-        if (parsed.xAxis && Array.isArray(parsed.yAxes)) {
-          this.config = parsed;
+        if (parsed && typeof parsed === "object") {
+          // Update master config - Alpine watcher will trigger save/render
+          this.config = { ...this.config, ...parsed };
           this.isValidJson = true;
         }
       } catch (e) {
-        this.isValidJson = false; // Triggers UI error state (e.g., red border)
+        this.isValidJson = false;
       }
     },
 
@@ -226,7 +329,7 @@ function trialViewer(trialId) {
       if (this.config.yAxes.includes(col)) {
         this.config.yAxes = this.config.yAxes.filter((c) => c !== col);
       } else {
-        this.config.yAxes.push(col);
+        this.config.yAxes = [...this.config.yAxes, col];
       }
       // Note: Watcher handles saveAndRender automatically
     },
