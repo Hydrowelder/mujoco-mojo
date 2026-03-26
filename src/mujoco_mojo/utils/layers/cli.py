@@ -614,7 +614,7 @@ def run_dojo(
             f"\nMobile: [bold cyan u]http://{local_ip}:{port}[/bold cyan u]"
         )
     else:
-        connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
+        connection_info += "\n\n[dim]Tip: To view on other devices (and to make pages shareable), run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
 
     console.print(
         Panel(
