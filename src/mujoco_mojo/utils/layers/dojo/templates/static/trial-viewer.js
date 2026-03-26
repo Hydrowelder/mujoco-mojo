@@ -481,7 +481,8 @@ function trialViewer(trialId, externalUrl) {
       Plotly.newPlot("plot-area", traces, layout, {
         responsive: true,
         displayModeBar: true,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
+        displayLogo: false,
+        modeBarButtonsToRemove: [],
       });
     },
   };
