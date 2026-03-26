@@ -367,7 +367,13 @@ function trialViewer(trialId, externalUrl) {
      * Navigation: Redirects to another trial within the same job
      */
     warpToTrial() {
-      if (this.warpId === null) return;
+      if (
+        this.warpId === null ||
+        this.warpId === undefined ||
+        this.warpId === ""
+      )
+        return;
+
       const paddedNum = String(this.warpId).padStart(this.paddingLen, "0");
       window.location.href = `/mosaic/trial_${paddedNum}`;
     },
