@@ -420,14 +420,19 @@
                                     <option value="hidden">Hidden</option>
                                 </select>
                             </div>
-                            <label class="flex items-center gap-2 cursor-pointer pb-2 group">
+                            <label class="flex items-center gap-2 pb-2 group transition-opacity duration-300"
+                                   :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : 'cursor-pointer'">
+
                                 <input type="checkbox"
                                        x-model="config.showSpike"
                                        @change="saveAndRender()"
-                                       class="rounded border-slate-300 dark:border-slate-700 text-cyan-500 focus:ring-cyan-500 bg-slate-100 dark:bg-slate-900 h-3.5 w-3.5 transition-all">
+                                       :disabled="config.hover === 'none'"
+                                       class="rounded border-slate-300 dark:border-slate-700 text-cyan-500 focus:ring-cyan-500 bg-slate-100 dark:bg-slate-900 h-3.5 w-3.5 transition-all disabled:bg-slate-200 dark:disabled:bg-slate-800">
+
                                 <span
-                                      class="text-[9px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">Show
-                                    Spikes</span>
+                                      class="text-[9px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">
+                                    Show Spikes
+                                </span>
                             </label>
                         </div>
 
