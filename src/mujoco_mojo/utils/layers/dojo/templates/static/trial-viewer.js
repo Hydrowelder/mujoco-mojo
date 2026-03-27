@@ -47,6 +47,7 @@ function trialViewer(trialId, externalUrl) {
     theme: "dark",
     yMenuOpen: false,
     settingsOpen: false,
+    downloadOpen: false,
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     ySearch: "",
     columns: [],
@@ -349,6 +350,116 @@ function trialViewer(trialId, externalUrl) {
         const el = document.getElementById("plot-area");
         if (el && el.offsetParent !== null) Plotly.Plots.resize(el);
       });
+    },
+
+    /**
+     * Export Plot as Image (PNG, JPG, SVG)
+     */
+    async downloadPlot(format) {
+      const el = document.getElementById("plot-area");
+      if (!el) return;
+
+      const plotlyFormat = format === "jpg" ? "jpeg" : format;
+      const isDark = document.documentElement.classList.contains("dark");
+
+      // Match the Metadata Card background exactly (#1e293b)
+      const bgColor = isDark ? tw.slate[800] : "#ffffff";
+
+      this.toastMessage = `Preparing ${format.toUpperCase()}...`;
+      this.showToast = true;
+
+      try {
+        // 1. Capture the current "Glass" state so we can restore it
+        const originalPaper = el.layout.paper_bgcolor;
+        const originalPlot = el.layout.plot_bgcolor;
+
+        // 2. TEMPORARILY apply the solid background for the snapshot
+        await Plotly.relayout(el, {
+          paper_bgcolor: bgColor,
+          plot_bgcolor: bgColor,
+        });
+
+        // 3. Generate the image from the now-solid plot
+        const dataUrl = await Plotly.toImage(el, {
+          format: plotlyFormat,
+          width: 1280,
+          height: 720,
+        });
+
+        // 4. IMMEDIATELY restore the transparency for the UI
+        await Plotly.relayout(el, {
+          paper_bgcolor: originalPaper,
+          plot_bgcolor: originalPlot,
+        });
+
+        // 5. Trigger the browser download
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `${this.trialId}_plot.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+        console.error("Export failed", e);
+      } finally {
+        this.downloadOpen = false;
+        setTimeout(() => (this.showToast = false), 2000);
+      }
+    },
+
+    /**
+     * Export Raw Data as CSV
+     */
+    /**
+     * Export ONLY currently displayed data as CSV
+     */
+    downloadCSV() {
+      if (!this.data || this.config.yAxes.length === 0) return;
+
+      // 1. Identify only the active columns (X + all selected Ys)
+      const activeCols = [this.config.xAxis, ...this.config.yAxes];
+      const rowCount = this.data[this.config.xAxis].length;
+
+      // 2. Build CSV with only those columns
+      let csv = activeCols.join(",") + "\n";
+      for (let i = 0; i < rowCount; i++) {
+        csv += activeCols.map((col) => this.data[col][i]).join(",") + "\n";
+      }
+
+      // 3. Standard Blob Download
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `${this.trialId}_filtered.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      this.downloadOpen = false;
+      this.toastMessage = "Filtered CSV Exported";
+      this.showToast = true;
+      setTimeout(() => (this.showToast = false), 3000);
+    },
+
+    /**
+     * Export the current Plot Configuration as a JSON file
+     */
+    downloadJSON() {
+      const configString = JSON.stringify(this.config, null, 4);
+      const blob = new Blob([configString], { type: "application/json" });
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `${this.trialId}_config.json`);
+      document.body.appendChild(link);
+
+      link.click();
+      document.body.removeChild(link);
+
+      this.downloadOpen = false;
+      this.toastMessage = "Configuration JSON Exported";
+      this.showToast = true;
+      setTimeout(() => (this.showToast = false), 3000);
     },
 
     /**

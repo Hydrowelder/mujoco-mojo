@@ -248,6 +248,7 @@
     </div>
 
     <div class="flex flex-row gap-4 items-stretch">
+        <!-- plot area -->
         <div
              class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 min-h-[600px] relative overflow-hidden">
             <div x-show="data && config.yAxes.length > 0"
@@ -264,8 +265,10 @@
             </template>
         </div>
 
+        <!-- sidebar -->
         <div
              class="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-md shrink-0 relative z-50">
+            <!-- copy share link -->
             <button @click="copyShareLink()"
                     class="p-2 text-slate-400 hover:text-cyan-500 transition-colors rounded-lg hover:bg-white dark:hover:bg-slate-800"
                     title="Copy Share Link">
@@ -280,6 +283,7 @@
                 </svg>
             </button>
 
+            <!-- plot config -->
             <div class="relative">
                 <button @click.stop="settingsOpen = !settingsOpen"
                         class="p-2 text-slate-400 hover:text-cyan-500 transition-colors rounded-lg hover:bg-white dark:hover:bg-slate-800">
@@ -347,6 +351,63 @@
                                 <option value="y">Y Axis</option>
                             </select>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- download options -->
+            <div class="relative">
+                <button @click.stop="downloadOpen = !downloadOpen"
+                        class="p-2 text-slate-400 hover:text-cyan-500 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                        title="Download Data or Image">
+                    <svg class="w-5 h-5"
+                         :class="downloadOpen ? 'text-cyan-500' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                </button>
+
+                <div x-show="downloadOpen"
+                     @click.stop
+                     @click.away="downloadOpen = false"
+                     x-transition
+                     class="absolute right-full top-0 mr-4 w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-[200]">
+
+                    <p
+                       class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        Export Trial</p>
+
+                    <div class="space-y-1">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase px-2 mb-1">Capture Plot</p>
+                        <button @click="downloadPlot('png')"
+                                class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">PNG
+                            Image</button>
+                        <button @click="downloadPlot('jpg')"
+                                class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">JPG
+                            Image</button>
+                        <button @click="downloadPlot('svg')"
+                                class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">SVG
+                            Vector</button>
+
+                        <div class="my-2 border-t border-slate-200 dark:border-slate-700"></div>
+
+                        <p class="text-[9px] font-bold text-slate-500 uppercase px-2 mb-1">Data and Config.</p>
+                        <button @click="downloadCSV()"
+                                class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors flex items-center justify-between">
+                            Filtered CSV
+                            <span class="text-[8px] bg-emerald-500/10 px-1 rounded">DATA</span>
+                        </button>
+
+                        <button @click="downloadJSON()"
+                                class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded transition-colors flex items-center justify-between">
+                            Config JSON
+                            <span class="text-[8px] bg-violet-500/10 px-1 rounded">CONFIG</span>
+                        </button>
                     </div>
                 </div>
             </div>
