@@ -3,12 +3,16 @@
 
 {% block extra_head %}
 <script src="/static/plotly-3.4.0.min.js"></script>
+<script src="/static/lz-string.min.js"></script>
 <script src="/static/trial-viewer.js"></script>
 {% endblock %}
 
 {% block content %}
 <div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}')"
-     class="space-y-4 relative">
+     @dragover.prevent="isDragging = true"
+     @dragleave.prevent="isDragging = false"
+     @drop.prevent="handleDrop($event)"
+     class="space-y-4 relative pb-10">
     <!-- toast for sharable link (teleported to body so it is sticky)-->
     <template x-teleport="body">
         <div x-show="showToast"
@@ -21,17 +25,37 @@
              x-transition:leave-end="opacity-0 -translate-y-12"
              class="fixed top-10 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
 
-            <div class="flex items-center gap-3 px-6 py-3 rounded-full border border-cyan-400
-                    bg-cyan-500 text-white dark:text-slate-950 transition-colors duration-300">
+            <div class="flex items-center gap-3 px-6 py-3 rounded-full border transition-colors duration-300 shadow-2xl"
+                 :class="{
+                'bg-cyan-500 border-cyan-400 text-white dark:text-slate-950': toastType === 'success',
+                'bg-rose-500 border-rose-400 text-white': toastType === 'error',
+                'bg-slate-700 border-slate-600 text-white': toastType === 'info'
+             }">
 
-                <svg class="w-4 h-4 text-cyan-100 dark:text-slate-900"
+                <svg class="w-4 h-4 shrink-0"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
+
+                    <path x-show="toastType === 'success'"
+                          stroke-linecap="round"
                           stroke-linejoin="round"
                           stroke-width="3"
                           d="M5 13l4 4L19 7" />
+
+                    <path x-show="toastType === 'error'"
+                          style="display: none;"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="3"
+                          d="M6 18L18 6M6 6l12 12" />
+
+                    <path x-show="toastType === 'info'"
+                          style="display: none;"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="3"
+                          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
                 <span class="text-[10px] font-mono font-black tracking-widest uppercase"
@@ -39,6 +63,29 @@
             </div>
         </div>
     </template>
+
+    <!-- drag and drop json to setup plot -->
+    <div x-show="isDragging"
+         style="display: none;"
+         class="fixed inset-0 z-[1000] bg-cyan-500/10 dark:bg-cyan-500/5 backdrop-blur-md border-4 border-dashed border-cyan-500 flex items-center justify-center pointer-events-none">
+        <div
+             class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-cyan-500 flex flex-col items-center gap-4">
+            <div class="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center text-cyan-500">
+                <svg class="w-8 h-8"
+                     fill="none"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+            </div>
+            <p class="text-sm font-mono font-black uppercase tracking-widest text-slate-700 dark:text-cyan-400">
+                Drop Config to Warp
+            </p>
+        </div>
+    </div>
 
     <div
          class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-300 dark:border-slate-700 pb-4 gap-4">
@@ -349,7 +396,51 @@
                                 <option value="closest">Closest</option>
                                 <option value="x">X Axis</option>
                                 <option value="y">Y Axis</option>
+                                <option value="none">Off</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <p
+                       class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1 mt-4">
+                        Labels & Legend</p>
+
+                    <div class="space-y-3">
+                        <div class="space-y-1">
+                            <label class="text-[9px] font-bold text-slate-500 uppercase">Main Title</label>
+                            <input type="text"
+                                   x-model="config.title"
+                                   placeholder="Untitled Plot"
+                                   class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-300">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1">
+                                <label class="text-[9px] font-bold text-slate-500 uppercase">X Label</label>
+                                <input type="text"
+                                       x-model="config.xAxisTitle"
+                                       :placeholder="config.xAxis"
+                                       class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-300">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[9px] font-bold text-slate-500 uppercase">Y Label</label>
+                                <input type="text"
+                                       x-model="config.yAxisTitle"
+                                       placeholder="Signals"
+                                       class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-300">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-1">
+                                <label class="text-[9px] font-bold text-slate-500 uppercase">Legend</label>
+                                <select x-model="config.legendPos"
+                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1 text-slate-700 dark:text-slate-200">
+                                    <option value="bottom">Bottom</option>
+                                    <option value="right">Right</option>
+                                    <option value="hidden">Hidden</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -417,7 +508,7 @@
     <!-- JSON editor -->
     <div class="mt-8 space-y-2">
         <div class="flex items-center justify-between px-2">
-            <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">Mosaic Config Console</span>
+            <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">JSON Plot Configuration</span>
             <div class="flex items-center gap-2">
                 <span x-show="isValidJson"
                       class="text-[9px] font-bold text-emerald-500 font-mono">● Valid</span>
@@ -427,8 +518,7 @@
         </div>
 
         <div
-             class="relative bg-white dark:bg-slate-950 rounded-xl border border-slate-300 dark:border-slate-800
-            overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-cyan-500/10 ring-1 ring-slate-200 dark:ring-slate-800">
+             class="relative bg-white dark:bg-slate-950 rounded-xl border border-slate-300 dark:border-slate-800 overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800">
             <div class="absolute inset-0 p-4 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap pointer-events-none overflow-hidden scroll-sync-target"
                  x-html="highlightedJson"></div>
 
@@ -438,10 +528,16 @@
                       class="relative w-full h-48 bg-transparent p-4 text-transparent caret-slate-950 dark:caret-cyan-500 font-mono text-[11px] leading-relaxed outline-none focus:ring-0 resize-none custom-scrollbar"
                       spellcheck="false"></textarea>
 
-            <button @click="configRaw = JSON.stringify(config, null, 4)"
-                    class="absolute right-4 bottom-4 text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-1 rounded hover:text-cyan-500 transition-colors z-10">
-                Format
-            </button>
+            <div class="absolute right-4 bottom-4 flex gap-2 z-10">
+                <button @click="copyRawConfig()"
+                        class="text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-1 rounded hover:text-cyan-500 transition-colors">
+                    Copy
+                </button>
+                <button @click="configRaw = JSON.stringify(config, null, 4)"
+                        class="text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-1 rounded hover:text-cyan-500 transition-colors">
+                    Format
+                </button>
+            </div>
         </div>
     </div>
 </div>

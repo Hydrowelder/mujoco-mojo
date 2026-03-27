@@ -48,11 +48,13 @@ function trialViewer(trialId, externalUrl) {
     yMenuOpen: false,
     settingsOpen: false,
     downloadOpen: false,
+    isDragging: false, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     ySearch: "",
     columns: [],
     showToast: false,
     toastMessage: "",
+    toastType: "success",
 
     // --- SINGLE SOURCE OF TRUTH: PLOT CONFIGURATION ---
     // This object is the master state. Changes here trigger re-renders.
@@ -62,7 +64,11 @@ function trialViewer(trialId, externalUrl) {
       grid: "all",
       linemode: "lines", // Renamed from markerMode for clarity
       interp: "linear", // line interpolation (linear, spline, etc)
-      hover: "x unified",
+      hover: "x unified", // "x unified", "y unified", "closest", "x", "y", "none"
+      title: "",
+      xAxisTitle: "",
+      yAxisTitle: "",
+      legendPos: "bottom", // "bottom", "right", "hidden"
     },
 
     // --- JSON EDITOR STATE ---
@@ -116,6 +122,7 @@ function trialViewer(trialId, externalUrl) {
         const resp = await fetch(`/mosaic/${this.trialId}/data`);
         if (resp.status === 404) {
           this.errorState = "not_found";
+          this.notify("Trial data not found", "error");
           throw new Error();
         }
 
@@ -146,6 +153,7 @@ function trialViewer(trialId, externalUrl) {
         }
       } catch (e) {
         this.data = null;
+        this.notify("Failed to connect to Dojo server", "error");
       } finally {
         this.loading = false;
         Alpine.store("dojo").startGlobalSync();
@@ -226,16 +234,16 @@ function trialViewer(trialId, externalUrl) {
 
     hydrateFromUrl(blob) {
       try {
-        const decoded = atob(blob.replace(/-/g, "+").replace(/_/g, "/"));
+        const decoded = LZString.decompressFromEncodedURIComponent(blob);
+        if (!decoded) throw new Error("Decompression failed");
         const parsed = JSON.parse(decoded);
 
         // We only merge the config; we no longer touch documentElement.classList
         this.config = { ...this.config, ...parsed };
 
-        this.toastMessage = "Shared view loaded";
-        this.showToast = true;
-        setTimeout(() => (this.showToast = false), 3000);
+        this.notify("Shared view loaded", "success");
       } catch (e) {
+        this.notify("Failed to decode shared link", "error");
         this.loadConfig();
       }
     },
@@ -248,53 +256,74 @@ function trialViewer(trialId, externalUrl) {
     copyShareLink() {
       try {
         const minified = JSON.stringify(this.config);
-        const encoded = btoa(minified)
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=+$/, "");
-
+        const encoded = LZString.compressToEncodedURIComponent(minified);
         const shareBase = this.externalUrl + window.location.pathname;
-        const finalUrl = `${shareBase}?v=${encoded}`;
 
-        // 1. Attempt the modern "Kosher" way first
-        if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(finalUrl).then(() => {
-            this.notifySuccess();
-          });
-        } else {
-          // 2. Fallback for Local IPs / Insecure Contexts
-          const textArea = document.createElement("textarea");
-          textArea.value = finalUrl;
-
-          // Ensure it's invisible but part of the DOM
-          textArea.style.position = "fixed";
-          textArea.style.left = "-9999px";
-          textArea.style.top = "0";
-          document.body.appendChild(textArea);
-
-          textArea.focus();
-          textArea.select();
-
-          try {
-            // for now, this method is a fallback. execCommand is only being used
-            // since this feature is only useful while not on localhost or https
-            // dojo is most likely served on http so this is needed
-            const successful = document.execCommand("copy");
-            if (successful) this.notifySuccess();
-          } catch (err) {
-            console.error("Fallback copy failed", err);
-          }
-
-          document.body.removeChild(textArea);
-        }
+        // Just call the helper
+        this.copyToClipboard(
+          `${shareBase}?v=${encoded}`,
+          "Shareable link copied!",
+        );
       } catch (e) {
-        console.error("Link generation failed", e);
+        this.notify("Link generation failed", "error");
       }
     },
 
-    notifySuccess() {
-      this.toastMessage = "Shareable link copied!";
+    copyRawConfig() {
+      this.copyToClipboard(this.configRaw, "JSON Config copied!");
+    },
+
+    /**
+     * Universal Clipboard Helper
+     * Handles Secure (HTTPS) and Insecure (HTTP) contexts
+     */
+    async copyToClipboard(text, successMsg = "Copied to clipboard!") {
+      // 1. Try the modern API first (Requires HTTPS/Localhost)
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          this.notify(successMsg, "success");
+          return;
+        } catch (err) {
+          console.warn("Modern clipboard failed, falling back...", err);
+        }
+      }
+
+      // 2. Fallback for HTTP / Older Browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        const successful = document.execCommand("copy");
+        if (successful) {
+          this.notify(successMsg, "success");
+        } else {
+          throw new Error("execCommand returned false");
+        }
+      } catch (err) {
+        this.notify("Failed to copy to clipboard", "error");
+        console.error("Clipboard fallback failed", err);
+      }
+      document.body.removeChild(textArea);
+    },
+
+    /**
+     * Universal Notification Engine
+     * @param {string} msg - The message to display
+     * @param {string} type - success | error | info
+     */
+    notify(msg, type = "success") {
+      this.toastMessage = msg;
+      this.toastType = type;
       this.showToast = true;
+
+      // Auto-hide after 3 seconds
       setTimeout(() => {
         this.showToast = false;
       }, 3000);
@@ -365,8 +394,7 @@ function trialViewer(trialId, externalUrl) {
       // Match the Metadata Card background exactly (#1e293b)
       const bgColor = isDark ? tw.slate[800] : "#ffffff";
 
-      this.toastMessage = `Preparing ${format.toUpperCase()}...`;
-      this.showToast = true;
+      this.notify(`Preparing ${format.toUpperCase()}...`, "info");
 
       try {
         // 1. Capture the current "Glass" state so we can restore it
@@ -403,7 +431,6 @@ function trialViewer(trialId, externalUrl) {
         console.error("Export failed", e);
       } finally {
         this.downloadOpen = false;
-        setTimeout(() => (this.showToast = false), 2000);
       }
     },
 
@@ -436,9 +463,8 @@ function trialViewer(trialId, externalUrl) {
       document.body.removeChild(link);
 
       this.downloadOpen = false;
-      this.toastMessage = "Filtered CSV Exported";
-      this.showToast = true;
-      setTimeout(() => (this.showToast = false), 3000);
+
+      this.notify("Filtered CSV Exported", "success");
     },
 
     /**
@@ -457,9 +483,43 @@ function trialViewer(trialId, externalUrl) {
       document.body.removeChild(link);
 
       this.downloadOpen = false;
-      this.toastMessage = "Configuration JSON Exported";
-      this.showToast = true;
-      setTimeout(() => (this.showToast = false), 3000);
+
+      this.notify("Configuration JSON Exported", "success");
+    },
+    /**
+     * Handle File Drop
+     */
+    handleDrop(e) {
+      this.isDragging = false;
+      const file = e.dataTransfer.files[0];
+
+      if (
+        !file ||
+        (file.type !== "application/json" && !file.name.endsWith(".json"))
+      ) {
+        this.notify("Please drop a .json file", "error");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const importedConfig = JSON.parse(event.target.result);
+
+          // Merge with current config to ensure we don't break reactivity
+          this.config = { ...this.config, ...importedConfig };
+
+          this.notify("Configuration restored!", "success");
+
+          // Re-sync the raw text area if it's open
+          this.configRaw = JSON.stringify(this.config, null, 4);
+        } catch (err) {
+          console.error("JSON Import failed", err);
+
+          this.notify("Invalid Config File", "error");
+        }
+      };
+      reader.readAsText(file);
     },
 
     /**
@@ -508,10 +568,19 @@ function trialViewer(trialId, externalUrl) {
       const majorGrid = isDark ? tw.slate[950] : tw.slate[200];
       const minorGrid = isDark ? tw.slate[900] : tw.slate[100];
       const tooltipBg = isDark ? tw.slate[900] : "#ffffff";
+      const tooltipFont = isDark ? tw.slate[50] : tw.slate[900];
       const tooltipBorder = tw.cyan[500];
       const spikeColor = isDark ? tw.cyan[500] : tw.slate[400];
 
-      // Map traces from selected signals
+      const isHoverDisabled = this.config.hover === "none";
+
+      const showX =
+        !isHoverDisabled &&
+        (this.config.hover.includes("x") || this.config.hover === "closest");
+      const showY =
+        !isHoverDisabled &&
+        (this.config.hover.includes("y") || this.config.hover === "closest");
+
       const traces = this.config.yAxes.map((key, i) => ({
         x: this.data[this.config.xAxis],
         y: this.data[key],
@@ -524,39 +593,62 @@ function trialViewer(trialId, externalUrl) {
           shape: this.config.interp,
         },
         marker: { size: 6 },
-        namelength: -1, // Full name display in tooltips
+        namelength: -1,
+        // Disable hover on individual traces if toggled off
+        hoverinfo: isHoverDisabled ? "skip" : "all",
         hoverlabel: {
           bgcolor: tooltipBg,
           bordercolor: tooltipBorder,
-          font: {
-            family: "monospace",
-            size: 12,
-            color: isDark ? "#f8fafc" : "#0f172a",
-          },
+          font: { family: "monospace", size: 12, color: tooltipFont },
         },
       }));
 
       const layout = {
+        title: this.config.title
+          ? {
+              text: this.config.title,
+              font: {
+                family: "monospace",
+                size: 16,
+                color: isDark ? tw.slate[200] : tw.slate[800],
+                weight: "bold",
+              },
+              x: 0,
+              xanchor: "left",
+            }
+          : null,
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        hovermode: this.config.hover,
+        // DYNAMIC MARGINS: Expand space based on titles and legend placement
+        margin: {
+          t: this.config.title ? 60 : 30,
+          r: this.config.legendPos === "right" ? 150 : 30,
+          b: this.config.legendPos === "bottom" ? 80 : 50,
+          l: this.config.yAxisTitle ? 80 : 60,
+        },
+        hovermode: isHoverDisabled ? false : this.config.hover,
         hoverlabel: {
           bgcolor: tooltipBg,
           bordercolor: tooltipBorder,
-          font: {
-            family: "monospace",
-            size: 12,
-            color: isDark ? "#f8fafc" : "#0f172a",
-          },
+          font: { family: "monospace", size: 12, color: tooltipFont },
           align: "left",
         },
-        showlegend: true,
-        legend: {
-          font: { size: 10, color: textColor },
-          orientation: "h",
-          y: -0.2,
-        },
+        showlegend: this.config.legendPos !== "hidden",
+        legend:
+          this.config.legendPos === "right"
+            ? {
+                orientation: "v",
+                x: 1.02,
+                y: 1,
+                font: { size: 10, color: textColor },
+              }
+            : {
+                orientation: "h",
+                y: -0.1,
+                x: 0.5,
+                xanchor: "center",
+                font: { size: 10, color: textColor },
+              },
         xaxis: {
           gridcolor: majorGrid,
           showgrid: this.config.grid !== "none",
@@ -564,21 +656,14 @@ function trialViewer(trialId, externalUrl) {
           zeroline: false,
           tickfont: { color: textColor },
           title: {
-            text: this.config.xAxis,
-            font: { size: 10, color: textColor, family: "monospace" },
+            text: this.config.xAxisTitle || this.config.xAxis, // Fallback to column name
+            font: { size: 11, color: textColor, family: "monospace" },
           },
-
-          // Unified Hover Spikes
-          showspikes: true,
+          showspikes: showX,
           spikemode: "across",
-          spikesnap: "cursor",
           spikelinecolor: spikeColor,
-          spikethickness: 1,
+          spikethickness: 0.5,
           spikedash: "solid",
-          hoverlabel: {
-            bgcolor: tooltipBg,
-            font: { color: isDark ? "#f8fafc" : "#0f172a" },
-          },
         },
         yaxis: {
           gridcolor: majorGrid,
@@ -586,14 +671,22 @@ function trialViewer(trialId, externalUrl) {
           minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
           zeroline: false,
           tickfont: { color: textColor },
+          title: {
+            text: this.config.yAxisTitle,
+            font: { size: 11, color: textColor, family: "monospace" },
+          },
+          showspikes: showY,
+          spikemode: "across",
+          spikelinecolor: spikeColor,
+          spikethickness: 0.5,
+          spikedash: "solid",
         },
       };
 
       Plotly.newPlot("plot-area", traces, layout, {
         responsive: true,
-        displayModeBar: true,
-        displayLogo: false,
-        modeBarButtonsToRemove: [],
+        displaylogo: false,
+        modeBarButtonsToRemove: ["toImage"],
       });
     },
   };
