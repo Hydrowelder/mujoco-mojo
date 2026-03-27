@@ -607,7 +607,7 @@ function trialViewer(trialId, externalUrl) {
       const tooltipBg = isDark ? tw.slate[900] : "#ffffff";
       const tooltipFont = isDark ? tw.slate[50] : tw.slate[900];
       const tooltipBorder = tw.cyan[500];
-      const spikeColor = isDark ? tw.cyan[500] : tw.slate[400];
+      const spikeColor = isDark ? tw.cyan[500] : tw.cyan[500];
 
       const isHoverDisabled = this.config.hover === "none";
 
@@ -643,6 +643,7 @@ function trialViewer(trialId, externalUrl) {
       }));
 
       const layout = {
+        // template: isDark ? "plotly_dark" : "plotly",
         title: this.config.title
           ? {
               text: this.config.title,
@@ -701,7 +702,7 @@ function trialViewer(trialId, externalUrl) {
           showspikes: showX,
           spikemode: "across",
           spikelinecolor: spikeColor,
-          spikethickness: 0.5,
+          spikethickness: -2,
           spikedash: "solid",
         },
         yaxis: {
@@ -717,7 +718,7 @@ function trialViewer(trialId, externalUrl) {
           showspikes: showY,
           spikemode: "across",
           spikelinecolor: spikeColor,
-          spikethickness: 0.5,
+          spikethickness: -2,
           spikedash: "solid",
         },
       };
