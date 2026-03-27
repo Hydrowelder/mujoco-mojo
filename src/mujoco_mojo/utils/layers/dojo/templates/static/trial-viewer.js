@@ -28,6 +28,20 @@ const tw = {
   rose: { 500: "#ef4444" },
 };
 
+const DEFAULT_CONFIG = {
+  xAxis: "time",
+  yAxes: [],
+  grid: "all",
+  linemode: "lines",
+  interp: "linear",
+  hover: "x unified",
+  title: "",
+  xAxisTitle: "",
+  yAxisTitle: "",
+  showSpike: true,
+  legendPos: "bottom",
+};
+
 /**
  * trialViewer - Alpine.js Component
  * Handles telemetry data retrieval, Plotly rendering, and JSON configuration state.
@@ -68,6 +82,7 @@ function trialViewer(trialId, externalUrl) {
       title: "",
       xAxisTitle: "",
       yAxisTitle: "",
+      showSpike: true,
       legendPos: "bottom", // "bottom", "right", "hidden"
     },
 
@@ -271,6 +286,28 @@ function trialViewer(trialId, externalUrl) {
 
     copyRawConfig() {
       this.copyToClipboard(this.configRaw, "JSON Config copied!");
+    },
+
+    resetConfig() {
+      if (
+        confirm(
+          "Reset plot to factory defaults? This will clear your current view.",
+        )
+      ) {
+        // 1. Wipe persistence
+        localStorage.removeItem("mojo_mosaic_config");
+
+        // 2. Restore defaults (Deep copy to break references)
+        this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+
+        // 3. Re-sync the X-axis fallback if telemetry is loaded
+        if (this.columns.includes("time")) this.config.xAxis = "time";
+
+        this.notify("Settings Reset", "info");
+
+        // 4. Update the editor text area
+        this.configRaw = JSON.stringify(this.config, null, 4);
+      }
     },
 
     /**
@@ -575,9 +612,11 @@ function trialViewer(trialId, externalUrl) {
       const isHoverDisabled = this.config.hover === "none";
 
       const showX =
+        this.config.showSpike &&
         !isHoverDisabled &&
         (this.config.hover.includes("x") || this.config.hover === "closest");
       const showY =
+        this.config.showSpike &&
         !isHoverDisabled &&
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
