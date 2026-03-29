@@ -393,11 +393,13 @@
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1">
+                            <div class="space-y-1 transition-opacity duration-300"
+                                 :class="config.linemode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Interpolation</label>
                                 <select x-model="config.interp"
                                         @change="saveAndRender()"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
+                                        :disabled="config.linemode === 'markers'"
+                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none disabled:cursor-not-allowed">
                                     <option value="linear">Linear</option>
                                     <option value="spline">Spline</option>
                                     <option value="hv">Step (HV)</option>

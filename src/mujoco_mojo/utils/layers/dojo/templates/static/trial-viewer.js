@@ -32,14 +32,16 @@ const DEFAULT_CONFIG = {
   xAxis: "time",
   yAxes: [],
   grid: "all",
-  linemode: "lines",
-  interp: "linear",
-  hover: "x unified",
+  linemode: "lines", // Renamed from markerMode for clarity
+  interp: "linear", // line interpolation (linear, spline, etc)
+  hover: "x unified", // "x unified", "y unified", "closest", "x", "y", "none"
   title: "",
   xAxisTitle: "",
   yAxisTitle: "",
   showSpike: true,
-  legendPos: "bottom",
+  legendPos: "bottom", // "bottom", "right", "hidden"
+  rangeX: null,
+  rangeY: null,
 };
 
 /**
@@ -72,19 +74,7 @@ function trialViewer(trialId, externalUrl) {
 
     // --- SINGLE SOURCE OF TRUTH: PLOT CONFIGURATION ---
     // This object is the master state. Changes here trigger re-renders.
-    config: {
-      xAxis: "time",
-      yAxes: [],
-      grid: "all",
-      linemode: "lines", // Renamed from markerMode for clarity
-      interp: "linear", // line interpolation (linear, spline, etc)
-      hover: "x unified", // "x unified", "y unified", "closest", "x", "y", "none"
-      title: "",
-      xAxisTitle: "",
-      yAxisTitle: "",
-      showSpike: true,
-      legendPos: "bottom", // "bottom", "right", "hidden"
-    },
+    config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)), // deep clone the default config
 
     // --- JSON EDITOR STATE ---
     configRaw: "", // Pretty-printed string for the <textarea>
@@ -137,8 +127,9 @@ function trialViewer(trialId, externalUrl) {
         const resp = await fetch(`/mosaic/${this.trialId}/data`);
         if (resp.status === 404) {
           this.errorState = "not_found";
-          this.notify("Trial data not found", "error");
-          throw new Error();
+          this.notify(`Trial ${this.trialId} not found`, "error");
+          this.loading = false;
+          return;
         }
 
         const json = await resp.json();
@@ -155,12 +146,44 @@ function trialViewer(trialId, externalUrl) {
             this.loadConfig();
           }
 
-          this.$nextTick(() => {
-            this.renderPlot();
-            // Handle initial resize for responsive layout
+          this.$nextTick(async () => {
+            await this.renderPlot();
+
+            const plotEl = document.getElementById("plot-area");
+
+            plotEl.on("plotly_relayout", (event) => {
+              // 1. Detect Reset (Double-click or Home button)
+              // We check both axes to be safe.
+              if (
+                event["xaxis.autorange"] === true ||
+                event["yaxis.autorange"] === true
+              ) {
+                this.config.rangeX = null;
+                this.config.rangeY = null;
+                return; // Stop here so we don't accidentally "capture" ranges during a reset
+              }
+
+              // 2. Detect Zoom/Pan for X-Axis
+              if (event["xaxis.range[0]"] !== undefined) {
+                this.config.rangeX = [
+                  event["xaxis.range[0]"],
+                  event["xaxis.range[1]"],
+                ];
+              }
+
+              // 3. Detect Zoom/Pan for Y-Axis
+              // Crucial: Only update if it actually exists in the event!
+              if (event["yaxis.range[0]"] !== undefined) {
+                this.config.rangeY = [
+                  event["yaxis.range[0]"],
+                  event["yaxis.range[1]"],
+                ];
+              }
+            });
+
             setTimeout(() => {
-              const el = document.getElementById("plot-area");
-              if (el && el.offsetParent !== null) Plotly.Plots.resize(el);
+              if (plotEl && plotEl.offsetParent !== null)
+                Plotly.Plots.resize(plotEl);
             }, 100);
           });
         } else {
@@ -168,7 +191,9 @@ function trialViewer(trialId, externalUrl) {
         }
       } catch (e) {
         this.data = null;
-        this.notify("Failed to connect to Dojo server", "error");
+        if (this.errorState !== "not_found") {
+          this.notify("Failed to connect to Dojo server", "error");
+        }
       } finally {
         this.loading = false;
         Alpine.store("dojo").startGlobalSync();
@@ -205,8 +230,8 @@ function trialViewer(trialId, externalUrl) {
       return !this.ySearch
         ? this.columns
         : this.columns.filter((c) =>
-          c.toLowerCase().includes(this.ySearch.toLowerCase()),
-        );
+            c.toLowerCase().includes(this.ySearch.toLowerCase()),
+          );
     },
 
     /**
@@ -523,6 +548,7 @@ function trialViewer(trialId, externalUrl) {
 
       this.notify("Configuration JSON Exported", "success");
     },
+
     /**
      * Handle File Drop
      */
@@ -590,9 +616,9 @@ function trialViewer(trialId, externalUrl) {
      * Plotly Engine: Renders the telemetry traces based on the current config object
      */
     renderPlot() {
-      if (!this.data || this.config.yAxes.length === 0) return;
+      if (!this.data) return;
 
-      const el = document.getElementById("plot-area")
+      // const el = document.getElementById("plot-area");
       const isDark = document.documentElement.classList.contains("dark");
 
       const plotColors = [
@@ -622,6 +648,32 @@ function trialViewer(trialId, externalUrl) {
         !isHoverDisabled &&
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
+      const calculatePaddedRange = (keys, padding = true) => {
+        let min = Infinity;
+        let max = -Infinity;
+
+        keys.forEach((key) => {
+          const arr = this.data[key];
+          if (!arr) return;
+          for (let i = 0; i < arr.length; i++) {
+            if (arr[i] < min) min = arr[i];
+            if (arr[i] > max) max = arr[i];
+          }
+        });
+
+        if (min === Infinity) return [0, 1]; // Fallback if no data
+        if (min === max) return [min - 1, max + 1]; // Handle constant signals
+
+        let pad = padding ? (max - min) / 16 : 0;
+        return [min - pad, max + pad];
+      };
+
+      // Determine final display ranges
+      const displayRangeX =
+        this.config.rangeX || calculatePaddedRange([this.config.xAxis], false);
+      const displayRangeY =
+        this.config.rangeY || calculatePaddedRange(this.config.yAxes);
+
       const traces = this.config.yAxes.map((key, i) => ({
         x: this.data[this.config.xAxis],
         y: this.data[key],
@@ -644,24 +696,58 @@ function trialViewer(trialId, externalUrl) {
         },
       }));
 
+      const xAxisObj = {
+        gridcolor: majorGrid,
+        showgrid: this.config.grid !== "none",
+        minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
+        zeroline: false,
+        tickfont: { color: textColor },
+        title: {
+          text: this.config.xAxisTitle || this.config.xAxis,
+          font: { size: 11, color: textColor, family: "monospace" },
+        },
+        autorange: false,
+        range: displayRangeX,
+        showspikes: showX,
+        spikemode: "across",
+        spikelinecolor: spikeColor,
+        spikethickness: -2,
+      };
+      const yAxisObj = {
+        gridcolor: majorGrid,
+        showgrid: this.config.grid !== "none",
+        minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
+        zeroline: false,
+        tickfont: { color: textColor },
+        title: {
+          text: this.config.yAxisTitle,
+          font: { size: 11, color: textColor, family: "monospace" },
+        },
+        autorange: false,
+        range: displayRangeY,
+        showspikes: showY,
+        spikemode: "across",
+        spikelinecolor: spikeColor,
+        spikethickness: -2,
+      };
+
       const layout = {
-        // template: isDark ? "plotly_dark" : "plotly",
+        uirevision: this.trialId,
         title: this.config.title
           ? {
-            text: this.config.title,
-            font: {
-              family: "monospace",
-              size: 16,
-              color: isDark ? tw.slate[200] : tw.slate[800],
-              weight: "bold",
-            },
-            x: 0,
-            xanchor: "left",
-          }
+              text: this.config.title,
+              font: {
+                family: "monospace",
+                size: 16,
+                color: isDark ? tw.slate[200] : tw.slate[800],
+                weight: "bold",
+              },
+              x: 0,
+              xanchor: "left",
+            }
           : null,
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
-        // DYNAMIC MARGINS: Expand space based on titles and legend placement
         margin: {
           t: this.config.title ? 60 : 30,
           r: this.config.legendPos === "right" ? 150 : 30,
@@ -679,63 +765,21 @@ function trialViewer(trialId, externalUrl) {
         legend:
           this.config.legendPos === "right"
             ? {
-              orientation: "v",
-              x: 1.02,
-              y: 1,
-              font: { size: 10, color: textColor },
-            }
+                orientation: "v",
+                x: 1.02,
+                y: 1,
+                font: { size: 10, color: textColor },
+              }
             : {
-              orientation: "h",
-              y: -0.1,
-              x: 0.5,
-              xanchor: "center",
-              font: { size: 10, color: textColor },
-            },
-        xaxis: {
-          gridcolor: majorGrid,
-          showgrid: this.config.grid !== "none",
-          minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
-          zeroline: false,
-          tickfont: { color: textColor },
-          title: {
-            text: this.config.xAxisTitle || this.config.xAxis, // Fallback to column name
-            font: { size: 11, color: textColor, family: "monospace" },
-          },
-          showspikes: showX,
-          spikemode: "across",
-          spikelinecolor: spikeColor,
-          spikethickness: -2,
-          spikedash: "solid",
-        },
-        yaxis: {
-          gridcolor: majorGrid,
-          showgrid: this.config.grid !== "none",
-          minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
-          zeroline: false,
-          tickfont: { color: textColor },
-          title: {
-            text: this.config.yAxisTitle,
-            font: { size: 11, color: textColor, family: "monospace" },
-          },
-          showspikes: showY,
-          spikemode: "across",
-          spikelinecolor: spikeColor,
-          spikethickness: -2,
-          spikedash: "solid",
-        },
+                orientation: "h",
+                y: -0.1,
+                x: 0.5,
+                xanchor: "center",
+                font: { size: 10, color: textColor },
+              },
+        xaxis: xAxisObj,
+        yaxis: yAxisObj,
       };
-
-      if (el && el.layout) {
-        // if the user has zoom in (autorange is false), grab those ranges
-        if (el.layout.xaxis && el.layout.xaxis.autorange === false) {
-          layout.xaxis.range = el.layout.xaxis.range;
-          layout.xaxis.autorange = false;
-        }
-        if (el.layout.yaxis && el.layout.yaxis.autorange === false) {
-          layout.yaxis.range = el.layout.yaxis.range;
-          layout.yaxis.autorange = false;
-        }
-      }
 
       const config = {
         responsive: true, // adapt to page changes
@@ -744,7 +788,7 @@ function trialViewer(trialId, externalUrl) {
         modeBarButtonsToRemove: ["toImage"], // we have our own download options
       };
 
-      Plotly.react("plot-area", traces, layout, config);
+      return Plotly.react("plot-area", traces, layout, config);
     },
   };
 }
