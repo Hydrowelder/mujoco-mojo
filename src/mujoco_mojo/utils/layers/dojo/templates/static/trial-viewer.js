@@ -623,6 +623,9 @@ function trialViewer(trialId, externalUrl) {
         this.config.yAxes = [...this.config.yAxes, col];
       }
       // Note: Watcher handles saveAndRender automatically
+
+      // reset the autoscaling
+      this.config.rangeY = null;
     },
 
     /**
