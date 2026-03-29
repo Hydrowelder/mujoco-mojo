@@ -171,7 +171,18 @@
                     PREV
                 </a>
                 {% else %}
-                <span class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">PREV</span>
+                <span class="!drop-shadow-none hover:!drop-shadow-none px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-500 flex items-center gap-1 transition-all cursor-not-allowed">
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="3"
+                              d="M15 19l-7-7 7-7" />
+                    </svg>
+                    PREV
+                </span>
                 {% endif %}
 
                 <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800 transition-all focus-within:border-cyan-500/50">
@@ -209,7 +220,18 @@
                     </svg>
                 </a>
                 {% else %}
-                <span class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">NEXT</span>
+                <span class="!drop-shadow-none hover:!drop-shadow-none px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-500 flex items-center gap-1 transition-all cursor-not-allowed">
+                    NEXT
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="3"
+                              d="M9 5l7 7-7 7" />
+                    </svg>
+                </span>
                 {% endif %}
             </div>
         </div>
