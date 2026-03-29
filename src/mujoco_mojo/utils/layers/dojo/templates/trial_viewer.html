@@ -68,8 +68,7 @@
     <div x-show="isDragging"
          style="display: none;"
          class="fixed inset-0 z-[1000] bg-cyan-500/10 dark:bg-cyan-500/5 backdrop-blur-md border-4 border-dashed border-cyan-500 flex items-center justify-center pointer-events-none">
-        <div
-             class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-cyan-500 flex flex-col items-center gap-4">
+        <div class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-cyan-500 flex flex-col items-center gap-4">
             <div class="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center text-cyan-500">
                 <svg class="w-8 h-8"
                      fill="none"
@@ -87,8 +86,7 @@
         </div>
     </div>
 
-    <div
-         class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-300 dark:border-slate-700 pb-4 gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-300 dark:border-slate-700 pb-4 gap-4">
 
         <div class="flex items-center gap-3 text-xs sm:text-sm font-mono shrink-0">
             <a href="/mosaic"
@@ -128,10 +126,8 @@
                     </svg>
                 </div>
 
-                <div
-                     class="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all">
-                    <p
-                       class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                <div class="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all">
+                    <p class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                         Keyboard Shortcuts</p>
                     <div class="space-y-3 font-mono text-[10px]">
                         <div class="flex justify-between items-center">
@@ -175,12 +171,10 @@
                     PREV
                 </a>
                 {% else %}
-                <span
-                      class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">PREV</span>
+                <span class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">PREV</span>
                 {% endif %}
 
-                <div
-                     class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800 transition-all focus-within:border-cyan-500/50">
+                <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800 transition-all focus-within:border-cyan-500/50">
                     <input type="number"
                            x-model.number="warpId"
                            @keyup.enter="warpToTrial()"
@@ -215,8 +209,7 @@
                     </svg>
                 </a>
                 {% else %}
-                <span
-                      class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">NEXT</span>
+                <span class="px-3 py-2 sm:py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-200 dark:text-slate-800 cursor-not-allowed">NEXT</span>
                 {% endif %}
             </div>
         </div>
@@ -257,8 +250,7 @@
                 </svg>
             </button>
 
-            <div
-                 class="flex-1 flex gap-1 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
+            <div class="flex-1 flex gap-1 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
                 <template x-for="col in config.yAxes"
                           :key="col">
                     <span class="shrink-0 px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 rounded text-[9px] font-mono font-bold"
@@ -278,8 +270,7 @@
                 <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
                     <template x-for="col in filteredCols"
                               :key="col">
-                        <label
-                               class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group">
+                        <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group">
                             <input type="checkbox"
                                    :checked="config.yAxes.includes(col)"
                                    @click.stop="toggleY(col)"
@@ -296,8 +287,7 @@
 
     <div class="flex flex-row gap-4 items-stretch">
         <!-- plot area -->
-        <div
-             class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 min-h-[600px] relative overflow-hidden">
+        <div class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 min-h-[600px] relative overflow-hidden">
             <div x-show="data && config.yAxes.length > 0"
                  id="plot-area"
                  class="w-full h-[600px]"></div>
@@ -305,16 +295,14 @@
                  class="absolute inset-0 flex items-center justify-center text-slate-400 font-mono text-xs italic">
                 Select Y-axis signals to begin...</div>
             <template x-if="loading">
-                <div
-                     class="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center">
+                <div class="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center">
                     <div class="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
             </template>
         </div>
 
         <!-- sidebar -->
-        <div
-             class="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-md shrink-0 relative z-50">
+        <div class="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-md shrink-0 relative z-50">
             <!-- copy share link -->
             <button @click="copyShareLink()"
                     class="p-2 text-slate-400 hover:text-cyan-500 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -354,8 +342,7 @@
                      x-transition
                      class="absolute right-full top-0 mr-4 w-[calc(100vw-6rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
-                    <p
-                       class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                         Plot Configuration
                     </p>
 
@@ -385,13 +372,16 @@
 
                         <div class="grid grid-cols-2 gap-3">
                             <div class="space-y-1">
-                                <label class="text-[9px] font-bold text-slate-500 uppercase">Shape</label>
+                                <label class="text-[9px] font-bold text-slate-500 uppercase">Interpolation</label>
                                 <select x-model="config.interp"
                                         @change="saveAndRender()"
                                         class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
                                     <option value="linear">Linear</option>
-                                    <option value="spline">Smooth</option>
+                                    <option value="spline">Spline</option>
                                     <option value="hv">Step (HV)</option>
+                                    <option value="vh">Step (VH)</option>
+                                    <option value="hvh">Step (HVH)</option>
+                                    <option value="vhv">Step (VHV)</option>
                                 </select>
                             </div>
                             <div class="space-y-1">
@@ -429,8 +419,7 @@
                                        :disabled="config.hover === 'none'"
                                        class="rounded border-slate-300 dark:border-slate-700 text-cyan-500 focus:ring-cyan-500 bg-slate-100 dark:bg-slate-900 h-3.5 w-3.5 transition-all disabled:bg-slate-200 dark:disabled:bg-slate-800">
 
-                                <span
-                                      class="text-[9px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">
                                     Show Spikes
                                 </span>
                             </label>
@@ -509,8 +498,7 @@
                      x-transition
                      class="absolute right-full top-0 mr-4 w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-[200]">
 
-                    <p
-                       class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <p class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                         Export Trial</p>
 
                     <div class="space-y-1">
@@ -557,8 +545,7 @@
             </div>
         </div>
 
-        <div
-             class="relative bg-white dark:bg-slate-950 rounded-xl border border-slate-300 dark:border-slate-800 overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800">
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-800 overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800">
             <div class="absolute inset-0 p-4 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap pointer-events-none overflow-hidden scroll-sync-target"
                  x-html="highlightedJson"></div>
 
