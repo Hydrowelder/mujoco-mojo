@@ -42,6 +42,8 @@ const DEFAULT_CONFIG = {
   legendPos: "bottom", // "bottom", "right", "hidden"
   rangeX: null,
   rangeY: null,
+  vsEnabled: false,
+  vsWarpId: null,
 };
 
 /**
@@ -80,21 +82,36 @@ function trialViewer(trialId, externalUrl) {
     configRaw: "", // Pretty-printed string for the <textarea>
     isValidJson: true, // Tracks if the user's manual JSON input is valid
 
+    // --- MATCHUP STATE ---
+    vsData: null,
+    vsLoading: false,
+
+    async fetchTrialData(id) {
+      const resp = await fetch(`/mosaic/${id}/data`);
+      if (!resp.ok) {
+        if (resp.status === 404) throw new Error(`Trial ${id} not found`);
+        throw new Error("Failed to connect to Dojo server");
+      }
+      const json = await resp.json();
+      if (!json || Object.keys(json).length === 0) {
+        throw new Error(`Trial ${id} contains no data`);
+      }
+      return json;
+    },
+
     async init() {
-      // Set initial theme
+      // 1. UI PRIMING
+      // Detect theme and set up the Warp ID from the URL string
       this.theme = document.documentElement.classList.contains("dark")
         ? "dark"
         : "light";
-
       const currentNum = parseInt(this.trialId.split("_").pop());
       this.warpId = isNaN(currentNum) ? null : currentNum;
 
-      // 1. Updated Theme Observer: Redraws plot AND updates config.theme
+      // 2. DOM & STATE OBSERVERS
+      // Watch for system theme changes (e.g., toggling dark mode via UI)
       const observer = new MutationObserver((mutations) => {
-        const isThemeChange = mutations.some(
-          (m) => m.attributeName === "class",
-        );
-        if (isThemeChange) {
+        if (mutations.some((m) => m.attributeName === "class")) {
           this.theme = document.documentElement.classList.contains("dark")
             ? "dark"
             : "light";
@@ -103,13 +120,13 @@ function trialViewer(trialId, externalUrl) {
       });
       observer.observe(document.documentElement, { attributes: true });
 
-      // 2. State Watcher: Sync the JSON text area whenever the config object changes
+      // Watch the master config: Any change here triggers a save and a redraw
       this.$watch("config", (value) => {
         this.configRaw = JSON.stringify(value, null, 4);
         this.saveAndRender();
       });
 
-      // 3. Fetch Dojo Status (Sync & Padding length)
+      // 3. FETCH EXTERNAL STATUS (Padding & Sync)
       try {
         const statusResp = await fetch("/monitor/api/status");
         const statusData = await statusResp.json();
@@ -122,85 +139,67 @@ function trialViewer(trialId, externalUrl) {
         console.warn("Dojo offline", e);
       }
 
-      // 4. Fetch Telemetry Data (DuckDB/JSON)
+      // 4. THE MAIN DATA LOAD
       try {
-        const resp = await fetch(`/mosaic/${this.trialId}/data`);
-        if (resp.status === 404) {
-          this.errorState = "not_found";
-          this.notify(`Trial ${this.trialId} not found`, "error");
-          this.loading = false;
-          return;
-        }
+        // Use your centralized fetch method
+        this.data = await this.fetchTrialData(this.trialId);
+        this.columns = Object.keys(this.data).sort();
 
-        const json = await resp.json();
-        if (json && Object.keys(json).length > 0) {
-          this.data = json;
-          this.columns = Object.keys(json).sort();
-
-          // Check for shared config in URL
-          const params = new URLSearchParams(window.location.search);
-          const shared = params.get("v");
-          if (shared) {
-            this.hydrateFromUrl(shared);
-          } else {
-            this.loadConfig();
-          }
-
-          this.$nextTick(async () => {
-            await this.renderPlot();
-
-            const plotEl = document.getElementById("plot-area");
-
-            plotEl.on("plotly_relayout", (event) => {
-              // 1. Detect Reset (Double-click or Home button)
-              // We check both axes to be safe.
-              if (
-                event["xaxis.autorange"] === true ||
-                event["yaxis.autorange"] === true
-              ) {
-                this.config.rangeX = null;
-                this.config.rangeY = null;
-                return; // Stop here so we don't accidentally "capture" ranges during a reset
-              }
-
-              // 2. Detect Zoom/Pan for X-Axis
-              if (event["xaxis.range[0]"] !== undefined) {
-                this.config.rangeX = [
-                  event["xaxis.range[0]"],
-                  event["xaxis.range[1]"],
-                ];
-              }
-
-              // 3. Detect Zoom/Pan for Y-Axis
-              // Crucial: Only update if it actually exists in the event!
-              if (event["yaxis.range[0]"] !== undefined) {
-                this.config.rangeY = [
-                  event["yaxis.range[0]"],
-                  event["yaxis.range[1]"],
-                ];
-              }
-            });
-
-            setTimeout(() => {
-              if (plotEl && plotEl.offsetParent !== null)
-                Plotly.Plots.resize(plotEl);
-            }, 100);
-          });
+        // 5. CONFIG HYDRATION
+        const params = new URLSearchParams(window.location.search);
+        const shared = params.get("v");
+        if (shared) {
+          this.hydrateFromUrl(shared);
         } else {
-          this.errorState = "empty";
+          this.loadConfig();
         }
+
+        // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
+        this.$nextTick(async () => {
+          await this.renderPlot();
+          const plotEl = document.getElementById("plot-area");
+
+          // Attach the zoom/pan listener to capture manual ranges
+          plotEl.on("plotly_relayout", (event) => {
+            // Handle Reset (Double-click)
+            if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
+              this.config.rangeX = null;
+              this.config.rangeY = null;
+              return;
+            }
+            // Handle Manual Zoom/Pan
+            if (event["xaxis.range[0]"] !== undefined) {
+              this.config.rangeX = [
+                event["xaxis.range[0]"],
+                event["xaxis.range[1]"],
+              ];
+            }
+            if (event["yaxis.range[0]"] !== undefined) {
+              this.config.rangeY = [
+                event["yaxis.range[0]"],
+                event["yaxis.range[1]"],
+              ];
+            }
+          });
+
+          // Handle initial resize for hidden containers
+          setTimeout(() => {
+            if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
+          }, 100);
+        });
       } catch (e) {
-        this.data = null;
-        if (this.errorState !== "not_found") {
-          this.notify("Failed to connect to Dojo server", "error");
-        }
+        // Catch 404s or malformed JSON from fetchTrialData
+        this.errorState = e.message.includes("not found")
+          ? "not_found"
+          : "empty";
+        this.notify(e.message, "error");
       } finally {
         this.loading = false;
         Alpine.store("dojo").startGlobalSync();
         Alpine.store("dojo").setPageReady(true);
       }
 
-      // 5. Global Keyboard Shortcuts
+      // 7. GLOBAL KEYBOARD SHORTCUTS
       window.addEventListener("keydown", (e) => {
         if (e.repeat) return;
         if (
@@ -211,9 +210,7 @@ function trialViewer(trialId, externalUrl) {
           document.querySelector('input[type="number"]')?.focus();
         }
         if (e.key === "Escape") {
-          this.yMenuOpen = false;
-          this.settingsOpen = false;
-          this.editorOpen = false;
+          this.yMenuOpen = this.settingsOpen = this.editorOpen = false;
           if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) e.target.blur();
         }
         if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
@@ -221,6 +218,37 @@ function trialViewer(trialId, externalUrl) {
         if (e.key === "ArrowRight")
           document.getElementById("nav-next")?.click();
       });
+    },
+
+    async handleVsToggle() {
+      if (!this.config.vsEnabled) {
+        this.vsData = null;
+        this.renderPlot();
+      } else if (this.config.vsWarpId !== null) {
+        await this.loadVsData();
+      }
+    },
+
+    async loadVsData() {
+      if (this.config.vsWarpId === null) return;
+
+      this.vsLoading = true;
+      const paddedVsNum = String(this.config.vsWarpId).padStart(
+        this.paddingLen,
+        "0",
+      );
+      const vsId = `trial_${paddedVsNum}`;
+
+      try {
+        this.vsData = await this.fetchTrialData(vsId);
+        this.notify(`Matched up with ${vsId}`, "info");
+        this.saveAndRender();
+      } catch (e) {
+        this.notify(e.message, "error");
+        this.vsData = null;
+      } finally {
+        this.vsLoading = false;
+      }
     },
 
     /**
@@ -649,23 +677,32 @@ function trialViewer(trialId, externalUrl) {
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
       const calculatePaddedRange = (keys, padding = true) => {
-        let min = Infinity;
-        let max = -Infinity;
+        let globalMin = Infinity;
+        let globalMax = -Infinity;
 
-        keys.forEach((key) => {
-          const arr = this.data[key];
-          if (!arr) return;
-          for (let i = 0; i < arr.length; i++) {
-            if (arr[i] < min) min = arr[i];
-            if (arr[i] > max) max = arr[i];
-          }
+        // Build list of all active data sources
+        const datasets = [this.data];
+        if (this.config.vsEnabled && this.vsData) datasets.push(this.vsData);
+
+        datasets.forEach((dataset) => {
+          keys.forEach((key) => {
+            const series = dataset[key];
+            if (!series) return;
+            // Iterate series for this specific signal/dataset
+            for (let i = 0; i < series.length; i++) {
+              const val = series[i];
+              if (val < globalMin) globalMin = val;
+              if (val > globalMax) globalMax = val;
+            }
+          });
         });
 
-        if (min === Infinity) return [0, 1]; // Fallback if no data
-        if (min === max) return [min - 1, max + 1]; // Handle constant signals
+        // Fallbacks for empty or flat data
+        if (globalMin === Infinity) return [0, 1];
+        if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
 
-        let pad = padding ? (max - min) / 16 : 0;
-        return [min - pad, max + pad];
+        const pad = padding ? (globalMax - globalMin) / 16 : 0;
+        return [globalMin - pad, globalMax + pad];
       };
 
       // Determine final display ranges
@@ -674,7 +711,8 @@ function trialViewer(trialId, externalUrl) {
       const displayRangeY =
         this.config.rangeY || calculatePaddedRange(this.config.yAxes);
 
-      const traces = this.config.yAxes.map((key, i) => ({
+      // main traces
+      let traces = this.config.yAxes.map((key, i) => ({
         x: this.data[this.config.xAxis],
         y: this.data[key],
         name: key,
@@ -685,7 +723,7 @@ function trialViewer(trialId, externalUrl) {
           color: plotColors[i % plotColors.length],
           shape: this.config.interp,
         },
-        marker: { size: 6 },
+        marker: { size: 6, symbol: "circle" },
         namelength: -1,
         // Disable hover on individual traces if toggled off
         hoverinfo: isHoverDisabled ? "skip" : "all",
@@ -695,6 +733,26 @@ function trialViewer(trialId, externalUrl) {
           font: { family: "monospace", size: 12, color: tooltipFont },
         },
       }));
+
+      if (this.config.vsEnabled && this.vsData) {
+        const vsTraces = this.config.yAxes.map((key, i) => ({
+          x: this.vsData[this.config.xAxis],
+          y: this.vsData[key],
+          name: `${key} (VS #${this.config.vsWarpId})`,
+          mode: this.config.linemode,
+          type: "scatter",
+          line: {
+            width: 2,
+            color: plotColors[i % plotColors.length],
+            shape: this.config.interp,
+            dash: "dot", // Distinguished by dots
+          },
+          opacity: 0.5, // Pushed to background
+          marker: { size: 6, symbol: "square" },
+          // ...
+        }));
+        traces = [...traces, ...vsTraces];
+      }
 
       const xAxisObj = {
         gridcolor: majorGrid,
