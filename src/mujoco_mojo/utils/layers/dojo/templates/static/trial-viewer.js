@@ -205,8 +205,8 @@ function trialViewer(trialId, externalUrl) {
       return !this.ySearch
         ? this.columns
         : this.columns.filter((c) =>
-            c.toLowerCase().includes(this.ySearch.toLowerCase()),
-          );
+          c.toLowerCase().includes(this.ySearch.toLowerCase()),
+        );
     },
 
     /**
@@ -227,13 +227,13 @@ function trialViewer(trialId, externalUrl) {
         /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])/g;
 
       return html.replace(regex, (match) => {
-        let cls = "text-slate-400 dark:text-slate-500"; // Default: Structural (braces/commas)
+        let cls = "text-slate-600 dark:text-slate-400"; // Default: Structural (braces/commas)
 
         if (/^"/.test(match)) {
           if (/:$/.test(match)) {
-            cls = "text-cyan-700 dark:text-cyan-400"; // Keys
+            cls = "text-cyan-500 dark:text-cyan-300"; // Keys
           } else {
-            cls = "text-emerald-600 dark:text-emerald-400"; // Strings
+            cls = "text-emerald-500 dark:text-emerald-400"; // Strings
           }
         } else if (/true|false/.test(match)) {
           cls = "text-violet-600 dark:text-violet-400"; // Booleans
@@ -592,7 +592,9 @@ function trialViewer(trialId, externalUrl) {
     renderPlot() {
       if (!this.data || this.config.yAxes.length === 0) return;
 
+      const el = document.getElementById("plot-area")
       const isDark = document.documentElement.classList.contains("dark");
+
       const plotColors = [
         tw.cyan[500],
         tw.emerald[500],
@@ -646,16 +648,16 @@ function trialViewer(trialId, externalUrl) {
         // template: isDark ? "plotly_dark" : "plotly",
         title: this.config.title
           ? {
-              text: this.config.title,
-              font: {
-                family: "monospace",
-                size: 16,
-                color: isDark ? tw.slate[200] : tw.slate[800],
-                weight: "bold",
-              },
-              x: 0,
-              xanchor: "left",
-            }
+            text: this.config.title,
+            font: {
+              family: "monospace",
+              size: 16,
+              color: isDark ? tw.slate[200] : tw.slate[800],
+              weight: "bold",
+            },
+            x: 0,
+            xanchor: "left",
+          }
           : null,
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
@@ -677,18 +679,18 @@ function trialViewer(trialId, externalUrl) {
         legend:
           this.config.legendPos === "right"
             ? {
-                orientation: "v",
-                x: 1.02,
-                y: 1,
-                font: { size: 10, color: textColor },
-              }
+              orientation: "v",
+              x: 1.02,
+              y: 1,
+              font: { size: 10, color: textColor },
+            }
             : {
-                orientation: "h",
-                y: -0.1,
-                x: 0.5,
-                xanchor: "center",
-                font: { size: 10, color: textColor },
-              },
+              orientation: "h",
+              y: -0.1,
+              x: 0.5,
+              xanchor: "center",
+              font: { size: 10, color: textColor },
+            },
         xaxis: {
           gridcolor: majorGrid,
           showgrid: this.config.grid !== "none",
@@ -723,11 +725,26 @@ function trialViewer(trialId, externalUrl) {
         },
       };
 
-      Plotly.newPlot("plot-area", traces, layout, {
-        responsive: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ["toImage"],
-      });
+      if (el && el.layout) {
+        // if the user has zoom in (autorange is false), grab those ranges
+        if (el.layout.xaxis && el.layout.xaxis.autorange === false) {
+          layout.xaxis.range = el.layout.xaxis.range;
+          layout.xaxis.autorange = false;
+        }
+        if (el.layout.yaxis && el.layout.yaxis.autorange === false) {
+          layout.yaxis.range = el.layout.yaxis.range;
+          layout.yaxis.autorange = false;
+        }
+      }
+
+      const config = {
+        responsive: true, // adapt to page changes
+        displaylogo: false, // hide plotly logo
+        displayModeBar: true, // keep mode bar always visible
+        modeBarButtonsToRemove: ["toImage"], // we have our own download options
+      };
+
+      Plotly.react("plot-area", traces, layout, config);
     },
   };
 }
