@@ -11,6 +11,7 @@ function monitor() {
     },
     stats: [],
     hasInitialData: false,
+    hasCelebrated: false,
 
     async init() {
       // listen for data updates from the global store
@@ -118,47 +119,176 @@ function monitor() {
     },
 
     handleCompletion() {
-      const celebrationKey = `mojo_celebrated_${this.status.n_done}`;
-      if (sessionStorage.getItem(celebrationKey)) return;
+      // Check the local variable instead of sessionStorage
+      if (this.hasCelebrated) return;
+
+      const theme = this.getHolidayTheme();
+      const chime = document.getElementById("chime");
 
       if (!Alpine.store("dojo").isMuted) {
-        const audio = document.getElementById("chime");
-        if (audio) audio.play().catch(() => {});
+        if (theme.audioUrl) {
+          const holidaySound = new Audio(theme.audioUrl);
+          holidaySound.play().catch(() => chime.play().catch(() => {}));
+        } else {
+          chime.play().catch(() => {});
+        }
       }
 
-      this.fireConfetti();
-      sessionStorage.setItem(celebrationKey, "true");
+      this.fireConfetti(theme);
+
+      // Mark as celebrated so it doesn't fire again until the next refresh
+      this.hasCelebrated = true;
     },
 
-    fireConfetti() {
-      const duration = 3 * 1000;
-      const animationEnd = Date.now() + duration;
-      const defaults = {
-        startVelocity: 30,
-        spread: 360,
-        ticks: 60,
-        zIndex: 1000,
+    getHolidayTheme() {
+      const now = new Date();
+      // const m = now.getMonth(); // 0-11
+      // const d = now.getDate();
+      const m = 2; // 0-11
+      const d = 17;
+
+      // New Year
+      if ((m === 11 && d === 31) || (m === 0 && d <= 2)) {
+        return {
+          name: "New Year",
+          emojis: ["🎆", "✨", "🥂"],
+          colors: ["#ffcc00", "#ffffff"],
+          audioUrl:
+            "https://actions.google.com/sounds/v1/human_voices/crowd_cheer.ogg", // TODO
+        };
+      }
+      // Pi Day
+      if (m === 2 && d === 14) {
+        return {
+          name: "Pi Day",
+          emojis: ["π", "🥧"],
+          colors: ["#ff9900"],
+          audioUrl:
+            "https://actions.google.com/sounds/v1/science_fiction/sci_fi_pulse.ogg", // TODO
+        };
+      }
+      // St. Patrick's
+      if (m === 2 && d === 17) {
+        return {
+          name: "St. Patrick's Day",
+          emojis: ["🍀", "🌈"],
+          colors: ["#22c55e", "#166534"],
+          audioUrl:
+            "https://actions.google.com/sounds/v1/foley/wind_chime_vibrant.ogg", // TODO
+        };
+      }
+      // May the 4th
+      if (m === 4 && d === 4) {
+        return {
+          name: "May the 4th",
+          emojis: ["⚔️", "🌌", "✨"],
+          colors: ["#FFE81F", "#2dd4bf"],
+          audioUrl:
+            "https://actions.google.com/sounds/v1/science_fiction/laser_burst.ogg", // TODO
+        };
+      }
+      // Halloween
+      if ((m === 9 && d >= 25) || (m === 10 && d === 1)) {
+        return {
+          name: "Halloween",
+          emojis: ["🎃", "👻", "🦇"],
+          colors: ["#ff6600", "#9437ff"],
+          audioUrl:
+            "https://actions.google.com/sounds/v1/horror/ghost_ly_laugh.ogg", // TODO
+        };
+      }
+      // Winter/Snow
+      if (m === 11 || (m === 0 && d <= 15)) {
+        return {
+          name: "Winter Snow",
+          emojis: ["❄️", "⛄", "🌨️"],
+          isSnow: true,
+          audioUrl:
+            "https://actions.google.com/sounds/v1/foley/sleigh_bells_ring.ogg", // TODO
+        };
+      }
+
+      return {
+        name: "Standard Mojo",
+        colors: ["#06b6d4", "#3b82f6", "#22c55e"],
+        // No audioUrl, defaults to chime
       };
-      const randomInRange = (min, max) => Math.random() * (max - min) + min;
+    },
 
-      const interval = setInterval(function () {
-        const timeLeft = animationEnd - Date.now();
-        if (timeLeft <= 0) return clearInterval(interval);
-        const particleCount = 50 * (timeLeft / duration);
+    fireConfetti(theme = {}) {
+      const themeName = theme.name || "Standard Mojo";
+      const isSpecial = !!theme.emojis;
+      const isSnow = theme.isSnow || false;
 
-        confetti({
-          ...defaults,
-          particleCount,
-          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
-          colors: ["#06b6d4", "#3b82f6", "#22c55e"],
-        });
-        confetti({
-          ...defaults,
-          particleCount,
-          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
-          colors: ["#06b6d4", "#3b82f6", "#22c55e"],
-        });
-      }, 250);
+      console.log(
+        `%c 🎊 Mojo Celebration: ${themeName} `,
+        "background: #06b6d4; color: #fff; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
+      );
+
+      const duration = 3000;
+      const animationEnd = Date.now() + duration;
+      const colors = theme.colors || ["#06b6d4", "#3b82f6", "#22c55e"];
+
+      // 1. Shapes + Color Fix (Pi will now be Orange, not Black)
+      let shapes = ["circle", "square"];
+      if (theme.emojis) {
+        shapes = theme.emojis.map((emoji) =>
+          confetti.shapeFromText({
+            text: emoji,
+            scalar: 5,
+            color: colors[0], // Forces the symbol to use the theme color
+          }),
+        );
+      }
+
+      // 2. Physics Profiles
+      const defaults = {
+        zIndex: 1000,
+        shapes: shapes,
+        colors: colors,
+        ticks: isSpecial ? 200 : 100,
+        scalar: isSpecial ? 5 : 1,
+        // Lower gravity (0.4) makes the rotation much slower and floatier
+        gravity: isSnow ? 0.4 : isSpecial ? 0.4 : 1.2,
+      };
+
+      const interval = setInterval(
+        () => {
+          const timeLeft = animationEnd - Date.now();
+          if (timeLeft <= 0) return clearInterval(interval);
+
+          if (isSnow) {
+            confetti({
+              ...defaults,
+              particleCount: 1,
+              startVelocity: 0,
+              drift: (Math.random() - 0.5) * 1.5,
+              origin: { x: Math.random(), y: -0.2 },
+            });
+          } else {
+            // 3. BOOSTED DENSITY & CENTER COVERAGE
+            // We increased standard from 50 to 150 particles per tick
+            const countMultiplier = isSpecial ? 40 : 150;
+            const particleCount = countMultiplier * (timeLeft / duration);
+
+            // Triple-pop: Fire 3 random bursts every interval to saturate the screen
+            for (let i = 0; i < 3; i++) {
+              confetti({
+                ...defaults,
+                particleCount: Math.ceil(particleCount / 3),
+                spread: isSpecial ? 90 : 360,
+                // Slower velocity (15) for special items makes them easier to read
+                startVelocity: isSpecial ? 15 : 45,
+                origin: {
+                  x: Math.random(), // FILL THE CENTER: Completely random horizontal
+                  y: Math.random() - 0.2, // Random vertical
+                },
+              });
+            }
+          }
+        },
+        isSpecial ? 400 : 250,
+      );
     },
   };
 }
