@@ -142,10 +142,10 @@ function monitor() {
 
     getHolidayTheme() {
       const now = new Date();
-      // const m = now.getMonth(); // 0-11
-      // const d = now.getDate();
-      const m = 2; // 0-11
-      const d = 17;
+      const m = now.getMonth(); // 0-11
+      const d = now.getDate();
+      // const m = 2; // 0-11 // BUG placeholder
+      // const d = 17; // BUG placeholder
 
       // New Year
       if ((m === 11 && d === 31) || (m === 0 && d <= 2)) {
