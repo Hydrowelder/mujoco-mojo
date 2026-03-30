@@ -63,12 +63,14 @@ function trialViewer(trialId, externalUrl) {
 
     // --- UI / MENU STATES ---
     theme: "dark",
+    xMenuOpen: false,
+    xSearch: "",
     yMenuOpen: false,
+    ySearch: "",
     settingsOpen: false,
     downloadOpen: false,
     isDragging: false, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
-    ySearch: "",
     columns: [],
     showToast: false,
     toastMessage: "",
@@ -626,6 +628,21 @@ function trialViewer(trialId, externalUrl) {
 
       // reset the autoscaling
       this.config.rangeY = null;
+    },
+
+    /**
+     * Clear all selected Y-Axis signals
+     */
+    clearYAxes() {
+      if (this.config.yAxes.length === 0) return;
+
+      this.config.yAxes = [];
+      this.saveAndRender(); // Saves to localStorage and updates Plotly
+
+      // Update the JSON editor if it's open
+      this.configRaw = JSON.stringify(this.config, null, 4);
+
+      this.notify("Signals Cleared", "info");
     },
 
     /**
