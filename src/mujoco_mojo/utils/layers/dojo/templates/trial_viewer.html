@@ -125,7 +125,7 @@
                     </svg>
                 </div>
 
-                <div class="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all">
+                <div class="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
                     <p class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                         Keyboard Shortcuts</p>
                     <div class="space-y-3 font-mono text-[10px]">
@@ -275,7 +275,8 @@
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <span class="text-[10px] font-black uppercase text-slate-400 w-12 sm:w-auto">X-Axis</span>
 
-            <div class="relative flex-1 sm:flex-none">
+            <div class="relative flex-1 sm:flex-none"
+                 @click.away="xMenuOpen = false">
                 <button @click="xMenuOpen = !xMenuOpen"
                         class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
                     <span x-text="config.xAxis"
@@ -291,8 +292,6 @@
                 </button>
 
                 <div x-show="xMenuOpen"
-                     @click.stop
-                     @click.away="xMenuOpen = false"
                      x-transition
                      class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
 
@@ -336,7 +335,8 @@
         <div class="flex-1 flex items-center gap-2 min-w-0 w-full">
             <span class="text-[10px] font-black uppercase text-slate-400 shrink-0 w-12 sm:w-auto">Y-Axis</span>
 
-            <div class="relative">
+            <div class="relative"
+                 @click.away="yMenuOpen = false">
                 <button @click="yMenuOpen = !yMenuOpen"
                         class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
                     <span x-text="config.yAxes.length"></span>
@@ -351,7 +351,6 @@
                 </button>
 
                 <div x-show="yMenuOpen"
-                     @click.away="yMenuOpen = false"
                      x-transition
                      class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
 
@@ -424,12 +423,12 @@
         </div>
     </div>
 
-    <div class="flex flex-row gap-4 items-stretch">
+    <div class="flex flex-row gap-4 items-stretch h-[600px]">
         <!-- plot area -->
-        <div class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 min-h-[600px] relative overflow-hidden">
+        <div class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 relative">
             <div x-show="data && config.yAxes.length > 0"
                  id="plot-area"
-                 class="w-full h-[600px]"></div>
+                 class="w-full h-full"></div>
             <div x-show="data && config.yAxes.length === 0"
                  class="absolute inset-0 flex items-center justify-center text-slate-400 font-mono text-xs italic">
                 Select Y-axis signals to begin...</div>
@@ -458,10 +457,11 @@
             </button>
 
             <!-- plot config -->
-            <div class="relative">
-                <button @click.stop="settingsOpen = !settingsOpen"
+            <div class="relative"
+                 @click.away="settingsOpen = false">
+                <button @click="settingsOpen = !settingsOpen"
                         class="p-2 transition-all duration-200 rounded-lg bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700"
-                        :class="settingsOpen ? 'text-cyan-500 bg-cyan-50/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
+                        :class="settingsOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
                         title="Edit Plot Configuration">
                     <svg class="w-5 h-5"
                          :class="settingsOpen ? 'text-cyan-500' : ''"
@@ -477,8 +477,6 @@
                 </button>
 
                 <div x-show="settingsOpen"
-                     @click.stop
-                     @click.away="settingsOpen = false"
                      x-transition
                      class="absolute right-full top-0 mr-4 w-[calc(100vw-6rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
@@ -621,9 +619,11 @@
             </div>
 
             <!-- download options -->
-            <div class="relative">
-                <button @click.stop="downloadOpen = !downloadOpen"
+            <div class="relative"
+                 @click.away="downloadOpen = false">
+                <button @click="downloadOpen = !downloadOpen"
                         class="p-2 text-slate-400 hover:text-cyan-500 transition-colors rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700"
+                        :class="downloadOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
                         title="Download Data or Image">
                     <svg class="w-5 h-5"
                          :class="downloadOpen ? 'text-cyan-500' : ''"
@@ -638,8 +638,6 @@
                 </button>
 
                 <div x-show="downloadOpen"
-                     @click.stop
-                     @click.away="downloadOpen = false"
                      x-transition
                      class="absolute right-full top-0 mr-4 w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-[200]">
 
