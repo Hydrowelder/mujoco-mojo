@@ -231,19 +231,36 @@
 
             <!-- versus selector -->
             <div class="flex items-center h-9 gap-1.5 bg-slate-300/50 dark:bg-slate-800/50 p-1 rounded-md border border-slate-300 dark:border-slate-800 transition-all focus-within:border-cyan-500/50 w-full sm:w-[280px] justify-between shadow-md">
-                <label class="flex items-center gap-1.5 px-2 py-1 cursor-pointer group">
+                <label class="flex items-center gap-2 px-2 py-1 cursor-pointer group w-full">
                     <input type="checkbox"
                            x-model="config.vsEnabled"
                            @change="handleVsToggle()"
-                           class="rounded border-slate-300 dark:border-slate-700 text-cyan-500 dark:text-cyan-500 focus:ring-cyan-500 bg-white dark:bg-transparent h-6 w-3.5 transition-all">
-                    <span class="text-[10px] font-mono font-bold uppercase text-slate-500 dark:text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-cyan-500 transition-colors">VS.</span>
+                           class="sr-only">
+
+                    <div class="relative flex items-center shrink-0">
+                        <div class="w-9 h-5 bg-slate-200 dark:bg-slate-900 border border-slate-400 dark:border-slate-700 rounded-md transition-colors duration-200"
+                             :class="config.vsEnabled ? 'bg-cyan-500/20 border-cyan-500' : ''"></div>
+
+                        <div class="absolute left-0.5 top-0.5 w-4 h-4 rounded-sm transition-all duration-200"
+                             :class="config.vsEnabled
+                    ? 'translate-x-4 bg-cyan-500'
+                    : 'translate-x-0 bg-slate-400 dark:bg-slate-500'"></div>
+                    </div>
+
+                    <span class="text-[10px] font-mono font-bold uppercase text-slate-500 dark:text-slate-400 group-hover:text-cyan-500 transition-colors">
+                        VS.
+                    </span>
                 </label>
 
                 <div x-show="config.vsEnabled"
-                     x-transition:enter="transition ease-out duration-200"
-                     x-transition:enter-start="opacity-0 -translate-x-2"
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 -translate-x-8"
                      x-transition:enter-end="opacity-100 translate-x-0"
+                     x-transition:leave="transition ease-in-out duration-200"
+                     x-transition:leave-start="opacity-100 translate-x-0"
+                     x-transition:leave-end="opacity-0 -translate-x-8"
                      class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto">
+
                     <input type="number"
                            x-model.number="config.vsWarpId"
                            @keyup.enter="loadVsData()"
@@ -251,9 +268,12 @@
                            pattern="[0-9]*"
                            placeholder="#"
                            class="w-10 sm:w-12 h-6 bg-transparent text-center outline-none text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+
                     <button @click="loadVsData()"
                             :disabled="!config.vsWarpId && config.vsWarpId !== 0"
-                            class="mr-1 px-2 py-0.5 bg-cyan-500 dark:bg-cyan-500 text-white dark:text-slate-950 text-[9px] font-black uppercase rounded-xl shadow-sm hover:bg-cyan-500 transition-colors">Load</button>
+                            class="mr-1 px-2 py-0.5 bg-cyan-500 dark:bg-cyan-500 text-white dark:text-slate-950 text-[9px] font-black uppercase rounded-xl shadow-sm hover:bg-cyan-500 transition-colors">
+                        Load
+                    </button>
                 </div>
 
                 <div x-show="!config.vsEnabled"
@@ -297,13 +317,13 @@
 
                     <input type="text"
                            x-model="xSearch"
-                           placeholder="Filter X-axis..."
+                           placeholder="Filter..."
                            class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-1.5 text-[10px] font-mono mb-2 text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500" />
 
                     <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
                         <template x-if="'time'.includes(xSearch.toLowerCase()) && columns.includes('time')">
                             <button @click="config.xAxis = 'time'; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group">
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
                                 <span class="text-[10px] font-mono font-bold text-cyan-500">time</span>
                                 <span x-show="config.xAxis === 'time'"
                                       class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
@@ -313,7 +333,7 @@
                         <template x-for="col in columns.filter(c => c !== 'time' && c.toLowerCase().includes(xSearch.toLowerCase()))"
                                   :key="col">
                             <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group">
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
                                 <span class="text-[10px] font-mono font-bold"
                                       :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="col"></span>
@@ -352,8 +372,7 @@
 
                 <div x-show="yMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
-
+                     class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
                     <input type="text"
                            x-model="ySearch"
                            placeholder="Filter..."
@@ -362,11 +381,11 @@
                     <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
                         <template x-for="col in filteredCols"
                                   :key="col">
-                            <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group">
+                            <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
                                 <input type="checkbox"
                                        :checked="config.yAxes.includes(col)"
                                        @click.stop="toggleY(col)"
-                                       class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 bg-transparent" />
+                                       class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
                                 <span class="text-[10px] font-mono font-bold"
                                       :class="config.yAxes.includes(col) ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="col"></span>
@@ -487,82 +506,260 @@
                     <div class="space-y-4">
                         <!-- plot behaviors -->
                         <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1">
+                            <!-- gridlines -->
+                            <div class="space-y-1 relative"
+                                 x-data="{ open: false }">
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Gridlines</label>
-                                <select x-model="config.grid"
-                                        @change="saveAndRender()"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
-                                    <option value="none">None</option>
-                                    <option value="major">Major</option>
-                                    <option value="all">Major + Minor</option>
-                                </select>
+
+                                <button @click="open = !open"
+                                        @click.away="open = false"
+                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+
+                                    <span class="truncate"
+                                          x-text="config.grid === 'all' ? 'Major + Minor' : (config.grid.charAt(0).toUpperCase() + config.grid.slice(1))"></span>
+
+                                    <svg class="w-3 h-3 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <div x-show="open"
+                                     x-transition
+                                     class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+
+                                    <template x-for="opt in ['none', 'major', 'all']">
+                                        <button @click="config.grid = opt; saveAndRender(); open = false"
+                                                class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                :class="config.grid === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
+                                            <span x-text="opt === 'all' ? 'Major + Minor' : (opt.charAt(0).toUpperCase() + opt.slice(1))"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
-                            <div class="space-y-1">
+                            <!-- linemode -->
+                            <div class="space-y-1 relative"
+                                 x-data="{ open: false }">
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Mode</label>
-                                <select x-model="config.linemode"
-                                        @change="saveAndRender()"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
-                                    <option value="lines">Lines</option>
-                                    <option value="markers">Markers</option>
-                                    <option value="lines+markers">Both</option>
-                                </select>
+
+                                <button @click="open = !open"
+                                        @click.away="open = false"
+                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+
+                                    <span class="truncate"
+                                          x-text="config.linemode === 'lines+markers' ? 'Both' : (config.linemode.charAt(0).toUpperCase() + config.linemode.slice(1))"></span>
+
+                                    <svg class="w-3.5 h-3.5 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <div x-show="open"
+                                     x-transition
+                                     class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+
+                                    <template x-for="opt in [
+                                                { label: 'Lines', value: 'lines' },
+                                                { label: 'Markers', value: 'markers' },
+                                                { label: 'Both', value: 'lines+markers' }
+                                            ]"
+                                              :key="opt.value">
+                                        <button @click="config.linemode = opt.value; saveAndRender(); open = false"
+                                                class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                :class="config.linemode === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
+                                            <span x-text="opt.label"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1 transition-opacity duration-300"
+                            <!-- interpolation -->
+                            <div class="space-y-1 relative transition-opacity duration-300"
+                                 x-data="{ open: false }"
                                  :class="config.linemode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
+
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Interpolation</label>
-                                <select x-model="config.interp"
-                                        @change="saveAndRender()"
+
+                                <button @click="open = !open"
+                                        @click.away="open = false"
                                         :disabled="config.linemode === 'markers'"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none disabled:cursor-not-allowed">
-                                    <option value="linear">Linear</option>
-                                    <option value="spline">Spline</option>
-                                    <option value="hv">Step (HV)</option>
-                                    <option value="vh">Step (VH)</option>
-                                    <option value="hvh">Step (HVH)</option>
-                                    <option value="vhv">Step (VHV)</option>
-                                </select>
+                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50 disabled:cursor-not-allowed">
+
+                                    <span class="truncate"
+                                          x-text="{
+            'linear': 'Linear',
+            'spline': 'Spline',
+            'hv': 'Step (HV)',
+            'vh': 'Step (VH)',
+            'hvh': 'Step (HVH)',
+            'vhv': 'Step (VHV)'
+        }[config.interp]"></span>
+
+                                    <svg class="w-3.5 h-3.5 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <div x-show="open"
+                                     x-transition
+                                     class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+
+                                    <template x-for="opt in [
+            { label: 'Linear', value: 'linear' },
+            { label: 'Spline', value: 'spline' },
+            { label: 'Step (HV)', value: 'hv' },
+            { label: 'Step (VH)', value: 'vh' },
+            { label: 'Step (HVH)', value: 'hvh' },
+            { label: 'Step (VHV)', value: 'vhv' }
+        ]"
+                                              :key="opt.value">
+                                        <button @click="config.interp = opt.value; saveAndRender(); open = false"
+                                                class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                :class="config.interp === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
+                                            <span x-text="opt.label"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
-                            <div class="space-y-1">
+                            <!-- hoverstyle -->
+                            <div class="space-y-1 relative"
+                                 x-data="{ open: false }">
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Hover</label>
-                                <select x-model="config.hover"
-                                        @change="saveAndRender()"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
-                                    <option value="x unified">Unified X</option>
-                                    <option value="y unified">Unified Y</option>
-                                    <option value="closest">Closest</option>
-                                    <option value="x">X Axis</option>
-                                    <option value="y">Y Axis</option>
-                                    <option value="none">Off</option>
-                                </select>
+
+                                <button @click="open = !open"
+                                        @click.away="open = false"
+                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+
+                                    <span class="truncate"
+                                          x-text="{
+            'x unified': 'Unified X',
+            'y unified': 'Unified Y',
+            'closest': 'Closest',
+            'x': 'X Axis',
+            'y': 'Y Axis',
+            'none': 'Off'
+        }[config.hover]"></span>
+
+                                    <svg class="w-3.5 h-3.5 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <div x-show="open"
+                                     x-transition
+                                     class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+
+                                    <template x-for="opt in [
+        { label: 'Unified X', value: 'x unified' },
+        { label: 'Unified Y', value: 'y unified' },
+        { label: 'Closest', value: 'closest' },
+        { label: 'X Axis', value: 'x' },
+        { label: 'Y Axis', value: 'y' },
+        { label: 'Off', value: 'none' }
+    ]"
+                                              :key="opt.value">
+                                        <button @click="config.hover = opt.value; saveAndRender(); open = false"
+                                                class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                :class="config.hover === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
+                                            <span x-text="opt.label"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3 items-end">
-                            <div class="space-y-1">
+                            <!-- legend location -->
+                            <div class="space-y-1 relative"
+                                 x-data="{ open: false }">
                                 <label class="text-[9px] font-bold text-slate-500 uppercase">Legend</label>
-                                <select x-model="config.legendPos"
-                                        @change="saveAndRender()"
-                                        class="w-full bg-slate-100 dark:bg-slate-900 border-none rounded text-[10px] font-mono p-1.5 text-slate-700 dark:text-slate-200 outline-none">
-                                    <option value="bottom">Bottom</option>
-                                    <option value="right">Right</option>
-                                    <option value="hidden">Hidden</option>
-                                </select>
+
+                                <button @click="open = !open"
+                                        @click.away="open = false"
+                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+
+                                    <span class="truncate"
+                                          x-text="config.legendPos.charAt(0).toUpperCase() + config.legendPos.slice(1)"></span>
+
+                                    <svg class="w-3.5 h-3.5 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                <div x-show="open"
+                                     x-transition
+                                     class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+
+                                    <template x-for="opt in ['bottom', 'right', 'hidden']"
+                                              :key="opt">
+                                        <button @click="config.legendPos = opt; saveAndRender(); open = false"
+                                                class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                :class="config.legendPos === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
+                                            <span x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
-                            <label class="flex items-center gap-2 pb-2 group transition-opacity duration-300"
-                                   :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : 'cursor-pointer'">
+                            <!-- show spikes checkbox -->
+                            <label class="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg group transition-all hover:border-cyan-500/50 cursor-pointer"
+                                   :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
 
-                                <input type="checkbox"
-                                       x-model="config.showSpike"
-                                       @change="saveAndRender()"
-                                       :disabled="config.hover === 'none'"
-                                       class="rounded border-slate-300 dark:border-slate-700 text-cyan-500 focus:ring-cyan-500 bg-slate-100 dark:bg-slate-900 h-3.5 w-3.5 transition-all disabled:bg-slate-200 dark:disabled:bg-slate-800">
-
-                                <span class="text-[9px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">
+                                <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors group-hover:text-slate-700 dark:group-hover:text-slate-200">
                                     Show Spikes
                                 </span>
+
+                                <div class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox"
+                                           x-model="config.showSpike"
+                                           @change="saveAndRender()"
+                                           :disabled="config.hover === 'none'"
+                                           class="sr-only">
+
+                                    <div class="w-10 h-6 bg-slate-200 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-md transition-colors duration-200"
+                                         :class="config.showSpike ? 'bg-cyan-500/20 border-cyan-500' : ''"></div>
+
+                                    <div class="absolute left-1 top-1 w-4 h-4 rounded-sm transition-all duration-200 shadow-sm"
+                                         :class="config.showSpike
+                ? 'translate-x-4 bg-cyan-500'
+                : 'translate-x-0 bg-slate-400 dark:bg-slate-500'">
+                                    </div>
+                                </div>
                             </label>
                         </div>
 
