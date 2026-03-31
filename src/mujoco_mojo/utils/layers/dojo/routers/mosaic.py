@@ -1,27 +1,31 @@
+import socket
+
 import duckdb
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-import socket
 
 from mujoco_mojo.utils.log import get_logger
+
 from .. import shared
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
+
 def get_network_ip():
     """Detects the primary local network IP of the host machine."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # Doesn't actually have to be reachable; just triggers IP selection
-        s.connect(('8.8.8.8', 1))
+        s.connect(("8.8.8.8", 1))
         ip = s.getsockname()[0]
     except Exception:
-        ip = 'localhost'
+        ip = "localhost"
     finally:
         s.close()
     return ip
+
 
 @router.get("/", response_class=HTMLResponse)
 async def get_mosaic(request: Request):
@@ -91,7 +95,6 @@ async def get_trial_viewer(request: Request, trial_id: str):
             "trial_id": trial_id,
             "prev_id": prev_id,
             "next_id": next_id,
-            "trial_id": trial_id,
             "external_url": f"http://{server_ip}:{port}",
         },
     )
