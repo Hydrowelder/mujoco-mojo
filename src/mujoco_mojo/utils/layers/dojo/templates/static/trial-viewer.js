@@ -131,8 +131,18 @@ function trialViewer(trialId, externalUrl) {
       observer.observe(document.documentElement, { attributes: true });
 
       // Watch the master config: Any change here triggers a save and a redraw
-      this.$watch("config", (value) => {
+      this.$watch("config", async (value, oldValue) => {
         this.configRaw = JSON.stringify(value, null, 4);
+
+        // check if we need to fetch that data for the comparison trials.
+        if (
+          this.config.vsEnabled &&
+          (value.xAxis !== oldValue?.xAxis ||
+            value.yAxes.length !== oldValue?.yAxes?.length)
+        ) {
+          await this.syncVsRange();
+        }
+
         this.saveAndRender();
       });
 
@@ -701,10 +711,14 @@ function trialViewer(trialId, externalUrl) {
       } else {
         this.config.yAxes = [...this.config.yAxes, col];
       }
-      // Note: Watcher handles saveAndRender automatically
 
-      // reset the autoscaling
+      // RESET scaling so we see the new data immediately
       this.config.rangeY = null;
+
+      // AUTO-SYNC: If we are comparing trials, go grab the new column for them
+      if (this.config.vsEnabled) {
+        this.syncVsRange();
+      }
     },
 
     /**
@@ -919,7 +933,7 @@ function trialViewer(trialId, externalUrl) {
       };
 
       const layout = {
-        uirevision: `${this.trialId}_${this.config.yAxes.join("_")}`,
+        uirevision: `${this.trialId}_${this.config.xAxis}_${this.config.yAxes.join("_")}`,
         title: this.config.title
           ? {
               text: this.config.title,
