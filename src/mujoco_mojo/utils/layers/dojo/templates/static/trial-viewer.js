@@ -34,7 +34,7 @@ const DEFAULT_CONFIG = {
   grid: "all",
   linemode: "lines", // Renamed from markerMode for clarity
   interp: "linear", // line interpolation (linear, spline, etc)
-  hover: "x unified", // "x unified", "y unified", "closest", "x", "y", "none"
+  hover: "closest", // "x unified", "y unified", "closest", "x", "y", "none"
   title: "",
   xAxisTitle: "",
   yAxisTitle: "",
@@ -43,7 +43,7 @@ const DEFAULT_CONFIG = {
   rangeX: null,
   rangeY: null,
   vsEnabled: false,
-  vsRange: [0, 19990],
+  vsRange: [0, 10],
 };
 
 /**
@@ -89,20 +89,24 @@ function trialViewer(trialId, externalUrl) {
     allTrials: [], // full list from /mosaic/api/trials
     vsMenuOpen: false,
     vsLoading: false,
+    vsDraft: {
+      enabled: false,
+      range: [0, 0],
+    },
 
-    async fetchTrialData(id) {
-      // TODO this should only pull the columns it actually needs
-      console.debug(`loading ${id}`);
-      const resp = await fetch(`/mosaic/${id}/data`);
-      if (!resp.ok) {
-        if (resp.status === 404) throw new Error(`Trial ${id} not found`);
-        throw new Error("Failed to connect to Dojo server");
+    async fetchTrialData(id, requiredCols = []) {
+      console.debug(`loading ${id} (cols: ${requiredCols.join(",") || "all"})`);
+
+      // Construct query param for columns
+      let url = `/mosaic/${id}/data`;
+      if (requiredCols.length > 0) {
+        const colParams = new URLSearchParams({ cols: requiredCols.join(",") });
+        url += `?${colParams.toString()}`;
       }
-      const json = await resp.json();
-      if (!json || Object.keys(json).length === 0) {
-        throw new Error(`Trial ${id} contains no data`);
-      }
-      return json;
+
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Trial ${id} failed`);
+      return await resp.json();
     },
 
     async init() {
@@ -159,6 +163,8 @@ function trialViewer(trialId, externalUrl) {
         } else {
           this.loadConfig();
         }
+        this.vsDraft.enabled = this.config.vsEnabled;
+        this.vsDraft.range = [...this.config.vsRange];
 
         // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
         this.$nextTick(async () => {
@@ -171,6 +177,8 @@ function trialViewer(trialId, externalUrl) {
             if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
               this.config.rangeX = null;
               this.config.rangeY = null;
+
+              this.renderPlot();
               return;
             }
             // Handle Manual Zoom/Pan
@@ -241,60 +249,85 @@ function trialViewer(trialId, externalUrl) {
           .filter((n) => !isNaN(n));
         this.config.vsRange = [Math.min(...ids), Math.max(...ids)];
       }
+
+      // RANGE CLAMPING & DRAFT SYNC
+      if (this.allTrials.length) {
+        const ids = this.allTrials
+          .map((id) => parseInt(id.split("_").pop()))
+          .filter((n) => !isNaN(n));
+
+        const minFleet = Math.min(...ids);
+        const maxFleet = Math.max(...ids);
+
+        // If range is default/zero, initialize it
+        if (this.config.vsRange[0] === 0 && this.config.vsRange[1] === 0) {
+          this.config.vsRange = [minFleet, maxFleet];
+        }
+
+        // Sync the draft to the config once at startup
+        this.vsDraft.enabled = this.config.vsEnabled;
+        this.vsDraft.range = [...this.config.vsRange];
+      }
     },
 
     async syncVsRange() {
-      // 1. Force refresh the manifest first so we see newly created trials
+      // 1. Force refresh manifest
       try {
         const resp = await fetch("/mosaic/api/trials");
         const data = await resp.json();
         this.allTrials = data.trials || [];
       } catch (e) {
-        console.warn("Manifest sync failed, using cached list", e);
+        console.warn("Manifest sync failed", e);
       }
 
-      // 2. Normalize the range
-      const start = Math.min(this.config.vsRange[0], this.config.vsRange[1]);
-      const end = Math.max(this.config.vsRange[0], this.config.vsRange[1]);
-      this.config.vsRange = [start, end];
+      if (!this.vsDraft.enabled) {
+        this.config.vsEnabled = false;
+        this.vsDatasets = {};
+        return;
+      }
 
-      if (!this.config.vsEnabled) return;
+      // START LOADING
       this.vsLoading = true;
 
-      // 3. Extract the numeric ID of the current trial once for comparison
-      const currentNum = parseInt(this.trialId.split("_").pop());
+      try {
+        const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const activeCols = [this.config.xAxis, ...this.config.yAxes];
 
-      // 4. Identify targets using numeric comparison (ignores padding issues)
-      const targetIds = this.allTrials.filter((id) => {
-        if (!id || typeof id !== "string") return false;
-        const n = parseInt(id.split("_").pop());
-        // Exclude current trial by number, not by string string (avoids trial_01 vs trial_1 issues)
-        return n >= start && n <= end && n !== currentNum;
-      });
+        const currentNum = parseInt(this.trialId.split("_").pop());
 
-      console.debug(
-        `Syncing batch: [${start}-${end}]. Found ${targetIds.length} matches.`,
-      );
-
-      // 5. Fetch missing data
-      const fetchTasks = targetIds
-        .filter((id) => !this.vsDatasets[id])
-        .map(async (id) => {
-          try {
-            const newData = await this.fetchTrialData(id);
-            // Update the local store
-            this.vsDatasets[id] = newData;
-          } catch (e) {
-            console.warn(`Could not load comparison trial ${id}:`, e);
-          }
+        const targetIds = this.allTrials.filter((id) => {
+          const n = parseInt(id.split("_").pop());
+          return n >= start && n <= end && n !== currentNum;
         });
 
-      await Promise.all(fetchTasks);
+        // Fetch missing data
+        await Promise.all(
+          targetIds.map(async (id) => {
+            const existing = this.vsDatasets[id];
+            const needsFetch =
+              !existing ||
+              activeCols.some((col) => !existing.hasOwnProperty(col));
+            if (needsFetch) {
+              const newData = await this.fetchTrialData(id, activeCols);
+              this.vsDatasets[id] = {
+                ...(this.vsDatasets[id] || {}),
+                ...newData,
+              };
+            }
+          }),
+        );
 
-      // 6. Force a single reactive update and re-render
-      this.vsDatasets = { ...this.vsDatasets };
-      this.vsLoading = false;
-      this.renderPlot();
+        // 3. THE COMMIT
+        // Now that data is in memory, update the master config.
+        // This triggers the watcher, which calls saveAndRender() exactly once.
+        this.vsDatasets = { ...this.vsDatasets };
+        this.config.vsRange = [...this.vsDraft.range];
+        this.config.vsEnabled = true;
+      } finally {
+        this.vsLoading = false;
+        // renderPlot is called automatically by the watcher on this.config
+      }
     },
 
     /**
@@ -886,7 +919,7 @@ function trialViewer(trialId, externalUrl) {
       };
 
       const layout = {
-        uirevision: this.trialId,
+        uirevision: `${this.trialId}_${this.config.yAxes.join("_")}`,
         title: this.config.title
           ? {
               text: this.config.title,
