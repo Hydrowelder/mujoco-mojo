@@ -43,7 +43,7 @@ const DEFAULT_CONFIG = {
   rangeX: null,
   rangeY: null,
   vsEnabled: false,
-  vsWarpId: null,
+  vsRange: [0, 19990],
 };
 
 /**
@@ -69,7 +69,7 @@ function trialViewer(trialId, externalUrl) {
     ySearch: "",
     settingsOpen: false,
     downloadOpen: false,
-    isDragging: false, // tracks if a file is being hovered over the page
+    isDragging: false, // tracks if a file is being hovered over the page // BUG when you drag and undrag this keeps the ui element up
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     columns: [],
     showToast: false,
@@ -85,10 +85,14 @@ function trialViewer(trialId, externalUrl) {
     isValidJson: true, // Tracks if the user's manual JSON input is valid
 
     // --- MATCHUP STATE ---
-    vsData: null,
+    vsDatasets: {}, // map of trial_id -> data object
+    allTrials: [], // full list from /mosaic/api/trials
+    vsMenuOpen: false,
     vsLoading: false,
 
     async fetchTrialData(id) {
+      // TODO this should only pull the columns it actually needs
+      console.debug(`loading ${id}`);
       const resp = await fetch(`/mosaic/${id}/data`);
       if (!resp.ok) {
         if (resp.status === 404) throw new Error(`Trial ${id} not found`);
@@ -220,37 +224,77 @@ function trialViewer(trialId, externalUrl) {
         if (e.key === "ArrowRight")
           document.getElementById("nav-next")?.click();
       });
-    },
 
-    async handleVsToggle() {
-      if (!this.config.vsEnabled) {
-        this.vsData = null;
-        this.renderPlot();
-      } else if (this.config.vsWarpId !== null) {
-        await this.loadVsData();
+      // FETCH TRIAL MANIFEST (For the slider/dropdown)
+      // Fetch the manifest so we know which IDs exist in the fleet
+      const resp = await fetch("/mosaic/api/trials");
+      const data = await resp.json();
+      this.allTrials = data.trials || [];
+
+      if (
+        this.config.vsRange[0] === 0 &&
+        this.config.vsRange[1] === 0 &&
+        this.allTrials.length
+      ) {
+        const ids = this.allTrials
+          .map((id) => parseInt(id.split("_").pop()))
+          .filter((n) => !isNaN(n));
+        this.config.vsRange = [Math.min(...ids), Math.max(...ids)];
       }
     },
 
-    async loadVsData() {
-      if (this.config.vsWarpId === null) return;
-
-      this.vsLoading = true;
-      const paddedVsNum = String(this.config.vsWarpId).padStart(
-        this.paddingLen,
-        "0",
-      );
-      const vsId = `trial_${paddedVsNum}`;
-
+    async syncVsRange() {
+      // 1. Force refresh the manifest first so we see newly created trials
       try {
-        this.vsData = await this.fetchTrialData(vsId);
-        this.notify(`Matched up with ${vsId}`, "info");
-        this.saveAndRender();
+        const resp = await fetch("/mosaic/api/trials");
+        const data = await resp.json();
+        this.allTrials = data.trials || [];
       } catch (e) {
-        this.notify(e.message, "error");
-        this.vsData = null;
-      } finally {
-        this.vsLoading = false;
+        console.warn("Manifest sync failed, using cached list", e);
       }
+
+      // 2. Normalize the range
+      const start = Math.min(this.config.vsRange[0], this.config.vsRange[1]);
+      const end = Math.max(this.config.vsRange[0], this.config.vsRange[1]);
+      this.config.vsRange = [start, end];
+
+      if (!this.config.vsEnabled) return;
+      this.vsLoading = true;
+
+      // 3. Extract the numeric ID of the current trial once for comparison
+      const currentNum = parseInt(this.trialId.split("_").pop());
+
+      // 4. Identify targets using numeric comparison (ignores padding issues)
+      const targetIds = this.allTrials.filter((id) => {
+        if (!id || typeof id !== "string") return false;
+        const n = parseInt(id.split("_").pop());
+        // Exclude current trial by number, not by string string (avoids trial_01 vs trial_1 issues)
+        return n >= start && n <= end && n !== currentNum;
+      });
+
+      console.debug(
+        `Syncing batch: [${start}-${end}]. Found ${targetIds.length} matches.`,
+      );
+
+      // 5. Fetch missing data
+      const fetchTasks = targetIds
+        .filter((id) => !this.vsDatasets[id])
+        .map(async (id) => {
+          try {
+            const newData = await this.fetchTrialData(id);
+            // Update the local store
+            this.vsDatasets[id] = newData;
+          } catch (e) {
+            console.warn(`Could not load comparison trial ${id}:`, e);
+          }
+        });
+
+      await Promise.all(fetchTasks);
+
+      // 6. Force a single reactive update and re-render
+      this.vsDatasets = { ...this.vsDatasets };
+      this.vsLoading = false;
+      this.renderPlot();
     },
 
     /**
@@ -699,16 +743,20 @@ function trialViewer(trialId, externalUrl) {
       const calculatePaddedRange = (keys, padding = true) => {
         let globalMin = Infinity;
         let globalMax = -Infinity;
+        const activeDatasets = [this.data];
 
-        // Build list of all active data sources
-        const datasets = [this.data];
-        if (this.config.vsEnabled && this.vsData) datasets.push(this.vsData);
+        if (this.config.vsEnabled) {
+          const [start, end] = this.config.vsRange;
+          Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
+            const n = parseInt(vsId.split("_").pop());
+            if (n >= start && n <= end) activeDatasets.push(dataset);
+          });
+        }
 
-        datasets.forEach((dataset) => {
+        activeDatasets.forEach((dataset) => {
           keys.forEach((key) => {
             const series = dataset[key];
             if (!series) return;
-            // Iterate series for this specific signal/dataset
             for (let i = 0; i < series.length; i++) {
               const val = series[i];
               if (val < globalMin) globalMin = val;
@@ -717,10 +765,8 @@ function trialViewer(trialId, externalUrl) {
           });
         });
 
-        // Fallbacks for empty or flat data
         if (globalMin === Infinity) return [0, 1];
         if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
-
         const pad = padding ? (globalMax - globalMin) / 16 : 0;
         return [globalMin - pad, globalMax + pad];
       };
@@ -739,39 +785,69 @@ function trialViewer(trialId, externalUrl) {
         mode: this.config.linemode,
         type: "scatter",
         line: {
-          width: 2,
+          width: 3,
           color: plotColors[i % plotColors.length],
           shape: this.config.interp,
         },
         marker: { size: 6, symbol: "circle" },
-        namelength: -1,
-        // Disable hover on individual traces if toggled off
-        hoverinfo: isHoverDisabled ? "skip" : "all",
         hoverlabel: {
+          namelength: -1,
           bgcolor: tooltipBg,
           bordercolor: tooltipBorder,
           font: { family: "monospace", size: 12, color: tooltipFont },
         },
+        hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
       }));
 
-      if (this.config.vsEnabled && this.vsData) {
-        const vsTraces = this.config.yAxes.map((key, i) => ({
-          x: this.vsData[this.config.xAxis],
-          y: this.vsData[key],
-          name: `${key} (VS #${this.config.vsWarpId})`,
-          mode: this.config.linemode,
-          type: "scatter",
-          line: {
-            width: 2,
-            color: plotColors[i % plotColors.length],
-            shape: this.config.interp,
-            dash: "dot", // Distinguished by dots
-          },
-          opacity: 0.5, // Pushed to background
-          marker: { size: 6, symbol: "square" },
-          // ...
-        }));
-        traces = [...traces, ...vsTraces];
+      if (this.config.vsEnabled) {
+        const [start, end] = this.config.vsRange;
+
+        // Track which parameters have already created a legend entry
+        const legendTracker = new Set();
+
+        const sortedVsIds = Object.keys(this.vsDatasets).sort((a, b) => {
+          const numA = parseInt(a.split("_").pop());
+          const numB = parseInt(b.split("_").pop());
+          return numA - numB;
+        });
+
+        sortedVsIds.forEach((vsId) => {
+          const n = parseInt(vsId.split("_").pop());
+          if (n < start || n > end || vsId === this.trialId) return;
+
+          const dataset = this.vsDatasets[vsId];
+          const vsTraces = this.config.yAxes.map((key, i) => {
+            // Check if this specific parameter has shown up in the legend yet
+            const isFirstEntryForThisParam = !legendTracker.has(key);
+
+            const t = {
+              x: dataset[this.config.xAxis],
+              y: dataset[key],
+              // Name it after the signal so the legend is clear
+              name: `${key} (vs.)`,
+              // Group by signal name so toggling one toggles all trials for that signal
+              legendgroup: `group_${key}`,
+              showlegend: isFirstEntryForThisParam,
+              mode: this.config.linemode,
+              type: "scatter",
+              line: {
+                width: 1,
+                color: plotColors[i % plotColors.length],
+                shape: this.config.interp,
+                dash: "dot",
+              },
+              opacity: 0.35,
+              marker: { size: 4, symbol: "square" },
+              hoverlabel: { namelength: -1 },
+              hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
+            };
+
+            // Mark this parameter as 'legend-accounted-for'
+            legendTracker.add(key);
+            return t;
+          });
+          traces = [...traces, ...vsTraces];
+        });
       }
 
       const xAxisObj = {
@@ -847,6 +923,7 @@ function trialViewer(trialId, externalUrl) {
                 x: 1.02,
                 y: 1,
                 font: { size: 10, color: textColor },
+                groupclick: "togglegroup",
               }
             : {
                 orientation: "h",
@@ -854,6 +931,7 @@ function trialViewer(trialId, externalUrl) {
                 x: 0.5,
                 xanchor: "center",
                 font: { size: 10, color: textColor },
+                groupclick: "togglegroup",
               },
         xaxis: xAxisObj,
         yaxis: yAxisObj,
