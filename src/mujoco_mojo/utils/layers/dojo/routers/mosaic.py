@@ -1,7 +1,8 @@
 import socket
+from functools import lru_cache
 
 import duckdb
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from mujoco_mojo.utils.log import get_logger
@@ -100,9 +101,23 @@ async def get_trial_viewer(request: Request, trial_id: str):
     )
 
 
+@lru_cache(maxsize=128)
+def _get_cached_data(db_path_str: str, cols_tuple: tuple):
+    from mujoco_mojo.runtime.results_manager import ResultsManager
+
+    with duckdb.connect(db_path_str, read_only=True) as con:
+        col_str = "*" if not cols_tuple else ", ".join([f'"{c}"' for c in cols_tuple])
+        query = f"SELECT {col_str} FROM {ResultsManager.default_table_name()}"
+        df = con.execute(query).pl()
+        return df.to_dict(as_series=False)
+
+
 @router.get("/{trial_id}/data")
-async def get_trial_data(trial_id: str):
-    """Connects to the specific trial's DuckDB and returns all telemetry."""
+async def get_trial_data(trial_id: str, cols: str = Query(None)):
+    """
+    Connects to the specific trial's DuckDB.
+    'cols' is an optional comma-separated string of column names.
+    """
     from mujoco_mojo.runtime.results_manager import ResultsManager
 
     job = shared.CURRENT_JOB
@@ -119,13 +134,12 @@ async def get_trial_data(trial_id: str):
         )
 
     try:
-        # DuckDB's .pl() execution is zero-copy where possible
-        with duckdb.connect(str(db_path), read_only=True) as con:
-            query = f"SELECT * FROM {ResultsManager.default_table_name()}"
-            df = con.execute(query).pl()
+        # Convert comma-string to a sorted tuple for the cache key
+        cols_tuple = tuple(sorted(cols.split(","))) if cols else None
 
-            # Polars conversion to Dict of Lists (Plotly format)
-            return df.to_dict(as_series=False)
+        # Fetch from cache or disk
+        data = _get_cached_data(str(db_path), cols_tuple)
+        return data
 
     except Exception as e:
         logger.error(f"Data retrieval failed for {trial_id}: {e}")
