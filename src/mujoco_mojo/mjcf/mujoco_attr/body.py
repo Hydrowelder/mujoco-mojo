@@ -180,13 +180,37 @@ class Body(XMLModel):
     )
     """Bodies assigned to body. Handled recursively."""
 
-    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
+    def rt_mass(self, mj_model: mujoco.MjModel) -> float:
+        """Mass of the body from a compiled MjModel."""
+        return mj_model.body_mass[self.get_id(mj_model)]
+
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Rotation matrix the body during runtime."""
+        return np.asarray(mj_data.xmat[self.get_id(mj_model)]).reshape(3, 3)
+
+    def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> np.ndarray:
+        """Diagonalized inertia tensor of the body (body relative)."""
+        return mj_model.body_inertia[self.get_id(mj_model)]
+
+    def rt_inertia_world(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Inertia tensor of the body expressed in the world frame."""
+        R = self.rt_xmat(mj_model, mj_data)
+        return R @ np.diag(self.rt_inertia_diag(mj_model)) @ R.T
+
+    def rt_parent_body_id(self, mj_model: mujoco.MjModel) -> int:
+        """Parent ID of the body."""
         return mj_model.body_parentid[self.get_id(mj_model)]
 
     def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Position of the body during runtime."""
         return mj_data.xpos[self.get_id(mj_model)]
 
-    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_lin_vel(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Linear velocity of the body during runtime."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
         mujoco.mj_objectVelocity(
@@ -197,6 +221,7 @@ class Body(XMLModel):
     def rt_ang_vel(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> np.ndarray:
+        """Angular velocity of the body during runtime."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
         mujoco.mj_objectVelocity(
@@ -204,10 +229,60 @@ class Body(XMLModel):
         )
         return res[0:3]
 
+    def rt_lin_mom(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Linear momentum of the body during runtime."""
+        return self.rt_mass(mj_model) * self.rt_lin_vel(mj_model, mj_data)
+
+    def rt_ang_mom(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> np.ndarray:
+        """Angular momentum of the body during runtime."""
+        return self.rt_inertia_world(mj_model, mj_data) @ self.rt_ang_vel(
+            mj_model, mj_data
+        )
+
+    def rt_trans_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+        """Translational kinetic energy of the body during runtime."""
+        mass = self.rt_mass(mj_model)
+        v = self.rt_lin_vel(mj_model, mj_data)
+        return 0.5 * mass * np.dot(v, v)
+
+    def rt_rot_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+        """Rotational kinetic energy of the body during runtime."""
+        omega = self.rt_ang_vel(mj_model, mj_data)
+        I_world = self.rt_inertia_world(mj_model, mj_data)
+        return 0.5 * np.dot(omega, I_world @ omega)
+
+    def rt_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+        """Total kinetic energy of the body during runtime."""
+        return self.rt_trans_ke(mj_model, mj_data) + self.rt_rot_ke(mj_model, mj_data)
+
     def request(
         self,
         results_manager: ResultsManager,
-        attrs: list[Literal["xpos", "xvelp", "xvelr"]] = ["xpos", "xvelp", "xvelr"],
+        attrs: list[
+            Literal[
+                "xpos",
+                "xvelp",
+                "xvelr",
+                "lin_mom",
+                "ang_mom",
+                "ke_trans",
+                "ke_rot",
+                "ke_total",
+            ]
+        ] = [
+            "xpos",
+            "xvelp",
+            "xvelr",
+            "lin_mom",
+            "ang_mom",
+            "ke_trans",
+            "ke_rot",
+            "ke_total",
+        ],
     ):
         """Registers specific site attributes for logging. Requires a named site."""
         if self.name is None:
@@ -216,19 +291,47 @@ class Body(XMLModel):
             raise ValueError(msg)
 
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            sid = self.get_id(mj_model)
             for attr in attrs:
-                if attr == "xpos":
-                    val = mj_data.xpos[sid]
-                elif attr == "xvelp":
-                    val = self.rt_vel(mj_model, mj_data)
-                elif attr == "xvelr":
-                    val = self.rt_ang_vel(mj_model, mj_data)
-                else:
-                    continue
+                match attr:
+                    case "xpos":
+                        val = self.rt_pos(mj_model, mj_data)
+                    case "xvelp":
+                        val = self.rt_lin_vel(mj_model, mj_data)
+                    case "xvelr":
+                        val = self.rt_ang_vel(mj_model, mj_data)
+                    case "lin_mom":
+                        val = self.rt_lin_mom(mj_model, mj_data)
+                    case "ang_mom":
+                        val = self.rt_ang_mom(mj_model, mj_data)
+                    case "ke_trans":
+                        val = self.rt_trans_ke(mj_model, mj_data)
+                    case "ke_rot":
+                        val = self.rt_rot_ke(mj_model, mj_data)
+                    case "ke_total":
+                        val = self.rt_ke(mj_model, mj_data)
+                    case _:
+                        continue
 
-                for i, k in enumerate("xyz"):
-                    results_manager.post(f"{self.name}_{attr}_{k}", val[i])
+                if isinstance(val, np.ndarray):
+                    # vector output (x, y, z + magnitude)
+                    mag = np.linalg.norm(val)
+                    full_vec = np.append(val, mag)
+
+                    for i, k in enumerate("xyzm"):
+                        results_manager.post(
+                            value=full_vec[i],
+                            category="Bodies",
+                            subgroup=f"{self.name}/{attr}",
+                            attr=k,
+                        )
+                else:
+                    # scalar output
+                    results_manager.post(
+                        value=float(val),
+                        category="Bodies",
+                        subgroup=self.name,
+                        attr=attr,
+                    )
 
         results_manager.schedule_harvest_task(harvest)
 

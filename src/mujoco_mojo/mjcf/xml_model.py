@@ -100,6 +100,16 @@ class XMLModel(MojoBaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_name(self):
+        name = getattr(self, "name", None)
+        if isinstance(name, str):
+            if ":" in name or "/" in name:
+                msg = f"Invalid name for {name}. Characters ':' and '/' are reserved for database output organization."
+                logger.error(msg)
+                raise ValueError(msg)
+        return self
+
     def to_xml(self, exclude_default: bool = True) -> Element:
         el = Element(self.tag)
 

@@ -4,7 +4,7 @@ from typing import Self
 
 import mujoco
 
-from mujoco_mojo.runtime.forcing_function import ForcingFunction
+from mujoco_mojo.runtime.forcing_function import Load
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 class RuntimeManager:
     results_manager: ResultsManager | None = None
 
-    forcing_functions: list[ForcingFunction] = field(default_factory=list)
+    loads: list[Load] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     _resolved: bool = False
@@ -43,12 +43,12 @@ class RuntimeManager:
 
     def resolve(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Call this once after mj_loadXML to prime the caches."""
-        for load in self.forcing_functions:
+        for load in self.loads:
             load.resolve_ids(mj_model, mj_data)
         self._resolved = True
 
-    def add_load(self, load: ForcingFunction):
-        self.forcing_functions.append(load)
+    def add_load(self, load: Load):
+        self.loads.append(load)
 
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
@@ -61,15 +61,15 @@ class RuntimeManager:
         2. Calls mj_step (physics)
         3. Calls record (telemetry)
         """
-        # sync state variables and clear render buffer
-        mujoco.mj_forward(mj_model, mj_data)
-        mj_data.xfrc_applied.fill(0)
-
         # resolve IDs and initial distances
         if not self._resolved:
             self.resolve(mj_model, mj_data)
 
-        for load in self.forcing_functions:
+        # sync state variables and clear render buffer
+        mujoco.mj_forward(mj_model, mj_data)
+
+        # apply user forcing functions
+        for load in self.loads:
             load.apply_load(mj_model, mj_data)
 
         # record if t=0
@@ -91,10 +91,15 @@ class RuntimeManager:
             # gather arrows for forcing functions
             all_arrows: list[ArrowConfig] = []
 
-            for load in self.forcing_functions:
+            for load in self.loads:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
 
             for recorder in self.video_recorders:
                 recorder.capture_frame(
                     mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
                 )
+
+        # clear buffers for next timestep
+        mj_data.xfrc_applied.fill(0)  # external forces
+        mj_data.qfrc_applied.fill(0)  # user-defined forces
+        mj_data.ctrl.fill(0)  # actuator forces

@@ -1,11 +1,11 @@
-from .forcing_function import ForcingFunction, GeneralForce, PointToPointForce
+from .forcing_function import GeneralForce, Load, PointToPointForce
 from .results_manager import ResultsManager
 from .runtime_manager import RuntimeManager
 from .video_recorder import VideoRecorder
 
 __all__ = [
-    "ForcingFunction",
     "GeneralForce",
+    "Load",
     "PointToPointForce",
     "ResultsManager",
     "RuntimeManager",

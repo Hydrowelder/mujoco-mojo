@@ -65,13 +65,62 @@ class ResultsManager:
         """Clear the ledger for a new timestep."""
         self.ledger = NamedValueDict[float]()
 
-    def post(self, key: ValueName | str, value: float | NamedValue[float]):
-        """Allows an object to inject a value into the ledger to be recorded in the results file."""
-        # coerce to a named value
-        if not isinstance(value, NamedValue):
-            value = NamedValue[float](name=ValueName(key), stored_value=float(value))
+    def post(
+        self,
+        value: float | NamedValue[float],
+        category: Literal["Bodies", "Sites", "Joints", "Sensors", "Physics", "Custom"],
+        subgroup: str | None = None,
+        attr: str | None = None,
+    ):
+        """
+        Injects a value into the telemetry ledger using a hierarchical namespace.
 
-        self.ledger[key] = value
+        This method constructs a structured key that the dashboard uses to build a navigable tree view. The naming convention follows a folder-like structure to group related signals (e.g., all axes of a body's position).
+
+        Format:
+            Category/Subgroup:Attribute
+            (e.g., "Bodies/Link_1:xpos_x")
+
+        Args:
+            value (float | NamedValue[float]): The numeric data to record. If a NamedValue is passed and 'subgroup' is not provided, the NamedValue's internal name is used as the subgroup.
+            category (Literal["Bodies", "Joints", "Sensors", "Physics", "Custom"]): _description_
+            subgroup (str | None, optional): The top-level organizational folder (e.g., "Bodies"). Defaults to None.
+            attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
+
+        Examples:
+            >>> # Becomes "Bodies/Hand:xpos_x"
+            >>> manager.post(1.2, "Bodies", "Hand", "xpos_x")
+
+            >>> # Becomes "Sensors/IMU"
+            >>> manager.post(9.81, "Sensors", "IMU")
+
+            >>> # Using NamedValue (Becomes "Joints/Elbow:qpos")
+            >>> nv = NamedValue(name="Elbow", value=0.4)
+            >>> manager.post(nv, "Joints", attr="qpos")
+
+        """
+        # extract the base name and value
+        if isinstance(value, NamedValue):
+            stored_val = float(value.value)
+            effective_name = subgroup or value.name
+        else:
+            stored_val = float(value)
+            effective_name = subgroup
+
+        # build the folder path ('/' for folders, ':' for components/attrs)
+        path_parts = [category]
+        if effective_name:
+            path_parts.append(effective_name)
+
+        full_key = "/".join(path_parts)
+
+        if attr:
+            full_key += f":{attr}"
+
+        # inject to ledger for next flush
+        self.ledger[full_key] = NamedValue[float](
+            name=ValueName(full_key), stored_value=stored_val
+        )
 
     def record(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Finalizes the ledger and sends to the buffer/results file."""
