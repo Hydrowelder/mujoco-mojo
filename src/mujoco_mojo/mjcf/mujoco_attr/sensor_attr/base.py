@@ -57,13 +57,15 @@ class SensorBase(XMLModel):
             val = mj_data.sensordata[adr : adr + dim]
 
             # post to telemetry
-            if dim == 1:
-                # scalar sensors (like a touch sensor)
-                results_manager.post(str(self.name), val[0])
-            else:
-                # vector sensors (like IMUs or Force sensors)
-                # use numerical suffixes since SensorBase doesn't know the component names
-                for i in range(dim):
-                    results_manager.post(f"{self.name}_{i}", val[i])
+            for i in range(dim):
+                results_manager.post(
+                    value=val[i],
+                    category="Sensors",
+                    # sensor name serves as the subgroup
+                    subgroup=self.name,
+                    # vector sensor (IMU/FT) components are indexed
+                    # scalars (Touch/Range) are not
+                    attr=str(i) if dim > 1 else None,
+                )
 
         results_manager.schedule_harvest_task(harvest)

@@ -36,7 +36,7 @@ def _ideal_force_logic(
     return -1.0 * (k * (dist - rest_length) + c * vel)
 
 
-class ForcingFunction(MojoBaseModel, ABC):
+class Load(MojoBaseModel, ABC):
     """Base class to build forcing functions off of."""
 
     name: str
@@ -136,15 +136,17 @@ class ForcingFunction(MojoBaseModel, ABC):
         attrs: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            if "force" in attrs:
+            for attr in attrs:
+                source = self._last_f if attr == "force" else self._last_t
+
+                # iterate through x, y, z, and magnitude (pop. pop.)
                 for i, k in enumerate("xyzm"):
                     results_manager.post(
-                        f"{self.name}_force_{k}", self._last_f[i] if self.active else 0
-                    )
-            if "torque" in attrs:
-                for i, k in enumerate("xyzm"):
-                    results_manager.post(
-                        f"{self.name}_torque_{k}", self._last_t[i] if self.active else 0
+                        value=float(source[i]) if self.active else 0.0,
+                        category="Physics",
+                        # nest the force/torque under the function name
+                        subgroup=f"{self.name}/{attr}",
+                        attr=k,
                     )
 
         results_manager.schedule_harvest_task(harvest)
@@ -185,7 +187,7 @@ class ForcingFunction(MojoBaseModel, ABC):
         return visuals
 
 
-class PointToPointForce(ForcingFunction):
+class PointToPointForce(Load):
     """Acts along the line-of-sight between two sites."""
 
     xtion_site: Site
@@ -416,7 +418,7 @@ class PointToPointForce(ForcingFunction):
         )
 
 
-class BodyReactionForce(ForcingFunction):
+class BodyReactionForce(Load):
     xtion_body: Body | None = None
     """Body on which the load should be acted on. If None the world will be used."""
 

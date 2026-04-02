@@ -115,8 +115,8 @@ class VideoRecorder:
         # calculate native scaling
         v_map = mj_model.vis.map
         v_scale = mj_model.vis.scale
-
         stat = mj_model.stat
+
         if is_torque:
             mag_scale = v_map.torque
             width = v_scale.jointwidth * stat.meansize

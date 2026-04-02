@@ -171,11 +171,14 @@ class Joint(XMLModel):
                     case _:
                         continue
 
-                # post the resutls
-                if nq == 1 or (nv == 1 and attr != "qpos"):
-                    results_manager.post(f"{self.name}_{attr}", val[0])
-                else:
-                    for i in range(len(val)):
-                        results_manager.post(f"{self.name}_{attr}_{i}", val[i])
+                # post the results
+                for i, v in enumerate(val):
+                    results_manager.post(
+                        value=v,
+                        category="Joints",
+                        subgroup=f"{self.name}/{attr}",
+                        # If it's a scalar (Hinge/Slide), we can omit the index suffix
+                        attr=str(i) if len(val) > 1 else None,
+                    )
 
         results_manager.schedule_harvest_task(harvest)

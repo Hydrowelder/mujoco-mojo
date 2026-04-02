@@ -611,17 +611,24 @@ class SiteBase(XMLModel):
                     # Standard pull for xpos, xmat
                     val = getattr(mj_data, f"site_{attr}")[sid]
 
-                # Logging logic
-                if val.ndim == 1:
-                    # 1D array
+                # standard 3-vector, use xyz labeling
+                if val.ndim == 1 and len(val) <= 3:
                     for i, k in enumerate("xyz"[: len(val)]):
-                        results_manager.post(f"{self.name}_{attr}_{k}", val[i])
+                        results_manager.post(
+                            value=val[i],
+                            category="Sites",
+                            subgroup=f"{self.name}/{attr}",
+                            attr=k,
+                        )
                 else:
-                    # Handle Matrices (2D) - Flatten to individual entries
+                    # longer arrays (or matrices like xmat), use flattened indices
                     val_flat = val.flatten()
                     for i in range(len(val_flat)):
                         results_manager.post(
-                            f"{self.name}_{attr}_{i}", float(val_flat[i])
+                            value=float(val_flat[i]),
+                            category="Sites",
+                            subgroup=f"{self.name}/{attr}",
+                            attr=str(i),
                         )
 
         results_manager.schedule_harvest_task(harvest)
