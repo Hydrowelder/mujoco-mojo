@@ -11,6 +11,8 @@ from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.process_manager import NamedValue
 from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.video_recorder import ArrowConfig
+from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
@@ -136,12 +138,51 @@ class ForcingFunction(MojoBaseModel, ABC):
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             if "force" in attrs:
                 for i, k in enumerate("xyzm"):
-                    results_manager.post(f"{self.name}_force_{k}", self._last_f[i])
+                    results_manager.post(
+                        f"{self.name}_force_{k}", self._last_f[i] if self.active else 0
+                    )
             if "torque" in attrs:
                 for i, k in enumerate("xyzm"):
-                    results_manager.post(f"{self.name}_torque_{k}", self._last_t[i])
+                    results_manager.post(
+                        f"{self.name}_torque_{k}", self._last_t[i] if self.active else 0
+                    )
 
         results_manager.schedule_harvest_task(harvest)
+
+    def get_visuals(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> list[ArrowConfig]:
+        """Returns a list of arrow configurations for the renderer."""
+        if not self.active:
+            return []
+
+        visuals: list[ArrowConfig] = []
+        action_pos = self.action_site.rt_pos(mj_model, mj_data)
+
+        # force arrow
+        f_vec = self._last_f[:3]
+        if np.linalg.norm(f_vec) > 1e-4:
+            visuals.append(
+                {
+                    "pos": action_pos,
+                    "vec": f_vec,
+                    "color": np.asarray(Color.EMERALD_500.rgba),
+                    "is_torque": False,
+                }
+            )
+
+        t_vec = self._last_t[:3]
+        if np.linalg.norm(t_vec) > 1e-4:
+            visuals.append(
+                {
+                    "pos": action_pos,
+                    "vec": t_vec,
+                    "color": np.asarray(Color.AMBER_500.rgba),
+                    "is_torque": True,
+                }
+            )
+
+        return visuals
 
 
 class PointToPointForce(ForcingFunction):
@@ -194,6 +235,31 @@ class PointToPointForce(ForcingFunction):
         )
         mj_data.xfrc_applied[xtion_bid][:3] += -f_world
         mj_data.xfrc_applied[xtion_bid][3:] += -t_world
+
+    def get_visuals(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> list[ArrowConfig]:
+        """Returns a list of arrow configurations for the renderer."""
+        visuals = super().get_visuals(mj_model, mj_data)
+
+        if not self.active:
+            return []
+
+        # Add the reaction force arrow at the xtion site
+        xtion_pos = self.xtion_site.rt_pos(mj_model, mj_data)
+        f_vec = self._last_f[:3]
+
+        if np.linalg.norm(f_vec) > 1e-4:
+            visuals.append(
+                {
+                    "pos": xtion_pos,
+                    "vec": -f_vec,  # opposite direction
+                    "color": np.asarray(Color.ROSE_500.rgba),  # Red for Reaction
+                    "is_torque": False,
+                }
+            )
+
+        return visuals
 
     def calculate(
         self,

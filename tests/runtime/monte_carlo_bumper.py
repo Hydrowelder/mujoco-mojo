@@ -263,19 +263,20 @@ def runtime(
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,
-                show_force=True,
+                show_loads=True,
+                show_net_force=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("tracking_camera.mp4"),
                 camera_name=TRACKING_CAMERA_NAME,
-                show_force=True,
+                show_net_force=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("box_camera.mp4"),
                 camera_name=BOX_CAMERA_NAME,
-                show_force=False,
+                show_net_force=False,
             ).setup(mj_model).register_to_rm(rm)
 
         # Create compression springs
@@ -368,13 +369,13 @@ if __name__ == "__main__":
 
     mojo.utils.setup_logger()
 
-    workdir = Path(__file__).parent / "mc_bumper_test"
+    workdir = Path(__file__).parent / "mc_bumper_test_2"
     # Run the Monte Carlo
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=100, n_proc=10),
+        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
     )
 
     # results, had_fails = runner.run(

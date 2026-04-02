@@ -5,10 +5,14 @@ from typing import ClassVar
 import mujoco
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.typing import (
     SensorName,
     VecN,
 )
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["SensorBase"]
 
@@ -33,3 +37,33 @@ class SensorBase(XMLModel):
 
     user: VecN | None = None
     """See User parameters."""
+
+    def request(self, results_manager: ResultsManager):
+        """Registers the sensor's output for logging."""
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            sid = self.get_id(mj_model)
+
+            # find where this sensor's data starts and how long it is
+            # (e.g., dim=3 for an accelerometer, dim=6 for a force/torque sensor)
+            adr = mj_model.sensor_adr[sid]
+            dim = mj_model.sensor_dim[sid]
+
+            # slice the flat sensordata array
+            val = mj_data.sensordata[adr : adr + dim]
+
+            # post to telemetry
+            if dim == 1:
+                # scalar sensors (like a touch sensor)
+                results_manager.post(str(self.name), val[0])
+            else:
+                # vector sensors (like IMUs or Force sensors)
+                # use numerical suffixes since SensorBase doesn't know the component names
+                for i in range(dim):
+                    results_manager.post(f"{self.name}_{i}", val[i])
+
+        results_manager.schedule_harvest_task(harvest)
