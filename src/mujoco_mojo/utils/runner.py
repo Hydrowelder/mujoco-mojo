@@ -396,7 +396,7 @@ class MojoRunner:
                     Panel(
                         f"[bold red]DANGER:[/] clean_workdir is active. \n"
                         f"Deleting: [cyan]{path}[/]\n"
-                        f"Continuing in [bold yellow]{i}[/] seconds... ([bold yellow]Ctrl+C[/] to abort)",
+                        f"Continuing in [bold yellow]{i:>2}[/] seconds... ([bold yellow]Ctrl+C[/] to abort)",
                         title="Cleanup Countdown",
                         border_style="red",
                     )

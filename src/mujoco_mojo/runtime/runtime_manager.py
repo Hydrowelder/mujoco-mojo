@@ -55,34 +55,23 @@ class RuntimeManager:
 
     def step(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """
-        Calculates and injects forces into qfrc_applied or xfrc_applied.
-
-        1. Calls apply_load (custom forces)
-        2. Calls mj_step (physics)
-        3. Calls record (telemetry)
+        Calculates forces, integratess physics, and handles telemetry.
         """
-        # resolve IDs and initial distances
-        if not self._resolved:
-            self.resolve(mj_model, mj_data)
-
         # sync state variables and clear render buffer
         mujoco.mj_forward(mj_model, mj_data)
+
+        # resolve IDs and initial distances
+        # it is critical this is done after mj_forward to update site positions
+        if not self._resolved:
+            self.resolve(mj_model, mj_data)
 
         # apply user forcing functions
         for load in self.loads:
             load.apply_load(mj_model, mj_data)
 
-        # record if t=0
-        if mj_data.time == 0 and self.results_manager:
-            mujoco.mj_forward(mj_model, mj_data)
-            self.results_manager.record(mj_model, mj_data)
-            self.results_manager.flush_ledger()
-
-        # integrate physics (advances the time)
-        mujoco.mj_step(mj_model, mj_data)
-
-        # telemetry objects harvest to the same ledger
+        # record data
         if self.results_manager:
+            mujoco.mj_forward(mj_model, mj_data)
             self.results_manager.record(mj_model, mj_data)
             self.results_manager.flush_ledger()
 
@@ -98,6 +87,9 @@ class RuntimeManager:
                 recorder.capture_frame(
                     mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
                 )
+
+        # integrate physics and advance the time
+        mujoco.mj_step(mj_model, mj_data)
 
         # clear buffers for next timestep
         mj_data.xfrc_applied.fill(0)  # external forces
