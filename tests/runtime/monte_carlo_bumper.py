@@ -69,8 +69,8 @@ class Handoff:
         stroke = mojo_model.sample_dist(
             mojo.TruncatedNormalDistribution(
                 name=mojo.DistName(f"{loc}_stroke"),
-                nominal=0.25,
-                mu=0.25,
+                nominal=1,
+                mu=1,
                 sigma=0.1,
                 low=0.2,
                 high=0.3,
@@ -89,7 +89,7 @@ class Handoff:
             xtion_site=tip,  # blue box
             stiffness=float(stiffness),
             max_stroke=float(stroke),
-            preload=25 if loc == "pz" else 24,
+            preload=1000 if loc == "pz" else 750,
         ).register_to_rm(rm)
 
         base.request(rm.results_manager)
@@ -162,13 +162,13 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     )
     mojo_model.mjcf.options = [
         mojo.Option(
-            timestep=0.001,
+            timestep=0.0001,
             gravity=np.array((0, 0, 0)),
         )
     ]
     mojo_model.mjcf.visuals = [
         mojo.Visual(
-            map=mojo.VisualMap(force=100),
+            map=mojo.VisualMap(force=4),
             scale=mojo.VisualScale(forcewidth=0.1),
         )
     ]
@@ -259,7 +259,7 @@ def runtime(
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 1
 
-        if mojo_model.is_nominal:
+        if mojo_model.is_nominal and False:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,

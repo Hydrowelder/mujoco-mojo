@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import mujoco
 import numpy as np
@@ -50,6 +50,9 @@ class Load(MojoBaseModel, ABC):
 
     rel_to_site: Site | None = None
     """Frame of reference for the calculated force. If None, uses worldbody."""
+
+    _user_data: Any = PrivateAttr(default=None)
+    """User defined information for the to use."""
 
     _last_f: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
@@ -124,11 +127,6 @@ class Load(MojoBaseModel, ABC):
             # target generalized force array
             qfrc_target=mj_data.qfrc_applied,
         )
-
-        # shadow for visualization (action)
-        # xfrc_applied is [fx, fy, fz, tx, ty, tz]
-        mj_data.xfrc_applied[action_bid][:3] += f_world
-        mj_data.xfrc_applied[action_bid][3:] += t_world
 
     def request(
         self,
@@ -235,8 +233,6 @@ class PointToPointForce(Load):
             body=xtion_bid,
             qfrc_target=mj_data.qfrc_applied,
         )
-        mj_data.xfrc_applied[xtion_bid][:3] += -f_world
-        mj_data.xfrc_applied[xtion_bid][3:] += -t_world
 
     def get_visuals(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
