@@ -6,7 +6,7 @@ import mujoco
 
 from mujoco_mojo.runtime.forcing_function import ForcingFunction
 from mujoco_mojo.runtime.results_manager import ResultsManager
-from mujoco_mojo.runtime.video_recorder import VideoRecorder
+from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -61,9 +61,6 @@ class RuntimeManager:
         2. Calls mj_step (physics)
         3. Calls record (telemetry)
         """
-        if self.results_manager:
-            self.results_manager.flush_ledger()
-
         # sync state variables and clear render buffer
         mujoco.mj_forward(mj_model, mj_data)
         mj_data.xfrc_applied.fill(0)
@@ -87,7 +84,17 @@ class RuntimeManager:
         # telemetry objects harvest to the same ledger
         if self.results_manager:
             self.results_manager.record(mj_model, mj_data)
+            self.results_manager.flush_ledger()
 
         # record any frames which are due
-        for recorder in self.video_recorders:
-            recorder.capture_frame(mj_data)
+        if self.video_recorders:
+            # gather arrows for forcing functions
+            all_arrows: list[ArrowConfig] = []
+
+            for load in self.forcing_functions:
+                all_arrows.extend(load.get_visuals(mj_model, mj_data))
+
+            for recorder in self.video_recorders:
+                recorder.capture_frame(
+                    mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
+                )

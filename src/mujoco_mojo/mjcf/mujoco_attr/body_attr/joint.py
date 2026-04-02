@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import mujoco
 import numpy as np
@@ -18,6 +18,12 @@ from mujoco_mojo.typing import (
     Vec5,
     VecN,
 )
+from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.results_manager import ResultsManager
+
+logger = get_logger(__name__)
 
 __all__ = ["Joint"]
 
@@ -115,3 +121,61 @@ class Joint(XMLModel):
 
     user: VecN | None = None
     """See User parameters."""
+
+    def request(
+        self,
+        results_manager: ResultsManager,
+        attrs: list[
+            Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"]
+        ] = ["qpos", "qvel"],
+    ):
+        """Registers specific joint attributes for logging."""
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            jid = self.get_id(mj_model)
+
+            # joints have different start addresses in the qpos and qvel/qfrc vectors
+            qpos_adr = mj_model.jnt_qposadr[jid]
+            dof_adr = mj_model.jnt_dofadr[jid]
+
+            # determine how many values to read based on joint type
+            jnt_type = mj_model.jnt_type[jid]
+            match jnt_type:
+                case mujoco.mjtJoint.mjJNT_FREE:
+                    nq, nv = 7, 6
+                case mujoco.mjtJoint.mjJNT_BALL:
+                    nq, nv = 4, 3
+                case mujoco.mjtJoint.mjJNT_HINGE | mujoco.mjtJoint.mjJNT_SLIDE:
+                    nq, nv = 1, 1
+                case _:
+                    msg = f"Joint {self.name} type {jnt_type} is invalid"
+                    logger.exception(msg)
+                    raise NotImplementedError(msg)
+
+            for attr in attrs:
+                match attr:
+                    case "qpos":
+                        val = mj_data.qpos[qpos_adr : qpos_adr + nq]
+                    case "qvel":
+                        val = mj_data.qvel[dof_adr : dof_adr + nv]
+                    case "qfrc_actuator":
+                        val = mj_data.qfrc_actuator[dof_adr : dof_adr + nv]
+                    case "qfrc_constraint":
+                        val = mj_data.qfrc_constraint[dof_adr : dof_adr + nv]
+                    case "qfrc_passive":
+                        val = mj_data.qfrc_passive[dof_adr : dof_adr + nv]
+                    case _:
+                        continue
+
+                # post the resutls
+                if nq == 1 or (nv == 1 and attr != "qpos"):
+                    results_manager.post(f"{self.name}_{attr}", val[0])
+                else:
+                    for i in range(len(val)):
+                        results_manager.post(f"{self.name}_{attr}_{i}", val[i])
+
+        results_manager.schedule_harvest_task(harvest)
