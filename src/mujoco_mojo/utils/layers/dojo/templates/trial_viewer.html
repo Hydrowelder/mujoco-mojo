@@ -411,11 +411,30 @@
                      x-transition
                      class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
 
-                    <input type="text"
-                           x-model="xSearch"
-                           placeholder="Filter..."
-                           class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-1.5 text-[10px] font-mono mb-2 text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500" />
+                    <div class="relative mb-2">
+                        <input type="text"
+                               x-model="xSearch"
+                               placeholder="Filter..."
+                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
+                        <button x-show="xSearch"
+                                type="button"
+                                @mousedown.prevent="xSearch = ''"
+                                class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors"
+                                x-transition:enter="transition duration-75"
+                                x-transition:enter-start="opacity-0"
+                                x-transition:enter-end="opacity-100">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
                     <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
                         <template x-if="'time'.includes(xSearch.toLowerCase()) && columns.includes('time')">
                             <button @click="config.xAxis = 'time'; xMenuOpen = false; xSearch = ''; saveAndRender()"
@@ -469,10 +488,31 @@
                 <div x-show="yMenuOpen"
                      x-transition
                      class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
-                    <input type="text"
-                           x-model="ySearch"
-                           placeholder="Filter..."
-                           class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-1.5 text-[10px] font-mono mb-2 text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500" />
+
+                    <div class="relative mb-2">
+                        <input type="text"
+                               x-model="ySearch"
+                               placeholder="Filter..."
+                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+
+                        <button x-show="ySearch"
+                                type="button"
+                                @mousedown.prevent="ySearch = ''"
+                                class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors"
+                                x-transition:enter="transition duration-75"
+                                x-transition:enter-start="opacity-0"
+                                x-transition:enter-end="opacity-100">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
                     <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
                         <template x-for="col in filteredCols"

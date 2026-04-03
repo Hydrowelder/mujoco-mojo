@@ -162,7 +162,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     )
     mojo_model.mjcf.options = [
         mojo.Option(
-            timestep=0.0001,
+            timestep=0.001,
             gravity=np.array((0, 0, 0)),
         )
     ]
