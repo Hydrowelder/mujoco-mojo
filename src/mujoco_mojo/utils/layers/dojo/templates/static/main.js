@@ -193,7 +193,10 @@ document.addEventListener("alpine:init", () => {
       this.isComplete = isComplete;
       this.isSyncing = false;
 
-      if (isComplete) this.stopGlobalSync();
+      // job is done and auto refresh should turn itself off
+      if (isComplete) {
+        this.stopGlobalSync();
+      }
 
       setTimeout(() => {
         this.syncProgress = 0;
@@ -204,22 +207,16 @@ document.addEventListener("alpine:init", () => {
       this.lastUpdate = timestamp;
       this.secondsSinceUpdate = 0;
       this.isComplete = isComplete;
+
+      if (isComplete) {
+        this.stopGlobalSync();
+      }
     },
   });
 
-  // Global Timer
-  setInterval(() => {
-    const store = Alpine.store("dojo");
-    if (store.lastUpdate) {
-      store.secondsSinceUpdate = Math.floor(
-        (Date.now() - store.lastUpdate) / 1000,
-      );
-    }
-  }, 1000);
-
   const store = Alpine.store("dojo");
 
-  // Global Timer for "Time Ago"
+  // Global Timer
   setInterval(() => {
     if (store.lastUpdate) {
       store.secondsSinceUpdate = Math.floor(
