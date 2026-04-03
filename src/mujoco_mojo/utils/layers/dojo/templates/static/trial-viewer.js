@@ -69,12 +69,20 @@ function trialViewer(trialId, externalUrl) {
     ySearch: "",
     settingsOpen: false,
     downloadOpen: false,
-    isDragging: false, // tracks if a file is being hovered over the page // BUG when you drag and undrag this keeps the ui element up
+    dragCounter: 0, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     columns: [],
     showToast: false,
     toastMessage: "",
     toastType: "success",
+    plotColors: [
+      tw.cyan[500],
+      tw.emerald[500],
+      tw.blue[500],
+      tw.violet[500],
+      tw.amber[500],
+      tw.rose[500],
+    ],
 
     // --- SINGLE SOURCE OF TRUTH: PLOT CONFIGURATION ---
     // This object is the master state. Changes here trigger re-renders.
@@ -799,7 +807,6 @@ function trialViewer(trialId, externalUrl) {
      * Handle File Drop
      */
     handleDrop(e) {
-      this.isDragging = false;
       const file = e.dataTransfer.files[0];
 
       if (
@@ -881,6 +888,13 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Helper to get color by index (with modulo for safety)
+     */
+    getSignalColor(index) {
+      return this.plotColors[index % this.plotColors.length];
+    },
+
+    /**
      * Plotly Engine: Renders the telemetry traces based on the current config object
      */
     renderPlot() {
@@ -889,14 +903,6 @@ function trialViewer(trialId, externalUrl) {
       // const el = document.getElementById("plot-area");
       const isDark = document.documentElement.classList.contains("dark");
 
-      const plotColors = [
-        tw.cyan[500],
-        tw.emerald[500],
-        tw.blue[500],
-        tw.violet[500],
-        tw.amber[500],
-        tw.rose[500],
-      ];
       const textColor = isDark ? tw.slate[400] : tw.slate[600];
       const majorGrid = isDark ? tw.slate[950] : tw.slate[200];
       const minorGrid = isDark ? tw.slate[900] : tw.slate[100];
@@ -962,7 +968,7 @@ function trialViewer(trialId, externalUrl) {
         type: "scatter",
         line: {
           width: 3,
-          color: plotColors[i % plotColors.length],
+          color: this.getSignalColor(i),
           shape: this.config.interp,
         },
         marker: { size: 6, symbol: "circle" },
@@ -1008,7 +1014,7 @@ function trialViewer(trialId, externalUrl) {
               type: "scatter",
               line: {
                 width: 1,
-                color: plotColors[i % plotColors.length],
+                color: this.getSignalColor(i),
                 shape: this.config.interp,
                 dash: "dot",
               },
