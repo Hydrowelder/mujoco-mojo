@@ -138,22 +138,6 @@ function trialViewer(trialId, externalUrl) {
       });
       observer.observe(document.documentElement, { attributes: true });
 
-      // Watch the master config: Any change here triggers a save and a redraw
-      this.$watch("config", async (value, oldValue) => {
-        this.configRaw = JSON.stringify(value, null, 4);
-
-        // check if we need to fetch that data for the comparison trials.
-        if (
-          this.config.vsEnabled &&
-          (value.xAxis !== oldValue?.xAxis ||
-            value.yAxes.length !== oldValue?.yAxes?.length)
-        ) {
-          await this.syncVsRange();
-        }
-
-        this.saveAndRender();
-      });
-
       // 3. FETCH EXTERNAL STATUS (Padding & Sync)
       try {
         const statusResp = await fetch("/monitor/api/status");
@@ -178,11 +162,18 @@ function trialViewer(trialId, externalUrl) {
         const shared = params.get("v");
         if (shared) {
           this.hydrateFromUrl(shared);
+          // CAPTURE SHARED STATE INTO DRAFT UI
+          this.vsDraft.enabled = this.config.vsEnabled;
+          this.vsDraft.range = [...this.config.vsRange];
+
+          // FORCE THE "REAL" PLOT STATE TO FALSE (Requires "Apply" click)
+          // We do this so the plot doesn't fetch comparisons until requested
+          this.config.vsEnabled = false;
         } else {
           this.loadConfig();
+          this.vsDraft.enabled = this.config.vsEnabled;
+          this.vsDraft.range = [...this.config.vsRange];
         }
-        this.vsDraft.enabled = this.config.vsEnabled;
-        this.vsDraft.range = [...this.config.vsRange];
 
         // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
         this.$nextTick(async () => {
@@ -257,35 +248,38 @@ function trialViewer(trialId, externalUrl) {
       const data = await resp.json();
       this.allTrials = data.trials || [];
 
-      if (
-        this.config.vsRange[0] === 0 &&
-        this.config.vsRange[1] === 0 &&
-        this.allTrials.length
-      ) {
-        const ids = this.allTrials
-          .map((id) => parseInt(id.split("_").pop()))
-          .filter((n) => !isNaN(n));
-        this.config.vsRange = [Math.min(...ids), Math.max(...ids)];
-      }
-
-      // RANGE CLAMPING & DRAFT SYNC
       if (this.allTrials.length) {
         const ids = this.allTrials
           .map((id) => parseInt(id.split("_").pop()))
           .filter((n) => !isNaN(n));
-
         const minFleet = Math.min(...ids);
         const maxFleet = Math.max(...ids);
 
-        // If range is default/zero, initialize it
+        // If the config is brand new [0,0], initialize it to the full fleet
         if (this.config.vsRange[0] === 0 && this.config.vsRange[1] === 0) {
           this.config.vsRange = [minFleet, maxFleet];
+          this.vsDraft.range = [minFleet, maxFleet];
+        }
+      }
+
+      this.configRaw = JSON.stringify(this.config, null, 4);
+
+      // Watch the master config: Any change here triggers a save and a redraw
+      this.$watch("config", async (value, oldValue) => {
+        this.configRaw = JSON.stringify(value, null, 4);
+
+        // check if we need to fetch that data for the comparison trials.
+        if (
+          this.config.vsEnabled &&
+          oldValue?.vsEnabled && // Only auto-sync if it was already on
+          (value.xAxis !== oldValue?.xAxis ||
+            value.yAxes.length !== oldValue?.yAxes?.length)
+        ) {
+          await this.syncVsRange();
         }
 
-        // Sync the draft to the config once at startup
-        this.vsDraft.enabled = this.config.vsEnabled;
-        this.vsDraft.range = [...this.config.vsRange];
-      }
+        this.saveAndRender();
+      });
     },
 
     async syncVsRange() {
@@ -340,12 +334,24 @@ function trialViewer(trialId, externalUrl) {
         // Now that data is in memory, update the master config.
         // This triggers the watcher, which calls saveAndRender() exactly once.
         this.vsDatasets = { ...this.vsDatasets };
-        this.config.vsRange = [...this.vsDraft.range];
+        this.config.vsRange = [start, end];
         this.config.vsEnabled = true;
       } finally {
         this.vsLoading = false;
         // renderPlot is called automatically by the watcher on this.config
       }
+    },
+
+    /**
+     * Specifically handles the toggle switch
+     */
+    handleVsToggle() {
+      // If user turns it OFF, we kill the lines immediately without an 'Apply' click
+      if (!this.vsDraft.enabled) {
+        this.config.vsEnabled = false;
+        this.renderPlot();
+      }
+      // If they turn it ON, we do nothing. They must click 'Apply' to see changes.
     },
 
     /**
@@ -998,6 +1004,8 @@ function trialViewer(trialId, externalUrl) {
           if (n < start || n > end || vsId === this.trialId) return;
 
           const dataset = this.vsDatasets[vsId];
+          if (!dataset) return;
+
           const vsTraces = this.config.yAxes.map((key, i) => {
             // Check if this specific parameter has shown up in the legend yet
             const isFirstEntryForThisParam = !legendTracker.has(key);
@@ -1006,7 +1014,7 @@ function trialViewer(trialId, externalUrl) {
               x: dataset[this.config.xAxis],
               y: dataset[key],
               // Name it after the signal so the legend is clear
-              name: `${key} (vs.)`,
+              name: `${key} (<i>vs.</i>)`,
               // Group by signal name so toggling one toggles all trials for that signal
               legendgroup: `group_${key}`,
               showlegend: isFirstEntryForThisParam,

@@ -2,10 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-import duckdb
 import mujoco
 import numpy as np
-import polars as pl
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -60,20 +58,20 @@ class Handoff:
         stiffness = mojo_model.sample_dist(
             mojo.TruncatedNormalDistribution(
                 name=mojo.DistName(f"{loc}_stiffness"),
-                nominal=50,
-                mu=50,
-                sigma=15,
+                nominal=100,
+                mu=100,
+                sigma=20,
                 low=0,
             )
         ).squeeze()
         stroke = mojo_model.sample_dist(
             mojo.TruncatedNormalDistribution(
                 name=mojo.DistName(f"{loc}_stroke"),
-                nominal=1,
-                mu=1,
-                sigma=0.1,
-                low=0.2,
-                high=0.3,
+                nominal=(nom := 1),
+                mu=nom,
+                sigma=nom * 0.1,
+                low=nom * 0.8,
+                high=nom * 1.2,
             )
         ).squeeze()
 
@@ -293,77 +291,6 @@ def runtime(
     return f"Trial {mojo_model.trial_num} complete."
 
 
-def post_process(workdir: Path):
-    import matplotlib.pyplot as plt
-
-    tn = 0
-    db_path = workdir / "trials" / f"trial_{tn}" / "telemetry.duckdb"
-    conn = duckdb.connect(db_path)
-
-    df = conn.execute("SELECT * FROM result").pl()
-
-    # calculate distances and strokes for both springs
-    for loc in ["pz", "mz"]:
-        t_name = f"{loc}_spring_tip_site"
-        b_name = f"{loc}_spring_base_site"
-
-        # Unique column names for this location
-        dist_col = f"{loc}_dist"
-        stroke_col = f"{loc}_stroke"
-
-        df = df.with_columns(
-            **{
-                dist_col: (
-                    (pl.col(f"{t_name}_xpos_x") - pl.col(f"{b_name}_xpos_x")).pow(2)
-                    + (pl.col(f"{t_name}_xpos_y") - pl.col(f"{b_name}_xpos_y")).pow(2)
-                    + (pl.col(f"{t_name}_xpos_z") - pl.col(f"{b_name}_xpos_z")).pow(2)
-                ).sqrt()
-            }
-        )
-
-        # Calculate stroke relative to start of trial
-        r0 = df[dist_col][0]
-        df = df.with_columns(**{stroke_col: pl.col(dist_col) - r0})
-
-    # plotting
-    plt.figure(figsize=(10, 6))
-
-    styles = {
-        "pz": {"color": mojo.utils.Color.CYAN_500, "label": "PZ Spring"},
-        "mz": {"color": mojo.utils.Color.ROSE_500, "label": "MZ Spring"},
-    }
-
-    for loc in ["pz", "mz"]:
-        stroke_col = f"{loc}_stroke"
-        # Match name from add_spring_force: f"{loc}_spring"
-        force_col = f"{loc}_spring_force_m"
-
-        # Filter for active stroke range (before separation)
-        active_df = df.filter(pl.col(stroke_col) <= 0.5)
-
-        plt.plot(
-            active_df[stroke_col],
-            active_df[force_col],
-            label=styles[loc]["label"],
-            color=styles[loc]["color"],
-            linewidth=2,
-            alpha=0.8,
-        )
-
-    # formatting
-    plt.title(f"Force vs. Stroke Comparison (Trial {tn})", fontsize=14)
-    plt.xlabel("Stroke [m] (extension > 0)", fontsize=12)
-    plt.ylabel("Force Magnitude [N]", fontsize=12)
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.legend()
-    plt.tight_layout()
-
-    # cleanup
-    plot_path = workdir / "force_stroke_plot.png"
-    plt.savefig(plot_path)
-    plt.close()
-
-
 if __name__ == "__main__":
     from pathlib import Path
 
@@ -383,6 +310,4 @@ if __name__ == "__main__":
     # )
     results, had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
 
-    if not had_fails and runner.runtime is not None:
-        post_process(workdir=workdir)
     print(f"Finished with {had_fails=}")

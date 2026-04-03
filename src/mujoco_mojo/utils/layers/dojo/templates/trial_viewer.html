@@ -266,6 +266,7 @@
                                @click.stop>
                             <input type="checkbox"
                                    x-model="vsDraft.enabled"
+                                   @change="handleVsToggle()"
                                    class="sr-only">
 
                             <div class="w-10 h-6 bg-slate-200 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 rounded-md transition-colors duration-200"
