@@ -102,14 +102,41 @@ async def get_trial_viewer(request: Request, trial_id: str):
 
 
 @lru_cache(maxsize=128)
+def _get_column_manifest(db_path_str: str, mtime: float) -> list[str]:
+    """Retrieves all column names from the DuckDB table schema."""
+    from mujoco_mojo.runtime.results_manager import ResultsManager
+
+    with duckdb.connect(db_path_str, read_only=True) as con:
+        # 'DESCRIBE' is a very fast metadata-only query in DuckDB
+        table = ResultsManager.default_table_name()
+        res = con.execute(f"DESCRIBE {table}").fetchall()
+        # res returns rows like: (column_name, type, null, key, default, extra)
+        return [row[0] for row in res]
+
+
+@lru_cache(maxsize=1024)  # Increased size because we are caching individual columns
+def _get_atomic_column(db_path_str: str, col_name: str, mtime: float):
+    """
+    Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
+    """
+    from mujoco_mojo.runtime.results_manager import ResultsManager
+
+    with duckdb.connect(db_path_str, read_only=True) as con:
+        table = ResultsManager.default_table_name()
+        # Fetching a single column is DuckDB's superpower
+        return (
+            con.execute(f'SELECT "{col_name}" FROM {table}').pl().to_series().to_list()
+        )
+
+
+@lru_cache(maxsize=128)
 def _get_cached_data(db_path_str: str, cols_tuple: tuple):
     from mujoco_mojo.runtime.results_manager import ResultsManager
 
     with duckdb.connect(db_path_str, read_only=True) as con:
         col_str = "*" if not cols_tuple else ", ".join([f'"{c}"' for c in cols_tuple])
         query = f"SELECT {col_str} FROM {ResultsManager.default_table_name()}"
-        df = con.execute(query).pl()
-        return df.to_dict(as_series=False)
+        return con.execute(query).pl().to_dict(as_series=False)
 
 
 @router.get("/{trial_id}/data")
@@ -133,14 +160,28 @@ async def get_trial_data(trial_id: str, cols: str = Query(None)):
             status_code=404, detail=f"Database not found for {trial_id}"
         )
 
-    try:
-        # Convert comma-string to a sorted tuple for the cache key
-        cols_tuple = tuple(sorted(cols.split(","))) if cols else None
+    # THE CACHE BREAKER: Get the file's last modified time
+    # If you restart a job, the new file will have a new mtime.
+    mtime = db_path.stat().st_mtime
 
-        # Fetch from cache or disk
-        data = _get_cached_data(str(db_path), cols_tuple)
-        return data
+    try:
+        db_path_str = str(db_path)
+
+        # get the manifest of ALL columns in the df
+        all_columns = _get_column_manifest(db_path_str, mtime)
+
+        data = {}
+        if cols:
+            requested = cols.split(",")
+            for col in requested:
+                if col in all_columns:
+                    data[col] = _get_atomic_column(db_path_str, col, mtime)
+
+        return {
+            "columns": all_columns,  # Full list of headers for the sidebar
+            "data": data,  # Actual arrays for the requested traces
+        }
 
     except Exception as e:
         logger.error(f"Data retrieval failed for {trial_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to read telemetry data")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
