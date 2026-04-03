@@ -114,7 +114,38 @@ function trialViewer(trialId, externalUrl) {
 
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
+
+      // We expect { columns: [...], data: {...} }
       return await resp.json();
+    },
+
+    /**
+     * Loads data as a background process to fill the cache
+     */
+    async startBackgroundDiscovery() {
+      // Filter for columns we know exist but don't have data for yet
+      const pending = this.columns.filter((c) => !this.data.hasOwnProperty(c));
+
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
+        // Breathe for a second so we don't hog the network/CPU
+        await new Promise((r) => setTimeout(r, 1500));
+
+        const chunk = pending.slice(i, i + CHUNK_SIZE);
+        try {
+          // Fetch the next 10 columns
+          const response = await this.fetchTrialData(this.trialId, chunk);
+
+          // Merge the new arrays into our local data store
+          this.data = { ...this.data, ...response.data };
+
+          console.debug(
+            `Dojo Hydration: Cached ${i + chunk.length}/${pending.length} columns`,
+          );
+        } catch (e) {
+          console.warn("Background hydration blip", e);
+        }
+      }
     },
 
     async init() {
@@ -153,9 +184,15 @@ function trialViewer(trialId, externalUrl) {
 
       // 4. THE MAIN DATA LOAD
       try {
-        // Use your centralized fetch method
-        this.data = await this.fetchTrialData(this.trialId);
-        this.columns = Object.keys(this.data).sort();
+        // Load the main data the user is requesting
+        const initialCols = [this.config.xAxis, ...this.config.yAxes];
+        const response = await this.fetchTrialData(this.trialId, initialCols);
+
+        this.columns = response.columns.sort();
+        this.data = response.data;
+
+        // start a background process which slowly loads data in case the user wants to see it
+        this.startBackgroundDiscovery();
 
         // 5. CONFIG HYDRATION
         const params = new URLSearchParams(window.location.search);
@@ -321,10 +358,12 @@ function trialViewer(trialId, externalUrl) {
               !existing ||
               activeCols.some((col) => !existing.hasOwnProperty(col));
             if (needsFetch) {
+              const response = await this.fetchTrialData(id, activeCols);
+
               const newData = await this.fetchTrialData(id, activeCols);
               this.vsDatasets[id] = {
                 ...(this.vsDatasets[id] || {}),
-                ...newData,
+                ...response.data, // Access the nested .data property
               };
             }
           }),
