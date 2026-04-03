@@ -114,7 +114,7 @@ def _get_column_manifest(db_path_str: str, mtime: float) -> list[str]:
         return [row[0] for row in res]
 
 
-@lru_cache(maxsize=1024)  # Increased size because we are caching individual columns
+@lru_cache(maxsize=2048)  # Increased size because we are caching individual columns
 def _get_atomic_column(db_path_str: str, col_name: str, mtime: float):
     """
     Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
@@ -127,16 +127,6 @@ def _get_atomic_column(db_path_str: str, col_name: str, mtime: float):
         return (
             con.execute(f'SELECT "{col_name}" FROM {table}').pl().to_series().to_list()
         )
-
-
-@lru_cache(maxsize=128)
-def _get_cached_data(db_path_str: str, cols_tuple: tuple):
-    from mujoco_mojo.runtime.results_manager import ResultsManager
-
-    with duckdb.connect(db_path_str, read_only=True) as con:
-        col_str = "*" if not cols_tuple else ", ".join([f'"{c}"' for c in cols_tuple])
-        query = f"SELECT {col_str} FROM {ResultsManager.default_table_name()}"
-        return con.execute(query).pl().to_dict(as_series=False)
 
 
 @router.get("/{trial_id}/data")

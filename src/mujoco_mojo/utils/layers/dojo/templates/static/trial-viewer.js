@@ -75,6 +75,7 @@ function trialViewer(trialId, externalUrl) {
     showToast: false,
     toastMessage: "",
     toastType: "success",
+    discoveryId: 0,
     plotColors: [
       tw.cyan[500],
       tw.emerald[500],
@@ -120,30 +121,88 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Helper to fetch in small chunks to keep the pipe clear
+     */
+    async trickleFetch(id, columnList, label, isVsDataset, loopId) {
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < columnList.length; i += CHUNK_SIZE) {
+        // --- THE SAFETY CHECK ---
+        // If a new discovery task started while we were waiting, exit now.
+        if (loopId !== this.discoveryId) return;
+
+        await new Promise((r) => setTimeout(r, 1000));
+        const chunk = columnList.slice(i, i + CHUNK_SIZE);
+
+        try {
+          const resp = await this.fetchTrialData(id, chunk);
+
+          if (isVsDataset) {
+            this.vsDatasets[id] = {
+              ...(this.vsDatasets[id] || {}),
+              ...resp.data,
+            };
+          } else {
+            this.data = { ...(this.data || {}), ...resp.data };
+          }
+
+          console.debug(
+            `Dojo Hydration [${label}]: ${i + chunk.length}/${columnList.length}`,
+          );
+        } catch (e) {
+          console.warn(`Hydration failed for ${id}`, e);
+        }
+      }
+    },
+
+    /**
      * Loads data as a background process to fill the cache
      */
     async startBackgroundDiscovery() {
-      // Filter for columns we know exist but don't have data for yet
-      const pending = this.columns.filter((c) => !this.data.hasOwnProperty(c));
+      // Create a unique ID for this specific "worker" run
+      const currentId = ++this.discoveryId;
 
-      const CHUNK_SIZE = 10;
-      for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
-        // Breathe for a second so we don't hog the network/CPU
-        await new Promise((r) => setTimeout(r, 1500));
+      // 1. HORIZONTAL: Current Trial
+      const pendingCols = this.columns.filter(
+        (c) => !this.data.hasOwnProperty(c),
+      );
+      if (pendingCols.length > 0) {
+        await this.trickleFetch(
+          this.trialId,
+          pendingCols,
+          "Current",
+          false,
+          currentId,
+        );
+      }
 
-        const chunk = pending.slice(i, i + CHUNK_SIZE);
-        try {
-          // Fetch the next 10 columns
-          const response = await this.fetchTrialData(this.trialId, chunk);
+      // 2. VERTICAL: vsDraft Range
+      if (currentId !== this.discoveryId) return; // Exit if superseded
 
-          // Merge the new arrays into our local data store
-          this.data = { ...this.data, ...response.data };
+      const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const activeCols = [this.config.xAxis, ...this.config.yAxes];
 
-          console.debug(
-            `Dojo Hydration: Cached ${i + chunk.length}/${pending.length} columns`,
+      const draftIds = this.allTrials.filter((id) => {
+        const n = parseInt(id.split("_").pop());
+        return n >= start && n <= end && id !== this.trialId;
+      });
+
+      for (const id of draftIds) {
+        // Check again before starting a new fetch
+        if (currentId !== this.discoveryId) return;
+
+        const existing = this.vsDatasets[id];
+        const needsFetch =
+          !existing || activeCols.some((c) => !existing.hasOwnProperty(c));
+
+        if (needsFetch) {
+          await this.trickleFetch(
+            id,
+            activeCols,
+            `Draft ${id}`,
+            true,
+            currentId,
           );
-        } catch (e) {
-          console.warn("Background hydration blip", e);
         }
       }
     },
@@ -190,9 +249,6 @@ function trialViewer(trialId, externalUrl) {
 
         this.columns = response.columns.sort();
         this.data = response.data;
-
-        // start a background process which slowly loads data in case the user wants to see it
-        this.startBackgroundDiscovery();
 
         // 5. CONFIG HYDRATION
         const params = new URLSearchParams(window.location.search);
@@ -298,6 +354,25 @@ function trialViewer(trialId, externalUrl) {
           this.vsDraft.range = [minFleet, maxFleet];
         }
       }
+
+      // This watches the slider/draft range and prepares data before "Apply" is clicked.
+      this.$watch("vsDraft.range", () => {
+        // Debounce: Wait 500ms after the user stops sliding
+        if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
+
+        this.discoveryTimeout = setTimeout(() => {
+          // Only pre-fetch if comparisons are actually enabled in the UI
+          if (this.vsDraft.enabled) {
+            console.debug(
+              "Predictive Sync: User adjusted range, starting hydration...",
+            );
+            this.startBackgroundDiscovery();
+          }
+        }, 500);
+      });
+
+      // Start the initial background load for the current trial + current draft
+      this.startBackgroundDiscovery();
 
       this.configRaw = JSON.stringify(this.config, null, 4);
 
