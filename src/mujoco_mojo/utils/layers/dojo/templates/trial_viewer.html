@@ -28,9 +28,10 @@
 
 {% block content %}
 <div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}')"
-     @dragover.prevent="isDragging = true"
-     @dragleave.prevent="isDragging = false"
-     @drop.prevent="handleDrop($event)"
+     @dragenter.prevent="dragCounter++"
+     @dragleave.prevent="dragCounter--"
+     @dragover.prevent
+     @drop.prevent="dragCounter = 0; handleDrop($event)"
      class="space-y-4 relative pb-10">
     <!-- toast for sharable link (teleported to body so it is sticky)-->
     <template x-teleport="body">
@@ -84,8 +85,11 @@
     </template>
 
     <!-- drag and drop json to setup plot -->
-    <div x-show="isDragging"
+    <div x-show="dragCounter > 0"
          style="display: none;"
+         x-transition:enter="transition opacity duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
          class="fixed inset-0 z-[1000] bg-cyan-500/10 dark:bg-cyan-500/5 backdrop-blur-md border-4 border-dashed border-cyan-500 flex items-center justify-center pointer-events-none">
         <div class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-cyan-500 flex flex-col items-center gap-4">
             <div class="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center text-cyan-500">
@@ -99,9 +103,11 @@
                           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
             </div>
-            <p class="text-sm font-mono font-black uppercase tracking-widest text-slate-700 dark:text-cyan-500">
-                Drop Config to Warp
-            </p>
+            <div class="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl border border-cyan-500 flex flex-col items-center gap-4">
+                <p class="text-sm font-mono font-black uppercase tracking-widest text-slate-700 dark:text-cyan-500">
+                    Drop Config to Warp
+                </p>
+            </div>
         </div>
     </div>
 
@@ -623,12 +629,24 @@
                 </div>
             </div>
             <div class="flex-1 flex items-center h-8 gap-1 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
-                <template x-for="col in config.yAxes"
+                <template x-for="(col, index) in config.yAxes"
                           :key="col">
-                    <span class="shrink-0 pl-2 pr-1 py-0.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 rounded text-[9px] font-mono font-bold flex items-center gap-1 group/chip transition-all hover:border-cyan-500/60 shadow-sm">
+                    <span class="shrink-0 pl-2 pr-1 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
+                          :style="`
+                background-color: ${getSignalColor(index)}1a;
+                border-color: ${getSignalColor(index)}4d;
+                color: ${getSignalColor(index)};
+              `"
+                          @mouseenter="$el.style.borderColor = getSignalColor(index)"
+                          @mouseleave="$el.style.borderColor = getSignalColor(index) + '4d'">
+
                         <span x-text="col"></span>
+
                         <button @click.stop="toggleY(col)"
-                                class="p-0.5 rounded-md hover:bg-cyan-500/20 text-cyan-500/40 hover:text-cyan-600 dark:hover:text-cyan-300 transition-colors">
+                                class="p-0.5 rounded-md transition-colors"
+                                :style="`color: ${getSignalColor(index)}66;`"
+                                @mouseenter="$el.style.backgroundColor = getSignalColor(index) + '33'; $el.style.color = getSignalColor(index)"
+                                @mouseleave="$el.style.backgroundColor = 'transparent'; $el.style.color = getSignalColor(index) + '66'">
                             <svg class="w-2.5 h-2.5"
                                  fill="none"
                                  stroke="currentColor"
@@ -641,6 +659,7 @@
                         </button>
                     </span>
                 </template>
+
                 <template x-if="config.yAxes.length === 0">
                     <span class="text-[9px] font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
                 </template>
