@@ -141,7 +141,7 @@ class Load(MojoBaseModel, ABC):
                 for i, k in enumerate("xyzm"):
                     results_manager.post(
                         value=float(source[i]) if self.active else 0.0,
-                        category="Physics",
+                        category="Loads",
                         # nest the force/torque under the function name
                         subgroup=f"{self.name}/{attr}",
                         attr=k,
