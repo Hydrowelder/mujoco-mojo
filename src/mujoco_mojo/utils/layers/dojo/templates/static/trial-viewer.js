@@ -485,6 +485,9 @@ function trialViewer(trialId, externalUrl) {
      * REFINED GENERIC LOGIC
      */
     getFilteredCols(field) {
+      // Safety: If columns haven't loaded yet, return empty array immediately
+      if (!this.columns || !Array.isArray(this.columns)) return [];
+
       const search = this[field + "Search"];
       if (!search) return this.smartSort([...this.columns]);
       try {
