@@ -33,8 +33,8 @@ function monitor() {
         console.warn("Monitor bootstrap failed.", e);
       } finally {
         // tell the global store to start the live pulse if needed
-        Alpine.store("dojo").startGlobalSync();
-        Alpine.store("dojo").setPageReady(true);
+        const shouldForce = this.status.is_complete;
+        Alpine.store("dojo").setPageReady(true, shouldForce);
       }
     },
 
@@ -134,7 +134,9 @@ function monitor() {
         }
       }
 
-      this.fireConfetti(theme);
+      setTimeout(() => {
+        this.fireConfetti(theme);
+      }, 300);
 
       // Mark as celebrated so it doesn't fire again until the next refresh
       this.hasCelebrated = true;
