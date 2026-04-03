@@ -195,6 +195,11 @@ class Trial:
         """The full path to the JSON configuration file for this trial."""
         return self.trial_dir / self.model_config_name
 
+    @property
+    def named_value_path(self) -> Path:
+        """The full path to the JSON NamedValue file for this trial."""
+        return self.trial_dir / "named_values.json"
+
     def run(
         self,
         generator: MojoGenerator,
@@ -263,6 +268,7 @@ class Trial:
                 if runtime is None:
                     mojo_model.mjcf.write_xml(self.xml_path)
                 mojo_model.dump_to_path(self.model_config_path)
+                self.named_value_path.write_text(mojo_model.named.model_dump_json())
 
             with status.record_step(step_name="solving"):
                 # 3. Execute (if runtime provided)
@@ -290,6 +296,9 @@ class Trial:
                     )
                     result = mojo_model
 
+            # serialize again in case new named values were added during the run
+            mojo_model.dump_to_path(self.model_config_path)
+            self.named_value_path.write_text(mojo_model.named.model_dump_json())
             status.step = "done"
             status.completion = Completion.SUCCESS
 

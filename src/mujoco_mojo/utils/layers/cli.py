@@ -31,6 +31,30 @@ from ..defaults import (
 
 console = Console()
 
+VERSION = version("mujoco-mojo")
+
+
+def print_logo():
+    logo = """
+M   M  U  U  J   OOO    CCCC   OOO      M   M   OOO   J   OOO
+MM MM  U  U  J  OO OO  CC     OO OO     MM MM  OO OO  J  OO OO
+MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
+MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
+M M M  U  U  J  OO OO  CC  C  OO OO     M M M  OO OO  J  OO OO
+M M M  UUUU  J   OOO    CCCC   OOO      M M M   OOO   J   OOO
+             J                                        J
+           JJ                                       JJ
+"""
+    console.print(
+        Panel(
+            logo,
+            expand=False,
+            style="bold cyan",
+            border_style="cyan",
+            subtitle=f"[dim]v{VERSION}[/dim]",
+        )
+    )
+
 
 def get_local_ip():
     """Returns the actual local IP address of this machine."""
@@ -346,9 +370,7 @@ cli_app = typer.Typer(
 
 def version_callback(value: bool):
     if value:
-        console.print(
-            f"[bold cyan]mujoco-mojo[/bold cyan] [bold white]{version('mujoco-mojo')}"
-        )
+        console.print(f"[bold cyan]mujoco-mojo[/bold cyan] [bold white]{VERSION}")
         raise typer.Exit()
 
 
@@ -359,7 +381,9 @@ run_app = typer.Typer(
 cli_app.add_typer(run_app, name="run")
 
 
-@cli_app.callback()
+@cli_app.callback(
+    epilog="Check out the [link=https://hydrowelder.github.io/mujoco-mojo/]full documentation[/link] for more info."
+)
 def main(
     ctx: typer.Context,
     version: Annotated[
@@ -455,6 +479,8 @@ def run_monte_carlo(
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+
+    print_logo()
 
     workdir = workdir.resolve()
 
