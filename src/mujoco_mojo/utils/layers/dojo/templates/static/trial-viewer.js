@@ -355,11 +355,24 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * SMART SORT: Pins 'time' to the top, then sorts alphabetically.
+     */
+    smartSort(list) {
+      return list.sort((a, b) => {
+        const aIsTime = a.toLowerCase() === "time";
+        const bIsTime = b.toLowerCase() === "time";
+        if (aIsTime && !bIsTime) return -1;
+        if (!aIsTime && bIsTime) return 1;
+        return a.localeCompare(b, undefined, { sensitivity: "base" });
+      });
+    },
+
+    /**
      * REFINED GENERIC LOGIC
      */
     getFilteredCols(field) {
       const search = this[field + "Search"];
-      if (!search) return this.columns;
+      if (!search) return this.smartSort([...this.columns]);
       try {
         let pattern = search.replace(/\*/g, ".*");
 
@@ -378,10 +391,12 @@ function trialViewer(trialId, externalUrl) {
         if (pattern.toLowerCase() === "time") pattern = "^time$";
 
         const query = new RegExp(pattern, "i");
-        return this.columns.filter((c) => query.test(c));
+        return this.smartSort(this.columns.filter((c) => query.test(c)));
       } catch (e) {
-        return this.columns.filter((c) =>
-          c.toLowerCase().includes(search.toLowerCase()),
+        return this.smartSort(
+          this.columns.filter((c) =>
+            c.toLowerCase().includes(search.toLowerCase()),
+          ),
         );
       }
     },
@@ -458,7 +473,7 @@ function trialViewer(trialId, externalUrl) {
         })
         .filter(Boolean);
 
-      return [...new Set([...selected, ...segments])].sort();
+      return this.smartSort([...new Set([...selected, ...segments])]);
     },
 
     getAvailableSuffixes(field) {
@@ -481,7 +496,7 @@ function trialViewer(trialId, externalUrl) {
       const available = matches
         .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))
         .filter(Boolean);
-      return [...new Set([...selected, ...available])].sort();
+      return this.smartSort([...new Set([...selected, ...available])]);
     },
 
     getActiveLevels(field) {

@@ -68,7 +68,7 @@ class ResultsManager:
     def post(
         self,
         value: float | NamedValue[float],
-        category: Literal["Bodies", "Sites", "Joints", "Sensors", "Physics", "Custom"],
+        category: Literal["Bodies", "Sites", "Joints", "Sensors", "Loads", "Custom"],
         subgroup: str | None = None,
         attr: str | None = None,
     ):
@@ -83,7 +83,7 @@ class ResultsManager:
 
         Args:
             value (float | NamedValue[float]): The numeric data to record. If a NamedValue is passed and 'subgroup' is not provided, the NamedValue's internal name is used as the subgroup.
-            category (Literal["Bodies", "Joints", "Sensors", "Physics", "Custom"]): _description_
+            category (Literal["Bodies", "Joints", "Sensors", "Loads", "Custom"]): _description_
             subgroup (str | None, optional): The top-level organizational folder (e.g., "Bodies"). Defaults to None.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
 
