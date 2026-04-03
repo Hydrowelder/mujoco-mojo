@@ -217,7 +217,7 @@
                            inputmode="numeric"
                            pattern="[0-9]*"
                            placeholder="#"
-                           class="w-10 sm:w-12 h-6 bg-transparent text-center outline-none text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                           class="w-10 sm:w-12 h-6 bg-transparent text-center outline-none text-base sm:text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     <button x-show="(warpId === 0 || warpId) && warpId != parseInt(trialId.split('_').pop())"
                             @click="warpToTrial()"
                             x-transition
@@ -261,8 +261,8 @@
                      class="flex items-center h-9 bg-slate-300/50 dark:bg-slate-800/50 p-1 rounded-md border border-slate-300 dark:border-slate-800 transition-all w-full justify-between select-none"
                      :class="vsDraft.enabled ? 'cursor-pointer hover:border-slate-400 dark:hover:border-slate-600' : 'cursor-default'">
 
-                    <div class="flex items-center gap-3">
-                        <label class="relative inline-flex items-center cursor-pointer"
+                    <div class="flex items-center gap-2 flex-1 min-w-0">
+                        <label class="relative inline-flex items-center cursor-pointer shrink-0"
                                @click.stop>
                             <input type="checkbox"
                                    x-model="vsDraft.enabled"
@@ -278,10 +278,31 @@
                         : 'translate-x-0 bg-slate-400 dark:bg-slate-500'"></div>
                         </label>
 
-                        <span class="text-[9px] font-bold uppercase tracking-widest transition-colors"
+                        <span class="text-[9px] font-black uppercase tracking-tighter truncate"
                               :class="vsDraft.enabled ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500/30 dark:text-slate-400/20'"
-                              x-text="`VS. ${vsDraft.range[0]}-${vsDraft.range[1]}`">
-                        </span>
+                              x-text="`VS. ${vsDraft.range[0]}-${vsDraft.range[1]}`"></span>
+
+                        <template x-if="vsDraft.enabled">
+                            <button @click.stop="syncVsRange()"
+                                    :disabled="vsLoading"
+                                    class="ml-auto px-3 h-6 bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 flex items-center gap-2  disabled:opacity-50">
+                                <span x-show="!vsLoading">Apply</span>
+                                <svg x-show="vsLoading"
+                                     class="animate-spin h-3 w-3 text-white"
+                                     viewBox="0 0 24 24">
+                                    <circle class="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            stroke-width="4"
+                                            fill="none"></circle>
+                                    <path class="opacity-75"
+                                          fill="currentColor"
+                                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </button>
+                        </template>
                     </div>
 
                     <div class="px-1 h-full flex items-center transition-all"
@@ -315,7 +336,7 @@
                                        x-model.number="vsDraft.range[0]"
                                        inputmode="numeric"
                                        pattern="[0-9]*"
-                                       class="h-6 bg-transparent text-center outline-none text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                       class="h-6 bg-transparent text-center outline-none text-base sm:text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                         </div>
                         <div class="space-y-1">
@@ -326,7 +347,7 @@
                                        x-model.number="vsDraft.range[1]"
                                        inputmode="numeric"
                                        pattern="[0-9]*"
-                                       class="h-6 bg-transparent text-center outline-none text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                       class="h-6 bg-transparent text-center outline-none text-base sm:text-[10px]  font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                         </div>
                     </div>
@@ -373,34 +394,6 @@
                   [&::-webkit-slider-thumb]:rounded-sm [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3
                   [&::-moz-range-thumb]:bg-cyan-500 [&::-moz-range-thumb]:border-none [&::-moz-range-thumb]:pointer-events-auto">
                     </div>
-
-                    <button @click="syncVsRange()"
-                            :disabled="vsLoading"
-                            class="w-full py-2 bg-cyan-500 text-white text-[10px] font-black uppercase tracking-widest rounded border border-cyan-500 dark:border-cyan-500 hover:bg-cyan-500 transition-all"
-                            :class="vsLoading ? 'opacity-50 cursor-wait' : ''">
-                        <template x-if="!vsLoading">
-                            <span>Apply</span>
-                        </template>
-                        <template x-if="vsLoading">
-                            <span class="flex items-center justify-center gap-2">
-                                <svg class="animate-spin h-3 w-3 text-white"
-                                     xmlns="http://www.w3.org/2000/svg"
-                                     fill="none"
-                                     viewBox="0 0 24 24">
-                                    <circle class="opacity-25"
-                                            cx="12"
-                                            cy="12"
-                                            r="10"
-                                            stroke="currentColor"
-                                            stroke-width="4"></circle>
-                                    <path class="opacity-75"
-                                          fill="currentColor"
-                                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Syncing Trials...
-                            </span>
-                        </template>
-                    </button>
                 </div>
             </div>
         </div>
