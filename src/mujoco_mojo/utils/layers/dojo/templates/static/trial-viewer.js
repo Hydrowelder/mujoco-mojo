@@ -341,14 +341,143 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
-     * Getter for filtered signals list in the Y-Axis menu
+     * REFINED GENERIC LOGIC
      */
-    get filteredCols() {
-      return !this.ySearch
-        ? this.columns
-        : this.columns.filter((c) =>
-            c.toLowerCase().includes(this.ySearch.toLowerCase()),
+    getFilteredCols(field) {
+      const search = this[field + "Search"];
+      if (!search) return this.columns;
+      try {
+        let pattern = search.replace(/\*/g, ".*");
+
+        // The "Fuzzy Bridge":
+        // This ensures that "xpos/" or "xpos" both match "xpos:x"
+        // It makes the trailing slash optional when followed by a suffix
+        pattern = pattern.replace(/\/?:/g, ".*:");
+
+        // If the user manually typed a trailing slash but it's a leaf,
+        // we make that slash optional in the regex.
+        if (pattern.endsWith("/")) {
+          pattern = pattern.replace(/\/$/, "\/?");
+        }
+
+        if (pattern.startsWith(":")) pattern = ".*" + pattern;
+        if (pattern.toLowerCase() === "time") pattern = "^time$";
+
+        const query = new RegExp(pattern, "i");
+        return this.columns.filter((c) => query.test(c));
+      } catch (e) {
+        return this.columns.filter((c) =>
+          c.toLowerCase().includes(search.toLowerCase()),
+        );
+      }
+    },
+
+    toggleRegexSegment(field, segment, depth = null) {
+      const key = field + "Search";
+      let [pathPart, suffixPart] = (this[key] || "").split(":");
+      pathPart = pathPart || "";
+      suffixPart = suffixPart || "";
+
+      if (depth === "suffix") {
+        let active = suffixPart.split("|").filter(Boolean);
+        const cleanSeg = segment.replace(":", "");
+        active = active.includes(cleanSeg)
+          ? active.filter((s) => s !== cleanSeg)
+          : [...active, cleanSeg];
+        suffixPart = active.sort().join("|");
+      } else {
+        let parts = pathPart.split("/").filter((p) => p !== "");
+        let target = parts[depth] || "";
+        let items = target.replace(/[()]/g, "").split("|").filter(Boolean);
+
+        items = items.includes(segment)
+          ? items.filter((i) => i !== segment)
+          : [...items, segment];
+
+        if (items.length === 0) {
+          parts = parts.slice(0, depth);
+        } else {
+          parts[depth] =
+            items.length === 1 ? items[0] : `(${items.sort().join("|")})`;
+        }
+
+        // --- NEW: Folder vs Leaf Validation ---
+        pathPart = parts.filter((p) => p !== "").join("/");
+
+        if (pathPart && pathPart.toLowerCase() !== "time") {
+          // Check if this path ever exists as a parent directory in your data
+          // We look for any column that starts with "pathPart/"
+          const isFolder = this.columns.some((c) =>
+            c.toLowerCase().startsWith(pathPart.toLowerCase() + "/"),
           );
+
+          if (isFolder) {
+            pathPart += "/";
+          }
+        }
+      }
+      this[key] = pathPart + (suffixPart ? ":" + suffixPart : "");
+    },
+
+    getSegmentsAtDepth(field, depth) {
+      const search = this[field + "Search"] || "";
+      const pathSearch = search.split(":")[0] || "";
+      const parts = pathSearch.split("/").filter((p) => p !== "");
+
+      // 1. Orphan Logic (keep current selections visible)
+      const selected = (parts[depth] || "")
+        .replace(/[()]/g, "")
+        .split("|")
+        .filter(Boolean);
+
+      // 2. Discovery Logic
+      const prefixParts = parts.slice(0, depth);
+      const prefix = prefixParts.join("/").replace(/\//g, "\\/?");
+      // If prefix is empty, we match the start of the string
+      const regex = new RegExp("^" + (prefix ? prefix : ""), "i");
+
+      const matches = this.columns.filter((c) => regex.test(c));
+      const segments = matches
+        .map((c) => {
+          const p = c.split(":")[0].split("/");
+          return p[depth] || null;
+        })
+        .filter(Boolean);
+
+      return [...new Set([...selected, ...segments])].sort();
+    },
+
+    getAvailableSuffixes(field) {
+      const search = this[field + "Search"];
+      const [pathPart, suffixPart] = search.split(":");
+
+      // 1. Orphan logic
+      const selected = (suffixPart || "")
+        .split("|")
+        .filter(Boolean)
+        .map((s) => ":" + s);
+
+      // 2. Discovery: Find suffixes matching the current path
+      const pathRegex = new RegExp(
+        "^" + (pathPart || "").replace(/\//g, "\\/?"),
+        "i",
+      );
+      const matches = this.columns.filter((c) => pathRegex.test(c));
+
+      const available = matches
+        .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))
+        .filter(Boolean);
+      return [...new Set([...selected, ...available])].sort();
+    },
+
+    getActiveLevels(field) {
+      const search = this[field + "Search"] || "";
+      // Isolate path from suffix
+      const pathOnly = search.split(":")[0] || "";
+      const parts = pathOnly.split("/").filter((p) => p !== "");
+
+      // Ensure we always show at least one level (the root)
+      return Array.from({ length: parts.length + 1 }, (_, i) => i);
     },
 
     /**
