@@ -25,13 +25,15 @@ function monitor() {
         const data = await resp.json();
 
         if (data && !data.error) {
-          this.handleDataUpdate(data);
-          // update global store with the initial pulse
           Alpine.store("dojo").updateSync(Date.now(), data.is_complete);
+          this.handleDataUpdate(data);
         }
       } catch (e) {
         console.warn("Monitor bootstrap failed.", e);
       } finally {
+        // We must call this to restart the SSE connection if the job was restarted!
+        Alpine.store("dojo").startGlobalSync();
+
         // tell the global store to start the live pulse if needed
         const shouldForce = this.status.is_complete;
         Alpine.store("dojo").setPageReady(true, shouldForce);

@@ -235,15 +235,25 @@ class JobStatus(MojoBaseModel):
     def n_remaining(self) -> int:
         return self.n_trial - self.n_done
 
+    def clear_cache(self) -> None:
+        """Wipes the internal trial cache to force a full disk re-scan."""
+        self._cache.clear()
+
     def trial_num_to_path(self, trial_num: int) -> Path:
         return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
 
     def refresh_from_disk(
-        self, n_proc: int = 1, progress_callback: Callable[[float], None] | None = None
+        self,
+        n_proc: int = 1,
+        progress_callback: Callable[[float], None] | None = None,
+        force_refetch: bool = False,
     ) -> None:
         """
         Scans the workdir to identify which trials still need execution, but only for runs not already in the cache (i.e., completed).
         """
+        if force_refetch:
+            self.clear_cache()
+
         max_workers = max(1, n_proc)
 
         # identify work
@@ -580,46 +590,46 @@ class JobStatus(MojoBaseModel):
         from mujoco_mojo.runtime.results_manager import ResultsManager
 
         # We trigger the disk refresh here so the data is fresh
-        obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
-        obj.refresh_from_disk(n_proc=obj.n_proc if n_proc is None else n_proc)
+        # obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
+        # obj.refresh_from_disk(n_proc=obj.n_proc if n_proc is None else n_proc)
 
-        avg_seconds = obj.average_trial_duration.total_seconds()
+        avg_seconds = self.average_trial_duration.total_seconds()
 
         # Avoid divide by zero if no trials have finished yet
         throughput = 0
         if avg_seconds > 0:
-            throughput = (60.0 / avg_seconds) * obj.n_proc
+            throughput = (60.0 / avg_seconds) * self.n_proc
 
         success_tns = [
-            tn for tn, comp in obj._registry.items() if comp == Completion.SUCCESS
+            tn for tn, comp in self._registry.items() if comp == Completion.SUCCESS
         ]
         last_success_tn = max(success_tns) if success_tns else None
 
         failed_with_db = []
-        failed_tns = obj.failed_trial_nums
+        failed_tns = self.failed_trial_nums
         for tn in failed_tns:
-            if (obj.trial_num_to_path(tn) / ResultsManager.default_db_name()).exists():
+            if (self.trial_num_to_path(tn) / ResultsManager.default_db_name()).exists():
                 failed_with_db.append(tn)
 
         return {
-            "progress": obj.progress * 100,
-            "n_success": obj.n_success,
-            "n_failed": obj.n_failed,
-            "n_trial": obj.n_trial,
-            "n_done": obj.n_done,
-            "n_remaining": obj.n_remaining,
-            "failure_rate": obj.failure_rate,
+            "progress": self.progress * 100,
+            "n_success": self.n_success,
+            "n_failed": self.n_failed,
+            "n_trial": self.n_trial,
+            "n_done": self.n_done,
+            "n_remaining": self.n_remaining,
+            "failure_rate": self.failure_rate,
             "throughput": round(throughput, 1),
-            "avg_duration": str(obj.average_trial_duration).split(".")[0],
-            "time_remaining": str(obj.time_remaining_average_success).split(".")[0],
-            "elapsed": str(obj.elapsed).split(".")[0],
-            "is_complete": obj.progress >= 1.0,
-            "success_tns": obj.success_trial_nums,
+            "avg_duration": str(self.average_trial_duration).split(".")[0],
+            "time_remaining": str(self.time_remaining_average_success).split(".")[0],
+            "elapsed": str(self.elapsed).split(".")[0],
+            "is_complete": self.progress >= 1.0,
+            "success_tns": self.success_trial_nums,
             "failure_tns": failed_tns,
             "last_success_tn": last_success_tn,
-            "start_time": f"{obj._utc_to_local(obj.start_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
-            "end_time": f"{obj._utc_to_local(obj.end_time).strftime('%Y-%m-%d %H:%M:%S')} {obj.local_tzabbr}",
+            "start_time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
+            "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
             "version": f"mujoco-mojo v{version('mujoco-mojo')}",
-            "padding_style": obj.padding_style,
+            "padding_style": self.padding_style,
             "failure_tns_with_db": failed_with_db,
         }

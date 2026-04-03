@@ -42,22 +42,19 @@ async def broadcast_updates():
                 await _emit_to_all({"type": "start", "total": job.n_trial})
 
                 # 2. Only perform the heavy disk scan if the job is actually active
-                if not job.is_done:
-                    last_reported = [0]
+                last_reported = [0]
 
-                    def throttled_sync_reporter(pct: float):
-                        if pct >= last_reported[0] + 5 or pct >= 100:
-                            last_reported[0] = int(pct // 5) * 5
-                            asyncio.run_coroutine_threadsafe(
-                                _emit_to_all({"type": "progress", "value": pct}), loop
-                            )
+                def sync_reporter(pct: float):
+                    if pct >= last_reported[0] + 5 or pct >= 100:
+                        last_reported[0] = int(pct // 5) * 5
+                        asyncio.run_coroutine_threadsafe(
+                            _emit_to_all({"type": "progress", "value": pct}), loop
+                        )
 
-                    await loop.run_in_executor(
-                        None,
-                        lambda: job.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
-                            progress_callback=throttled_sync_reporter
-                        ),
-                    )
+                await loop.run_in_executor(
+                    None,
+                    lambda: job.refresh_from_disk(progress_callback=sync_reporter),  # pyright: ignore[reportOptionalMemberAccess]
+                )
 
                 # 3. Always send the "final" state to everyone
                 final_data = job.to_monitor_json()
@@ -98,6 +95,12 @@ async def get_status():
     """The 'Pulse' endpoint for Alpine.js."""
     if not shared.CURRENT_JOB:
         return {"error": "No job loaded"}
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: shared.CURRENT_JOB.refresh_from_disk(force_refetch=True),  # pyright: ignore[reportOptionalMemberAccess]
+    )
 
     return shared.CURRENT_JOB.to_monitor_json()
 
