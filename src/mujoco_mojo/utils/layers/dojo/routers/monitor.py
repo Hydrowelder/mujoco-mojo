@@ -86,7 +86,9 @@ async def _emit_to_all(message_dict: dict):
 async def get_monitor(request: Request):
     """Serves the initial monitor frame."""
     return shared.templates.TemplateResponse(
-        name="monitor.html", context={"request": request, "job": shared.CURRENT_JOB}
+        request=request,
+        name="monitor.html",
+        context={"request": request, "job": shared.CURRENT_JOB},
     )
 
 
