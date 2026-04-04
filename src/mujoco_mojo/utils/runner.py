@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import itertools
+import logging
+import multiprocessing
 import os
 import re
 import shutil
@@ -11,6 +13,7 @@ import sys
 from bdb import BdbQuit
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from logging.handlers import QueueListener
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -32,7 +35,7 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
 )
-from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.log import get_logger, worker_init
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -613,7 +616,19 @@ class MojoRunner:
             logger.info(
                 f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
             )
-            executor = ProcessPoolExecutor(max_workers=self.config.n_proc)
+            # needed for logging on Windows
+            m = multiprocessing.Manager()
+            log_queue = m.Queue()
+
+            parent_log_level = logging.getLogger().getEffectiveLevel()
+            listener = QueueListener(log_queue, *logging.getLogger().handlers)
+            listener.start()
+
+            executor = ProcessPoolExecutor(
+                max_workers=self.config.n_proc,
+                initializer=worker_init,
+                initargs=(log_queue, parent_log_level),
+            )
             try:
                 future_to_tn = {
                     executor.submit(

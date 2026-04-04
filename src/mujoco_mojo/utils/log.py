@@ -1,7 +1,7 @@
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import QueueHandler, RotatingFileHandler
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -98,3 +98,22 @@ def setup_logger(
         logger.addHandler(file_handler)
 
     return logger
+
+
+def worker_init(queue: Any, level: int):
+    """
+    Initializes the worker process logger to match the parent's state.
+
+    This is used for logging with multiprocessing.
+    """
+    root = logging.getLogger()
+
+    # clear any default handlers spawned by the new process
+    root.handlers.clear()
+
+    # add the QueueHandler to ship logs back to the main process
+    handler = QueueHandler(queue)
+    root.addHandler(handler)
+
+    # set log level
+    root.setLevel(level)

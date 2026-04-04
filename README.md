@@ -5,6 +5,32 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/mujoco-mojo/">
+    <img src="https://img.shields.io/pypi/v/mujoco-mojo.svg" alt="PyPI version">
+  </a>
+  <a href="https://pypi.org/project/mujoco-mojo/">
+    <img src="https://img.shields.io/pypi/pyversions/mujoco-mojo.svg" alt="Python versions">
+  </a>
+  <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml">
+    <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg" alt="Tests & Release Status">
+  </a>
+  <a href="https://docs.pydantic.dev/latest/">
+    <img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2">
+  </a>
+  <a href="https://opensource.org/licenses/Apache-2.0">
+    <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License">
+  </a>
+  <a href="https://hydrowelder.github.io/mujoco-mojo/">
+    <img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Documentation">
+  </a>
+  <a href="https://pypistats.org/packages/mujoco-mojo">
+    <img src="https://img.shields.io/pypi/dm/mujoco-mojo.svg" alt="Downloads">
+  </a>
+</p>
+
+---
+
 A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
@@ -14,8 +40,6 @@ A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered 
 * **Monitor:** Track progress via a **zero-dependency web dashboard** and persistent logs.
 * **Assess:** Quickly view **interactive results** of a trial in context of others.
 * **Reproduce:** Automatic **environment snapshotting** (`requirements.txt`) for every job.
-
-> [Documentation](https://hydrowelder.github.io/mujoco-mojo/)
 
 ## Installation
 Install using `uv` (recommended):
@@ -91,6 +115,7 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 * Pro-Grade Tooling: Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
 * Keyboard-First Design: Full hotkey support for warping between trials and managing views without leaving the home row.
 
+---
 
 > [!NOTE]
 > **MuJoCo Mojo** is an independently developed open-source toolbox. It is **not** affiliated with, sponsored by, or endorsed by **Google DeepMind** or the official **MuJoCo** development team.
