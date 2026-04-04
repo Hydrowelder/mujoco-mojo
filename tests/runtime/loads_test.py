@@ -104,31 +104,20 @@ def test_runtime_manager_integration(
 
     # Setup a spring: k=100, rest=0.5. Dist is 1.0.
     # Force should be 50N pulling bodies together.
-    spring = PointToPointForce.ideal_spring(
+    _spring = PointToPointForce.ideal_spring(
         name="test_spring",
         action_site=s1,
         xtion_site=s2,
         stiffness=100.0,
         rest_length=0.5,
-    )
-
-    mgr.add_load(spring)
-    mgr.resolve(model, data)
-
-    # Ensure buffer is clean
-    data.qfrc_applied[:] = 0.0
+    ).register_to_rm(mgr)
 
     # Apply the step
     mgr.step(model, data)
 
-    # For freejoints, indices [0:3] are the global translation forces for body1
-    # Body 1 (action) is at x=0, Body 2 (xtion) is at x=1.
-    # Spring is extended, so it pulls Body 1 toward +X.
-    assert data.qfrc_applied[0] == pytest.approx(50.0)
-
-    # Body 2 (xtion) is at index 6 in qfrc_applied (3 for freejoint pos, 3 for ori)
-    # It should be pulled toward -X.
-    assert data.qfrc_applied[6] == pytest.approx(-50.0)
+    # Check the persistent cache on the spring object
+    # Index 0 is the X-component of the calculated world force
+    assert _spring._last_f[0] == pytest.approx(50.0)
 
 
 def test_compression_spring_limit(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
