@@ -14,6 +14,11 @@
     --md-accent-fg-color: #06b6d4;
 }
 
+/* Disable the new-tab icon for badge links */
+a.badge-link::after {
+    content: none !important;
+}
+
 /* ----------------------------------------------------------
    1. THEME COLOR SYNC (Dashboard Palettes)
    ---------------------------------------------------------- */
