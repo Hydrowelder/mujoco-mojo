@@ -1,4 +1,4 @@
-from process_manager import (
+from stochas import (
     NOMINAL_TRIAL_NUM,
     BaseDict,
     BaseList,

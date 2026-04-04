@@ -4,7 +4,7 @@ import pytest
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import Inertial
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.process_manager import (
+from mujoco_mojo.stochas import (
     DistName,
     NormalDistribution,
     UniformDistribution,

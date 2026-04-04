@@ -9,9 +9,9 @@ from pydantic import PrivateAttr, model_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
-from mujoco_mojo.process_manager import NamedValue
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
+from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 

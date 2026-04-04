@@ -156,7 +156,7 @@ from .mjcf import (
     ZAxis,
 )
 from .mojo_model import MojoModel
-from .process_manager import (
+from .stochas import (
     NOMINAL_TRIAL_NUM,
     BaseDict,
     BaseList,

@@ -7,7 +7,7 @@ from pydantic import Field, PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
-from mujoco_mojo.process_manager import (
+from mujoco_mojo.stochas import (
     NOMINAL_TRIAL_NUM,
     Dist,
     DistributionDict,

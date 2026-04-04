@@ -475,7 +475,7 @@ def run_monte_carlo(
     """
     from numpydantic import NDArray
 
-    from mujoco_mojo.process_manager import NamedValueDict
+    from mujoco_mojo.stochas import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)

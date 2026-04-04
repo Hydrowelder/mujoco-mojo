@@ -26,7 +26,7 @@ uv add mujoco-mojo
 
 or with `pip`:
 
-```
+```bash
 pip install mujoco-mojo
 ```
 
