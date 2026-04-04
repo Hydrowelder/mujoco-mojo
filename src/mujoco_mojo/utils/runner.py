@@ -21,7 +21,7 @@ from pydantic import field_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.process_manager import NOMINAL_TRIAL_NUM, NamedValueDict
+from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM, NamedValueDict
 from mujoco_mojo.utils.defaults import (
     DEFAULT_MC_N_PROC,
     DEFAULT_MC_N_TRIAL,

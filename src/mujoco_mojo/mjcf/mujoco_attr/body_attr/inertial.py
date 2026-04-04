@@ -9,7 +9,7 @@ from pydantic import field_validator, model_validator
 from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.process_manager import Dist, Distribution, NamedValue
+from mujoco_mojo.stochas import Dist, Distribution, NamedValue
 from mujoco_mojo.typing import Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
 

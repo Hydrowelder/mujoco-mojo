@@ -7,7 +7,7 @@ import duckdb
 import mujoco
 import polars as pl
 
-from mujoco_mojo.process_manager import NamedValue, NamedValueDict, ValueName
+from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
