@@ -440,6 +440,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dojo-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dojo Dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Dojo Dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monitor-real-time-oversight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monitor: Real-Time Oversight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mosaic-advanced-telemetry-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mosaic: Advanced Telemetry Analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -578,6 +617,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dojo-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dojo Dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Dojo Dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monitor-real-time-oversight" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monitor: Real-Time Oversight
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mosaic-advanced-telemetry-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mosaic: Advanced Telemetry Analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -644,9 +722,10 @@
 <p>A <strong>complete MJCF lifecycle and trial orchestration suite</strong> for MuJoCo, powered by <strong>Pydantic v2</strong>.</p>
 <p><strong>MuJoCo Mojo</strong> bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.</p>
 <ul>
-<li><strong>Model:</strong> Build MJCFs via <strong>validated Python objects</strong>—no more manual XML hacking.</li>
+<li><strong>Model:</strong> Build MJCFs via <strong>validated Python objects</strong> allowing for programatic generation.</li>
 <li><strong>Scale:</strong> Execute <strong>multi-threaded Monte Carlo trials</strong> with built-in resume logic.</li>
 <li><strong>Monitor:</strong> Track progress via a <strong>zero-dependency web dashboard</strong> and persistent logs.</li>
+<li><strong>Assess:</strong> Quickly view <strong>interactive results</strong> of a trial in context of others.</li>
 <li><strong>Reproduce:</strong> Automatic <strong>environment snapshotting</strong> (<code>requirements.txt</code>) for every job.</li>
 </ul>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">¶</a></h2>
@@ -705,8 +784,25 @@
 <li>
 <p>Support for running jobs with SLURM for distributed compute</p>
 </li>
-<li>Lightweight browser-based dashboard tool for runtime monitoring with system/light/darkmode which works with or without an internet connection</li>
 <li>Built in Rich logging for terminal and a rotating file handler for persistent logs</li>
+</ul>
+<h3 id="dojo-dashboard">Dojo Dashboard<a class="headerlink" href="#dojo-dashboard" title="Permanent link">¶</a></h3>
+<p>A zero-dependency, offline-first web suite for monitoring and analyzing your simulation jobs in real-time.</p>
+<h4 id="monitor-real-time-oversight">Monitor: Real-Time Oversight<a class="headerlink" href="#monitor-real-time-oversight" title="Permanent link">¶</a></h4>
+<ul>
+<li>Live Progress Tracking: Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.</li>
+<li>Success/Failure Analytics: Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.</li>
+<li>Sensory Feedback: Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.</li>
+<li>Deep-Linked Navigation: Jump straight from the monitor to any individual trial in the viewer with one click.</li>
+</ul>
+<h4 id="mosaic-advanced-telemetry-analysis">Mosaic: Advanced Telemetry Analysis<a class="headerlink" href="#mosaic-advanced-telemetry-analysis" title="Permanent link">¶</a></h4>
+<ul>
+<li>High-Fidelity Plotting: Hardware-accelerated visualization using Plotly.js for seamless zooming and panning through millions of data points.</li>
+<li>Dynamic Versus Mode: Overlay current telemetry against previous trials using an intuitive range-selection slider for instant regression testing.</li>
+<li>Regex-Powered Filtering: Navigate high-dimensional datasets using a "folder-style" signal selector with suffix and regex support.</li>
+<li>State Persistence &amp; Sharing: Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.</li>
+<li>Pro-Grade Tooling: Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).</li>
+<li>Keyboard-First Design: Full hotkey support for warping between trials and managing views without leaving the home row.</li>
 </ul>
 
 
