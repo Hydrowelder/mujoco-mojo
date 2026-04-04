@@ -9,7 +9,6 @@ from mujoco_mojo import mjcf
 
 
 def test_import():
-    import mujoco_mojo as mojo
     from mujoco_mojo import mjcf
 
     mojo.__name__
@@ -53,11 +52,9 @@ mojo_model = mjcf.Mujoco(
     compilers=[mjcf.Compiler(balanceinertia=True)],
 )
 
-
 # =============== ensure it works with mujoco ===============
-xml = mojo.utils.to_pretty_xml(mojo_model.to_xml(exclude_default=True))
 save_as = Path(__file__).with_name("result_test_writer.xml")
-save_as.write_text(xml)
+mojo_model.write_xml(file=save_as, exclude_default=True)
 
 model = mojo_model.to_mj_model()
 mujoco_material_id = mujoco.mj_name2id(

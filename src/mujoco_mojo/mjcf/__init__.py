@@ -153,6 +153,7 @@ from .orientation import (
     ZAxis,
 )
 from .plugin import Plugin
+from .pose import Pose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
 from .position import Pos
 
 __all__ = [
@@ -227,6 +228,12 @@ __all__ = [
     "Pair",
     "Plugin",
     "Pos",
+    "Pose",
+    "PoseAxisAngle",
+    "PoseEuler",
+    "PoseQuat",
+    "PoseXYAxes",
+    "PoseZAxis",
     "Quat",
     "Sensor",
     "SensorAccelerometer",
