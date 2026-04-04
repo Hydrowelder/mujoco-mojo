@@ -37,3 +37,12 @@ repos:
     rev: v1.1.408
     hooks:
       - id: pyright
+  - repo: local
+    hooks:
+      - id: act-test
+        name: Run GitHub Actions locally (act)
+        entry: act -j test
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        files: ^(src/|tests/|pyproject\.toml|uv\.lock)
