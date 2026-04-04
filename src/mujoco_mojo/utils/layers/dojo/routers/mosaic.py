@@ -32,7 +32,7 @@ def get_network_ip():
 async def get_mosaic(request: Request):
     """Serves the initial mosiac frame."""
     return shared.templates.TemplateResponse(
-        name="mosaic.html", context={"request": request}
+        request=request, name="mosaic.html", context={"request": request}
     )
 
 
@@ -90,6 +90,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
             pass
 
     return shared.templates.TemplateResponse(
+        request=request,
         name="trial_viewer.html",
         context={
             "request": request,
