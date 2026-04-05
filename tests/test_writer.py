@@ -30,8 +30,7 @@ mojo_model = mjcf.Mujoco(
                 name=mojot.GeomName("floor"),
                 size=np.asarray((5, 5, 0.1)),
                 rgba=np.array((0.5, 0.5, 0.5, 1)),
-                pos=mjcf.Pos(pos=np.array((1, 2, 3))),
-                orientation=quat,
+                pose=quat.as_pose(np.array((1, 2, 3))),
                 material=material.name,  # static analyzer warns you if this is not MaterialName type
             ),
         ],

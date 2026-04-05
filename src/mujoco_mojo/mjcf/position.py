@@ -4,6 +4,9 @@ import numpy as np
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["Pos"]
 
@@ -35,7 +38,9 @@ class Pos(XMLModel):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Pos):
-            return NotImplemented
+            msg = f"Invalid type ({type(other)}) to check equality for Pos type"
+            logger.error(msg)
+            raise NotImplementedError(msg)
         return np.array_equal(np.asarray(self.pos), np.asarray(other.pos))
 
     def __getitem__(self, key):

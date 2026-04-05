@@ -5,8 +5,7 @@ from typing import ClassVar
 import mujoco
 import numpy as np
 
-from mujoco_mojo.mjcf.orientation import Orientation, Quat
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import BodyName, CameraName, TrackingMode, Vec2, VecN
 
@@ -25,8 +24,7 @@ class Camera(XMLModel):
         "fovy",
         "ipd",
         "resolution",
-        "pos",
-        "orientation",
+        "pose",
         "mode",
         "target",
         "focal",
@@ -84,11 +82,10 @@ class Camera(XMLModel):
     ipd: float = 0.068
     """Inter-pupilary distance. This attribute only has an effect during stereoscopic rendering. It specifies the distance between the left and right viewpoints. Each viewpoint is shifted by +/- half of the distance specified here, along the X axis of the camera frame."""
 
-    pos: Pos = Pos(pos=np.array((0, 0, 0)))
-    """Position of the camera frame."""
+    pose: Pose = PoseQuat()
+    """Position and orientation of the camera frame.
 
-    orientation: Orientation = Quat()
-    """Orientation of the camera frame. See Frame orientations. Note that specifically for cameras, the xyaxes attribute is semantically convenient as the X and Y axes correspond to the directions "right" and "up" in pixel space, respectively."""
+    See Frame orientations. Note that specifically for cameras, the xyaxes attribute is semantically convenient as the X and Y axes correspond to the directions "right" and "up" in pixel space, respectively."""
 
     user: VecN | None = None
     """See User parameters."""
