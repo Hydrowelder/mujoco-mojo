@@ -125,6 +125,7 @@ function trialViewer(trialId, externalUrl) {
       if (this.historyStack.length > this.maxHistory) this.historyStack.shift();
 
       this.historyIndex = this.historyStack.length - 1;
+      this.persistHistory();
     },
 
     undo() {
@@ -132,6 +133,7 @@ function trialViewer(trialId, externalUrl) {
         this.isUndoing = true;
         this.historyIndex--;
         this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.persistHistory();
         this.$nextTick(() => {
           this.isUndoing = false;
         });
@@ -144,11 +146,20 @@ function trialViewer(trialId, externalUrl) {
         this.isUndoing = true;
         this.historyIndex++;
         this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.persistHistory();
         this.$nextTick(() => {
           this.isUndoing = false;
         });
         this.notify("Redo", "info");
       }
+    },
+
+    persistHistory() {
+      const bundle = {
+        stack: this.historyStack,
+        index: this.historyIndex,
+      };
+      localStorage.setItem("mojo_mosaic_history", JSON.stringify(bundle));
     },
 
     async fetchTrialData(id, requiredCols = []) {
@@ -885,6 +896,22 @@ function trialViewer(trialId, externalUrl) {
         // Default fallback: Set X-axis to 'time' if available
         if (this.columns.includes("time")) this.config.xAxis = "time";
       }
+
+      // rehydrate history stack
+      const savedHistory = localStorage.getItem("mojo_mosaic_history");
+      if (savedHistory) {
+        try {
+          const { stack, index } = JSON.parse(savedHistory);
+          this.historyStack = stack;
+          this.historyIndex = index;
+        } catch (e) {
+          console.warn("History recovery failed, starting fresh.");
+          this.pushHistory();
+        }
+      } else {
+        this.pushHistory(); // First-time setup
+      }
+
       // Sync the text editor string with the loaded object
       this.configRaw = JSON.stringify(this.config, null, 4);
     },
@@ -894,6 +921,7 @@ function trialViewer(trialId, externalUrl) {
      */
     saveAndRender() {
       localStorage.setItem("mojo_mosaic_config", JSON.stringify(this.config));
+      this.persistHistory();
       this.renderPlot();
 
       // Guarded resize in case the plot container recently became visible
