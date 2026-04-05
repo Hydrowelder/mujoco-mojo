@@ -12,8 +12,8 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
     FlexCompElasticity,
 )
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.pin import FlexCompPin
-from mujoco_mojo.mjcf.orientation import Orientation
 from mujoco_mojo.mjcf.plugin import Plugin
+from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FlexCompDOF, FlexCompType, MaterialName, Vec3, Vec4, VecN
 from mujoco_mojo.utils.utils import is_empty_list
@@ -90,8 +90,7 @@ class FlexComp(XMLModel):
         "material",
         "rgba",
         "flatskin",
-        "pos",
-        "orientation",
+        "pose",
         "origin",
     )
 
@@ -169,11 +168,10 @@ class FlexComp(XMLModel):
     rigid: bool | None = None
     """If this is true, all points correspond to vertices within the parent body, and no new bodies are created. This is equivalent to pinning all points. Note that if all points are indeed pinned, the model compiler will detect that the flex is rigid (which behaves is a non-convex mesh in collision detection)."""
 
-    pos: Vec3 | None = None
-    """This 3D vector translates all points relative to the frame of the parent body."""
+    pose: Pose = PoseQuat()
+    """This 3D vector translates all points relative to the frame of the parent body.
 
-    orientation: Orientation | None = None
-    """If using a quaternion, rotation of all points around the pos vector specified above. Together these two vectors define a pose transformation, used to position and orient the points as needed.
+    For the orientation, if using a quaternion, rotation of all points around the pos vector specified above. Together these two vectors define a pose transformation, used to position and orient the points as needed.
 
     Other orientations are options in place of quat."""
 

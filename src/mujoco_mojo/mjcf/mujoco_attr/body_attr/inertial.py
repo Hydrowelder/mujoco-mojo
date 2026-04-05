@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Self
 
-import mujoco
 import numpy as np
 from pydantic import field_validator, model_validator
 
-from mujoco_mojo.mjcf.orientation import Orientation, Quat
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.orientation import (
+    Orientation,
+    OrientationBase,
+    Quat,
+)
+from mujoco_mojo.mjcf.pose import (
+    Pose,
+)
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.stochas import Dist, Distribution, NamedValue
-from mujoco_mojo.typing import Vec3, Vec6
+from mujoco_mojo.typing import EulerSeq, Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
@@ -27,19 +32,15 @@ class Inertial(XMLModel):
     tag = "inertial"
 
     attributes = (
-        "pos",
-        "orientation",
+        "pose",
         "mass",
         "diaginertia",
         "fullinertia",
     )
     __exclusive_groups__ = (("diaginertia", "fullinertia"),)
 
-    pos: Pos
-    """Position of the inertial frame. This attribute is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
-
-    orientation: Orientation | None = None
-    """Orientation of the inertial frame. See Frame orientations."""
+    pose: Pose
+    """Position and orientation of the inertial frame. The position attribute is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
 
     mass: float
     """Mass of the body. Negative values are not allowed. MuJoCo requires the inertia matrix in generalized coordinates to be positive-definite, which can sometimes be achieved even if some bodies have zero mass. In general however there is no reason to use massless bodies. Such bodies are often used in other engines to bypass the limitation that joints cannot be combined, or to attach sensors and cameras. In MuJoCo primitive joint types can be combined, and we have sites which are a more efficient attachment mechanism."""
@@ -209,25 +210,6 @@ class Inertial(XMLModel):
 
         return self
 
-    def rt_world_pos(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
-        """
-        Calculates the world-space position of this center of mass.
-
-        Requires the body's world transform from mjData.
-        """
-        # get the parent body ID
-        body_id = mj_model.body_parentid[self.get_id(mj_model)]
-
-        # get the body world transform
-        xpos = mj_data.xpos[body_id]
-        xmat = mj_data.xmat[body_id].reshape(3, 3)
-
-        # transform local offset to world space
-        # r_world = r_body + R_body @ offset_local
-        return xpos + xmat @ np.asarray(self.pos)
-
     def get_body_frame_inertia(self) -> np.ndarray:
         """
         Calculates the 3x3 inertia matrix expressed in the parent body's frame.
@@ -239,13 +221,13 @@ class Inertial(XMLModel):
 
         """
         # rotate into body frame axes
-        R = self.orientation.as_matrix() if self.orientation else np.eye(3)
+        R = self.pose.as_matrix()
         I_local = self.inertia_matrix
         I_rot = R @ I_local @ R.T
 
         # parallel axis theorem
         # I_body = I_com + m ([r_skew]^2) -> I_com + m * ( (p.T @ p) * eye(3) - p @ p.T )
-        p = np.asarray(self.pos)
+        p = np.asarray(self.pose.pos)
         m = self.mass
 
         # cross product matrix
@@ -285,8 +267,7 @@ class Inertial(XMLModel):
 
         return cls(
             mass=mass,
-            pos=Pos(pos=pos),
-            orientation=Quat.from_matrix(eigvecs),
+            pose=Quat.from_matrix(eigvecs).as_pose(pos=pos),
             diaginertia=eigvals,
         )
 
@@ -312,13 +293,12 @@ class Inertial(XMLModel):
         m_total = m1 + m2
 
         if m_total <= 0:
-            logger.warning(
-                f"Adding inertials would result in a negative mass ({m1} + {m2} = {m_total})"
-            )
-            return self
+            msg = f"Adding inertials would result in a negative mass ({m1} + {m2} = {m_total})"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # new CoM
-        p1, p2 = np.asarray(self.pos), np.asarray(other.pos)
+        p1, p2 = np.asarray(self.pose.pos), np.asarray(other.pose.pos)
         pos_total = (m1 * p1 + m2 * p2) / m_total
 
         # sum inertias in the common body frame
@@ -355,7 +335,7 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         # new CoM
-        p1, p2 = np.asarray(self.pos), np.asarray(other.pos)
+        p1, p2 = np.asarray(self.pose.pos), np.asarray(other.pose.pos)
         pos_total = (m1 * p1 - m2 * p2) / m_total
 
         # sum inertias in the common body frame
@@ -391,7 +371,9 @@ class Inertial(XMLModel):
             float | Dist,
         ]
         | None = None,
-        orientation: Orientation | None = None,
+        orientation: tuple[type[OrientationBase], list[float | Dist], EulerSeq | None]
+        | Orientation
+        | None = None,
         max_retries: int = 10,
     ) -> Inertial:
         """
@@ -405,7 +387,7 @@ class Inertial(XMLModel):
             pos (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist]): Position vector or tuple of component distributions.
             diaginertia (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist] | None, optional): Principal moments or tuple of component distributions. Defaults to None.
             fullinertia (Vec6 | tuple[ float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, ] | None, optional): Full inertia vector or tuple of component distributions. Defaults to None.
-            orientation (Orientation | None, optional): Fixed orientation for the inertial frame. Defaults to None.
+            orientation (tuple[type[OrientationBase], list[float | Dist], EulerSeq | None] | Orientation | None, optional): Orientation for the inertial frame. Defaults to None.
             max_retries (int, optional): Maximum number of re-samples on physics failure. Defaults to 10.
 
         Raises:
@@ -468,17 +450,46 @@ class Inertial(XMLModel):
                 else (None, [])
             )
 
+            resolved_ori = None
+            ori_nv = []
+
+            if orientation is None:
+                resolved_ori = Quat()
+            elif isinstance(orientation, OrientationBase):
+                resolved_ori = orientation
+            elif isinstance(orientation, tuple) and len(orientation) == 3:
+                ori_type, ori_data, extra_val = orientation
+                ori_val, ori_nv = _resolve_and_track(ori_data)
+
+                field_name = ori_type._rotation_attr
+                data_dict: dict[str, Any] = {
+                    "type": ori_type.model_fields["type"].default,
+                    field_name: ori_val,
+                }
+
+                # If the 3rd element is an EulerSeq, add it to the dict
+                if extra_val is not None:
+                    assert isinstance(extra_val, EulerSeq)
+                    data_dict["eulerseq"] = extra_val
+
+                resolved_ori = ori_type(**data_dict)
+            else:
+                msg = "orientation must be None, an Orientation object, or (Class, Data) tuple."
+                logger.error(msg)
+                raise TypeError(msg)
+
             try:
+                instance_pose = resolved_ori.as_pose(pos=p_val)
+
                 instance = cls(
                     mass=float(m_val),
-                    pos=Pos(pos=p_val),  # shouldnt this be p_val?
+                    pose=instance_pose,
                     diaginertia=d_val,
                     fullinertia=f_val,
-                    orientation=orientation,
                 )
 
                 # success! commiting all Namedvalues to the registry
-                all_pending = m_nv + p_nv + d_nv + f_nv
+                all_pending = m_nv + p_nv + d_nv + f_nv + ori_nv
                 for nv in all_pending:
                     mojo_model.named.force_update(nv, warn=False)
 

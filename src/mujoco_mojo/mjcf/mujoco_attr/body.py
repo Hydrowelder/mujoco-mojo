@@ -17,9 +17,8 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
-from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import BodyName, Sleep, VecN
 from mujoco_mojo.utils.log import get_logger
@@ -35,8 +34,7 @@ __all__ = ["Body", "WorldBody"]
 _body_attr = (
     "name",
     "childclass",
-    "pos",
-    "orientation",
+    "pose",
     "mocap",
     "gravcomp",
     "sleep",
@@ -78,11 +76,8 @@ class Body(XMLModel):
     mocap: bool = False
     """If this attribute is "true", the body is labeled as a mocap body. This is allowed only for bodies that are children of the world body and have no joints. Such bodies are fixed from the viewpoint of the dynamics, but nevertheless the forward kinematics set their position and orientation from the fields mjData.mocap_{pos,quat} at each time step. The size of these arrays is adjusted by the compiler so as to match the number of mocap bodies in the model. This mechanism can be used to stream motion capture data into the simulation. Mocap bodies can also be moved via mouse perturbations in the interactive visualizer, even in dynamic simulation mode. This can be useful for creating props with adjustable position and orientation."""
 
-    pos: Pos = Pos(pos=np.array((0, 0, 0)))
-    """The 3D position of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
-
-    orientation: Orientation = Quat()
-    """See Frame orientations."""
+    pose: Pose = PoseQuat()
+    """The 3D position and orientation of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
 
     gravcomp: float = 0
     """Gravity compensation force, specified as fraction of body weight. This attribute creates an upwards force applied to the body's center of mass, countering the force of gravity. As an example, a value of 1 creates an upward force equal to the body's weight and compensates for gravity exactly. Values greater than 1 will create a net upwards force or buoyancy effect."""

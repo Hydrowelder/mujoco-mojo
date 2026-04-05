@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import StrEnum, auto
-from typing import Annotated, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
 
 import numpy as np
 from pydantic import Field
@@ -12,6 +12,10 @@ from mujoco_mojo.mjcf.constants import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Angle, EulerSeq, Vec3, Vec4, Vec6
 from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from .pose import Pose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
+    from .position import Pos
 
 logger = get_logger(__name__)
 
@@ -75,6 +79,11 @@ class OrientationBase(XMLModel, ABC):
         """Must return the value (converted to target units) for XML output."""
         pass
 
+    @abstractmethod
+    def as_pose(self, pos: Vec3 | Pos) -> Pose:
+        """Returns the orientation with its equal Pose type."""
+        pass
+
 
 class Quat(OrientationBase):
     """If the quaternion is known, this is the preferred was to specify the frame orientation because it does not involve conversions. Instead it is normalized to unit length and copied into mjModel during compilation. When a model is saved as MJCF, all frame orientations are expressed as quaternions using this attribute."""
@@ -112,6 +121,11 @@ class Quat(OrientationBase):
         # Quaternions don't care about degrees or eulerseq
         return np.asarray(self.quat)
 
+    def as_pose(self, pos: Vec3 | Pos) -> PoseQuat:
+        from mujoco_mojo.mjcf.pose import PoseQuat
+
+        return PoseQuat(pos=np.asarray(pos), **self.model_dump())
+
 
 class AxisAngle(OrientationBase):
     """These are the quantities (x,y,z,a) mentioned above. The last number is the angle of rotation, in degrees or radians as specified by the angle attribute of compiler. The first three numbers determine a 3D vector which is the rotation axis. This vector is normalized to unit length during compilation, so the user can specify a vector of any non-zero length. Keep in mind that the rotation is right-handed; if the direction of the vector (x,y,z) is reversed this will result in the opposite rotation. Changing the sign of aa can also be used to specify the opposite rotation."""
@@ -123,8 +137,12 @@ class AxisAngle(OrientationBase):
     axisangle: Vec4 = np.array((1, 0, 0, 0))
     """Orientation of the frame. See Frame orientations."""
 
-    degrees: Angle = DEFAULT_ANGLE
+    angle: Angle = DEFAULT_ANGLE
     """Whether or not the values expressed here are in degrees or not. This should match the setting for your MuJoCo compiler setting."""
+
+    @property
+    def is_degrees(self) -> bool:
+        return self.angle == Angle.DEGREE
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AxisAngle):
@@ -136,7 +154,7 @@ class AxisAngle(OrientationBase):
         axis = axisangle[:3]
         angle = axisangle[3]
 
-        if self.degrees:
+        if self.is_degrees:
             angle = np.radians(angle)
 
         # Normalize the axis vector
@@ -156,10 +174,15 @@ class AxisAngle(OrientationBase):
         self, target_degrees: Angle, target_eulerseq: EulerSeq
     ) -> np.ndarray:
         val = np.array(self.axisangle, dtype=float)
-        if self.degrees != target_degrees:
+        if self.angle != target_degrees:
             # re-calculate only the 4th element (the angle)
             val[3] = np.degrees(val[3]) if target_degrees else np.radians(val[3])
         return val
+
+    def as_pose(self, pos: Vec3 | Pos) -> PoseAxisAngle:
+        from mujoco_mojo.mjcf.pose import PoseAxisAngle
+
+        return PoseAxisAngle(pos=np.asarray(pos), **self.model_dump())
 
 
 class Euler(OrientationBase):
@@ -204,6 +227,11 @@ class Euler(OrientationBase):
             target_eulerseq.value, degrees=target_degrees == Angle.DEGREE
         )
 
+    def as_pose(self, pos: Vec3 | Pos) -> PoseEuler:
+        from mujoco_mojo.mjcf.pose import PoseEuler
+
+        return PoseEuler(pos=np.asarray(pos), **self.model_dump())
+
 
 class XYAxes(OrientationBase):
     """The first 3 numbers are the X axis of the frame. The next 3 numbers are the Y axis of the frame, which is automatically made orthogonal to the X axis. The Z axis is then defined as the cross-product of the X and Y axes."""
@@ -241,6 +269,11 @@ class XYAxes(OrientationBase):
     ) -> np.ndarray:
         # XYAxes don't care about degrees or eulerseq
         return np.asarray(self.xyaxes)
+
+    def as_pose(self, pos: Vec3 | Pos) -> PoseXYAxes:
+        from mujoco_mojo.mjcf.pose import PoseXYAxes
+
+        return PoseXYAxes(pos=np.asarray(pos), **self.model_dump())
 
 
 class ZAxis(OrientationBase):
@@ -280,6 +313,11 @@ class ZAxis(OrientationBase):
     ) -> np.ndarray:
         # ZAxis don't care about degrees or eulerseq
         return np.asarray(self.zaxis)
+
+    def as_pose(self, pos: Vec3 | Pos) -> PoseZAxis:
+        from mujoco_mojo.mjcf.pose import PoseZAxis
+
+        return PoseZAxis(pos=np.asarray(pos), **self.model_dump())
 
 
 Orientation = Annotated[

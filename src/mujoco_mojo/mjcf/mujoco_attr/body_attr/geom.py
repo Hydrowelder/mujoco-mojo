@@ -7,9 +7,8 @@ import numpy as np
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
-from mujoco_mojo.mjcf.orientation import Orientation, Quat
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     FluidShape,
@@ -59,8 +58,7 @@ _geom_attr = (
     "margin",
     "gap",
     "fromto",
-    "pos",
-    "orientation",
+    "pose",
     "fitscale",
     "rgba",
     "fluidshape",
@@ -152,11 +150,8 @@ class GeomBase(XMLModel):
     fromto: Vec6 | None = None
     """This attribute can only be used with capsule, box, cylinder and ellipsoid geoms. It provides an alternative specification of the geom length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the geom connects these two points, with the +Z axis of the geom's frame oriented from the first towards the second point, while in the perpendicular direction, the geom sizes are both equal to the first value of the size attribute. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the end points. If this attribute is specified, the remaining position and orientation-related attributes are ignored. The image on the right demonstrates use of fromto with the four supported geoms, using identical Z values. The model is here. Note that the fromto semantics of capsule are unique: the two end points specify the segment around which the radius defines the capsule surface."""
 
-    pos: Pos = Pos(pos=np.array((0, 0, 0)))
-    """Position of the geom, specified in the frame of the body where the geom is defined."""
-
-    orientation: Orientation = Quat()
-    """Orientation of the geom frame. See Frame orientations."""
+    pose: Pose = PoseQuat()
+    """Position and orientation of the geom, specified in the frame of the body where the geom is defined."""
 
     fitscale: float = 1
     """This attribute is used only when a primitive geometric type is being fitted to a mesh asset. The scale specified here is relative to the output of the automated fitting procedure. The default value of 1 leaves the result unchanged, a value of 2 makes all sizes of the fitted geom two times larger."""

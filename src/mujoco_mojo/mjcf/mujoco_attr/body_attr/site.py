@@ -6,8 +6,7 @@ import mujoco
 import numpy as np
 from pydantic import ConfigDict, Field
 
-from mujoco_mojo.mjcf.orientation import Orientation, Quat
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     GeomType,
@@ -40,8 +39,7 @@ _site_attr = (
     "class_",
     "type",
     "group",
-    "pos",
-    "orientation",
+    "pose",
     "material",
     "size",
     "rgba",
@@ -77,11 +75,8 @@ class SiteBase(XMLModel):
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
     """Color and transparency. If this value is different from the internal default, it overrides the corresponding material properties."""
 
-    pos: Pos = Pos(pos=np.array((0, 0, 0)))
-    """Position of the site frame."""
-
-    orientation: Orientation = Quat()
-    """Orientation of the site frame. See Frame orientations."""
+    pose: Pose = PoseQuat()
+    """Position and orientation of the site frame."""
 
     user: VecN | None = None
     """See User parameters."""

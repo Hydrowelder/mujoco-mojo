@@ -41,7 +41,7 @@ class Handoff:
             base := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_base_site"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([0.4, 0, mult * 0.5])),
+                pose=mojo.PoseQuat(pos=np.array([0.4, 0, mult * 0.5])),
                 rgba=mojo.utils.Color.RED_500.rgba,
             )
         )
@@ -49,7 +49,7 @@ class Handoff:
             tip := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_tip_site"),
                 size=0.1,
-                pos=mojo.Pos(pos=np.array([-0.4, 0, mult * 0.5])),
+                pose=mojo.PoseQuat(pos=np.array([-0.4, 0, mult * 0.5])),
                 rgba=mojo.utils.Color.BLUE_500.rgba,
             )
         )
@@ -151,7 +151,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             mojo.GeomPlane(
                 name=mojo.GeomName("floor"),
                 size=np.array([0, 0, 0.1]),
-                pos=mojo.Pos(pos=np.array((0, 0, -5))),
+                pose=mojo.PoseQuat(pos=np.array((0, 0, -5))),
                 material=grid_mat.name,
                 contype=0,
                 conaffinity=0,
@@ -176,7 +176,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         [  # Box 1
             box1 := mojo.Body(
                 name=mojo.BodyName("box1"),
-                pos=mojo.Pos(pos=np.array([-0.5, 0, 0])),
+                pose=mojo.PoseQuat(pos=np.array([-0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
                 geoms=[
                     mojo.GeomBox(
@@ -190,8 +190,9 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 cameras=[
                     mojo.Camera(
                         name=BOX_CAMERA_NAME,
-                        pos=mojo.Pos(pos=np.array((0.4, 0, 0))),
-                        orientation=mojo.Euler(euler=np.array((90, -90, 0))),
+                        pose=mojo.PoseEuler(
+                            pos=np.array((0.4, 0, 0)), euler=np.array((90, -90, 0))
+                        ),
                         fovy=120,
                     ),
                 ],
@@ -199,7 +200,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             # Box 2
             box2 := mojo.Body(
                 name=mojo.BodyName("box2"),
-                pos=mojo.Pos(pos=np.array([0.5, 0, 0])),
+                pose=mojo.PoseQuat(pos=np.array([0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
                 geoms=[
                     mojo.GeomBox(
@@ -217,13 +218,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
             name=FIXED_CAMERA_NAME,
-            pos=mojo.Pos(pos=np.array((0, -10, 0))),
-            orientation=mojo.Euler(euler=np.array((90, 0, 0))),
+            pose=mojo.PoseEuler(pos=np.array((0, -10, 0)), euler=np.array((90, 0, 0))),
             fovy=30,
         ),
         mojo.Camera(
             name=TRACKING_CAMERA_NAME,
-            pos=mojo.Pos(pos=np.array((0, -10, 0))),
+            pose=mojo.PoseQuat(pos=np.array((0, -10, 0))),
             fovy=30,
             mode=mojo.TrackingMode.TARGETBODY,
             target=box2.name,
