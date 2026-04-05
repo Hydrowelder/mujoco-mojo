@@ -495,7 +495,6 @@ class MojoRunner:
         resume: bool = DEFAULT_RESUME,
         trial_ids: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
-
         if isinstance(self.config, MonteCarloConfig):
             result, had_fails = self.run_monte_carlo(
                 global_overrides=global_overrides,

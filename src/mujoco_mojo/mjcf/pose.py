@@ -39,25 +39,23 @@ class PoseBase(Pos, OrientationBase):
     def inv(self) -> PoseQuat:
         """Returns the inverse Pose."""
         r_inv = self.as_matrix().T
-        p_inv = -(r_inv @ np.asarray(self.pos))
+        p_inv = -(r_inv @ self.pos)
         return Quat.from_matrix(r_inv).as_pose(pos=p_inv)
 
-    def apply(
-        self, vec: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> np.ndarray:
+    def apply(self, vec: Vec3) -> np.ndarray:
         """Transforms a point from local coordinates to parent coordinates."""
         # v' = R*v + p
-        return self.as_matrix() @ np.asarray(vec) + np.asarray(self.pos)
+        return self.as_matrix() @ np.asarray(vec, dtype=float) + self.pos
 
     def __mul__(self, other: Any) -> Any:
         # point transform
         if isinstance(other, (np.ndarray, list, tuple)) and len(other) == 3:
-            return self.apply(np.asarray(other))
+            return self.apply(np.asarray(other, dtype=float))
 
         # pose composition
         if isinstance(other, PoseBase):
             new_r = self.as_matrix() @ other.as_matrix()
-            new_p = self.as_matrix() @ np.asarray(other.pos) + np.asarray(self.pos)
+            new_p = self.as_matrix() @ other.pos + self.pos
             return Quat.from_matrix(new_r).as_pose(pos=new_p)
 
         return NotImplemented
@@ -69,22 +67,18 @@ class PoseBase(Pos, OrientationBase):
     @classmethod
     def look_at(
         cls,
-        target: Vec3 | np.ndarray | list[float] | tuple[float, float, float],
-        eye: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
-            [0, 0, 0]
-        ),
-        up: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
-            [0, 0, 1]
-        ),
+        target: Vec3,
+        eye: Vec3 = np.array([0, 0, 0]),
+        up: Vec3 = np.array([0, 0, 1]),
         negative_z: bool = True,
     ) -> Self:
         """
         Creates a full Pose that points the Z-axis toward/away from a target.
 
         Args:
-            target (Vec3 | np.ndarray | list[float] | tuple[float, float, float]): Where the vector should point to.
-            eye (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            target (Vec3): Where the vector should point to.
+            eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
+            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:

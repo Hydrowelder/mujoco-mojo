@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, NewType
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    NewType,
+)
 
+import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import Field
 
@@ -198,29 +203,41 @@ GridLayoutStr = Annotated[
 ]
 """A string used for texture grid layout. May only include `'.'`, `'R'`, `'L'`, `'U'`, `'D'`, `'F'`, and `'B'`."""
 
-Vec2 = Annotated[NDArray[Shape["2"], float | int], ...]
-"""A 2-element numeric array."""
+if TYPE_CHECKING:
+    type _VecBase = np.ndarray
 
-Vec3 = Annotated[NDArray[Shape["3"], float | int], ...]
-"""A 3-element numeric array, often used for positions or directions."""
+    type Vec2 = _VecBase
+    """A 2-element numeric array."""
 
-Vec4 = Annotated[NDArray[Shape["4"], float | int], ...]
-"""A 4-element numeric array, often used for RGBA colors or quaternions."""
+    type Vec3 = _VecBase
+    """A 3-element numeric array, often used for positions or directions."""
 
-Vec5 = Annotated[NDArray[Shape["5"], float | int], ...]
-"""A 5-element numeric array."""
+    type Vec4 = _VecBase
+    """A 4-element numeric array, often used for RGBA colors or quaternions."""
 
-Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
-"""A 6-element numeric array."""
+    type Vec5 = _VecBase
+    """A 5-element numeric array."""
 
-Vec7 = Annotated[NDArray[Shape["7"], float | int], ...]
-"""A 7-element numeric array."""
+    type Vec6 = _VecBase
+    """A 6-element numeric array."""
 
-Vec9 = Annotated[NDArray[Shape["9"], float | int], ...]
-"""A 9-element numeric array."""
+    type Vec7 = _VecBase
+    """A 7-element numeric array."""
 
-VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
-"""An N-element numeric array of arbitrary length."""
+    type Vec9 = _VecBase
+    """A 9-element numeric array."""
+
+    type VecN = _VecBase
+    """An N-element numeric array of arbitrary length."""
+else:
+    Vec2 = Annotated[NDArray[Shape["2"], float | int], ...]
+    Vec3 = Annotated[NDArray[Shape["3"], float | int], ...]
+    Vec4 = Annotated[NDArray[Shape["4"], float | int], ...]
+    Vec5 = Annotated[NDArray[Shape["5"], float | int], ...]
+    Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
+    Vec7 = Annotated[NDArray[Shape["7"], float | int], ...]
+    Vec9 = Annotated[NDArray[Shape["9"], float | int], ...]
+    VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
 
 
 def empty_list_field():

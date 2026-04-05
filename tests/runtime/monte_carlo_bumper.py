@@ -41,7 +41,7 @@ class Handoff:
             base := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_base_site"),
                 size=0.1,
-                pose=mojo.PoseQuat(pos=np.array([0.4, 0, mult * 0.5])),
+                pose=mojo.PoseQuat(pos=np.asarray([0.4, 0, mult * 0.5])),
                 rgba=mojo.utils.Color.RED_500.rgba,
             )
         )
@@ -49,7 +49,7 @@ class Handoff:
             tip := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_tip_site"),
                 size=0.1,
-                pose=mojo.PoseQuat(pos=np.array([-0.4, 0, mult * 0.5])),
+                pose=mojo.PoseQuat(pos=np.asarray([-0.4, 0, mult * 0.5])),
                 rgba=mojo.utils.Color.BLUE_500.rgba,
             )
         )
@@ -119,7 +119,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 grid_mat := mojo.Material(
                     name=mojo.MaterialName("grid_mat"),
                     texture=grid_tex.name,
-                    texrepeat=np.array((1, 1)),
+                    texrepeat=np.asarray((1, 1)),
                 )
             ],
         ),
@@ -150,8 +150,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         else [
             mojo.GeomPlane(
                 name=mojo.GeomName("floor"),
-                size=np.array([0, 0, 0.1]),
-                pose=mojo.PoseQuat(pos=np.array((0, 0, -5))),
+                size=np.asarray([0, 0, 0.1]),
+                pose=mojo.PoseQuat(pos=np.asarray((0, 0, -5))),
                 material=grid_mat.name,
                 contype=0,
                 conaffinity=0,
@@ -161,7 +161,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.options = [
         mojo.Option(
             timestep=0.001,
-            gravity=np.array((0, 0, 0)),
+            gravity=np.asarray((0, 0, 0)),
         )
     ]
     mojo_model.mjcf.visuals = [
@@ -176,12 +176,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         [  # Box 1
             box1 := mojo.Body(
                 name=mojo.BodyName("box1"),
-                pose=mojo.PoseQuat(pos=np.array([-0.5, 0, 0])),
+                pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
                 geoms=[
                     mojo.GeomBox(
                         name=mojo.GeomName("g1"),
-                        size=np.array([0.5, 0.5, 0.5]),
+                        size=np.asarray([0.5, 0.5, 0.5]),
                         rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
@@ -191,7 +191,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     mojo.Camera(
                         name=BOX_CAMERA_NAME,
                         pose=mojo.PoseEuler(
-                            pos=np.array((0.4, 0, 0)), euler=np.array((90, -90, 0))
+                            pos=np.asarray((0.4, 0, 0)),
+                            euler=np.asarray(
+                                (90, -90, 0),
+                            ),
                         ),
                         fovy=120,
                     ),
@@ -200,12 +203,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             # Box 2
             box2 := mojo.Body(
                 name=mojo.BodyName("box2"),
-                pose=mojo.PoseQuat(pos=np.array([0.5, 0, 0])),
+                pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
                 geoms=[
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
-                        size=np.array([0.5, 0.5, 0.5]),
+                        size=np.asarray([0.5, 0.5, 0.5]),
                         rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
@@ -218,12 +221,17 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
             name=FIXED_CAMERA_NAME,
-            pose=mojo.PoseEuler(pos=np.array((0, -10, 0)), euler=np.array((90, 0, 0))),
+            pose=mojo.PoseEuler(
+                pos=np.asarray((0, -10, 0)),
+                euler=np.asarray((90, 0, 0)),
+            ),
             fovy=30,
         ),
         mojo.Camera(
             name=TRACKING_CAMERA_NAME,
-            pose=mojo.PoseQuat(pos=np.array((0, -10, 0))),
+            pose=mojo.PoseQuat(
+                pos=np.asarray((0, -10, 0)),
+            ),
             fovy=30,
             mode=mojo.TrackingMode.TARGETBODY,
             target=box2.name,
@@ -257,7 +265,7 @@ def runtime(
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 1
 
-        if mojo_model.is_nominal and False:
+        if mojo_model.is_nominal:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,

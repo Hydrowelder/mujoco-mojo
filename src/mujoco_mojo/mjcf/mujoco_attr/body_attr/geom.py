@@ -211,7 +211,7 @@ class GeomBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
-        fromto: np.ndarray,
+        fromto: Vec6,
     ) -> float:
         """The brute force, but accurate method which checks every pair and returns the minimum distance."""
         list_1 = geom_1 if isinstance(geom_1, list) else [geom_1]
@@ -248,7 +248,7 @@ class GeomBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
-        fromto: np.ndarray,
+        fromto: Vec6,
     ) -> float:
         """
         Broadphase and narrowphase method to calculate geometric distance.
@@ -332,7 +332,7 @@ class GeomBase(XMLModel):
         if fromto is None:
             fromto = np.zeros(6)
         else:
-            fromto = np.asarray(fromto)
+            fromto = fromto
         if auto:
             return cls._get_geom_dist_between_geoms_auto(
                 geom_1=geom_1,
@@ -384,7 +384,7 @@ class GeomBase(XMLModel):
         if fromto is None:
             fromto = np.zeros(6)
         else:
-            fromto = np.asarray(fromto)
+            fromto = fromto
         return self.get_geom_dist_between_geoms(
             mj_model=mj_model,
             mj_data=mj_data,

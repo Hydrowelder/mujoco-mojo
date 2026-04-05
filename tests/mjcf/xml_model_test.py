@@ -47,7 +47,7 @@ def test_format_value():
     """Verify standard MJCF string formatting."""
     assert _format_value(True) == "true"
     assert _format_value(False) == "false"
-    assert _format_value(np.array([1, 2, 3])) == "1 2 3"
+    assert _format_value(np.asarray([1, 2, 3])) == "1 2 3"
     assert _format_value(1.23) == "1.23"
 
 
@@ -131,7 +131,7 @@ def test_invalid_names():
 def test_rgba_warning(caplog):
     """Verify that warn_rgba triggers a logger warning for values > 1."""
     # MuJoCo uses 0-1 range. 255 should trigger the warning validator.
-    rgba_255 = np.array([255, 0, 0, 255])
+    rgba_255 = np.asarray([255, 0, 0, 255])
 
     # This shouldn't raise an error, just log a warning
     SubModel(name="test_geom", rgba=rgba_255)

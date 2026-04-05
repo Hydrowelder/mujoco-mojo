@@ -110,7 +110,7 @@ class ActuatorMuscle(ActuatorBase):
 
         !!! note "Included for reference only"
         """
-        timeconst1, timeconst2 = tuple(np.asarray(self.timeconst))
+        timeconst1, timeconst2 = tuple(self.timeconst)
 
         return np.array((timeconst1, timeconst2, self.tausmooth))
 
@@ -124,7 +124,7 @@ class ActuatorMuscle(ActuatorBase):
 
         !!! note "Included for reference only"
         """
-        range1, range2 = tuple(np.asarray(self.range))
+        range1, range2 = tuple(self.range)
         return np.array(
             (
                 range1,

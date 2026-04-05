@@ -19,7 +19,7 @@ def test_euler_conversions():
 
     mat = e.as_matrix()
     # Expected: x->y, y->-x, z->z
-    expected = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    expected = np.asarray([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     assert np.allclose(mat, expected, atol=1e-7)
 
     # Test with_eulerseq (convert xyz 90z to zyx)
@@ -33,7 +33,7 @@ def test_axis_angle_with_helpers():
     aa = AxisAngle(axisangle=np.asarray([0, 0, 1, 90]), angle=Angle.DEGREE)
 
     # Change axis to X
-    aa_x = aa.with_axis([1, 0, 0])
+    aa_x = aa.with_axis(np.asarray([1, 0, 0]))
     assert np.array_equal(np.asarray(aa_x.axisangle)[:3], [1, 0, 0])
 
     # Change angle value
@@ -80,7 +80,7 @@ def test_look_at_factory():
 
     # Forward vector in local space is [0, 0, -1]
     # Rotate it to world space; should match the pointing direction [1, 0, 0]
-    world_forward = q.apply([0, 0, -1])
+    world_forward = q.apply(np.asarray([0, 0, -1]))
     assert np.allclose(world_forward, [1, 0, 0], atol=1e-7)
 
 
