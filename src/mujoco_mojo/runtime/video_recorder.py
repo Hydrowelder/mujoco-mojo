@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Self, TypedDict
 import mujoco
 import numpy as np
 
-from mujoco_mojo.typing import CameraName
+from mujoco_mojo.typing import CameraName, Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
@@ -15,9 +15,9 @@ logger = get_logger(__name__)
 
 
 class ArrowConfig(TypedDict):
-    pos: np.ndarray
-    vec: np.ndarray
-    color: np.ndarray
+    pos: Vec3
+    vec: Vec3
+    color: Vec4
     is_torque: bool
 
 
@@ -90,9 +90,9 @@ class VideoRecorder:
     def _add_arrow_to_scene(
         self,
         mj_model: mujoco.MjModel,
-        pos: np.ndarray,
-        vec: np.ndarray,
-        color: np.ndarray,
+        pos: Vec3,
+        vec: Vec3,
+        color: Vec4,
         is_torque: bool,
     ):
         if self._renderer.scene.ngeom >= self._renderer.scene.maxgeom:
@@ -104,12 +104,12 @@ class VideoRecorder:
 
         # initialize with default
         mujoco.mjv_initGeom(
-            geom,
-            mujoco.mjtGeom.mjGEOM_ARROW,
-            np.zeros(3),
-            np.zeros(3),
-            np.zeros(9),
-            color.astype(np.float32),
+            geom=geom,
+            type=mujoco.mjtGeom.mjGEOM_ARROW,
+            size=np.zeros(3),
+            pos=np.zeros(3),
+            mat=np.zeros(9),
+            rgba=np.asarray(color, dtype=np.float32),
         )
 
         # calculate native scaling
@@ -132,7 +132,7 @@ class VideoRecorder:
             geom=geom,
             type=mujoco.mjtGeom.mjGEOM_ARROW,
             width=width,
-            from_=pos,
+            from_=np.asarray(pos, dtype=np.float64),
             to=pos + scaled_vec,
         )
         self._renderer.scene.ngeom += 1

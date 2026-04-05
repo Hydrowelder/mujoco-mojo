@@ -19,6 +19,7 @@ from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.dependency_path import DepPath
+from mujoco_mojo.typing import Angle, EulerSeq
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import get_checksum
 
@@ -91,7 +92,6 @@ class XMLModel(MojoBaseModel):
 
     @model_validator(mode="after")
     def warn_rgba(self) -> Self:
-
         rgba: np.ndarray | None = getattr(self, "rgba", None)
         if rgba is not None:
             if max(rgba) > 1:
@@ -110,7 +110,12 @@ class XMLModel(MojoBaseModel):
                 raise ValueError(msg)
         return self
 
-    def to_xml(self, exclude_default: bool = True) -> Element:
+    def to_xml(
+        self,
+        compiler_degrees: Angle,
+        compiler_eulerseq: EulerSeq,
+        exclude_default: bool = True,
+    ) -> Element:
         el = Element(self.tag)
 
         # attributes (deterministic)
@@ -148,7 +153,10 @@ class XMLModel(MojoBaseModel):
                     raise ValueError(msg)
 
                 # recursively extract attributes
-                sub_attrs = value._collect_xml_attributes()
+                sub_attrs = value._collect_xml_attributes(
+                    compiler_degrees=compiler_degrees,
+                    compiler_eulerseq=compiler_eulerseq,
+                )
 
                 # collision detection
                 for k in sub_attrs:
@@ -174,7 +182,13 @@ class XMLModel(MojoBaseModel):
             items = value if isinstance(value, list) else [value]
             for item in items:
                 if isinstance(item, XMLModel):
-                    el.append(item.to_xml(exclude_default=exclude_default))
+                    el.append(
+                        item.to_xml(
+                            exclude_default=exclude_default,
+                            compiler_degrees=compiler_degrees,
+                            compiler_eulerseq=compiler_eulerseq,
+                        )
+                    )
                 else:
                     msg = f"Field '{field}' in {self.__class__.__name__} contains an object of type {type(item).__name__} which is not an XMLModel (missing to_xml)."
                     logger.error(msg)
@@ -182,7 +196,11 @@ class XMLModel(MojoBaseModel):
 
         return el
 
-    def _collect_xml_attributes(self) -> dict[str, str]:
+    def _collect_xml_attributes(
+        self,
+        compiler_degrees: Angle,
+        compiler_eulerseq: EulerSeq,
+    ) -> dict[str, str]:
         """
         Recursively collect attributes for XML flattening.
 
@@ -194,6 +212,9 @@ class XMLModel(MojoBaseModel):
             raise ValueError(msg)
 
         attrs: dict[str, str] = {}
+        # to prevent circular import since OrientationBase is an XMLModel
+        from mujoco_mojo.mjcf.orientation import OrientationBase
+
         for field in self.attributes:
             value = getattr(self, field, None)
 
@@ -202,8 +223,19 @@ class XMLModel(MojoBaseModel):
 
             key = field.rstrip("_")
 
+            if isinstance(self, OrientationBase) and field == self._rotation_attr:
+                xml_val = self.get_xml_value(
+                    target_degrees=compiler_degrees,
+                    target_eulerseq=compiler_eulerseq,
+                )
+                attrs[key] = _format_value(xml_val)
+                continue
+
             if isinstance(value, XMLModel):
-                nested = value._collect_xml_attributes()
+                nested = value._collect_xml_attributes(
+                    compiler_degrees=compiler_degrees,
+                    compiler_eulerseq=compiler_eulerseq,
+                )
 
                 for k in nested:
                     if k in attrs:
@@ -212,9 +244,9 @@ class XMLModel(MojoBaseModel):
                         raise ValueError(msg)
 
                 attrs.update(nested)
+                continue
 
-            else:
-                attrs[key] = _format_value(value)
+            attrs[key] = _format_value(value)
 
         return attrs
 
@@ -307,11 +339,15 @@ class XMLModel(MojoBaseModel):
         self._id_cache = obj_id
         return obj_id
 
-    def _iter_tree(
-        self,
-    ):  # doesnt this need to determine if there is a list/dict/tuple/array which contains paths too?
+    def _iter_tree(self):
         """Yields this model and all its XMLModel children recursively."""
         yield self
+
+        for field in self.attributes:
+            value = getattr(self, field, None)
+            if isinstance(value, XMLModel):
+                yield from value._iter_tree()
+
         for field in self.children:
             value = getattr(self, field, None)
             if value is None:

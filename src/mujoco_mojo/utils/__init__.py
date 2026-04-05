@@ -1,10 +1,12 @@
 from .color import Color
+from .interp import Interpolator
 from .log import get_logger, setup_logger
 from .runner import MojoGenerator, MojoRunner, MojoRuntime, MonteCarloConfig, Trial
 from .utils import is_empty_list, to_pretty_xml
 
 __all__ = [
     "Color",
+    "Interpolator",
     "MojoGenerator",
     "MojoRunner",
     "MojoRuntime",

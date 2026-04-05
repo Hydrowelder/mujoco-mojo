@@ -279,7 +279,7 @@ class Color(StrEnum):
 
     @property
     def rgb(self) -> Vec3:
-        return np.asarray(self.rgba)[0:3]
+        return self.rgba[0:3]
 
     def with_alpha(self, alpha: float) -> Vec4:
         """Returns the color with a custom transparency level."""
@@ -308,7 +308,7 @@ class Color(StrEnum):
     @classmethod
     def rgba_to_hex(cls, rgba: Vec4) -> str:
         """Converts normalized RGBA to '#RRGGBB' (alpha is discarded)."""
-        rgba = np.asarray(rgba)
+        rgba = np.asarray(rgba, dtype=float)
         rgb255 = (rgba[:3] * 255).astype(int)
         return "#{:02x}{:02x}{:02x}".format(*rgb255)
 
