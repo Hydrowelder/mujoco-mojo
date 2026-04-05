@@ -211,7 +211,7 @@ class PointToPointForce(Load):
     def _validate_frame(self) -> Self:
         if self.rel_to_site is not None:
             raise ValueError(
-                f"PointToPointForce '{self.name}' cannot use 'relative_to'. It is natively defined by the line-of-sight between sites."
+                f"PointToPointForce '{self.name}' cannot use 'rel_to_site'. It is natively defined by the line-of-sight between sites."
             )
         return self
 

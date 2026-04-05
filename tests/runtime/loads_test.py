@@ -8,7 +8,9 @@ from mujoco_mojo.runtime.load import (
     GeneralForce,
     PointToPointForce,
     ScalarForce,
+    ScalarTorque,
     VectorForce,
+    VectorTorque,
 )
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.typing import BodyName, SiteName
@@ -273,3 +275,178 @@ def test_active_toggle_suppression(
 
     assert np.all(data.qfrc_applied == 0)
     assert len(force.get_visuals(model, data)) == 0
+
+
+def test_scalar_torque_orientation_tracking(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify ScalarTorque follows the site's local X-axis as it rotates."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    # Constant 10Nm torque along local X
+    twister = ScalarTorque(
+        name="twister", action_site=s1, scalar_func=lambda t, u, m, d: 10.0
+    )
+    twister.resolve_ids(model, data)
+
+    # 1. Identity: Local X is World X
+    _, t_world = twister.calculate(model, data)
+    assert np.allclose(t_world, [10.0, 0, 0])
+
+    # 2. Rotate body 90 deg around Y: Local X is now World -Z [0, 0, -1]
+    # Quat (w,x,y,z) for 90 deg Y: [0.7071, 0, 0.7071, 0]
+    data.qpos[3:7] = [0.7071, 0, 0.7071, 0]
+    mujoco.mj_forward(model, data)
+
+    _, t_world_rot = twister.calculate(model, data)
+    assert np.allclose(t_world_rot, [0, 0, -10.0], atol=1e-5)
+
+
+def test_spring_damping_logic(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+    """Verify that damping correctly opposes relative velocity."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+    s2 = SiteSphere(name=SiteName("site2"))
+
+    # Spring with NO stiffness, ONLY damping (c=10.0)
+    # Dist is 1.0, rest_length is 1.0 (no displacement force)
+    damper = PointToPointForce.ideal_spring(
+        name="damper", action_site=s1, xtion_site=s2, damping=10.0, rest_length=1.0
+    )
+    damper.resolve_ids(model, data)
+
+    # Set Body 1 moving away from Body 2 at 2.0 m/s in X
+    # Body 1 is the first freejoint (qvel indices 0-5)
+    data.qvel[0] = 2.0
+    mujoco.mj_forward(model, data)
+
+    # Logic: vel = 2.0, c = 10.0. F_mag = -1.0 * (0 + 10 * 2) = -20N.
+    # Unit vector (p1 - p2) is [1, 0, 0].
+    # Result should be [-20, 0, 0] (pulling back against motion).
+    f, _ = damper.calculate(model, data)
+    assert np.allclose(f, [-20.0, 0, 0])
+
+
+def test_torque_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+    """Verify that VectorTorque applies opposite torques to action and reaction bodies."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+    b2 = Body(name=BodyName("body2"))
+
+    # Apply 50Nm in World Y to Body 1, reacting on Body 2
+    torque = VectorTorque(
+        name="torsion_bar", action_site=s1, xtion_body=b2, ty=lambda t, m, d: 50.0
+    )
+    torque.resolve_ids(model, data)
+
+    data.qfrc_applied.fill(0)
+    torque.apply_load(model, data)
+
+    # Freejoint qfrc mapping: [fx, fy, fz, tx, ty, tz]
+    # Body 1 (indices 0-5): Torque is index 4
+    assert data.qfrc_applied[4] == pytest.approx(50.0)
+    # Body 2 (indices 6-11): Torque is index 10
+    assert data.qfrc_applied[10] == pytest.approx(-50.0)
+
+
+def test_general_force_6dof_application(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify that GeneralForce applies both F and T correctly in world frame."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    # Apply [10, 20, 30] Force and [1, 2, 3] Torque
+    load = GeneralForce(
+        name="complex_load",
+        action_site=s1,
+        fx=lambda t, m, d: 10.0,
+        fy=lambda t, m, d: 20.0,
+        fz=lambda t, m, d: 30.0,
+        tx=lambda t, m, d: 1.0,
+        ty=lambda t, m, d: 2.0,
+        tz=lambda t, m, d: 3.0,
+    )
+    load.resolve_ids(model, data)
+
+    f_world, t_world = load.calculate(model, data)
+
+    assert np.allclose(f_world, [10, 20, 30])
+    assert np.allclose(t_world, [1, 2, 3])
+
+
+def test_point_to_point_validation_error():
+    """Verify that PointToPointForce rejects 'rel_to_site' via Pydantic validator."""
+    s1 = SiteSphere(name=SiteName("s1"))
+    s2 = SiteSphere(name=SiteName("s2"))
+
+    # We use the constructor directly to bypass the factory and hit the validator
+    with pytest.raises(ValueError, match="cannot use 'rel_to_site'"):
+        PointToPointForce(
+            name="err",
+            action_site=s1,
+            xtion_site=s2,
+            rel_to_site=s1,  # This triggers your _validate_frame method
+            magnitude_func=lambda d, v, r, m, data: 0.0,
+        )
+
+
+def test_stochastic_named_value_unwrap(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify that stiffness/damping work when passed as NamedValues."""
+    model, data = basic_mj_setup
+    from mujoco_mojo.stochas import NamedValue, ValueName
+
+    # Use a NamedValue for stiffness
+    k_stochastic = NamedValue(name=ValueName("random_k"), stored_value=250.0)
+
+    spring = PointToPointForce.ideal_spring(
+        name="stoch_spring",
+        action_site=SiteSphere(name=SiteName("site1")),
+        xtion_site=SiteSphere(name=SiteName("site2")),
+        stiffness=k_stochastic,
+        rest_length=0.0,
+    )
+    spring.resolve_ids(model, data)
+
+    # Dist=1.0, k=250. Force should be 250N.
+    f, _ = spring.calculate(model, data)
+    assert np.linalg.norm(f) == pytest.approx(250.0)
+
+
+def test_scalar_torque_math(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+    """Verify ScalarTorque applies torque along the site's local X-axis."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    # Apply 15Nm torque
+    torque = ScalarTorque(
+        name="motor", action_site=s1, scalar_func=lambda t, u, m, d: 15.0
+    )
+    torque.resolve_ids(model, data)
+
+    # At identity, local X is world X
+    _, t_world = torque.calculate(model, data)
+    assert np.allclose(t_world, [15.0, 0, 0])
+
+
+def test_body_reaction_force_to_world(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify that if xtion_body is None, only the action force is applied."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    # xtion_body is None by default in BodyReactionForce
+    force = VectorForce(name="gravity_sim", action_site=s1, fz=lambda t, m, d: -10.0)
+    force.resolve_ids(model, data)
+
+    data.qfrc_applied.fill(0)
+    force.apply_load(model, data)
+
+    # Body 1 (indices 0-5) should feel the force
+    assert data.qfrc_applied[2] == -10.0
+    # Body 2 (indices 6-11) should feel NOTHING (no reaction body)
+    assert np.all(data.qfrc_applied[6:] == 0)
