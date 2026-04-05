@@ -64,8 +64,98 @@ class OrientationBase(XMLModel, ABC):
         q = self.to_rotation().as_quat()
         return Quat(quat=np.array([q[3], q[0], q[1], q[2]]))
 
+    def as_axisangle(self, angle_type: Angle = DEFAULT_ANGLE) -> AxisAngle:
+        """Casts any orientation to an AxisAngle object."""
+        return AxisAngle.from_matrix(self.as_matrix()).with_angle(angle_type)
+
+    def as_euler(
+        self, seq: EulerSeq = DEFAULT_EULERSEQ, angle_type: Angle = DEFAULT_ANGLE
+    ) -> Euler:
+        """Casts any orientation to an Euler object."""
+        return (
+            Euler.from_matrix(self.as_matrix())
+            .with_eulerseq(seq)
+            .with_angle(angle_type)
+        )
+
+    def as_xyaxes(self) -> XYAxes:
+        """Casts any orientation to an XYAxes object."""
+        return XYAxes.from_matrix(self.as_matrix())
+
+    def as_zaxis(self) -> ZAxis:
+        """Casts any orientation to a ZAxis object."""
+        return ZAxis.from_matrix(self.as_matrix())
+
     def as_matrix(self):
+        """Returns this orientation as a rotation matrix."""
         return self.to_rotation().as_matrix()
+
+    def apply(self, vec: Vec3) -> np.ndarray:
+        """Rotates a vector by this orientation."""
+        return self.to_rotation().apply(np.asarray(vec))
+
+    def __mul__(self, other: OrientationBase) -> Quat:
+        """Composes two rotations: self * other and returns a Quat."""
+        if not isinstance(other, OrientationBase):
+            msg = f"Invalid type {type(other)} for multiplication with orientation"
+            logger.error(msg)
+            raise TypeError(msg)
+
+        res_mat = self.as_matrix() @ other.as_matrix()
+        return Quat.from_matrix(res_mat)
+
+    def inv(self) -> Self:
+        """Returns the inverse orientation."""
+        return type(self).from_matrix(self.as_matrix().T)
+
+    def angle_between(
+        self, other: OrientationBase, angle: Angle = Angle.DEGREE
+    ) -> float:
+        """The absolute shortest angular distance."""
+        # Geodesic distance: ||log(R1^T @ R2)||
+        diff = self.inv() * other
+        as_rad = float(np.linalg.norm(diff.to_rotation().as_rotvec()))
+        as_rad = max(0.0, as_rad)
+        return as_rad if angle == Angle.RADIAN else np.degrees(as_rad)
+
+    @classmethod
+    def look_at(
+        cls,
+        target: Vec3,
+        eye: Vec3 = np.array([0, 0, 0]),
+        up: Vec3 = np.array([0, 0, 1]),
+        negative_z: bool = True,
+    ) -> Self:
+        """
+        Creates an orientation that points the Z-axis toward/away from a target.
+
+        Args:
+            target (Vec3): Where the vector should point to.
+            eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
+            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
+
+        Returns:
+            Self: New instance of Orientation.
+
+        """
+        target = np.asarray(target)
+        eye = np.asarray(eye)
+
+        forward = target - eye
+        forward /= np.linalg.norm(forward)
+
+        if negative_z:
+            forward = -forward
+
+        # compute right and up axes to complete orthonormal basis
+        right = np.cross(np.asarray(up), forward)
+        right /= np.linalg.norm(right)
+        actual_up = np.cross(forward, right)
+
+        # matrix is [X, Y, Z] columns
+        mat = np.column_stack((right, actual_up, forward))
+        return cls.from_matrix(mat)
 
     @abstractmethod
     def to_rotation(self) -> R:
@@ -82,6 +172,12 @@ class OrientationBase(XMLModel, ABC):
     @abstractmethod
     def as_pose(self, pos: Vec3 | Pos) -> Pose:
         """Returns the orientation with its equal Pose type."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Reconstructs the orientation object from a 3x3 matrix."""
         pass
 
 
@@ -103,7 +199,7 @@ class Quat(OrientationBase):
 
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> Self:
-        """Create a Quat orientation from a 3x3 rotation matrix."""
+        """Reconstructs the Quat object from a 3x3 matrix."""
         rot = R.from_matrix(matrix)
         q = rot.as_quat()
 
@@ -179,10 +275,54 @@ class AxisAngle(OrientationBase):
             val[3] = np.degrees(val[3]) if target_degrees else np.radians(val[3])
         return val
 
+    def with_angle(self, angle: Angle) -> Self:
+        """Expresses the AxisAngle in either radians or degrees."""
+        if angle == self.angle:
+            return self
+
+        new_axisangle = np.asarray(self.axisangle)
+        new_axisangle[3] = (
+            np.degrees(new_axisangle[3])
+            if angle == Angle.DEGREE
+            else np.radians(new_axisangle[3])
+        )
+
+        return self.model_copy(update={"axisangle": new_axisangle, "angle": angle})
+
+    def with_axis(self, axis: Vec3) -> Self:
+        """Returns a new AxisAngle with a new axis but the same angle."""
+        axis = np.asarray(axis)
+        axis = axis / np.linalg.norm(axis)
+        new_val = np.array([*axis, np.asarray(self.axisangle)[3]])
+        return self.model_copy(update={"axisangle": new_val})
+
+    def with_angle_val(self, angle: float) -> Self:
+        """Returns a new AxisAngle with a new angle value but the same axis."""
+        new_val = np.array([*np.asarray(self.axisangle)[:3], angle])
+        return self.model_copy(update={"axisangle": new_val})
+
     def as_pose(self, pos: Vec3 | Pos) -> PoseAxisAngle:
         from mujoco_mojo.mjcf.pose import PoseAxisAngle
 
         return PoseAxisAngle(pos=np.asarray(pos), **self.model_dump())
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Reconstructs the AxisAngle from a 3x3 matrix."""
+        rot = R.from_matrix(matrix)
+        rotvec = rot.as_rotvec()
+        angle_rad = np.linalg.norm(rotvec)
+
+        # handle zero-rotation case
+        if angle_rad < 1e-10:
+            return cls(axisangle=np.array([1.0, 0.0, 0.0, 0.0]), angle=DEFAULT_ANGLE)
+
+        axis = rotvec / angle_rad
+        # convert to degrees if the class default is Angle.DEGREE
+        is_deg = DEFAULT_ANGLE == Angle.DEGREE
+        angle_val = np.degrees(angle_rad) if is_deg else angle_rad
+
+        return cls(axisangle=np.array([*axis, angle_val]), angle=DEFAULT_ANGLE)
 
 
 class Euler(OrientationBase):
@@ -232,6 +372,41 @@ class Euler(OrientationBase):
 
         return PoseEuler(pos=np.asarray(pos), **self.model_dump())
 
+    def with_eulerseq(self, seq: EulerSeq) -> Self:
+        """
+        Returns a new instance with a different Euler sequence, maintaining the same physical rotation.
+        """
+        if seq == self.eulerseq:
+            return self
+
+        rot = self.to_rotation()
+        new_euler = rot.as_euler(seq.value, degrees=self.is_degrees)
+        return self.model_copy(update={"euler": new_euler, "eulerseq": seq})
+
+    def with_angle(self, angle: Angle) -> Self:
+        """Expresses the AxisAngle in either radians or degrees."""
+        if angle == self.angle:
+            return self
+
+        new_euler = (
+            np.degrees(np.asarray(self.euler))
+            if angle == Angle.DEGREE
+            else np.radians(np.asarray(self.euler))
+        )
+
+        return self.model_copy(update={"euler": new_euler, "angle": angle})
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Reconstructs Euler angles from a 3x3 matrix."""
+        rot = R.from_matrix(matrix)
+        is_deg = DEFAULT_ANGLE == Angle.DEGREE
+
+        # as_euler returns a NumPy array of 3 angles
+        angles = rot.as_euler(DEFAULT_EULERSEQ.value, degrees=is_deg)
+
+        return cls(euler=angles, eulerseq=DEFAULT_EULERSEQ, angle=DEFAULT_ANGLE)
+
 
 class XYAxes(OrientationBase):
     """The first 3 numbers are the X axis of the frame. The next 3 numbers are the Y axis of the frame, which is automatically made orthogonal to the X axis. The Z axis is then defined as the cross-product of the X and Y axes."""
@@ -274,6 +449,13 @@ class XYAxes(OrientationBase):
         from mujoco_mojo.mjcf.pose import PoseXYAxes
 
         return PoseXYAxes(pos=np.asarray(pos), **self.model_dump())
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Extracts X and Y axes directly from the matrix columns."""
+        x_axis = matrix[:, 0]
+        y_axis = matrix[:, 1]
+        return cls(xyaxes=np.concatenate([x_axis, y_axis]))
 
 
 class ZAxis(OrientationBase):
@@ -318,6 +500,12 @@ class ZAxis(OrientationBase):
         from mujoco_mojo.mjcf.pose import PoseZAxis
 
         return PoseZAxis(pos=np.asarray(pos), **self.model_dump())
+
+    @classmethod
+    def from_matrix(cls, matrix: np.ndarray) -> Self:
+        """Extracts the Z axis from the third column of the matrix."""
+        z_axis = matrix[:, 2]
+        return cls(zaxis=z_axis)
 
 
 Orientation = Annotated[

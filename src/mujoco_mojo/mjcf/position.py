@@ -38,9 +38,7 @@ class Pos(XMLModel):
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Pos):
-            msg = f"Invalid type ({type(other)}) to check equality for Pos type"
-            logger.error(msg)
-            raise NotImplementedError(msg)
+            return NotImplemented
         return np.array_equal(np.asarray(self.pos), np.asarray(other.pos))
 
     def __getitem__(self, key):
