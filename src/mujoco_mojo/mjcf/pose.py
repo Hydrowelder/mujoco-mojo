@@ -5,7 +5,7 @@ from typing import Annotated, Any, Self
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.mjcf.constants import DEFAULT_ANGLE, DEFAULT_EULERSEQ
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.orientation import (
     AxisAngle,
     Euler,
@@ -42,7 +42,9 @@ class PoseBase(Pos, OrientationBase):
         p_inv = -(r_inv @ np.asarray(self.pos))
         return Quat.from_matrix(r_inv).as_pose(pos=p_inv)
 
-    def apply(self, vec: Vec3) -> np.ndarray:
+    def apply(
+        self, vec: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> np.ndarray:
         """Transforms a point from local coordinates to parent coordinates."""
         # v' = R*v + p
         return self.as_matrix() @ np.asarray(vec) + np.asarray(self.pos)
@@ -67,18 +69,22 @@ class PoseBase(Pos, OrientationBase):
     @classmethod
     def look_at(
         cls,
-        target: Vec3,
-        eye: Vec3 = np.array([0, 0, 0]),
-        up: Vec3 = np.array([0, 0, 1]),
+        target: Vec3 | np.ndarray | list[float] | tuple[float, float, float],
+        eye: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
+            [0, 0, 0]
+        ),
+        up: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
+            [0, 0, 1]
+        ),
         negative_z: bool = True,
     ) -> Self:
         """
         Creates a full Pose that points the Z-axis toward/away from a target.
 
         Args:
-            target (Vec3): Where the vector should point to.
-            eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            target (Vec3 | np.ndarray | list[float] | tuple[float, float, float]): Where the vector should point to.
+            eye (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
+            up (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:
