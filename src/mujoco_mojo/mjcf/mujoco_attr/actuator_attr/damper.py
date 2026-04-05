@@ -116,7 +116,8 @@ class ActuatorDamper(ActuatorBase):
             logger.error(msg)
             raise ValueError(msg)
 
-        if any(np.asarray(self.ctrlrange) < 0):
+        assert isinstance(self.ctrlrange, np.ndarray)
+        if any(self.ctrlrange < 0):
             msg = "ctrlrange cannot be negative"
             logger.error(msg)
             raise ValueError(msg)

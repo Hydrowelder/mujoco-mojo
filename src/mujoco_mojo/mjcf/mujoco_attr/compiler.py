@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -64,13 +65,13 @@ class Compiler(XMLModel):
     coordinate: Coordinate = Coordinate.LOCAL
     """In previous versions, this attribute could be used to specify whether frame positions and orientations are expressed in local or global coordinates, but the "global" option has since been removed, and will cause an error to be generated. In order to convert older models which used the "global" option, load and save them in MuJoCo 2.3.3 or older."""
 
-    angle: Angle = Angle.DEGREE
+    angle: Angle = DEFAULT_ANGLE
     """This attribute specifies whether the angles in the MJCF model are expressed in units of degrees or radians. The compiler converts degrees into radians, and mjModel always uses radians. For URDF models the parser sets this attribute to "radian" internally, regardless of the XML setting."""
 
     fitaabb: bool = False
     """The compiler is able to replace a mesh with a geometric primitive fitted to that mesh; see geom below. If this attribute is "true", the fitting procedure uses the axis-aligned bounding box (AABB) of the mesh, choosing the smallest primitive whose AABB contains the mesh AABB. Otherwise it uses the equivalent-inertia box of the mesh. The type of geometric primitive used for fitting is specified separately for each geom. The models used to generate the image on the right can be found here (fit inertia box) and here (fit aabb)."""
 
-    eulerseq: EulerSeq | str = EulerSeq.xyz
+    eulerseq: EulerSeq = DEFAULT_EULERSEQ
     """This attribute specifies the sequence of Euler rotations for all euler attributes of elements that have spatial frames, as explained in Frame orientations. This must be a string with exactly 3 characters from the set {x, y, z, X, Y, Z}. The character at position n determines the axis around which the n-th rotation is performed. Lower case letters denote axes that rotate with the frame (intrinsic), while upper case letters denote axes that remain fixed in the parent frame (extrinsic). The "rpy" convention used in URDF corresponds to "XYZ" in MJCF."""
 
     meshdir: DepPath | None = None

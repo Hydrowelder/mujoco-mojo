@@ -4,6 +4,9 @@ import numpy as np
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = ["Pos"]
 
@@ -31,15 +34,15 @@ class Pos(XMLModel):
             t: The interpolation factor (0.0 = self, 1.0 = other).
 
         """
-        return self * (1.0 - t) + np.asarray(other) * t
+        return self * (1.0 - t) + np.asarray(other, dtype=float) * t
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Pos):
             return NotImplemented
-        return np.array_equal(np.asarray(self.pos), np.asarray(other.pos))
+        return np.array_equal(self.pos, other.pos)
 
     def __getitem__(self, key):
-        return np.asarray(self.pos)[key]
+        return self.pos[key]
 
     def __len__(self) -> int:
         return 3
@@ -47,20 +50,23 @@ class Pos(XMLModel):
     def __add__(self, other: Pos | Vec3 | list | tuple) -> Pos:
         """Adds another position or vecotr to this one."""
         other_val = (
-            np.asarray(other.pos) if isinstance(other, Pos) else np.asarray(other)
+            other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
         )
-        return Pos(pos=np.asarray(self.pos) + other_val)
+        assert isinstance(self.pos, np.ndarray)
+        return Pos(pos=self.pos + other_val)
 
     def __sub__(self, other: Pos | Vec3 | list | tuple) -> Pos:
         """Subtracts another position or vector from this one."""
         other_val = (
-            np.asarray(other.pos) if isinstance(other, Pos) else np.asarray(other)
+            other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
         )
-        return Pos(pos=np.asarray(self.pos) - other_val)
+        assert isinstance(self.pos, np.ndarray)
+        return Pos(pos=self.pos - other_val)
 
     def __mul__(self, scalar: float) -> Pos:
         """Multiplies the position by a scalar."""
-        return Pos(pos=np.asarray(self.pos) * scalar)
+        assert isinstance(self.pos, np.ndarray)
+        return Pos(pos=self.pos * scalar)
 
     def __rmul__(self, scalar: float) -> Pos:
         """Handles scalar * Pos (required for the m1 * p1 logic)."""
@@ -68,7 +74,8 @@ class Pos(XMLModel):
 
     def __truediv__(self, scalar: float) -> Pos:
         """Divides the position by a scalar."""
-        return Pos(pos=np.asarray(self.pos) / scalar)
+        assert isinstance(self.pos, np.ndarray)
+        return Pos(pos=self.pos / scalar)
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         """Allows np.asarray(my_pos) to work seamlessly."""

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import Inertial
-from mujoco_mojo.mjcf.position import Pos
+from mujoco_mojo.mjcf.pose import PoseQuat
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import (
     DistName,
@@ -22,7 +22,7 @@ def simple_box_inertial() -> Inertial:
     """A standard 1kg, 1x1x1 box at origin."""
     return Inertial(
         mass=1.0,
-        pos=Pos(pos=np.array([0, 0, 0])),
+        pose=PoseQuat(pos=np.asarray([0, 0, 0])),
         diaginertia=np.asarray([1 / 6, 1 / 6, 1 / 6]),
     )
 
@@ -38,7 +38,7 @@ def test_parallel_axis_addition(simple_box_inertial: Inertial):
     # Move a second identical cube to [1, 0, 0]
     other = Inertial(
         mass=1.0,
-        pos=Pos(pos=np.array([1, 0, 0])),
+        pose=PoseQuat(pos=np.asarray([1, 0, 0])),
         diaginertia=np.asarray([1 / 6, 1 / 6, 1 / 6]),
     )
 
@@ -47,7 +47,7 @@ def test_parallel_axis_addition(simple_box_inertial: Inertial):
     # Combined mass should be 2.0
     assert combined.mass == 2.0
     # Combined CoM should be at [0.5, 0, 0]
-    assert np.allclose(np.asarray(combined.pos), [0.5, 0, 0])
+    assert np.allclose(combined.pose.pos, [0.5, 0, 0])
     # Verify the I_xx remains the same (axis of rotation passes through both CoMs)
     # Note: Principal axes might rotate, so we check the resulting matrix diagonals
     assert combined.i_xx == pytest.approx(1 / 3)  # (1/6 + 1/6)
@@ -57,7 +57,7 @@ def test_inertial_subtraction(simple_box_inertial: Inertial):
     """Test 'carving out' matter."""
     small_mass = Inertial(
         mass=0.5,
-        pos=Pos(pos=np.array([0, 0, 0])),
+        pose=PoseQuat(pos=np.asarray([0, 0, 0])),
         diaginertia=np.asarray([1 / 12, 1 / 12, 1 / 12]),
     )
 
@@ -72,7 +72,7 @@ def test_subtraction_physics_failure(simple_box_inertial: Inertial):
     # Impossible: Subtracting more inertia than the base has
     massive_tool = Inertial(
         mass=0.1,
-        pos=Pos(pos=np.array([0, 0, 0])),
+        pose=PoseQuat(pos=np.asarray([0, 0, 0])),
         diaginertia=np.asarray([10, 10, 10]),
     )
 
@@ -114,8 +114,10 @@ def test_from_random_component_draw(mojo_model: MojoModel):
         diaginertia=np.asarray([0.1, 0.1, 0.1]),
     )
 
-    assert 5 <= item.pos[0] <= 6
-    assert item.pos[1] == 0.0
+    assert isinstance(item.pose, PoseQuat)
+    pos_array = np.asarray(item.pose.pos)
+    assert 5 <= pos_array[0] <= 6
+    assert pos_array[1] == 0.0
     assert "pos_x" in mojo_model.named
 
 
@@ -129,7 +131,7 @@ def test_from_random_max_retries(mojo_model: MojoModel):
         Inertial.from_random(
             mojo_model=mojo_model,
             mass=1.0,
-            pos=np.array([0, 0, 0]),
+            pos=np.asarray([0, 0, 0]),
             diaginertia=(bad_dist, bad_dist, bad_dist),
             max_retries=3,
         )

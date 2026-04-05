@@ -6,6 +6,7 @@ import mujoco
 from pydantic import Field
 
 import mujoco_mojo.utils.utils as utils
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
@@ -22,7 +23,7 @@ from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
 from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import ModelName
+from mujoco_mojo.typing import Angle, EulerSeq, ModelName
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
 
@@ -160,6 +161,43 @@ class Mujoco(XMLModel):
     )
     """Extension definitions grouping."""
 
+    @property
+    def compiler_degree_settings(self) -> Angle:
+        """
+        Returns the unified Angle setting. If no compilers are defined, uses the Compiler class default.
+        """
+        default = DEFAULT_ANGLE
+
+        if not self.compilers:
+            return default
+        elif len(self.compilers) == 1:
+            return self.compilers[0].angle
+
+        unique = {c.angle for c in self.compilers}
+        if len(unique) > 1:
+            msg = f"Inconsistent compiler angle settings: {unique}. All compiler tags must match."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        return next(iter(unique)) if unique else default
+
+    @property
+    def compiler_eulerseq_settings(self) -> EulerSeq:
+        default = DEFAULT_EULERSEQ
+
+        if not self.compilers:
+            return default
+        elif len(self.compilers) == 1:
+            return self.compilers[0].eulerseq
+
+        unique = {c.eulerseq for c in self.compilers}
+        if len(unique) > 1:
+            msg = f"Inconsistent compiler eulerseq settings: {unique}. All compiler tags must match."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        return next(iter(unique)) if unique else default
+
     def write_xml(self, file: Path, exclude_default: bool = True) -> None:
         """
         Writes the MuJoCo model to an XML file.
@@ -169,16 +207,36 @@ class Mujoco(XMLModel):
             exclude_default (bool, optional): Wheter or not to include default values. Values equal to None are always ignored. Attributes which are literals (such as Geom.type) are always included. Defaults to True.
 
         """
-        xml = utils.to_pretty_xml(self.to_xml(exclude_default=exclude_default))
+        xml = utils.to_pretty_xml(
+            self.to_xml(
+                exclude_default=exclude_default,
+                compiler_degrees=self.compiler_degree_settings,
+                compiler_eulerseq=self.compiler_eulerseq_settings,
+            )
+        )
         file.write_text(xml, encoding="utf-8")
 
     def to_mj_spec(self) -> mujoco.MjSpec:
         """Creates an MjSpec from the Mujoco instance."""
-        return mujoco.MjSpec.from_string(to_pretty_xml(self.to_xml()))
+        return mujoco.MjSpec.from_string(
+            to_pretty_xml(
+                self.to_xml(
+                    compiler_degrees=self.compiler_degree_settings,
+                    compiler_eulerseq=self.compiler_eulerseq_settings,
+                )
+            )
+        )
 
     def to_mj_model(self) -> mujoco.MjModel:
         """Creates an MjModel from the Mujoco instance."""
-        return mujoco.MjModel.from_xml_string(to_pretty_xml(self.to_xml()))
+        return mujoco.MjModel.from_xml_string(
+            to_pretty_xml(
+                self.to_xml(
+                    compiler_degrees=self.compiler_degree_settings,
+                    compiler_eulerseq=self.compiler_eulerseq_settings,
+                )
+            )
+        )
 
     def prep_for_sim(
         self, save_path: Path | None = None
