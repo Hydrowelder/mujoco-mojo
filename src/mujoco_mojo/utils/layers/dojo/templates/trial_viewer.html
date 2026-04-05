@@ -719,39 +719,7 @@
                     <span class="text-[7px] font-black uppercase tracking-tighter">Share</span>
                 </button>
             </div>
-            <div class="flex flex-col gap-2">
-                <button @click="undo()"
-                        :disabled="historyIndex <= 0"
-                        class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
-                        title="Undo (Ctrl+Z)">
-                    <svg class="w-5 h-5"
-                         fill="none"
-                         stroke="currentColor"
-                         viewBox="0 0 24 24">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                    </svg>
-                    <span class="text-[7px] font-black uppercase tracking-tighter">Undo</span>
-                </button>
-            </div>
-            <div class="flex flex-col gap-2">
-                <button @click="redo()"
-                        :disabled="historyIndex >= historyStack.length - 1"
-                        class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
-                        title="Redo (Ctrl+Y)">
-                    <svg class="w-5 h-5"
-                         fill="none"
-                         stroke="currentColor"
-                         viewBox="0 0 24 24">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
-                    </svg><span class="text-[7px] font-black uppercase tracking-tighter">Redo</span>
-                </button>
-            </div>
+
             <!-- plot config -->
             <div class="flex flex-col gap-2">
                 <div class="relative"
@@ -765,11 +733,10 @@
                              fill="none"
                              stroke="currentColor"
                              viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-width="2"
+                                  d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path stroke-width="2"
+                                  d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
                         <span class="text-[7px] font-black uppercase tracking-tighter">Edit</span>
                     </button>
@@ -1153,6 +1120,43 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- undo -->
+            <div class="flex flex-col gap-2">
+                <button @click="undo()"
+                        :disabled="historyIndex <= 0"
+                        class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
+                        title="Undo (Ctrl+Z)">
+                    <svg class="w-5 h-5"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                    <span class="text-[7px] font-black uppercase tracking-tighter">Undo</span>
+                </button>
+            </div>
+
+            <!-- redo -->
+            <div class="flex flex-col gap-2">
+                <button @click="redo()"
+                        :disabled="historyIndex >= historyStack.length - 1"
+                        class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
+                        title="Redo (Ctrl+Y)">
+                    <svg class="w-5 h-5"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
+                    </svg><span class="text-[7px] font-black uppercase tracking-tighter">Redo</span>
+                </button>
             </div>
 
             <!-- download options -->
