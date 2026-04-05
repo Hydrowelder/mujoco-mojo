@@ -58,6 +58,7 @@ function trialViewer(trialId, externalUrl) {
     warpId: null,
     paddingLen: 2,
     loading: true,
+    isMac: /Mac|iPhone|iPod|iPad/.test(navigator.platform),
     data: null,
     errorState: null,
 
@@ -101,6 +102,53 @@ function trialViewer(trialId, externalUrl) {
     vsDraft: {
       enabled: false,
       range: [0, 0],
+    },
+
+    // --- HISTORY STATE ---
+    historyStack: [],
+    historyIndex: -1,
+    isUndoing: false, // Flag to prevent watcher from capturing history during undo/redo
+    maxHistory: 50,
+
+    pushHistory() {
+      if (this.isUndoing) return;
+
+      const snapshot = JSON.stringify(this.config);
+
+      // If the state is identical to the current head, don't push
+      if (this.historyStack[this.historyIndex] === snapshot) return;
+
+      // Wipe any "redo" future if we make a new change
+      this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+
+      this.historyStack.push(snapshot);
+      if (this.historyStack.length > this.maxHistory) this.historyStack.shift();
+
+      this.historyIndex = this.historyStack.length - 1;
+    },
+
+    undo() {
+      if (this.historyIndex > 0) {
+        this.isUndoing = true;
+        this.historyIndex--;
+        this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.$nextTick(() => {
+          this.isUndoing = false;
+        });
+        this.notify("Undo", "info");
+      }
+    },
+
+    redo() {
+      if (this.historyIndex < this.historyStack.length - 1) {
+        this.isUndoing = true;
+        this.historyIndex++;
+        this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.$nextTick(() => {
+          this.isUndoing = false;
+        });
+        this.notify("Redo", "info");
+      }
     },
 
     async fetchTrialData(id, requiredCols = []) {
@@ -268,6 +316,11 @@ function trialViewer(trialId, externalUrl) {
           this.vsDraft.range = [...this.config.vsRange];
         }
 
+        // Capture the very first state after hydration
+        this.$nextTick(() => {
+          this.pushHistory();
+        });
+
         // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
         this.$nextTick(async () => {
           await this.renderPlot();
@@ -333,6 +386,20 @@ function trialViewer(trialId, externalUrl) {
         if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
         if (e.key === "ArrowRight")
           document.getElementById("nav-next")?.click();
+
+        const isZ = e.key.toLowerCase() === "z";
+        const isY = e.key.toLowerCase() === "y";
+        const cmdOrCtrl = e.metaKey || e.ctrlKey;
+
+        if (cmdOrCtrl && isZ) {
+          e.preventDefault();
+          if (e.shiftKey) this.redo();
+          else this.undo();
+        }
+        if (cmdOrCtrl && isY) {
+          e.preventDefault();
+          this.redo();
+        }
       });
 
       // FETCH TRIAL MANIFEST (For the slider/dropdown)
@@ -390,6 +457,7 @@ function trialViewer(trialId, externalUrl) {
           await this.syncVsRange();
         }
 
+        this.pushHistory();
         this.saveAndRender();
       });
     },
