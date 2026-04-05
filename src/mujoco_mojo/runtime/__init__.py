@@ -1,4 +1,4 @@
-from .forcing_function import GeneralForce, Load, PointToPointForce
+from .load import GeneralForce, Load, PointToPointForce
 from .results_manager import ResultsManager
 from .runtime_manager import RuntimeManager
 from .video_recorder import VideoRecorder
