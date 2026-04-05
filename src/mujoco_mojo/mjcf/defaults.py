@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from mujoco_mojo.typing import Vec2, Vec3, Vec5
+from mujoco_mojo.typing import Angle, EulerSeq, Vec2, Vec3, Vec5
 
 __all__ = [
     "FRICTION_DEFAULT",
@@ -18,3 +18,9 @@ SOLREF_DEFAULT: Vec2 = np.array((0.02, 1))
 
 FRICTION_DEFAULT: Vec3 = np.array((1, 0.005, 0.0001))
 """Default friction definition. The values are coefficients for `sliding`, `torsion`, and `rolling`."""
+
+DEFAULT_ANGLE = Angle.DEGREE
+"""Default angle convention."""
+
+DEFAULT_EULERSEQ = EulerSeq.xyz
+"""Default Euler angle sequence."""

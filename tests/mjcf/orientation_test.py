@@ -1,0 +1,110 @@
+import numpy as np
+import pytest
+
+from mujoco_mojo.mjcf.orientation import AxisAngle, Euler, OrientationType, Quat, XYAxes
+from mujoco_mojo.typing import Angle, EulerSeq
+
+
+def test_quat_identity():
+    """Verify Quat identity behavior and matrix conversion."""
+    q = Quat(quat=np.asarray([1.0, 0.0, 0.0, 0.0]))
+    assert np.allclose(q.as_matrix(), np.eye(3))
+    assert q.type == OrientationType.QUAT
+
+
+def test_euler_conversions():
+    """Test Euler to matrix and back, including sequence changes."""
+    # 90 degrees around Z
+    e = Euler(euler=np.asarray([0, 0, 90]), eulerseq=EulerSeq.xyz, angle=Angle.DEGREE)
+
+    mat = e.as_matrix()
+    # Expected: x->y, y->-x, z->z
+    expected = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    assert np.allclose(mat, expected, atol=1e-7)
+
+    # Test with_eulerseq (convert xyz 90z to zyx)
+    e_zyx = e.with_eulerseq(EulerSeq.zyx)
+    assert e_zyx.eulerseq == EulerSeq.zyx
+    assert np.allclose(e_zyx.as_matrix(), expected)
+
+
+def test_axis_angle_with_helpers():
+    """Test AxisAngle and its 'with_' modification methods."""
+    aa = AxisAngle(axisangle=np.asarray([0, 0, 1, 90]), angle=Angle.DEGREE)
+
+    # Change axis to X
+    aa_x = aa.with_axis([1, 0, 0])
+    assert np.array_equal(np.asarray(aa_x.axisangle)[:3], [1, 0, 0])
+
+    # Change angle value
+    aa_180 = aa_x.with_angle_val(180.0)
+    assert np.asarray(aa_180.axisangle)[3] == 180.0
+
+
+def test_composition_and_inversion():
+    """Test self * other and inv()."""
+    # R1: 90 deg around X, R2: 90 deg around Y
+    r1 = Euler(euler=np.asarray([90, 0, 0]))
+    r2 = Euler(euler=np.asarray([0, 90, 0]))
+
+    # Compose
+    combined = r1 * r2
+    assert isinstance(combined, Quat)  # Base class returns Quat for math
+
+    # Invert
+    inv_r1 = r1.inv()
+    identity_check = r1 * inv_r1
+    assert np.allclose(identity_check.as_matrix(), np.eye(3), atol=1e-7)
+
+
+def test_angle_between():
+    """Test the geodesic distance between orientations."""
+    r1 = Euler(euler=np.asarray([0, 0, 0]))
+    r2 = Euler(euler=np.asarray([0, 0, 90]))
+
+    dist = r1.angle_between(r2, angle=Angle.DEGREE)
+    assert pytest.approx(dist) == 90.0
+
+    dist_rad = r1.angle_between(r2, angle=Angle.RADIAN)
+    assert pytest.approx(dist_rad) == np.pi / 2
+
+
+def test_look_at_factory():
+    """Verify look_at produces the correct pointing vector."""
+    # Look from origin toward +X
+    target = [1, 0, 0]
+    eye = [0, 0, 0]
+
+    # Camera/Light convention: -Z points at target
+    q = Quat.look_at(target=np.asarray(target), eye=np.asarray(eye), negative_z=True)
+
+    # Forward vector in local space is [0, 0, -1]
+    # Rotate it to world space; should match the pointing direction [1, 0, 0]
+    world_forward = q.apply([0, 0, -1])
+    assert np.allclose(world_forward, [1, 0, 0], atol=1e-7)
+
+
+def test_universal_casts():
+    """Verify we can pivot between any representation."""
+    # Start with XYAxes
+    xy = XYAxes(xyaxes=np.asarray([0, 1, 0, -1, 0, 0]))  # Rotated 90 deg around Z
+
+    # Cast to Euler
+    e = xy.as_euler(seq=EulerSeq.xyz)
+    assert isinstance(e, Euler)
+    assert np.allclose(e.as_matrix(), xy.as_matrix())
+
+    # Cast to Quat
+    q = e.as_quat()
+    assert isinstance(q, Quat)
+    assert np.allclose(q.as_matrix(), xy.as_matrix())
+
+
+def test_vector_rotation():
+    """Test the apply() method."""
+    q = Euler(euler=np.asarray([0, 0, 90])).as_quat()
+    v = [1, 0, 0]
+
+    v_rot = q.apply(np.asarray(v))
+    # 90 deg around Z takes X to Y
+    assert np.allclose(v_rot, [0, 1, 0], atol=1e-7)

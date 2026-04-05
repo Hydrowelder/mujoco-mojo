@@ -8,7 +8,7 @@ import numpy as np
 from pydantic import Field
 from scipy.spatial.transform import Rotation as R
 
-from mujoco_mojo.mjcf.constants import DEFAULT_ANGLE, DEFAULT_EULERSEQ
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Angle, EulerSeq, Vec3, Vec4, Vec6
 from mujoco_mojo.utils.log import get_logger
@@ -90,7 +90,9 @@ class OrientationBase(XMLModel, ABC):
         """Returns this orientation as a rotation matrix."""
         return self.to_rotation().as_matrix()
 
-    def apply(self, vec: Vec3) -> np.ndarray:
+    def apply(
+        self, vec: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> np.ndarray:
         """Rotates a vector by this orientation."""
         return self.to_rotation().apply(np.asarray(vec))
 
@@ -121,39 +123,62 @@ class OrientationBase(XMLModel, ABC):
     @classmethod
     def look_at(
         cls,
-        target: Vec3,
-        eye: Vec3 = np.array([0, 0, 0]),
-        up: Vec3 = np.array([0, 0, 1]),
+        target: Vec3 | np.ndarray | list[float] | tuple[float, float, float],
+        eye: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
+            [0, 0, 0]
+        ),
+        up: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
+            [0, 0, 1]
+        ),
         negative_z: bool = True,
     ) -> Self:
         """
         Creates an orientation that points the Z-axis toward/away from a target.
 
         Args:
-            target (Vec3): Where the vector should point to.
-            eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            target (Vec3 | np.ndarray | list[float] | tuple[float, float, float]): Where the vector should point to.
+            eye (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
+            up (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:
             Self: New instance of Orientation.
 
         """
-        target = np.asarray(target)
-        eye = np.asarray(eye)
+        target = np.asarray(target, dtype=float)
+        eye = np.asarray(eye, dtype=float)
+        up = np.asarray(up, dtype=float)
 
         forward = target - eye
-        forward /= np.linalg.norm(forward)
+        norm = np.linalg.norm(forward)
+        if norm == 0:
+            msg = "Target and Eye cannot be at the same position."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        forward = forward / norm
 
         if negative_z:
             forward = -forward
 
-        # compute right and up axes to complete orthonormal basis
-        right = np.cross(np.asarray(up), forward)
-        right /= np.linalg.norm(right)
+        # Compute right and up axes
+        right = np.cross(up, forward)
+        right_norm = np.linalg.norm(right)
+
+        # Handle case where 'up' is colinear with 'forward'
+        if right_norm < 1e-10:
+            # shift 'up' to an arbitrary axis to break colinearity
+            alt_up = (
+                np.array([0.0, 1.0, 0.0])
+                if abs(forward[2]) > 0.9
+                else np.array([0.0, 0.0, 1.0])
+            )
+            right = np.cross(alt_up, forward)
+            right_norm = np.linalg.norm(right)
+
+        right /= right_norm
         actual_up = np.cross(forward, right)
 
-        # matrix is [X, Y, Z] columns
         mat = np.column_stack((right, actual_up, forward))
         return cls.from_matrix(mat)
 
@@ -170,7 +195,9 @@ class OrientationBase(XMLModel, ABC):
         pass
 
     @abstractmethod
-    def as_pose(self, pos: Vec3 | Pos) -> Pose:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> Pose:
         """Returns the orientation with its equal Pose type."""
         pass
 
@@ -217,7 +244,9 @@ class Quat(OrientationBase):
         # Quaternions don't care about degrees or eulerseq
         return np.asarray(self.quat)
 
-    def as_pose(self, pos: Vec3 | Pos) -> PoseQuat:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> PoseQuat:
         from mujoco_mojo.mjcf.pose import PoseQuat
 
         return PoseQuat(pos=np.asarray(pos), **self.model_dump())
@@ -289,7 +318,9 @@ class AxisAngle(OrientationBase):
 
         return self.model_copy(update={"axisangle": new_axisangle, "angle": angle})
 
-    def with_axis(self, axis: Vec3) -> Self:
+    def with_axis(
+        self, axis: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> Self:
         """Returns a new AxisAngle with a new axis but the same angle."""
         axis = np.asarray(axis)
         axis = axis / np.linalg.norm(axis)
@@ -301,7 +332,9 @@ class AxisAngle(OrientationBase):
         new_val = np.array([*np.asarray(self.axisangle)[:3], angle])
         return self.model_copy(update={"axisangle": new_val})
 
-    def as_pose(self, pos: Vec3 | Pos) -> PoseAxisAngle:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> PoseAxisAngle:
         from mujoco_mojo.mjcf.pose import PoseAxisAngle
 
         return PoseAxisAngle(pos=np.asarray(pos), **self.model_dump())
@@ -367,7 +400,9 @@ class Euler(OrientationBase):
             target_eulerseq.value, degrees=target_degrees == Angle.DEGREE
         )
 
-    def as_pose(self, pos: Vec3 | Pos) -> PoseEuler:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> PoseEuler:
         from mujoco_mojo.mjcf.pose import PoseEuler
 
         return PoseEuler(pos=np.asarray(pos), **self.model_dump())
@@ -445,7 +480,9 @@ class XYAxes(OrientationBase):
         # XYAxes don't care about degrees or eulerseq
         return np.asarray(self.xyaxes)
 
-    def as_pose(self, pos: Vec3 | Pos) -> PoseXYAxes:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> PoseXYAxes:
         from mujoco_mojo.mjcf.pose import PoseXYAxes
 
         return PoseXYAxes(pos=np.asarray(pos), **self.model_dump())
@@ -496,7 +533,9 @@ class ZAxis(OrientationBase):
         # ZAxis don't care about degrees or eulerseq
         return np.asarray(self.zaxis)
 
-    def as_pose(self, pos: Vec3 | Pos) -> PoseZAxis:
+    def as_pose(
+        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
+    ) -> PoseZAxis:
         from mujoco_mojo.mjcf.pose import PoseZAxis
 
         return PoseZAxis(pos=np.asarray(pos), **self.model_dump())
