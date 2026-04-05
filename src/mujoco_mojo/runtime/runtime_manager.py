@@ -4,7 +4,7 @@ from typing import Self
 
 import mujoco
 
-from mujoco_mojo.runtime.forcing_function import Load
+from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger

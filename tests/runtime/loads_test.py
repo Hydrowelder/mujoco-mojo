@@ -2,10 +2,16 @@ import mujoco
 import numpy as np
 import pytest
 
+from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
-from mujoco_mojo.runtime.forcing_function import GeneralForce, PointToPointForce
+from mujoco_mojo.runtime.load import (
+    GeneralForce,
+    PointToPointForce,
+    ScalarForce,
+    VectorForce,
+)
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
-from mujoco_mojo.typing import SiteName
+from mujoco_mojo.typing import BodyName, SiteName
 
 
 @pytest.fixture
@@ -148,3 +154,122 @@ def test_compression_spring_limit(basic_mj_setup: tuple[mujoco.MjModel, mujoco.M
     # F_mag = -100 * (0.2 - 0.5) = +30.
     # Force = +30 * [-1, 0, 0] = [-30, 0, 0]
     assert np.asarray(force_active)[0] < 0
+
+
+def test_body_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+    """Verify that VectorForce applies opposite loads to action and reaction bodies."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+    b2 = Body(name=BodyName("body2"))
+
+    # Apply 100N in World X to Site 1 (Body 1), reacting on Body 2
+    force = VectorForce(
+        name="inter_link", action_site=s1, xtion_body=b2, fx=lambda t, m, d: 100.0
+    )
+    force.resolve_ids(model, data)
+
+    # Clear buffers and apply
+    data.qfrc_applied.fill(0)
+    force.apply_load(model, data)
+
+    # Body 1 is the first freejoint (indices 0-5), Body 2 is the second (indices 6-11)
+    # Check X-force component
+    assert data.qfrc_applied[0] == pytest.approx(100.0)  # Action
+    assert data.qfrc_applied[6] == pytest.approx(-100.0)  # Reaction
+
+
+def test_scalar_force_orientation_tracking(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify ScalarForce follows the site's local X-axis as it rotates."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    # Constant 50N thruster
+    thruster = ScalarForce(
+        name="thruster", action_site=s1, scalar_func=lambda t, u, m, d: 50.0
+    )
+    thruster.resolve_ids(model, data)
+
+    # 1. Identity: Local X is World X
+    f_world, _ = thruster.calculate(model, data)
+    assert np.allclose(f_world, [50.0, 0, 0])
+
+    # 2. Rotate body 90 deg around Z: Local X is now World Y [0, 1, 0]
+    # Quat (w,x,y,z) for 90 deg Z: [0.7071, 0, 0, 0.7071]
+    data.qpos[3:7] = [0.7071, 0, 0, 0.7071]
+    mujoco.mj_forward(model, data)
+
+    f_world_rot, _ = thruster.calculate(model, data)
+    assert np.allclose(f_world_rot, [0, 50.0, 0], atol=1e-5)
+
+
+def test_stroke_compression_spring(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Verify the three states of a stroke-limited compression spring."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+    s2 = SiteSphere(name=SiteName("site2"))
+
+    # Initial dist = 1.0. Set r0 = 1.0, max_stroke = 0.5.
+    # Active range is 1.0 to 1.5.
+    spring = PointToPointForce.stroke_compression_spring(
+        name="limited_spring",
+        action_site=s1,
+        xtion_site=s2,
+        stiffness=100.0,
+        preload=10.0,
+        max_stroke=0.5,
+    )
+    spring.resolve_ids(model, data)  # sets _r0_mag to 1.0
+
+    # State 1: At rest (d=1.0, delta=0). Force = Preload = 10N.
+    f, _ = spring.calculate(model, data)
+    assert np.linalg.norm(f) == pytest.approx(10.0)
+
+    # State 2: Mid-stroke (d=1.25, delta=0.25).
+    # Force = 10 - (100 * 0.25) = -15. Since return is max(0, f_mag), should be 0.
+    # Let's adjust preload to be higher for a better test.
+    spring = PointToPointForce.stroke_compression_spring(
+        name="stiff_spring",
+        action_site=s1,
+        xtion_site=s2,
+        stiffness=10.0,
+        preload=50.0,
+        max_stroke=0.5,
+    )
+    spring.resolve_ids(model, data)
+    data.qpos[7] = 1.25  # Dist = 1.25
+    mujoco.mj_forward(model, data)
+    f, _ = spring.calculate(model, data)
+    # F = 50 - (10 * 0.25) = 47.5
+    assert np.linalg.norm(f) == pytest.approx(47.5)
+
+    # State 3: Out of bounds (d=1.6, delta=0.6). Should be 0.
+    data.qpos[7] = 0.6
+    mujoco.mj_forward(model, data)
+    f, _ = spring.calculate(model, data)
+    assert np.linalg.norm(f) == 0.0
+
+
+def test_active_toggle_suppression(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """Ensure that setting active=False suppresses all forces."""
+    model, data = basic_mj_setup
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    force = ScalarForce(
+        name="dead_force",
+        action_site=s1,
+        active=False,
+        scalar_func=lambda t, u, m, d: 100.0,
+    )
+    force.resolve_ids(model, data)
+
+    data.qfrc_applied.fill(0)
+    force.apply_load(model, data)
+
+    assert np.all(data.qfrc_applied == 0)
+    assert len(force.get_visuals(model, data)) == 0
