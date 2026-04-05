@@ -80,7 +80,7 @@ def test_look_at_pose():
     assert np.allclose(np.asarray(pose.pos), eye)
     # Check that the -Z axis in world space points toward the target
     # Point [0, 0, -1] in local should be [0, 0, 0] in world
-    assert np.allclose(pose.apply([0, 0, -1]), [0, 0, 0])
+    assert np.allclose(pose.apply(np.asarray([0, 0, -1])), [0, 0, 0])
 
 
 def test_pose_converters():

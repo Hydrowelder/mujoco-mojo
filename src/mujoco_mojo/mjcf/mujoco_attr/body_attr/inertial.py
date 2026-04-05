@@ -72,9 +72,9 @@ class Inertial(XMLModel):
         if self.using_diag:
             d = self.diaginertia
             assert d is not None
-            return np.diag(np.asarray(d))
+            return np.diag(d)
 
-        f = np.asarray(self.fullinertia)
+        f = self.fullinertia
         assert f is not None
 
         return np.array(
@@ -227,7 +227,7 @@ class Inertial(XMLModel):
 
         # parallel axis theorem
         # I_body = I_com + m ([r_skew]^2) -> I_com + m * ( (p.T @ p) * eye(3) - p @ p.T )
-        p = np.asarray(self.pose.pos)
+        p = self.pose.pos
         m = self.mass
 
         # cross product matrix
@@ -254,7 +254,7 @@ class Inertial(XMLModel):
 
         """
         # shift inertia from body frame back to the center of mass
-        p = np.asarray(pos)
+        p = pos
         p_sq = np.dot(p, p) * np.eye(3) - np.outer(p, p)
         I_com = inertia_matrix - mass * p_sq
 
@@ -298,7 +298,9 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         # new CoM
-        p1, p2 = np.asarray(self.pose.pos), np.asarray(other.pose.pos)
+        p1, p2 = self.pose.pos, other.pose.pos
+        assert isinstance(p1, np.ndarray)
+        assert isinstance(p2, np.ndarray)
         pos_total = (m1 * p1 + m2 * p2) / m_total
 
         # sum inertias in the common body frame
@@ -335,7 +337,10 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         # new CoM
-        p1, p2 = np.asarray(self.pose.pos), np.asarray(other.pose.pos)
+        p1, p2 = self.pose.pos, other.pose.pos
+        assert isinstance(p1, np.ndarray)
+        assert isinstance(p2, np.ndarray)
+
         pos_total = (m1 * p1 - m2 * p2) / m_total
 
         # sum inertias in the common body frame
@@ -421,7 +426,7 @@ class Inertial(XMLModel):
                         pending_named_values.append(nv)
                     else:
                         resolved_values.append(item)
-                return np.asarray(resolved_values), pending_named_values
+                return np.asarray(resolved_values, dtype=float), pending_named_values
 
             # case 2: single vector-level distribution
             if isinstance(input_val, Distribution):
@@ -432,7 +437,7 @@ class Inertial(XMLModel):
                 return nv.value.squeeze(), [nv]
 
             # case 3: raw numeric value
-            return np.asarray(input_val), []
+            return input_val, []
 
         attempts = 0
         while attempts < max_retries:

@@ -39,8 +39,8 @@ class Interpolator(MojoBaseModel):
     @model_validator(mode="after")
     def _init_spline(self) -> Self:
         self._func = interp1d(
-            np.asarray(self.x),
-            np.asarray(self.y),
+            self.x,
+            self.y,
             kind=self.kind,
             fill_value="extrapolate",
         )

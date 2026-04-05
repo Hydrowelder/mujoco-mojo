@@ -87,7 +87,7 @@ class SiteBase(XMLModel):
     def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
         return mj_model.site_bodyid[self.get_id(mj_model)]
 
-    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         return mj_data.site_xpos[self.get_id(mj_model)]
 
     def rt_displacements(
@@ -184,7 +184,7 @@ class SiteBase(XMLModel):
             )
         )
 
-    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear
@@ -193,15 +193,11 @@ class SiteBase(XMLModel):
         )
         return res
 
-    def rt_lin_vel(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_lin_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the 3D linear velocity vector in the world frame."""
         return self.rt_vel(mj_model, mj_data)[3:6]
 
-    def rt_ang_vel(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the 3D angular velocity vector in the world frame."""
         return self.rt_vel(mj_model, mj_data)[0:3]
 
@@ -211,7 +207,7 @@ class SiteBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         relative_to: Site | None = None,
-    ) -> np.ndarray:
+    ) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
         world_self = self.rt_vel(mj_model, mj_data)
@@ -221,6 +217,8 @@ class SiteBase(XMLModel):
         else:
             world_other = np.zeros(6)
 
+        assert isinstance(world_self, np.ndarray)
+        assert isinstance(world_other, np.ndarray)
         world_rel = world_self - world_other
 
         if relative_to is None:

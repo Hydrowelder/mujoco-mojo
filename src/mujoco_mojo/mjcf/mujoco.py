@@ -6,7 +6,7 @@ import mujoco
 from pydantic import Field
 
 import mujoco_mojo.utils.utils as utils
-from mujoco_mojo.mjcf.constants import DEFAULT_ANGLE, DEFAULT_EULERSEQ
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset

@@ -166,7 +166,7 @@ class Load(MojoBaseModel, ABC):
                 {
                     "pos": action_pos,
                     "vec": f_vec,
-                    "color": np.asarray(Color.EMERALD_500.rgba),
+                    "color": Color.EMERALD_500.rgba,
                     "is_torque": False,
                 }
             )
@@ -177,7 +177,7 @@ class Load(MojoBaseModel, ABC):
                 {
                     "pos": action_pos,
                     "vec": t_vec,
-                    "color": np.asarray(Color.AMBER_500.rgba),
+                    "color": Color.AMBER_500.rgba,
                     "is_torque": True,
                 }
             )
@@ -252,7 +252,7 @@ class PointToPointForce(Load):
                 {
                     "pos": xtion_pos,
                     "vec": -f_vec,  # opposite direction
-                    "color": np.asarray(Color.ROSE_500.rgba),  # Red for Reaction
+                    "color": Color.ROSE_500.rgba,  # Red for Reaction
                     "is_torque": False,
                 }
             )

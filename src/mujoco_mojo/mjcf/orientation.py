@@ -90,11 +90,9 @@ class OrientationBase(XMLModel, ABC):
         """Returns this orientation as a rotation matrix."""
         return self.to_rotation().as_matrix()
 
-    def apply(
-        self, vec: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> np.ndarray:
+    def apply(self, vec: Vec3) -> np.ndarray:
         """Rotates a vector by this orientation."""
-        return self.to_rotation().apply(np.asarray(vec))
+        return self.to_rotation().apply(np.asarray(vec, dtype=float))
 
     def __mul__(self, other: OrientationBase) -> Quat:
         """Composes two rotations: self * other and returns a Quat."""
@@ -123,22 +121,18 @@ class OrientationBase(XMLModel, ABC):
     @classmethod
     def look_at(
         cls,
-        target: Vec3 | np.ndarray | list[float] | tuple[float, float, float],
-        eye: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
-            [0, 0, 0]
-        ),
-        up: Vec3 | np.ndarray | list[float] | tuple[float, float, float] = np.array(
-            [0, 0, 1]
-        ),
+        target: Vec3,
+        eye: Vec3 = np.array([0, 0, 0]),
+        up: Vec3 = np.array([0, 0, 1]),
         negative_z: bool = True,
     ) -> Self:
         """
         Creates an orientation that points the Z-axis toward/away from a target.
 
         Args:
-            target (Vec3 | np.ndarray | list[float] | tuple[float, float, float]): Where the vector should point to.
-            eye (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3 | np.ndarray | list[float] | tuple[float, float, float], optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            target (Vec3): Where the vector should point to.
+            eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
+            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:
@@ -195,9 +189,7 @@ class OrientationBase(XMLModel, ABC):
         pass
 
     @abstractmethod
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> Pose:
+    def as_pose(self, pos: Vec3 | Pos) -> Pose:
         """Returns the orientation with its equal Pose type."""
         pass
 
@@ -222,7 +214,7 @@ class Quat(OrientationBase):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Quat):
             return NotImplemented
-        return np.array_equal(np.asarray(self.quat), np.asarray(other.quat))
+        return np.array_equal(self.quat, other.quat)
 
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> Self:
@@ -234,7 +226,7 @@ class Quat(OrientationBase):
 
     def to_rotation(self) -> R:
         # determine the subtype to make a scipy Rotation object
-        quat = np.asarray(self.quat)
+        quat = self.quat
         x, y, z, w = quat[1], quat[2], quat[3], quat[0]
         return R.from_quat([x, y, z, w])
 
@@ -242,14 +234,13 @@ class Quat(OrientationBase):
         self, target_degrees: Angle, target_eulerseq: EulerSeq
     ) -> np.ndarray:
         # Quaternions don't care about degrees or eulerseq
-        return np.asarray(self.quat)
+        assert isinstance(self.quat, np.ndarray)
+        return self.quat
 
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> PoseQuat:
+    def as_pose(self, pos: Vec3 | Pos) -> PoseQuat:
         from mujoco_mojo.mjcf.pose import PoseQuat
 
-        return PoseQuat(pos=np.asarray(pos), **self.model_dump())
+        return PoseQuat(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
 
 class AxisAngle(OrientationBase):
@@ -272,12 +263,13 @@ class AxisAngle(OrientationBase):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AxisAngle):
             return NotImplemented
-        return np.array_equal(np.asarray(self.axisangle), np.asarray(other.axisangle))
+        return np.array_equal(self.axisangle, other.axisangle)
 
     def to_rotation(self) -> R:
-        axisangle = np.asarray(self.axisangle)
+        axisangle = self.axisangle
         axis = axisangle[:3]
         angle = axisangle[3]
+        assert isinstance(axis, np.ndarray)
 
         if self.is_degrees:
             angle = np.radians(angle)
@@ -309,7 +301,8 @@ class AxisAngle(OrientationBase):
         if angle == self.angle:
             return self
 
-        new_axisangle = np.asarray(self.axisangle)
+        new_axisangle = self.axisangle
+        assert isinstance(new_axisangle, np.ndarray)
         new_axisangle[3] = (
             np.degrees(new_axisangle[3])
             if angle == Angle.DEGREE
@@ -318,26 +311,22 @@ class AxisAngle(OrientationBase):
 
         return self.model_copy(update={"axisangle": new_axisangle, "angle": angle})
 
-    def with_axis(
-        self, axis: Vec3 | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> Self:
+    def with_axis(self, axis: Vec3) -> Self:
         """Returns a new AxisAngle with a new axis but the same angle."""
-        axis = np.asarray(axis)
+        axis = np.asarray(axis, dtype=float)
         axis = axis / np.linalg.norm(axis)
-        new_val = np.array([*axis, np.asarray(self.axisangle)[3]])
+        new_val = np.array([*axis, self.axisangle[3]])
         return self.model_copy(update={"axisangle": new_val})
 
     def with_angle_val(self, angle: float) -> Self:
         """Returns a new AxisAngle with a new angle value but the same axis."""
-        new_val = np.array([*np.asarray(self.axisangle)[:3], angle])
+        new_val = np.array([*self.axisangle[:3], angle])
         return self.model_copy(update={"axisangle": new_val})
 
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> PoseAxisAngle:
+    def as_pose(self, pos: Vec3 | Pos) -> PoseAxisAngle:
         from mujoco_mojo.mjcf.pose import PoseAxisAngle
 
-        return PoseAxisAngle(pos=np.asarray(pos), **self.model_dump())
+        return PoseAxisAngle(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> Self:
@@ -381,31 +370,28 @@ class Euler(OrientationBase):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Euler):
             return NotImplemented
-        return np.array_equal(np.asarray(self.euler), np.asarray(other.euler))
+        return np.array_equal(self.euler, other.euler)
 
     def to_rotation(self) -> R:
-        return R.from_euler(
-            self.eulerseq, np.asarray(self.euler), degrees=self.is_degrees
-        )
+        return R.from_euler(self.eulerseq, self.euler, degrees=self.is_degrees)
 
     def get_xml_value(
         self, target_degrees: Angle, target_eulerseq: EulerSeq
     ) -> np.ndarray:
         # if everything is already a match return early
         if self.angle == target_degrees and self.eulerseq == target_eulerseq:
-            return np.asarray(self.euler)
+            assert isinstance(self.euler, np.ndarray)
+            return self.euler
 
         # convert
         return self.to_rotation().as_euler(
             target_eulerseq.value, degrees=target_degrees == Angle.DEGREE
         )
 
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> PoseEuler:
+    def as_pose(self, pos: Vec3 | Pos) -> PoseEuler:
         from mujoco_mojo.mjcf.pose import PoseEuler
 
-        return PoseEuler(pos=np.asarray(pos), **self.model_dump())
+        return PoseEuler(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
     def with_eulerseq(self, seq: EulerSeq) -> Self:
         """
@@ -424,9 +410,7 @@ class Euler(OrientationBase):
             return self
 
         new_euler = (
-            np.degrees(np.asarray(self.euler))
-            if angle == Angle.DEGREE
-            else np.radians(np.asarray(self.euler))
+            np.degrees(self.euler) if angle == Angle.DEGREE else np.radians(self.euler)
         )
 
         return self.model_copy(update={"euler": new_euler, "angle": angle})
@@ -456,10 +440,11 @@ class XYAxes(OrientationBase):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, XYAxes):
             return NotImplemented
-        return np.array_equal(np.asarray(self.xyaxes), np.asarray(other.xyaxes))
+        return np.array_equal(self.xyaxes, other.xyaxes)
 
     def to_rotation(self) -> R:
-        vecs = np.asarray(self.xyaxes)
+        vecs = self.xyaxes
+        assert isinstance(vecs, np.ndarray)
         x = vecs[:3]
         y = vecs[3:]
 
@@ -478,14 +463,13 @@ class XYAxes(OrientationBase):
         self, target_degrees: Angle, target_eulerseq: EulerSeq | str
     ) -> np.ndarray:
         # XYAxes don't care about degrees or eulerseq
-        return np.asarray(self.xyaxes)
+        assert isinstance(self.xyaxes, np.ndarray)
+        return self.xyaxes
 
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> PoseXYAxes:
+    def as_pose(self, pos: Vec3 | Pos) -> PoseXYAxes:
         from mujoco_mojo.mjcf.pose import PoseXYAxes
 
-        return PoseXYAxes(pos=np.asarray(pos), **self.model_dump())
+        return PoseXYAxes(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> Self:
@@ -508,10 +492,11 @@ class ZAxis(OrientationBase):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ZAxis):
             return NotImplemented
-        return np.array_equal(np.asarray(self.zaxis), np.asarray(other.zaxis))
+        return np.array_equal(self.zaxis, other.zaxis)
 
     def to_rotation(self) -> R:
-        z = np.asarray(self.zaxis)
+        z = self.zaxis
+        assert isinstance(z, np.ndarray)
         z = z / np.linalg.norm(z)
 
         # Choose arbitrary x-axis that's not colinear with z
@@ -531,14 +516,13 @@ class ZAxis(OrientationBase):
         self, target_degrees: Angle, target_eulerseq: EulerSeq | str
     ) -> np.ndarray:
         # ZAxis don't care about degrees or eulerseq
-        return np.asarray(self.zaxis)
+        assert isinstance(self.zaxis, np.ndarray)
+        return self.zaxis
 
-    def as_pose(
-        self, pos: Vec3 | Pos | np.ndarray | list[float] | tuple[float, float, float]
-    ) -> PoseZAxis:
+    def as_pose(self, pos: Vec3 | Pos) -> PoseZAxis:
         from mujoco_mojo.mjcf.pose import PoseZAxis
 
-        return PoseZAxis(pos=np.asarray(pos), **self.model_dump())
+        return PoseZAxis(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> Self:

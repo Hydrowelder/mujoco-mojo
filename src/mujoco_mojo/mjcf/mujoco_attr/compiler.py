@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mujoco_mojo.mjcf.constants import DEFAULT_ANGLE, DEFAULT_EULERSEQ
+from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
 from mujoco_mojo.mjcf.xml_model import XMLModel
