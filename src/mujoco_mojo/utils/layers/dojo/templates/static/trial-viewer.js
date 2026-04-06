@@ -45,6 +45,7 @@ const DEFAULT_CONFIG = {
   vsEnabled: false,
   vsRange: [0, 10],
   annotations: [], // Stores { x, y, text }
+  shapes: [], // Stores { type, x0, x1, y0, y1, label }
 };
 
 /**
@@ -119,6 +120,11 @@ function trialViewer(trialId, externalUrl) {
     annotationsOpen: false,
     annDraft: null, // Holds { x, y, text } while typing
     editIndex: null,
+
+    // --- SHAPES ---
+    shapesOpen: false,
+    placementMode: null, // 'vline', 'hline', 'rect'
+    rectStart: null, // To store the first click of a rectangle
 
     pushHistory() {
       if (this.isUndoing) return;
@@ -274,6 +280,62 @@ function trialViewer(trialId, externalUrl) {
           );
         }
       }
+    },
+
+    setPlacementMode(type) {
+      this.placementMode = type;
+      this.rectStart = null;
+      this.notify(`Mode: ${type.toUpperCase()}. Click plot to place.`, "info");
+    },
+
+    deleteShape(index) {
+      this.config.shapes.splice(index, 1);
+      this.saveAndRender();
+    },
+
+    /**
+     * Handle Shape Creation inside plotly_click listener
+     */
+    handlePlotClickForShapes(pt) {
+      if (!this.placementMode) return false;
+
+      // Use Cyan as the default for new shapes
+      const defaultColor = tw.cyan[500];
+
+      if (this.placementMode === "vline") {
+        this.config.shapes.push({
+          type: "vline",
+          x0: pt.x,
+          color: defaultColor,
+        });
+        this.placementMode = null;
+      } else if (this.placementMode === "hline") {
+        this.config.shapes.push({
+          type: "hline",
+          y0: pt.y,
+          color: defaultColor,
+        });
+        this.placementMode = null;
+      } else if (this.placementMode === "rect") {
+        if (!this.rectStart) {
+          this.rectStart = { x: pt.x, y: pt.y };
+          return true;
+        } else {
+          this.config.shapes.push({
+            type: "rect",
+            x0: this.rectStart.x,
+            x1: pt.x,
+            y0: this.rectStart.y,
+            y1: pt.y,
+            color: defaultColor,
+          });
+          this.rectStart = null;
+          this.placementMode = null;
+        }
+      }
+
+      this.saveAndRender();
+      return true;
     },
 
     saveAnnotation() {
@@ -472,20 +534,48 @@ function trialViewer(trialId, externalUrl) {
           });
 
           // annotations listener
-          plotEl.on("plotly_click", (data) => {
-            const pt = data.points[0];
+          plotEl.addEventListener("click", (e) => {
+            // 1. Target check: 'nsewdrag' is the class Plotly uses for the grid area
+            const isPlotValue =
+              e.target.classList.contains("nsewdrag") ||
+              e.target.classList.contains("drag");
 
-            // 1. Populate draft with X AND Y
-            this.annDraft = { x: pt.x, y: pt.y, text: "" };
-            this.editIndex = null;
+            if (!isPlotValue) return;
 
-            // 2. Open Sidebar automatically
-            this.annotationsOpen = true;
+            // 2. Coordinate Conversion
+            const rect = plotEl.getBoundingClientRect();
+            const fullLayout = plotEl._fullLayout;
 
-            // 3. Focus the text box
-            this.$nextTick(() => {
-              this.$refs.annInput?.focus();
-            });
+            // Convert pixels to data coordinates using Plotly's math engine
+            const xVal = fullLayout.xaxis.p2l(
+              e.clientX - rect.left - fullLayout.margin.l,
+            );
+            const yVal = fullLayout.yaxis.p2l(
+              e.clientY - rect.top - fullLayout.margin.t,
+            );
+            const pt = { x: xVal, y: yVal };
+
+            // 3. PRIORITY 1: Shapes (Geometric primitives)
+            if (this.placementMode) {
+              this.handlePlotClickForShapes(pt);
+              return;
+            }
+
+            // 4. PRIORITY 2: Annotations (Text Notes)
+            setTimeout(() => {
+              this.annDraft = {
+                x: pt.x,
+                y: pt.y,
+                text: "",
+              };
+              this.editIndex = null;
+              this.annotationsOpen = true;
+
+              this.$nextTick(() => {
+                const input = document.querySelector('[x-ref="annInput"]');
+                if (input) input.focus();
+              });
+            }, 0);
           });
 
           // Handle initial resize for hidden containers
@@ -1565,6 +1655,55 @@ function trialViewer(trialId, externalUrl) {
           borderwidth: 1,
           borderpad: 4,
         })),
+        shapes: (this.config.shapes || []).map((s) => {
+          const isDark = document.documentElement.classList.contains("dark");
+          const shapeColor = s.color || tw.cyan[500]; // Fallback to Cyan
+
+          const base = {
+            line: {
+              color: shapeColor,
+              width: 2,
+              dash: s.dash || "solid",
+            },
+            layer: "below",
+          };
+
+          if (s.type === "vline") {
+            return {
+              ...base,
+              type: "line",
+              x0: s.x0,
+              x1: s.x0,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+            };
+          }
+          if (s.type === "hline") {
+            return {
+              ...base,
+              type: "line",
+              y0: s.y0,
+              y1: s.y0,
+              x0: 0,
+              x1: 1,
+              xref: "paper",
+            };
+          }
+          if (s.type === "rect") {
+            return {
+              ...base,
+              type: "rect",
+              x0: s.x0,
+              x1: s.x1,
+              y0: s.y0,
+              y1: s.y1,
+              // ADD ALPHA: If hex is #06b6d4, we add '1A' (10% opacity) or '26' (15%)
+              fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
+              line: { ...base.line, width: 1 },
+            };
+          }
+        }),
       };
 
       // config
