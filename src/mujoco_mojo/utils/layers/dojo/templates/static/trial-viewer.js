@@ -44,6 +44,8 @@ const DEFAULT_CONFIG = {
   rangeY: null,
   vsEnabled: false,
   vsRange: [0, 10],
+  annotations: [], // Stores { x, y, text }
+  shapes: [], // Stores { type, x0, x1, y0, y1, label }
 };
 
 /**
@@ -58,6 +60,7 @@ function trialViewer(trialId, externalUrl) {
     warpId: null,
     paddingLen: 2,
     loading: true,
+    isMac: /Mac|iPhone|iPod|iPad/.test(navigator.platform),
     data: null,
     errorState: null,
 
@@ -69,6 +72,7 @@ function trialViewer(trialId, externalUrl) {
     ySearch: "",
     settingsOpen: false,
     downloadOpen: false,
+
     dragCounter: 0, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     columns: [],
@@ -92,6 +96,9 @@ function trialViewer(trialId, externalUrl) {
     // --- JSON EDITOR STATE ---
     configRaw: "", // Pretty-printed string for the <textarea>
     isValidJson: true, // Tracks if the user's manual JSON input is valid
+    isValidConfig: true, // Tracks logical correctness
+    configErrors: [], // List of specific error strings
+    isEditingRaw: false, // Guard to prevent auto-format loop
 
     // --- MATCHUP STATE ---
     vsDatasets: {}, // map of trial_id -> data object
@@ -101,6 +108,74 @@ function trialViewer(trialId, externalUrl) {
     vsDraft: {
       enabled: false,
       range: [0, 0],
+    },
+
+    // --- HISTORY STATE ---
+    historyStack: [],
+    historyIndex: -1,
+    isUndoing: false, // Flag to prevent watcher from capturing history during undo/redo
+    maxHistory: 50,
+
+    // --- ANNOTATIONS ---
+    annotationsOpen: false,
+    annDraft: null, // Holds { x, y, text } while typing
+    editIndex: null,
+
+    // --- SHAPES ---
+    shapesOpen: false,
+    placementMode: null, // 'vline', 'hline', 'rect'
+    rectStart: null, // To store the first click of a rectangle
+
+    pushHistory() {
+      if (this.isUndoing) return;
+
+      const snapshot = JSON.stringify(this.config);
+
+      // If the state is identical to the current head, don't push
+      if (this.historyStack[this.historyIndex] === snapshot) return;
+
+      // Wipe any "redo" future if we make a new change
+      this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+
+      this.historyStack.push(snapshot);
+      if (this.historyStack.length > this.maxHistory) this.historyStack.shift();
+
+      this.historyIndex = this.historyStack.length - 1;
+      this.persistHistory();
+    },
+
+    undo() {
+      if (this.historyIndex > 0) {
+        this.isUndoing = true;
+        this.historyIndex--;
+        this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.persistHistory();
+        this.$nextTick(() => {
+          this.isUndoing = false;
+        });
+        this.notify("Undo", "info");
+      }
+    },
+
+    redo() {
+      if (this.historyIndex < this.historyStack.length - 1) {
+        this.isUndoing = true;
+        this.historyIndex++;
+        this.config = JSON.parse(this.historyStack[this.historyIndex]);
+        this.persistHistory();
+        this.$nextTick(() => {
+          this.isUndoing = false;
+        });
+        this.notify("Redo", "info");
+      }
+    },
+
+    persistHistory() {
+      const bundle = {
+        stack: this.historyStack,
+        index: this.historyIndex,
+      };
+      localStorage.setItem("mojo_mosaic_history", JSON.stringify(bundle));
     },
 
     async fetchTrialData(id, requiredCols = []) {
@@ -207,6 +282,161 @@ function trialViewer(trialId, externalUrl) {
       }
     },
 
+    setPlacementMode(type) {
+      this.placementMode = type;
+      this.rectStart = null;
+      this.notify(`Mode: ${type.toUpperCase()}. Click plot to place.`, "info");
+    },
+
+    deleteShape(index) {
+      this.config.shapes.splice(index, 1);
+      this.saveAndRender();
+    },
+
+    /**
+     * Handle Shape Creation inside plotly_click listener
+     */
+    handlePlotClickForShapes(pt) {
+      if (!this.placementMode) return false;
+
+      // Use Cyan as the default for new shapes
+      const defaultColor = tw.cyan[500];
+
+      if (this.placementMode === "vline") {
+        this.config.shapes.push({
+          type: "vline",
+          x0: pt.x,
+          color: defaultColor,
+        });
+        this.placementMode = null;
+      } else if (this.placementMode === "hline") {
+        this.config.shapes.push({
+          type: "hline",
+          y0: pt.y,
+          color: defaultColor,
+        });
+        this.placementMode = null;
+      } else if (this.placementMode === "rect") {
+        if (!this.rectStart) {
+          this.rectStart = { x: pt.x, y: pt.y };
+          return true;
+        } else {
+          this.config.shapes.push({
+            type: "rect",
+            x0: this.rectStart.x,
+            x1: pt.x,
+            y0: this.rectStart.y,
+            y1: pt.y,
+            color: defaultColor,
+          });
+          this.rectStart = null;
+          this.placementMode = null;
+        }
+      }
+
+      this.saveAndRender();
+      return true;
+    },
+
+    saveAnnotation() {
+      if (!this.annDraft || !this.annDraft.text.trim()) return;
+
+      if (this.editIndex !== null) {
+        // Update existing
+        this.config.annotations[this.editIndex] = { ...this.annDraft };
+      } else {
+        // Create new
+        if (!this.config.annotations) this.config.annotations = [];
+        this.config.annotations.push({ ...this.annDraft });
+      }
+
+      this.cancelDraft();
+      this.saveAndRender();
+    },
+
+    startEdit(index) {
+      this.editIndex = index;
+      this.annDraft = { ...this.config.annotations[index] };
+      this.$nextTick(() => this.$refs.annInput?.focus());
+    },
+
+    cancelDraft() {
+      this.annDraft = null;
+      this.editIndex = null;
+    },
+
+    /**
+     * Pokes the plot to center on the note's timestamp
+     */
+    jumpToAnnotation(ann) {
+      const el = document.getElementById("plot-area");
+      if (!el || !this.data) return;
+
+      // 1. CALCULATE X (TIME) WINDOW
+      const xValues = this.data[this.config.xAxis] || [];
+      const xMin = xValues[0] || 0;
+      const xMax = xValues[xValues.length - 1] || 100;
+
+      // We'll show a 10% slice of the total trial duration
+      const xSpan = (xMax - xMin) * 0.1;
+      let newRangeX = [ann.x - xSpan / 2, ann.x + xSpan / 2];
+
+      // Clamp X so we don't zoom past the start/end of the data
+      if (newRangeX[0] < xMin) {
+        newRangeX[1] += xMin - newRangeX[0];
+        newRangeX[0] = xMin;
+      }
+      if (newRangeX[1] > xMax) {
+        newRangeX[0] -= newRangeX[1] - xMax;
+        newRangeX[1] = xMax;
+      }
+
+      // 2. CALCULATE Y (VALUE) WINDOW
+      // We use the full padded range of your active signals to find a 'reasonable' scale
+      const fullY = this.calculatePaddedRange(this.config.yAxes, false);
+      const yTotalHeight = Math.abs(fullY[1] - fullY[0]);
+
+      // We'll show a 20% vertical slice centered on the point
+      const ySpan = yTotalHeight * 0.2;
+      const newRangeY = [ann.y - ySpan / 2, ann.y + ySpan / 2];
+
+      // 3. APPLY TO STATE
+      this.config.rangeX = newRangeX;
+      this.config.rangeY = newRangeY;
+
+      // 4. COMMAND PLOTLY
+      // We use relayout here because it's an instant camera move.
+      Plotly.relayout(el, {
+        "xaxis.range": newRangeX,
+        "yaxis.range": newRangeY,
+        "xaxis.autorange": false,
+        "yaxis.autorange": false,
+      });
+
+      this.saveAndRender();
+    },
+
+    /**
+     * Remove an annotation by index
+     */
+    deleteAnnotation(index) {
+      this.config.annotations.splice(index, 1);
+      this.saveAndRender();
+    },
+
+    /**
+     * Edit existing text
+     */
+    editAnnotation(index) {
+      const ann = this.config.annotations[index];
+      const newText = prompt("Update Annotation:", ann.text);
+
+      if (newText !== null && newText.trim() !== "") {
+        this.config.annotations[index].text = newText;
+        this.saveAndRender();
+      }
+    },
+
     async init() {
       // 1. UI PRIMING
       // Detect theme and set up the Warp ID from the URL string
@@ -268,6 +498,11 @@ function trialViewer(trialId, externalUrl) {
           this.vsDraft.range = [...this.config.vsRange];
         }
 
+        // Capture the very first state after hydration
+        this.$nextTick(() => {
+          this.pushHistory();
+        });
+
         // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
         this.$nextTick(async () => {
           await this.renderPlot();
@@ -296,6 +531,51 @@ function trialViewer(trialId, externalUrl) {
                 event["yaxis.range[1]"],
               ];
             }
+          });
+
+          // annotations listener
+          plotEl.addEventListener("click", (e) => {
+            // 1. Target check: 'nsewdrag' is the class Plotly uses for the grid area
+            const isPlotValue =
+              e.target.classList.contains("nsewdrag") ||
+              e.target.classList.contains("drag");
+
+            if (!isPlotValue) return;
+
+            // 2. Coordinate Conversion
+            const rect = plotEl.getBoundingClientRect();
+            const fullLayout = plotEl._fullLayout;
+
+            // Convert pixels to data coordinates using Plotly's math engine
+            const xVal = fullLayout.xaxis.p2l(
+              e.clientX - rect.left - fullLayout.margin.l,
+            );
+            const yVal = fullLayout.yaxis.p2l(
+              e.clientY - rect.top - fullLayout.margin.t,
+            );
+            const pt = { x: xVal, y: yVal };
+
+            // 3. PRIORITY 1: Shapes (Geometric primitives)
+            if (this.placementMode) {
+              this.handlePlotClickForShapes(pt);
+              return;
+            }
+
+            // 4. PRIORITY 2: Annotations (Text Notes)
+            setTimeout(() => {
+              this.annDraft = {
+                x: pt.x,
+                y: pt.y,
+                text: "",
+              };
+              this.editIndex = null;
+              this.annotationsOpen = true;
+
+              this.$nextTick(() => {
+                const input = document.querySelector('[x-ref="annInput"]');
+                if (input) input.focus();
+              });
+            }, 0);
           });
 
           // Handle initial resize for hidden containers
@@ -333,6 +613,20 @@ function trialViewer(trialId, externalUrl) {
         if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
         if (e.key === "ArrowRight")
           document.getElementById("nav-next")?.click();
+
+        const isZ = e.key.toLowerCase() === "z";
+        const isY = e.key.toLowerCase() === "y";
+        const cmdOrCtrl = e.metaKey || e.ctrlKey;
+
+        if (cmdOrCtrl && isZ) {
+          e.preventDefault();
+          if (e.shiftKey) this.redo();
+          else this.undo();
+        }
+        if (cmdOrCtrl && isY) {
+          e.preventDefault();
+          this.redo();
+        }
       });
 
       // FETCH TRIAL MANIFEST (For the slider/dropdown)
@@ -378,7 +672,9 @@ function trialViewer(trialId, externalUrl) {
 
       // Watch the master config: Any change here triggers a save and a redraw
       this.$watch("config", async (value, oldValue) => {
-        this.configRaw = JSON.stringify(value, null, 4);
+        if (!this.isEditingRaw) {
+          this.configRaw = JSON.stringify(value, null, 4);
+        }
 
         // check if we need to fetch that data for the comparison trials.
         if (
@@ -390,6 +686,7 @@ function trialViewer(trialId, externalUrl) {
           await this.syncVsRange();
         }
 
+        this.pushHistory();
         this.saveAndRender();
       });
     },
@@ -639,29 +936,41 @@ function trialViewer(trialId, externalUrl) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-      // 2. Comprehensive RegEx: Keys, Strings, Numbers, Booleans, Null, and Structural ( { } [ ] , )
+      /**
+       * 2. REVISED REGEX
+       * Group 1: Valid JSON Tokens
+       * Group 5: "Garbage" (Any non-whitespace characters not matched by Group 1)
+       */
       const regex =
-        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])/g;
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])|(\S+)/g;
 
-      return html.replace(regex, (match) => {
-        let cls = "text-slate-600 dark:text-slate-400"; // Default: Structural (braces/commas)
-
-        if (/^"/.test(match)) {
-          if (/:$/.test(match)) {
-            cls = "text-cyan-500 dark:text-cyan-300"; // Keys
-          } else {
-            cls = "text-emerald-500 dark:text-emerald-400"; // Strings
+      return html.replace(
+        regex,
+        (match, token, _inner1, _inner2, _inner3, garbage) => {
+          // If it's garbage (text that doesn't belong in JSON), make it scream
+          if (garbage) {
+            return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
           }
-        } else if (/true|false/.test(match)) {
-          cls = "text-violet-600 dark:text-violet-400"; // Booleans
-        } else if (/null/.test(match)) {
-          cls = "text-rose-500"; // Null
-        } else if (/-?\d/.test(match)) {
-          cls = "text-amber-600 dark:text-amber-500"; // Numbers
-        }
 
-        return `<span class="${cls}">${match}</span>`;
-      });
+          let cls = "text-slate-500 dark:text-slate-400"; // Default: Structural (braces/commas)
+
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = "text-cyan-600 dark:text-cyan-300"; // Keys
+            } else {
+              cls = "text-emerald-600 dark:text-emerald-400"; // Strings
+            }
+          } else if (/true|false/.test(match)) {
+            cls = "text-violet-600 dark:text-violet-400"; // Booleans
+          } else if (/null/.test(match)) {
+            cls = "text-rose-500"; // Null
+          } else if (/-?\d/.test(match)) {
+            cls = "text-amber-600 dark:text-amber-500"; // Numbers
+          }
+
+          return `<span class="${cls}">${match}</span>`;
+        },
+      );
     },
 
     hydrateFromUrl(blob) {
@@ -784,19 +1093,63 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Logical Validation for Mosaic Config
+     */
+    validateConfig(cfg) {
+      let errors = [];
+
+      // 1. Check X-Axis
+      if (!this.columns.includes(cfg.xAxis)) {
+        errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
+      }
+
+      // 2. Check Y-Axes
+      if (!Array.isArray(cfg.yAxes)) {
+        errors.push("yAxes must be an array.");
+      } else {
+        cfg.yAxes.forEach((y) => {
+          if (!this.columns.includes(y))
+            errors.push(`Y-Axis signal "${y}" is missing.`);
+        });
+      }
+
+      // 3. Range Safety
+      if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1]) {
+        errors.push("Comparison range start cannot be greater than end.");
+      }
+
+      return errors;
+    },
+
+    /**
      * Input Handler for JSON Editor
      * Uses Object.assign to maintain reactivity without breaking the object reference.
      */
     updateFromRaw() {
       try {
         const parsed = JSON.parse(this.configRaw);
+        this.isValidJson = true;
+
         if (parsed && typeof parsed === "object") {
-          // Update master config - Alpine watcher will trigger save/render
-          this.config = { ...this.config, ...parsed };
-          this.isValidJson = true;
+          // Check for logical errors
+          this.configErrors = this.validateConfig(parsed);
+          this.isValidConfig = this.configErrors.length === 0;
+
+          if (this.isValidConfig) {
+            // THE GUARD: Set this to true so the watcher ignores the change
+            this.isEditingRaw = true;
+
+            this.config = { ...this.config, ...parsed };
+
+            // Release the guard after the current reactive cycle
+            this.$nextTick(() => {
+              this.isEditingRaw = false;
+            });
+          }
         }
       } catch (e) {
         this.isValidJson = false;
+        this.isValidConfig = false;
       }
     },
 
@@ -817,6 +1170,22 @@ function trialViewer(trialId, externalUrl) {
         // Default fallback: Set X-axis to 'time' if available
         if (this.columns.includes("time")) this.config.xAxis = "time";
       }
+
+      // rehydrate history stack
+      const savedHistory = localStorage.getItem("mojo_mosaic_history");
+      if (savedHistory) {
+        try {
+          const { stack, index } = JSON.parse(savedHistory);
+          this.historyStack = stack;
+          this.historyIndex = index;
+        } catch (e) {
+          console.warn("History recovery failed, starting fresh.");
+          this.pushHistory();
+        }
+      } else {
+        this.pushHistory(); // First-time setup
+      }
+
       // Sync the text editor string with the loaded object
       this.configRaw = JSON.stringify(this.config, null, 4);
     },
@@ -826,6 +1195,7 @@ function trialViewer(trialId, externalUrl) {
      */
     saveAndRender() {
       localStorage.setItem("mojo_mosaic_config", JSON.stringify(this.config));
+      this.persistHistory();
       this.renderPlot();
 
       // Guarded resize in case the plot container recently became visible
@@ -1033,6 +1403,41 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Shared helper to find the min/max of current active datasets
+     */
+    calculatePaddedRange(keys, padding = true) {
+      let globalMin = Infinity;
+      let globalMax = -Infinity;
+      const activeDatasets = [this.data];
+
+      if (this.config.vsEnabled) {
+        const [start, end] = this.config.vsRange;
+        Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
+          const n = parseInt(vsId.split("_").pop());
+          if (n >= start && n <= end) activeDatasets.push(dataset);
+        });
+      }
+
+      activeDatasets.forEach((dataset) => {
+        keys.forEach((key) => {
+          const series = dataset[key];
+          if (!series) return;
+          for (let i = 0; i < series.length; i++) {
+            const val = series[i];
+            if (val < globalMin) globalMin = val;
+            if (val > globalMax) globalMax = val;
+          }
+        });
+      });
+
+      if (globalMin === Infinity) return [0, 1];
+      if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
+
+      const pad = padding ? (globalMax - globalMin) / 16 : 0;
+      return [globalMin - pad, globalMax + pad];
+    },
+
+    /**
      * Plotly Engine: Renders the telemetry traces based on the current config object
      */
     renderPlot() {
@@ -1060,42 +1465,12 @@ function trialViewer(trialId, externalUrl) {
         !isHoverDisabled &&
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
-      const calculatePaddedRange = (keys, padding = true) => {
-        let globalMin = Infinity;
-        let globalMax = -Infinity;
-        const activeDatasets = [this.data];
-
-        if (this.config.vsEnabled) {
-          const [start, end] = this.config.vsRange;
-          Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
-            const n = parseInt(vsId.split("_").pop());
-            if (n >= start && n <= end) activeDatasets.push(dataset);
-          });
-        }
-
-        activeDatasets.forEach((dataset) => {
-          keys.forEach((key) => {
-            const series = dataset[key];
-            if (!series) return;
-            for (let i = 0; i < series.length; i++) {
-              const val = series[i];
-              if (val < globalMin) globalMin = val;
-              if (val > globalMax) globalMax = val;
-            }
-          });
-        });
-
-        if (globalMin === Infinity) return [0, 1];
-        if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
-        const pad = padding ? (globalMax - globalMin) / 16 : 0;
-        return [globalMin - pad, globalMax + pad];
-      };
-
       // Determine final display ranges
       const displayRangeX =
-        this.config.rangeX || calculatePaddedRange([this.config.xAxis], false);
+        this.config.rangeX ||
+        this.calculatePaddedRange([this.config.xAxis], false);
       const displayRangeY =
-        this.config.rangeY || calculatePaddedRange(this.config.yAxes);
+        this.config.rangeY || this.calculatePaddedRange(this.config.yAxes);
 
       // main traces
       let traces = this.config.yAxes.map((key, i) => ({
@@ -1119,6 +1494,7 @@ function trialViewer(trialId, externalUrl) {
         hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
       }));
 
+      // vs traces
       if (this.config.vsEnabled) {
         const [start, end] = this.config.vsRange;
 
@@ -1172,6 +1548,7 @@ function trialViewer(trialId, externalUrl) {
         });
       }
 
+      // x axis config
       const xAxisObj = {
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
@@ -1189,6 +1566,8 @@ function trialViewer(trialId, externalUrl) {
         spikelinecolor: spikeColor,
         spikethickness: -2,
       };
+
+      // y axis config
       const yAxisObj = {
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
@@ -1207,6 +1586,7 @@ function trialViewer(trialId, externalUrl) {
         spikethickness: -2,
       };
 
+      // layout
       const layout = {
         uirevision: `${this.trialId}_${this.config.xAxis}_${this.config.yAxes.join("_")}`,
         title: this.config.title
@@ -1257,8 +1637,76 @@ function trialViewer(trialId, externalUrl) {
               },
         xaxis: xAxisObj,
         yaxis: yAxisObj,
+        annotations: (this.config.annotations || []).map((ann) => ({
+          x: ann.x,
+          y: ann.y,
+          text: ann.text,
+          showarrow: true,
+          arrowhead: 2,
+          ax: 0,
+          ay: -40, // Position text 40px above the point
+          font: {
+            family: "monospace",
+            size: 12,
+            color: isDark ? tw.slate[50] : tw.slate[900],
+          },
+          bgcolor: isDark ? tw.slate[800] : "#ffffff",
+          bordercolor: tw.cyan[500],
+          borderwidth: 1,
+          borderpad: 4,
+        })),
+        shapes: (this.config.shapes || []).map((s) => {
+          const isDark = document.documentElement.classList.contains("dark");
+          const shapeColor = s.color || tw.cyan[500]; // Fallback to Cyan
+
+          const base = {
+            line: {
+              color: shapeColor,
+              width: 2,
+              dash: s.dash || "solid",
+            },
+            layer: "below",
+          };
+
+          if (s.type === "vline") {
+            return {
+              ...base,
+              type: "line",
+              x0: s.x0,
+              x1: s.x0,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+            };
+          }
+          if (s.type === "hline") {
+            return {
+              ...base,
+              type: "line",
+              y0: s.y0,
+              y1: s.y0,
+              x0: 0,
+              x1: 1,
+              xref: "paper",
+            };
+          }
+          if (s.type === "rect") {
+            return {
+              ...base,
+              type: "rect",
+              x0: s.x0,
+              x1: s.x1,
+              y0: s.y0,
+              y1: s.y1,
+              // ADD ALPHA: If hex is #06b6d4, we add '1A' (10% opacity) or '26' (15%)
+              fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
+              line: { ...base.line, width: 1 },
+            };
+          }
+        }),
       };
 
+      // config
       const config = {
         responsive: true, // adapt to page changes
         displaylogo: false, // hide plotly logo
