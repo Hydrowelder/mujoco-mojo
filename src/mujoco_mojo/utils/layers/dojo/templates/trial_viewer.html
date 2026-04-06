@@ -1348,18 +1348,33 @@
     <div class="mt-8 space-y-2">
         <div class="flex items-center justify-between px-2">
             <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">JSON Plot Configuration</span>
-            <div class="flex items-center gap-2">
-                <span x-show="isValidJson"
-                      class="text-[9px] font-bold text-emerald-600 dark:text-emerald-500 font-mono flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Valid
-                </span>
+            <div class="flex items-center gap-3">
                 <span x-show="!isValidJson"
-                      style="display: none;"
-                      class="text-[9px] font-bold text-rose-600 dark:text-rose-500 font-mono animate-pulse flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Syntax Error
+                      class="text-[9px] font-bold text-rose-500 font-mono flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span> Syntax Error
+                </span>
+
+                <span x-show="isValidJson && !isValidConfig"
+                      class="text-[9px] font-bold text-amber-500 font-mono flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Config Error
+                </span>
+
+                <span x-show="isValidJson && isValidConfig"
+                      class="text-[9px] font-bold text-emerald-500 font-mono flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live
                 </span>
             </div>
         </div>
+
+        <template x-if="configErrors.length > 0 && isValidJson">
+            <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 mx-1">
+                <template x-for="err in configErrors">
+                    <p class="text-[9px] font-mono text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                        <span>→</span> <span x-text="err"></span>
+                    </p>
+                </template>
+            </div>
+        </template>
 
         <div class="relative bg-white dark:bg-slate-950 rounded-xl border border-slate-300 dark:border-slate-800 overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800 transition-all focus-within:border-cyan-500/50">
 
