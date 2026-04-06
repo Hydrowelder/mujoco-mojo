@@ -44,6 +44,7 @@ const DEFAULT_CONFIG = {
   rangeY: null,
   vsEnabled: false,
   vsRange: [0, 10],
+  annotations: [], // Stores { x, y, text }
 };
 
 /**
@@ -70,6 +71,7 @@ function trialViewer(trialId, externalUrl) {
     ySearch: "",
     settingsOpen: false,
     downloadOpen: false,
+
     dragCounter: 0, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     columns: [],
@@ -109,6 +111,11 @@ function trialViewer(trialId, externalUrl) {
     historyIndex: -1,
     isUndoing: false, // Flag to prevent watcher from capturing history during undo/redo
     maxHistory: 50,
+
+    // --- ANNOTATIONS ---
+    annotationsOpen: false,
+    annDraft: null, // Holds { x, y, text } while typing
+    editIndex: null,
 
     pushHistory() {
       if (this.isUndoing) return;
@@ -266,6 +273,105 @@ function trialViewer(trialId, externalUrl) {
       }
     },
 
+    saveAnnotation() {
+      if (!this.annDraft || !this.annDraft.text.trim()) return;
+
+      if (this.editIndex !== null) {
+        // Update existing
+        this.config.annotations[this.editIndex] = { ...this.annDraft };
+      } else {
+        // Create new
+        if (!this.config.annotations) this.config.annotations = [];
+        this.config.annotations.push({ ...this.annDraft });
+      }
+
+      this.cancelDraft();
+      this.saveAndRender();
+    },
+
+    startEdit(index) {
+      this.editIndex = index;
+      this.annDraft = { ...this.config.annotations[index] };
+      this.$nextTick(() => this.$refs.annInput?.focus());
+    },
+
+    cancelDraft() {
+      this.annDraft = null;
+      this.editIndex = null;
+    },
+
+    /**
+     * Pokes the plot to center on the note's timestamp
+     */
+    jumpToAnnotation(ann) {
+      const el = document.getElementById("plot-area");
+      if (!el || !this.data) return;
+
+      // 1. CALCULATE X (TIME) WINDOW
+      const xValues = this.data[this.config.xAxis] || [];
+      const xMin = xValues[0] || 0;
+      const xMax = xValues[xValues.length - 1] || 100;
+
+      // We'll show a 10% slice of the total trial duration
+      const xSpan = (xMax - xMin) * 0.1;
+      let newRangeX = [ann.x - xSpan / 2, ann.x + xSpan / 2];
+
+      // Clamp X so we don't zoom past the start/end of the data
+      if (newRangeX[0] < xMin) {
+        newRangeX[1] += xMin - newRangeX[0];
+        newRangeX[0] = xMin;
+      }
+      if (newRangeX[1] > xMax) {
+        newRangeX[0] -= newRangeX[1] - xMax;
+        newRangeX[1] = xMax;
+      }
+
+      // 2. CALCULATE Y (VALUE) WINDOW
+      // We use the full padded range of your active signals to find a 'reasonable' scale
+      const fullY = this.calculatePaddedRange(this.config.yAxes, false);
+      const yTotalHeight = Math.abs(fullY[1] - fullY[0]);
+
+      // We'll show a 20% vertical slice centered on the point
+      const ySpan = yTotalHeight * 0.2;
+      const newRangeY = [ann.y - ySpan / 2, ann.y + ySpan / 2];
+
+      // 3. APPLY TO STATE
+      this.config.rangeX = newRangeX;
+      this.config.rangeY = newRangeY;
+
+      // 4. COMMAND PLOTLY
+      // We use relayout here because it's an instant camera move.
+      Plotly.relayout(el, {
+        "xaxis.range": newRangeX,
+        "yaxis.range": newRangeY,
+        "xaxis.autorange": false,
+        "yaxis.autorange": false,
+      });
+
+      this.saveAndRender();
+    },
+
+    /**
+     * Remove an annotation by index
+     */
+    deleteAnnotation(index) {
+      this.config.annotations.splice(index, 1);
+      this.saveAndRender();
+    },
+
+    /**
+     * Edit existing text
+     */
+    editAnnotation(index) {
+      const ann = this.config.annotations[index];
+      const newText = prompt("Update Annotation:", ann.text);
+
+      if (newText !== null && newText.trim() !== "") {
+        this.config.annotations[index].text = newText;
+        this.saveAndRender();
+      }
+    },
+
     async init() {
       // 1. UI PRIMING
       // Detect theme and set up the Warp ID from the URL string
@@ -360,6 +466,23 @@ function trialViewer(trialId, externalUrl) {
                 event["yaxis.range[1]"],
               ];
             }
+          });
+
+          // annotations listener
+          plotEl.on("plotly_click", (data) => {
+            const pt = data.points[0];
+
+            // 1. Populate draft with X AND Y
+            this.annDraft = { x: pt.x, y: pt.y, text: "" };
+            this.editIndex = null;
+
+            // 2. Open Sidebar automatically
+            this.annotationsOpen = true;
+
+            // 3. Focus the text box
+            this.$nextTick(() => {
+              this.$refs.annInput?.focus();
+            });
           });
 
           // Handle initial resize for hidden containers
@@ -1129,6 +1252,41 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Shared helper to find the min/max of current active datasets
+     */
+    calculatePaddedRange(keys, padding = true) {
+      let globalMin = Infinity;
+      let globalMax = -Infinity;
+      const activeDatasets = [this.data];
+
+      if (this.config.vsEnabled) {
+        const [start, end] = this.config.vsRange;
+        Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
+          const n = parseInt(vsId.split("_").pop());
+          if (n >= start && n <= end) activeDatasets.push(dataset);
+        });
+      }
+
+      activeDatasets.forEach((dataset) => {
+        keys.forEach((key) => {
+          const series = dataset[key];
+          if (!series) return;
+          for (let i = 0; i < series.length; i++) {
+            const val = series[i];
+            if (val < globalMin) globalMin = val;
+            if (val > globalMax) globalMax = val;
+          }
+        });
+      });
+
+      if (globalMin === Infinity) return [0, 1];
+      if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
+
+      const pad = padding ? (globalMax - globalMin) / 16 : 0;
+      return [globalMin - pad, globalMax + pad];
+    },
+
+    /**
      * Plotly Engine: Renders the telemetry traces based on the current config object
      */
     renderPlot() {
@@ -1156,42 +1314,12 @@ function trialViewer(trialId, externalUrl) {
         !isHoverDisabled &&
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
-      const calculatePaddedRange = (keys, padding = true) => {
-        let globalMin = Infinity;
-        let globalMax = -Infinity;
-        const activeDatasets = [this.data];
-
-        if (this.config.vsEnabled) {
-          const [start, end] = this.config.vsRange;
-          Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
-            const n = parseInt(vsId.split("_").pop());
-            if (n >= start && n <= end) activeDatasets.push(dataset);
-          });
-        }
-
-        activeDatasets.forEach((dataset) => {
-          keys.forEach((key) => {
-            const series = dataset[key];
-            if (!series) return;
-            for (let i = 0; i < series.length; i++) {
-              const val = series[i];
-              if (val < globalMin) globalMin = val;
-              if (val > globalMax) globalMax = val;
-            }
-          });
-        });
-
-        if (globalMin === Infinity) return [0, 1];
-        if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
-        const pad = padding ? (globalMax - globalMin) / 16 : 0;
-        return [globalMin - pad, globalMax + pad];
-      };
-
       // Determine final display ranges
       const displayRangeX =
-        this.config.rangeX || calculatePaddedRange([this.config.xAxis], false);
+        this.config.rangeX ||
+        this.calculatePaddedRange([this.config.xAxis], false);
       const displayRangeY =
-        this.config.rangeY || calculatePaddedRange(this.config.yAxes);
+        this.config.rangeY || this.calculatePaddedRange(this.config.yAxes);
 
       // main traces
       let traces = this.config.yAxes.map((key, i) => ({
@@ -1358,6 +1486,24 @@ function trialViewer(trialId, externalUrl) {
               },
         xaxis: xAxisObj,
         yaxis: yAxisObj,
+        annotations: (this.config.annotations || []).map((ann) => ({
+          x: ann.x,
+          y: ann.y,
+          text: ann.text,
+          showarrow: true,
+          arrowhead: 2,
+          ax: 0,
+          ay: -40, // Position text 40px above the point
+          font: {
+            family: "monospace",
+            size: 12,
+            color: isDark ? tw.slate[50] : tw.slate[900],
+          },
+          bgcolor: isDark ? tw.slate[800] : "#ffffff",
+          bordercolor: tw.cyan[500],
+          borderwidth: 1,
+          borderpad: 4,
+        })),
       };
 
       // config
