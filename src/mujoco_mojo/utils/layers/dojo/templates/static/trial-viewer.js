@@ -61,8 +61,6 @@ function trialViewer(trialId, externalUrl) {
     isMac: /Mac|iPhone|iPod|iPad/.test(navigator.platform),
     data: null,
     errorState: null,
-    isInternalChange: false,
-    hasListeners: false, // Flag to prevent duplicate listeners
 
     // --- UI / MENU STATES ---
     theme: "dark",
@@ -337,42 +335,37 @@ function trialViewer(trialId, externalUrl) {
         // 6. INITIAL PLOT RENDER & EVENT ATTACHMENT
         this.$nextTick(async () => {
           await this.renderPlot();
-          // const plotEl = document.getElementById("plot-area");
-          // if (!plotEl) return;
+          const plotEl = document.getElementById("plot-area");
 
-          // // Attach the zoom/pan listener to capture manual ranges
-          // plotEl.on("plotly_relayout", (event) => {
-          //   this.isInternalChange = true; // Block the watcher from calling renderPlot
+          // Attach the zoom/pan listener to capture manual ranges
+          plotEl.on("plotly_relayout", (event) => {
+            // Handle Reset (Double-click)
+            if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
+              this.config.rangeX = null;
+              this.config.rangeY = null;
 
-          //   // Handle Reset (Double-click)
-          //   if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
-          //     this.config.rangeX = null;
-          //     this.config.rangeY = null;
-          //   }
-          //   // Handle Manual Zoom/Pan
-          //   else if (event["xaxis.range[0]"] !== undefined) {
-          //     this.config.rangeX = [
-          //       event["xaxis.range[0]"],
-          //       event["xaxis.range[1]"],
-          //     ];
-          //     if (event["yaxis.range[0]"] !== undefined) {
-          //       this.config.rangeY = [
-          //         event["yaxis.range[0]"],
-          //         event["yaxis.range[1]"],
-          //       ];
-          //     }
-          //   }
+              this.renderPlot();
+              return;
+            }
+            // Handle Manual Zoom/Pan
+            if (event["xaxis.range[0]"] !== undefined) {
+              this.config.rangeX = [
+                event["xaxis.range[0]"],
+                event["xaxis.range[1]"],
+              ];
+            }
+            if (event["yaxis.range[0]"] !== undefined) {
+              this.config.rangeY = [
+                event["yaxis.range[0]"],
+                event["yaxis.range[1]"],
+              ];
+            }
+          });
 
-          //   // Release the guard after Alpine has processed the state change
-          //   this.$nextTick(() => {
-          //     this.isInternalChange = false;
-          //   });
-          // });
-
-          // // Handle initial resize for hidden containers
-          // setTimeout(() => {
-          //   if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
-          // }, 100);
+          // Handle initial resize for hidden containers
+          setTimeout(() => {
+            if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
+          }, 100);
         });
       } catch (e) {
         // Catch 404s or malformed JSON from fetchTrialData
@@ -473,16 +466,6 @@ function trialViewer(trialId, externalUrl) {
             value.yAxes.length !== oldValue?.yAxes?.length)
         ) {
           await this.syncVsRange();
-        }
-
-        // If the change came from a Mouse Zoom, just save to localStorage and stop.
-        if (this.isInternalChange) {
-          // Just persist to disk, don't re-render or push to undo history
-          localStorage.setItem(
-            "mojo_mosaic_config",
-            JSON.stringify(this.config),
-          );
-          return;
         }
 
         this.pushHistory();
@@ -944,13 +927,7 @@ function trialViewer(trialId, externalUrl) {
       // Guarded resize in case the plot container recently became visible
       this.$nextTick(() => {
         const el = document.getElementById("plot-area");
-        if (
-          el &&
-          el.classList.contains("js-plotly-plot") &&
-          el.offsetParent !== null
-        ) {
-          Plotly.Plots.resize(el);
-        }
+        if (el && el.offsetParent !== null) Plotly.Plots.resize(el);
       });
     },
 
@@ -1155,9 +1132,7 @@ function trialViewer(trialId, externalUrl) {
      * Plotly Engine: Renders the telemetry traces based on the current config object
      */
     renderPlot() {
-      // Ensure the container and data exist
-      const el = document.getElementById("plot-area");
-      if (!el || !this.data || this.config.yAxes.length === 0) return;
+      if (!this.data) return;
 
       // const el = document.getElementById("plot-area");
       const isDark = document.documentElement.classList.contains("dark");
@@ -1213,25 +1188,10 @@ function trialViewer(trialId, externalUrl) {
       };
 
       // Determine final display ranges
-      // const displayRangeX =
-      //   this.config.rangeX || calculatePaddedRange([this.config.xAxis], false);
-      // const displayRangeY =
-      //   this.config.rangeY || calculatePaddedRange(this.config.yAxes);
-
-      const displayRangeX = this.config.rangeX;
-      const displayRangeY = this.config.rangeY;
-
-      console.log(`displayRangeX=${displayRangeX}`);
-      console.log(`this.config.rangeX=${this.config.rangeX}`);
-      console.log(
-        `calculatePaddedRange([this.config.xAxis], false)=${calculatePaddedRange([this.config.xAxis], false)}`,
-      );
-
-      console.log(`displayRangeY=${displayRangeY}`);
-      console.log(`this.config.rangeY=${this.config.rangeY}`);
-      console.log(
-        `calculatePaddedRange(this.config.yAxes)=${calculatePaddedRange(this.config.yAxes)}`,
-      );
+      const displayRangeX =
+        this.config.rangeX || calculatePaddedRange([this.config.xAxis], false);
+      const displayRangeY =
+        this.config.rangeY || calculatePaddedRange(this.config.yAxes);
 
       // main traces
       let traces = this.config.yAxes.map((key, i) => ({
@@ -1320,7 +1280,7 @@ function trialViewer(trialId, externalUrl) {
           text: this.config.xAxisTitle || this.config.xAxis,
           font: { size: 11, color: textColor, family: "monospace" },
         },
-        autorange: displayRangeX === null,
+        autorange: false,
         range: displayRangeX,
         showspikes: showX,
         spikemode: "across",
@@ -1339,7 +1299,7 @@ function trialViewer(trialId, externalUrl) {
           text: this.config.yAxisTitle,
           font: { size: 11, color: textColor, family: "monospace" },
         },
-        autorange: displayRangeY === null,
+        autorange: false,
         range: displayRangeY,
         showspikes: showY,
         spikemode: "across",
@@ -1408,40 +1368,7 @@ function trialViewer(trialId, externalUrl) {
         modeBarButtonsToRemove: ["toImage"], // we have our own download options
       };
 
-      return Plotly.react(el, traces, layout, config).then(() => {
-        this.attachPlotListeners(el);
-      });
-    },
-    attachPlotListeners(el) {
-      if (this.hasListeners) return;
-
-      el.on("plotly_relayout", (event) => {
-        // Block the watcher from triggering a full renderPlot cycle
-        this.isInternalChange = true;
-
-        if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
-          this.config.rangeX = null;
-          this.config.rangeY = null;
-        } else if (event["xaxis.range[0]"] !== undefined) {
-          this.config.rangeX = [
-            event["xaxis.range[0]"],
-            event["xaxis.range[1]"],
-          ];
-          if (event["yaxis.range[0]"] !== undefined) {
-            this.config.rangeY = [
-              event["yaxis.range[0]"],
-              event["yaxis.range[1]"],
-            ];
-          }
-        }
-
-        // Release the guard after Alpine has synced the configRaw update
-        this.$nextTick(() => {
-          this.isInternalChange = false;
-        });
-      });
-
-      this.hasListeners = true;
+      return Plotly.react("plot-area", traces, layout, config);
     },
   };
 }
