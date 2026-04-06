@@ -95,6 +95,9 @@ function trialViewer(trialId, externalUrl) {
     // --- JSON EDITOR STATE ---
     configRaw: "", // Pretty-printed string for the <textarea>
     isValidJson: true, // Tracks if the user's manual JSON input is valid
+    isValidConfig: true, // Tracks logical correctness
+    configErrors: [], // List of specific error strings
+    isEditingRaw: false, // Guard to prevent auto-format loop
 
     // --- MATCHUP STATE ---
     vsDatasets: {}, // map of trial_id -> data object
@@ -579,7 +582,9 @@ function trialViewer(trialId, externalUrl) {
 
       // Watch the master config: Any change here triggers a save and a redraw
       this.$watch("config", async (value, oldValue) => {
-        this.configRaw = JSON.stringify(value, null, 4);
+        if (!this.isEditingRaw) {
+          this.configRaw = JSON.stringify(value, null, 4);
+        }
 
         // check if we need to fetch that data for the comparison trials.
         if (
@@ -841,29 +846,41 @@ function trialViewer(trialId, externalUrl) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-      // 2. Comprehensive RegEx: Keys, Strings, Numbers, Booleans, Null, and Structural ( { } [ ] , )
+      /**
+       * 2. REVISED REGEX
+       * Group 1: Valid JSON Tokens
+       * Group 5: "Garbage" (Any non-whitespace characters not matched by Group 1)
+       */
       const regex =
-        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])/g;
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])|(\S+)/g;
 
-      return html.replace(regex, (match) => {
-        let cls = "text-slate-600 dark:text-slate-400"; // Default: Structural (braces/commas)
-
-        if (/^"/.test(match)) {
-          if (/:$/.test(match)) {
-            cls = "text-cyan-500 dark:text-cyan-300"; // Keys
-          } else {
-            cls = "text-emerald-500 dark:text-emerald-400"; // Strings
+      return html.replace(
+        regex,
+        (match, token, _inner1, _inner2, _inner3, garbage) => {
+          // If it's garbage (text that doesn't belong in JSON), make it scream
+          if (garbage) {
+            return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
           }
-        } else if (/true|false/.test(match)) {
-          cls = "text-violet-600 dark:text-violet-400"; // Booleans
-        } else if (/null/.test(match)) {
-          cls = "text-rose-500"; // Null
-        } else if (/-?\d/.test(match)) {
-          cls = "text-amber-600 dark:text-amber-500"; // Numbers
-        }
 
-        return `<span class="${cls}">${match}</span>`;
-      });
+          let cls = "text-slate-500 dark:text-slate-400"; // Default: Structural (braces/commas)
+
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = "text-cyan-600 dark:text-cyan-300"; // Keys
+            } else {
+              cls = "text-emerald-600 dark:text-emerald-400"; // Strings
+            }
+          } else if (/true|false/.test(match)) {
+            cls = "text-violet-600 dark:text-violet-400"; // Booleans
+          } else if (/null/.test(match)) {
+            cls = "text-rose-500"; // Null
+          } else if (/-?\d/.test(match)) {
+            cls = "text-amber-600 dark:text-amber-500"; // Numbers
+          }
+
+          return `<span class="${cls}">${match}</span>`;
+        },
+      );
     },
 
     hydrateFromUrl(blob) {
@@ -986,19 +1003,63 @@ function trialViewer(trialId, externalUrl) {
     },
 
     /**
+     * Logical Validation for Mosaic Config
+     */
+    validateConfig(cfg) {
+      let errors = [];
+
+      // 1. Check X-Axis
+      if (!this.columns.includes(cfg.xAxis)) {
+        errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
+      }
+
+      // 2. Check Y-Axes
+      if (!Array.isArray(cfg.yAxes)) {
+        errors.push("yAxes must be an array.");
+      } else {
+        cfg.yAxes.forEach((y) => {
+          if (!this.columns.includes(y))
+            errors.push(`Y-Axis signal "${y}" is missing.`);
+        });
+      }
+
+      // 3. Range Safety
+      if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1]) {
+        errors.push("Comparison range start cannot be greater than end.");
+      }
+
+      return errors;
+    },
+
+    /**
      * Input Handler for JSON Editor
      * Uses Object.assign to maintain reactivity without breaking the object reference.
      */
     updateFromRaw() {
       try {
         const parsed = JSON.parse(this.configRaw);
+        this.isValidJson = true;
+
         if (parsed && typeof parsed === "object") {
-          // Update master config - Alpine watcher will trigger save/render
-          this.config = { ...this.config, ...parsed };
-          this.isValidJson = true;
+          // Check for logical errors
+          this.configErrors = this.validateConfig(parsed);
+          this.isValidConfig = this.configErrors.length === 0;
+
+          if (this.isValidConfig) {
+            // THE GUARD: Set this to true so the watcher ignores the change
+            this.isEditingRaw = true;
+
+            this.config = { ...this.config, ...parsed };
+
+            // Release the guard after the current reactive cycle
+            this.$nextTick(() => {
+              this.isEditingRaw = false;
+            });
+          }
         }
       } catch (e) {
         this.isValidJson = false;
+        this.isValidConfig = false;
       }
     },
 
