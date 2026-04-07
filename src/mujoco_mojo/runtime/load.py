@@ -12,6 +12,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
+from mujoco_mojo.typing import RequestCategory
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
@@ -141,7 +142,7 @@ class Load(MojoBaseModel, ABC):
                 for i, k in enumerate("xyzm"):
                     results_manager.post(
                         value=float(source[i]) if self.active else 0.0,
-                        category="Loads",
+                        category=RequestCategory.LOADS,
                         # nest the force/torque under the function name
                         subgroup=f"{self.name}/{attr}",
                         attr=k,

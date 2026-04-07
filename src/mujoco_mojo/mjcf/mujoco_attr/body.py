@@ -20,7 +20,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import BodyName, Sleep, VecN
+from mujoco_mojo.typing import BodyName, RequestCategory, Sleep, VecN
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
@@ -315,7 +315,7 @@ class Body(XMLModel):
                     for i, k in enumerate("xyzm"):
                         results_manager.post(
                             value=full_vec[i],
-                            category="Bodies",
+                            category=RequestCategory.BODIES,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -323,7 +323,7 @@ class Body(XMLModel):
                     # scalar output
                     results_manager.post(
                         value=float(val),
-                        category="Bodies",
+                        category=RequestCategory.BODIES,
                         subgroup=self.name,
                         attr=attr,
                     )
