@@ -10,6 +10,7 @@ from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.typing import (
     FluidShape,
     GeomName,
@@ -17,6 +18,7 @@ from mujoco_mojo.typing import (
     HFieldName,
     MaterialName,
     MeshName,
+    RequestCategory,
     Vec2,
     Vec3,
     Vec4,
@@ -24,6 +26,9 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "Geom",
@@ -394,6 +399,102 @@ class GeomBase(XMLModel):
             fromto=fromto,
             auto=auto,
         )
+
+    def rt_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Returns the world position of the center of the geom."""
+        return mj_data.geom_xpos[self.get_id(mj_model)]
+
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+        """Returns the world orientation matrix of the geom."""
+        return mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+
+    def rt_xvel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+        """Returns the 6D velocity vector (ang, lin) in world coordinates."""
+        assert self._mjt_obj is not None
+        res = np.zeros(6)
+        mujoco.mj_objectVelocity(
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+        )
+        return res
+
+    def rt_xvelp(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Returns 3D linear velocity in world frame."""
+        return self.rt_xvel(mj_model, mj_data)[3:6]
+
+    def rt_xvelr(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Returns 3D angular velocity in world frame."""
+        return self.rt_xvel(mj_model, mj_data)[0:3]
+
+    def rt_xacc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+        """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
+        assert self._mjt_obj is not None
+        res = np.zeros(6)
+        mujoco.mj_objectAcceleration(
+            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+        )
+        return res
+
+    def rt_xaccp(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Returns 3D linear acceleration in world frame."""
+        return self.rt_xacc(mj_model, mj_data)[3:6]
+
+    def rt_xaccr(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Returns 3D angular acceleration in world frame."""
+        return self.rt_xacc(mj_model, mj_data)[0:3]
+
+    def request(
+        self,
+        results_manager: ResultsManager,
+        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr"]] = [
+            "xpos",
+            "xmat",
+        ],
+    ):
+        """Registers specific geom attributes for logging."""
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+            for attr in attrs:
+                # Manual mapping to avoid getattr
+                if attr == "xpos":
+                    val = self.rt_xpos(mj_model, mj_data)
+                elif attr == "xmat":
+                    val = self.rt_xmat(mj_model, mj_data)
+                elif attr == "xvelp":
+                    val = self.rt_xvelp(mj_model, mj_data)
+                elif attr == "xvelr":
+                    val = self.rt_xvelr(mj_model, mj_data)
+                elif attr == "xaccp":
+                    val = self.rt_xaccp(mj_model, mj_data)
+                elif attr == "xaccr":
+                    val = self.rt_xaccr(mj_model, mj_data)
+                else:
+                    continue
+
+                # Handle 3-vectors (pos, vel, acc)
+                if val.ndim == 1 and len(val) <= 3:
+                    for i, k in enumerate("xyz"[: len(val)]):
+                        results_manager.post(
+                            value=float(val[i]),
+                            category=RequestCategory.GEOMS,
+                            subgroup=f"{self.name}/{attr}",
+                            attr=k,
+                        )
+                else:
+                    # Handle flattened matrices (xmat)
+                    val_flat = val.flatten()
+                    for i in range(len(val_flat)):
+                        results_manager.post(
+                            value=float(val_flat[i]),
+                            category=RequestCategory.GEOMS,
+                            subgroup=f"{self.name}/{attr}",
+                            attr=str(i),
+                        )
+
+        results_manager.schedule_harvest_task(harvest)
 
 
 class GeomPlane(GeomBase):
