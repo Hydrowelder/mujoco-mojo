@@ -95,7 +95,7 @@
           </h1>
         </div>
 
-        <nav class="relative flex p-1 bg-slate-300/50 dark:bg-slate-800/50 rounded-lg w-fit font-mono text-xs uppercase tracking-widest border border-slate-300 dark:border-slate-700 shadow-xl">
+        <nav class="relative flex p-1 bg-slate-300/50 dark:bg-slate-800/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-slate-300 dark:border-slate-700 shadow-xl">
           {% set path = request.url.path %}
           <a href="/monitor"
              class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-cyan-500 font-bold' if path.startswith('/monitor') else 'text-slate-500' }} hover:text-cyan-500 transition-colors">
@@ -125,7 +125,7 @@
                   :title="$store.dojo.isAutoRefresh ? 'Disable Auto-refresh' : 'Enable Auto-refresh'">
             <div class="w-2 h-2 rounded-full shrink-0"
                  :class="$store.dojo.isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-slate-400'"></div>
-            <span class="text-[10px] font-black uppercase tracking-widest hidden sm:inline-block w-10 text-center"
+            <span class="text-sm font-black uppercase tracking-widest hidden sm:inline-block w-10 text-center"
                   x-text="$store.dojo.isAutoRefresh ? 'Auto' : 'Off'"></span>
           </button>
 
@@ -211,12 +211,12 @@
         <!-- job metadata -->
         <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md space-y-1 w-full md:w-64">
           <div class="flex items-center gap-2">
-            <span class="text-[9px] uppercase font-black text-slate-500 w-12">Owner</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-xs truncate">{{ owner }}</p>
+            <span class="text-sm uppercase font-black text-slate-500 w-auto">Owner</span>
+            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate">{{ owner }}</p>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-[9px] uppercase font-black text-slate-500 w-12">Workdir</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-xs truncate"
+            <span class="text-sm uppercase font-black text-slate-500 w-auto">Workdir</span>
+            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate"
                style="direction: rtl"
                title="{{ workdir_path }}">&lrm;{{ workdir_name }}</p>
           </div>
@@ -239,12 +239,12 @@
           <div class="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
 
           <div class="text-center w-full">
-            <p class="text-slate-600 dark:text-slate-200 font-black uppercase tracking-[0.3em] text-sm animate-pulse mb-3">
+            <p class="text-slate-600 dark:text-slate-200 font-black uppercase tracking-[0.3em] text-base animate-pulse mb-3">
               Loading Dojo
             </p>
 
             <div class="h-10 flex items-center justify-center overflow-hidden">
-              <p class="text-slate-500 dark:text-slate-400 text-xs font-mono italic leading-relaxed text-center"
+              <p class="text-slate-500 dark:text-slate-400 text-sm font-mono italic leading-relaxed text-center"
                  x-show="$store.dojo.showPhrase"
                  x-text="$store.dojo.loadingPhrases[$store.dojo.loadingIndex]"
                  x-transition:enter="transition ease-out duration-300"
@@ -266,7 +266,7 @@
     </main>
   </div>
 
-  <footer class="max-w-6xl mx-auto px-8 mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-xs text-slate-400 font-mono">
+  <footer class="max-w-6xl mx-auto px-8 mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-sm text-slate-400 font-mono">
     <div class="flex items-center gap-3"
          x-data>
       <!-- time since refresh badge -->
