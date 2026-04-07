@@ -78,7 +78,7 @@
                           d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
-                <span class="text-[10px] font-mono font-black tracking-widest uppercase"
+                <span class="text-base font-mono font-black tracking-widest uppercase"
                       x-text="toastMessage"></span>
             </div>
         </div>
@@ -113,7 +113,7 @@
 
     <div class="flex flex-col lg:flex-row lg:items-center justify-between border-b border-slate-400 dark:border-slate-700 pb-4 gap-4">
         <!-- back button -->
-        <div class="flex items-center gap-3 text-xs sm:text-sm font-mono shrink-0">
+        <div class="flex items-center gap-3 text-sm sm:text-base font-mono shrink-0">
             <a href="/mosaic"
                class="flex items-center gap-2 text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-500 transition-colors whitespace-nowrap group">
                 <svg class="w-4 h-4 transition-transform group-hover:-translate-x-1"
@@ -150,10 +150,10 @@
                     </svg>
                 </div>
 
-                <div class="absolute right-0 md:left-0 md:right-auto top-full mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
-                    <p class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                <div class="absolute right-0 md:left-0 md:right-auto top-full mt-2 w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                         Keyboard Shortcuts</p>
-                    <div class="space-y-3 font-mono text-[10px]">
+                    <div class="space-y-3 font-mono text-sm">
                         <div class="flex justify-between items-center">
                             <span class="text-slate-500">Next / Prev</span>
                             <span class="flex gap-1">
@@ -211,7 +211,7 @@
                 {% if prev_id %}
                 <a href="/mosaic/{{ prev_id }}"
                    id="nav-prev"
-                   class="logo-style !drop-shadow-none hover:!drop-shadow-none px-2 py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-500 flex items-center gap-1 transition-all">
+                   class="logo-style !drop-shadow-none hover:!drop-shadow-none px-2 text-sm sm:text-base font-mono font-bold text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-500 flex items-center gap-2 transition-all">
                     <svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -223,7 +223,7 @@
                     </svg>PREV
                 </a>
                 {% else %}
-                <span class="px-2 py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-400 dark:text-slate-600 flex items-center gap-1 cursor-not-allowed opacity-50">
+                <span class="px-2 py-1 text-sm sm:text-base font-mono font-bold text-slate-400 dark:text-slate-600 flex items-center gap-1 cursor-not-allowed opacity-50">
                     <svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -244,18 +244,18 @@
                            inputmode="numeric"
                            pattern="[0-9]*"
                            placeholder="#"
-                           class="w-10 sm:w-12 h-6 bg-transparent text-center outline-none text-base sm:text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                           class="w-10 sm:w-12 h-6 bg-transparent text-center outline-none text-sm sm:text-base font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     <button x-show="(warpId === 0 || warpId) && warpId != parseInt(trialId.split('_').pop())"
                             @click="warpToTrial()"
                             x-transition
-                            class="mr-1 px-2 py-0.5 bg-cyan-500 dark:bg-cyan-500 text-white dark:text-slate-950 text-[9px] font-black uppercase rounded-xl shadow-sm hover:bg-cyan-500 transition-colors">Warp</button>
+                            class="mr-1 px-2 py-0.5 bg-cyan-500 dark:bg-cyan-500 text-white text-xs font-black uppercase rounded-xl shadow-sm hover:bg-cyan-500 transition-colors">Warp</button>
                 </div>
 
                 <!-- next button -->
                 {% if next_id %}
                 <a href="/mosaic/{{ next_id }}"
                    id="nav-next"
-                   class="logo-style !drop-shadow-none hover:!drop-shadow-none px-2 py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-500 flex items-center gap-1 transition-all">
+                   class="logo-style !drop-shadow-none hover:!drop-shadow-none px-2 text-sm sm:text-base font-mono font-bold text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-500 flex items-center gap-2 transition-all">
                     NEXT<svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -267,7 +267,7 @@
                     </svg>
                 </a>
                 {% else %}
-                <span class="px-2 py-1 text-[10px] sm:text-xs font-mono font-bold text-slate-400 dark:text-slate-600 flex items-center gap-1 cursor-not-allowed opacity-50">
+                <span class="px-2 py-1 text-sm sm:text-base font-mono font-bold text-slate-400 dark:text-slate-600 flex items-center gap-1 cursor-not-allowed opacity-50">
                     NEXT<svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -305,15 +305,16 @@
                         : 'translate-x-0 bg-slate-400 dark:bg-slate-500'"></div>
                         </label>
 
-                        <span class="text-[9px] font-black uppercase tracking-tighter truncate"
-                              :class="vsDraft.enabled ? 'text-slate-700 dark:text-slate-200' : 'text-slate-500/30 dark:text-slate-400/20'"
+                        <span class="text-xs sm:text-xs font-black uppercase tracking-tighter truncate"
+                              :class="vsDraft.enabled ? 'text-slate-500' : 'text-slate-500/30 dark:text-slate-400/20'"
                               x-text="`VS. ${vsDraft.range[0]}-${vsDraft.range[1]}`"></span>
 
                         <template x-if="vsDraft.enabled">
                             <button @click.stop="syncVsRange()"
                                     :disabled="vsLoading"
-                                    class="ml-auto px-3 h-6 bg-cyan-500 hover:bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 flex items-center gap-2  disabled:opacity-50">
-                                <span x-show="!vsLoading">Apply</span>
+                                    class="ml-auto px-2 h-6 bg-cyan-500 hover:bg-cyan-600 text-white text-sm sm:text-base font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 flex items-center gap-2  disabled:opacity-50">
+                                <span class="text-xs sm:text-xs"
+                                      x-show="!vsLoading">Apply</span>
                                 <svg x-show="vsLoading"
                                      class="animate-spin h-3 w-3 text-white"
                                      viewBox="0 0 24 24">
@@ -352,29 +353,29 @@
                      @click.away="open = false"
                      class="absolute top-full right-0 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md z-[400] p-4 space-y-4 shadow-none">
 
-                    <p class="text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">Range Settings</p>
+                    <p class="text-sm sm:text-sm font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">Range Settings</p>
 
                     <div class="grid grid-cols-2 gap-3">
                         <div class="space-y-1">
-                            <label class="text-[8px] font-bold text-slate-500">START</label>
+                            <label class="text-xs sm:text-xs font-bold text-slate-500">START</label>
                             <div x-show="vsDraft.enabled"
                                  class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto">
                                 <input type="number"
                                        x-model.number="vsDraft.range[0]"
                                        inputmode="numeric"
                                        pattern="[0-9]*"
-                                       class="h-6 bg-transparent text-center outline-none text-base sm:text-[10px] font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                       class="w-full bg-transparent text-center outline-none py-1.5 text-sm sm:text-base font-mono font-bold text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-[8px] font-bold text-slate-500">END</label>
+                            <label class="text-xs sm:text-xs font-bold text-slate-500">END</label>
                             <div x-show="vsDraft.enabled"
                                  class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto">
                                 <input type="number"
                                        x-model.number="vsDraft.range[1]"
                                        inputmode="numeric"
                                        pattern="[0-9]*"
-                                       class="h-6 bg-transparent text-center outline-none text-base sm:text-[10px]  font-mono font-bold text-cyan-500 dark:text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                       class="w-full bg-transparent text-center outline-none py-1.5 text-sm sm:text-base font-mono font-bold text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                         </div>
                     </div>
@@ -435,12 +436,12 @@
 
         <!-- x axis selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <span class="text-[10px] font-black uppercase text-slate-400 w-12 sm:w-auto">X-Axis</span>
+            <span class="text-sm font-black uppercase text-slate-400 w-12 w-auto">X-Axis</span>
 
             <div class="relative flex-1 sm:flex-none"
                  @click.away="xMenuOpen = false">
                 <button @click="xMenuOpen = !xMenuOpen"
-                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
+                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
                     <span x-text="config.xAxis"
                           class="truncate"></span>
                     <svg class="w-3 h-3 transition-transform"
@@ -461,7 +462,7 @@
                         <input type="text"
                                x-model="xSearch"
                                placeholder="Filter..."
-                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-base sm:text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
                         <button x-show="xSearch"
                                 type="button"
                                 @mousedown.prevent="xSearch = ''"
@@ -487,7 +488,7 @@
                                           :key="seg">
                                     <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
                                             :class="xSearch.split('/')[depth]?.includes(seg) ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                            class="shrink-0 px-2.5 py-1 rounded-md border text-[11px] font-bold transition-all"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
                             </div>
@@ -499,18 +500,18 @@
                                       :key="sfx">
                                 <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
                                         :class="xSearch.split(':').pop()?.split('|').includes(sfx.replace(':','')) ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                        class="shrink-0 px-2.5 py-1 rounded border text-[11px] font-mono font-bold transition-all"
+                                        class="shrink-0 px-2 py-1 rounded-xl border text-sm font-mono font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
                         </div>
                     </div>
 
-                    <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
                         <template x-for="col in getFilteredCols('x')"
                                   :key="col">
                             <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
                                     class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-[10px] font-mono font-bold truncate pr-2"
+                                <span class="text-sm font-mono font-bold pr-2"
                                       :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="col"></span>
                                 <span x-show="config.xAxis === col"
@@ -519,7 +520,7 @@
                         </template>
 
                         <div x-show="getFilteredCols('x').length === 0"
-                             class="text-[10px] font-mono italic text-slate-400 p-2">
+                             class="text-sm font-mono italic text-slate-400 p-2">
                             No matching signals...
                         </div>
                     </div>
@@ -529,12 +530,12 @@
 
         <!-- y axis selector and ribbon -->
         <div class="flex-1 flex items-center gap-2 min-w-0 w-full">
-            <span class="text-[10px] font-black uppercase text-slate-400 shrink-0 w-12 sm:w-auto">Y-Axis</span>
+            <span class="text-sm font-black uppercase text-slate-400 w-12 w-auto">Y-Axis</span>
 
             <div class="relative"
                  @click.away="yMenuOpen = false">
                 <button @click="yMenuOpen = !yMenuOpen"
-                        class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
+                        class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
                     <span x-text="config.yAxes.length"></span>
                     <svg class="w-3 h-3 transition-transform"
                          :class="yMenuOpen ? 'rotate-180' : ''"
@@ -554,7 +555,7 @@
                         <input type="text"
                                x-model="ySearch"
                                placeholder="Filter..."
-                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-base sm:text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
                         <button x-show="ySearch"
                                 type="button"
@@ -587,7 +588,7 @@
                                             :class="ySearch.split('/')[depth]?.includes(seg)
                                 ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
                                 : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                            class="shrink-0 px-2.5 py-1 rounded-md border text-[11px] font-bold transition-all"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
                             </div>
@@ -601,7 +602,7 @@
                                         :class="ySearch.split(':').pop()?.split('|').includes(sfx.replace(':',''))
                             ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                             : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                        class="shrink-0 px-2.5 py-1 rounded border text-[11px] font-mono font-bold transition-all"
+                                        class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
                         </div>
@@ -615,7 +616,7 @@
                                        :checked="config.yAxes.includes(col)"
                                        @click.stop="toggleY(col)"
                                        class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
-                                <span class="text-[10px] font-mono font-bold"
+                                <span class="text-sm font-mono font-bold"
                                       :class="config.yAxes.includes(col) ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="col"></span>
                             </label>
@@ -623,14 +624,14 @@
                     </div>
 
                     <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
-                        <span class="text-[9px] font-black uppercase text-slate-400 tracking-tighter shrink-0"
+                        <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
                               x-text="`${getFilteredCols('y').length} Signals`"
                               x-show="getFilteredCols('y').length > 0"></span>
 
                         <button @click="clearYAxes()"
                                 x-show="config.yAxes.length > 0"
                                 x-transition
-                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all group">
+                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
                             <svg class="w-3 h-3 transition-transform group-hover:scale-110"
                                  fill="none"
                                  stroke="currentColor"
@@ -645,10 +646,10 @@
                     </div>
                 </div>
             </div>
-            <div class="flex-1 flex items-center h-8 gap-1 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
+            <div class="flex-1 flex items-center h-8 gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap custom-scrollbar no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
                 <template x-for="(col, index) in config.yAxes"
                           :key="col">
-                    <span class="shrink-0 pl-2 pr-1 py-0.5 rounded text-[9px] font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
+                    <span class="shrink-0 pl-2 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
                           :style="`
                 background-color: ${getSignalColor(index)}1a;
                 border-color: ${getSignalColor(index)}4d;
@@ -678,7 +679,7 @@
                 </template>
 
                 <template x-if="config.yAxes.length === 0">
-                    <span class="text-[9px] font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
+                    <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
                 </template>
             </div>
         </div>
@@ -692,7 +693,7 @@
                  class="w-full h-full transition-opacity duration-300">
             </div>
             <div x-show="data && config.yAxes.length === 0"
-                 class="absolute inset-0 flex items-center justify-center text-slate-400 font-mono text-xs italic">
+                 class="absolute inset-0 flex items-center justify-center text-slate-400 font-mono text-base italic">
                 Select Y-axis signals to begin...</div>
             <template x-if="loading">
                 <div class="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center">
@@ -717,7 +718,7 @@
                               stroke-width="2"
                               d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    <span class="text-[7px] font-black uppercase tracking-tighter">Share</span>
+                    <span class="text-xs font-black uppercase tracking-tighter">Share</span>
                 </button>
             </div>
 
@@ -739,14 +740,14 @@
                             <path d="M5 7L7 5L10 8L15 3V11H5V7Z"
                                   fill="currentColor"></path>
                         </svg>
-                        <span class="text-[7px] font-black uppercase tracking-tighter">Plot</span>
+                        <span class="text-xs font-black uppercase tracking-tighter">Plot</span>
                     </button>
 
                     <div x-show="settingsOpen"
                          x-transition
                          class="absolute right-full top-0 mr-4 w-[calc(100vw-6rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
-                        <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        <p class="text-base font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Plot Editor
                         </p>
 
@@ -756,11 +757,11 @@
                                 <!-- gridlines -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase">Gridlines</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Gridlines</label>
 
                                     <button @click="open = !open"
                                             @click.away="open = false"
-                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
 
                                         <span class="truncate"
                                               x-text="config.grid === 'all' ? 'Major + Minor' : (config.grid.charAt(0).toUpperCase() + config.grid.slice(1))"></span>
@@ -783,7 +784,7 @@
 
                                         <template x-for="opt in ['none', 'major', 'all']">
                                             <button @click="config.grid = opt; saveAndRender(); open = false"
-                                                    class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
                                                     :class="config.grid === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
                                                 <span x-text="opt === 'all' ? 'Major + Minor' : (opt.charAt(0).toUpperCase() + opt.slice(1))"></span>
                                             </button>
@@ -793,11 +794,11 @@
                                 <!-- linemode -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase">Mode</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Mode</label>
 
                                     <button @click="open = !open"
                                             @click.away="open = false"
-                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
 
                                         <span class="truncate"
                                               x-text="config.linemode === 'lines+markers' ? 'Both' : (config.linemode.charAt(0).toUpperCase() + config.linemode.slice(1))"></span>
@@ -840,12 +841,12 @@
                                      x-data="{ open: false }"
                                      :class="config.linemode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
 
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase">Interpolation</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Interpolation</label>
 
                                     <button @click="open = !open"
                                             @click.away="open = false"
                                             :disabled="config.linemode === 'markers'"
-                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50 disabled:cursor-not-allowed">
+                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50 disabled:cursor-not-allowed">
 
                                         <span class="truncate"
                                               x-text="{
@@ -883,7 +884,7 @@
         ]"
                                                   :key="opt.value">
                                             <button @click="config.interp = opt.value; saveAndRender(); open = false"
-                                                    class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
                                                     :class="config.interp === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
                                                 <span x-text="opt.label"></span>
                                             </button>
@@ -893,11 +894,11 @@
                                 <!-- hoverstyle -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase">Hover</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Hover</label>
 
                                     <button @click="open = !open"
                                             @click.away="open = false"
-                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
 
                                         <span class="truncate"
                                               x-text="{
@@ -935,7 +936,7 @@
     ]"
                                                   :key="opt.value">
                                             <button @click="config.hover = opt.value; saveAndRender(); open = false"
-                                                    class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
                                                     :class="config.hover === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
                                                 <span x-text="opt.label"></span>
                                             </button>
@@ -948,11 +949,11 @@
                                 <!-- legend location -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase">Legend</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Legend</label>
 
                                     <button @click="open = !open"
                                             @click.away="open = false"
-                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-[10px] font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
 
                                         <span class="truncate"
                                               x-text="config.legendPos.charAt(0).toUpperCase() + config.legendPos.slice(1)"></span>
@@ -976,7 +977,7 @@
                                         <template x-for="opt in ['bottom', 'right', 'hidden']"
                                                   :key="opt">
                                             <button @click="config.legendPos = opt; saveAndRender(); open = false"
-                                                    class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
                                                     :class="config.legendPos === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
                                                 <span x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></span>
                                             </button>
@@ -987,7 +988,7 @@
                                 <label class="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg group transition-all hover:border-cyan-500/50 cursor-pointer"
                                        :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
 
-                                    <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors group-hover:text-slate-700 dark:group-hover:text-slate-200">
+                                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors group-hover:text-slate-700 dark:group-hover:text-slate-200">
                                         Show Spikes
                                     </span>
 
@@ -1015,13 +1016,12 @@
                             <!-- titles -->
                             <div class="space-y-3">
                                 <div class="space-y-1">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Main Plot
-                                        Title</label>
+                                    <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Main Plot Title</label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.title"
                                                placeholder="Untitled Plot"
-                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-base sm:text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
                                         <button x-show="config.title"
                                                 type="button"
@@ -1044,13 +1044,13 @@
                                 </div>
 
                                 <div class="space-y-1">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">X-Axis
+                                    <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">X-Axis
                                         Label</label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.xAxisTitle"
                                                :placeholder="config.xAxis"
-                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-base sm:text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
                                         <button x-show="config.xAxisTitle"
                                                 type="button"
@@ -1073,13 +1073,13 @@
                                 </div>
 
                                 <div class="space-y-1">
-                                    <label class="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Y-Axis
+                                    <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Y-Axis
                                         Label</label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.yAxisTitle"
                                                placeholder="Y-Axis Label"
-                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-base sm:text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
                                         <button x-show="config.yAxisTitle"
                                                 type="button"
@@ -1105,7 +1105,7 @@
                             <!-- reset config -->
                             <div class="pt-2">
                                 <button @click="resetConfig()"
-                                        class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">
+                                        class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all">
                                     <svg class="w-3 h-3"
                                          fill="none"
                                          stroke="currentColor"
@@ -1145,20 +1145,20 @@
                                   stroke-width="2"
                                   d="M21 13V7a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h2.023c.3 0 .575.153.73.404l2.111 3.378a.15.15 0 0 0 .272 0l2.159-3.454c.127-.204.351-.328.592-.328H17a4 4 0 0 0 4-4z" />
                         </svg>
-                        <span class="text-[7px] font-black uppercase tracking-tighter">Notes</span>
+                        <span class="text-xs font-black uppercase tracking-tighter">Notes</span>
                     </button>
 
                     <div x-show="annotationsOpen"
                          x-transition
                          class="absolute right-full top-0 mr-4 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
-                        <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        <p class="text-base font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Notes Editor
                         </p>
 
                         <div x-show="!config.annotations.length && !annDraft"
                              class="py-12 px-4 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tight leading-relaxed">
+                            <p class="text-sm font-bold text-slate-400 uppercase tracking-tight leading-relaxed">
                                 No notes yet.<br>
                                 <span class="text-cyan-500/80">Click any point on the plot</span><br>
                                 to drop an annotation.
@@ -1168,10 +1168,10 @@
                         <template x-if="annDraft">
                             <div class="mb-6 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
                                 <div class="flex justify-between items-center mb-2">
-                                    <p class="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">
+                                    <p class="text-sm font-bold text-cyan-600 dark:text-cyan-400 uppercase">
                                         <span x-text="editIndex !== null ? 'Editing Note' : 'New Note'"></span>
                                     </p>
-                                    <p class="text-[8px] font-mono text-slate-400">
+                                    <p class="text-xs font-mono text-slate-400">
                                         X: <span x-text="annDraft?.x.toFixed(3)"></span> | Y: <span x-text="annDraft?.y.toFixed(3)"></span>
                                     </p>
                                 </div>
@@ -1182,13 +1182,13 @@
                                        @keydown.enter="saveAnnotation()"
                                        @keydown.escape="cancelDraft()"
                                        placeholder="Enter note..."
-                                       class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-1.5 text-[10px] font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                                       class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
 
                                 <div class="flex justify-end gap-2 mt-2">
                                     <button @click="cancelDraft()"
-                                            class="text-[9px] font-bold text-slate-400 hover:text-slate-600 uppercase">Cancel</button>
+                                            class="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase">Cancel</button>
                                     <button @click="saveAnnotation()"
-                                            class="text-[9px] font-bold text-cyan-500 hover:text-cyan-600 uppercase"
+                                            class="text-xs font-bold text-cyan-500 hover:text-cyan-600 uppercase"
                                             x-text="editIndex !== null ? 'Update' : 'Save'"></button>
                                 </div>
                             </div>
@@ -1199,13 +1199,12 @@
                                       :key="index">
                                 <div class="group bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 hover:border-cyan-500/50 transition-colors cursor-pointer"
                                      @click="jumpToAnnotation(ann)">
-                                    <!-- here -->
                                     <div class="flex justify-between items-start gap-3">
                                         <div class="flex-1">
-                                            <p class="text-[10px] font-bold text-slate-700 dark:text-slate-200 break-words"
+                                            <p class="text-sm font-bold text-slate-700 dark:text-slate-200 break-words"
                                                x-text="ann.text"></p>
 
-                                            <p class="text-[8px] font-mono text-slate-400 mt-1"
+                                            <p class="text-xs font-mono text-slate-400 mt-1"
                                                x-text="`X: ${ann.x.toFixed(3)} | Y: ${ann.y.toFixed(3)}`"></p>
                                         </div>
 
@@ -1257,14 +1256,14 @@
                             <path stroke-width="2"
                                   d="M4 4h7v7H4zM13 13h7v7h-7zM4 15l5 5M15 4l5 5" />
                         </svg>
-                        <span class="text-[7px] font-black uppercase tracking-tighter">Shapes</span>
+                        <span class="text-xs font-black uppercase tracking-tighter">Shapes</span>
                     </button>
 
                     <div x-show="shapesOpen"
                          x-transition
                          class="absolute right-full top-0 mr-4 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
-                        <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        <p class="text-base font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Shapes Editor
                         </p>
 
@@ -1283,7 +1282,7 @@
                                           stroke-linecap="round" />
                                 </svg>
 
-                                <span class="text-[8px] font-mono font-bold uppercase tracking-tight"
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
                                       :class="placementMode === 'vline' ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'">V-Line</span>
                             </button>
 
@@ -1301,7 +1300,7 @@
                                           stroke-linecap="round" />
                                 </svg>
 
-                                <span class="text-[8px] font-mono font-bold uppercase tracking-tight"
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
                                       :class="placementMode === 'hline' ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'">H-Line</span>
                             </button>
 
@@ -1323,14 +1322,14 @@
                                           stroke-width="2" />
                                 </svg>
 
-                                <span class="text-[8px] font-mono font-bold uppercase tracking-tight"
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
                                       :class="placementMode === 'rect' ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'">Rect</span>
                             </button>
                         </div>
 
                         <div x-show="placementMode"
                              class="mb-4 p-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg animate-pulse">
-                            <p class="text-[9px] font-bold text-cyan-600 dark:text-cyan-400 uppercase text-center">
+                            <p class="text-sm font-bold text-cyan-600 dark:text-cyan-400 uppercase text-center">
                                 Click plot to place <span x-text="placementMode"></span>...
                             </p>
                         </div>
@@ -1341,9 +1340,9 @@
                                 <div class="group bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-lg p-2 mb-2">
                                     <div class="flex items-center justify-between mb-2">
                                         <div>
-                                            <p class="text-[9px] font-black uppercase text-slate-500"
+                                            <p class="text-sm font-black uppercase text-slate-500"
                                                x-text="s.type"></p>
-                                            <p class="text-[8px] font-mono text-slate-400">
+                                            <p class="text-xs font-mono text-slate-400">
                                                 <span x-text="s.type === 'vline' ? `X: ${s.x0.toFixed(2)}` : s.type === 'hline' ? `Y: ${s.y0.toFixed(2)}` : 'Area Box'"></span>
                                             </p>
                                         </div>
@@ -1380,7 +1379,7 @@
                 <button @click="undo()"
                         :disabled="historyIndex <= 0"
                         class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
-                        title="Undo (Ctrl+Z)">
+                        :title="isMac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)'">
                     <svg class="w-5 h-5"
                          fill="none"
                          stroke="currentColor"
@@ -1390,7 +1389,7 @@
                               stroke-width="2"
                               d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                     </svg>
-                    <span class="text-[7px] font-black uppercase tracking-tighter">Undo</span>
+                    <span class="text-xs font-black uppercase tracking-tighter">Undo</span>
                 </button>
             </div>
 
@@ -1399,7 +1398,7 @@
                 <button @click="redo()"
                         :disabled="historyIndex >= historyStack.length - 1"
                         class="w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500 disabled:opacity-20 disabled:hover:bg-transparent"
-                        title="Redo (Ctrl+Y)">
+                        :title="isMac ? 'Redo (⌘⇧Z)' : 'Redo (Ctrl+Y)'">
                     <svg class="w-5 h-5"
                          fill="none"
                          stroke="currentColor"
@@ -1408,7 +1407,7 @@
                               stroke-linejoin="round"
                               stroke-width="2"
                               d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
-                    </svg><span class="text-[7px] font-black uppercase tracking-tighter">Redo</span>
+                    </svg><span class="text-xs font-black uppercase tracking-tighter">Redo</span>
                 </button>
             </div>
 
@@ -1430,43 +1429,43 @@
                                   stroke-width="2"
                                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                        <span class="text-[7px] font-black uppercase tracking-tighter">Export</span>
+                        <span class="text-xs font-black uppercase tracking-tighter">Export</span>
                     </button>
 
                     <div x-show="downloadOpen"
                          x-transition
                          class="absolute right-full top-0 mr-4 w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-[200]">
 
-                        <p class="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        <p class="text-base font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Export Options</p>
 
                         <div class="space-y-1">
-                            <p class="text-[9px] font-bold text-slate-500 uppercase px-2 mb-1">Capture Plot</p>
+                            <p class="text-sm font-bold text-slate-500 uppercase px-2 mb-1">Capture Plot</p>
 
                             <button @click="downloadPlot('svg')"
-                                    class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
                                 SVG Vector
                             </button>
                             <button @click="downloadPlot('png')"
-                                    class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
                                 PNG Image
                             </button>
                             <button @click="downloadPlot('jpg')"
-                                    class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
                                 JPG Image
                             </button>
 
                             <div class="my-2 border-t border-slate-200 dark:border-slate-700"></div>
 
-                            <p class="text-[9px] font-bold text-slate-500 uppercase px-2 mb-1">Data</p>
+                            <p class="text-sm font-bold text-slate-500 uppercase px-2 mb-1">Data</p>
                             <button @click="downloadCSV()"
-                                    class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/30 rounded transition-all duration-200 flex items-center justify-between group">
                                 Filtered CSV
                                 <span class="text-[8px] bg-emerald-500/10 group-hover:bg-emerald-500 group-hover:text-white px-1 rounded transition-colors">DATA</span>
                             </button>
 
                             <button @click="downloadJSON()"
-                                    class="w-full text-left px-2 py-1.5 text-[10px] font-mono font-bold text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/30 rounded transition-all duration-200 flex items-center justify-between group">
                                 Config JSON
                                 <span class="text-[8px] bg-violet-500/10 group-hover:bg-violet-500 group-hover:text-white px-1 rounded transition-colors">CONFIG</span>
                             </button>
@@ -1480,20 +1479,20 @@
     <!-- JSON editor -->
     <div class="mt-8 space-y-2">
         <div class="flex items-center justify-between px-2">
-            <span class="text-[10px] font-black uppercase text-slate-400 tracking-widest">JSON Plot Configuration</span>
+            <span class="text-base font-black uppercase text-slate-400 tracking-widest">JSON Configuration</span>
             <div class="flex items-center gap-3">
                 <span x-show="!isValidJson"
-                      class="text-[9px] font-bold text-rose-500 font-mono flex items-center gap-1">
+                      class="text-base font-bold text-rose-500 font-mono flex items-center gap-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span> Syntax Error
                 </span>
 
                 <span x-show="isValidJson && !isValidConfig"
-                      class="text-[9px] font-bold text-amber-500 font-mono flex items-center gap-1">
+                      class="text-base font-bold text-amber-500 font-mono flex items-center gap-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Config Error
                 </span>
 
                 <span x-show="isValidJson && isValidConfig"
-                      class="text-[9px] font-bold text-emerald-500 font-mono flex items-center gap-1">
+                      class="text-base font-bold text-emerald-500 font-mono flex items-center gap-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live
                 </span>
             </div>
@@ -1502,7 +1501,7 @@
         <template x-if="configErrors.length > 0 && isValidJson">
             <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 mx-1">
                 <template x-for="err in configErrors">
-                    <p class="text-[9px] font-mono text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <p class="text-sm font-mono text-amber-600 dark:text-amber-400 flex items-center gap-2">
                         <span>→</span> <span x-text="err"></span>
                     </p>
                 </template>
@@ -1511,22 +1510,22 @@
 
         <div class="relative bg-white dark:bg-slate-950 rounded-xl border border-slate-300 dark:border-slate-800 overflow-hidden shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800 transition-all focus-within:border-cyan-500/50">
 
-            <div class="absolute inset-0 p-4 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap pointer-events-none overflow-hidden scroll-sync-target"
+            <div class="absolute inset-0 p-4 font-mono text-sm leading-relaxed break-all whitespace-pre-wrap pointer-events-none overflow-hidden scroll-sync-target"
                  x-html="highlightedJson"></div>
 
             <textarea x-model="configRaw"
                       @input.debounce.500ms="updateFromRaw()"
                       @scroll="$el.parentElement.querySelector('.scroll-sync-target').scrollTop = $el.scrollTop"
-                      class="relative w-full h-64 bg-transparent p-4 text-transparent caret-slate-900 dark:caret-cyan-500 font-mono text-[11px] leading-relaxed outline-none focus:ring-0 resize-none custom-scrollbar"
+                      class="relative w-full h-64 bg-transparent p-4 text-transparent caret-slate-900 dark:caret-cyan-500 font-mono text-sm leading-relaxed outline-none focus:ring-0 resize-none custom-scrollbar"
                       spellcheck="false"></textarea>
 
             <div class="absolute right-4 bottom-4 flex gap-2 z-10">
                 <button @click="copyRawConfig()"
-                        class="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase rounded border border-slate-200 dark:border-slate-800 hover:text-cyan-500 dark:hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
+                        class="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-sm font-black uppercase rounded-lg border border-slate-200 dark:border-slate-800 hover:text-cyan-500 dark:hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
                     Copy
                 </button>
                 <button @click="configRaw = JSON.stringify(config, null, 4)"
-                        class="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase rounded border border-slate-200 dark:border-slate-800 hover:text-cyan-500 dark:hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
+                        class="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-sm font-black uppercase rounded-lg border border-slate-200 dark:border-slate-800 hover:text-cyan-500 dark:hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
                     Format
                 </button>
             </div>

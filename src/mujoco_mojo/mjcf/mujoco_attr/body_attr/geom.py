@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 import mujoco
 import numpy as np
@@ -10,7 +10,6 @@ from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.typing import (
     FluidShape,
     GeomName,
@@ -27,6 +26,9 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.results_manager import ResultsManager
 
 logger = get_logger(__name__)
 
