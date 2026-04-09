@@ -119,12 +119,14 @@ function trialViewer(trialId, externalUrl) {
     // --- ANNOTATIONS ---
     annotationsOpen: false,
     annDraft: null, // Holds { x, y, text } while typing
-    editIndex: null,
+    annEditIndex: null,
 
     // --- SHAPES ---
     shapesOpen: false,
     placementMode: null, // 'vline', 'hline', 'rect'
     rectStart: null, // To store the first click of a rectangle
+    shapeDraft: null,
+    shapeEditIndex: null,
 
     pushHistory() {
       if (this.isUndoing) return;
@@ -285,7 +287,16 @@ function trialViewer(trialId, externalUrl) {
     setPlacementMode(type) {
       this.placementMode = type;
       this.rectStart = null;
-      this.notify(`Mode: ${type.toUpperCase()}. Click plot to place.`, "info");
+      this.shapeDraft = null; // Clear any existing draft if starting a new placement
+
+      const label =
+        type === "vline"
+          ? "Vertical Line"
+          : type === "hline"
+            ? "Horizontal Line"
+            : "Area Rectangle";
+
+      this.notify(`Mode: ${label}. Click plot to place.`, "info");
     },
 
     deleteShape(index) {
@@ -298,71 +309,89 @@ function trialViewer(trialId, externalUrl) {
      */
     handlePlotClickForShapes(pt) {
       if (!this.placementMode) return false;
-
-      // Use Cyan as the default for new shapes
       const defaultColor = tw.cyan[500];
 
+      let newShape = null;
       if (this.placementMode === "vline") {
-        this.config.shapes.push({
-          type: "vline",
-          x0: pt.x,
-          color: defaultColor,
-        });
-        this.placementMode = null;
+        newShape = { type: "vline", x0: pt.x, color: defaultColor, label: "" };
       } else if (this.placementMode === "hline") {
-        this.config.shapes.push({
-          type: "hline",
-          y0: pt.y,
-          color: defaultColor,
-        });
-        this.placementMode = null;
+        newShape = { type: "hline", y0: pt.y, color: defaultColor, label: "" };
       } else if (this.placementMode === "rect") {
         if (!this.rectStart) {
           this.rectStart = { x: pt.x, y: pt.y };
-          return true;
-        } else {
-          this.config.shapes.push({
-            type: "rect",
-            x0: this.rectStart.x,
-            x1: pt.x,
-            y0: this.rectStart.y,
-            y1: pt.y,
-            color: defaultColor,
-          });
-          this.rectStart = null;
-          this.placementMode = null;
+          return true; // Wait for second click
         }
+        newShape = {
+          type: "rect",
+          x0: this.rectStart.x,
+          x1: pt.x,
+          y0: this.rectStart.y,
+          y1: pt.y,
+          color: defaultColor,
+          label: "",
+        };
+        this.rectStart = null;
       }
 
-      this.saveAndRender();
+      if (newShape) {
+        if (!this.config.shapes) this.config.shapes = [];
+        this.config.shapes.push(newShape); // Push directly to list
+        this.placementMode = null; // Close placement mode
+        this.saveAndRender(); // Update plot immediately
+      }
       return true;
+    },
+
+    saveShape() {
+      if (!this.config.shapes) this.config.shapes = [];
+      if (this.shapeEditIndex !== null) {
+        this.config.shapes[this.shapeEditIndex] = { ...this.shapeDraft };
+      } else {
+        this.config.shapes.push({ ...this.shapeDraft });
+      }
+      this.shapeDraft = null;
+      this.shapeEditIndex = null;
+      this.saveAndRender();
+    },
+
+    startShapeEdit(index) {
+      this.shapeEditIndex = index;
+      this.shapeDraft = { ...this.config.shapes[index] };
+      this.shapesOpen = true;
+    },
+
+    cancelShapeDraft() {
+      this.shapeDraft = null;
+      this.shapeEditIndex = null;
+      // If they were in the middle of a rectangle, reset that too
+      this.rectStart = null;
     },
 
     saveAnnotation() {
       if (!this.annDraft || !this.annDraft.text.trim()) return;
 
-      if (this.editIndex !== null) {
+      if (this.annEditIndex !== null) {
         // Update existing
-        this.config.annotations[this.editIndex] = { ...this.annDraft };
+        this.config.annotations[this.annEditIndex] = { ...this.annDraft };
       } else {
         // Create new
         if (!this.config.annotations) this.config.annotations = [];
         this.config.annotations.push({ ...this.annDraft });
       }
 
-      this.cancelDraft();
+      this.cancelAnnDraft();
       this.saveAndRender();
     },
 
-    startEdit(index) {
-      this.editIndex = index;
+    startAnnEdit(index) {
+      this.annEditIndex = index;
       this.annDraft = { ...this.config.annotations[index] };
       this.$nextTick(() => this.$refs.annInput?.focus());
     },
 
-    cancelDraft() {
+    cancelAnnDraft() {
       this.annDraft = null;
-      this.editIndex = null;
+      this.annEditIndex = null;
     },
 
     /**
@@ -568,7 +597,7 @@ function trialViewer(trialId, externalUrl) {
                 y: pt.y,
                 text: "",
               };
-              this.editIndex = null;
+              this.annEditIndex = null;
               this.annotationsOpen = true;
 
               this.$nextTick(() => {
@@ -1637,34 +1666,76 @@ function trialViewer(trialId, externalUrl) {
               },
         xaxis: xAxisObj,
         yaxis: yAxisObj,
-        annotations: (this.config.annotations || []).map((ann) => ({
-          x: ann.x,
-          y: ann.y,
-          text: ann.text,
-          showarrow: true,
-          arrowhead: 2,
-          ax: 0,
-          ay: -40, // Position text 40px above the point
-          font: {
-            family: "monospace",
-            size: 12,
-            color: isDark ? tw.slate[50] : tw.slate[900],
-          },
-          bgcolor: isDark ? tw.slate[800] : "#ffffff",
-          bordercolor: tw.cyan[500],
-          borderwidth: 1,
-          borderpad: 4,
-        })),
+        annotations: [
+          // 1. Existing Notes (with arrows)
+          ...(this.config.annotations || []).map((ann) => ({
+            x: ann.x,
+            y: ann.y,
+            text: ann.text,
+            showarrow: true,
+            arrowhead: 2,
+            ax: 0,
+            ay: -40,
+            font: {
+              family: "monospace",
+              size: 12,
+              color: isDark ? tw.slate[50] : tw.slate[900],
+            },
+            bgcolor: isDark ? tw.slate[800] : tw.slate[50],
+            bordercolor: tw.cyan[500],
+            borderwidth: 1,
+            borderpad: 4,
+          })),
+
+          // 2. Shape Labels (pinned to geometry)
+          ...(this.config.shapes || [])
+            .filter((s) => s.label)
+            .map((s) => {
+              let x = s.x0;
+              let y = s.y0;
+              let xanchor = "left";
+              let yanchor = "bottom";
+              let xref = "x";
+              let yref = "y";
+
+              // Positioning logic to keep labels on the plot edge or shape corner
+              if (s.type === "vline") {
+                y = 1;
+                yref = "paper"; // Top of the plot
+              } else if (s.type === "hline") {
+                x = 1;
+                xref = "paper";
+                xanchor = "right"; // Right side of the plot
+              } else if (s.type === "rect") {
+                x = s.x0;
+                y = s.y1; // Top-left corner of the rect
+              }
+
+              return {
+                x,
+                y,
+                xref,
+                yref,
+                text: `<b>${s.label}</b>`,
+                showarrow: false, // No arrows for shape labels
+                xanchor,
+                yanchor,
+                font: {
+                  size: 10,
+                  color: s.color || tw.cyan[500],
+                  family: "monospace",
+                },
+                bgcolor: isDark ? tw.slate[900] + "B3" : tw.slate[50] + "B3",
+                borderpad: 2,
+              };
+            }),
+        ],
         shapes: (this.config.shapes || []).map((s) => {
           const isDark = document.documentElement.classList.contains("dark");
-          const shapeColor = s.color || tw.cyan[500]; // Fallback to Cyan
+          const shapeColor = s.color || tw.cyan[500];
 
           const base = {
-            line: {
-              color: shapeColor,
-              width: 2,
-              dash: s.dash || "solid",
-            },
+            line: { color: shapeColor, width: 2, dash: s.dash || "solid" },
             layer: "below",
           };
 
@@ -1698,7 +1769,6 @@ function trialViewer(trialId, externalUrl) {
               x1: s.x1,
               y0: s.y0,
               y1: s.y1,
-              // ADD ALPHA: If hex is #06b6d4, we add '1A' (10% opacity) or '26' (15%)
               fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
               line: { ...base.line, width: 1 },
             };
