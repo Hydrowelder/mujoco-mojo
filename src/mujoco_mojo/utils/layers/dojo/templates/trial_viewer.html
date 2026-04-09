@@ -752,8 +752,8 @@
                         </p>
 
                         <div class="space-y-4">
-                            <!-- plot behaviors -->
-                            <div class="grid grid-cols-2 gap-3">
+                            <!-- row 1 -->
+                            <div class="grid grid-cols-2 gap-3 max-h-64">
                                 <!-- gridlines -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
@@ -835,6 +835,7 @@
                                 </div>
                             </div>
 
+                            <!-- row 2 -->
                             <div class="grid grid-cols-2 gap-3">
                                 <!-- interpolation -->
                                 <div class="space-y-1 relative transition-opacity duration-300"
@@ -945,6 +946,7 @@
                                 </div>
                             </div>
 
+                            <!-- row 3 -->
                             <div class="grid grid-cols-2 gap-3 items-end">
                                 <!-- legend location -->
                                 <div class="space-y-1 relative"
@@ -1011,10 +1013,101 @@
                                 </label>
                             </div>
 
+                            <!-- axis base -->
+                            <div class="space-y-3">
+
+                                <!-- x scale -->
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="space-y-1 relative"
+                                         x-data="{ open: false }">
+                                        <label class="text-xs font-bold text-slate-500 uppercase">X-Scale</label>
+                                        <button @click="open = !open"
+                                                @click.away="open = false"
+                                                class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            <span x-text="config.xScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            <svg class="w-3 h-3 shrink-0"
+                                                 :class="open ? 'rotate-180' : ''"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div x-show="open"
+                                             x-transition
+                                             class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+                                            <template x-for="opt in ['linear', 'log']">
+                                                <button @click="config.xScale = opt; if(opt === 'log' && !config.xLogBase) config.xLogBase = 10; saveAndRender(); open = false"
+                                                        class="w-full text-left px-3 py-2 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                        :class="config.xScale === opt ? 'bg-cyan-500 text-white font-bold' : 'hover:bg-cyan-500/10 hover:text-cyan-500 text-slate-600 dark:text-slate-300'"
+                                                        x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                            </template>
+                                        </div>
+                                        <div x-show="config.xScale === 'log'"
+                                             x-transition
+                                             class="mt-2 flex items-center gap-2">
+                                            <span class="text-xs font-bold text-slate-400 uppercase">Base</span>
+
+                                            <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto w-20">
+                                                <input type="number"
+                                                       x-model.number="config.xLogBase"
+                                                       @change="saveAndRender()"
+                                                       inputmode="numeric"
+                                                       pattern="[0-9]*"
+                                                       class="w-full bg-transparent text-center outline-none py-1 text-xs sm:text-sm font-mono font-bold text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- y scale -->
+                                    <div class="space-y-1 relative"
+                                         x-data="{ open: false }">
+                                        <label class="text-xs font-bold text-slate-500 uppercase">Y-Scale</label>
+                                        <button @click="open = !open"
+                                                @click.away="open = false"
+                                                class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50">
+                                            <span x-text="config.yScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            <svg class="w-3 h-3 shrink-0"
+                                                 :class="open ? 'rotate-180' : ''"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div x-show="open"
+                                             x-transition
+                                             class="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden">
+                                            <template x-for="opt in ['linear', 'log']">
+                                                <button @click="config.yScale = opt; if(opt === 'log' && !config.yLogBase) config.yLogBase = 10; saveAndRender(); open = false"
+                                                        class="w-full text-left px-3 py-2 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                        :class="config.yScale === opt ? 'bg-cyan-500 text-white font-bold' : 'hover:bg-cyan-500/10 hover:text-cyan-500 text-slate-600 dark:text-slate-300'"
+                                                        x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                            </template>
+                                        </div>
+                                        <div x-show="config.yScale === 'log'"
+                                             x-transition
+                                             class="mt-2 flex items-center gap-2">
+                                            <span class="text-xs font-bold text-slate-400 uppercase">Base</span>
+
+                                            <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto w-20">
+                                                <input type="number"
+                                                       x-model.number="config.yLogBase"
+                                                       @change="saveAndRender()"
+                                                       inputmode="numeric"
+                                                       pattern="[0-9]*"
+                                                       class="w-full bg-transparent text-center outline-none py-1 text-xs sm:text-sm font-mono font-bold text-cyan-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="border-t border-slate-100 dark:border-slate-700/50 my-2"></div>
 
                             <!-- titles -->
                             <div class="space-y-3">
+                                <!-- main title -->
                                 <div class="space-y-1">
                                     <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Main Plot Title</label>
                                     <div class="relative mb-2">
@@ -1043,6 +1136,7 @@
                                     </div>
                                 </div>
 
+                                <!-- x axis label -->
                                 <div class="space-y-1">
                                     <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">X-Axis
                                         Label</label>
@@ -1072,6 +1166,7 @@
                                     </div>
                                 </div>
 
+                                <!-- y axis label -->
                                 <div class="space-y-1">
                                     <label class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Y-Axis
                                         Label</label>
