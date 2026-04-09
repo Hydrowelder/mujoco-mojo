@@ -28,3 +28,31 @@ class EqualityBase(XMLModel):
 
     solimp: Vec5 = SOLIMP_DEFAULT
     """Constraint solver parameters for equality constraint simulation. See Solver parameters."""
+
+    def set_active(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, state: bool
+    ) -> None:
+        """
+        Sets the runtime activation state of the equality constraint.
+
+        Args:
+            mj_model: The MuJoCo model instance.
+            mj_data: The MuJoCo data instance containing the current state.
+            state: True to enable the constraint, False to disable it.
+
+        """
+        eq_id = self.get_id(mj_model)
+        mj_data.eq_active[eq_id] = 1 if state else 0
+
+    def enable(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> None:
+        """Convenience method to enable the constraint at runtime."""
+        self.set_active(mj_model, mj_data, True)
+
+    def disable(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> None:
+        """Convenience method to disable the constraint at runtime."""
+        self.set_active(mj_model, mj_data, False)
+
+    def is_active(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> bool:
+        """Returns the current runtime activation state."""
+        eq_id = self.get_id(mj_model)
+        return bool(mj_data.eq_active[eq_id])
