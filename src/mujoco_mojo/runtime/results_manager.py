@@ -8,6 +8,7 @@ import mujoco
 import polars as pl
 
 from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
+from mujoco_mojo.typing import RequestCategory
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -68,7 +69,7 @@ class ResultsManager:
     def post(
         self,
         value: float | NamedValue[float],
-        category: Literal["Bodies", "Sites", "Joints", "Sensors", "Loads", "Custom"],
+        category: RequestCategory | str,
         subgroup: str | None = None,
         attr: str | None = None,
     ):

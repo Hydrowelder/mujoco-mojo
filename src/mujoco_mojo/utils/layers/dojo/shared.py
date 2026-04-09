@@ -11,6 +11,7 @@ __all__ = ["CURRENT_JOB", "HERE", "set_globals", "static", "templates"]
 HERE = Path(__file__).parent
 WORKDIR: Path | None = None
 CURRENT_JOB: JobStatus | None = None
+AUTH_PASSWORD: str | None = None
 
 # Chime sound comes from https://mixkit.co/free-sound-effects/win/
 templates = Jinja2Templates(directory=HERE / "templates")

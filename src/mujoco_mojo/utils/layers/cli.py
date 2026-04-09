@@ -352,6 +352,14 @@ if True:
             help="Port number to use to serve the Dojo process.",
         ),
     ]
+    DojoPassword = Annotated[
+        str | None,
+        typer.Option(
+            "--password",
+            "-pw",
+            help="Enable Basic Auth protection",
+        ),
+    ]
 
 # initialize the CLI with rich formatting
 cli_app = typer.Typer(
@@ -601,6 +609,7 @@ def run_dojo(
     host: DojoHostType = "127.0.0.1",
     port: DojoPortType = 8000,
     n_proc: NProcType = 1,
+    password: DojoPassword = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -629,11 +638,17 @@ def run_dojo(
     job.refresh_from_disk(n_proc=n_proc)
 
     shared.CURRENT_JOB = job
+    shared.AUTH_PASSWORD = password
     shared.set_globals(workdir=workdir, owner=job.started_by)
 
     # detect ip
     local_ip = get_local_ip()
-    connection_info = f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
+    if password:
+        connection_info = "[yellow]Auth enabled. Use [u]any[/u] username and your provided password.[/yellow]\n\n"
+    else:
+        connection_info = ""
+
+    connection_info += f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
 
     if host == "0.0.0.0":
         connection_info += (

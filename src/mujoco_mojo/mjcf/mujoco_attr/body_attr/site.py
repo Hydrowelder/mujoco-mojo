@@ -11,6 +11,7 @@ from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     GeomType,
     MaterialName,
+    RequestCategory,
     SiteName,
     Vec2,
     Vec3,
@@ -609,7 +610,7 @@ class SiteBase(XMLModel):
                     for i, k in enumerate("xyz"[: len(val)]):
                         results_manager.post(
                             value=val[i],
-                            category="Sites",
+                            category=RequestCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -619,7 +620,7 @@ class SiteBase(XMLModel):
                     for i in range(len(val_flat)):
                         results_manager.post(
                             value=float(val_flat[i]),
-                            category="Sites",
+                            category=RequestCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=str(i),
                         )
