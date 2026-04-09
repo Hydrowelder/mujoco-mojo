@@ -42,6 +42,8 @@ const DEFAULT_CONFIG = {
   legendPos: "bottom", // "bottom", "right", "hidden"
   rangeX: null,
   rangeY: null,
+  xScale: "linear",
+  yScale: "linear",
   vsEnabled: false,
   vsRange: [0, 10],
   annotations: [], // Stores { x, y, text }
@@ -1579,6 +1581,19 @@ function trialViewer(trialId, externalUrl) {
 
       // x axis config
       const xAxisObj = {
+        type: this.config.xScale || "linear",
+        range:
+          this.config.xScale === "log"
+            ? [
+                Math.log10(Math.max(1e-6, displayRangeX[0])),
+                Math.log10(Math.max(1e-6, displayRangeX[1])),
+              ]
+            : displayRangeX,
+        dtick:
+          this.config.xScale === "log" && this.config.xLogBase
+            ? Math.log10(this.config.xLogBase)
+            : undefined,
+        tickformat: ".3s",
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
@@ -1589,7 +1604,6 @@ function trialViewer(trialId, externalUrl) {
           font: { size: 11, color: textColor, family: "monospace" },
         },
         autorange: false,
-        range: displayRangeX,
         showspikes: showX,
         spikemode: "across",
         spikelinecolor: spikeColor,
@@ -1598,6 +1612,19 @@ function trialViewer(trialId, externalUrl) {
 
       // y axis config
       const yAxisObj = {
+        type: this.config.yScale || "linear",
+        range:
+          this.config.yScale === "log"
+            ? [
+                Math.log10(Math.max(1e-6, displayRangeY[0])),
+                Math.log10(Math.max(1e-6, displayRangeY[1])),
+              ]
+            : displayRangeY,
+        dtick:
+          this.config.yScale === "log" && this.config.yLogBase
+            ? Math.log10(this.config.yLogBase)
+            : undefined,
+        tickformat: ".3s",
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
@@ -1608,7 +1635,6 @@ function trialViewer(trialId, externalUrl) {
           font: { size: 11, color: textColor, family: "monospace" },
         },
         autorange: false,
-        range: displayRangeY,
         showspikes: showY,
         spikemode: "across",
         spikelinecolor: spikeColor,
