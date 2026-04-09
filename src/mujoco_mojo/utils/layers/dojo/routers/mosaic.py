@@ -63,31 +63,32 @@ async def get_valid_trials():
 async def get_trial_viewer(request: Request, trial_id: str):
     """Land here when clicking a trial."""
     job = shared.CURRENT_JOB
-    prev_id = None
-    next_id = None
+
+    if not job:
+        raise HTTPException(status_code=404, detail="No active job found.")
 
     server_ip = get_network_ip()
     port = request.url.port or 8000
 
-    if job:
-        # 1. Get the sorted list of all trials that actually have data
-        from mujoco_mojo.runtime.results_manager import ResultsManager
+    # 1. Get the sorted list of all trials that actually have data
+    from mujoco_mojo.runtime.results_manager import ResultsManager
 
-        valid_ids = []
-        for tn in job.trial_nums:
-            path = job.trial_num_to_path(tn)
-            if (path / ResultsManager.default_db_name()).exists():
-                valid_ids.append(path.name)
+    valid_ids = []
+    for tn in job.trial_nums:
+        path = job.trial_num_to_path(tn)
+        if (path / ResultsManager.default_db_name()).exists():
+            valid_ids.append(path.name)
 
-        # 2. Find the neighbors of the current trial_id
-        try:
-            idx = valid_ids.index(trial_id)
-            if idx > 0:
-                prev_id = valid_ids[idx - 1]
-            if idx < len(valid_ids) - 1:
-                next_id = valid_ids[idx + 1]
-        except ValueError:
-            pass
+    if trial_id not in valid_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trial '{trial_id}' does not exist or has no telemetry data.",
+        )
+
+    # 2. Find the neighbors of the current trial_id
+    idx = valid_ids.index(trial_id)
+    prev_id = valid_ids[idx - 1] if idx > 0 else None
+    next_id = valid_ids[idx + 1] if idx < len(valid_ids) - 1 else None
 
     return shared.templates.TemplateResponse(
         request=request,
