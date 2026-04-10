@@ -122,25 +122,24 @@ class XMLModel(MojoBaseModel):
         for field in self.attributes:
             value = getattr(self, field, None)
 
+            if value is None:
+                continue
+
             field_info = type(self).model_fields[field]
             annotation = field_info.annotation
             is_literal = get_origin(annotation) is Literal
 
-            if exclude_default and not is_literal:
+            if exclude_default and not is_literal and not isinstance(value, XMLModel):
                 # determine default value
                 default = type(self).model_fields[field].default
 
                 # determine if its equal to value
                 if isinstance(value, np.ndarray):
-                    is_default = np.array_equal(value, default)
+                    if np.array_equal(value, default):
+                        continue
                 else:
-                    is_default = value == default
-
-                if is_default:
-                    continue
-
-            if value is None:
-                continue
+                    if value == default:
+                        continue
 
             field_name = field.rstrip("_")
 
