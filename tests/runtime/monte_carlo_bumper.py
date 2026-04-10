@@ -4,6 +4,7 @@ from typing import Literal
 
 import mujoco
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -23,6 +24,7 @@ class Handoff:
     It is here to allow encapsulation for defining MJCF elements, while retaining the simple ability to later use those definitions in the runtime.
     """
 
+    box1_rot: mojo.Site
     springs: dict[
         Literal["pz", "mz"],
         tuple[mojo.Site, mojo.Site, mojo.NamedValue, mojo.NamedValue],
@@ -218,6 +220,17 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         ]
     )
 
+    ortho_q = R.from_euler("xyz", [45, 45, 45], degrees=True).as_quat(scalar_first=True)
+
+    box1.sites.append(
+        box1_rot_site := mojo.SiteSphere(
+            name=mojo.SiteName("box1_rot_site"),
+            size=0.2,
+            pose=mojo.PoseQuat(quat=ortho_q),
+            rgba=mojo.utils.Color.FUCHSIA_500.rgba,
+        )
+    )
+
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
             name=FIXED_CAMERA_NAME,
@@ -239,7 +252,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     ]
 
     # add handoff data
-    handoff = Handoff()
+    handoff = Handoff(box1_rot=box1_rot_site)
     mojo_model._user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
@@ -291,6 +304,8 @@ def runtime(
 
         for b in mojo_model.mjcf.worldbody.bodies:
             b.request(rm.results_manager)
+
+        mojo_model._user_data.box1_rot.request(rm.results_manager)
 
         # Run for 2 seconds
         while mj_data.time < 2.0:
