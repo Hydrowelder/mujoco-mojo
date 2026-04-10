@@ -6,6 +6,7 @@ import mujoco
 import numpy as np
 from pydantic import ConfigDict, Field
 
+from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
@@ -82,8 +83,11 @@ class SiteBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
-    def rot(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
         return np.asarray(mj_data.site_xmat[self.get_id(mj_model)]).reshape(3, 3)
+
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
+        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
 
     def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
         return mj_model.site_bodyid[self.get_id(mj_model)]
@@ -109,7 +113,7 @@ class SiteBase(XMLModel):
             return dr_world
 
         # rotate into relative_to frame: R^T * dr_world
-        rot_t = relative_to.rot(mj_model, mj_data).T
+        rot_t = relative_to.rt_xmat(mj_model, mj_data).T
         return rot_t @ dr_world
 
     def rt_dx(
@@ -226,7 +230,7 @@ class SiteBase(XMLModel):
             return world_rel
 
         # rotate into relative_to coordinate frame
-        rot_t = rot_t = relative_to.rot(mj_model, mj_data).T
+        rot_t = rot_t = relative_to.rt_xmat(mj_model, mj_data).T
         rel_local = np.zeros(6)
         rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
         rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
@@ -421,7 +425,7 @@ class SiteBase(XMLModel):
             return world_rel
 
         # rotate into relative_to coordinate frame
-        rot_t = relative_to.rot(mj_model, mj_data).T
+        rot_t = relative_to.rt_xmat(mj_model, mj_data).T
         rel_local = np.zeros(6)
         rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
         rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
@@ -580,9 +584,9 @@ class SiteBase(XMLModel):
     def request(
         self,
         results_manager: ResultsManager,
-        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr"]] = [
+        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr", "quat"]] = [
             "xpos",
-            "xmat",
+            "quat",
             "xvelp",
             "xvelr",
         ],
@@ -594,19 +598,32 @@ class SiteBase(XMLModel):
             raise ValueError(msg)
 
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            sid = self.get_id(mj_model)
             for attr in attrs:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
-                if attr == "xvelp":
-                    val = self.rt_lin_vel(mj_model, mj_data)
-                elif attr == "xvelr":
-                    val = self.rt_ang_vel(mj_model, mj_data)
-                else:
-                    # Standard pull for xpos, xmat
-                    val = getattr(mj_data, f"site_{attr}")[sid]
+                match attr:
+                    case "xpos":
+                        val = self.rt_pos(mj_model, mj_data)
+                    case "xmat":
+                        val = self.rt_xmat(mj_model, mj_data)
+                    case "xvelp":
+                        val = self.rt_lin_vel(mj_model, mj_data)
+                    case "xvelr":
+                        val = self.rt_ang_vel(mj_model, mj_data)
+                    case "quat":
+                        val = self.rt_quat(mj_model, mj_data)
+                    case _:
+                        continue
 
-                # standard 3-vector, use xyz labeling
-                if val.ndim == 1 and len(val) <= 3:
+                if isinstance(val, Quat):
+                    for i, k in enumerate("wxyz"[: len(val.quat)]):
+                        results_manager.post(
+                            value=float(val.quat[i]),
+                            category=RequestCategory.SITES,
+                            subgroup=f"{self.name}/{attr}",
+                            attr=k,
+                        )
+                elif val.ndim == 1 and len(val) <= 3:
+                    # standard 3-vector, use xyz labeling
                     for i, k in enumerate("xyz"[: len(val)]):
                         results_manager.post(
                             value=val[i],
