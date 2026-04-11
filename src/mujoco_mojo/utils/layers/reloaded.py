@@ -137,6 +137,8 @@ class MojoReloaded:
     port: int
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
+    _playback_speed: float = 1.0
+    _last_command: str = "run"
 
     def generate_construct(
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
@@ -223,6 +225,7 @@ class MojoReloaded:
                 ),
                 _sync_hook=self._sync_hook,
                 _skip_recording=True,
+                playback_speed=self._playback_speed,
             )
             start = time.time()
             run_func(
@@ -273,35 +276,56 @@ class MojoReloaded:
     def _interactive_loop(
         self, on_reload_callback: OnReloadCallback, is_running_check: IsRunningCheck
     ):
+        if self.runtime:
+            runtime_cmd = "- [bold cyan]Any float[/]: Generate and use runtime. Playback speed set by float [dim](i.e., 1.0/run for real time, 0.5 for half speed, etc.)[/].\n"
+        else:
+            runtime_cmd = ""
         console.print(
             Panel(
                 "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
-                "1. Edit your generator code.\n"
-                "2. Press [bold yellow]ENTER[/bold yellow] here to push changes.\n"
-                "3. Type [bold red]'exit'[/bold red] to close.",
-                title="Mojo Reloaded",
+                "- [bold yellow]ENTER[/]: Repeat last command\n"
+                "- [bold magenta]gen[/]: Generate only\n"
+                f"{runtime_cmd}"
+                "- [bold red]'exit'[/]: to close",
+                title="Interactive Controls",
                 border_style="cyan",
             )
         )
         while is_running_check():
             try:
-                cmd = (
+                raw_input = (
                     console.input(
-                        "[bold green]Awaiting reload command[/bold green]:[white] Press [bold yellow]ENTER[/bold yellow] to reload > [/white]"
+                        f"[bold green]Awaiting command[/bold green] [dim](last cmd: {self._last_command})[/dim]:[white] > [/white]"
                     )
                     .strip()
                     .lower()
                 )
-                if cmd in ["exit", "quit", "q"]:
+
+                # handle repeat last command
+                cmd = raw_input if raw_input else self._last_command
+                self._last_command = cmd
+
+                if raw_input in ["exit", "quit", "q"]:
                     break
+
+                use_runtime = not cmd == "gen"
+
+                try:
+                    self._playback_speed = float(cmd)
+                    console.print(
+                        f"[dim]Playback speed set to {self._playback_speed}x[/]"
+                    )
+                except ValueError:
+                    pass
+
             except (BdbQuit, KeyboardInterrupt):
                 break
 
             try:
                 start = time.time()
-                with console.status("[bold]Regenerating...[/bold]"):
+                with console.status("[bold]Processing...[/bold]"):
                     new_mj_model, new_mj_data = self.generate_construct(
-                        use_runtime=True, on_reload_callback=on_reload_callback
+                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
                     )
                     on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
                 console.print(
