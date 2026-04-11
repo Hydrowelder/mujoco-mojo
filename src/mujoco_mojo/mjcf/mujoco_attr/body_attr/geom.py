@@ -7,6 +7,7 @@ import numpy as np
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
+from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -410,6 +411,9 @@ class GeomBase(XMLModel):
         """Returns the world orientation matrix of the geom."""
         return mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
 
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
+        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
+
     def rt_xvel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
@@ -447,9 +451,11 @@ class GeomBase(XMLModel):
     def request(
         self,
         results_manager: ResultsManager,
-        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr"]] = [
+        attrs: list[
+            Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
+        ] = [
             "xpos",
-            "xmat",
+            "quat",
         ],
     ):
         """Registers specific geom attributes for logging."""
@@ -461,23 +467,35 @@ class GeomBase(XMLModel):
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 # Manual mapping to avoid getattr
-                if attr == "xpos":
-                    val = self.rt_xpos(mj_model, mj_data)
-                elif attr == "xmat":
-                    val = self.rt_xmat(mj_model, mj_data)
-                elif attr == "xvelp":
-                    val = self.rt_xvelp(mj_model, mj_data)
-                elif attr == "xvelr":
-                    val = self.rt_xvelr(mj_model, mj_data)
-                elif attr == "xaccp":
-                    val = self.rt_xaccp(mj_model, mj_data)
-                elif attr == "xaccr":
-                    val = self.rt_xaccr(mj_model, mj_data)
-                else:
-                    continue
+                match attr:
+                    case "xpos":
+                        val = self.rt_xpos(mj_model, mj_data)
+                    case "xmat":
+                        val = self.rt_xmat(mj_model, mj_data)
+                    case "xvelp":
+                        val = self.rt_xvelp(mj_model, mj_data)
+                    case "xvelr":
+                        val = self.rt_xvelr(mj_model, mj_data)
+                    case "xaccp":
+                        val = self.rt_xaccp(mj_model, mj_data)
+                    case "xaccr":
+                        val = self.rt_xaccr(mj_model, mj_data)
+                    case "quat":
+                        val = self.rt_quat(mj_model, mj_data)
+                    case _:
+                        continue
 
+                # handle quaternion
+                if isinstance(val, Quat):
+                    for i, k in enumerate("wxyz"[: len(val.quat)]):
+                        results_manager.post(
+                            value=float(val.quat[i]),
+                            category=RequestCategory.GEOMS,
+                            subgroup=f"{self.name}/{attr}",
+                            attr=k,
+                        )
                 # Handle 3-vectors (pos, vel, acc)
-                if val.ndim == 1 and len(val) <= 3:
+                elif val.ndim == 1 and len(val) <= 3:
                     for i, k in enumerate("xyz"[: len(val)]):
                         results_manager.post(
                             value=float(val[i]),

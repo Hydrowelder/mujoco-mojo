@@ -9,20 +9,22 @@ import mujoco_mojo.utils.layers.dojo.shared as shared
 
 from .routers import monitor, mosaic
 
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 
 def validate_dojo_auth(credentials: HTTPBasicCredentials = Depends(security)):
     """
     Checks the provided credentials against the CLI-provided password. Username is ignored (or set to 'mojo'), we just care about the password.
     """
-    if shared.AUTH_PASSWORD:
-        if credentials.password != shared.AUTH_PASSWORD:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect Mojo Password",
-                headers={"WWW-Authenticate": "Basic"},
-            )
+    if not shared.AUTH_PASSWORD:
+        return None
+
+    if credentials.password != shared.AUTH_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect Mojo Password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     return credentials.username
 
 

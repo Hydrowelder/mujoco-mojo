@@ -17,6 +17,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
+from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -183,6 +184,9 @@ class Body(XMLModel):
         """Rotation matrix the body during runtime."""
         return np.asarray(mj_data.xmat[self.get_id(mj_model)]).reshape(3, 3)
 
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
+        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
+
     def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> np.ndarray:
         """Diagonalized inertia tensor of the body (body relative)."""
         return mj_model.body_inertia[self.get_id(mj_model)]
@@ -260,6 +264,8 @@ class Body(XMLModel):
         attrs: list[
             Literal[
                 "xpos",
+                "quat",
+                "xmat",
                 "xvelp",
                 "xvelr",
                 "lin_mom",
@@ -270,6 +276,7 @@ class Body(XMLModel):
             ]
         ] = [
             "xpos",
+            "quat",
             "xvelp",
             "xvelr",
             "lin_mom",
@@ -290,6 +297,27 @@ class Body(XMLModel):
                 match attr:
                     case "xpos":
                         val = self.rt_pos(mj_model, mj_data)
+                    case "xmat":
+                        val = self.rt_xmat(mj_model, mj_data)
+                        val_flat = val.flatten()
+                        for i in range(len(val_flat)):
+                            results_manager.post(
+                                value=float(val_flat[i]),
+                                category=RequestCategory.BODIES,
+                                subgroup=f"{self.name}/{attr}",
+                                attr=str(i),
+                            )
+                        continue
+                    case "quat":
+                        val = self.rt_quat(mj_model, mj_data)
+                        for i, k in enumerate("wxyz"[: len(val.quat)]):
+                            results_manager.post(
+                                value=float(val.quat[i]),
+                                category=RequestCategory.BODIES,
+                                subgroup=f"{self.name}/{attr}",
+                                attr=k,
+                            )
+                        continue
                     case "xvelp":
                         val = self.rt_lin_vel(mj_model, mj_data)
                     case "xvelr":

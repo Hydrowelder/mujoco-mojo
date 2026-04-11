@@ -80,9 +80,7 @@ class Load(MojoBaseModel, ABC):
 
         # Get the 3x3 rotation matrix for the reference site
         # MuJoCo stores this as a flat 9-element array in site_xmat
-        rot = np.asarray(mj_data.site_xmat[self.rel_to_site.get_id(mj_model)]).reshape(
-            3, 3
-        )
+        rot = self.rel_to_site.rt_xmat(mj_model, mj_data)
         return rot @ local
 
     @abstractmethod
@@ -458,8 +456,7 @@ class ScalarForce(BodyReactionForce):
     ) -> tuple[np.ndarray, np.ndarray]:
         t = mj_data.time
 
-        sid = self.action_site.get_id(mj_model)
-        unit_vec = np.asarray(mj_data.site_xmat[sid]).reshape(3, 3)[:, 0]
+        unit_vec = self.action_site.rt_xmat(mj_model, mj_data)[:, 0]
 
         mag = self.scalar_func(t, unit_vec, mj_model, mj_data)
 
@@ -480,8 +477,7 @@ class ScalarTorque(BodyReactionForce):
     ) -> tuple[np.ndarray, np.ndarray]:
         t = mj_data.time
 
-        sid = self.action_site.get_id(mj_model)
-        unit_vec = np.asarray(mj_data.site_xmat[sid]).reshape(3, 3)[:, 0]
+        unit_vec = self.action_site.rt_xmat(mj_model, mj_data)[:, 0]
 
         mag = self.scalar_func(t, unit_vec, mj_model, mj_data)
 

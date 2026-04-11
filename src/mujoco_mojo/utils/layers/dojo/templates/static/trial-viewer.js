@@ -31,6 +31,7 @@ const tw = {
 const DEFAULT_CONFIG = {
   xAxis: "time",
   yAxes: [],
+  refFrame: null,
   grid: "all",
   linemode: "lines", // Renamed from markerMode for clarity
   interp: "linear", // line interpolation (linear, spline, etc)
@@ -72,12 +73,15 @@ function trialViewer(trialId, externalUrl) {
     xSearch: "",
     yMenuOpen: false,
     ySearch: "",
+    refFrameMenuOpen: false,
     settingsOpen: false,
     downloadOpen: false,
 
+    activeFrame: null,
     dragCounter: 0, // tracks if a file is being hovered over the page
     editorOpen: false, // Controls the visibility of the JSON editor drawer
     columns: [],
+    rotateableVectors: [],
     showToast: false,
     toastMessage: "",
     toastType: "success",
@@ -182,20 +186,53 @@ function trialViewer(trialId, externalUrl) {
       localStorage.setItem("mojo_mosaic_history", JSON.stringify(bundle));
     },
 
+    shiftY(index, direction, isWarp = false) {
+      // direction: -1 for left, 1 for right
+      if (!isWarp) {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= this.config.yAxes.length) return;
+
+        const arr = [...this.config.yAxes];
+        [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
+        this.config.yAxes = arr;
+      } else {
+        // "Warp" to front or end
+        const arr = [...this.config.yAxes];
+        const [movedItem] = arr.splice(index, 1);
+
+        if (direction === -1) {
+          arr.unshift(movedItem); // Jump to start
+        } else {
+          arr.push(movedItem); // Jump to end
+        }
+
+        this.config.yAxes = arr;
+      }
+
+      this.saveAndRender();
+    },
+
     async fetchTrialData(id, requiredCols = []) {
       console.debug(`loading ${id} (cols: ${requiredCols.join(",") || "all"})`);
 
       // Construct query param for columns
       let url = `/mosaic/${id}/data`;
+      const colParams = new URLSearchParams();
+
       if (requiredCols.length > 0) {
-        const colParams = new URLSearchParams({ cols: requiredCols.join(",") });
-        url += `?${colParams.toString()}`;
+        colParams.append("cols", requiredCols.join(","));
       }
+
+      if (this.config.refFrame) {
+        colParams.append("rotate_by", this.config.refFrame);
+      }
+
+      const queryStr = colParams.toString();
+      if (queryStr) url += `?${queryStr}`;
 
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
 
-      // We expect { columns: [...], data: {...} }
       return await resp.json();
     },
 
@@ -209,7 +246,7 @@ function trialViewer(trialId, externalUrl) {
         // If a new discovery task started while we were waiting, exit now.
         if (loopId !== this.discoveryId) return;
 
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 50));
         const chunk = columnList.slice(i, i + CHUNK_SIZE);
 
         try {
@@ -220,8 +257,13 @@ function trialViewer(trialId, externalUrl) {
               ...(this.vsDatasets[id] || {}),
               ...resp.data,
             };
+            this.vsDatasets = { ...this.vsDatasets };
           } else {
             this.data = { ...(this.data || {}), ...resp.data };
+          }
+
+          if (this.config.yAxes.some((y) => chunk.includes(y))) {
+            this.renderPlot();
           }
 
           console.debug(
@@ -468,6 +510,30 @@ function trialViewer(trialId, externalUrl) {
       }
     },
 
+    // Add this near your other getters like highlightedJson
+    get selectableYColumns() {
+      if (!this.columns) return [];
+      if (!this.config.refFrame) return this.columns;
+
+      return this.columns.filter((col) => {
+        const parts = col.split(":");
+        const suffix = parts.pop(); // e.g., 'z' or 'mag'
+        const family = parts.join(":"); // e.g., 'Bodies/box1/xpos'
+
+        // Only allow x, y, z components for rotation mode
+        const isVectorComponent = ["x", "y", "z"].includes(suffix);
+        return isVectorComponent && this.rotateableVectors.includes(family);
+      });
+    },
+
+    get availableQuats() {
+      // If the manifest hasn't loaded yet, return empty
+      if (!this.columns || !Array.isArray(this.columns)) return [];
+      return this.columns
+        .filter((c) => c.endsWith(":w"))
+        .map((c) => c.replace(":w", ""));
+    },
+
     async init() {
       // 1. UI PRIMING
       // Detect theme and set up the Warp ID from the URL string
@@ -508,7 +574,9 @@ function trialViewer(trialId, externalUrl) {
         const initialCols = [this.config.xAxis, ...this.config.yAxes];
         const response = await this.fetchTrialData(this.trialId, initialCols);
 
-        this.columns = response.columns.sort();
+        this.columns = response.columns.all.sort();
+        this.rotateableVectors = response.columns.rotateable_vectors;
+
         this.data = response.data;
 
         // 5. CONFIG HYDRATION
@@ -696,6 +764,36 @@ function trialViewer(trialId, externalUrl) {
         }, 500);
       });
 
+      this.$watch("config.refFrame", async (newValue, oldValue) => {
+        // Because we are watching a string (a primitive), newValue and oldValue
+        // will actually be different!
+        console.debug(
+          `[Mojo] Frame Change: ${oldValue || "world"} -> ${newValue || "world"}`,
+        );
+
+        this.discoveryId++; // Kill active fetches
+        this.data = {};
+        this.vsDatasets = {};
+
+        // Fetch immediate traces
+        const initialCols = [this.config.xAxis, ...this.config.yAxes];
+        const response = await this.fetchTrialData(this.trialId, initialCols);
+
+        this.columns = response.columns.all.sort();
+        this.rotateableVectors = response.columns.rotateable_vectors;
+        this.data = response.data;
+
+        // Trigger full background refresh in the new frame
+        this.startBackgroundDiscovery();
+
+        if (this.config.vsEnabled) {
+          await this.syncVsRange();
+        }
+
+        // Call your standard save/render
+        this.saveAndRender();
+      });
+
       // Start the initial background load for the current trial + current draft
       this.startBackgroundDiscovery();
 
@@ -744,7 +842,28 @@ function trialViewer(trialId, externalUrl) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const activeCols = [this.config.xAxis, ...this.config.yAxes];
+        let activeCols = [this.config.xAxis, ...this.config.yAxes];
+
+        if (this.config.refFrame) {
+          const families = new Set();
+          this.config.yAxes.forEach((col) => {
+            if (col.includes(":")) {
+              families.add(col.substring(0, col.lastIndexOf(":")));
+            }
+          });
+
+          families.forEach((fam) => {
+            activeCols.push(`${fam}:x`, `${fam}:y`, `${fam}:z`);
+          });
+          // Also need the quat itself if the backend needs it for calculation
+          activeCols.push(
+            `${this.config.refFrame}:w`,
+            `${this.config.refFrame}:x`,
+            `${this.config.refFrame}:y`,
+            `${this.config.refFrame}:z`,
+          );
+        }
+        activeCols = [...new Set(activeCols)];
 
         const currentNum = parseInt(this.trialId.split("_").pop());
 
@@ -759,14 +878,14 @@ function trialViewer(trialId, externalUrl) {
             const existing = this.vsDatasets[id];
             const needsFetch =
               !existing ||
-              activeCols.some((col) => !existing.hasOwnProperty(col));
+              activeCols.some((col) => !existing.hasOwnProperty(col)) ||
+              this.config.refFrame !== null; // Always fetch if we are in a non-world frame
+
             if (needsFetch) {
               const response = await this.fetchTrialData(id, activeCols);
-
-              const newData = await this.fetchTrialData(id, activeCols);
               this.vsDatasets[id] = {
                 ...(this.vsDatasets[id] || {}),
-                ...response.data, // Access the nested .data property
+                ...response.data,
               };
             }
           }),
@@ -816,8 +935,10 @@ function trialViewer(trialId, externalUrl) {
       // Safety: If columns haven't loaded yet, return empty array immediately
       if (!this.columns || !Array.isArray(this.columns)) return [];
 
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"];
-      if (!search) return this.smartSort([...this.columns]);
+
+      if (!search) return this.smartSort([...base]);
       try {
         let pattern = search.replace(/\*/g, ".*");
 
@@ -836,11 +957,11 @@ function trialViewer(trialId, externalUrl) {
         if (pattern.toLowerCase() === "time") pattern = "^time$";
 
         const query = new RegExp(pattern, "i");
-        return this.smartSort(this.columns.filter((c) => query.test(c)));
+        return this.smartSort(base.filter((c) => query.test(c)));
       } catch (e) {
         return this.smartSort(
-          this.columns.filter((c) =>
-            c.toLowerCase().includes(search.toLowerCase()),
+          this.smartSort(
+            base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
           ),
         );
       }
@@ -853,12 +974,17 @@ function trialViewer(trialId, externalUrl) {
       suffixPart = suffixPart || "";
 
       if (depth === "suffix") {
-        let active = suffixPart.split("|").filter(Boolean);
         const cleanSeg = segment.replace(":", "");
-        active = active.includes(cleanSeg)
-          ? active.filter((s) => s !== cleanSeg)
-          : [...active, cleanSeg];
-        suffixPart = active.sort().join("|");
+        // CRITICAL: Strip parentheses before splitting to prevent nesting
+        let items = suffixPart.replace(/[()]/g, "").split("|").filter(Boolean);
+
+        items = items.includes(cleanSeg)
+          ? items.filter((i) => i !== cleanSeg)
+          : [...items, cleanSeg];
+
+        // Rebuild flat: (x|y|z)
+        suffixPart =
+          items.length > 1 ? `(${items.sort().join("|")})` : items[0] || "";
       } else {
         let parts = pathPart.split("/").filter((p) => p !== "");
         let target = parts[depth] || "";
@@ -875,25 +1001,19 @@ function trialViewer(trialId, externalUrl) {
             items.length === 1 ? items[0] : `(${items.sort().join("|")})`;
         }
 
-        // --- NEW: Folder vs Leaf Validation ---
-        pathPart = parts.filter((p) => p !== "").join("/");
-
+        pathPart = parts.join("/");
         if (pathPart && pathPart.toLowerCase() !== "time") {
-          // Check if this path ever exists as a parent directory in your data
-          // We look for any column that starts with "pathPart/"
           const isFolder = this.columns.some((c) =>
             c.toLowerCase().startsWith(pathPart.toLowerCase() + "/"),
           );
-
-          if (isFolder) {
-            pathPart += "/";
-          }
+          if (isFolder) pathPart += "/";
         }
       }
       this[key] = pathPart + (suffixPart ? ":" + suffixPart : "");
     },
 
     getSegmentsAtDepth(field, depth) {
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"] || "";
       const pathSearch = search.split(":")[0] || "";
       const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -910,8 +1030,8 @@ function trialViewer(trialId, externalUrl) {
       // If prefix is empty, we match the start of the string
       const regex = new RegExp("^" + (prefix ? prefix : ""), "i");
 
-      const matches = this.columns.filter((c) => regex.test(c));
-      const segments = matches
+      const segments = base
+        .filter((c) => regex.test(c))
         .map((c) => {
           const p = c.split(":")[0].split("/");
           return p[depth] || null;
@@ -922,11 +1042,13 @@ function trialViewer(trialId, externalUrl) {
     },
 
     getAvailableSuffixes(field) {
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"];
       const [pathPart, suffixPart] = search.split(":");
 
       // 1. Orphan logic
       const selected = (suffixPart || "")
+        .replace(/[()]/g, "")
         .split("|")
         .filter(Boolean)
         .map((s) => ":" + s);
@@ -936,12 +1058,37 @@ function trialViewer(trialId, externalUrl) {
         "^" + (pathPart || "").replace(/\//g, "\\/?"),
         "i",
       );
-      const matches = this.columns.filter((c) => pathRegex.test(c));
+      const matches = base.filter((c) => pathRegex.test(c));
 
       const available = matches
         .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))
         .filter(Boolean);
       return this.smartSort([...new Set([...selected, ...available])]);
+    },
+
+    /**
+     * Helper to determine if a segment button should be highlighted.
+     * This handles the regex stripping so the HTML stays clean.
+     */
+    isSegmentActive(field, seg, depth) {
+      const search = this[field + "Search"] || "";
+      if (depth === "suffix") {
+        const suffixPart = search.split(":")[1] || "";
+        const items = suffixPart
+          .replace(/[()]/g, "")
+          .split("|")
+          .filter(Boolean);
+        return items.includes(seg.replace(":", ""));
+      } else {
+        const pathPart = search.split(":")[0] || "";
+        const levels = pathPart.split("/").filter((p) => p !== "");
+        const levelContent = levels[depth] || "";
+        const items = levelContent
+          .replace(/[()]/g, "")
+          .split("|")
+          .filter(Boolean);
+        return items.includes(seg);
+      }
     },
 
     getActiveLevels(field) {
@@ -1593,7 +1740,7 @@ function trialViewer(trialId, externalUrl) {
           this.config.xScale === "log" && this.config.xLogBase
             ? Math.log10(this.config.xLogBase)
             : undefined,
-        tickformat: ".3s",
+        // tickformat: ".3s",
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
@@ -1610,6 +1757,10 @@ function trialViewer(trialId, externalUrl) {
         spikethickness: -2,
       };
 
+      const frameLabel = this.config.refFrame
+        ? `<br><span style="color: ${textColor}; font-size: 10px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
+        : ``;
+
       // y axis config
       const yAxisObj = {
         type: this.config.yScale || "linear",
@@ -1624,14 +1775,14 @@ function trialViewer(trialId, externalUrl) {
           this.config.yScale === "log" && this.config.yLogBase
             ? Math.log10(this.config.yLogBase)
             : undefined,
-        tickformat: ".3s",
+        // tickformat: ",.3f",
         gridcolor: majorGrid,
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
         zeroline: false,
         tickfont: { color: textColor },
         title: {
-          text: this.config.yAxisTitle,
+          text: this.config.yAxisTitle + frameLabel,
           font: { size: 11, color: textColor, family: "monospace" },
         },
         autorange: false,

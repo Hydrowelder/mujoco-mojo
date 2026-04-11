@@ -428,259 +428,454 @@
     </div>
 
     <!-- series selections -->
-    <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full"
-         x-show="
-         !loading
-         &&
-         data">
+    <div class="bg-white dark:bg-slate-800 px-2 py-0 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md flex flex-col gap-0 w-full"
+         x-show="!loading && data">
 
-        <!-- x axis selector -->
-        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <span class="text-sm font-black uppercase text-slate-400 w-12 w-auto">X-Axis</span>
+        <!-- row 1 -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
+            <!-- x axis selector -->
+            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                    X-Axis
+                </span>
 
-            <div class="relative flex-1 sm:flex-none"
-                 @click.away="xMenuOpen = false">
-                <button @click="xMenuOpen = !xMenuOpen"
-                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
-                    <span x-text="config.xAxis"
-                          class="truncate"></span>
-                    <svg class="w-3 h-3 transition-transform"
-                         :class="xMenuOpen ? 'rotate-180' : ''"
+                <div class="relative group cursor-help">
+                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
                          viewBox="0 0 24 24">
-                        <path d="M19 9l-7 7-7-7"
-                              stroke-width="3" />
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.5"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                </button>
 
-                <div x-show="xMenuOpen"
-                     x-transition
-                     class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
+                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="xSearch"
-                               placeholder="Filter..."
-                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
-                        <button x-show="xSearch"
-                                type="button"
-                                @mousedown.prevent="xSearch = ''"
-                                class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                            X-Axis Signal
+                        </p>
 
-                    <div class="flex flex-col gap-1 mb-2">
-                        <template x-for="depth in getActiveLevels('x')"
-                                  :key="depth">
-                            <div x-show="getSegmentsAtDepth('x', depth).length > 0"
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
-                                <template x-for="seg in getSegmentsAtDepth('x', depth)"
-                                          :key="seg">
-                                    <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
-                                            :class="xSearch.split('/')[depth]?.includes(seg) ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                            x-text="seg"></button>
-                                </template>
-                            </div>
-                        </template>
-
-                        <div x-show="getAvailableSuffixes('x').length > 0"
-                             class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
-                            <template x-for="sfx in getAvailableSuffixes('x')"
-                                      :key="sfx">
-                                <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
-                                        :class="xSearch.split(':').pop()?.split('|').includes(sfx.replace(':','')) ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                        class="shrink-0 px-2 py-1 rounded-xl border text-sm font-mono font-bold transition-all"
-                                        x-text="sfx"></button>
-                            </template>
+                        <div class="space-y-3">
+                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Determines the <span class="font-bold text-slate-900 dark:text-white">independent variable</span> for the plot. While <code class="text-cyan-500 font-mono">time</code> is the default, any telemetry signal can be mapped here to create phase-space or correlation plots.
+                            </p>
                         </div>
                     </div>
+                </div>
 
-                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
-                        <template x-for="col in getFilteredCols('x')"
-                                  :key="col">
-                            <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold pr-2"
-                                      :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="col"></span>
-                                <span x-show="config.xAxis === col"
-                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
+                <!-- dropdown -->
+                <div class="relative flex-1 sm:flex-none"
+                     @click.away="xMenuOpen = false">
+                    <button @click="xMenuOpen = !xMenuOpen"
+                            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
+                        <span x-text="config.xAxis"
+                              class="truncate"></span>
+                        <svg class="w-3 h-3 transition-transform"
+                             :class="xMenuOpen ? 'rotate-180' : ''"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path d="M19 9l-7 7-7-7"
+                                  stroke-width="3" />
+                        </svg>
+                    </button>
+
+                    <div x-show="xMenuOpen"
+                         x-transition
+                         class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
+
+                        <div class="relative mb-2">
+                            <input type="text"
+                                   x-model="xSearch"
+                                   placeholder="Filter..."
+                                   class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                            <button x-show="xSearch"
+                                    type="button"
+                                    @mousedown.prevent="xSearch = ''"
+                                    class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors">
+                                <svg class="w-3 h-3"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
-                        </template>
+                        </div>
 
-                        <div x-show="getFilteredCols('x').length === 0"
-                             class="text-sm font-mono italic text-slate-400 p-2">
-                            No matching signals...
+                        <div class="flex flex-col gap-1 mb-2">
+                            <template x-for="depth in getActiveLevels('x')"
+                                      :key="depth">
+                                <div x-show="getSegmentsAtDepth('x', depth).length > 0"
+                                     class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+                                    <template x-for="seg in getSegmentsAtDepth('x', depth)"
+                                              :key="seg">
+                                        <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
+                                                :class="isSegmentActive('x', seg, depth)
+            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                                class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                                x-text="seg"></button>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <div x-show="getAvailableSuffixes('x').length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
+                                <template x-for="sfx in getAvailableSuffixes('x')"
+                                          :key="sfx">
+                                    <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
+                                            :class="isSegmentActive('x', sfx, 'suffix')
+            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="sfx"></button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                            <template x-for="col in getFilteredCols('x')"
+                                      :key="col">
+                                <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
+                                        class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                    <span class="text-sm font-mono font-bold pr-2"
+                                          :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                          x-text="col"></span>
+                                    <span x-show="config.xAxis === col"
+                                          class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
+                                </button>
+                            </template>
+
+                            <div x-show="getFilteredCols('x').length === 0"
+                                 class="text-sm font-mono italic text-slate-400 p-2">
+                                No matching signals...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- rotation selector -->
+            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                    Ref. Frame
+                </span>
+
+                <div class="relative group cursor-help">
+                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.5"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+
+                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+
+                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                            Rotation Logic
+                        </p>
+
+                        <div class="space-y-3">
+                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                This allows for the dynamic rotation of 3D signals about specific frames.
+                                Valid frames must contain <code class="text-cyan-500 font-mono font-bold">quat:w,x,y,z</code> components.
+                            </p>
+
+                            <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
+                                <p class="text-xs text-slate-500 dark:text-slate-400 italic">
+                                    <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-[10px]">Filter Active:</strong>
+                                    Y-Axis selection is restricted to 3D vectors when a reference frame is selected.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative flex-1 sm:flex-none"
+                     @click.away="refFrameMenuOpen = false">
+                    <button @click="refFrameMenuOpen = !refFrameMenuOpen"
+                            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[140px]">
+                        <span x-text="config.refFrame || 'world'"
+                              class="truncate"></span>
+                        <svg class="w-3 h-3 transition-transform"
+                             :class="refFrameMenuOpen ? 'rotate-180' : ''"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path d="M19 9l-7 7-7-7"
+                                  stroke-width="3" />
+                        </svg>
+                    </button>
+
+                    <div x-show="refFrameMenuOpen"
+                         x-transition
+                         class="absolute top-full left-0 mt-2 w-full sm:w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2 sm:w-64">
+
+                        <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                            <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
+                                <span class="text-sm font-mono font-bold"
+                                      :class="!config.refFrame ? 'text-cyan-500' : 'text-slate-400'">world</span>
+                                <span x-show="!config.refFrame"
+                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                            </button>
+
+                            <template x-for="q in availableQuats"
+                                      :key="q">
+                                <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
+                                        class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                    <span class="text-sm font-mono font-bold pr-2"
+                                          :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                          x-text="q"></span>
+                                    <span x-show="config.refFrame === q"
+                                          class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                                </button>
+                            </template>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- y axis selector and ribbon -->
-        <div class="flex-1 flex items-center gap-2 min-w-0 w-full">
-            <span class="text-sm font-black uppercase text-slate-400 w-12 w-auto">Y-Axis</span>
+        <!-- row 2 -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
+            <!-- y axis selector -->
+            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                    Y-Axes
+                </span>
 
-            <div class="relative"
-                 @click.away="yMenuOpen = false">
-                <button @click="yMenuOpen = !yMenuOpen"
-                        class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
-                    <span x-text="config.yAxes.length"></span>
-                    <svg class="w-3 h-3 transition-transform"
-                         :class="yMenuOpen ? 'rotate-180' : ''"
+                <div class="relative group cursor-help">
+                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
                          viewBox="0 0 24 24">
-                        <path d="M19 9l-7 7-7-7"
-                              stroke-width="3" />
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.5"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                </button>
 
-                <div x-show="yMenuOpen"
-                     x-transition
-                     class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
+                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="ySearch"
-                               placeholder="Filter..."
-                               class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                            Y-Axis Signals
+                        </p>
 
-                        <button x-show="ySearch"
-                                type="button"
-                                @mousedown.prevent="ySearch = ''"
-                                class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors"
-                                x-transition:enter="transition duration-75"
-                                x-transition:enter-start="opacity-0"
-                                x-transition:enter-end="opacity-100">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="flex flex-col gap-1 mb-4">
-                        <template x-for="depth in getActiveLevels('y')"
-                                  :key="depth">
-                            <div x-show="getSegmentsAtDepth('y', depth).length > 0"
-                                 x-transition
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+                        <div class="space-y-3">
+                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Represents the <span class="font-bold text-slate-900 dark:text-white">dependent variables</span>. You can select multiple signals to overlay them on the same plot area.
+                            </p>
 
-                                <template x-for="seg in getSegmentsAtDepth('y', depth)"
-                                          :key="seg">
-                                    <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
-                                            :class="ySearch.split('/')[depth]?.includes(seg)
-                                ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-                                : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                            x-text="seg"></button>
-                                </template>
+                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Use the arrows on the active signal chips to reorder them. The sequence in the ribbon determines the <span class="text-cyan-500 font-bold">color mapping</span> and legend order.
+                            </p>
+
+                            <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
+                                <p class="text-xs text-slate-500 dark:text-slate-400 italic text-xs">
+                                    <strong class="text-cyan-500 not-italic uppercase">Pro Tip:</strong>
+                                    Shift+Click the arrows to shift a signal immediately to the start or end of the list.
+                                </p>
                             </div>
-                        </template>
-
-                        <div x-show="getAvailableSuffixes('y').length > 0"
-                             class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
-                            <template x-for="sfx in getAvailableSuffixes('y')"
-                                      :key="sfx">
-                                <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
-                                        :class="ySearch.split(':').pop()?.split('|').includes(sfx.replace(':',''))
-                            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                        class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                        x-text="sfx"></button>
-                            </template>
                         </div>
                     </div>
+                </div>
 
-                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
-                        <template x-for="col in getFilteredCols('y')"
-                                  :key="col">
-                            <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <input type="checkbox"
-                                       :checked="config.yAxes.includes(col)"
-                                       @click.stop="toggleY(col)"
-                                       class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
-                                <span class="text-sm font-mono font-bold"
-                                      :class="config.yAxes.includes(col) ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="col"></span>
-                            </label>
-                        </template>
-                    </div>
+                <div class="relative"
+                     @click.away="yMenuOpen = false">
+                    <button @click="yMenuOpen = !yMenuOpen"
+                            class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
+                        <span x-text="config.yAxes.length"></span>
+                        <svg class="w-3 h-3 transition-transform"
+                             :class="yMenuOpen ? 'rotate-180' : ''"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path d="M19 9l-7 7-7-7"
+                                  stroke-width="3" />
+                        </svg>
+                    </button>
 
-                    <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
-                        <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
-                              x-text="`${getFilteredCols('y').length} Signals`"
-                              x-show="getFilteredCols('y').length > 0"></span>
+                    <div x-show="yMenuOpen"
+                         x-transition
+                         class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
 
-                        <button @click="clearYAxes()"
-                                x-show="config.yAxes.length > 0"
-                                x-transition
-                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
-                            <svg class="w-3 h-3 transition-transform group-hover:scale-110"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="2.5"
-                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            Deselect All
-                        </button>
+                        <div class="relative mb-2">
+                            <input type="text"
+                                   x-model="ySearch"
+                                   placeholder="Filter..."
+                                   class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+
+                            <button x-show="ySearch"
+                                    type="button"
+                                    @mousedown.prevent="ySearch = ''"
+                                    class="absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors"
+                                    x-transition:enter="transition duration-75"
+                                    x-transition:enter-start="opacity-0"
+                                    x-transition:enter-end="opacity-100">
+                                <svg class="w-3 h-3"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="flex flex-col gap-1 mb-4">
+                            <template x-for="depth in getActiveLevels('y')"
+                                      :key="depth">
+                                <div x-show="getSegmentsAtDepth('y', depth).length > 0"
+                                     x-transition
+                                     class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+
+                                    <template x-for="seg in getSegmentsAtDepth('y', depth)"
+                                              :key="seg">
+                                        <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
+                                                :class="isSegmentActive('y', seg, depth)
+            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                                class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                                x-text="seg"></button>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <div x-show="getAvailableSuffixes('y').length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
+                                <template x-for="sfx in getAvailableSuffixes('y')"
+                                          :key="sfx">
+                                    <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
+                                            :class="isSegmentActive('y', sfx, 'suffix')
+            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="sfx"></button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
+                            <template x-for="col in getFilteredCols('y')"
+                                      :key="col">
+                                <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
+                                    <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                        <input type="checkbox"
+                                               :checked="config.yAxes.includes(col)"
+                                               @click.stop="toggleY(col)"
+                                               class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
+                                        <span class="text-sm font-mono font-bold"
+                                              :class="config.yAxes.includes(col) ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                              x-text="col"></span>
+                                    </label>
+                                </template>
+                            </template>
+                        </div>
+
+                        <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
+                            <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
+                                  x-text="`${getFilteredCols('y').length} Signals`"
+                                  x-show="getFilteredCols('y').length > 0"></span>
+
+                            <button @click="clearYAxes()"
+                                    x-show="config.yAxes.length > 0"
+                                    x-transition
+                                    class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
+                                <svg class="w-3 h-3 transition-transform group-hover:scale-110"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="2.5"
+                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Deselect All
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="flex-1 flex items-center h-8 gap-1 overflow-x-auto overflow-y-hidden whitespace-nowrap custom-scrollbar no-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)] py-1">
-                <template x-for="(col, index) in config.yAxes"
-                          :key="col">
-                    <span class="shrink-0 pl-2 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
-                          :style="`
-                background-color: ${getSignalColor(index)}1a;
-                border-color: ${getSignalColor(index)}4d;
-                color: ${getSignalColor(index)};
-              `"
-                          @mouseenter="$el.style.borderColor = getSignalColor(index)"
-                          @mouseleave="$el.style.borderColor = getSignalColor(index) + '4d'">
+            <!-- selected ribbon -->
+            <div class="flex-1 w-full min-w-0">
+                <div class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)]">
+                    <template x-for="(col, index) in config.yAxes"
+                              :key="col">
+                        <span class="shrink-0 pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
+                              :style="`
+                    background-color: ${getSignalColor(index)}1a;
+                    border-color: ${getSignalColor(index)}4d;
+                    color: ${getSignalColor(index)};
+                  `"
+                              @mouseenter="$el.style.borderColor = getSignalColor(index)"
+                              @mouseleave="$el.style.borderColor = getSignalColor(index) + '4d'">
 
-                        <span x-text="col"></span>
+                            <button @click.stop="shiftY(index, -1, $event.shiftKey)"
+                                    x-show="index > 0"
+                                    class="p-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                                    title="Move Left (Shift+Click to Jump to Start)">
+                                <svg class="w-3 h-3"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
 
-                        <button @click.stop="toggleY(col)"
-                                class="p-0.5 rounded-md transition-colors"
-                                :style="`color: ${getSignalColor(index)}66;`"
-                                @mouseenter="$el.style.backgroundColor = getSignalColor(index) + '33'; $el.style.color = getSignalColor(index)"
-                                @mouseleave="$el.style.backgroundColor = 'transparent'; $el.style.color = getSignalColor(index) + '66'">
-                            <svg class="w-2.5 h-2.5"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3.5"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </span>
-                </template>
+                            <span x-text="col"
+                                  class="px-0.5"></span>
 
-                <template x-if="config.yAxes.length === 0">
-                    <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
-                </template>
+                            <button @click.stop="shiftY(index, 1, $event.shiftKey)"
+                                    x-show="index < config.yAxes.length - 1"
+                                    class="p-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                                    title="Move Right (Shift+Click to Jump to End)">
+                                <svg class="w-3 h-3"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+
+                            <div class="w-px h-3 bg-current opacity-20 mx-0.5"></div>
+
+                            <button @click.stop="toggleY(col)"
+                                    class="p-0.5 rounded-md transition-colors"
+                                    :style="`color: ${getSignalColor(index)}66;`"
+                                    @mouseenter="$el.style.backgroundColor = getSignalColor(index) + '33'; $el.style.color = getSignalColor(index)"
+                                    @mouseleave="$el.style.backgroundColor = 'transparent'; $el.style.color = getSignalColor(index) + '66'">
+                                <svg class="w-2.5 h-2.5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3.5"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </span>
+                    </template>
+
+                    <template x-if="config.yAxes.length === 0">
+                        <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
+                    </template>
+                </div>
             </div>
         </div>
     </div>
@@ -735,9 +930,9 @@
                              fill="none"
                              stroke="currentColor"
                              viewBox="0 0 24 24">
-                            <path d="M1 1V15H15V13H3V1H1Z"
+                            <path d="M4 4v16h16v-2H6V4H4z"
                                   fill="currentColor"></path>
-                            <path d="M5 7L7 5L10 8L15 3V11H5V7Z"
+                            <path d="M8 13l3-3 4 4 4-4v5H8v-2z"
                                   fill="currentColor"></path>
                         </svg>
                         <span class="text-xs font-black uppercase tracking-tighter">Plot</span>
@@ -1349,7 +1544,8 @@
                             :class="{
                 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50': shapesOpen,
                 'animate-pulse ring-2 ring-cyan-500/50 text-cyan-500 bg-cyan-50 dark:bg-slate-800': placementMode
-            }">
+            }"
+                            title="Manage Shapes">
 
                         <svg class="w-5 h-5"
                              fill="none"
