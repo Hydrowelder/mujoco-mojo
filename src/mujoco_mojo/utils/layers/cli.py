@@ -622,6 +622,7 @@ def run_monte_carlo(
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: GeneratorType,
+    runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     ui: UIType = UserInterface.OPENGL,
     overrides_path: OverridesType = None,
@@ -631,6 +632,8 @@ def run_reloaded(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
+    run_args: RunArgsType = [],
+    run_kwargs: RunKwargsType = [],
     host: HostType = "127.0.0.1",
     port: PortType = 8080,
     verbose: int = 0,
@@ -649,9 +652,12 @@ def run_reloaded(
     overrides_path = None if not overrides_path else overrides_path.resolve()
     processed_gen_args = [_smart_parse(a) for a in gen_args]
     processed_gen_kwargs = _process_kwargs(gen_kwargs)
+    processed_run_args = [_smart_parse(a) for a in run_args]
+    processed_run_kwargs = _process_kwargs(run_kwargs)
 
     MojoReloaded(
         generator=generator,
+        runtime=runtime,
         workdir=workdir,
         ui=ui,
         overrides_path=overrides_path,
@@ -661,6 +667,8 @@ def run_reloaded(
         xml_name=xml_name,
         gen_args=processed_gen_args,
         gen_kwargs=processed_gen_kwargs,
+        run_args=processed_run_args,
+        run_kwargs=processed_run_kwargs,
         host=host,
         port=port,
     ).run()

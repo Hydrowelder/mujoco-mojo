@@ -278,7 +278,9 @@ def runtime(
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 1
 
-        if mojo_model.is_nominal:
+        assert rm._sync_hook is not None
+
+        if mojo_model.is_nominal and False:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,
