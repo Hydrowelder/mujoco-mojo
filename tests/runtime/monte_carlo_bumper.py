@@ -211,7 +211,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
                         size=np.asarray([0.5, 0.5, 0.5]),
-                        rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
+                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
+                        rgba=mojo.utils.Color.YELLOW_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
                     )

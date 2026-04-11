@@ -1,3 +1,4 @@
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Self, runtime_checkable
@@ -24,6 +25,10 @@ class RuntimeManager:
     loads: list[Load] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
+    playback_speed: float = 1.0
+    _start_wall_time: float = field(default_factory=time.time, init=False)
+    _start_sim_time: float = field(default=0.0, init=False)
+
     _sync_hook: SyncHook | None = None
     _skip_recording: bool = False
 
@@ -45,7 +50,7 @@ class RuntimeManager:
         logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")
         with ThreadPoolExecutor() as executor:
             for recorder in self.video_recorders:
-                executor.submit(recorder.save)
+                executor.submit(recorder.save)  # TODO add playback speed argument
 
         logger.info("All video encoding tasks complete.")
 
@@ -67,6 +72,10 @@ class RuntimeManager:
         """
         # sync state variables and clear render buffer
         mujoco.mj_forward(mj_model, mj_data)
+
+        if mj_data.time == 0.0 or self._start_sim_time == 0.0:
+            self._start_sim_time = mj_data.time
+            self._start_wall_time = time.time()
 
         # resolve IDs and initial distances
         # it is critical this is done after mj_forward to update site positions
@@ -101,6 +110,19 @@ class RuntimeManager:
 
         if self._sync_hook:
             self._sync_hook(mj_model, mj_data)
+
+        if self.playback_speed > 0:
+            sim_elapsed = mj_data.time - self._start_sim_time
+
+            # how much time we want to have passed
+            target_wall_elapsed = sim_elapsed / self.playback_speed
+
+            # how much time has actually passed
+            actual_wall_elapsed = time.time() - self._start_wall_time
+
+            sleep_time = target_wall_elapsed - actual_wall_elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
         # clear buffers for next timestep
         mj_data.xfrc_applied.fill(0)  # external forces
