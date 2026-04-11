@@ -186,6 +186,32 @@ function trialViewer(trialId, externalUrl) {
       localStorage.setItem("mojo_mosaic_history", JSON.stringify(bundle));
     },
 
+    shiftY(index, direction, isWarp = false) {
+      // direction: -1 for left, 1 for right
+      if (!isWarp) {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= this.config.yAxes.length) return;
+
+        const arr = [...this.config.yAxes];
+        [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
+        this.config.yAxes = arr;
+      } else {
+        // "Warp" to front or end
+        const arr = [...this.config.yAxes];
+        const [movedItem] = arr.splice(index, 1);
+
+        if (direction === -1) {
+          arr.unshift(movedItem); // Jump to start
+        } else {
+          arr.push(movedItem); // Jump to end
+        }
+
+        this.config.yAxes = arr;
+      }
+
+      this.saveAndRender();
+    },
+
     async fetchTrialData(id, requiredCols = []) {
       console.debug(`loading ${id} (cols: ${requiredCols.join(",") || "all"})`);
 
@@ -482,6 +508,22 @@ function trialViewer(trialId, externalUrl) {
         this.config.annotations[index].text = newText;
         this.saveAndRender();
       }
+    },
+
+    // Add this near your other getters like highlightedJson
+    get selectableYColumns() {
+      if (!this.columns) return [];
+      if (!this.config.refFrame) return this.columns;
+
+      return this.columns.filter((col) => {
+        const parts = col.split(":");
+        const suffix = parts.pop(); // e.g., 'z' or 'mag'
+        const family = parts.join(":"); // e.g., 'Bodies/box1/xpos'
+
+        // Only allow x, y, z components for rotation mode
+        const isVectorComponent = ["x", "y", "z"].includes(suffix);
+        return isVectorComponent && this.rotateableVectors.includes(family);
+      });
     },
 
     get availableQuats() {
@@ -800,12 +842,14 @@ function trialViewer(trialId, externalUrl) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const activeCols = [this.config.xAxis, ...this.config.yAxes];
+        let activeCols = [this.config.xAxis, ...this.config.yAxes];
 
         if (this.config.refFrame) {
           const families = new Set();
           this.config.yAxes.forEach((col) => {
-            if (col.includes(":")) families.add(col.split(":")[0]);
+            if (col.includes(":")) {
+              families.add(col.substring(0, col.lastIndexOf(":")));
+            }
           });
 
           families.forEach((fam) => {
@@ -891,8 +935,10 @@ function trialViewer(trialId, externalUrl) {
       // Safety: If columns haven't loaded yet, return empty array immediately
       if (!this.columns || !Array.isArray(this.columns)) return [];
 
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"];
-      if (!search) return this.smartSort([...this.columns]);
+
+      if (!search) return this.smartSort([...base]);
       try {
         let pattern = search.replace(/\*/g, ".*");
 
@@ -911,11 +957,11 @@ function trialViewer(trialId, externalUrl) {
         if (pattern.toLowerCase() === "time") pattern = "^time$";
 
         const query = new RegExp(pattern, "i");
-        return this.smartSort(this.columns.filter((c) => query.test(c)));
+        return this.smartSort(base.filter((c) => query.test(c)));
       } catch (e) {
         return this.smartSort(
-          this.columns.filter((c) =>
-            c.toLowerCase().includes(search.toLowerCase()),
+          this.smartSort(
+            base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
           ),
         );
       }
@@ -967,6 +1013,7 @@ function trialViewer(trialId, externalUrl) {
     },
 
     getSegmentsAtDepth(field, depth) {
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"] || "";
       const pathSearch = search.split(":")[0] || "";
       const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -983,8 +1030,8 @@ function trialViewer(trialId, externalUrl) {
       // If prefix is empty, we match the start of the string
       const regex = new RegExp("^" + (prefix ? prefix : ""), "i");
 
-      const matches = this.columns.filter((c) => regex.test(c));
-      const segments = matches
+      const segments = base
+        .filter((c) => regex.test(c))
         .map((c) => {
           const p = c.split(":")[0].split("/");
           return p[depth] || null;
@@ -995,6 +1042,7 @@ function trialViewer(trialId, externalUrl) {
     },
 
     getAvailableSuffixes(field) {
+      const base = field === "x" ? this.columns : this.selectableYColumns;
       const search = this[field + "Search"];
       const [pathPart, suffixPart] = search.split(":");
 
@@ -1010,7 +1058,7 @@ function trialViewer(trialId, externalUrl) {
         "^" + (pathPart || "").replace(/\//g, "\\/?"),
         "i",
       );
-      const matches = this.columns.filter((c) => pathRegex.test(c));
+      const matches = base.filter((c) => pathRegex.test(c));
 
       const available = matches
         .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))

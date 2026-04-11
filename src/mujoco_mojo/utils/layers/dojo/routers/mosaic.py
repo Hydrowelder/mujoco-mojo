@@ -133,9 +133,13 @@ def _get_column_manifest(db_path_str: str, mtime: float) -> ColumnManifest:
 
     # Strict set comparison ensures quaternions and vectors are disjoint
     # A quaternion (w,x,y,z) will not match {"x", "y", "z"}
-    rotateable_vectors = [p for p, s in prefix_map.items() if s == {"x", "y", "z"}]
+    rotateable_vectors = [
+        p for p, s in prefix_map.items() if {"x", "y", "z"}.issubset(s) and "w" not in s
+    ]
 
-    available_quats = [p for p, s in prefix_map.items() if s == {"w", "x", "y", "z"}]
+    available_quats = [
+        p for p, s in prefix_map.items() if {"w", "x", "y", "z"}.issubset(s)
+    ]
 
     return {
         "all": real_cols,
