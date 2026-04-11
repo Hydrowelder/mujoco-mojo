@@ -72,7 +72,8 @@ def setup_logger(
         console = Console(theme=mojo_theme)
         rich_handler = RichHandler(
             console=console,
-            show_time=False,
+            show_time=True,
+            log_time_format="[%Y-%m-%d %H:%M:%S]",
             show_path=True,
             enable_link_path=False,
             # highlighter=None,
