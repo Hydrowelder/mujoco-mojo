@@ -6,6 +6,7 @@ import logging
 import socket
 import sys
 from bdb import BdbQuit
+from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any
@@ -221,7 +222,10 @@ if True:
     ]
     ResumeType = Annotated[
         bool,
-        typer.Option("--resume/--no-resume", help="Resume from previous state on disk"),
+        typer.Option(
+            "--resume/--no-resume",
+            help="Resume from previous state on disk",
+        ),
     ]
     CleanWorkdirType = Annotated[
         bool,
@@ -345,20 +349,20 @@ if True:
             help="Workspace directory to build the Dojo process for. This should be the same argument as what is used for other mujoco-mojo run commands.",
         ),
     ]
-    DojoHostType = Annotated[
+    HostType = Annotated[
         str,
         typer.Option(
             "--host",
             "-h",
-            help="What host IP should be used to serve the Dojo process.",
+            help="What host IP should be used to serve the process.",
         ),
     ]
-    DojoPortType = Annotated[
+    PortType = Annotated[
         int,
         typer.Option(
             "--port",
             "-p",
-            help="Port number to use to serve the Dojo process.",
+            help="Port number to use to serve the process.",
         ),
     ]
     DojoPassword = Annotated[
@@ -367,6 +371,22 @@ if True:
             "--password",
             "-pw",
             help="Enable Basic Auth protection",
+        ),
+    ]
+
+    # Reloaded
+    class UserInterface(StrEnum):
+        OPENGL = "opengl"
+        MJVISER = "mjviser"
+        VISER = "viser"
+
+    UIType = Annotated[
+        UserInterface,
+        typer.Option(
+            "--user-interface",
+            "-ui",
+            help="Which viewer type to use. OpenGL requires X11 forwarding but is ideal for local development.",
+            case_sensitive=False,
         ),
     ]
 
@@ -665,10 +685,48 @@ def _recursive_mojo_reload(module, project_root: Path, visited: set | None = Non
         pass
 
 
+def is_dark_mode() -> bool:
+    """Determine if the system is in dark mode using only the standard library."""
+    import platform
+    import subprocess
+
+    system = platform.system()
+
+    try:
+        if system == "Windows":
+            import winreg
+
+            # Look at the 'Personalize' key for AppsUseLightTheme
+            path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
+                # 0 = Dark, 1 = Light
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return value == 0
+
+        elif system == "Darwin":  # macOS
+            # 'defaults read -g AppleInterfaceStyle' returns 'Dark' or errors out if Light
+            cmd = ["defaults", "read", "-g", "AppleInterfaceStyle"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return "Dark" in result.stdout
+
+        elif system == "Linux":
+            # Check GNOME/GTK settings (most common)
+            cmd = ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return "dark" in result.stdout.lower()
+
+    except Exception:
+        # Fallback to Light Mode if anything fails (e.g. old Windows versions)
+        return False
+
+    return False
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: GeneratorType,
     workdir: WorkdirType = DEFAULT_WORKDIR,
+    ui: UIType = UserInterface.OPENGL,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
@@ -676,6 +734,8 @@ def run_reloaded(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
+    host: HostType = "127.0.0.1",
+    port: PortType = 8080,
     verbose: int = 0,
     quiet: int = 0,
 ) -> None:
@@ -687,7 +747,6 @@ def run_reloaded(
     import sys
 
     import mujoco
-    import mujoco.viewer
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
@@ -750,18 +809,9 @@ def run_reloaded(
             mojo_model, global_overrides, *processed_gen_args, **processed_gen_kwargs
         )
         mojo_model.dump_to_path(workdir / model_config_name)
-        return mojo_model.mjcf.prep_for_sim(save_path=workdir / xml_name)
-
-    console.print(
-        Panel(
-            "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
-            "1. Edit your generator code.\n"
-            "2. Press [bold white]ENTER[/bold white] here to push changes.\n"
-            "3. Type [bold red]'exit'[/bold red] to close.",
-            title="[bold white]Mojo Reloaded[/bold white]",
-            border_style="green",
-        )
-    )
+        mj_model, mj_data = mojo_model.mjcf.prep_for_sim(save_path=workdir / xml_name)
+        mujoco.mj_forward(mj_model, mj_data)
+        return mj_model, mj_data
 
     try:
         with console.status(
@@ -772,38 +822,145 @@ def run_reloaded(
         console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
         raise typer.Exit(1)
 
-    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
-        while viewer.is_running():
-            try:
-                cmd = (
-                    console.input(
-                        "[bold green]Awaiting reload command[/bold green]:[white] Press Enter to reload > [/white]"
-                    )
-                    .strip()
-                    .lower()
-                )
-                if cmd in ["exit", "quit", "q"]:
-                    break
-            except (BdbQuit, KeyboardInterrupt):
-                break
+    match ui:
+        case UserInterface.OPENGL:
+            import mujoco.viewer
 
-            try:
-                with console.status("[bold yellow]Regenerating...[/bold yellow]"):
-                    new_mj_model, new_mj_data = generate_construct()
-
-                    sim = viewer._get_sim()
-
-                    if sim:
-                        sim.load(new_mj_model, new_mj_data, str(workdir / xml_name))
-                        mujoco.mj_forward(new_mj_model, new_mj_data)
-                        viewer.sync()
-
-                console.print("[bold green]Model Reloaded.[/bold green]")
-
-            except Exception as e:
+            with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
                 console.print(
-                    f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                    Panel(
+                        "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
+                        "1. Edit your generator code.\n"
+                        "2. Press [bold yellow]ENTER[/bold yellow] here to push changes.\n"
+                        "3. Type [bold red]'exit'[/bold red] to close.",
+                        title="Mojo Reloaded",
+                        border_style="cyan",
+                    )
                 )
+                while viewer.is_running():
+                    try:
+                        cmd = (
+                            console.input(
+                                "[bold green]Awaiting reload command[/bold green]:[white] Press [bold yellow]ENTER[/bold yellow] to reload > [/white]"
+                            )
+                            .strip()
+                            .lower()
+                        )
+                        if cmd in ["exit", "quit", "q"]:
+                            break
+                    except (BdbQuit, KeyboardInterrupt):
+                        break
+
+                    try:
+                        with console.status(
+                            "[bold yellow]Regenerating...[/bold yellow]"
+                        ):
+                            new_mj_model, new_mj_data = generate_construct()
+
+                            sim = viewer._get_sim()
+
+                            if sim:
+                                sim.load(
+                                    new_mj_model, new_mj_data, str(workdir / xml_name)
+                                )
+                                viewer.sync()
+
+                        console.print("[bold green]Model Reloaded.[/bold green]")
+
+                    except Exception as e:
+                        console.print(
+                            f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                        )
+
+        case UserInterface.MJVISER | UserInterface.VISER:
+            try:
+                import viser
+                from mjviser import ViserMujocoScene
+            except ImportError:
+                console.print(
+                    "The [bold]mjviser[/bold] UI option requires you to install [bold]mjviser[/bold] separately."
+                )
+                raise typer.Exit(1)
+            import contextlib
+            import io
+
+            from mujoco_mojo.utils.color import Color
+
+            for name in ["websockets"]:
+                _l = logging.getLogger(name)
+                _l.setLevel(logging.WARNING)
+                _l.propagate = False
+
+            local_ip = get_local_ip()
+
+            connection_info = (
+                f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
+            )
+
+            if host == "0.0.0.0":
+                connection_info += (
+                    f"\nMobile: [bold cyan u]http://{local_ip}:{port}[/bold cyan u]"
+                )
+            else:
+                connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                server = viser.ViserServer(
+                    host=host, port=port, label="MuJoCo Mojo Reloaded", verbose=False
+                )
+            server.configure_theme(  # pyright: ignore[reportAttributeAccessIssue]
+                dark_mode=is_dark_mode(),
+                show_logo=False,
+                brand_color=tuple(int(x) for x in (Color.CYAN_500.rgb * 255).round()),
+            )
+
+            def start_scene(m: mujoco.MjModel, d: mujoco.MjData):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    server.scene.reset()
+                    scene = ViserMujocoScene(server=server, mj_model=m, num_envs=1)
+                    scene.create_visualization_gui()
+                    scene.create_scene_gui()
+                    scene.update_from_mjdata(d)
+                return scene
+
+            _scene = start_scene(mj_model, mj_data)
+
+            console.print(
+                Panel(
+                    f"""[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
+                    border_style="cyan",
+                    title="Mojo Reloaded",
+                )
+            )
+
+            while True:
+                try:
+                    cmd = (
+                        console.input(
+                            "[bold green]Awaiting reload command[/bold green]:[white] Press [bold yellow]ENTER[/bold yellow] to reload > [/white]"
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if cmd in ["exit", "quit", "q"]:
+                        break
+                except (BdbQuit, KeyboardInterrupt):
+                    break
+
+                try:
+                    with console.status("[bold yellow]Regenerating...[/bold yellow]"):
+                        new_mj_model, new_mj_data = generate_construct()
+                        _scene = start_scene(new_mj_model, new_mj_data)
+
+                    console.print("[bold green]Model Reloaded.[/bold green]")
+
+                except Exception as e:
+                    console.print(
+                        f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                    )
+
+        case _:
+            console.print(f"Invalid viewer option selected {ui}")
     console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
 
@@ -811,8 +968,8 @@ def run_reloaded(
 def run_dojo(
     ctx: typer.Context,
     workdir: DojoWorkdirType,
-    host: DojoHostType = "127.0.0.1",
-    port: DojoPortType = 8000,
+    host: HostType = "127.0.0.1",
+    port: PortType = 8000,
     n_proc: NProcType = 1,
     password: DojoPassword = None,
     verbose: VerboseType = 0,
