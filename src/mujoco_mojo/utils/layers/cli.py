@@ -5,6 +5,7 @@ import importlib
 import logging
 import socket
 import sys
+from bdb import BdbQuit
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any
@@ -713,15 +714,17 @@ def run_reloaded(
 
     with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
         while viewer.is_running():
-            cmd = (
-                console.input(
-                    "[bold green]mojo@reloaded[/bold green]:[white] Press Enter to reload > [/white]"
+            try:
+                cmd = (
+                    console.input(
+                        "[bold green]Awaiting reload command[/bold green]:[white] Press Enter to reload > [/white]"
+                    )
+                    .strip()
+                    .lower()
                 )
-                .strip()
-                .lower()
-            )
-
-            if cmd in ["exit", "quit", "q"]:
+                if cmd in ["exit", "quit", "q"]:
+                    break
+            except (BdbQuit, KeyboardInterrupt):
                 break
 
             try:
@@ -732,14 +735,16 @@ def run_reloaded(
 
                     if sim:
                         sim.load(new_mj_model, new_mj_data, str(workdir / xml_name))
+                        mujoco.mj_forward(new_mj_model, new_mj_data)
+                        viewer.sync()
 
-                console.print("✅ [bold green]Model Reloaded.[/bold green]")
+                console.print("[bold green]Model Reloaded.[/bold green]")
+
             except Exception as e:
                 console.print(
-                    f"❌ [bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                    f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
                 )
-
-    console.print("[bold yellow]Jacked out.[/bold yellow]")
+    console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
 
 @cli_app.command(name="dojo")
