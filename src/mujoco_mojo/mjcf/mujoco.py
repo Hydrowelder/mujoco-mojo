@@ -198,13 +198,16 @@ class Mujoco(XMLModel):
 
         return next(iter(unique)) if unique else default
 
-    def write_xml(self, file: Path, exclude_default: bool = True) -> None:
+    def write_xml(self, file: Path, exclude_default: bool = True) -> str:
         """
         Writes the MuJoCo model to an XML file.
 
         Args:
             file (Path): Filepath to save XML.
             exclude_default (bool, optional): Wheter or not to include default values. Values equal to None are always ignored. Attributes which are literals (such as Geom.type) are always included. Defaults to True.
+
+        Returns:
+            str: Prettified XML text.
 
         """
         xml = utils.to_pretty_xml(
@@ -215,6 +218,7 @@ class Mujoco(XMLModel):
             )
         )
         file.write_text(xml, encoding="utf-8")
+        return xml
 
     def to_mj_spec(self) -> mujoco.MjSpec:
         """Creates an MjSpec from the Mujoco instance."""

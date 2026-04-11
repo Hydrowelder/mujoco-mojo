@@ -455,7 +455,7 @@ class MojoRunner:
         clean_workdir: bool = False,
         cleanup_delay: int = 10,
         execution_mode: ExecutionMode = ExecutionMode.LOCAL,
-        trial_ids: list[int] | None = None,
+        trial_nums: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
         if clean_workdir:
@@ -476,13 +476,13 @@ class MojoRunner:
                 return self.run_local(
                     global_overrides=global_overrides,
                     resume=resume,
-                    trial_ids=trial_ids,
+                    trial_nums=trial_nums,
                 )
             case ExecutionMode.SLURM:
                 return self.orchestrate_slurm(
                     global_overrides=global_overrides,
                     resume=resume,
-                    trial_ids=trial_ids,
+                    trial_nums=trial_nums,
                 )
             case _:
                 msg = f"No run command has been configured for execution mode {execution_mode}"
@@ -493,13 +493,13 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = DEFAULT_RESUME,
-        trial_ids: list[int] | None = None,
+        trial_nums: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         if isinstance(self.config, MonteCarloConfig):
             result, had_fails = self.run_monte_carlo(
                 global_overrides=global_overrides,
                 resume=resume,
-                trial_ids=trial_ids,
+                trial_nums=trial_nums,
             )
         else:
             msg = f"A configuration for {self.config.__class__.__name__} has not been implemented."
@@ -517,7 +517,7 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray],
         resume: bool = DEFAULT_RESUME,
-        trial_ids: list[int] | None = None,
+        trial_nums: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
         (self.workdir / "logs").mkdir(exist_ok=True)
@@ -527,7 +527,7 @@ class MojoRunner:
                 result, had_fails = self.orchestrate_slurm_monte_carlo(
                     global_overrides=global_overrides,
                     resume=resume,
-                    trial_ids=trial_ids,
+                    trial_nums=trial_nums,
                 )
             except (BdbQuit, KeyboardInterrupt):
                 print("\n")
@@ -568,7 +568,7 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = True,
-        trial_ids: list[int] | None = None,
+        trial_nums: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Orchestrates a Monte Carlo job."""
         if self.slurm_trial_id is not None:
@@ -580,7 +580,7 @@ class MojoRunner:
 
             return [result], trial_status.completion == Completion.FAILED
 
-        job_trial_nums = trial_ids if trial_ids else self.config.trial_nums
+        job_trial_nums = trial_nums if trial_nums else self.config.trial_nums
 
         # initialize the status tracker
         status_tracker = JobStatus(
@@ -896,7 +896,7 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         resume: bool = True,
-        trial_ids: list[int] | None = None,
+        trial_nums: list[int] | None = None,
     ) -> tuple[list[Any], bool]:
         """Orchestrates a Monte Carlo SLURM submission."""
         from rich.console import Console
@@ -913,7 +913,7 @@ class MojoRunner:
             overrides_path.write_text(global_overrides.model_dump_json())
 
         # initialize the status tracker
-        job_trial_nums = trial_ids if trial_ids else self.config.trial_nums
+        job_trial_nums = trial_nums if trial_nums else self.config.trial_nums
 
         status_tracker = JobStatus(
             workdir=self.workdir.resolve(),
@@ -972,7 +972,7 @@ class MojoRunner:
             f"{gen_args_str} {gen_kwargs_str} "
             f"{run_args_str} {run_kwargs_str} "
             f"--n-trials 0 "  # force to zero to prevent an expected warning
-            f"--trial-id $SLURM_ARRAY_TASK_ID "  # execute its onw trial_num
+            f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its onw trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method
             f"--n-proc 1"  # A worker only needs 1 process
         )
