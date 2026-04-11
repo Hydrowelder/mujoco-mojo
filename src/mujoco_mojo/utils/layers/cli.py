@@ -285,12 +285,20 @@ if True:
             case_sensitive=False,
         ),
     ]
-    TrialIdType = Annotated[
+    TrialNumType = Annotated[
+        int,
+        typer.Option(
+            "--trial-num",
+            "-tn",
+            help="Specific trial number to run ([italic]-tn 5[/italic])",
+        ),
+    ]
+    TrialNumsType = Annotated[
         list[int],
         typer.Option(
-            "--trial-id",
-            "-tid",
-            help="Specific trial IDs to run ([italic]-tid 5 -tid 42[/italic])",
+            "--trial-num",
+            "-tn",
+            help="Specific trial numbers to run ([italic]-tn 5 -tn 42[/italic])",
         ),
     ]
     SeedType = Annotated[
@@ -384,7 +392,7 @@ def version_callback(value: bool):
 
 # create a run group for the run commands
 run_app = typer.Typer(
-    help="Execution commands for various Mojo functions (Monte Carlo, Dojo, etc.)."
+    help="Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.)."
 )
 cli_app.add_typer(run_app, name="run")
 
@@ -468,7 +476,7 @@ def run_monte_carlo(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
-    trial_ids: TrialIdType = [],
+    trial_nums: TrialNumsType = [],
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -523,7 +531,7 @@ def run_monte_carlo(
                 f"Global NamedValue overrides had {len(global_overrides)} entries."
             )
 
-    if n_trial != 0 and trial_ids:
+    if n_trial != 0 and trial_nums:
         logger.warning(
             "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
         )
@@ -560,7 +568,7 @@ def run_monte_carlo(
         else NamedValueDict[NDArray](),
         clean_workdir=clean_workdir,
         execution_mode=execution_mode,
-        trial_ids=trial_ids,
+        trial_nums=trial_nums,
     )
 
     match execution_mode:
@@ -600,6 +608,138 @@ def run_monte_carlo(
             console.print(f"\n{finished_msg}")
 
     raise typer.Exit()
+
+
+@cli_app.command(name="reloaded")
+def run_reloaded(
+    generator: GeneratorType,
+    workdir: WorkdirType = DEFAULT_WORKDIR,
+    overrides_path: OverridesType = None,
+    trial_num: TrialNumType = 0,
+    seed: SeedType = DEFAULT_SEED,
+    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
+    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    gen_args: GenArgsType = [],
+    gen_kwargs: GenKwargsType = [],
+    verbose: int = 0,
+    quiet: int = 0,
+) -> None:
+    """
+    [bold magenta]RELOADED:[/bold magenta] Native OpenGL developer loop.
+
+    Manual trigger to regenerate and reload the MJCF model.
+    """
+    import importlib
+    import sys
+
+    import mujoco
+    import mujoco.viewer
+    from numpydantic import NDArray
+
+    from mujoco_mojo.stochas import NamedValueDict
+    from mujoco_mojo.utils.runner import MojoGenerator, MojoModel
+
+    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+
+    workdir = workdir.resolve()
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    overrides_path = None if not overrides_path else overrides_path.resolve()
+
+    # initialize the generator function
+    gen_func: MojoGenerator = _load_func(generator)
+    module_name = gen_func.__module__
+
+    processed_gen_args = [_smart_parse(a) for a in gen_args]
+    processed_gen_kwargs = _process_kwargs(gen_kwargs)
+
+    def generate_construct() -> tuple[mujoco.MjModel, mujoco.MjData]:
+        """Helper to run a generation."""
+        nonlocal gen_func
+        if module_name in sys.modules:
+            try:
+                importlib.reload(sys.modules[module_name])
+                gen_func = _load_func(generator)
+            except Exception as e:
+                # If there's a syntax error in their change, we'll catch it here
+                logger.error(f"Reload failed: {e}")
+                raise e
+
+        global_overrides = NamedValueDict[NDArray]()
+        if overrides_path and overrides_path.exists():
+            logger.info(
+                f"Retrieving global NamedValue overrides from `{overrides_path}`"
+            )
+            global_overrides = NamedValueDict[NDArray].model_validate_json(
+                overrides_path.read_text()
+            )
+
+            if len(global_overrides) == 0:
+                logger.warning(
+                    "Global NamedValue overrides had no entries. Continuing anyway."
+                )
+            else:
+                logger.info(
+                    f"Global NamedValue overrides had {len(global_overrides)} entries."
+                )
+
+        mojo_model = (
+            MojoModel()
+            .with_overrides(overrides=global_overrides)
+            .with_seed(seed=seed)
+            .with_trial_num(trial_num)
+        )
+        mojo_model = gen_func(
+            mojo_model, global_overrides, *processed_gen_args, **processed_gen_kwargs
+        )
+        return mojo_model.mjcf.prep_for_sim(save_path=workdir / xml_name)
+
+    console.print(
+        Panel(
+            "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
+            "1. Edit your generator code.\n"
+            "2. Press [bold white]ENTER[/bold white] here to push changes.\n"
+            "3. Type [bold red]'exit'[/bold red] to close.",
+            title="[bold white]Mojo Reloaded[/bold white]",
+            border_style="green",
+        )
+    )
+
+    try:
+        mj_model, mj_data = generate_construct()
+    except Exception as e:
+        console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
+        raise typer.Exit(1)
+
+    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+        while viewer.is_running():
+            cmd = (
+                console.input(
+                    "[bold green]mojo@reloaded[/bold green]:[white] Press Enter to reload > [/white]"
+                )
+                .strip()
+                .lower()
+            )
+
+            if cmd in ["exit", "quit", "q"]:
+                break
+
+            try:
+                with console.status("[bold yellow]Regenerating...[/bold yellow]"):
+                    new_mj_model, new_mj_data = generate_construct()
+
+                    sim = viewer._get_sim()
+
+                    if sim:
+                        sim.load(new_mj_model, new_mj_data, str(workdir / xml_name))
+
+                console.print("✅ [bold green]Model Reloaded.[/bold green]")
+            except Exception as e:
+                console.print(
+                    f"❌ [bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                )
+
+    console.print("[bold yellow]Jacked out.[/bold yellow]")
 
 
 @cli_app.command(name="dojo")
