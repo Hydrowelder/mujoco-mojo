@@ -611,6 +611,60 @@ def run_monte_carlo(
     raise typer.Exit()
 
 
+def _recursive_mojo_reload(module, project_root: Path, visited: set | None = None):
+    """Recursively reloads modules, but only if they live inside project_root."""
+    import importlib
+    import sys
+
+    if visited is None:
+        visited = set()
+
+    if module in visited:
+        return
+    visited.add(module)
+
+    # skip reloading these
+    BLOCKLIST = {"numpy", "scipy", "matplotlib", "PIL", "cv2", "mujoco"}
+
+    if getattr(module, "__name__", "") in BLOCKLIST:
+        return
+
+    for name in list(module.__dict__.keys()):
+        obj = module.__dict__[name]
+        if hasattr(obj, "__module__"):
+            child_module_name = obj.__module__
+            child_module = sys.modules.get(child_module_name)
+
+            if child_module and child_module not in visited:
+                child_file = getattr(child_module, "__file__", None)
+
+                if child_file:
+                    child_path = Path(child_file).resolve()
+
+                    # must be inside project root AND NOT inside site-packages
+                    is_local = child_path.is_relative_to(project_root)
+                    is_library = (
+                        "site-packages" in child_path.parts
+                        or "dist-packages" in child_path.parts
+                    )
+
+                    if is_local and not is_library:
+                        _recursive_mojo_reload(child_module, project_root, visited)
+
+    try:
+        # only reload if it's not a namespace package or built-in
+        if hasattr(module, "__file__"):
+            importlib.reload(module)
+    except Exception:
+        pass
+
+    try:
+        importlib.reload(module)
+    except Exception:
+        # some modules (like namespace packages) can be finicky
+        pass
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: GeneratorType,
@@ -626,11 +680,10 @@ def run_reloaded(
     quiet: int = 0,
 ) -> None:
     """
-    [bold magenta]RELOADED:[/bold magenta] Native OpenGL developer loop.
+    [bold yellow]Run a development session with the native OpenGL viewer.[/bold yellow]
 
-    Manual trigger to regenerate and reload the MJCF model.
+    Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
     """
-    import importlib
     import sys
 
     import mujoco
@@ -642,8 +695,11 @@ def run_reloaded(
 
     logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
+    project_root = Path.cwd()
+
     workdir = workdir.resolve()
     workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / ".gitignore").write_text("*")
 
     overrides_path = None if not overrides_path else overrides_path.resolve()
 
@@ -659,7 +715,7 @@ def run_reloaded(
         nonlocal gen_func
         if module_name in sys.modules:
             try:
-                importlib.reload(sys.modules[module_name])
+                _recursive_mojo_reload(sys.modules[module_name], project_root)
                 gen_func = _load_func(generator)
             except Exception as e:
                 # If there's a syntax error in their change, we'll catch it here
@@ -693,6 +749,7 @@ def run_reloaded(
         mojo_model = gen_func(
             mojo_model, global_overrides, *processed_gen_args, **processed_gen_kwargs
         )
+        mojo_model.dump_to_path(workdir / model_config_name)
         return mojo_model.mjcf.prep_for_sim(save_path=workdir / xml_name)
 
     console.print(
@@ -707,7 +764,10 @@ def run_reloaded(
     )
 
     try:
-        mj_model, mj_data = generate_construct()
+        with console.status(
+            "[bold yellow]Performing initial generation...[/bold yellow]"
+        ):
+            mj_model, mj_data = generate_construct()
     except Exception as e:
         console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
         raise typer.Exit(1)
