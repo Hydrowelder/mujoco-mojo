@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Self
+from typing import Any, Protocol, Self, runtime_checkable
 
 import mujoco
 
@@ -12,12 +12,20 @@ from mujoco_mojo.utils.log import get_logger
 logger = get_logger(__name__)
 
 
+@runtime_checkable
+class SyncHook(Protocol):
+    def __call__(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Any: ...
+
+
 @dataclass
 class RuntimeManager:
     results_manager: ResultsManager | None = None
 
     loads: list[Load] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
+
+    _sync_hook: SyncHook | None = None
+    _skip_recording: bool = False
 
     _resolved: bool = False
 
@@ -70,7 +78,7 @@ class RuntimeManager:
             load.apply_load(mj_model, mj_data)
 
         # record data
-        if self.results_manager:
+        if self.results_manager and not self._skip_recording:
             mujoco.mj_forward(mj_model, mj_data)
             self.results_manager.record(mj_model, mj_data)
             self.results_manager.flush_ledger()
@@ -90,6 +98,9 @@ class RuntimeManager:
 
         # integrate physics and advance the time
         mujoco.mj_step(mj_model, mj_data)
+
+        if self._sync_hook:
+            self._sync_hook(mj_model, mj_data)
 
         # clear buffers for next timestep
         mj_data.xfrc_applied.fill(0)  # external forces

@@ -12,17 +12,16 @@ from numpydantic import NDArray
 from rich.console import Console
 from rich.panel import Panel
 
+import mujoco_mojo.runtime as rt
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import NamedValueDict
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.runner import MojoGenerator
+from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
 
 from .cli import UserInterface
 
 logger = get_logger(__name__)
 console = Console()
-
-INTENTIONAL_DELAY = 0.75
 
 
 @runtime_checkable
@@ -122,6 +121,7 @@ def is_dark_mode() -> bool:
 @dataclass
 class MojoReloaded:
     generator: str
+    runtime: str | None
     workdir: Path
     ui: UserInterface
     overrides_path: Path | None
@@ -131,10 +131,16 @@ class MojoReloaded:
     xml_name: str
     gen_args: list[Any]
     gen_kwargs: dict[str, Any]
+    run_args: list[Any]
+    run_kwargs: dict[str, Any]
     host: str
     port: int
 
-    def generate_construct(self) -> tuple[mujoco.MjModel, mujoco.MjData]:
+    _sync_hook: rt.runtime_manager.SyncHook | None = None
+
+    def generate_construct(
+        self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
+    ) -> tuple[mujoco.MjModel, mujoco.MjData]:
         """Helper to run a generation."""
         from .cli import _load_func
 
@@ -150,6 +156,19 @@ class MojoReloaded:
                 # If there's a syntax error in their change, we'll catch it here
                 logger.error(f"Reload failed: {e}")
                 raise e
+
+        run_func = None
+        if self.runtime:
+            run_func: MojoRuntime | None = _load_func(self.runtime)
+
+            if run_func.__module__ in sys.modules:
+                try:
+                    recursive_reload(sys.modules[run_func.__module__], project_root)
+                    run_func = _load_func(self.runtime)
+                except Exception as e:
+                    # If there's a syntax error in their change, we'll catch it here
+                    logger.error(f"Reload failed: {e}")
+                    raise e
 
         global_overrides = NamedValueDict[NDArray]()
         if self.overrides_path and self.overrides_path.exists():
@@ -169,6 +188,8 @@ class MojoReloaded:
                     f"Global NamedValue overrides had {len(global_overrides)} entries."
                 )
 
+        # execute generation
+        start = time.time()
         mojo_model = (
             MojoModel()
             .with_overrides(overrides=global_overrides)
@@ -185,7 +206,39 @@ class MojoReloaded:
         mj_model, mj_data = mojo_model.mjcf.prep_for_sim(
             save_path=self.workdir / self.xml_name
         )
-        mujoco.mj_forward(mj_model, mj_data)
+
+        # sync the viewer
+        if on_reload_callback:
+            on_reload_callback(mj_model, mj_data)
+
+        console.print(
+            f"[dim white]Model generated in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+        )
+
+        # execute runtime
+        if run_func and use_runtime:
+            runtime_manager = rt.RuntimeManager(
+                results_manager=rt.ResultsManager(
+                    db_path=self.workdir / rt.ResultsManager.default_db_name()
+                ),
+                _sync_hook=self._sync_hook,
+                _skip_recording=True,
+            )
+            start = time.time()
+            run_func(
+                mojo_model,
+                runtime_manager,
+                mj_model,
+                mj_data,
+                *self.run_args,
+                **self.run_kwargs,
+            )
+            console.print(
+                f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+            )
+        else:
+            mujoco.mj_forward(mj_model, mj_data)
+
         return mj_model, mj_data
 
     def run(self):
@@ -194,11 +247,16 @@ class MojoReloaded:
         (self.workdir / ".gitignore").write_text("*")
 
         try:
+            start = time.time()
             with console.status(
                 "[bold magenta]Performing initial generation...[/bold magenta]"
             ):
-                mj_model, mj_data = self.generate_construct()
-                time.sleep(INTENTIONAL_DELAY)
+                mj_model, mj_data = self.generate_construct(
+                    use_runtime=False, on_reload_callback=None
+                )
+            console.print(
+                f"[dim white]Model reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+            )
         except Exception as e:
             console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
             raise typer.Exit(1)
@@ -240,11 +298,15 @@ class MojoReloaded:
                 break
 
             try:
+                start = time.time()
                 with console.status("[bold]Regenerating...[/bold]"):
-                    new_mj_model, new_mj_data = self.generate_construct()
+                    new_mj_model, new_mj_data = self.generate_construct(
+                        use_runtime=True, on_reload_callback=on_reload_callback
+                    )
                     on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
-                    time.sleep(INTENTIONAL_DELAY)
-                console.print("[bold green]Model Reloaded.[/bold green]")
+                console.print(
+                    f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                )
 
             except Exception as e:
                 console.print(
@@ -256,6 +318,9 @@ class MojoReloaded:
 
         with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
 
+            def sync(m: mujoco.MjModel, d: mujoco.MjData):
+                viewer.sync()
+
             def reload_handler(m: mujoco.MjModel, d: mujoco.MjData):
                 sim = viewer._get_sim()
                 if sim:
@@ -264,6 +329,7 @@ class MojoReloaded:
 
             reload_handler(mj_model, mj_data)
 
+            self._sync_hook = lambda mj_model, mj_data: sync(mj_model, mj_data)
             self._interactive_loop(
                 lambda mj_model, mj_data: reload_handler(mj_model, mj_data),
                 is_running_check=viewer.is_running,
@@ -327,6 +393,9 @@ class MojoReloaded:
         scene.create_visualization_gui()
         scene.create_scene_gui()
 
+        def sync(m: mujoco.MjModel, d: mujoco.MjData):
+            scene.update_from_mjdata(d)
+
         def update_scene(m: mujoco.MjModel, d: mujoco.MjData):
             scene = ViserMujocoScene(server=server, mj_model=m, num_envs=1)
             scene.update_from_mjdata(d)
@@ -336,6 +405,7 @@ class MojoReloaded:
 
         _print_connection_panel()
 
+        self._sync_hook = lambda mj_model, mj_data: sync(mj_model, mj_data)
         self._interactive_loop(
             lambda mj_model, mj_data: update_scene(mj_model, mj_data), lambda: True
         )
