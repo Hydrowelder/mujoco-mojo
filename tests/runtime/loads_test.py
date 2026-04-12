@@ -5,7 +5,7 @@ import pytest
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
 from mujoco_mojo.runtime.load import (
-    GeneralForce,
+    GeneralLoad,
     PointToPointForce,
     ScalarForce,
     ScalarTorque,
@@ -86,7 +86,7 @@ def test_general_force_rotation(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjD
     mujoco.mj_forward(model, data)
 
     # Apply a constant 10N in local Z
-    thrust = GeneralForce(
+    thrust = GeneralLoad(
         name="thruster", action_site=s1, fz=lambda t, model, data: 10.0, rel_to_site=s1
     )
     thrust.resolve_ids(model, data)
@@ -358,7 +358,7 @@ def test_general_force_6dof_application(
     s1 = SiteSphere(name=SiteName("site1"))
 
     # Apply [10, 20, 30] Force and [1, 2, 3] Torque
-    load = GeneralForce(
+    load = GeneralLoad(
         name="complex_load",
         action_site=s1,
         fx=lambda t, m, d: 10.0,

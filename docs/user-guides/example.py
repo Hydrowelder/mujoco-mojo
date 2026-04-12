@@ -1,0 +1,306 @@
+# --8<-- [start:imports]
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+import mujoco
+import numpy as np
+
+import mujoco_mojo as mojo
+import mujoco_mojo.runtime as rt
+
+logger = mojo.utils.get_logger(__name__)
+# --8<-- [end:imports]
+
+# --8<-- [start:constants]
+FIXED_CAMERA_NAME = mojo.CameraName("static")
+BOX_CAMERA_NAME = mojo.CameraName("box_camera")
+TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
+# --8<-- [end:constants]
+
+
+# --8<-- [start:handoff]
+@dataclass
+class Handoff:
+    """
+    User-defined interconnect between the generator and runtime function.
+    Retains MJCF definitions for use in the physics loop.
+    """
+
+    box1_rot: mojo.Site
+    springs: dict[
+        Literal["pz", "mz"],
+        tuple[mojo.Site, mojo.Site, mojo.NamedValue, mojo.NamedValue],
+    ] = field(default_factory=dict)
+
+    def define_spring(
+        self,
+        loc: Literal["pz", "mz"],
+        box1: mojo.Body,
+        box2: mojo.Body,
+        mojo_model: mojo.MojoModel,
+    ):
+        mult = 1 if loc == "pz" else -1
+
+        box1.sites.append(
+            base := mojo.SiteSphere(
+                name=mojo.SiteName(f"{loc}_spring_base_site"),
+                size=0.1,
+                pose=mojo.PoseQuat(pos=np.asarray([0.4, 0, mult * 0.5])),
+                rgba=mojo.utils.Color.RED_500.rgba,
+            )
+        )
+        box2.sites.append(
+            tip := mojo.SiteSphere(
+                name=mojo.SiteName(f"{loc}_spring_tip_site"),
+                size=0.1,
+                pose=mojo.PoseQuat(pos=np.asarray([-0.4, 0, mult * 0.5])),
+                rgba=mojo.utils.Color.BLUE_500.rgba,
+            )
+        )
+
+        # --8<-- [start:sampling]
+        # Perform random draws tied to the model seed
+        stiffness = mojo_model.sample_dist(
+            mojo.TruncatedNormalDistribution(
+                name=mojo.DistName(f"{loc}_stiffness"),
+                nominal=100,
+                mu=100,
+                sigma=20,
+                low=0,
+            )
+        ).squeeze()
+
+        stroke = mojo_model.sample_dist(
+            mojo.TruncatedNormalDistribution(
+                name=mojo.DistName(f"{loc}_stroke"),
+                nominal=(nom := 1),
+                mu=nom,
+                sigma=nom * 0.1,
+                low=nom * 0.8,
+                high=nom * 1.2,
+            )
+        ).squeeze()
+        # --8<-- [end:sampling]
+
+        self.springs.update({loc: (base, tip, stiffness, stroke)})
+
+    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
+        assert rm.results_manager is not None
+        base, tip, stiffness, stroke = self.springs[loc]
+
+        # --8<-- [start:forces]
+        spring_force = rt.PointToPointForce.stroke_compression_spring(
+            name=f"{loc}_spring",
+            action_site=base,
+            xtion_site=tip,
+            stiffness=float(stiffness),
+            max_stroke=float(stroke),
+            preload=1000 if loc == "pz" else 750,
+        ).register_to_rm(rm)
+
+        base.request(rm.results_manager)
+        tip.request(rm.results_manager)
+        spring_force.request(rm.results_manager)
+        # --8<-- [end:forces]
+
+
+# --8<-- [end:handoff]
+
+
+# --8<-- [start:generate]
+# --8<-- [start:generate-handle]
+def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+    """Generates the MJCF model and samples distributions."""
+    # --8<-- [end:generate-handle]
+    skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
+
+    # --8<-- [start:assets]
+    # Configure simulation assets
+    mojo_model.mjcf.assets = [
+        mojo.Asset(
+            textures=[
+                grid_tex := mojo.TextureBuiltIn(
+                    name=mojo.TextureName("grid_tex"),
+                    type=mojo.TextureType.D2,
+                    builtin=mojo.TextureBuiltInType.CHECKER,
+                    width=512,
+                    height=512,
+                    rgb1=mojo.utils.Color.SLATE_600.rgb,
+                    rgb2=mojo.utils.Color.SLATE_800.rgb,
+                )
+            ],
+            materials=[
+                grid_mat := mojo.Material(
+                    name=mojo.MaterialName("grid_mat"),
+                    texture=grid_tex.name,
+                    texrepeat=np.asarray((1, 1)),
+                )
+            ],
+        ),
+    ]
+    # --8<-- [end:assets]
+
+    # Handle skybox if in nominal mode
+    if mojo_model.is_nominal:
+        mojo_model.mjcf.assets.append(
+            mojo.Asset(
+                textures=[
+                    mojo.Texture(
+                        name=mojo.TextureName("skybox_texture_colors"),
+                        type=mojo.TextureType.SKYBOX,
+                        fileback=skybox_folder / "nz.png",
+                        filedown=skybox_folder / "ny.png",
+                        filefront=skybox_folder / "pz.png",
+                        fileleft=skybox_folder / "nx.png",
+                        fileright=skybox_folder / "px.png",
+                        fileup=skybox_folder / "py.png",
+                    )
+                ]
+            ),
+        )
+
+    # --8<-- [start:worldbody]
+    mojo_model.mjcf.worldbody = mojo.WorldBody(
+        geoms=[]
+        if mojo_model.is_nominal
+        else [
+            mojo.GeomPlane(
+                name=mojo.GeomName("floor"),
+                size=np.asarray([0, 0, 0.1]),
+                pose=mojo.PoseQuat(pos=np.asarray((0, 0, -5))),
+                material=grid_mat.name,
+                contype=0,
+                conaffinity=0,
+            ),
+        ]
+    )
+    # --8<-- [end:worldbody]
+
+    mojo_model.mjcf.options = [
+        mojo.Option(timestep=0.001, gravity=np.asarray((0, 0, 0)))
+    ]
+
+    # --8<-- [start:bodies]
+    # Create two boxes using the walrus operator for immediate referencing
+    mojo_model.mjcf.worldbody.bodies.extend(
+        [
+            box1 := mojo.Body(
+                name=mojo.BodyName("box1"),
+                pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
+                freejoints=[mojo.FreeJoint()],
+                geoms=[
+                    mojo.GeomBox(
+                        name=mojo.GeomName("g1"),
+                        size=np.asarray([0.5, 0.5, 0.5]),
+                        rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
+                    )
+                ],
+            ),
+            box2 := mojo.Body(
+                name=mojo.BodyName("box2"),
+                pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
+                freejoints=[mojo.FreeJoint()],
+                geoms=[
+                    mojo.GeomBox(
+                        name=mojo.GeomName("g2"),
+                        size=np.asarray([0.5, 0.5, 0.5]),
+                        rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
+                    )
+                ],
+            ),
+        ]
+    )
+    # --8<-- [end:bodies]
+
+    box1.sites.append(
+        box1_rot_site := mojo.SiteSphere(
+            name=mojo.SiteName("box1_rot_site"),
+            size=0.2,
+            pose=mojo.PoseEuler(euler=np.asarray((45, 45, 45))),
+            rgba=mojo.utils.Color.FUCHSIA_500.rgba,
+        )
+    )
+
+    # --8<-- [start:generate-finalizing]
+    # Pack and execute handoff
+    handoff = Handoff(box1_rot=box1_rot_site)
+    mojo_model._user_data = handoff
+    handoff.define_spring("pz", box1, box2, mojo_model)
+    handoff.define_spring("mz", box1, box2, mojo_model)
+
+    return mojo_model
+
+
+# --8<-- [end:generate-finalizing]
+
+# --8<-- [end:generate]
+
+
+# --8<-- [start:runtime]
+# --8<-- [start:runtime-handle]
+def runtime(
+    mojo_model: mojo.MojoModel,
+    runtime_manager: rt.RuntimeManager,
+    mj_model: mujoco.MjModel,
+    mj_data: mujoco.MjData,
+    *args,
+    **kwargs,
+):
+    """Executes the physics simulation."""
+    # --8<-- [end:runtime-handle]
+    assert isinstance(mojo_model._user_data, Handoff)
+
+    with runtime_manager as rm:
+        assert mojo_model.mjcf.worldbody is not None
+        assert rm.results_manager is not None
+
+        # --8<-- [start:video]
+        if mojo_model.is_nominal:  # Only record the first trial
+            rt.VideoRecorder(
+                path=Path("fixed_camera.mp4"),
+                camera_name=FIXED_CAMERA_NAME,
+                show_loads=True,
+            ).setup(mj_model).register_to_rm(rm)
+        # --8<-- [end:video]
+
+        # Register forces from our handoff data
+        mojo_model._user_data.add_spring_force("pz", rm)
+        mojo_model._user_data.add_spring_force("mz", rm)
+
+        # --8<-- [start:requests]
+        # Request telemetry for bodies and sites
+        rm.results_manager.record_decimation = 10  # Only record every 10 steps
+        for b in mojo_model.mjcf.worldbody.bodies:
+            b.request(
+                rm.results_manager,
+                attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
+            )
+        mojo_model._user_data.box1_rot.request(rm.results_manager)
+        # --8<-- [end:requests]
+
+        # --8<-- [start:stepping]
+        # Step until 2.0 seconds
+        while mj_data.time < 2.0:
+            rm.step(mj_model, mj_data)
+        # --8<-- [end:stepping]
+
+    return f"Trial {mojo_model.trial_num} complete."
+
+
+# --8<-- [end:runtime]
+
+# --8<-- [start:main]
+if __name__ == "__main__":
+    mojo.utils.setup_logger()
+    workdir = Path(__file__).parent / "experiment_workspace"
+
+    runner = mojo.utils.MojoRunner(
+        generator=generate,
+        runtime=runtime,
+        workdir=workdir,
+        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
+    )
+
+    runner.run(resume=False, clean_workdir=True)
+# --8<-- [end:main]
