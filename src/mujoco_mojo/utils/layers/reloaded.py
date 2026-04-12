@@ -4,7 +4,7 @@ import time
 from bdb import BdbQuit
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
 
 import mujoco
 import numpy as np
@@ -289,7 +289,7 @@ class MojoReloaded:
                 "- [bold yellow]ENTER[/]: Repeat last command\n"
                 "- [bold magenta]gen[/]: Generate only\n"
                 f"{runtime_cmd}"
-                "- [bold red]'exit'[/]: to close",
+                "- [bold red]exit[/]: to close",
                 title="Interactive Controls",
                 border_style="cyan",
             )
@@ -298,7 +298,7 @@ class MojoReloaded:
             try:
                 raw_input = (
                     console.input(
-                        f"[bold green]Awaiting command[/bold green] [dim](last cmd: {self._last_command})[/dim]:[white] > [/white]"
+                        f"[bold green]Awaiting command[/bold green] [dim](last cmd: {self._last_command})[/dim][white] > [/white]"
                     )
                     .strip()
                     .lower()
@@ -413,6 +413,10 @@ class MojoReloaded:
         from mujoco_mojo.utils.color import Color
         from mujoco_mojo.utils.utils import get_local_ip
 
+        class ViserState(TypedDict):
+            scene: ViserMujocoScene
+            arrow_handle: None | viser.LineSegmentsHandle
+
         for name in ["websockets"]:
             _l = logging.getLogger(name)
             _l.setLevel(logging.WARNING)
@@ -452,20 +456,57 @@ class MojoReloaded:
         )
 
         server.scene.reset()
-        scene = ViserMujocoScene(server=server, mj_model=mj_model, num_envs=1)
-        scene.create_visualization_gui()
-        scene.create_scene_gui()
+
+        state: ViserState = {
+            "scene": ViserMujocoScene(server=server, mj_model=mj_model, num_envs=1),
+            "arrow_handle": None,
+        }
+        state["scene"].create_visualization_gui()
+        state["scene"].create_scene_gui()
 
         def sync(m: mujoco.MjModel, d: mujoco.MjData, arrows: list[ArrowConfig]):
-            scene.update_from_mjdata(d)
+            state["scene"].update_from_mjdata(d)
+            node_name = "mojo_arrows"
+
+            if not arrows:
+                # If no arrows this frame, clear the batch and exit
+                server.scene.remove_by_name(node_name)
+                return
+
+            all_segments = []
+            all_colors = []
+            line_width = 2.0
+
+            for arrow in arrows:
+                start, end, w = resolve_arrow_coords(
+                    mj_model=m,
+                    pos=arrow["pos"],
+                    vec=arrow["vec"],
+                    is_torque=arrow["is_torque"],
+                )
+
+                line_width = w * 200.0
+                all_segments.append(np.stack([start, end]))
+                color_uint8 = tuple(int(x * 255) for x in arrow["color"][:3])
+                all_colors.append([color_uint8, color_uint8])
+
+            points_batch = np.array(all_segments, dtype=np.float32)
+            colors_batch = np.array(all_colors, dtype=np.uint8)
+
+            server.scene.add_line_segments(
+                name=node_name,
+                points=points_batch,
+                colors=colors_batch,
+                line_width=line_width,
+            )
 
         def update_scene(m: mujoco.MjModel, d: mujoco.MjData):
-            scene = ViserMujocoScene(server=server, mj_model=m, num_envs=1)
-            scene.update_from_mjdata(d)
-            return scene
+            state["scene"] = ViserMujocoScene(server=server, mj_model=m, num_envs=1)
+            state["scene"].update_from_mjdata(d)
+            return state["scene"]
 
+        # initial render
         update_scene(mj_model, mj_data)
-
         _print_connection_panel()
 
         self._sync_hook = lambda mj_model, mj_data, arrows: sync(
