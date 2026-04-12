@@ -3,9 +3,8 @@
 import ast
 import importlib
 import logging
-import socket
 import sys
-from bdb import BdbQuit
+from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Any
@@ -18,6 +17,7 @@ from rich.panel import Panel
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
+from mujoco_mojo.utils.utils import get_local_ip
 
 from ..defaults import (
     DEFAULT_MC_N_PROC,
@@ -55,20 +55,6 @@ M M M  UUUU  J   OOO    CCCC   OOO      M M M   OOO   J   OOO
             subtitle=f"[dim]v{VERSION}[/dim]",
         )
     )
-
-
-def get_local_ip():
-    """Returns the actual local IP address of this machine."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        # Does not actually need to connect to 8.8.8.8 to work
-        s.connect(("8.8.8.8", 1))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = "127.0.0.1"
-    finally:
-        s.close()
-    return ip
 
 
 def _setup_cli_logging(verbose: int, quiet: int) -> logging.Logger:
@@ -221,7 +207,10 @@ if True:
     ]
     ResumeType = Annotated[
         bool,
-        typer.Option("--resume/--no-resume", help="Resume from previous state on disk"),
+        typer.Option(
+            "--resume/--no-resume",
+            help="Resume from previous state on disk",
+        ),
     ]
     CleanWorkdirType = Annotated[
         bool,
@@ -345,20 +334,20 @@ if True:
             help="Workspace directory to build the Dojo process for. This should be the same argument as what is used for other mujoco-mojo run commands.",
         ),
     ]
-    DojoHostType = Annotated[
+    HostType = Annotated[
         str,
         typer.Option(
             "--host",
             "-h",
-            help="What host IP should be used to serve the Dojo process.",
+            help="What host IP should be used to serve the process.",
         ),
     ]
-    DojoPortType = Annotated[
+    PortType = Annotated[
         int,
         typer.Option(
             "--port",
             "-p",
-            help="Port number to use to serve the Dojo process.",
+            help="Port number to use to serve the process.",
         ),
     ]
     DojoPassword = Annotated[
@@ -367,6 +356,25 @@ if True:
             "--password",
             "-pw",
             help="Enable Basic Auth protection",
+        ),
+    ]
+
+    # Reloaded
+    class UserInterface(StrEnum):
+        OPENGL = "opengl"
+        MJVISER = "mjviser"
+        VISER = "viser"
+
+    UIType = Annotated[
+        UserInterface,
+        typer.Option(
+            "--user-interface",
+            "-ui",
+            help=(
+                "Which viewer type to use. OpenGL requires X11 forwarding but is ideal for local development. The Viser viewers require you to install those dependencies (they are available in the "
+                r"[bold]mujoco-mojo\[reloaded][/bold] group)"
+            ),
+            case_sensitive=False,
         ),
     ]
 
@@ -611,64 +619,12 @@ def run_monte_carlo(
     raise typer.Exit()
 
 
-def _recursive_mojo_reload(module, project_root: Path, visited: set | None = None):
-    """Recursively reloads modules, but only if they live inside project_root."""
-    import importlib
-    import sys
-
-    if visited is None:
-        visited = set()
-
-    if module in visited:
-        return
-    visited.add(module)
-
-    # skip reloading these
-    BLOCKLIST = {"numpy", "scipy", "matplotlib", "PIL", "cv2", "mujoco"}
-
-    if getattr(module, "__name__", "") in BLOCKLIST:
-        return
-
-    for name in list(module.__dict__.keys()):
-        obj = module.__dict__[name]
-        if hasattr(obj, "__module__"):
-            child_module_name = obj.__module__
-            child_module = sys.modules.get(child_module_name)
-
-            if child_module and child_module not in visited:
-                child_file = getattr(child_module, "__file__", None)
-
-                if child_file:
-                    child_path = Path(child_file).resolve()
-
-                    # must be inside project root AND NOT inside site-packages
-                    is_local = child_path.is_relative_to(project_root)
-                    is_library = (
-                        "site-packages" in child_path.parts
-                        or "dist-packages" in child_path.parts
-                    )
-
-                    if is_local and not is_library:
-                        _recursive_mojo_reload(child_module, project_root, visited)
-
-    try:
-        # only reload if it's not a namespace package or built-in
-        if hasattr(module, "__file__"):
-            importlib.reload(module)
-    except Exception:
-        pass
-
-    try:
-        importlib.reload(module)
-    except Exception:
-        # some modules (like namespace packages) can be finicky
-        pass
-
-
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: GeneratorType,
+    runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
+    ui: UIType = UserInterface.OPENGL,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
@@ -676,6 +632,10 @@ def run_reloaded(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
+    run_args: RunArgsType = [],
+    run_kwargs: RunKwargsType = [],
+    host: HostType = "127.0.0.1",
+    port: PortType = 8080,
     verbose: int = 0,
     quiet: int = 0,
 ) -> None:
@@ -684,135 +644,42 @@ def run_reloaded(
 
     Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
     """
-    import sys
+    from .reloaded import MojoReloaded
 
-    import mujoco
-    import mujoco.viewer
-    from numpydantic import NDArray
+    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
-    from mujoco_mojo.stochas import NamedValueDict
-    from mujoco_mojo.utils.runner import MojoGenerator, MojoModel
-
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-
-    project_root = Path.cwd()
-
-    workdir = workdir.resolve()
-    workdir.mkdir(parents=True, exist_ok=True)
-    (workdir / ".gitignore").write_text("*")
-
+    # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
-
-    # initialize the generator function
-    gen_func: MojoGenerator = _load_func(generator)
-    module_name = gen_func.__module__
-
     processed_gen_args = [_smart_parse(a) for a in gen_args]
     processed_gen_kwargs = _process_kwargs(gen_kwargs)
+    processed_run_args = [_smart_parse(a) for a in run_args]
+    processed_run_kwargs = _process_kwargs(run_kwargs)
 
-    def generate_construct() -> tuple[mujoco.MjModel, mujoco.MjData]:
-        """Helper to run a generation."""
-        nonlocal gen_func
-        if module_name in sys.modules:
-            try:
-                _recursive_mojo_reload(sys.modules[module_name], project_root)
-                gen_func = _load_func(generator)
-            except Exception as e:
-                # If there's a syntax error in their change, we'll catch it here
-                logger.error(f"Reload failed: {e}")
-                raise e
-
-        global_overrides = NamedValueDict[NDArray]()
-        if overrides_path and overrides_path.exists():
-            logger.info(
-                f"Retrieving global NamedValue overrides from `{overrides_path}`"
-            )
-            global_overrides = NamedValueDict[NDArray].model_validate_json(
-                overrides_path.read_text()
-            )
-
-            if len(global_overrides) == 0:
-                logger.warning(
-                    "Global NamedValue overrides had no entries. Continuing anyway."
-                )
-            else:
-                logger.info(
-                    f"Global NamedValue overrides had {len(global_overrides)} entries."
-                )
-
-        mojo_model = (
-            MojoModel()
-            .with_overrides(overrides=global_overrides)
-            .with_seed(seed=seed)
-            .with_trial_num(trial_num)
-        )
-        mojo_model = gen_func(
-            mojo_model, global_overrides, *processed_gen_args, **processed_gen_kwargs
-        )
-        mojo_model.dump_to_path(workdir / model_config_name)
-        return mojo_model.mjcf.prep_for_sim(save_path=workdir / xml_name)
-
-    console.print(
-        Panel(
-            "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
-            "1. Edit your generator code.\n"
-            "2. Press [bold white]ENTER[/bold white] here to push changes.\n"
-            "3. Type [bold red]'exit'[/bold red] to close.",
-            title="[bold white]Mojo Reloaded[/bold white]",
-            border_style="green",
-        )
-    )
-
-    try:
-        with console.status(
-            "[bold yellow]Performing initial generation...[/bold yellow]"
-        ):
-            mj_model, mj_data = generate_construct()
-    except Exception as e:
-        console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
-        raise typer.Exit(1)
-
-    with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
-        while viewer.is_running():
-            try:
-                cmd = (
-                    console.input(
-                        "[bold green]Awaiting reload command[/bold green]:[white] Press Enter to reload > [/white]"
-                    )
-                    .strip()
-                    .lower()
-                )
-                if cmd in ["exit", "quit", "q"]:
-                    break
-            except (BdbQuit, KeyboardInterrupt):
-                break
-
-            try:
-                with console.status("[bold yellow]Regenerating...[/bold yellow]"):
-                    new_mj_model, new_mj_data = generate_construct()
-
-                    sim = viewer._get_sim()
-
-                    if sim:
-                        sim.load(new_mj_model, new_mj_data, str(workdir / xml_name))
-                        mujoco.mj_forward(new_mj_model, new_mj_data)
-                        viewer.sync()
-
-                console.print("[bold green]Model Reloaded.[/bold green]")
-
-            except Exception as e:
-                console.print(
-                    f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
-                )
-    console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
+    MojoReloaded(
+        generator=generator,
+        runtime=runtime,
+        workdir=workdir,
+        ui=ui,
+        overrides_path=overrides_path,
+        trial_num=trial_num,
+        seed=seed,
+        model_config_name=model_config_name,
+        xml_name=xml_name,
+        gen_args=processed_gen_args,
+        gen_kwargs=processed_gen_kwargs,
+        run_args=processed_run_args,
+        run_kwargs=processed_run_kwargs,
+        host=host,
+        port=port,
+    ).run()
 
 
 @cli_app.command(name="dojo")
 def run_dojo(
     ctx: typer.Context,
     workdir: DojoWorkdirType,
-    host: DojoHostType = "127.0.0.1",
-    port: DojoPortType = 8000,
+    host: HostType = "127.0.0.1",
+    port: PortType = 8000,
     n_proc: NProcType = 1,
     password: DojoPassword = None,
     verbose: VerboseType = 0,

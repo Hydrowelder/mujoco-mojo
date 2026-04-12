@@ -7,6 +7,7 @@ import numpy as np
 
 from mujoco_mojo.typing import CameraName, Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.visuals import resolve_arrow_coords
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
@@ -113,27 +114,15 @@ class VideoRecorder:
         )
 
         # calculate native scaling
-        v_map = mj_model.vis.map
-        v_scale = mj_model.vis.scale
-        stat = mj_model.stat
-
-        if is_torque:
-            mag_scale = v_map.torque
-            width = v_scale.jointwidth * stat.meansize
-        else:
-            mag_scale = v_map.force
-            width = v_scale.forcewidth * stat.meansize
-
-        # normalize length by mean body mass
-        scaled_vec = vec * (mag_scale / max(stat.meanmass, 1e-6))
+        start, end, width = resolve_arrow_coords(mj_model, pos, vec, is_torque)
 
         # use connector to solve pos and rot. mat.
         mujoco.mjv_connector(
             geom=geom,
             type=mujoco.mjtGeom.mjGEOM_ARROW,
             width=width,
-            from_=np.asarray(pos, dtype=np.float64),
-            to=pos + scaled_vec,
+            from_=start,
+            to=end,
         )
         self._renderer.scene.ngeom += 1
 

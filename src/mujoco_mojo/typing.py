@@ -35,6 +35,7 @@ __all__ = [
     "DeformableSkinName",
     "DynType",
     "EnableDisable",
+    "EulerSeq",
     "FlexCompDOF",
     "FlexCompType",
     "FlexName",

@@ -4,7 +4,6 @@ from typing import Literal
 
 import mujoco
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -211,6 +210,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
                         size=np.asarray([0.5, 0.5, 0.5]),
+                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
@@ -220,13 +220,15 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         ]
     )
 
-    ortho_q = R.from_euler("xyz", [45, 45, 45], degrees=True).as_quat(scalar_first=True)
-
     box1.sites.append(
         box1_rot_site := mojo.SiteSphere(
             name=mojo.SiteName("box1_rot_site"),
             size=0.2,
-            pose=mojo.PoseQuat(quat=ortho_q),
+            pose=mojo.PoseEuler(
+                euler=np.asarray((45, 45, 45)),
+                angle=mojo.Angle.DEGREE,
+                eulerseq=mojo.EulerSeq.xyz,
+            ),
             rgba=mojo.utils.Color.FUCHSIA_500.rgba,
         )
     )
@@ -278,7 +280,9 @@ def runtime(
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 1
 
-        if mojo_model.is_nominal:
+        assert rm._sync_hook is not None
+
+        if mojo_model.is_nominal and False:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,
