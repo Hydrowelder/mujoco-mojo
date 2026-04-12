@@ -15,7 +15,12 @@ logger = get_logger(__name__)
 
 @runtime_checkable
 class SyncHook(Protocol):
-    def __call__(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Any: ...
+    def __call__(
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        arrows: list[ArrowConfig],
+    ) -> Any: ...
 
 
 @dataclass
@@ -93,13 +98,16 @@ class RuntimeManager:
             self.results_manager.flush_ledger()
 
         # record any frames which are due
-        if self.video_recorders:
+        all_arrows = None
+        if self.video_recorders or self._sync_hook:
             # gather arrows for forcing functions
-            all_arrows: list[ArrowConfig] = []
+            all_arrows: list[ArrowConfig] | None = []
 
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
 
+        if self.video_recorders:
+            assert all_arrows is not None
             for recorder in self.video_recorders:
                 recorder.capture_frame(
                     mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
@@ -109,7 +117,8 @@ class RuntimeManager:
         mujoco.mj_step(mj_model, mj_data)
 
         if self._sync_hook:
-            self._sync_hook(mj_model, mj_data)
+            assert all_arrows is not None
+            self._sync_hook(mj_model, mj_data, all_arrows)
 
         if self.playback_speed > 0:
             sim_elapsed = mj_data.time - self._start_sim_time
