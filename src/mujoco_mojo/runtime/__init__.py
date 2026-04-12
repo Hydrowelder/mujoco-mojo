@@ -1,13 +1,25 @@
-from .load import GeneralForce, Load, PointToPointForce
+from .load import (
+    GeneralLoad,
+    Load,
+    PointToPointForce,
+    ScalarForce,
+    ScalarTorque,
+    VectorForce,
+    VectorTorque,
+)
 from .results_manager import ResultsManager
 from .runtime_manager import RuntimeManager
 from .video_recorder import VideoRecorder
 
 __all__ = [
-    "GeneralForce",
+    "GeneralLoad",
     "Load",
     "PointToPointForce",
     "ResultsManager",
     "RuntimeManager",
+    "ScalarForce",
+    "ScalarTorque",
+    "VectorForce",
+    "VectorTorque",
     "VideoRecorder",
 ]

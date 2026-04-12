@@ -84,12 +84,8 @@ pip install mujoco-mojo
 > mujoco-mojo run monte-carlo \
 >     --generator monte_carlo_test.Experiment.generate \
 >     --runtime monte_carlo_test.runtime \
->     --workdir ./mc_test/ \
->     --no-resume \
->     --gen-arg 123 \
->     --gen-kwarg 'test=1234' \
 >     --n-trial 10 \
->     --n-proc 1
+>     --n-proc 4
 > ```
 
 * Support for running jobs with SLURM for distributed compute
@@ -101,19 +97,35 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 
 #### Monitor: Real-Time Oversight
 
-* Live Progress Tracking: Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.
-* Success/Failure Analytics: Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.
-* Sensory Feedback: Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.
-* Deep-Linked Navigation: Jump straight from the monitor to any individual trial in the viewer with one click.
+* **Live Progress Tracking:** Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.
+* **Success/Failure Analytics:** Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.
+* **Sensory Feedback:** Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.
+* **Deep-Linked Navigation:** Jump straight from the monitor to any individual trial in the viewer with one click.
 
 #### Mosaic: Advanced Telemetry Analysis
 
-* High-Fidelity Plotting: Hardware-accelerated visualization using Plotly.js for seamless zooming and panning through millions of data points.
-* Dynamic Versus Mode: Overlay current telemetry against previous trials using an intuitive range-selection slider for instant regression testing.
-* Regex-Powered Filtering: Navigate high-dimensional datasets using a "folder-style" signal selector with suffix and regex support.
-* State Persistence & Sharing: Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
-* Pro-Grade Tooling: Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
-* Keyboard-First Design: Full hotkey support for warping between trials and managing views without leaving the home row.
+* **High-Fidelity Plotting:** Hardware-accelerated visualization using Plotly.js for seamless zooming and panning through millions of data points.
+* **Dynamic Versus Mode:** Overlay current telemetry against previous trials using an intuitive range-selection slider for instant regression testing.
+* **Regex-Powered Filtering:** Navigate high-dimensional datasets using a "folder-style" signal selector with suffix and regex support.
+* **State Persistence & Sharing:** Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
+* **Pro-Grade Tooling:** Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
+* **Keyboard-First Design:** Full hotkey support for warping between trials and managing views without leaving the home row.
+
+### Reloaded
+
+A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
+
+* **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
+* **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
+* **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, or trigger "generation-only" mode for rapid MJCF debugging.
+* **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
+
+> [!TIP]
+> ```bash
+> mujoco-mojo reloaded \
+>     --generator monte_carlo_test.Experiment.generate \
+>     --runtime monte_carlo_test.runtime \
+> ```
 
 ---
 

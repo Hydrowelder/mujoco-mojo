@@ -13,7 +13,14 @@ watch:
 
 nav:
   - Home: index.md
-  - User Guide: user-guide.md
+  - User Guide:
+      - user-guide.md
+      - Getting Started: user-guides/getting-started.md
+      - Generate Script: user-guides/generate-script.md
+      - Runtime Script: user-guides/runtime-script.md
+      - Reloaded: user-guides/reloaded.md
+      - Running Jobs: user-guides/running-jobs.md
+      - Dojo: user-guides/dojo.md
   # - Code Reference: reference/
   - About: about.md
 
@@ -139,7 +146,6 @@ markdown_extensions:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - tables
-  - footnotes
   - pymdownx.critic
   - pymdownx.caret
   - pymdownx.keys

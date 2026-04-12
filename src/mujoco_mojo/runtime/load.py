@@ -527,7 +527,7 @@ class VectorTorque(BodyReactionForce):
         return np.zeros(3), self._get_world_vectors(mj_model, mj_data, t_raw)
 
 
-class GeneralForce(VectorForce, VectorTorque):
+class GeneralLoad(VectorForce, VectorTorque):
     """A 6-DOF force/torque applier."""
 
     def calculate(

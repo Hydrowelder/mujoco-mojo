@@ -38,6 +38,8 @@ hide:
   </a>
 </p>
 
+---
+
 A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
@@ -125,3 +127,19 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 * State Persistence & Sharing: Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
 * Pro-Grade Tooling: Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
 * Keyboard-First Design: Full hotkey support for warping between trials and managing views without leaving the home row.
+
+### Reloaded
+
+A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
+
+* **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
+* **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
+* **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, or trigger "generation-only" mode for rapid MJCF debugging.
+* **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
+
+    ??? example
+        ```bash
+        mujoco-mojo reloaded \
+            --generator monte_carlo_test.Experiment.generate \
+            --runtime monte_carlo_test.runtime \
+        ```
