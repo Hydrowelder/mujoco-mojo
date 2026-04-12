@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 import mujoco
+import numpy as np
 import typer
 from numpydantic import NDArray
 from rich.console import Console
@@ -14,9 +15,11 @@ from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mojo_model import MojoModel
+from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValueDict
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
+from mujoco_mojo.utils.visuals import resolve_arrow_coords
 
 from .cli import UserInterface
 
@@ -333,6 +336,7 @@ class MojoReloaded:
                 )
 
             except Exception as e:
+                logger.exception(e)
                 console.print(
                     f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
                 )
@@ -342,7 +346,40 @@ class MojoReloaded:
 
         with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
 
-            def sync(m: mujoco.MjModel, d: mujoco.MjData):
+            def sync(m: mujoco.MjModel, d: mujoco.MjData, arrows: list[ArrowConfig]):
+                assert viewer.user_scn
+                viewer.user_scn.ngeom = 0
+
+                for arrow in arrows:
+                    if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom:
+                        break
+
+                    geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
+                    mujoco.mjv_initGeom(
+                        geom=geom,
+                        type=mujoco.mjtGeom.mjGEOM_ARROW,
+                        size=np.zeros(3),
+                        pos=np.zeros(3),
+                        mat=np.zeros(9),
+                        rgba=np.asarray(arrow["color"], dtype=np.float32),
+                    )
+
+                    start, end, width = resolve_arrow_coords(
+                        mj_model=mj_model,
+                        pos=arrow["pos"],
+                        vec=arrow["vec"],
+                        is_torque=arrow["is_torque"],
+                    )
+
+                    mujoco.mjv_connector(
+                        geom=geom,
+                        type=mujoco.mjtGeom.mjGEOM_ARROW,
+                        width=width,
+                        from_=start,
+                        to=end,
+                    )
+                    geom.rgba = arrow["color"]
+                    viewer.user_scn.ngeom += 1
                 viewer.sync()
 
             def reload_handler(m: mujoco.MjModel, d: mujoco.MjData):
@@ -353,7 +390,9 @@ class MojoReloaded:
 
             reload_handler(mj_model, mj_data)
 
-            self._sync_hook = lambda mj_model, mj_data: sync(mj_model, mj_data)
+            self._sync_hook = lambda mj_model, mj_data, arrows: sync(
+                mj_model, mj_data, arrows
+            )
             self._interactive_loop(
                 lambda mj_model, mj_data: reload_handler(mj_model, mj_data),
                 is_running_check=viewer.is_running,
@@ -417,7 +456,7 @@ class MojoReloaded:
         scene.create_visualization_gui()
         scene.create_scene_gui()
 
-        def sync(m: mujoco.MjModel, d: mujoco.MjData):
+        def sync(m: mujoco.MjModel, d: mujoco.MjData, arrows: list[ArrowConfig]):
             scene.update_from_mjdata(d)
 
         def update_scene(m: mujoco.MjModel, d: mujoco.MjData):
@@ -429,7 +468,9 @@ class MojoReloaded:
 
         _print_connection_panel()
 
-        self._sync_hook = lambda mj_model, mj_data: sync(mj_model, mj_data)
+        self._sync_hook = lambda mj_model, mj_data, arrows: sync(
+            mj_model, mj_data, arrows
+        )
         self._interactive_loop(
             lambda mj_model, mj_data: update_scene(mj_model, mj_data), lambda: True
         )
