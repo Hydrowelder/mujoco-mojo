@@ -17,13 +17,13 @@ hide:
 
 <p align="center">
   <a href="https://pypi.org/project/mujoco-mojo/" class="badge-link">
-    <img src="https://img.shields.io/pypi/v/mujoco-mojo.svg" alt="PyPI version">
+    <img src="https://img.shields.io/pypi/v/mujoco-mojo.svg?cacheSeconds=300" alt="PyPI version">
   </a>
   <a href="https://pypi.org/project/mujoco-mojo/" class="badge-link">
-    <img src="https://img.shields.io/pypi/pyversions/mujoco-mojo.svg" alt="Python versions">
+    <img src="https://img.shields.io/pypi/pyversions/mujoco-mojo.svg?cacheSeconds=86400" alt="Python versions">
   </a>
   <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml" class="badge-link">
-    <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg" alt="Tests & Release Status">
+    <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg?branch=master" alt="Tests & Release Status">
   </a>
   <a href="https://docs.pydantic.dev/latest/" class="badge-link">
     <img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2">
@@ -35,7 +35,7 @@ hide:
     <img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Documentation">
   </a>
   <a href="https://pypistats.org/packages/mujoco-mojo" class="badge-link">
-    <img src="https://img.shields.io/pypi/dm/mujoco-mojo.svg" alt="Downloads">
+    <img src="https://img.shields.io/pypi/dm/mujoco-mojo.svg?cacheSeconds=86400" alt="Downloads">
   </a>
 </p>
 
