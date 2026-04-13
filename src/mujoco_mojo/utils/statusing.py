@@ -488,13 +488,13 @@ class JobStatus(MojoBaseModel):
             "Successes": (
                 f"{self.n_success} ({self.success_rate:.1%}) "
                 f'<progress value="{self.n_success}" max="{self.n_done}" '
-                f'style="accent-color: #22C55E;">'
+                f'style="accent-color: #10b981;">'
                 f"{self.n_success}</progress>"
             ),
             "Failures": (
                 f"{self.n_failed} ({self.failure_rate:.1%}) "
                 f'<progress value="{self.n_failed}" max="{self.n_done}" '
-                f'style="accent-color: #EF4444;">'
+                f'style="accent-color: #f43f5e;">'
                 f"{self.n_failed}</progress>"
             ),
             "Generator": _parse_func(*self.generator),
@@ -531,11 +531,11 @@ class JobStatus(MojoBaseModel):
     @property
     def _failed_runs_md(self) -> str:
         if not self.failed_trial_nums:
-            return "## Failed Trials:\n✅ **No failures detected.** 🎉"
+            return "## Failed Trials\n✅ **No failures detected.** 🎉"
 
         # Using a list with bullet points for clean Markdown rendering
         nums = [f"`{tn:{self.padding_style}}`" for tn in sorted(self.failed_trial_nums)]
-        return "## ❌ Failed Trials:\n* " + "\n* ".join(nums)
+        return "## ❌ Failed Trials\n* " + "\n* ".join(nums)
 
     def generate_report(
         self,
@@ -559,15 +559,15 @@ class JobStatus(MojoBaseModel):
 {disclaimer}
 ---
 
-## Metrics:
+## Metrics
 
-> Progress: **{self.progress:.1%}** <progress value="{self.progress}" max="1">{self.progress:.1%}</progress>
+> Progress **{self.progress:.1%}** <progress value="{self.progress}" max="1" style="accent-color: #06b6d4;">{self.progress:.1%}</progress>
 
 {self._metrics_series.to_markdown(index=False)}
 
 ---
 
-## Run Times:
+## Run Times
 {self._run_time_series().to_markdown(index=False)}
 
 ---

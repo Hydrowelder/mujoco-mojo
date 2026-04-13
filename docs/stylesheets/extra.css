@@ -19,6 +19,10 @@ a.badge-link::after {
     content: none !important;
 }
 
+a.badge-link {
+    text-decoration: none;
+}
+
 /* ----------------------------------------------------------
    1. THEME COLOR SYNC (Dashboard Palettes)
    ---------------------------------------------------------- */
@@ -85,10 +89,6 @@ pre {
    3. ADAPTIVE LOGO & HOVER EFFECTS
    ---------------------------------------------------------- */
 
-[data-md-color-scheme="slate"] .md-header__button.md-logo img {
-    content: url("../assets/dark-logo.svg");
-}
-
 .md-header__button.md-logo img {
     height: 2rem;
     width: auto;
@@ -153,24 +153,38 @@ pre {
 }
 
 
-/* Center the splash and give it some breathing room */
-.mojo-splash {
-    margin: 2rem 0 3rem 0;
+/* Ensure the figure doesn't collapse or overlap */
+.mojo-splash,
+.fade-in {
+    display: block;
+    width: 100%;
+    margin: 2rem 0;
+    text-align: center;
+    overflow: visible;
 }
 
-/* Splash Hover Effect - Matches your brand growth */
-.mojo-splash img {
-    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* 2. Target the IMAGE for animation, transition, and height */
+.mojo-splash img,
+.fade-in img {
     height: 10.0em;
+    width: auto;
+    display: block;
+    margin: 0 auto;
+
+    /* Animation */
+    opacity: 0;
+    animation-name: mojoFadeIn;
+    animation-duration: 2s;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: forwards;
+
+    /* Transition - MUST be on the img for the scale to work */
+    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.mojo-splash img:hover {
+.mojo-splash img:hover,
+.fade-in img:hover {
     transform: scale(1.05);
-}
-
-/* Dark Mode Swap for Splash */
-[data-md-color-scheme="slate"] .mojo-splash img {
-    content: url("../assets/dark-hero-logo.svg");
 }
 
 /* Optional: Add a fade-in animation for that "Splash" feel */
@@ -186,16 +200,9 @@ pre {
     }
 }
 
-.mojo-splash {
-    opacity: 0;
-    /* Ensures the element is hidden initially, before the animation starts */
-    animation-name: mojoFadeIn;
-    animation-duration: 2s;
-    /* Adjust the duration as needed (e.g., 1s, 0.5s) */
-    animation-timing-function: ease-in-out;
-    /* Optional: controls the speed curve */
-    animation-fill-mode: forwards;
-    /* Ensures the element remains visible after the animation finishes */
+.fade-in {
+    width: 50%;
+    height: auto;
 }
 
 /* --- Mojo Auto-Highlighting --- */

@@ -10,9 +10,10 @@ hide:
   }
 </style>
 
-<p align="center" class="mojo-splash">
-  <img src="assets/light-hero-logo.svg" alt="MuJoCo Mojo Logo">
-</p>
+<figure align="center" class="mojo-splash">
+    <img src="/assets/light-hero-logo.svg#only-light" alt="MuJoCo Mojo Logo">
+    <img src="/assets/dark-hero-logo.svg#only-dark" alt="MuJoCo Mojo Logo">
+</figure>
 
 <p align="center">
   <a href="https://pypi.org/project/mujoco-mojo/" class="badge-link">
@@ -56,13 +57,13 @@ Install `mujoco-mojo` in your project using the following:
 
 === "`uv` (recommended)"
 
-    ```bash
+    ```bash  linenums="0"
     uv add mujoco-mojo
     ```
 
 === "`pip`"
 
-    ```bash
+    ```bash  linenums="0"
     pip install mujoco-mojo
     ```
 
@@ -93,7 +94,7 @@ Install `mujoco-mojo` in your project using the following:
 * Flexible command line utilities to run jobs
 
     ??? example
-        ```bash
+        ```bash  linenums="0"
         mujoco-mojo run monte-carlo \
             --generator monte_carlo_test.Experiment.generate \
             --runtime monte_carlo_test.runtime \
@@ -138,7 +139,7 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 * **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
 
     ??? example
-        ```bash
+        ```bash  linenums="0"
         mujoco-mojo reloaded \
             --generator monte_carlo_test.Experiment.generate \
             --runtime monte_carlo_test.runtime \
