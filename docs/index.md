@@ -10,9 +10,11 @@ hide:
   }
 </style>
 
+# Home
+
 <figure align="center" class="mojo-splash">
-    <img src="/assets/light-hero-logo.svg#only-light" alt="MuJoCo Mojo Logo">
-    <img src="/assets/dark-hero-logo.svg#only-dark" alt="MuJoCo Mojo Logo">
+    <img src="./assets/light-hero-logo.svg#only-light" alt="MuJoCo Mojo Logo">
+    <img src="./assets/dark-hero-logo.svg#only-dark" alt="MuJoCo Mojo Logo">
 </figure>
 
 <p align="center">
