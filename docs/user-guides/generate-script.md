@@ -3,7 +3,13 @@
 !!! abstract
     The **Generate Script** is the heartbeat of your simulation pipeline. Its job is to programmatically assemble the MuJoCo MJCF model and perform all stochastic (random) draws. By the time this function returns, the simulation should be "frozen" in its initial state, ready for the physics engine to take over.
 
-    You may want to take a look at [the guide](reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
+    <figure align="center" class="fade-in">
+        <img src="/assets/user-guides/generate-result.jpg" alt="Generate final result" style="width: 50%; height: auto;">
+        <figcaption>The visual result of the completed generator script: two translucent boxes with freejoints, spring attachment sites (red and blue spheres), and a central tracking site (fuchsia sphere), all set against a starry skybox.</figcaption>
+    </figure>
+
+!!! info "Suggested Reading: Mojo Reloaded"
+    After a brief skim of this guide, you may want to take a look at [the guide](reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -13,7 +19,7 @@ The generate script is built around the "MojoGenerate" protocol. This function p
 
 It also **must** return a `mojo.MojoModel`.
 
-???+ quote "MojoGenerate Handle"
+???+ example "Example: MojoGenerate Handle"
     ```python
     --8<-- "docs/user-guides/example.py:generate-handle"
     ```
@@ -31,7 +37,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
     Handoff objects are also not serialized when running, so it is not recommended to rely on this for future recreation of models.
 
-??? quote "Example Handoff Class"
+??? example "Example: Handoff Class"
     ```python
     --8<-- "docs/user-guides/example.py:handoff"
     ```
@@ -52,7 +58,7 @@ Notice in the following code how enumerations such as `mojo.TextureType.D2` and 
 ???+ tip "Tip: Color Utilities"
     Mojo provides some helpful utilities like `mojo.utils.Color`. This class provides a ton of helpful shortcuts for [Tailwind CSS](https://tailwindcss.com/docs/colors) colors. This makes it really easy to customize the appearance of your model.
 
-???+ quote "Example Assets Definition"
+???+ example "Example: Assets Definition"
     ```python
     --8<-- "docs/user-guides/example.py:assets"
     ```
@@ -70,7 +76,7 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 ???+ note "Note: Pose"
     Mojo provides many ways to define a position and orientation ([pose](https://en.wikipedia.org/wiki/Pose_(computer_vision))). Shown below is a pose definition using `mojo.PoseQuat`. Other orientation options are using an axis angle, Euler angle sequence, X and Y axes, or a Z axis.
 
-???+ quote "Example Worldbody Definition"
+???+ example "Example: Worldbody Definition"
     ```python
     --8<-- "docs/user-guides/example.py:worldbody"
     ```
@@ -88,7 +94,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 ???+ note "Note: Squeezing `NamedValues`"
     The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.sqeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)
 
-???+ quote "Example Sampling"
+???+ example "Example: Sampling"
     ```python
     --8<-- "docs/user-guides/example.py:sampling"
     ```
@@ -97,7 +103,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 Lets tie thing up! At the end of your `generate` function, you attach your `Handoff` data to the `mojo_model._user_data` attribute. This makes it accessible to the `runtime` function later.
 
-???+ quote "Example End of Function"
+???+ example "Example: End of Function"
     ```python
     --8<-- "docs/user-guides/example.py:generate-finalizing"
     ```
@@ -109,7 +115,7 @@ Lets tie thing up! At the end of your `generate` function, you attach your `Hand
 
     Now that we have completed building the kinematic tree, defining a user data to handoff, and an introduction to using distribution sampling, we now move on to defining the [runtime behavior](runtime-script.md) of the physics engine.
 
-??? quote "Full Generate Script"
+??? example "Example: Full Generate Script"
     ```python
     --8<-- "docs/user-guides/example.py:generate"
     ```

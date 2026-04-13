@@ -1,9 +1,17 @@
 # Runtime Script
 
 !!! abstract
-    While the [Generate script](generate-script.md) builds the world, the **Runtime Script** defines its execution. This is where you apply forces, execute control logic, and decide what data is worth saving.
+    While the [Generate Script](generate-script.md) builds the world, the **Runtime Script** defines its execution. This is where you apply forces, execute control logic, and decide what data is worth saving.
 
     The beauty of Mojo is that you don't need to manage the low-level MuJoCo physics state manually; the `RuntimeManager` handles the heavy lifting, ensuring your simulation is stable and your telemetry is perfectly synchronized.
+
+    <figure align="center" class="fade-in">
+        <img src="/assets/user-guides/runtime-anim.gif" alt="Runtime final result" style="width: 50%; height: auto;">
+        <figcaption>The visual result of the completed runtime script: Two spring forces act between the sphere site pairs defined in the generate step. The action-reaction forces are displayed. The boxes translate away from one another while rotating due to mismatched the unequal spring force.</figcaption>
+    </figure>
+
+!!! info "Suggested Reading:  Mojo Reloaded"
+    After a brief skim of this guide, you may want to take a look at [the guide](reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -11,7 +19,7 @@
 
 Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `_user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
 
-???+ quote "MojoGenerate Handle"
+???+ example "Example: MojoGenerate Handle"
     ```python
     --8<-- "docs/user-guides/example.py:runtime-handle"
     ```
@@ -28,7 +36,7 @@ This is where the `Handoff` pattern pays off! Since we packed our site reference
 
 Mojo provides high-level force abstractions like `PointToPointForce`, which automatically handles the math for things like compression springs or hydraulic actuators. When providing reaction sites located on other bodies, the runtime manager also calculates the correct action-reaction forces to apply.
 
-???+ quote "Applying Custom Forces"
+???+ example "Example: Applying Custom Forces"
     ```python
     --8<-- "docs/user-guides/example.py:forces"
     ```
@@ -107,7 +115,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     Custom requests can also be made using the `ResultsManager.post()` method!
 
-???+ quote "Example Telemetry Requests"
+???+ example "Example: Telemetry Requests"
     ```python
     --8<-- "docs/user-guides/example.py:requests"
     ```
@@ -121,7 +129,7 @@ If you need visual proof of your simulation (or you just need something for a sl
 ???+ tip "Tip: Load Debugging"
     The `VideoRecorder` can automatically overlay custom force vectors (like your spring forces) directly onto the video frames, making it an invaluable tool for debugging.
 
-???+ quote "Example Video Setup"
+???+ example "Example: Video Setup"
     ```python
     --8<-- "docs/user-guides/example.py:video"
     ```
@@ -134,7 +142,7 @@ The heart of the script is the humble `while` or `for` loop. Because `rm.step()`
 
 When the context manager for `rm` is over, all your requested telemetry and videos will be recorded!
 
-???+ quote "Example Stepping"
+???+ example "Example: Stepping"
     ```python
     --8<-- "docs/user-guides/example.py:stepping"
     ```
@@ -146,7 +154,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
     With your **Generator** and **Runtime** scripts ready, the next step is to learn how to scale these up into massive Monte Carlo jobs using the [Job Runner](running-jobs.md).
 
-??? quote "Full Runtime Script"
+??? example "Example:Full Runtime Script"
     ```python
     --8<-- "docs/user-guides/example.py:runtime"
     ```

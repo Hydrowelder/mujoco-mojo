@@ -12,14 +12,10 @@ import mujoco_mojo.runtime as rt
 logger = mojo.utils.get_logger(__name__)
 # --8<-- [end:imports]
 
-# --8<-- [start:constants]
-FIXED_CAMERA_NAME = mojo.CameraName("static")
-BOX_CAMERA_NAME = mojo.CameraName("box_camera")
-TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
-# --8<-- [end:constants]
-
-
 # --8<-- [start:handoff]
+FIXED_CAMERA_NAME = mojo.CameraName("static")
+
+
 @dataclass
 class Handoff:
     """
@@ -139,7 +135,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ],
         ),
     ]
-    # --8<-- [end:assets]
 
     # Handle skybox if in nominal mode
     if mojo_model.is_nominal:
@@ -159,6 +154,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 ]
             ),
         )
+    # --8<-- [end:assets]
 
     # --8<-- [start:worldbody]
     mojo_model.mjcf.worldbody = mojo.WorldBody(
@@ -179,6 +175,23 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
     mojo_model.mjcf.options = [
         mojo.Option(timestep=0.001, gravity=np.asarray((0, 0, 0)))
+    ]
+    mojo_model.mjcf.visuals = [
+        mojo.Visual(
+            map=mojo.VisualMap(force=4),
+            scale=mojo.VisualScale(forcewidth=0.1),
+        )
+    ]
+
+    mojo_model.mjcf.worldbody.cameras = [
+        mojo.Camera(
+            name=FIXED_CAMERA_NAME,
+            pose=mojo.PoseEuler(
+                pos=np.asarray((0, -10, 0)),
+                euler=np.asarray((90, 0, 0)),
+            ),
+            fovy=30,
+        ),
     ]
 
     # --8<-- [start:bodies]
@@ -258,7 +271,7 @@ def runtime(
         # --8<-- [start:video]
         if mojo_model.is_nominal:  # Only record the first trial
             rt.VideoRecorder(
-                path=Path("fixed_camera.mp4"),
+                path=Path("runtime-anim.gif"),
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
             ).setup(mj_model).register_to_rm(rm)
@@ -299,7 +312,7 @@ if __name__ == "__main__":
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
+        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
     )
 
     runner.run(resume=False, clean_workdir=True)

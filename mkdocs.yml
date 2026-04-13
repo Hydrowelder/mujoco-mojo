@@ -14,13 +14,18 @@ watch:
 nav:
   - Home: index.md
   - User Guide:
-      - user-guide.md
+      # - user-guide.md
       - Getting Started: user-guides/getting-started.md
       - Generate Script: user-guides/generate-script.md
       - Runtime Script: user-guides/runtime-script.md
+      - Running Jobs:
+          - user-guides/running-jobs.md
+          - Example Report: user-guides/MOJO_RUNTIME_REPORT.md
+      - Dojo Dashboard:
+          - user-guides/dojo.md
+          - Monitor: user-guides/monitor.md
+          - Mosaic: user-guides/mosaic.md
       - Reloaded: user-guides/reloaded.md
-      - Running Jobs: user-guides/running-jobs.md
-      - Dojo: user-guides/dojo.md
   # - Code Reference: reference/
   - About: about.md
 
@@ -131,6 +136,10 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
       auto_title: true
+      # auto_title_map:
+      #   "Python": ":simple-python: Python"
+      #   "Bash": "`:material-bash:` Bash"
+      linenums: true
   - pymdownx.inlinehilite
   - pymdownx.details
   - pymdownx.snippets

@@ -75,6 +75,11 @@ class RuntimeManager:
         """
         Calculates forces, integratess physics, and handles telemetry.
         """
+        # clear buffers for next timestep
+        mj_data.xfrc_applied.fill(0)  # external forces
+        mj_data.qfrc_applied.fill(0)  # user-defined forces
+        mj_data.ctrl.fill(0)  # actuator forces
+
         # sync state variables and clear render buffer
         mujoco.mj_forward(mj_model, mj_data)
 
@@ -132,8 +137,3 @@ class RuntimeManager:
             sleep_time = target_wall_elapsed - actual_wall_elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
-
-        # clear buffers for next timestep
-        mj_data.xfrc_applied.fill(0)  # external forces
-        mj_data.qfrc_applied.fill(0)  # user-defined forces
-        mj_data.ctrl.fill(0)  # actuator forces
