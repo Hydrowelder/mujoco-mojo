@@ -6,8 +6,8 @@
 ---
 
 <figure align="center">
-    <img src="/assets/user-guides/light-mosaic-view.jpg#only-light" alt="Mosaic dashboard view" style="width: 85%; height: auto;">
-    <img src="/assets/user-guides/dark-mosaic-view.jpg#only-dark" alt="Mosaic dashboard view" style="width: 85%; height: auto;">
+    <img src="../../assets/user-guides/light-mosaic-view.jpg#only-light" alt="Mosaic dashboard view" style="width: 85%; height: auto;">
+    <img src="../../assets/user-guides/dark-mosaic-view.jpg#only-dark" alt="Mosaic dashboard view" style="width: 85%; height: auto;">
     <figcaption>A preview of the <b>Mosaic</b> page showing run results for <code>trial_00</code>. Annotations indicate key moments in the simulations. Two telemetry signals per trial are shown with 9 additional trials displayed for comparison.</figcaption>
 </figure>
 
@@ -31,8 +31,8 @@ Trial Navigation
     The dropdowns aren't just lists; they are Regex-aware. You can use the segment buttons (like quat, ctrl, or sens) to quickly filter down hundreds of signals to just the ones you need.
 
 <figure align="center">
-    <img src="/assets/user-guides/light-selector-bar.jpg#only-light" alt="Selector" style="width: 85%; height: auto;">
-    <img src="/assets/user-guides/dark-selector-bar.jpg#only-dark" alt="Selector bar" style="width: 85%; height: auto;">
+    <img src="../../assets/user-guides/light-selector-bar.jpg#only-light" alt="Selector" style="width: 85%; height: auto;">
+    <img src="../../assets/user-guides/dark-selector-bar.jpg#only-dark" alt="Selector bar" style="width: 85%; height: auto;">
     <figcaption>The dropdown for <b>Y-Axes</b> is active with the Bodies and box1 quick filters active. Two telemetry signals are selected showing the rotational and total kinetic energy.</figcaption>
 </figure>
 
@@ -51,8 +51,8 @@ This button compacts your current plot view (trial, selected data, plot appearan
 Adjust the visual style. Switch between Lines, Markers, or both. Change interpolation (Spline vs. Linear) or toggle Logarithmic scales for high-dynamic-range data.
 
 <figure align="center">
-    <img src="/assets/user-guides/light-plot-editor.jpg#only-light" alt="Plot editor menu" style="width: 40%; height: auto;">
-    <img src="/assets/user-guides/dark-plot-editor.jpg#only-dark" alt="Plot editor menu" style="width: 40%; height: auto;">
+    <img src="../../assets/user-guides/light-plot-editor.jpg#only-light" alt="Plot editor menu" style="width: 40%; height: auto;">
+    <img src="../../assets/user-guides/dark-plot-editor.jpg#only-dark" alt="Plot editor menu" style="width: 40%; height: auto;">
     <figcaption>The menu for <b>plot editor</b> is active. It shows the many dropdown options available to configure the layout of the plot area as well as the interaction behavior when hover over data.</figcaption>
 </figure>
 
@@ -64,8 +64,8 @@ Click anywhere on the plot to drop a persistent note. These are saved into the J
     You can click on a note in the editor to "focus" on the note!
 
 <figure align="center">
-    <img src="/assets/user-guides/light-notes-editor.jpg#only-light" alt="Notes editor menu" style="width: 60%; height: auto;">
-    <img src="/assets/user-guides/dark-notes-editor.jpg#only-dark" alt="Notes editor menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/light-notes-editor.jpg#only-light" alt="Notes editor menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/dark-notes-editor.jpg#only-dark" alt="Notes editor menu" style="width: 60%; height: auto;">
     <figcaption>The menu for <b>notes editor</b> is active and in editing mode. A note is being edited. The plot area shows the two notes shown in the menu.</figcaption>
 </figure>
 
@@ -78,8 +78,8 @@ Add various shapes to the plot. After selecting an option in the menu, your mous
 * **Rect:** Draws a rectangle on the plot. The abscissa and ordinate of the mouse determines one of the corners of the rectangle. Likewise, the second click determines the other corner.
 
 <figure align="center">
-    <img src="/assets/user-guides/light-shapes-editor.jpg#only-light" alt="Shapes editor menu" style="width: 60%; height: auto;">
-    <img src="/assets/user-guides/dark-shapes-editor.jpg#only-dark" alt="Shapes editor menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/light-shapes-editor.jpg#only-light" alt="Shapes editor menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/dark-shapes-editor.jpg#only-dark" alt="Shapes editor menu" style="width: 60%; height: auto;">
     <figcaption>The menu for <b>shapes editor</b> is active and in editing mode. A shape's label and color is being edited. The plot area shows a vertical (yellow) and horizontal (red) line and a rectangle (purple).</figcaption>
 </figure>
 
@@ -96,8 +96,8 @@ Dojo provides a few basic export options to capture an image of the plot or save
 * **Config JSON:** The current page configuration can be downloaded as a JSON so it can be reloaded at a later time.
 
 <figure align="center">
-    <img src="/assets/user-guides/light-export-options.jpg#only-light" alt="Export options menu" style="width: 60%; height: auto;">
-    <img src="/assets/user-guides/dark-export-options.jpg#only-dark" alt="Export options menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/light-export-options.jpg#only-light" alt="Export options menu" style="width: 60%; height: auto;">
+    <img src="../../assets/user-guides/dark-export-options.jpg#only-dark" alt="Export options menu" style="width: 60%; height: auto;">
     <figcaption>The menu for <b>export options</b> is active. </figcaption>
 </figure>
 
