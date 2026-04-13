@@ -24,6 +24,9 @@
   <a href="https://hydrowelder.github.io/mujoco-mojo/" class="badge-link" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Documentation">
   </a>
+  <a href="https://github.com/Hydrowelder/mujoco-mojo/discussions" class="badge-link" style="text-decoration:none;">
+    <img src="https://img.shields.io/badge/discussions-GitHub-blue?logo=github&logoColor=white" alt="GitHub Discussions">
+  </a>
   <a href="https://pypistats.org/packages/mujoco-mojo" class="badge-link" style="text-decoration:none;">
     <img src="https://img.shields.io/pypi/dm/mujoco-mojo.svg?cacheSeconds=86400" alt="Downloads">
   </a>

@@ -36,12 +36,18 @@ theme:
   font: false
 
   palette:
+    - media: "(prefers-color-scheme)"
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/lightbulb-auto
+        name: "Switch to light mode"
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: black
       accent: cyan
       toggle:
-        icon: material/weather-sunny
+        icon: material/lightbulb-on
         name: Switch to dark mode
 
     - media: "(prefers-color-scheme: dark)"
@@ -49,8 +55,8 @@ theme:
       primary: custom
       accent: cyan
       toggle:
-        icon: material/weather-night
-        name: Switch to light mode
+        icon: material/lightbulb-outline
+        name: Switch to system preference
 
   features:
     - navigation.tabs
