@@ -23,21 +23,7 @@ jobs:
           enable-cache: true
       - name: Install Python 3.13
         run: uv python install 3.13
-      - name: Install Dependencies
-        run: |
-          uv pip install --system \
-            mkdocs-glightbox \
-            mkdocs-literate-nav \
-            mkdocs-material \
-            mkdocs-open-in-new-tab \
-            mkdocs-section-index \
-            mkdocstrings \
-            mkdocstrings-python \
-            pymdown-extensions \
-            tabulate \
-            griffe-pydantic \
-            zensical
-      - run: zensical build --clean
+      - run: uv run --python 3.13 --group dev zensical build --clean
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site
