@@ -737,7 +737,8 @@ def run_dojo(
             subtitle=f"Workers: {n_proc}",
         )
     )
-    uvicorn.run(dojo_app, host=host, port=port, log_level="error")
+
+    uvicorn.run(dojo_app, host=host, port=port, log_level="critical")
 
 
 @run_app.command(name="optimize")
