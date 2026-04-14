@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import Angle, EulerSeq, Vec3, Vec4, Vec6
+from mujoco_mojo.typing import Angle, EulerSeq, Mat3, Vec3, Vec4, Vec6
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
@@ -195,7 +195,7 @@ class OrientationBase(XMLModel, ABC):
 
     @classmethod
     @abstractmethod
-    def from_matrix(cls, matrix: np.ndarray) -> Self:
+    def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs the orientation object from a 3x3 matrix."""
         pass
 
@@ -217,7 +217,7 @@ class Quat(OrientationBase):
         return np.array_equal(self.quat, other.quat)
 
     @classmethod
-    def from_matrix(cls, matrix: np.ndarray) -> Self:
+    def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs the Quat object from a 3x3 matrix."""
         rot = R.from_matrix(matrix)
         q = rot.as_quat()
@@ -329,7 +329,7 @@ class AxisAngle(OrientationBase):
         return PoseAxisAngle(pos=np.asarray(pos, dtype=float), **self.model_dump())
 
     @classmethod
-    def from_matrix(cls, matrix: np.ndarray) -> Self:
+    def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs the AxisAngle from a 3x3 matrix."""
         rot = R.from_matrix(matrix)
         rotvec = rot.as_rotvec()
@@ -416,7 +416,7 @@ class Euler(OrientationBase):
         return self.model_copy(update={"euler": new_euler, "angle": angle})
 
     @classmethod
-    def from_matrix(cls, matrix: np.ndarray) -> Self:
+    def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs Euler angles from a 3x3 matrix."""
         rot = R.from_matrix(matrix)
         is_deg = DEFAULT_ANGLE == Angle.DEGREE

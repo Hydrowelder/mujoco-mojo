@@ -12,7 +12,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
-from mujoco_mojo.typing import RequestCategory
+from mujoco_mojo.typing import RequestCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
@@ -55,10 +55,10 @@ class Load(MojoBaseModel, ABC):
     _user_data: Any = PrivateAttr(default=None)
     """User defined information for the to use."""
 
-    _last_f: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_f: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
-    _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_t: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
@@ -72,8 +72,8 @@ class Load(MojoBaseModel, ABC):
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        local: np.ndarray,
-    ) -> np.ndarray:
+        local: Vec3,
+    ) -> Vec3:
         """Rotates local force/torque into world coordinates based on relative_to."""
         if self.rel_to_site is None:
             return local
