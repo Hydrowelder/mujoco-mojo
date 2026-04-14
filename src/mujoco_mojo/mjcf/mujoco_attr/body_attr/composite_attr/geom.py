@@ -166,7 +166,7 @@ class CompositeSDF(GeomSDF):
     attributes = _composite_geom_attr
 
 
-CompositeGeom = Annotated[
+AnyCompositeGeom = Annotated[
     CompositePlane
     | CompositeHField
     | CompositeSphere

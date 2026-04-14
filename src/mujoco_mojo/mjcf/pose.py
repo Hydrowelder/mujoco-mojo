@@ -18,7 +18,7 @@ from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import Angle, EulerSeq, Vec3
 
 __all__ = [
-    "Pose",
+    "AnyPose",
     "PoseAxisAngle",
     "PoseEuler",
     "PoseQuat",
@@ -63,6 +63,10 @@ class PoseBase(Pos, OrientationBase):
     def expressed_in(self, target: PoseBase) -> PoseQuat:
         """Returns this pose expressed relative to a target frame."""
         return target.inv() * self
+
+    @property
+    def as_pos(self) -> Pos:
+        return Pos(pos=self.pos)
 
     @classmethod
     def look_at(
@@ -143,7 +147,7 @@ class PoseZAxis(PoseBase, ZAxis):
 
 
 # Unified type for MJCF elements that support any orientation type
-Pose = Annotated[
+AnyPose = Annotated[
     PoseQuat | PoseAxisAngle | PoseEuler | PoseXYAxes | PoseZAxis,
     Field(discriminator="type"),
 ]

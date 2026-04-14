@@ -23,10 +23,10 @@ class Handoff:
     Retains MJCF definitions for use in the physics loop.
     """
 
-    box1_rot: mojo.Site
+    box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.Site, mojo.Site, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
     ] = field(default_factory=dict)
 
     def define_spring(

@@ -264,24 +264,23 @@ if TYPE_CHECKING:
     type MatN = _VecBase
     """An NxN numeric matrix of arbitrary length."""
 else:
-    type _scalar = float | int
-    Vec2 = Annotated[NDArray[Shape["2"], _scalar], ...]
-    Vec3 = Annotated[NDArray[Shape["3"], _scalar], ...]
-    Vec4 = Annotated[NDArray[Shape["4"], _scalar], ...]
-    Vec5 = Annotated[NDArray[Shape["5"], _scalar], ...]
-    Vec6 = Annotated[NDArray[Shape["6"], _scalar], ...]
-    Vec7 = Annotated[NDArray[Shape["7"], _scalar], ...]
-    Vec9 = Annotated[NDArray[Shape["9"], _scalar], ...]
-    VecN = Annotated[NDArray[Shape["*"], _scalar], ...]  # type: ignore  # noqa: F722
+    Vec2 = Annotated[NDArray[Shape["2"], float | int], ...]
+    Vec3 = Annotated[NDArray[Shape["3"], float | int], ...]
+    Vec4 = Annotated[NDArray[Shape["4"], float | int], ...]
+    Vec5 = Annotated[NDArray[Shape["5"], float | int], ...]
+    Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
+    Vec7 = Annotated[NDArray[Shape["7"], float | int], ...]
+    Vec9 = Annotated[NDArray[Shape["9"], float | int], ...]
+    VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
 
-    Mat2 = Annotated[NDArray[Shape["2", "2"], _scalar], ...]
-    Mat3 = Annotated[NDArray[Shape["3", "3"], _scalar], ...]
-    Mat4 = Annotated[NDArray[Shape["4", "4"], _scalar], ...]
-    Mat5 = Annotated[NDArray[Shape["5", "5"], _scalar], ...]
-    Mat6 = Annotated[NDArray[Shape["6", "6"], _scalar], ...]
-    Mat7 = Annotated[NDArray[Shape["7", "7"], _scalar], ...]
-    Mat9 = Annotated[NDArray[Shape["9", "9"], _scalar], ...]
-    MatN = Annotated[NDArray[Shape["*", "*"], _scalar], ...]  # type: ignore  # noqa: F722
+    Mat2 = Annotated[NDArray[Shape["2, 2"], float | int], ...]
+    Mat3 = Annotated[NDArray[Shape["3, 3"], float | int], ...]
+    Mat4 = Annotated[NDArray[Shape["4, 4"], float | int], ...]
+    Mat5 = Annotated[NDArray[Shape["5, 5"], float | int], ...]
+    Mat6 = Annotated[NDArray[Shape["6, 6"], float | int], ...]
+    Mat7 = Annotated[NDArray[Shape["7, 7"], float | int], ...]
+    Mat9 = Annotated[NDArray[Shape["9, 9"], float | int], ...]
+    MatN = Annotated[NDArray[Shape["*, *"], float | int], ...]  # type: ignore  # noqa: F722
 
 
 def empty_list_field():

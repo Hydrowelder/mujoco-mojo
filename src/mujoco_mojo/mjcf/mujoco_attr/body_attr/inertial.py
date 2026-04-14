@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import numpy as np
 from pydantic import field_validator, model_validator
 
 from mujoco_mojo.mjcf.orientation import (
-    Orientation,
+    AnyOrientation,
     OrientationBase,
     Quat,
 )
-from mujoco_mojo.mjcf.pose import (
-    Pose,
-)
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.stochas import Dist, Distribution, NamedValue
 from mujoco_mojo.typing import EulerSeq, Mat3, Vec3, Vec6
@@ -32,15 +30,19 @@ class Inertial(XMLModel):
     tag = "inertial"
 
     attributes = (
-        "pose",
+        "pos",
+        "orientation",
         "mass",
         "diaginertia",
         "fullinertia",
     )
     __exclusive_groups__ = (("diaginertia", "fullinertia"),)
 
-    pose: Pose
-    """Position and orientation of the inertial frame. The position attribute is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
+    pos: Pos
+    """Position of the inertial frame. It is required even when the inertial properties can be inferred from geoms. This is because the presence of the inertial element itself disables the automatic inference mechanism."""
+
+    orientation: AnyOrientation | None = None
+    """Orientation of the inertial frame."""
 
     mass: float
     """Mass of the body. Negative values are not allowed. MuJoCo requires the inertia matrix in generalized coordinates to be positive-definite, which can sometimes be achieved even if some bodies have zero mass. In general however there is no reason to use massless bodies. Such bodies are often used in other engines to bypass the limitation that joints cannot be combined, or to attach sensors and cameras. In MuJoCo primitive joint types can be combined, and we have sites which are a more efficient attachment mechanism."""
@@ -192,6 +194,11 @@ class Inertial(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
+        if self.fullinertia is not None and self.orientation is not None:
+            msg = "orientation cannot be provided when using 'fullinertia'. The orientation is automatically derived from the full inertia matrix."
+            logger.error(msg)
+            raise ValueError(msg)
+
         M = self.inertia_matrix
 
         # Symmetry sanity check (numerical)
@@ -210,6 +217,13 @@ class Inertial(XMLModel):
 
         return self
 
+    @property
+    def rotation_matrix(self) -> Mat3:
+        """Returns the 3x3 rotation matrix for the inertial frame."""
+        if self.orientation:
+            return self.orientation.as_matrix()
+        return np.eye(3)
+
     def get_body_frame_inertia(self) -> Mat3:
         """
         Calculates the 3x3 inertia matrix expressed in the parent body's frame.
@@ -221,13 +235,13 @@ class Inertial(XMLModel):
 
         """
         # rotate into body frame axes
-        R = self.pose.as_matrix()
+        R = self.rotation_matrix
         I_local = self.inertia_matrix
         I_rot = R @ I_local @ R.T
 
         # parallel axis theorem
         # I_body = I_com + m ([r_skew]^2) -> I_com + m * ( (p.T @ p) * eye(3) - p @ p.T )
-        p = self.pose.pos
+        p = self.pos.pos
         m = self.mass
 
         # cross product matrix
@@ -265,7 +279,8 @@ class Inertial(XMLModel):
 
         return cls(
             mass=mass,
-            pose=Quat.from_matrix(eigvecs).as_pose(pos=pos),
+            pos=Pos(pos=pos),
+            orientation=Quat.from_matrix(eigvecs),
             diaginertia=eigvals,
         )
 
@@ -296,7 +311,7 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         # new CoM
-        p1, p2 = self.pose.pos, other.pose.pos
+        p1, p2 = self.pos.pos, other.pos.pos
         assert isinstance(p1, np.ndarray)
         assert isinstance(p2, np.ndarray)
         pos_total = (m1 * p1 + m2 * p2) / m_total
@@ -335,7 +350,7 @@ class Inertial(XMLModel):
             raise ValueError(msg)
 
         # new CoM
-        p1, p2 = self.pose.pos, other.pose.pos
+        p1, p2 = self.pos.pos, other.pos.pos
         assert isinstance(p1, np.ndarray)
         assert isinstance(p2, np.ndarray)
 
@@ -360,7 +375,7 @@ class Inertial(XMLModel):
         cls,
         mojo_model: MojoModel,
         mass: float | Dist,
-        pos: Vec3 | tuple[float | Dist, float | Dist, float | Dist],
+        pos: Vec3 | tuple[float | Dist, float | Dist, float | Dist] | Pos,
         diaginertia: Vec3
         | tuple[float | Dist, float | Dist, float | Dist]
         | None = None,
@@ -375,7 +390,7 @@ class Inertial(XMLModel):
         ]
         | None = None,
         orientation: tuple[type[OrientationBase], list[float | Dist], EulerSeq | None]
-        | Orientation
+        | AnyOrientation
         | None = None,
         max_retries: int = 10,
     ) -> Inertial:
@@ -401,8 +416,16 @@ class Inertial(XMLModel):
             Inertial: A physically valid randomized Inertial element.
 
         """
+        if isinstance(pos, Pos):
+            pos = pos.pos
+
         if diaginertia is None and fullinertia is None:
             msg = "diaginertia or fullinertia must be defined"
+            logger.exception(msg)
+            raise ValueError(msg)
+
+        if fullinertia is not None and orientation is not None:
+            msg = "fullinertia and orientation cannot simultaneously be defiend."
             logger.exception(msg)
             raise ValueError(msg)
 
@@ -453,40 +476,36 @@ class Inertial(XMLModel):
                 else (None, [])
             )
 
-            resolved_ori = None
+            resolved_ori: AnyOrientation | None = None
             ori_nv = []
 
-            if orientation is None:
-                resolved_ori = Quat()
-            elif isinstance(orientation, OrientationBase):
-                resolved_ori = orientation
-            elif isinstance(orientation, tuple) and len(orientation) == 3:
-                ori_type, ori_data, extra_val = orientation
-                ori_val, ori_nv = _resolve_and_track(ori_data)
+            if f_val is None:
+                if orientation is None:
+                    resolved_ori = Quat()
+                elif isinstance(orientation, OrientationBase):
+                    resolved_ori = cast(AnyOrientation, orientation)
+                elif isinstance(orientation, tuple):
+                    ori_type, ori_data, extra_val = orientation
+                    ori_val, ori_nv = _resolve_and_track(ori_data)
 
-                field_name = ori_type._rotation_attr
-                data_dict: dict[str, Any] = {
-                    "type": ori_type.model_fields["type"].default,
-                    field_name: ori_val,
-                }
+                    data_dict: dict[str, Any] = {
+                        "type": ori_type.model_fields["type"].default,
+                        ori_type._rotation_attr: ori_val,
+                    }
+                    if extra_val:
+                        data_dict["eulerseq"] = extra_val
 
-                # If the 3rd element is an EulerSeq, add it to the dict
-                if extra_val is not None:
-                    assert isinstance(extra_val, EulerSeq)
-                    data_dict["eulerseq"] = extra_val
-
-                resolved_ori = ori_type(**data_dict)
-            else:
-                msg = "orientation must be None, an Orientation object, or (Class, Data) tuple."
-                logger.error(msg)
-                raise TypeError(msg)
+                    resolved_ori = cast(AnyOrientation, ori_type(**data_dict))
+                else:
+                    msg = "orientation must be None, an Orientation object, or (Class, Data) tuple."
+                    logger.error(msg)
+                    raise TypeError(msg)
 
             try:
-                instance_pose = resolved_ori.as_pose(pos=p_val)
-
                 instance = cls(
                     mass=float(m_val),
-                    pose=instance_pose,
+                    pos=Pos(pos=p_val),
+                    orientation=resolved_ori,
                     diaginertia=d_val,
                     fullinertia=f_val,
                 )

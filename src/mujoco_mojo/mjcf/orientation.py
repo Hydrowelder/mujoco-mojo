@@ -14,15 +14,15 @@ from mujoco_mojo.typing import Angle, EulerSeq, Mat3, Vec3, Vec4, Vec6
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from .pose import Pose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
+    from .pose import AnyPose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
     from .position import Pos
 
 logger = get_logger(__name__)
 
 __all__ = [
+    "AnyOrientation",
     "AxisAngle",
     "Euler",
-    "Orientation",
     "OrientationType",
     "Quat",
     "XYAxes",
@@ -189,7 +189,7 @@ class OrientationBase(XMLModel, ABC):
         pass
 
     @abstractmethod
-    def as_pose(self, pos: Vec3 | Pos) -> Pose:
+    def as_pose(self, pos: Vec3 | Pos) -> AnyPose:
         """Returns the orientation with its equal Pose type."""
         pass
 
@@ -531,7 +531,7 @@ class ZAxis(OrientationBase):
         return cls(zaxis=z_axis)
 
 
-Orientation = Annotated[
+AnyOrientation = Annotated[
     Quat | AxisAngle | Euler | XYAxes | ZAxis,
     Field(discriminator="type"),
 ]

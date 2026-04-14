@@ -50,7 +50,7 @@ class EqualityConnectSite(EqualityBase):
     """Name of a site belonging to the second body participating in the constraint. When specified, site1 must also be specified. See the site1 description for more details."""
 
 
-EqualityConnect = Annotated[
+AnyEqualityConnect = Annotated[
     EqualityConnectBody | EqualityConnectSite,
     Field(discriminator="type"),
 ]
