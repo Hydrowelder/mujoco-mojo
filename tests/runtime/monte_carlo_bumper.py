@@ -23,10 +23,10 @@ class Handoff:
     It is here to allow encapsulation for defining MJCF elements, while retaining the simple ability to later use those definitions in the runtime.
     """
 
-    box1_rot: mojo.Site
+    box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.Site, mojo.Site, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
     ] = field(default_factory=dict)
 
     def define_spring(
@@ -279,8 +279,6 @@ def runtime(
     with runtime_manager as rm:
         assert rm.results_manager is not None
         rm.results_manager.record_decimation = 1
-
-        assert rm._sync_hook is not None
 
         if mojo_model.is_nominal and False:
             rt.VideoRecorder(

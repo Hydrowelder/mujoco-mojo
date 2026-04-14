@@ -248,7 +248,10 @@ class Mujoco(XMLModel):
         """Creates a MuJoCo MjModel and MjData from the Mujoco instance."""
         if save_path:
             self.write_xml(save_path)
-            model = mujoco.MjModel.from_xml_path(str(save_path))
+            mj_model = mujoco.MjModel.from_xml_path(str(save_path))
         else:
-            model = self.to_mj_model()
-        return model, mujoco.MjData(model)
+            mj_model = self.to_mj_model()
+
+        mj_data = mujoco.MjData(mj_model)
+        mujoco.mj_forward(mj_model, mj_data)
+        return mj_model, mj_data

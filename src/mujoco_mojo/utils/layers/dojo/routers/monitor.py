@@ -116,6 +116,8 @@ async def status_stream(request: Request):
     ACTIVE_CONNECTIONS.add(client_queue)
 
     async def event_generator():
+        yield ": connected\n\n"
+
         try:
             while True:
                 # check for disconnect

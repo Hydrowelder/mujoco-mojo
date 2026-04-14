@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from pydantic import Field
 
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import CompositeGeom
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import AnyCompositeGeom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.joint import CompositeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.site import CompositeSite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
@@ -69,7 +69,7 @@ class Composite(XMLModel):
     )
     """Joints assigned to composite."""
 
-    geom: CompositeGeom | None = None
+    geom: AnyCompositeGeom | None = None
     """Geometry assigned to composite."""
 
     site: CompositeSite | None = None

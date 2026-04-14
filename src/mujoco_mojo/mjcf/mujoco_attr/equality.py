@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from mujoco_mojo.mjcf.mujoco_attr.equality_attr.connect import EqualityConnect
+from mujoco_mojo.mjcf.mujoco_attr.equality_attr.connect import AnyEqualityConnect
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.flex import EqualityFlex
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.joint import EqualityJoint
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.tendon import EqualityTendon
-from mujoco_mojo.mjcf.mujoco_attr.equality_attr.weld import EqualityWeld
+from mujoco_mojo.mjcf.mujoco_attr.equality_attr.weld import AnyEqualityWeld
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils.utils import is_empty_list
 
@@ -20,13 +20,13 @@ class Equality(XMLModel):
 
     children = ("connects", "welds", "joints", "tendons", "flexes")
 
-    connects: list[EqualityConnect] = Field(
+    connects: list[AnyEqualityConnect] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Connect elements assigned to Equality."""
 
-    welds: list[EqualityWeld] = Field(
+    welds: list[AnyEqualityWeld] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

@@ -8,11 +8,11 @@ from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
-from mujoco_mojo.typing import RequestCategory
+from mujoco_mojo.typing import RequestCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
@@ -46,19 +46,19 @@ class Load(MojoBaseModel, ABC):
     active: bool = True
     """Whether or not this force should be active."""
 
-    action_site: Site
+    action_site: AnySite
     """Site on which the forcing function acts."""
 
-    rel_to_site: Site | None = None
+    rel_to_site: AnySite | None = None
     """Frame of reference for the calculated force. If None, uses worldbody."""
 
     _user_data: Any = PrivateAttr(default=None)
     """User defined information for the to use."""
 
-    _last_f: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_f: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
-    _last_t: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_t: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
@@ -72,8 +72,8 @@ class Load(MojoBaseModel, ABC):
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        local: np.ndarray,
-    ) -> np.ndarray:
+        local: Vec3,
+    ) -> Vec3:
         """Rotates local force/torque into world coordinates based on relative_to."""
         if self.rel_to_site is None:
             return local
@@ -187,7 +187,7 @@ class Load(MojoBaseModel, ABC):
 class PointToPointForce(Load):
     """Acts along the line-of-sight between two sites."""
 
-    xtion_site: Site
+    xtion_site: AnySite
     """Site on which the forcing function will apply a reation force. Leave as None to use the worldbody.
 
     This is called xtion to limit confusion between "reaction" and "relative"."""
@@ -285,8 +285,8 @@ class PointToPointForce(Load):
     def ideal_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,
@@ -313,8 +313,8 @@ class PointToPointForce(Load):
     def stroke_compression_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         preload: float | NamedValue[float] = 0.0,
@@ -352,8 +352,8 @@ class PointToPointForce(Load):
     def compression_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,
@@ -384,8 +384,8 @@ class PointToPointForce(Load):
     def tension_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,
