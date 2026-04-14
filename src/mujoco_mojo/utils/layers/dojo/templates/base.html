@@ -276,6 +276,23 @@
   <footer class="max-w-6xl mx-auto px-8 mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-sm text-slate-400 font-mono">
     <div class="flex items-center gap-3"
          x-data>
+      <!-- connection activity -->
+      <div class="flex items-center gap-2 bg-slate-300/50 dark:bg-slate-800/50 px-2.5 py-1 rounded-full border border-slate-400/50 transition-all duration-300"
+           :class="$store.dojo.isConnected ? 'border-emerald-500/30' : 'border-rose-500/30'"
+           :title="$store.dojo.isConnected ? 'Dojo Link Active' : 'Dojo Link Severed'">
+
+        <div class="relative flex items-center justify-center">
+          <span x-show="$store.dojo.isConnected"
+                class="absolute inline-flex h-2 w-2 rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 transition-colors duration-500"
+                :class="$store.dojo.isConnected ? 'bg-emerald-500' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'"></span>
+        </div>
+
+        <span class="text-[10px] uppercase font-black tracking-widest transition-colors duration-500"
+              :class="$store.dojo.isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+              x-text="$store.dojo.isConnected ? 'Live' : 'Down'"></span>
+      </div>
+
       <!-- time since refresh badge -->
       <div class="flex items-center gap-2 bg-slate-300/50 dark:bg-slate-800/50 px-3 py-1 rounded-full border border-slate-400/50">
 

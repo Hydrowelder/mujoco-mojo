@@ -15,6 +15,7 @@ document.addEventListener("alpine:init", () => {
     isAutoRefresh: localStorage.getItem("mojo_auto") !== "false",
 
     // streaming state
+    isConnected: false,
     isSyncing: false,
     syncProgress: 0,
     secondsSinceUpdate: 0,
@@ -69,6 +70,46 @@ document.addEventListener("alpine:init", () => {
       "Bleeding air from the non-reversible tremie pipe...",
       "Adjusting the differential girdlespring tension...",
     ],
+
+    init() {
+      // 1. Immediate check on load
+      this.checkServerHealth();
+
+      // 2. Periodic heartbeat (every 1 seconds)
+      setInterval(() => {
+        this.checkServerHealth();
+      }, 10000);
+
+      // 3. Start the SSE sync if appropriate
+      this.startGlobalSync();
+    },
+
+    async checkServerHealth() {
+      // Create a timeout so the fetch doesn't hang for 30 seconds
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      try {
+        const response = await fetch("/monitor/api/status", {
+          method: "GET",
+          cache: "no-store", // CRITICAL: Stop the browser from lying to us
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        // Explicitly check for 200 OK
+        this.isConnected = response.ok;
+      } catch (err) {
+        // If the server is down, fetch throws a TypeError or AbortError
+        this.isConnected = false;
+
+        // If we were syncing, stop it now
+        if (this.source) {
+          this.stopGlobalSync();
+        }
+      }
+    },
 
     setPageReady(val, force = false) {
       if (val) {
@@ -172,6 +213,7 @@ document.addEventListener("alpine:init", () => {
       if (this.source) {
         this.source.close();
         this.source = null;
+        this.isConnected = false;
         this.isSyncing = false;
       }
     },
