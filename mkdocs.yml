@@ -36,12 +36,16 @@ theme:
   font: false
 
   palette:
+    # 1. System Preference (The Default)
     - media: "(prefers-color-scheme)"
+      scheme: default
       primary: custom
       accent: cyan
       toggle:
         icon: material/lightbulb-auto
-        name: "Switch to light mode"
+        name: Switch to light mode
+
+    # 2. Explicit Light Mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: black
@@ -50,6 +54,7 @@ theme:
         icon: material/lightbulb-on
         name: Switch to dark mode
 
+    # 3. Explicit Dark Mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: custom

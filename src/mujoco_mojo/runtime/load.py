@@ -8,7 +8,7 @@ from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.results_manager import ResultsManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
@@ -46,10 +46,10 @@ class Load(MojoBaseModel, ABC):
     active: bool = True
     """Whether or not this force should be active."""
 
-    action_site: Site
+    action_site: AnySite
     """Site on which the forcing function acts."""
 
-    rel_to_site: Site | None = None
+    rel_to_site: AnySite | None = None
     """Frame of reference for the calculated force. If None, uses worldbody."""
 
     _user_data: Any = PrivateAttr(default=None)
@@ -187,7 +187,7 @@ class Load(MojoBaseModel, ABC):
 class PointToPointForce(Load):
     """Acts along the line-of-sight between two sites."""
 
-    xtion_site: Site
+    xtion_site: AnySite
     """Site on which the forcing function will apply a reation force. Leave as None to use the worldbody.
 
     This is called xtion to limit confusion between "reaction" and "relative"."""
@@ -285,8 +285,8 @@ class PointToPointForce(Load):
     def ideal_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,
@@ -313,8 +313,8 @@ class PointToPointForce(Load):
     def stroke_compression_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         preload: float | NamedValue[float] = 0.0,
@@ -352,8 +352,8 @@ class PointToPointForce(Load):
     def compression_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,
@@ -384,8 +384,8 @@ class PointToPointForce(Load):
     def tension_spring(
         cls,
         name: str,
-        action_site: Site,
-        xtion_site: Site,
+        action_site: AnySite,
+        xtion_site: AnySite,
         stiffness: float | NamedValue[float] = 0.0,
         damping: float | NamedValue[float] = 0.0,
         rest_length: float = 0.0,

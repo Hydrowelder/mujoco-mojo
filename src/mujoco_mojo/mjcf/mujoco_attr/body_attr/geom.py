@@ -9,7 +9,7 @@ from pydantic import ConfigDict, Field
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.mjcf.pose import Pose, PoseQuat
+from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     FluidShape,
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = [
-    "Geom",
+    "AnyGeom",
     "GeomBox",
     "GeomCapsule",
     "GeomCylinder",
@@ -159,7 +159,7 @@ class GeomBase(XMLModel):
     fromto: Vec6 | None = None
     """This attribute can only be used with capsule, box, cylinder and ellipsoid geoms. It provides an alternative specification of the geom length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the geom connects these two points, with the +Z axis of the geom's frame oriented from the first towards the second point, while in the perpendicular direction, the geom sizes are both equal to the first value of the size attribute. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the end points. If this attribute is specified, the remaining position and orientation-related attributes are ignored. The image on the right demonstrates use of fromto with the four supported geoms, using identical Z values. The model is here. Note that the fromto semantics of capsule are unique: the two end points specify the segment around which the radius defines the capsule surface."""
 
-    pose: Pose = PoseQuat()
+    pose: AnyPose = PoseQuat()
     """Position and orientation of the geom, specified in the frame of the body where the geom is defined."""
 
     fitscale: float = 1
@@ -196,8 +196,8 @@ class GeomBase(XMLModel):
     @classmethod
     def _get_geom_dist_between_geom(
         cls,
-        geom_1: Geom,
-        geom_2: Geom,
+        geom_1: AnyGeom,
+        geom_2: AnyGeom,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
@@ -215,8 +215,8 @@ class GeomBase(XMLModel):
     @classmethod
     def _get_geom_dist_between_geoms_acc(
         cls,
-        geom_1: Geom | list[Geom],
-        geom_2: Geom | list[Geom],
+        geom_1: AnyGeom | list[AnyGeom],
+        geom_2: AnyGeom | list[AnyGeom],
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
@@ -252,8 +252,8 @@ class GeomBase(XMLModel):
     @classmethod
     def _get_geom_dist_between_geoms_auto(
         cls,
-        geom_1: Geom | list[Geom],
-        geom_2: Geom | list[Geom],
+        geom_1: AnyGeom | list[AnyGeom],
+        geom_2: AnyGeom | list[AnyGeom],
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
@@ -309,8 +309,8 @@ class GeomBase(XMLModel):
     @classmethod
     def get_geom_dist_between_geoms(
         cls,
-        geom_1: Geom | list[Geom],
-        geom_2: Geom | list[Geom],
+        geom_1: AnyGeom | list[AnyGeom],
+        geom_2: AnyGeom | list[AnyGeom],
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
@@ -363,7 +363,7 @@ class GeomBase(XMLModel):
 
     def get_geom_dist(
         self,
-        other: Geom,
+        other: AnyGeom,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
@@ -671,7 +671,7 @@ class GeomSDF(GeomBase):
     """
 
 
-Geom = Annotated[
+AnyGeom = Annotated[
     GeomPlane
     | GeomHField
     | GeomSphere

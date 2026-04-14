@@ -7,7 +7,7 @@ import numpy as np
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.orientation import Quat
-from mujoco_mojo.mjcf.pose import Pose, PoseQuat
+from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     GeomType,
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = [
-    "Site",
+    "AnySite",
     "SiteBox",
     "SiteCapsule",
     "SiteCylinder",
@@ -78,7 +78,7 @@ class SiteBase(XMLModel):
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
     """Color and transparency. If this value is different from the internal default, it overrides the corresponding material properties."""
 
-    pose: Pose = PoseQuat()
+    pose: AnyPose = PoseQuat()
     """Position and orientation of the site frame."""
 
     user: VecN | None = None
@@ -98,10 +98,10 @@ class SiteBase(XMLModel):
 
     def rt_displacements(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> Vec3:
         """Returns the 3D displacement vector from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         p1 = self.rt_pos(mj_model, mj_data)
@@ -119,10 +119,10 @@ class SiteBase(XMLModel):
 
     def rt_dx(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime X displacement between this site and 'other'.
@@ -140,10 +140,10 @@ class SiteBase(XMLModel):
 
     def rt_dy(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Y displacement between this site and 'other'.
@@ -161,10 +161,10 @@ class SiteBase(XMLModel):
 
     def rt_dz(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Z displacement between this site and 'other'.
@@ -181,7 +181,7 @@ class SiteBase(XMLModel):
         )
 
     def rt_dm(
-        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
         """Returns the runtime distance magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
@@ -209,10 +209,10 @@ class SiteBase(XMLModel):
 
     def rt_velocities(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
@@ -239,10 +239,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_vx(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime X linear velocity between this site and 'other'.
@@ -260,10 +260,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_vy(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Y linear velocity between this site and 'other'.
@@ -281,10 +281,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_vz(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Z linear velocity between this site and 'other'.
@@ -301,7 +301,7 @@ class SiteBase(XMLModel):
         )
 
     def rt_lin_vm(
-        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
         """Returns the runtime linear velocity magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
@@ -312,10 +312,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_vx(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime X angular velocity between this site and 'other'.
@@ -333,10 +333,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_vy(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Y angular velocity between this site and 'other'.
@@ -354,10 +354,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_vz(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Z angular velocity between this site and 'other'.
@@ -374,7 +374,7 @@ class SiteBase(XMLModel):
         )
 
     def rt_ang_vm(
-        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
         """Returns the runtime angular velocity magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
@@ -402,10 +402,10 @@ class SiteBase(XMLModel):
 
     def rt_accelerations(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
@@ -430,10 +430,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_ax(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime X linear acceleration between this site and 'other'.
@@ -451,10 +451,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_ay(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Y linear acceleration between this site and 'other'.
@@ -472,10 +472,10 @@ class SiteBase(XMLModel):
 
     def rt_lin_az(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Z linear acceleration between this site and 'other'.
@@ -492,7 +492,7 @@ class SiteBase(XMLModel):
         )
 
     def rt_lin_am(
-        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
         """Returns the runtime linear acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
@@ -505,10 +505,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_ax(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime X angular acceleration between this site and 'other'.
@@ -526,10 +526,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_ay(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Y angular acceleration between this site and 'other'.
@@ -547,10 +547,10 @@ class SiteBase(XMLModel):
 
     def rt_ang_az(
         self,
-        other: Site | None,
+        other: AnySite | None,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        relative_to: Site | None = None,
+        relative_to: AnySite | None = None,
     ) -> float:
         """
         Returns the runtime Z angular acceleration between this site and 'other'.
@@ -567,7 +567,7 @@ class SiteBase(XMLModel):
         )
 
     def rt_ang_am(
-        self, other: Site | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> float:
         """Returns the runtime angular acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
@@ -741,7 +741,7 @@ class SiteBox(SiteBase):
     """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
 
 
-Site = Annotated[
+AnySite = Annotated[
     SiteSphere | SiteCapsule | SiteEllipsoid | SiteCylinder | SiteBox,
     Field(discriminator="type"),
 ]
