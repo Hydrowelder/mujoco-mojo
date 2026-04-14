@@ -11,6 +11,7 @@ from mujoco_mojo.mjcf.pose import Pose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     GeomType,
+    Mat3,
     MaterialName,
     RequestCategory,
     SiteName,
@@ -83,7 +84,7 @@ class SiteBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
         return np.asarray(mj_data.site_xmat[self.get_id(mj_model)]).reshape(3, 3)
 
     def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
@@ -101,7 +102,7 @@ class SiteBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         relative_to: Site | None = None,
-    ) -> np.ndarray:
+    ) -> Vec3:
         """Returns the 3D displacement vector from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         p1 = self.rt_pos(mj_model, mj_data)
         p2 = other.rt_pos(mj_model, mj_data) if other else np.zeros(3)
@@ -382,7 +383,7 @@ class SiteBase(XMLModel):
             )
         )
 
-    def rt_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear
@@ -391,15 +392,11 @@ class SiteBase(XMLModel):
         )
         return res
 
-    def rt_lin_acc(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_lin_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the 3D linear acceleration vector in the world frame."""
         return self.rt_acc(mj_model, mj_data)[3:6]
 
-    def rt_ang_acc(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_ang_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the 3D angular acceleration vector in the world frame."""
         return self.rt_acc(mj_model, mj_data)[0:3]
 
@@ -409,7 +406,7 @@ class SiteBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         relative_to: Site | None = None,
-    ) -> np.ndarray:
+    ) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
         world_self = self.rt_acc(mj_model, mj_data)

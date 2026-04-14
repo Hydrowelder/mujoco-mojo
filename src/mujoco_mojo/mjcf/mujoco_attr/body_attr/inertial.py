@@ -15,7 +15,7 @@ from mujoco_mojo.mjcf.pose import (
 )
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.stochas import Dist, Distribution, NamedValue
-from mujoco_mojo.typing import EulerSeq, Vec3, Vec6
+from mujoco_mojo.typing import EulerSeq, Mat3, Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
@@ -67,7 +67,7 @@ class Inertial(XMLModel):
         raise ValueError(msg)
 
     @property
-    def inertia_matrix(self) -> np.ndarray:
+    def inertia_matrix(self) -> Mat3:
         """Returns the 3x3 inertia matrix reconstruction."""
         if self.using_diag:
             d = self.diaginertia
@@ -210,7 +210,7 @@ class Inertial(XMLModel):
 
         return self
 
-    def get_body_frame_inertia(self) -> np.ndarray:
+    def get_body_frame_inertia(self) -> Mat3:
         """
         Calculates the 3x3 inertia matrix expressed in the parent body's frame.
 
@@ -236,9 +236,7 @@ class Inertial(XMLModel):
         return I_rot + m * p_sq
 
     @classmethod
-    def from_body_frame(
-        cls, mass: float, pos: Vec3, inertia_matrix: np.ndarray
-    ) -> Self:
+    def from_body_frame(cls, mass: float, pos: Vec3, inertia_matrix: Mat3) -> Self:
         """
         Factory to create an Inertial element from properties in a parent frame.
 

@@ -42,7 +42,7 @@ class PoseBase(Pos, OrientationBase):
         p_inv = -(r_inv @ self.pos)
         return Quat.from_matrix(r_inv).as_pose(pos=p_inv)
 
-    def apply(self, vec: Vec3) -> np.ndarray:
+    def apply(self, vec: Vec3) -> Vec3:
         """Transforms a point from local coordinates to parent coordinates."""
         # v' = R*v + p
         return self.as_matrix() @ np.asarray(vec, dtype=float) + self.pos

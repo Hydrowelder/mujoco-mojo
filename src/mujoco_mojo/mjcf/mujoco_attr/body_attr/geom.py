@@ -16,6 +16,7 @@ from mujoco_mojo.typing import (
     GeomName,
     GeomType,
     HFieldName,
+    Mat3,
     MaterialName,
     MeshName,
     RequestCategory,
@@ -184,7 +185,7 @@ class GeomBase(XMLModel):
     plugin: Plugin | None = None
     """Associate this geom with an engine plugin. Either plugin or instance are required."""
 
-    def geom_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def geom_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
@@ -200,7 +201,7 @@ class GeomBase(XMLModel):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         dist_max: float,
-        fromto: np.ndarray,
+        fromto: Vec6,
     ) -> float:
         return mujoco.mj_geomDistance(
             m=mj_model,
@@ -407,7 +408,7 @@ class GeomBase(XMLModel):
         """Returns the world position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
         """Returns the world orientation matrix of the geom."""
         return mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
 
