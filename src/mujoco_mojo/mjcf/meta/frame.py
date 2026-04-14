@@ -5,7 +5,7 @@ from typing import ClassVar
 import mujoco
 from pydantic import Field
 
-from mujoco_mojo.mjcf.pose import Pose, PoseQuat
+from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import FrameName
 from mujoco_mojo.utils.utils import is_empty_list
@@ -68,7 +68,7 @@ class Frame(XMLModel):
     childclass: str | None = None
     """If this attribute is present, all descendant elements that admit a defaults class will use the class specified here, unless they specify their own class or another frame or body with a childclass attribute is encountered along the chain of nested bodies and frames. Recall Default settings."""
 
-    pose: Pose = PoseQuat()
+    pose: AnyPose = PoseQuat()
     """The 3D position and orientation of the frame, in the parent coordinate system."""
 
     frames: list[Frame] = Field(default_factory=list, exclude_if=is_empty_list)

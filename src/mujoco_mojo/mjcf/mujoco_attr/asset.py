@@ -4,7 +4,7 @@ from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.hfield import HField
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import Material
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import Mesh
+from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import AnyMesh
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import Texture
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
@@ -21,7 +21,7 @@ class Asset(XMLModel):
 
     children = ("meshes", "hfields", "skins", "textures", "materials", "models")
 
-    meshes: list[Mesh] = Field(
+    meshes: list[AnyMesh] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

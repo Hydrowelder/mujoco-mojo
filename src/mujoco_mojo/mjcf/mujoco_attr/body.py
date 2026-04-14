@@ -12,16 +12,16 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Geom
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import AnyGeom
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import Site
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
-from mujoco_mojo.mjcf.pose import Pose, PoseQuat
+from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import BodyName, RequestCategory, Sleep, VecN
+from mujoco_mojo.typing import Angle, BodyName, Mat3, RequestCategory, Sleep, Vec3, VecN
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
@@ -77,7 +77,7 @@ class Body(XMLModel):
     mocap: bool = False
     """If this attribute is "true", the body is labeled as a mocap body. This is allowed only for bodies that are children of the world body and have no joints. Such bodies are fixed from the viewpoint of the dynamics, but nevertheless the forward kinematics set their position and orientation from the fields mjData.mocap_{pos,quat} at each time step. The size of these arrays is adjusted by the compiler so as to match the number of mocap bodies in the model. This mechanism can be used to stream motion capture data into the simulation. Mocap bodies can also be moved via mouse perturbations in the interactive visualizer, even in dynamic simulation mode. This can be useful for creating props with adjustable position and orientation."""
 
-    pose: Pose = PoseQuat()
+    pose: AnyPose = PoseQuat()
     """The 3D position and orientation of the body frame, in the parent coordinate frame. If undefined it defaults to (0,0,0)."""
 
     gravcomp: float = 0
@@ -116,13 +116,13 @@ class Body(XMLModel):
     )
     """Free joints assigned to body. Defining more than one free joint will not do anything"""
 
-    geoms: list[Geom] = Field(
+    geoms: list[AnyGeom] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
     """Geometries assigned to body."""
 
-    sites: list[Site] = Field(
+    sites: list[AnySite] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
@@ -180,20 +180,20 @@ class Body(XMLModel):
         """Mass of the body from a compiled MjModel."""
         return mj_model.body_mass[self.get_id(mj_model)]
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
         """Rotation matrix the body during runtime."""
         return np.asarray(mj_data.xmat[self.get_id(mj_model)]).reshape(3, 3)
 
     def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
         return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
 
-    def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> np.ndarray:
+    def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> Vec3:
         """Diagonalized inertia tensor of the body (body relative)."""
         return mj_model.body_inertia[self.get_id(mj_model)]
 
     def rt_inertia_world(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    ) -> Mat3:
         """Inertia tensor of the body expressed in the world frame."""
         R = self.rt_xmat(mj_model, mj_data)
         return R @ np.diag(self.rt_inertia_diag(mj_model)) @ R.T
@@ -202,13 +202,11 @@ class Body(XMLModel):
         """Parent ID of the body."""
         return mj_model.body_parentid[self.get_id(mj_model)]
 
-    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> np.ndarray:
+    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Position of the body during runtime."""
         return mj_data.xpos[self.get_id(mj_model)]
 
-    def rt_lin_vel(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_lin_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Linear velocity of the body during runtime."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
@@ -217,9 +215,7 @@ class Body(XMLModel):
         )
         return res[3:6]
 
-    def rt_ang_vel(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Angular velocity of the body during runtime."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear velocity
@@ -228,15 +224,11 @@ class Body(XMLModel):
         )
         return res[0:3]
 
-    def rt_lin_mom(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_lin_mom(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Linear momentum of the body during runtime."""
         return self.rt_mass(mj_model) * self.rt_lin_vel(mj_model, mj_data)
 
-    def rt_ang_mom(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> np.ndarray:
+    def rt_ang_mom(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Angular momentum of the body during runtime."""
         return self.rt_inertia_world(mj_model, mj_data) @ self.rt_ang_vel(
             mj_model, mj_data
@@ -258,6 +250,17 @@ class Body(XMLModel):
         """Total kinetic energy of the body during runtime."""
         return self.rt_trans_ke(mj_model, mj_data) + self.rt_rot_ke(mj_model, mj_data)
 
+    def rt_xipos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+        """Position of the body inertial frame during runtime."""
+        return mj_data.xipos[self.get_id(mj_model)]
+
+    def rt_ximat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
+        """Rotation matrix the body during runtime."""
+        return np.asarray(mj_data.ximat[self.get_id(mj_model)]).reshape(3, 3)
+
+    def rt_xiquat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
+        return Quat.from_matrix(self.rt_ximat(mj_model, mj_data))
+
     def request(
         self,
         results_manager: ResultsManager,
@@ -269,16 +272,19 @@ class Body(XMLModel):
                 "xvelp",
                 "xvelr",
                 "lin_mom",
+                "xipos",
+                "xiquat",
+                "ximat",
                 "ang_mom",
                 "ke_trans",
                 "ke_rot",
                 "ke_total",
             ]
         ] = [
-            "xpos",
-            "quat",
             "xvelp",
             "xvelr",
+            "xipos",
+            "xiquat",
             "lin_mom",
             "ang_mom",
             "ke_trans",
@@ -297,8 +303,13 @@ class Body(XMLModel):
                 match attr:
                     case "xpos":
                         val = self.rt_pos(mj_model, mj_data)
-                    case "xmat":
-                        val = self.rt_xmat(mj_model, mj_data)
+                    case "xmat" | "ximat":
+                        match attr:
+                            case "xmat":
+                                val = self.rt_xmat(mj_model, mj_data)
+                            case "ximat":
+                                val = self.rt_ximat(mj_model, mj_data)
+
                         val_flat = val.flatten()
                         for i in range(len(val_flat)):
                             results_manager.post(
@@ -308,8 +319,13 @@ class Body(XMLModel):
                                 attr=str(i),
                             )
                         continue
-                    case "quat":
-                        val = self.rt_quat(mj_model, mj_data)
+                    case "quat" | "xiquat":
+                        match attr:
+                            case "quat":
+                                val = self.rt_quat(mj_model, mj_data)
+                            case "xiquat":
+                                val = self.rt_xiquat(mj_model, mj_data)
+
                         for i, k in enumerate("wxyz"[: len(val.quat)]):
                             results_manager.post(
                                 value=float(val.quat[i]),
@@ -322,6 +338,8 @@ class Body(XMLModel):
                         val = self.rt_lin_vel(mj_model, mj_data)
                     case "xvelr":
                         val = self.rt_ang_vel(mj_model, mj_data)
+                    case "xipos":
+                        val = self.rt_xipos(mj_model, mj_data)
                     case "lin_mom":
                         val = self.rt_lin_mom(mj_model, mj_data)
                     case "ang_mom":
@@ -362,32 +380,63 @@ class Body(XMLModel):
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        v_point: np.ndarray,
-        omega: np.ndarray,
-        point: np.ndarray,
-    ):
+        linear_velocity: Vec3 = np.zeros(3),
+        angular_velocity: Vec3 = np.zeros(3),
+        angle: Angle = Angle.RADIAN,
+        reference: AnyPose = PoseQuat(),
+    ) -> None:
         """
-        Sets the initial qvel for this body based on a velocity condition about a point.
+        Sets the initial velocity (qvel) for a body with a free joint.
 
-        Calculates: v_body = v_point + omega x (r_body - point)
+        This method applies a rigid body velocity mapping. If the velocity is defined at a specific point in space (e.g., the center of a rotating system), this calculates the resulting linear velocity at the body's actual position.
+
+        Calculates:
+            >>> v_world = R_ref @ v_local
+
+            >>> w_world = R_ref @ w_local
+
+            >>> v_body = v_world + w_world x (r_body - r_ref)
+
+        Args:
+            mj_model (mujoco.MjModel): The compiled MuJoCo model.
+            mj_data (mujoco.MjData): The MuJoCo data state to modify.
+            linear_velocity (Vec3): Linear velocity vector [x, y, z]. Expressed in the reference frame. Defaults to np.zeros(3).
+            angular_velocity (Vec3): Angular velocity vector [wx, wy, wz]. Defaults to np.zeros(3).
+            angle (Angle, optional): Type of angle measurement angular_velocity is expressed in. Defaults to Angle.RADIAN.
+            reference (Pose, optional): The global pose where the velocities is defined (this Pose is expressed in the world frame). Defaults to PoseQuat().
+
+        Raises:
+            ValueError: If the body does not have a free joint.
+
         """
         if not self.freejoints:
             logger.warning(
                 "Attempting to set initial velocity conditions for a body which does not have a free joint."
             )
 
-        r_body = self.rt_pos(mj_model, mj_data)
+        # convert from deg to rad
+        w_input = np.asarray(angular_velocity, dtype=float)
+        if angle == Angle.DEGREE:
+            w_input = np.deg2rad(w_input)
 
-        # rigid body velo. mapping
-        v_body = v_point + np.cross(omega, (r_body - point))
+        # coordinate transformation
+        r_mat = reference.as_matrix()
+        v_ref_world = r_mat @ np.asarray(linear_velocity, dtype=float)
+        w_world = r_mat @ w_input
 
-        # find the joint addresses for the body
-        jnt_adr = mj_model.body_jntadr[self.get_id(mj_model)]
-        qvel_adr = mj_model.jnt_dofadr[jnt_adr]
+        # translate the velocity to the body origin
+        r_body_world = self.rt_pos(mj_model, mj_data)
+        r_ref_world = reference.pos
+
+        v_body_linear = v_ref_world + np.cross(w_world, (r_body_world - r_ref_world))
 
         # apply to mj_data.qvel
-        mj_data.qvel[qvel_adr : qvel_adr + 3] = v_body
-        mj_data.qvel[qvel_adr + 3 : qvel_adr + 6] = omega
+        bid = self.get_id(mj_model)
+        jnt_adr = mj_model.body_jntadr[bid]
+        qvel_adr = mj_model.jnt_dofadr[jnt_adr]
+
+        mj_data.qvel[qvel_adr : qvel_adr + 3] = v_body_linear
+        mj_data.qvel[qvel_adr + 3 : qvel_adr + 6] = w_world
 
 
 _temp_list = list(_body_children)

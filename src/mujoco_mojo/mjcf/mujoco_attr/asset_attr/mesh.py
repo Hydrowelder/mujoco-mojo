@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, overload
+from typing import Annotated, Any, ClassVar, Literal, Self, overload
 
 import mujoco
 import numpy as np
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.orientation import Quat
@@ -46,50 +46,8 @@ _mesh_attr = (
 )
 
 
-class Mesh(XMLModel):
-    """
-    This element creates a mesh asset, which can then be referenced from geoms. If the referencing geom type is mesh the mesh is instantiated in the model, otherwise a geometric primitive is automatically fitted to it; see the geom element below.
-
-    MuJoCo works with triangulated meshes. They can be loaded from binary STL files, OBJ files or MSH files with custom format described below, or vertex and face data specified directly in the XML. Software such as MeshLab can be used to convert from other mesh formats to STL or OBJ. While any collection of triangles can be loaded as a mesh and rendered, collision detection works with the convex hull of the mesh as explained in Collision detection. The mesh appearance (including texture mapping) is controlled by the material and rgba attributes of the referencing geom, similarly to height fields.
-
-    Meshes can have explicit texture coordinates instead of relying on the automated texture mapping mechanism. When provided, these explicit coordinates have priority. Note that texture coordinates can be specified with OBJ files and MSH files, as well as explicitly in the XML with the texcoord attribute, but not via STL files. These mechanism cannot be mixed. So if you have an STL mesh, the only way to add texture coordinates to it is to convert to one of the other supported formats.
-
-    Poorly designed meshes can display rendering artifacts. In particular, the shadow mapping mechanism relies on having some distance between front and back-facing triangle faces. If the faces are repeated, with opposite normals as determined by the vertex order in each triangle, this causes shadow aliasing. The solution is to remove the repeated faces (which can be done in MeshLab) or use a better designed mesh. Flipped faces are checked by MuJoCo for meshes specified as OBJ or XML and an error message is returned.
-
-    The size of the mesh is determined by the 3D coordinates of the vertex data in the mesh file, multiplied by the components of the scale attribute below. Scaling is applied separately for each coordinate axis. Note that negative scaling values can be used to flip the mesh; this is a legitimate operation. The size parameters of the referencing geoms are ignored, similarly to height fields. We also provide a mechanism to translate and rotate the 3D coordinates, using the attributes refpos and refquat.
-
-    A mesh can also be defined without faces (a point cloud essentially). In that case the convex hull is constructed automatically.This makes it easy to construct simple shapes directly in the XML. For example, a pyramid can be created as follows:
-
-    ```xml
-    <asset>
-        <mesh name="tetrahedron" vertex="0 0 0  1 0 0  0 1 0  0 0 1"/>
-    </asset>
-    ```
-
-    Positioning and orienting is complicated by the fact that vertex data in the source asset are often relative to coordinate frames whose origin is not inside the mesh. In contrast, MuJoCo expects the origin of a geom's local frame to coincide with the geometric center of the shape. We resolve this discrepancy by pre-processing the mesh in the compiler, so that it is centered around (0,0,0) and its principal axes of inertia are the coordinate axes. We save the translation and rotation offsets applied to the source asset in mjModel.mesh_pos and mjModel.mesh_quat; these are required if one reads vertex data from the source and needs to re-apply the transform. These offsets are then composed with the referencing geom's position and orientation; see also the mesh attribute of geom below. Fortunately most meshes used in robot models are designed in a coordinate frame centered at the joint. This makes the corresponding MJCF model intuitive: we set the body frame at the joint, so that the joint position is (0,0,0) in the body frame, and simply reference the mesh. Below is an MJCF model fragment of a forearm, containing all the information needed to put the mesh where one would expect it to be. The body position is specified relative to the parent body, namely the upper arm (not shown). It is offset by 35 cm which is the typical length of the human upper arm. If the mesh vertex data were not designed in the above convention, we would have to use the geom position and orientation (or the refpos, refquat mechanism) to compensate, but in practice this is rarely needed.
-
-    ```xml
-    <asset>
-        <mesh file="forearm.stl"/>
-    </asset>
-
-    <body pos="0 0 0.35"/>
-        <joint type="hinge" axis="1 0 0"/>
-        <geom type="mesh" mesh="forearm"/>
-    </body>
-    ```
-
-    The inertial computation mentioned above is part of an algorithm used not only to center and align the mesh, but also to infer the mass and inertia of the body to which it is attached. This is done by computing the centroid of the triangle faces, connecting each face with the centroid to form a triangular pyramid, computing the mass and signed inertia of all pyramids (considered solid, or hollow if shellinertia is true) and accumulating them. The sign ensures that pyramids on the outside of the surfaces are subtracted, as can occur with concave geometries. This algorithm can be found in section 1.3.8 of Computational Geometry in C (Second Edition) by Joseph O'Rourke.
-
-    The full list of processing steps applied by the compiler to each mesh is as follows:
-
-    1. For STL meshes, remove any repeated vertices and re-index the faces if needed. If the mesh is not STL, we assume that the desired vertices and faces have already been generated and do not apply removal or re-indexing;
-    2. If vertex normals are not provided, generate normals automatically, using a weighted average of the surrounding face normals. If sharp edges are encountered, the renderer uses the face normals to preserve the visual information about the edge, unless smoothnormal is true. Note that normals cannot be provided with STL meshes;
-    3. Scale, translate and rotate the vertices and normals, re-normalize the normals in case of scaling. Save these transformations in mjModel.mesh_{pos, quat, scale}.
-    4. Construct the convex hull if specified;
-    5. Find the centroid of all triangle faces, and construct the union-of-pyramids representation. Triangles whose area is too small (below the mjMINVAL value of 1E-14) result in compile error;
-    6. Compute the center of mass and inertia matrix of the union-of-pyramids. Use eigenvalue decomposition to find the principal axes of inertia. Center and align the mesh, saving the translational and rotational offsets for subsequent geom-related computations.
-    """
+class MeshBase(XMLModel):
+    """Base class from which other mesh classes are built from."""
 
     tag = "mesh"
 
@@ -311,14 +269,62 @@ class Mesh(XMLModel):
         return decomposed_mojo_meshes
 
 
-class MeshSphere(Mesh):
+class Mesh(MeshBase):
+    """
+    This element creates a mesh asset, which can then be referenced from geoms. If the referencing geom type is mesh the mesh is instantiated in the model, otherwise a geometric primitive is automatically fitted to it; see the geom element below.
+
+    MuJoCo works with triangulated meshes. They can be loaded from binary STL files, OBJ files or MSH files with custom format described below, or vertex and face data specified directly in the XML. Software such as MeshLab can be used to convert from other mesh formats to STL or OBJ. While any collection of triangles can be loaded as a mesh and rendered, collision detection works with the convex hull of the mesh as explained in Collision detection. The mesh appearance (including texture mapping) is controlled by the material and rgba attributes of the referencing geom, similarly to height fields.
+
+    Meshes can have explicit texture coordinates instead of relying on the automated texture mapping mechanism. When provided, these explicit coordinates have priority. Note that texture coordinates can be specified with OBJ files and MSH files, as well as explicitly in the XML with the texcoord attribute, but not via STL files. These mechanism cannot be mixed. So if you have an STL mesh, the only way to add texture coordinates to it is to convert to one of the other supported formats.
+
+    Poorly designed meshes can display rendering artifacts. In particular, the shadow mapping mechanism relies on having some distance between front and back-facing triangle faces. If the faces are repeated, with opposite normals as determined by the vertex order in each triangle, this causes shadow aliasing. The solution is to remove the repeated faces (which can be done in MeshLab) or use a better designed mesh. Flipped faces are checked by MuJoCo for meshes specified as OBJ or XML and an error message is returned.
+
+    The size of the mesh is determined by the 3D coordinates of the vertex data in the mesh file, multiplied by the components of the scale attribute below. Scaling is applied separately for each coordinate axis. Note that negative scaling values can be used to flip the mesh; this is a legitimate operation. The size parameters of the referencing geoms are ignored, similarly to height fields. We also provide a mechanism to translate and rotate the 3D coordinates, using the attributes refpos and refquat.
+
+    A mesh can also be defined without faces (a point cloud essentially). In that case the convex hull is constructed automatically.This makes it easy to construct simple shapes directly in the XML. For example, a pyramid can be created as follows:
+
+    ```xml
+    <asset>
+        <mesh name="tetrahedron" vertex="0 0 0  1 0 0  0 1 0  0 0 1"/>
+    </asset>
+    ```
+
+    Positioning and orienting is complicated by the fact that vertex data in the source asset are often relative to coordinate frames whose origin is not inside the mesh. In contrast, MuJoCo expects the origin of a geom's local frame to coincide with the geometric center of the shape. We resolve this discrepancy by pre-processing the mesh in the compiler, so that it is centered around (0,0,0) and its principal axes of inertia are the coordinate axes. We save the translation and rotation offsets applied to the source asset in mjModel.mesh_pos and mjModel.mesh_quat; these are required if one reads vertex data from the source and needs to re-apply the transform. These offsets are then composed with the referencing geom's position and orientation; see also the mesh attribute of geom below. Fortunately most meshes used in robot models are designed in a coordinate frame centered at the joint. This makes the corresponding MJCF model intuitive: we set the body frame at the joint, so that the joint position is (0,0,0) in the body frame, and simply reference the mesh. Below is an MJCF model fragment of a forearm, containing all the information needed to put the mesh where one would expect it to be. The body position is specified relative to the parent body, namely the upper arm (not shown). It is offset by 35 cm which is the typical length of the human upper arm. If the mesh vertex data were not designed in the above convention, we would have to use the geom position and orientation (or the refpos, refquat mechanism) to compensate, but in practice this is rarely needed.
+
+    ```xml
+    <asset>
+        <mesh file="forearm.stl"/>
+    </asset>
+
+    <body pos="0 0 0.35"/>
+        <joint type="hinge" axis="1 0 0"/>
+        <geom type="mesh" mesh="forearm"/>
+    </body>
+    ```
+
+    The inertial computation mentioned above is part of an algorithm used not only to center and align the mesh, but also to infer the mass and inertia of the body to which it is attached. This is done by computing the centroid of the triangle faces, connecting each face with the centroid to form a triangular pyramid, computing the mass and signed inertia of all pyramids (considered solid, or hollow if shellinertia is true) and accumulating them. The sign ensures that pyramids on the outside of the surfaces are subtracted, as can occur with concave geometries. This algorithm can be found in section 1.3.8 of Computational Geometry in C (Second Edition) by Joseph O'Rourke.
+
+    The full list of processing steps applied by the compiler to each mesh is as follows:
+
+    1. For STL meshes, remove any repeated vertices and re-index the faces if needed. If the mesh is not STL, we assume that the desired vertices and faces have already been generated and do not apply removal or re-indexing;
+    2. If vertex normals are not provided, generate normals automatically, using a weighted average of the surrounding face normals. If sharp edges are encountered, the renderer uses the face normals to preserve the visual information about the edge, unless smoothnormal is true. Note that normals cannot be provided with STL meshes;
+    3. Scale, translate and rotate the vertices and normals, re-normalize the normals in case of scaling. Save these transformations in mjModel.mesh_{pos, quat, scale}.
+    4. Construct the convex hull if specified;
+    5. Find the centroid of all triangle faces, and construct the union-of-pyramids representation. Triangles whose area is too small (below the mjMINVAL value of 1E-14) result in compile error;
+    6. Compute the center of mass and inertia matrix of the union-of-pyramids. Use eigenvalue decomposition to find the principal axes of inertia. Center and align the mesh, saving the translational and rotational offsets for subsequent geom-related computations.
+    """
+
+    builtin: Literal[None] = Field(None, exclude=True)
+
+
+class MeshSphere(MeshBase):
     """
     Repeated subdivisions of a unit icosahedron ("icosphere").
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/s.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "sphere"
+    builtin: Literal["sphere"] = "sphere"
 
     attributes = (*_mesh_attr, "builtin", "subdivision")
 
@@ -335,14 +341,14 @@ class MeshSphere(Mesh):
         return v
 
 
-class MeshHemisphere(Mesh):
+class MeshHemisphere(MeshBase):
     """
     Quad-projected hemisphere.
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/h.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "hemisphere"
+    builtin: Literal["hemisphere"] = "hemisphere"
 
     attributes = (*_mesh_attr, "builtin", "resolution")
 
@@ -359,14 +365,14 @@ class MeshHemisphere(Mesh):
         return v
 
 
-class MeshCone(Mesh):
+class MeshCone(MeshBase):
     """
     Cone mesh from top and bottom polygons.
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/c.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "cone"
+    builtin: Literal["cone"] = "cone"
 
     attributes = (*_mesh_attr, "builtin", "nvert", "radius")
 
@@ -395,14 +401,14 @@ class MeshCone(Mesh):
         return v
 
 
-class MeshSupersphere(Mesh):
+class MeshSupersphere(MeshBase):
     """
     Supersphere (superellipsoid) shape.
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/ss.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "supersphere"
+    builtin: Literal["supersphere"] = "supersphere"
 
     attributes = (*_mesh_attr, "builtin", "resolution", "e", "n")
 
@@ -434,14 +440,14 @@ class MeshSupersphere(Mesh):
         return v
 
 
-class MeshTorus(Mesh):
+class MeshTorus(MeshBase):
     """
     Supertorus (generalized torus) shape.
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/st.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "torus"
+    builtin: Literal["torus"] = "torus"
 
     attributes = (*_mesh_attr, "builtin", "resolution", "radius", "s", "t")
 
@@ -485,14 +491,14 @@ class MeshTorus(Mesh):
         return v
 
 
-class MeshWedge(Mesh):
+class MeshWedge(MeshBase):
     """
     Slice of a unit spherical shell.
 
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/w.png" width="300" />
     """
 
-    builtin: ClassVar[str] = "wedge"
+    builtin: Literal["wedge"] = "wedge"
 
     attributes = (
         *_mesh_attr,
@@ -556,10 +562,10 @@ class MeshWedge(Mesh):
         return v
 
 
-class MeshPlate(Mesh):
+class MeshPlate(MeshBase):
     """A rectangular plate with given resolution in each dimension. This mesh is designed to be used by the tactile sensor, which reports data at the vertices."""
 
-    builtin: ClassVar[str] = "plate"
+    builtin: Literal["plate"] = "plate"
 
     attributes = (*_mesh_attr, "builtin", "res_x", "res_y")
 
@@ -578,6 +584,18 @@ class MeshPlate(Mesh):
             raise ValueError(msg)
         return v
 
+
+AnyMesh = Annotated[
+    MeshSphere
+    | MeshHemisphere
+    | MeshCone
+    | MeshSupersphere
+    | MeshTorus
+    | MeshWedge
+    | MeshPlate
+    | Mesh,
+    Field(discriminator="builtin"),
+]
 
 if __name__ == "__main__":
     MeshPlate(res_x=1, res_y=2)

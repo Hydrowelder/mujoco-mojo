@@ -68,7 +68,7 @@ class EqualityWeldSite(EqualityBase):
     """A constant that scales the angular residual (angular constraint violation). Notionally in units of torque/force=lengthtorque/force=length. Intuitively this coefficient defines how much the weld "cares" about rotational displacements vs. translational displacements. Setting this value to 0 makes the weld behave like a connect constraint. Note that this value has units of length and can therefore be understood as follows. Imagining that the weld is implemented by a flat patch of glue sticking the two bodies together, torquescale can be interpreted as the diameter of this glue patch."""
 
 
-EqualityWeld = Annotated[
+AnyEqualityWeld = Annotated[
     EqualityWeldBody | EqualityWeldSite,
     Field(discriminator="type"),
 ]

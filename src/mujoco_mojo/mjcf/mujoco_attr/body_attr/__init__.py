@@ -4,7 +4,7 @@ from .attach import Attach
 from .camera import Camera
 from .composite import Composite
 from .composite_attr import (
-    CompositeGeom,
+    AnyCompositeGeom,
     CompositeJoint,
     CompositeSite,
     CompositeSkin,
@@ -18,7 +18,7 @@ from .flexcomp_attr import (
 )
 from .free_joint import FreeJoint
 from .geom import (
-    Geom,
+    AnyGeom,
     GeomBox,
     GeomCapsule,
     GeomCylinder,
@@ -33,7 +33,7 @@ from .inertial import Inertial
 from .joint import Joint
 from .light import Light
 from .site import (
-    Site,
+    AnySite,
     SiteBox,
     SiteCapsule,
     SiteCylinder,
@@ -42,10 +42,12 @@ from .site import (
 )
 
 __all__ = [
+    "AnyCompositeGeom",
+    "AnyGeom",
+    "AnySite",
     "Attach",
     "Camera",
     "Composite",
-    "CompositeGeom",
     "CompositeJoint",
     "CompositeSite",
     "CompositeSkin",
@@ -55,7 +57,6 @@ __all__ = [
     "FlexCompElasticity",
     "FlexCompPin",
     "FreeJoint",
-    "Geom",
     "GeomBox",
     "GeomCapsule",
     "GeomCylinder",
@@ -68,7 +69,6 @@ __all__ = [
     "Inertial",
     "Joint",
     "Light",
-    "Site",
     "SiteBox",
     "SiteCapsule",
     "SiteCylinder",
