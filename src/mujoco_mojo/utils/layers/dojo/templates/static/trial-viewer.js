@@ -30,7 +30,7 @@ const tw = {
 
 const DEFAULT_CONFIG = {
   xAxis: "time",
-  yAxes: [],
+  yAxes: {}, // Key: signal name, Value: { label, color, width, etc. }
   refFrame: null,
   grid: "all",
   linemode: "lines", // Renamed from markerMode for clarity
@@ -187,27 +187,24 @@ function trialViewer(trialId, externalUrl) {
     },
 
     shiftY(index, direction, isWarp = false) {
-      // direction: -1 for left, 1 for right
-      if (!isWarp) {
-        const newIndex = index + direction;
-        if (newIndex < 0 || newIndex >= this.config.yAxes.length) return;
+      const keys = Object.keys(this.config.yAxes);
+      if (keys.length < 2) return;
 
-        const arr = [...this.config.yAxes];
-        [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
-        this.config.yAxes = arr;
+      let newKeys = [...keys];
+      const movedKey = newKeys.splice(index, 1)[0];
+
+      if (isWarp) {
+        direction === -1 ? newKeys.unshift(movedKey) : newKeys.push(movedKey);
       } else {
-        // "Warp" to front or end
-        const arr = [...this.config.yAxes];
-        const [movedItem] = arr.splice(index, 1);
-
-        if (direction === -1) {
-          arr.unshift(movedItem); // Jump to start
-        } else {
-          arr.push(movedItem); // Jump to end
-        }
-
-        this.config.yAxes = arr;
+        newKeys.splice(index + direction, 0, movedKey);
       }
+
+      // Reconstruct the object to enforce the new insertion order
+      const newYAxes = {};
+      newKeys.forEach((k) => {
+        newYAxes[k] = this.config.yAxes[k];
+      });
+      this.config.yAxes = newYAxes;
 
       this.saveAndRender();
     },
@@ -262,7 +259,7 @@ function trialViewer(trialId, externalUrl) {
             this.data = { ...(this.data || {}), ...resp.data };
           }
 
-          if (this.config.yAxes.some((y) => chunk.includes(y))) {
+          if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y))) {
             this.renderPlot();
           }
 
@@ -301,7 +298,7 @@ function trialViewer(trialId, externalUrl) {
 
       const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
       const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [this.config.xAxis, ...this.config.yAxes];
+      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
 
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop());
@@ -466,7 +463,10 @@ function trialViewer(trialId, externalUrl) {
 
       // 2. CALCULATE Y (VALUE) WINDOW
       // We use the full padded range of your active signals to find a 'reasonable' scale
-      const fullY = this.calculatePaddedRange(this.config.yAxes, false);
+      const fullY = this.calculatePaddedRange(
+        Object.keys(this.config.yAxes),
+        false,
+      );
       const yTotalHeight = Math.abs(fullY[1] - fullY[0]);
 
       // We'll show a 20% vertical slice centered on the point
@@ -550,7 +550,8 @@ function trialViewer(trialId, externalUrl) {
           this.theme = document.documentElement.classList.contains("dark")
             ? "dark"
             : "light";
-          if (this.data && this.config.yAxes.length > 0) this.renderPlot();
+          if (this.data && Object.keys(this.config.yAxes).length > 0)
+            this.renderPlot();
         }
       });
       observer.observe(document.documentElement, { attributes: true });
@@ -571,7 +572,10 @@ function trialViewer(trialId, externalUrl) {
       // 4. THE MAIN DATA LOAD
       try {
         // Load the main data the user is requesting
-        const initialCols = [this.config.xAxis, ...this.config.yAxes];
+        const initialCols = [
+          this.config.xAxis,
+          ...Object.keys(this.config.yAxes),
+        ];
         const response = await this.fetchTrialData(this.trialId, initialCols);
 
         this.columns = response.columns.all.sort();
@@ -776,7 +780,10 @@ function trialViewer(trialId, externalUrl) {
         this.vsDatasets = {};
 
         // Fetch immediate traces
-        const initialCols = [this.config.xAxis, ...this.config.yAxes];
+        const initialCols = [
+          this.config.xAxis,
+          ...Object.keys(this.config.yAxes),
+        ];
         const response = await this.fetchTrialData(this.trialId, initialCols);
 
         this.columns = response.columns.all.sort();
@@ -810,7 +817,8 @@ function trialViewer(trialId, externalUrl) {
           this.config.vsEnabled &&
           oldValue?.vsEnabled && // Only auto-sync if it was already on
           (value.xAxis !== oldValue?.xAxis ||
-            value.yAxes.length !== oldValue?.yAxes?.length)
+            Object.keys(value.yAxes).length !==
+              Object.keys(oldValue?.yAxes || {}).length)
         ) {
           await this.syncVsRange();
         }
@@ -842,11 +850,11 @@ function trialViewer(trialId, externalUrl) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [this.config.xAxis, ...this.config.yAxes];
+        let activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
 
         if (this.config.refFrame) {
           const families = new Set();
-          this.config.yAxes.forEach((col) => {
+          Object.keys(this.config.yAxes).forEach((col) => {
             if (col.includes(":")) {
               families.add(col.substring(0, col.lastIndexOf(":")));
             }
@@ -1151,6 +1159,31 @@ function trialViewer(trialId, externalUrl) {
       );
     },
 
+    getYProps(axis, index) {
+      const obj = this.config.yAxes[axis] || {};
+      return {
+        name: axis,
+        label: obj.label || axis,
+        color: obj.color || this.getSignalColor(index),
+        width: obj.width || 3,
+        opacity: obj.opacity || 1.0,
+        dash: obj.dash || "solid",
+        marker: obj.marker || "none",
+        scale: obj.scale || "1.0",
+      };
+    },
+
+    parseScale(scaleStr) {
+      try {
+        const safe = String(scaleStr)
+          .replace(/pi/gi, Math.PI)
+          .replace(/[^-()\d/*+.]/g, "");
+        return Function(`"use strict"; return (${safe})`)() || 1.0;
+      } catch {
+        return 1.0;
+      }
+    },
+
     hydrateFromUrl(blob) {
       try {
         const decoded = LZString.decompressFromEncodedURIComponent(blob);
@@ -1282,12 +1315,11 @@ function trialViewer(trialId, externalUrl) {
       }
 
       // 2. Check Y-Axes
-      if (!Array.isArray(cfg.yAxes)) {
-        errors.push("yAxes must be an array.");
+      if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
+        errors.push("yAxes must be a hashmap.");
       } else {
-        cfg.yAxes.forEach((y) => {
-          if (!this.columns.includes(y))
-            errors.push(`Y-Axis signal "${y}" is missing.`);
+        Object.keys(cfg.yAxes).forEach((y) => {
+          if (!this.columns.includes(y)) errors.push(`Y-Axis "${y}" missing.`);
         });
       }
 
@@ -1443,10 +1475,10 @@ function trialViewer(trialId, externalUrl) {
      * Export ONLY currently displayed data as CSV
      */
     downloadCSV() {
-      if (!this.data || this.config.yAxes.length === 0) return;
+      if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
 
       // 1. Identify only the active columns (X + all selected Ys)
-      const activeCols = [this.config.xAxis, ...this.config.yAxes];
+      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
       const rowCount = this.data[this.config.xAxis].length;
 
       // 2. Build CSV with only those columns
@@ -1528,28 +1560,25 @@ function trialViewer(trialId, externalUrl) {
      * Toggle Logic: Adds/Removes signals from the Y-Axis array
      */
     toggleY(col) {
-      if (this.config.yAxes.includes(col)) {
-        this.config.yAxes = this.config.yAxes.filter((c) => c !== col);
+      if (this.config.yAxes[col]) {
+        delete this.config.yAxes[col];
       } else {
-        this.config.yAxes = [...this.config.yAxes, col];
+        // Maintain feature parity: add with a placeholder empty object
+        // getYProps will handle filling in the defaults during render
+        this.config.yAxes[col] = {};
       }
 
-      // RESET scaling so we see the new data immediately
       this.config.rangeY = null;
-
-      // AUTO-SYNC: If we are comparing trials, go grab the new column for them
-      if (this.config.vsEnabled) {
-        this.syncVsRange();
-      }
+      if (this.config.vsEnabled) this.syncVsRange();
     },
 
     /**
      * Clear all selected Y-Axis signals
      */
     clearYAxes() {
-      if (this.config.yAxes.length === 0) return;
+      if (Object.keys(this.config.yAxes).length === 0) return;
 
-      this.config.yAxes = [];
+      this.config.yAxes = {};
       this.saveAndRender(); // Saves to localStorage and updates Plotly
 
       // Update the JSON editor if it's open
@@ -1597,11 +1626,13 @@ function trialViewer(trialId, externalUrl) {
       }
 
       activeDatasets.forEach((dataset) => {
-        keys.forEach((key) => {
+        keys.forEach((key, i) => {
+          const p = this.getYProps(key, i);
+          const scale = this.parseScale(p.scale);
           const series = dataset[key];
           if (!series) return;
           for (let i = 0; i < series.length; i++) {
-            const val = series[i];
+            const val = series[i] * scale;
             if (val < globalMin) globalMin = val;
             if (val > globalMax) globalMax = val;
           }
@@ -1648,29 +1679,36 @@ function trialViewer(trialId, externalUrl) {
         this.config.rangeX ||
         this.calculatePaddedRange([this.config.xAxis], false);
       const displayRangeY =
-        this.config.rangeY || this.calculatePaddedRange(this.config.yAxes);
+        this.config.rangeY ||
+        this.calculatePaddedRange(Object.keys(this.config.yAxes));
 
       // main traces
-      let traces = this.config.yAxes.map((key, i) => ({
-        x: this.data[this.config.xAxis],
-        y: this.data[key],
-        name: key,
-        mode: this.config.linemode,
-        type: "scatter",
-        line: {
-          width: 3,
-          color: this.getSignalColor(i),
-          shape: this.config.interp,
-        },
-        marker: { size: 6, symbol: "circle" },
-        hoverlabel: {
-          namelength: -1,
-          bgcolor: tooltipBg,
-          bordercolor: tooltipBorder,
-          font: { family: "monospace", size: 12, color: tooltipFont },
-        },
-        hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
-      }));
+      const yKeys = Object.keys(this.config.yAxes);
+      let traces = yKeys.map((key, i) => {
+        const p = this.getYProps(key, i);
+        const scale = this.parseScale(p.scale);
+
+        return {
+          x: this.data[this.config.xAxis],
+          y: this.data[p.name].map((v) => v * scale),
+          name: p.label,
+          mode: this.config.linemode,
+          type: "scatter",
+          line: {
+            width: 3,
+            color: this.getSignalColor(i),
+            shape: this.config.interp,
+          },
+          marker: { size: 6, symbol: "circle" },
+          hoverlabel: {
+            namelength: -1,
+            bgcolor: tooltipBg,
+            bordercolor: tooltipBorder,
+            font: { family: "monospace", size: 12, color: tooltipFont },
+          },
+          hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
+        };
+      });
 
       // vs traces
       if (this.config.vsEnabled) {
@@ -1692,15 +1730,18 @@ function trialViewer(trialId, externalUrl) {
           const dataset = this.vsDatasets[vsId];
           if (!dataset) return;
 
-          const vsTraces = this.config.yAxes.map((key, i) => {
+          const vsTraces = yKeys.map((key, i) => {
+            const p = this.getYProps(key, i);
+            const scale = this.parseScale(p.scale);
+
             // Check if this specific parameter has shown up in the legend yet
             const isFirstEntryForThisParam = !legendTracker.has(key);
 
             const t = {
               x: dataset[this.config.xAxis],
-              y: dataset[key],
+              y: dataset[p.name].map((v) => v * scale),
               // Name it after the signal so the legend is clear
-              name: `${key} (<i>vs.</i>)`,
+              name: `${p.label} (<i>vs.</i>)`,
               // Group by signal name so toggling one toggles all trials for that signal
               legendgroup: `group_${key}`,
               showlegend: isFirstEntryForThisParam,
@@ -1794,7 +1835,7 @@ function trialViewer(trialId, externalUrl) {
 
       // layout
       const layout = {
-        uirevision: `${this.trialId}_${this.config.xAxis}_${this.config.yAxes.join("_")}`,
+        uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}`,
         title: this.config.title
           ? {
               text: this.config.title,
