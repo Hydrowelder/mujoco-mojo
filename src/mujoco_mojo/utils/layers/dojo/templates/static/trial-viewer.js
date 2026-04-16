@@ -1684,31 +1684,35 @@ function trialViewer(trialId, externalUrl) {
 
       // main traces
       const yKeys = Object.keys(this.config.yAxes);
-      let traces = yKeys.map((key, i) => {
-        const p = this.getYProps(key, i);
-        const scale = this.parseScale(p.scale);
+      let traces = yKeys
+        .map((key, i) => {
+          const p = this.getYProps(key, i);
+          const scale = this.parseScale(p.scale);
 
-        return {
-          x: this.data[this.config.xAxis],
-          y: this.data[p.name].map((v) => v * scale),
-          name: p.label,
-          mode: this.config.linemode,
-          type: "scatter",
-          line: {
-            width: 3,
-            color: this.getSignalColor(i),
-            shape: this.config.interp,
-          },
-          marker: { size: 6, symbol: "circle" },
-          hoverlabel: {
-            namelength: -1,
-            bgcolor: tooltipBg,
-            bordercolor: tooltipBorder,
-            font: { family: "monospace", size: 12, color: tooltipFont },
-          },
-          hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
-        };
-      });
+          if (!this.data[p.name]) return null;
+
+          return {
+            x: this.data[this.config.xAxis],
+            y: this.data[p.name].map((v) => v * scale),
+            name: p.label,
+            mode: this.config.linemode,
+            type: "scatter",
+            line: {
+              width: 3,
+              color: this.getSignalColor(i),
+              shape: this.config.interp,
+            },
+            marker: { size: 6, symbol: "circle" },
+            hoverlabel: {
+              namelength: -1,
+              bgcolor: tooltipBg,
+              bordercolor: tooltipBorder,
+              font: { family: "monospace", size: 12, color: tooltipFont },
+            },
+            hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
+          };
+        })
+        .filter((trace) => trace !== null);
 
       // vs traces
       if (this.config.vsEnabled) {
