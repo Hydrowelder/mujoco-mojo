@@ -1563,13 +1563,20 @@ function trialViewer(trialId, externalUrl) {
       if (this.config.yAxes[col]) {
         delete this.config.yAxes[col];
       } else {
-        // Maintain feature parity: add with a placeholder empty object
-        // getYProps will handle filling in the defaults during render
-        this.config.yAxes[col] = {};
-      }
+        // Find the next available color index
+        const nextIndex = Object.keys(this.config.yAxes).length;
 
-      this.config.rangeY = null;
-      if (this.config.vsEnabled) this.syncVsRange();
+        // Initialize with DEFAULTS so Alpine has a "path" to watch
+        this.config.yAxes[col] = {
+          color: this.getSignalColor(nextIndex), // Hard-set the default hex
+          label: "",
+          width: 3,
+          opacity: 1,
+          scale: "1.0",
+          dash: "solid",
+        };
+      }
+      this.saveAndRender();
     },
 
     /**
@@ -1698,11 +1705,13 @@ function trialViewer(trialId, externalUrl) {
             mode: this.config.linemode,
             type: "scatter",
             line: {
-              width: 3,
-              color: this.getSignalColor(i),
+              width: p.width,
+              color: p.color,
               shape: this.config.interp,
+              dash: p.dash,
             },
-            marker: { size: 6, symbol: "circle" },
+            marker: { size: 6, symbol: p.marker },
+            opacity: p.opacity,
             hoverlabel: {
               namelength: -1,
               bgcolor: tooltipBg,
@@ -1753,12 +1762,12 @@ function trialViewer(trialId, externalUrl) {
               type: "scatter",
               line: {
                 width: 1,
-                color: this.getSignalColor(i),
+                color: p.color,
                 shape: this.config.interp,
                 dash: "dot",
               },
               opacity: 0.35,
-              marker: { size: 4, symbol: "square" },
+              marker: { size: 4, symbol: p.marker },
               hoverlabel: { namelength: -1 },
               hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
             };
