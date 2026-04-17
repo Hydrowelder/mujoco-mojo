@@ -1561,7 +1561,8 @@ function trialViewer(trialId, externalUrl) {
      */
     toggleY(col) {
       if (this.config.yAxes[col]) {
-        delete this.config.yAxes[col];
+        const { [col]: _, ...remainingY } = this.config.yAxes;
+        this.config.yAxes = remainingY;
       } else {
         // Find the next available color index
         const nextIndex = Object.keys(this.config.yAxes).length;
@@ -1586,6 +1587,7 @@ function trialViewer(trialId, externalUrl) {
       if (Object.keys(this.config.yAxes).length === 0) return;
 
       this.config.yAxes = {};
+      this.config.yAxes = { ...this.config.yAxes };
       this.saveAndRender(); // Saves to localStorage and updates Plotly
 
       // Update the JSON editor if it's open
@@ -1743,39 +1745,46 @@ function trialViewer(trialId, externalUrl) {
           const dataset = this.vsDatasets[vsId];
           if (!dataset) return;
 
-          const vsTraces = yKeys.map((key, i) => {
-            const p = this.getYProps(key, i);
-            const scale = this.parseScale(p.scale);
+          const vsTraces = yKeys
+            .map((key, i) => {
+              const p = this.getYProps(key, i);
 
-            // Check if this specific parameter has shown up in the legend yet
-            const isFirstEntryForThisParam = !legendTracker.has(key);
+              if (!dataset[p.name]) {
+                return null;
+              }
 
-            const t = {
-              x: dataset[this.config.xAxis],
-              y: dataset[p.name].map((v) => v * scale),
-              // Name it after the signal so the legend is clear
-              name: `${p.label} (<i>vs.</i>)`,
-              // Group by signal name so toggling one toggles all trials for that signal
-              legendgroup: `group_${key}`,
-              showlegend: isFirstEntryForThisParam,
-              mode: this.config.linemode,
-              type: "scatter",
-              line: {
-                width: 1,
-                color: p.color,
-                shape: this.config.interp,
-                dash: "dot",
-              },
-              opacity: 0.35,
-              marker: { size: 4, symbol: p.marker },
-              hoverlabel: { namelength: -1 },
-              hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
-            };
+              const scale = this.parseScale(p.scale);
 
-            // Mark this parameter as 'legend-accounted-for'
-            legendTracker.add(key);
-            return t;
-          });
+              // Check if this specific parameter has shown up in the legend yet
+              const isFirstEntryForThisParam = !legendTracker.has(key);
+
+              const t = {
+                x: dataset[this.config.xAxis],
+                y: dataset[p.name].map((v) => v * scale),
+                // Name it after the signal so the legend is clear
+                name: `${p.label} (<i>vs.</i>)`,
+                // Group by signal name so toggling one toggles all trials for that signal
+                legendgroup: `group_${key}`,
+                showlegend: isFirstEntryForThisParam,
+                mode: this.config.linemode,
+                type: "scatter",
+                line: {
+                  width: 1,
+                  color: p.color,
+                  shape: this.config.interp,
+                  dash: "dot",
+                },
+                opacity: 0.35,
+                marker: { size: 4, symbol: p.marker },
+                hoverlabel: { namelength: -1 },
+                hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
+              };
+
+              // Mark this parameter as 'legend-accounted-for'
+              legendTracker.add(key);
+              return t;
+            })
+            .filter((trace) => trace !== null);
           traces = [...traces, ...vsTraces];
         });
       }
@@ -1799,10 +1808,10 @@ function trialViewer(trialId, externalUrl) {
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
         zeroline: false,
-        tickfont: { color: textColor },
+        tickfont: { color: textColor, size: 14 },
         title: {
           text: this.config.xAxisTitle || this.config.xAxis,
-          font: { size: 11, color: textColor, family: "monospace" },
+          font: { size: 14, color: textColor, family: "monospace" },
         },
         autorange: false,
         showspikes: showX,
@@ -1812,7 +1821,7 @@ function trialViewer(trialId, externalUrl) {
       };
 
       const frameLabel = this.config.refFrame
-        ? `<br><span style="color: ${textColor}; font-size: 10px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
+        ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
         : ``;
 
       // y axis config
@@ -1834,10 +1843,10 @@ function trialViewer(trialId, externalUrl) {
         showgrid: this.config.grid !== "none",
         minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
         zeroline: false,
-        tickfont: { color: textColor },
+        tickfont: { color: textColor, size: 14 },
         title: {
           text: this.config.yAxisTitle + frameLabel,
-          font: { size: 11, color: textColor, family: "monospace" },
+          font: { size: 14, color: textColor, family: "monospace" },
         },
         autorange: false,
         showspikes: showY,
@@ -1884,15 +1893,15 @@ function trialViewer(trialId, externalUrl) {
                 orientation: "v",
                 x: 1.02,
                 y: 1,
-                font: { size: 10, color: textColor },
+                font: { family: "monospace", size: 14, color: textColor },
                 groupclick: "togglegroup",
               }
             : {
                 orientation: "h",
-                y: -0.1,
+                y: -0.2,
                 x: 0.5,
                 xanchor: "center",
-                font: { size: 10, color: textColor },
+                font: { family: "monospace", size: 14, color: textColor },
                 groupclick: "togglegroup",
               },
         xaxis: xAxisObj,
