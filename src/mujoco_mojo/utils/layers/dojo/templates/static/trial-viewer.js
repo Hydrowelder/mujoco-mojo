@@ -1418,46 +1418,48 @@ function trialViewer(trialId, externalUrl) {
     /**
      * Export Plot as Image (PNG, JPG, SVG)
      */
-    async downloadPlot(format) {
+    async downloadPlot(format, scale = 1) {
       const el = document.getElementById("plot-area");
       if (!el) return;
 
       const plotlyFormat = format === "jpg" ? "jpeg" : format;
       const isDark = document.documentElement.classList.contains("dark");
-
-      // Match the Metadata Card background exactly (#1e293b)
       const bgColor = isDark ? tw.slate[800] : "#ffffff";
 
-      this.notify(`Preparing ${format.toUpperCase()}...`, "info");
+      // Calculate resulting resolution for the notification
+      const resW = Math.round(1280 * scale);
+      const resH = Math.round(720 * scale);
+      this.notify(
+        `Exporting ${resW}x${resH} ${format.toUpperCase()}...`,
+        "info",
+      );
 
       try {
-        // 1. Capture the current "Glass" state so we can restore it
         const originalPaper = el.layout.paper_bgcolor;
         const originalPlot = el.layout.plot_bgcolor;
 
-        // 2. TEMPORARILY apply the solid background for the snapshot
+        // Apply background
         await Plotly.relayout(el, {
           paper_bgcolor: bgColor,
           plot_bgcolor: bgColor,
         });
 
-        // 3. Generate the image from the now-solid plot
         const dataUrl = await Plotly.toImage(el, {
           format: plotlyFormat,
-          width: 1280,
-          height: 720,
+          width: 1280, // Keep base width stable
+          height: 720, // Keep base height stable
+          scale: scale, // Multiply EVERYTHING by this factor
         });
 
-        // 4. IMMEDIATELY restore the transparency for the UI
+        // Restore transparency
         await Plotly.relayout(el, {
           paper_bgcolor: originalPaper,
           plot_bgcolor: originalPlot,
         });
 
-        // 5. Trigger the browser download
         const link = document.createElement("a");
         link.href = dataUrl;
-        link.download = `${this.trialId}_plot.${format}`;
+        link.download = `${this.trialId}_${resW}p.${format}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
