@@ -19,7 +19,7 @@ def validate_dojo_auth(credentials: HTTPBasicCredentials = Depends(security)):
     if not shared.AUTH_PASSWORD:
         return None
 
-    if credentials.password != shared.AUTH_PASSWORD:
+    if not credentials or credentials.password != shared.AUTH_PASSWORD:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Mojo Password",
