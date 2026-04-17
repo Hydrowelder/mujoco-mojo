@@ -4,6 +4,7 @@
 {% block extra_head %}
 <script src="/static/plotly-3.4.0.min.js"></script>
 <script src="/static/lz-string.min.js"></script>
+<script src="/static/iro.min.js"></script>
 <script src="/static/trial-viewer.js"></script>
 <style>
     .custom-scrollbar {
@@ -432,14 +433,14 @@
          x-show="!loading && data">
 
         <!-- row 1 -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
+        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
             <!-- x axis selector -->
             <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <span class="text-sm font-black uppercase text-slate-400 w-auto">
                     X-Axis
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -450,7 +451,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             X-Axis Signal
@@ -565,7 +566,7 @@
                     Ref. Frame
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -576,7 +577,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Rotation Logic
@@ -631,7 +632,7 @@
                                       :key="q">
                                 <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
                                         class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                    <span class="text-sm font-mono font-bold pr-2"
+                                    <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
                                           :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                           x-text="q"></span>
                                     <span x-show="config.refFrame === q"
@@ -645,14 +646,14 @@
         </div>
 
         <!-- row 2 -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
+        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
             <!-- y axis selector -->
             <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <span class="text-sm font-black uppercase text-slate-400 w-auto">
                     Y-Axes
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -663,7 +664,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Y-Axis Signals
@@ -692,7 +693,7 @@
                      @click.away="yMenuOpen = false">
                     <button @click="yMenuOpen = !yMenuOpen"
                             class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
-                        <span x-text="config.yAxes.length"></span>
+                        <span x-text="Object.keys(config.yAxes).length"></span>
                         <svg class="w-3 h-3 transition-transform"
                              :class="yMenuOpen ? 'rotate-180' : ''"
                              fill="none"
@@ -770,11 +771,11 @@
                                 <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
                                     <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
                                         <input type="checkbox"
-                                               :checked="config.yAxes.includes(col)"
+                                               :checked="config.yAxes[col]"
                                                @click.stop="toggleY(col)"
                                                class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
                                         <span class="text-sm font-mono font-bold"
-                                              :class="config.yAxes.includes(col) ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                              :class="config.yAxes[col] ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                               x-text="col"></span>
                                     </label>
                                 </template>
@@ -787,7 +788,7 @@
                                   x-show="getFilteredCols('y').length > 0"></span>
 
                             <button @click="clearYAxes()"
-                                    x-show="config.yAxes.length > 0"
+                                    x-show="Object.keys(config.yAxes).length > 0"
                                     x-transition
                                     class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
                                 <svg class="w-3 h-3 transition-transform group-hover:scale-110"
@@ -806,73 +807,357 @@
                 </div>
             </div>
             <!-- selected ribbon -->
-            <div class="flex-1 w-full min-w-0">
-                <div class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)]">
-                    <template x-for="(col, index) in config.yAxes"
+            <div class="flex-1 w-full min-w-0 relative"
+                 x-data="{
+        canScrollLeft: false,
+        canScrollRight: false,
+        checkScroll() {
+            const el = this.$refs.ribbon;
+            // 2px buffer to handle sub-pixel rounding in different browsers
+            this.canScrollLeft = el.scrollLeft > 2;
+            this.canScrollRight = el.scrollLeft < (el.scrollWidth - el.clientWidth - 2);
+        }
+     }"
+                 x-init="
+        $nextTick(() => checkScroll());
+        $watch('config.yAxes', () => $nextTick(() => checkScroll()));
+     ">
+
+                <div x-ref="ribbon"
+                     @scroll="checkScroll()"
+                     class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
+                     :style="`
+            mask-image: linear-gradient(
+                to right,
+                ${canScrollLeft ? 'transparent' : 'black'} 0%,
+                black 40px,
+                black calc(100% - 40px),
+                ${canScrollRight ? 'transparent' : 'black'} 100%
+            );
+            -webkit-mask-image: linear-gradient(
+                to right,
+                ${canScrollLeft ? 'transparent' : 'black'} 0%,
+                black 40px,
+                black calc(100% - 40px),
+                ${canScrollRight ? 'transparent' : 'black'} 100%
+            );
+         `">
+
+                    <template x-for="(col, index) in Object.keys(config.yAxes)"
                               :key="col">
-                        <span class="shrink-0 pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border"
-                              :style="`
-                    background-color: ${getSignalColor(index)}1a;
-                    border-color: ${getSignalColor(index)}4d;
-                    color: ${getSignalColor(index)};
-                  `"
-                              @mouseenter="$el.style.borderColor = getSignalColor(index)"
-                              @mouseleave="$el.style.borderColor = getSignalColor(index) + '4d'">
+                        <!-- ribbon chip -->
+                        <div class="relative shrink-0"
+                             x-data="{
+        open: false,
+        coords: { top: 0, left: 0, width: 0 }
+     }">
+                            <span x-ref="anchor"
+                                  class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
+                                  :style="`
+                background-color: ${config.yAxes[col].color || getSignalColor(index)}1a;
+                border-color: ${config.yAxes[col].color || getSignalColor(index)}4d;
+                color: ${config.yAxes[col].color || getSignalColor(index)};
+              `"
+                                  @mouseenter="$el.style.borderColor = (config.yAxes[col].color || getSignalColor(index))"
+                                  @mouseleave="if(!open) $el.style.borderColor = (config.yAxes[col].color || getSignalColor(index)) + '4d'">
 
-                            <button @click.stop="shiftY(index, -1, $event.shiftKey)"
-                                    x-show="index > 0"
-                                    class="p-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                                    title="Move Left (Shift+Click to Jump to Start)">
-                                <svg class="w-3 h-3"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="3"
-                                          d="M15 19l-7-7 7-7" />
-                                </svg>
-                            </button>
+                                <!-- shift left arrow -->
+                                <button @click.stop="shiftY(index, -1, $event.shiftKey)"
+                                        x-show="index > 0"
+                                        class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                                    <svg class="w-3.5 h-3.5"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="3"
+                                              d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
 
-                            <span x-text="col"
-                                  class="px-0.5"></span>
+                                <!-- config button -->
+                                <button @click="
+                    const rect = $refs.anchor.getBoundingClientRect();
+                    // We add the current scroll position to the coordinates
+                    coords = {
+                        top: rect.bottom + window.scrollY,
+                        left: rect.left + window.scrollX,
+                        width: rect.width
+                    };
+                    open = !open;
+                "
+                                        class="px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1.5 transition-colors">
+                                    <span x-text="config.yAxes[col]?.label || col"></span>
+                                    <svg class="w-3 h-3 opacity-30 transition-transform"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path d="M19 9l-7 7-7-7"
+                                              stroke-width="4" />
+                                    </svg>
+                                </button>
 
-                            <button @click.stop="shiftY(index, 1, $event.shiftKey)"
-                                    x-show="index < config.yAxes.length - 1"
-                                    class="p-0.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                                    title="Move Right (Shift+Click to Jump to End)">
-                                <svg class="w-3 h-3"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="3"
-                                          d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
+                                <!-- shift right arrow -->
+                                <button @click.stop="shiftY(index, 1, $event.shiftKey)"
+                                        x-show="index < Object.keys(config.yAxes).length - 1"
+                                        class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                                    <svg class="w-3.5 h-3.5"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="3"
+                                              d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
 
-                            <div class="w-px h-3 bg-current opacity-20 mx-0.5"></div>
+                                <div class="w-px h-3 bg-current opacity-20 mx-0.5"></div>
 
-                            <button @click.stop="toggleY(col)"
-                                    class="p-0.5 rounded-md transition-colors"
-                                    :style="`color: ${getSignalColor(index)}66;`"
-                                    @mouseenter="$el.style.backgroundColor = getSignalColor(index) + '33'; $el.style.color = getSignalColor(index)"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'; $el.style.color = getSignalColor(index) + '66'">
-                                <svg class="w-2.5 h-2.5"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="3.5"
-                                          d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </span>
+                                <!-- delete signal -->
+                                <button @click.stop="toggleY(col)"
+                                        class="p-0.5 rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10">
+                                    <svg class="w-2.5 h-2.5"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="3.5"
+                                              d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </span>
+
+                            <!-- dropdown -->
+                            <template x-teleport="body">
+                                <div x-show="open"
+                                     x-transition
+                                     @click.away="open = false"
+                                     x-data="{
+    isDirty: false,
+    temp: { label: '', color: '', width: 3, opacity: 1, scale: '1.0', dash: 'solid', marker: 'none' }
+}"
+                                     x-init="$watch('open', value => {
+            if(value) {
+                temp = JSON.parse(JSON.stringify(config.yAxes[col]));
+                isDirty = false;
+            }
+         })"
+                                     :style="`
+            position: absolute;
+            top: ${coords.top + 12}px;
+            left: ${Math.max(10, coords.left - (320/2) + (coords.width/2))}px;
+         `"
+                                     class="w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[600]">
+
+                                    <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-white dark:bg-slate-800 border-t border-l border-slate-400 dark:border-slate-700"></div>
+
+                                    <div class="relative z-10 space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <p class="text-sm font-black uppercase text-slate-500 tracking-tight truncate max-w-[220px]"
+                                               x-text="col"></p>
+                                            <button @click="open = false"
+                                                    class="text-slate-400 hover:text-rose-500 transition-colors">
+                                                <svg class="w-5 h-5"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path d="M6 18L18 6M6 6l12 12"
+                                                          stroke-width="3" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        <button @click="config.yAxes[col] = { ...temp }; saveAndRender(); isDirty = false;"
+                                                :disabled="!isDirty"
+                                                :class="isDirty
+                        ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-md'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
+                                                class="w-full py-2 rounded-md font-bold uppercase text-xs tracking-widest transition-all">
+                                            Apply Changes
+                                        </button>
+
+                                        <div class="space-y-1">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Legend Label</label>
+                                            <input type="text"
+                                                   x-model="temp.label"
+                                                   @input="isDirty = true"
+                                                   :placeholder="temp.label || col"
+                                                   class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md px-3 py-2 text-sm font-mono text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
+                                        </div>
+                                        <div class="space-y-2"
+                                             x-init="$nextTick(() => {
+                    const picker = new iro.ColorPicker($refs.picker, {
+                        width: 280,
+                        height: 180,
+                        color: temp.color || '#ffffff',
+                        padding: 0,
+                        handleRadius: 9,
+                        borderWidth: 1,
+                        borderColor: '#000000',
+                        layout: [
+                            {
+                                component: iro.ui.Box,
+                                options: {
+                                    margin: 10,
+                                    width: 280,
+                                    boxHeight: 160,
+                                }
+                            },
+                            {
+                                component: iro.ui.Slider,
+                                options: {
+                                    sliderType: 'hue',
+                                    width: 280,
+                                    height: 20,
+                                    margin: 10
+                                }
+                            }
+                        ]
+                    });
+                    $watch('temp.color', value => {
+                        if (value && value !== picker.color.hexString) {
+                            picker.color.set(value);
+                        }
+                    });
+
+                    picker.on('color:change', (color) => {
+                        temp.color = color.hexString;
+                        isDirty = true;
+                    });
+                 })">
+                                            <div class="flex items-center justify-between mb-1">
+                                                <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Signal Color</label>
+
+                                                <div class="flex gap-1.5">
+                                                    <template x-for="color in plotColors"
+                                                              :key="color">
+                                                        <button @click="temp.color = color; isDirty = true"
+                                                                class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                                :style="`background-color: ${color}`"
+                                                                :class="temp.color === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="flex justify-center">
+                                                <div x-ref="picker"></div>
+                                            </div>
+
+                                            <div class="flex gap-2">
+                                                <div class="relative flex-1">
+                                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">#</span>
+
+                                                    <input type="text"
+                                                           :value="(temp.color || '').replace('#', '')"
+                                                           @input="
+                   let v = $event.target.value.replace(/[^a-fA-F0-9]/g, '').substring(0, 6);
+                   temp.color = '#' + v;
+                   isDirty = true;
+               "
+                                                           class="w-full pl-7 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-cyan-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
+                                                </div>
+
+                                                <div class="w-10 h-10 rounded-md border border-slate-300 dark:border-slate-800 shadow-inner shrink-0"
+                                                     :style="`background-color: ${temp.color}`"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div class="space-y-1">
+                                                <label class="text-sm font-bold text-slate-500 uppercase">Width: <span class="text-cyan-500"
+                                                          x-text="temp.width"></span></label>
+                                                <input type="range"
+                                                       min="0.5"
+                                                       max="8"
+                                                       step="0.5"
+                                                       x-model.number="temp.width"
+                                                       @input="isDirty = true"
+                                                       class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                            </div>
+                                            <div class="space-y-1">
+                                                <label class="text-sm font-bold text-slate-500 uppercase">Opacity: <span class="text-cyan-500"
+                                                          x-text="Math.round(temp.opacity*100)+'%'"></span></label>
+                                                <input type="range"
+                                                       min="0.1"
+                                                       max="1"
+                                                       step="0.05"
+                                                       x-model.number="temp.opacity"
+                                                       @input="isDirty = true"
+                                                       class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div class="space-y-1"
+                                                 x-data="{ sOpen: false }">
+                                                <label class="text-sm font-bold text-slate-500 uppercase">Style</label>
+                                                <button @click="sOpen = !sOpen"
+                                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 text-sm font-mono text-slate-700 dark:text-slate-200">
+                                                    <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
+                                                    <svg class="w-2 h-2"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path d="M19 9l-7 7-7-7"
+                                                              stroke-width="4" />
+                                                    </svg>
+                                                </button>
+                                                <div x-show="sOpen"
+                                                     @click.away="sOpen = false"
+                                                     class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                    <template x-for="opt in ['solid', 'dash', 'dot', 'dashdot']">
+                                                        <button @click="temp.dash = opt; isDirty = true; sOpen = false"
+                                                                class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-cyan-500/10 hover:text-cyan-500 dark:text-slate-300"
+                                                                x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-1"
+                                                 x-data="{ mOpen: false }">
+                                                <label class="text-sm font-bold text-slate-500 uppercase">Marker</label>
+                                                <button @click="mOpen = !mOpen"
+                                                        class="w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 text-sm font-mono text-slate-700 dark:text-slate-200">
+                                                    <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
+                                                    <svg class="w-2 h-2"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path d="M19 9l-7 7-7-7"
+                                                              stroke-width="4" />
+                                                    </svg>
+                                                </button>
+                                                <div x-show="mOpen"
+                                                     @click.away="mOpen = false"
+                                                     class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                    <template x-for="opt in ['none', 'circle', 'square', 'diamond', 'cross']">
+                                                        <button @click="temp.marker = opt; isDirty = true; mOpen = false"
+                                                                class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-cyan-500/10 hover:text-cyan-500 dark:text-slate-300"
+                                                                x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Scale Evaluator: <span class="text-cyan-500"
+                                                      x-text="'(' + parseScale(temp.scale || '1.0').toFixed(4) + ')'"></span></label>
+                                            <input type="text"
+                                                   x-model="temp.scale"
+                                                   @input="isDirty = true"
+                                                   placeholder="1.0"
+                                                   class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 pr-8 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </template>
 
-                    <template x-if="config.yAxes.length === 0">
+                    <template x-if="Object.keys(config.yAxes).length === 0">
                         <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
                     </template>
                 </div>
@@ -883,11 +1168,11 @@
     <div class="flex flex-row gap-4 items-stretch h-[600px]">
         <!-- plot area -->
         <div class="flex-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-2xl shadow-2xl p-2 relative">
-            <div :class="(data && config.yAxes.length > 0) ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+            <div :class="(data && Object.keys(config.yAxes).length > 0) ? 'opacity-100' : 'opacity-0 pointer-events-none'"
                  id="plot-area"
                  class="w-full h-full transition-opacity duration-300">
             </div>
-            <div x-show="data && config.yAxes.length === 0"
+            <div x-show="data && Object.keys(config.yAxes).length === 0"
                  class="absolute inset-0 flex items-center justify-center text-slate-400 font-mono text-base italic">
                 Select Y-axis signals to begin...</div>
             <template x-if="loading">
@@ -1021,7 +1306,7 @@
                                             ]"
                                                   :key="opt.value">
                                             <button @click="config.linemode = opt.value; saveAndRender(); open = false"
-                                                    class="w-full text-left px-3 py-2 text-[10px] font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
+                                                    class="w-full text-left px-3 py-2 text-sm font-mono transition-colors border-b last:border-none border-slate-100 dark:border-slate-700"
                                                     :class="config.linemode === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-500'">
                                                 <span x-text="opt.label"></span>
                                             </button>
@@ -1848,17 +2133,32 @@
                         <div class="space-y-1">
                             <p class="text-sm font-bold text-slate-500 uppercase px-2 mb-1">Capture Plot</p>
 
-                            <button @click="downloadPlot('svg')"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
+                            <button @click="downloadPlot('svg', 1)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all flex items-center justify-between group">
                                 SVG Vector
+                                <span class="text-xs opacity-50 group-hover:opacity-100">INF</span>
                             </button>
-                            <button @click="downloadPlot('png')"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
+
+                            <div class="my-1 border-t border-slate-100 dark:border-slate-700/50"></div>
+
+                            <button @click="downloadPlot('png', 1.5)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all flex items-center justify-between group">
                                 PNG Image
+                                <span class="text-xs bg-slate-100 dark:bg-slate-900 px-1 rounded text-slate-400 group-hover:text-cyan-500">1080p</span>
                             </button>
-                            <button @click="downloadPlot('jpg')"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all duration-200">
-                                JPG Image
+
+                            <button @click="downloadPlot('png', 3)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all flex items-center justify-between group">
+                                PNG High-DPI
+                                <span class="text-xs bg-cyan-500/10 text-cyan-600 px-1 rounded group-hover:bg-cyan-500 group-hover:text-white">4K</span>
+                            </button>
+
+                            <div class="my-1 border-t border-slate-100 dark:border-slate-700/50"></div>
+
+                            <button @click="downloadPlot('jpg', 1.5)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-cyan-200 dark:hover:bg-slate-700 hover:text-cyan-500 dark:hover:text-cyan-400 rounded transition-all flex items-center justify-between group">
+                                JPG Compressed
+                                <span class="text-xs opacity-50">1080p</span>
                             </button>
 
                             <div class="my-2 border-t border-slate-200 dark:border-slate-700"></div>

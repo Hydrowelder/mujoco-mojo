@@ -187,24 +187,44 @@ document.addEventListener("alpine:init", () => {
       this.source = new EventSource("/monitor/api/status/stream");
 
       this.source.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        // 1. SILENT GUARD: Skip empty keep-alive pings from the server
+        if (!event.data || !event.data.trim()) return;
 
-        if (data.type === "start") this.startSync();
-        if (data.type === "progress") this.setSyncProgress(data.value);
+        try {
+          // 2. PROTECTIVE PARSE: Don't let a bad payload kill the app
+          const data = JSON.parse(event.data);
 
-        if (data.type === "final") {
-          this.endSync(Date.now(), data.status.is_complete);
-          // tell the specific page (Monitor/Mosaic) that new data is here
-          window.dispatchEvent(
-            new CustomEvent("mojo-data-updated", { detail: data.status }),
+          // 3. LOGICAL DISPATCH
+          if (data.type === "start") this.startSync();
+
+          if (data.type === "progress") this.setSyncProgress(data.value);
+
+          if (data.type === "final") {
+            this.endSync(Date.now(), data.status?.is_complete);
+
+            // Broadcast the update to other components (Mosaic/Monitor)
+            window.dispatchEvent(
+              new CustomEvent("mojo-data-updated", { detail: data.status }),
+            );
+          }
+        } catch (err) {
+          // 4. THE SAFETY NET: Handle non-JSON strings or HTML error pages
+          console.warn(
+            "[Mojo Sync] Received invalid payload. Stream may be idle or server errored.",
+            {
+              raw: event.data,
+              error: err.message,
+            },
           );
         }
       };
 
-      this.source.onerror = () => {
+      this.source.onerror = (err) => {
+        console.error("[Mojo Sync] Connection lost. Attempting recovery...");
         this.isSyncing = false;
         this.stopGlobalSync();
-        // try to reconnect in 5s
+
+        // Attempt reconnection in 5s
         setTimeout(() => this.startGlobalSync(), 5000);
       };
     },
