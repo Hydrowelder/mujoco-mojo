@@ -433,14 +433,14 @@
          x-show="!loading && data">
 
         <!-- row 1 -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
+        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
             <!-- x axis selector -->
             <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <span class="text-sm font-black uppercase text-slate-400 w-auto">
                     X-Axis
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -451,7 +451,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             X-Axis Signal
@@ -566,7 +566,7 @@
                     Ref. Frame
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -577,7 +577,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Rotation Logic
@@ -632,7 +632,7 @@
                                       :key="q">
                                 <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
                                         class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                    <span class="text-sm font-mono font-bold pr-2"
+                                    <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
                                           :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                           x-text="q"></span>
                                     <span x-show="config.refFrame === q"
@@ -646,14 +646,14 @@
         </div>
 
         <!-- row 2 -->
-        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
+        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
             <!-- y axis selector -->
             <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <span class="text-sm font-black uppercase text-slate-400 w-auto">
                     Y-Axes
                 </span>
 
-                <div class="relative group cursor-help">
+                <div class="group cursor-help">
                     <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
                          fill="none"
                          stroke="currentColor"
@@ -664,7 +664,7 @@
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
 
-                    <div class="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
+                    <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300]">
 
                         <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
                             Y-Axis Signals
@@ -807,8 +807,41 @@
                 </div>
             </div>
             <!-- selected ribbon -->
-            <div class="flex-1 w-full min-w-0">
-                <div class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar [mask-image:linear-gradient(to_right,black_90%,transparent)]">
+            <div class="flex-1 w-full min-w-0 relative"
+                 x-data="{
+        canScrollLeft: false,
+        canScrollRight: false,
+        checkScroll() {
+            const el = this.$refs.ribbon;
+            // 2px buffer to handle sub-pixel rounding in different browsers
+            this.canScrollLeft = el.scrollLeft > 2;
+            this.canScrollRight = el.scrollLeft < (el.scrollWidth - el.clientWidth - 2);
+        }
+     }"
+                 x-init="
+        $nextTick(() => checkScroll());
+        $watch('config.yAxes', () => $nextTick(() => checkScroll()));
+     ">
+
+                <div x-ref="ribbon"
+                     @scroll="checkScroll()"
+                     class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
+                     :style="`
+            mask-image: linear-gradient(
+                to right,
+                ${canScrollLeft ? 'transparent' : 'black'} 0%,
+                black 40px,
+                black calc(100% - 40px),
+                ${canScrollRight ? 'transparent' : 'black'} 100%
+            );
+            -webkit-mask-image: linear-gradient(
+                to right,
+                ${canScrollLeft ? 'transparent' : 'black'} 0%,
+                black 40px,
+                black calc(100% - 40px),
+                ${canScrollRight ? 'transparent' : 'black'} 100%
+            );
+         `">
 
                     <template x-for="(col, index) in Object.keys(config.yAxes)"
                               :key="col">
@@ -855,7 +888,7 @@
                     open = !open;
                 "
                                         class="px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1.5 transition-colors">
-                                    <span x-text="config.yAxes[col].label || col"></span>
+                                    <span x-text="config.yAxes[col]?.label || col"></span>
                                     <svg class="w-3 h-3 opacity-30 transition-transform"
                                          :class="open ? 'rotate-180' : ''"
                                          fill="none"
@@ -996,7 +1029,20 @@
                         isDirty = true;
                     });
                  })">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Signal Color</label>
+                                            <div class="flex items-center justify-between mb-1">
+                                                <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Signal Color</label>
+
+                                                <div class="flex gap-1.5">
+                                                    <template x-for="color in plotColors"
+                                                              :key="color">
+                                                        <button @click="temp.color = color; isDirty = true"
+                                                                class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                                :style="`background-color: ${color}`"
+                                                                :class="temp.color === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
                                             <div class="flex justify-center">
                                                 <div x-ref="picker"></div>
                                             </div>
