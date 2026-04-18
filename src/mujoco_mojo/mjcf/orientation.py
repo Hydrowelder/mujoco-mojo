@@ -176,6 +176,10 @@ class OrientationBase(XMLModel, ABC):
         mat = np.column_stack((right, actual_up, forward))
         return cls.from_matrix(mat)
 
+    @classmethod
+    def from_rotation(cls, rot: R) -> Self:
+        return cls.from_matrix(rot.as_matrix())
+
     @abstractmethod
     def to_rotation(self) -> R:
         """Returns the orientation as a `scipy.spatial.transform` `Rotation` object."""
