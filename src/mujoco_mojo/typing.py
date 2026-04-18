@@ -1060,3 +1060,16 @@ class TextureMIME(StrEnum):
 
     VND = "image/vnd.mujoco.texture"
     """Texture file is a vnd.mujoco.texture (whatever that is)."""
+
+
+class ActuatorInput(StrEnum):
+    """Specifies the input signal semantics. (see tech note, Section 2.5)"""
+
+    VOLTAGE = "voltage"
+    """The control directly sets applied motor voltage"""
+
+    POSITION = "position"
+    """The PID controller uses the control as a reference setpoint relative to the joint position."""
+
+    VELOCITY = "velocity"
+    """The PID controller uses the control as a reference setpoint relative to the joint velocity."""
