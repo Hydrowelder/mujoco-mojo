@@ -7,7 +7,7 @@ from .load import (
     VectorForce,
     VectorTorque,
 )
-from .results_manager import ResultsManager
+from .results_manager import SignalManager
 from .runtime_manager import RuntimeManager
 from .video_recorder import VideoRecorder
 
@@ -15,10 +15,10 @@ __all__ = [
     "GeneralLoad",
     "Load",
     "PointToPointForce",
-    "ResultsManager",
     "RuntimeManager",
     "ScalarForce",
     "ScalarTorque",
+    "SignalManager",
     "VectorForce",
     "VectorTorque",
     "VideoRecorder",

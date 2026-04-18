@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "coacd>=1.0.7",
-    "duckdb>=1.5.0",
     "fastapi>=0.134.0",
     "fastparquet>=2025.12.0",
     "jinja2>=3.1.6",
@@ -34,6 +33,8 @@ dependencies = [
     "trimesh>=4.11.2",
     "typer>=0.24.1",
     "uvicorn>=0.41.0",
+    "ipykernel>=7.2.0",
+    "pip>=26.0.1",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

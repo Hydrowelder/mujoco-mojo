@@ -587,7 +587,7 @@ class JobStatus(MojoBaseModel):
 
     def to_monitor_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
-        from mujoco_mojo.runtime.results_manager import ResultsManager
+        from mujoco_mojo.runtime.results_manager import SignalManager
 
         # We trigger the disk refresh here so the data is fresh
         # obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
@@ -608,7 +608,9 @@ class JobStatus(MojoBaseModel):
         failed_with_db = []
         failed_tns = self.failed_trial_nums
         for tn in failed_tns:
-            if (self.trial_num_to_path(tn) / ResultsManager.default_db_name()).exists():
+            if (
+                self.trial_num_to_path(tn) / SignalManager.default_output_name()
+            ).exists():
                 failed_with_db.append(tn)
 
         return {

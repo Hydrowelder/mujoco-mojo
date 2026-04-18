@@ -22,7 +22,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from mujoco_mojo.runtime.results_manager import ResultsManager
+    from mujoco_mojo.runtime.results_manager import SignalManager
 
 logger = get_logger(__name__)
 
@@ -125,7 +125,7 @@ class Joint(XMLModel):
 
     def request(
         self,
-        results_manager: ResultsManager,
+        results_manager: SignalManager,
         attrs: list[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"]
         ] = ["qpos", "qvel"],
