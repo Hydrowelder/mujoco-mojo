@@ -82,7 +82,7 @@ def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
     # defines some forces and outputs
 
     # exit runtime loop
-    # dump duckdb to workdir (or maybe the results manager should be returned by this function and the dumping is handled by the process which called this method)
+    # dump output to workdir (or maybe the results manager should be returned by this function and the dumping is handled by the process which called this method)
 
     return None
 

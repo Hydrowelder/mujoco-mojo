@@ -1,14 +1,15 @@
+import polars as pl
 import pytest
 
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.stochas import NamedValue, ValueName
 
 
 @pytest.fixture
 def rm(tmp_path):
     """Provides a ResultsManager pointing to a temporary directory."""
-    db_file = tmp_path / "test_telemetry.duckdb"
-    manager = ResultsManager(db_path=db_file, batch_size=5)
+    db_file = tmp_path / "test_telemetry.parquet"
+    manager = SignalManager(export_path=db_file, batch_size=5)
     yield manager
     # Ensure connection is closed so the file isn't locked
     try:
@@ -17,7 +18,7 @@ def rm(tmp_path):
         pass
 
 
-def test_hierarchical_key_generation(rm: ResultsManager):
+def test_hierarchical_key_generation(rm: SignalManager):
     """Verify the 'Category/Subgroup:Attribute' naming logic."""
     # Test full path
     rm.post(1.0, "Bodies", "Hand", "xpos_x")
@@ -33,8 +34,8 @@ def test_hierarchical_key_generation(rm: ResultsManager):
     assert "Joints/Elbow:qpos" in rm.ledger
 
 
-def test_batching_and_persistence(rm: ResultsManager):
-    """Verify data is only committed to DuckDB after reaching batch_size."""
+def test_batching_and_persistence(rm: SignalManager):
+    """Verify data is only committed to output after reaching batch_size."""
     # We need a mock MjModel/Data for the record call
     import mujoco
 
@@ -47,7 +48,7 @@ def test_batching_and_persistence(rm: ResultsManager):
         rm.record(m, d)
         rm.flush_ledger()
 
-    # Buffer should have 4 rows, but DuckDB table shouldn't exist/be empty yet
+    # Buffer should have 4 rows, but output table shouldn't exist/be empty yet
     assert len(rm._buffer) == 4
 
     # 5th step triggers flush
@@ -56,14 +57,13 @@ def test_batching_and_persistence(rm: ResultsManager):
 
     assert len(rm._buffer) == 0  # Buffer cleared
 
-    # Verify DuckDB has the data
-    conn = rm._conn
-    result = conn.execute("SELECT COUNT(*) FROM result").fetchone()
-    assert result is not None
-    assert result[0] == 5
+    # Verify output has the data
+    df = pl.read_parquet(rm.export_path)
+    assert df.height == 5
+    assert "time" in df.columns
 
 
-def test_record_decimation(rm: ResultsManager):
+def test_record_decimation(rm: SignalManager):
     """Verify that decimation correctly skips steps."""
     import mujoco
 
@@ -86,7 +86,7 @@ def test_record_decimation(rm: ResultsManager):
     assert len(rm._buffer) == 2
 
 
-def test_harvest_task_execution(rm: ResultsManager):
+def test_harvest_task_execution(rm: SignalManager):
     """Verify that scheduled harvest tasks fire during record()."""
     import mujoco
 
