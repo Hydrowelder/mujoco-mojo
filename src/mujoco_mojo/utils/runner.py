@@ -280,8 +280,9 @@ class Trial:
                     import mujoco_mojo.runtime as rt
 
                     runtime_manager = rt.RuntimeManager(
-                        results_manager=rt.ResultsManager(
-                            db_path=self.trial_dir / rt.ResultsManager.default_db_name()
+                        results_manager=rt.SignalManager(
+                            export_path=self.trial_dir
+                            / rt.SignalManager.default_output_name()
                         )
                     )
                     mj_model, mj_data = mojo_model.mjcf.prep_for_sim(self.xml_path)

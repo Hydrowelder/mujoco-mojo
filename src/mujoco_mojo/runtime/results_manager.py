@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-import duckdb
 import mujoco
 import polars as pl
 
@@ -15,9 +14,9 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class ResultsManager:
-    db_path: Path
-    """Where the DuckDB file should be saved."""
+class SignalManager:
+    export_path: Path
+    """Where the output file should be saved."""
 
     batch_size: int = 1000
     """Number of steps before flushing to disk."""
@@ -34,17 +33,16 @@ class ResultsManager:
         default_factory=list, init=False
     )
 
-    _conn: duckdb.DuckDBPyConnection = field(init=False)
     _buffer: list[dict[str, float]] = field(default_factory=list, init=False)
     _step_count: int = -1
 
     @staticmethod
-    def default_db_name() -> Literal["telemetry.duckdb"]:
-        return "telemetry.duckdb"
+    def default_output_name() -> Literal["telemetry.parquet"]:
+        return "telemetry.parquet"
 
     @property
     def db_name(self) -> str:
-        return self.default_db_name()
+        return self.default_output_name()
 
     @staticmethod
     def default_table_name() -> Literal["result"]:
@@ -56,8 +54,7 @@ class ResultsManager:
 
     def __post_init__(self):
         # Ensure directory exists and connect
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = duckdb.connect(str(self.db_path))
+        self.export_path.parent.mkdir(parents=True, exist_ok=True)
 
     def schedule_harvest_task(self, task: Callable):
         self._harvest_tasks.append(task)
@@ -145,21 +142,24 @@ class ResultsManager:
             self.flush()
 
     def flush(self):
-        """Commits the memory buffer to the DuckDB file."""
+        """Commits the memory buffer to the output file."""
         if not self._buffer:
             return
 
-        # convert buffer to Polars DataFrame for instant DuckDB ingestion
-        _df = pl.DataFrame(self._buffer)
+        new_df = pl.DataFrame(self._buffer)
 
-        # create table if it doesn't exist, otherwise append
-        try:
-            self._conn.execute(f"INSERT INTO {self.table_name} SELECT * FROM _df")
-        except duckdb.CatalogException:
-            self._conn.execute(f"CREATE TABLE {self.table_name} AS SELECT * FROM _df")
+        if self.export_path.exists():
+            try:
+                existing_df = pl.read_parquet(self.export_path)
+                combined_df = pl.concat([existing_df, new_df], how="diagonal")
+                combined_df.write_parquet(self.export_path, compression="zstd")
+            except Exception as e:
+                logger.error(f"Failed to append telemetry: {e}")
+        else:
+            new_df.write_parquet(self.export_path, compression="zstd")
 
         self._buffer = []
 
     def close(self):
         self.flush()
-        self._conn.close()
+        logger.info(f"Telemetry stream closed. Data saved to {self.export_path}")

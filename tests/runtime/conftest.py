@@ -1,7 +1,7 @@
 import mujoco
 import pytest
 
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 
 
 @pytest.fixture
@@ -30,5 +30,5 @@ def mj_setup():
 @pytest.fixture
 def rm(tmp_path):
     """Isolated ResultsManager for testing."""
-    db_path = tmp_path / "test_telemetry.duckdb"
-    return ResultsManager(db_path=db_path)
+    db_path = tmp_path / "test_telemetry.parquet"
+    return SignalManager(export_path=db_path)

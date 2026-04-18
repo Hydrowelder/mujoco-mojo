@@ -4,7 +4,7 @@ import mujoco
 import numpy as np
 
 from mujoco_mojo.runtime.load import Load
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 
@@ -16,7 +16,7 @@ class MockLoad(Load):
         return np.array([10.0, 0, 0]), np.zeros(3)
 
 
-def test_runtime_manager_lifecycle(rm: ResultsManager):
+def test_runtime_manager_lifecycle(rm: SignalManager):
     """Verify that __enter__ and __exit__ handle cleanup correctly."""
     # Patch close to ensure it's called
     with patch.object(rm, "close") as mock_close:
@@ -28,7 +28,7 @@ def test_runtime_manager_lifecycle(rm: ResultsManager):
 
 
 def test_resolution_on_first_step(
-    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: ResultsManager
+    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: SignalManager
 ):
     """Verify that resolve() is automatically called during the first step."""
     model, data = mj_setup
@@ -46,7 +46,7 @@ def test_resolution_on_first_step(
 
 
 def test_buffer_clearing_hygiene(
-    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: ResultsManager
+    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: SignalManager
 ):
     """CRITICAL: Verify that step() clears the applied force buffers."""
     model, data = mj_setup
@@ -88,7 +88,7 @@ def test_video_capture_with_arrows(mj_setup: tuple[mujoco.MjModel, mujoco.MjData
 
 
 @patch("mujoco_mojo.runtime.runtime_manager.ThreadPoolExecutor")
-def test_parallel_video_save(mock_executor_cls, rm: ResultsManager):
+def test_parallel_video_save(mock_executor_cls, rm: SignalManager):
     """Verify that save_recordings uses parallel execution."""
     mock_recorder = MagicMock()
     mgr = RuntimeManager(video_recorders=[mock_recorder])
