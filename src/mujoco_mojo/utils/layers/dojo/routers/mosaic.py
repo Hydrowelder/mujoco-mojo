@@ -2,8 +2,8 @@ import socket
 from functools import lru_cache
 from typing import TypedDict
 
-import duckdb
 import numpy as np
+import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from scipy.spatial.transform import Rotation as R
@@ -41,8 +41,9 @@ async def get_mosaic(request: Request):
 
 @router.get("/api/trials")
 async def get_valid_trials():
-    """Scans the workdir for folders containing 'telemetry.duckdb'"""
+    """Scans the workdir for folders containing 'telemetry.parquet'"""
     job = shared.CURRENT_JOB
+    from mujoco_mojo.runtime.results_manager import SignalManager
 
     if job is None:
         logger.warning("Mosaic accessed but CURRENT_JOB is None.")
@@ -54,7 +55,9 @@ async def get_valid_trials():
         trial_dir = job.trial_num_to_path(tn)
 
         # if there is a db and the trial is actually done
-        if (trial_dir / "telemetry.duckdb").exists() and tn in job._cache:
+        if (
+            trial_dir / SignalManager.default_output_name()
+        ).exists() and tn in job._cache:
             valid_trials.append(trial_dir.name)
 
     valid_trials.sort()
@@ -74,12 +77,12 @@ async def get_trial_viewer(request: Request, trial_id: str):
     port = request.url.port or 8000
 
     # 1. Get the sorted list of all trials that actually have data
-    from mujoco_mojo.runtime.results_manager import ResultsManager
+    from mujoco_mojo.runtime.results_manager import SignalManager
 
     valid_ids = []
     for tn in job.trial_nums:
         path = job.trial_num_to_path(tn)
-        if (path / ResultsManager.default_db_name()).exists():
+        if (path / SignalManager.default_output_name()).exists():
             valid_ids.append(path.name)
 
     if trial_id not in valid_ids:
@@ -113,16 +116,10 @@ class ColumnManifest(TypedDict):
 
 
 @lru_cache(maxsize=128)
-def _get_column_manifest(db_path_str: str, mtime: float) -> ColumnManifest:
-    """Retrieves all column names from the DuckDB table schema."""
-    from mujoco_mojo.runtime.results_manager import ResultsManager
-
-    with duckdb.connect(db_path_str, read_only=True) as con:
-        # 'DESCRIBE' is a very fast metadata-only query in DuckDB
-        table = ResultsManager.default_table_name()
-        res = con.execute(f"DESCRIBE {table}").fetchall()
-        # res returns rows like: (column_name, type, null, key, default, extra)
-    real_cols: list[str] = [row[0] for row in res]
+def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
+    """Retrieves all column names from the table schema."""
+    schema = pl.read_parquet(path_str, n_rows=0).schema
+    real_cols: list[str] = list(schema.keys())
 
     # Map prefixes to the total set of suffixes they possess
     prefix_map: dict[str, set[str]] = {}
@@ -149,18 +146,11 @@ def _get_column_manifest(db_path_str: str, mtime: float) -> ColumnManifest:
 
 
 @lru_cache(maxsize=2048)  # Increased size because we are caching individual columns
-def _get_atomic_column(db_path_str: str, col_name: str, mtime: float):
+def _get_atomic_column(path_str: str, col_name: str, mtime: float):
     """
     Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
     """
-    from mujoco_mojo.runtime.results_manager import ResultsManager
-
-    with duckdb.connect(db_path_str, read_only=True) as con:
-        table = ResultsManager.default_table_name()
-        # Fetching a single column is DuckDB's superpower
-        return (
-            con.execute(f'SELECT "{col_name}" FROM {table}').pl().to_series().to_list()
-        )
+    return pl.scan_parquet(path_str).select(col_name).collect().to_series().to_list()
 
 
 @router.get("/{trial_id}/data")
@@ -184,14 +174,14 @@ async def get_trial_data(
         dict: Dictionary containing split columns and their associated data.
 
     """
-    from mujoco_mojo.runtime.results_manager import ResultsManager
+    from mujoco_mojo.runtime.results_manager import SignalManager
 
     job = shared.CURRENT_JOB
     if not job:
         raise HTTPException(status_code=404, detail="No job active")
 
     db_path = (
-        job.workdir / "trials" / trial_id / ResultsManager.default_db_name()
+        job.workdir / "trials" / trial_id / SignalManager.default_output_name()
     ).resolve()
 
     if not db_path.exists():

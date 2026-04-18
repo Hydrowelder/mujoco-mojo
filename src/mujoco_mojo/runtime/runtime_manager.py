@@ -6,7 +6,7 @@ from typing import Any, Protocol, Self, runtime_checkable
 import mujoco
 
 from mujoco_mojo.runtime.load import Load
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 
@@ -25,7 +25,7 @@ class SyncHook(Protocol):
 
 @dataclass
 class RuntimeManager:
-    results_manager: ResultsManager | None = None
+    results_manager: SignalManager | None = None
 
     loads: list[Load] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)

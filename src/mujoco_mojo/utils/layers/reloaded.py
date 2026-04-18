@@ -223,8 +223,8 @@ class MojoReloaded:
         # execute runtime
         if run_func and use_runtime:
             runtime_manager = rt.RuntimeManager(
-                results_manager=rt.ResultsManager(
-                    db_path=self.workdir / rt.ResultsManager.default_db_name()
+                results_manager=rt.SignalManager(
+                    export_path=self.workdir / rt.SignalManager.default_output_name()
                 ),
                 _sync_hook=self._sync_hook,
                 _skip_recording=True,

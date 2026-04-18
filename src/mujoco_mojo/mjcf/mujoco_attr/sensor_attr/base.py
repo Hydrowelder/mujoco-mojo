@@ -5,7 +5,7 @@ from typing import ClassVar
 import mujoco
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.typing import (
     RequestCategory,
     SensorInterp,
@@ -77,7 +77,7 @@ class SensorBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
-    def request(self, results_manager: ResultsManager):
+    def request(self, results_manager: SignalManager):
         """Registers the sensor's output for logging."""
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."

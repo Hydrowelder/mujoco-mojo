@@ -9,7 +9,7 @@ from pydantic import PrivateAttr, model_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
-from mujoco_mojo.runtime.results_manager import ResultsManager
+from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import RequestCategory, Vec3
@@ -129,7 +129,7 @@ class Load(MojoBaseModel, ABC):
 
     def request(
         self,
-        results_manager: ResultsManager,
+        results_manager: SignalManager,
         attrs: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
         def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
