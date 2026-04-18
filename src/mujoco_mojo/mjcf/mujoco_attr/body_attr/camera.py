@@ -7,7 +7,15 @@ import numpy as np
 
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import BodyName, CameraName, TrackingMode, Vec2, VecN
+from mujoco_mojo.typing import (
+    BodyName,
+    CameraName,
+    CameraOutput,
+    CameraProjection,
+    TrackingMode,
+    Vec2,
+    VecN,
+)
 
 __all__ = ["Camera"]
 
@@ -20,7 +28,7 @@ class Camera(XMLModel):
     attributes = (
         "name",
         "class_",
-        "orthographic",
+        "projection",
         "fovy",
         "ipd",
         "resolution",
@@ -31,6 +39,7 @@ class Camera(XMLModel):
         "focalpixel",
         "principal",
         "principalpixel",
+        "output",
         "sensorsize",
         "user",
     )
@@ -55,7 +64,7 @@ class Camera(XMLModel):
     target: BodyName | None = None
     """When the camera mode is "targetbody" or "targetbodycom", this attribute becomes required. It specifies which body should be targeted by the camera. In all other modes this attribute is ignored."""
 
-    orthographic: bool = False
+    projection: CameraProjection = CameraProjection.PERSPECTIVE
     """Whether the camera uses a perspective projection (the default) or an orthographic projection. Setting this attribute changes the semantic of the fovy attribute, see below."""
 
     fovy: float = 45
@@ -75,6 +84,16 @@ class Camera(XMLModel):
 
     principalpixel: Vec2 = np.array((0, 0))
     """Offset of the principal point of the camera with respect to the camera center in pixel units. If both principal and principalpixel are specified, the former is ignored."""
+
+    output: CameraOutput = CameraOutput.RGB
+    """Types of output images supported by the camera.
+        * rgb: RGB image.
+        * depth: Depth image (distance from camera plane).
+        * distance: Distance image (distance from camera origin).
+        * normal: Surface normal image.
+        * segmentation: Segmentation image.
+
+    This attribute is not used for rendering, but serves as a convenient location to save the output types supported by the camera. The output attribute can contain multiple types, e.g. "rgb normal"."""
 
     sensorsize: Vec2 = np.array((0, 0))
     """Size of the camera sensor in length units. It is mutually exclusive with fovy. If specified, resolution and focal are required."""
