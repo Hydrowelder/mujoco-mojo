@@ -4,6 +4,8 @@ from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.connect import AnyEqualityConnect
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.flex import EqualityFlex
+from mujoco_mojo.mjcf.mujoco_attr.equality_attr.flexstrain import EqualityFlexStrain
+from mujoco_mojo.mjcf.mujoco_attr.equality_attr.flexvert import EqualityFlexVert
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.joint import EqualityJoint
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.tendon import EqualityTendon
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.weld import AnyEqualityWeld
@@ -18,7 +20,15 @@ class Equality(XMLModel):
 
     tag = "equality"
 
-    children = ("connects", "welds", "joints", "tendons", "flexes")
+    children = (
+        "connects",
+        "welds",
+        "joints",
+        "tendons",
+        "flexes",
+        "flexverts",
+        "flexstrains",
+    )
 
     connects: list[AnyEqualityConnect] = Field(
         default_factory=list,
@@ -49,3 +59,15 @@ class Equality(XMLModel):
         exclude_if=is_empty_list,
     )
     """Flex elements assigned to Equality."""
+
+    flexverts: list[EqualityFlexVert] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Flexvert elements assigned to Equality."""
+
+    flexstrains: list[EqualityFlexStrain] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Flexstrain elements assigned to Equality."""
