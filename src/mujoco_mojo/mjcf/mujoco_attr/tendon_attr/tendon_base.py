@@ -11,6 +11,7 @@ from mujoco_mojo.typing import (
     TendonLimited,
     TendonName,
     Vec2,
+    Vec3,
     Vec5,
     VecN,
 )
@@ -83,11 +84,15 @@ class TendonBase(XMLModel):
 
     If two non-decreasing values are given, they define a dead-band range. If the tendon length is between the two values, the force is 0. If it is outside this range, the force behaves like a regular spring, with the rest-point corresponding to the nearest springlength value. A deadband can be used to define tendons whose limits are enforced by springs rather than constraints."""
 
-    stiffness: float = 0
-    """Stiffness coefficient. A positive value generates a spring force (linear in position) acting along the tendon."""
+    stiffness: Vec3 = np.array((0, 0, 0))
+    """Tendon stiffness coefficients a,b,ca,b,c. A positive aa generates a linear spring force f(x)=-ax, acting along the tendon. Here xx is the tendon displacement defined by springlength.
 
-    damping: float = 0
-    """Damping coefficient. A positive value generates a damping force (linear in velocity) acting along the tendon. Unlike joint damping which is integrated implicitly by the Euler method, tendon damping is not integrated implicitly, thus joint damping should be used if possible."""
+    If the optional second and third components are set, they define a nonlinear polynomial spring force f(x)=-(ax+bx^2+cx^3). See Polynomial forces for details."""
+
+    damping: Vec3 = np.array((0, 0, 0))
+    """Damping coefficients a,b,ca,b,c. A positive aa produces the standard dissipative linear damping force f(v)=-av.
+
+    If the optional second and third components are set, they define a nonlinear polynomial damping force f(v)=-(av+bv|v|+cv^3). Note the anti-symmetrization of the quadratic term, ensuring that the force is an odd function of velocity. See Polynomial forces for details."""
 
     user: VecN | None = None
     """See User parameters."""

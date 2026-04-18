@@ -24,6 +24,8 @@ __all__ = [
     "BiasType",
     "BodyName",
     "CameraName",
+    "CameraOutput",
+    "CameraProjection",
     "ColorSpace",
     "CompositeInitial",
     "CompositeJointKind",
@@ -73,8 +75,10 @@ __all__ = [
     "MeshName",
     "ModelName",
     "PluginName",
+    "RangefinderData",
     "RequestCategory",
     "SensorAttachableName",
+    "SensorInterp",
     "SensorName",
     "SensorObjectType",
     "SiteName",
@@ -1073,3 +1077,63 @@ class ActuatorInput(StrEnum):
 
     VELOCITY = "velocity"
     """The PID controller uses the control as a reference setpoint relative to the joint velocity."""
+
+
+class CameraProjection(StrEnum):
+    """Whether the camera uses a perspective (the default) or orthographic projection. Setting this attribute to "orthographic" changes the semantic of the fovy attribute."""
+
+    PERSPECTIVE = "perspective"
+
+    ORTHOGRAPHIC = "orthographic"
+
+
+class CameraOutput(StrEnum):
+    """Types of output images supported by the camera."""
+
+    RGB = "rgb"
+    """RGB image."""
+
+    DEPTH = "depth"
+    """Depth image (distance from camera plane)."""
+
+    DISTANCE = "distance"
+    """Distance image (distance from camera origin)."""
+
+    NORMAL = "normal"
+    """Surface normal image."""
+
+    SEGMENTATION = "segmentation"
+    """Segmentation image."""
+
+
+class RangefinderData(StrEnum):
+    DIST = "dist"
+    """The distance from the ray origin to the nearest geom surface, -1 if no surface was hit. If this data type is included, rays will be visualized as lines."""
+
+    DIR = "dir"
+    """Normalized direction of the ray, or (0, 0, 0) if no surface was hit."""
+
+    ORIGIN = "origin"
+    """The point from which the ray emanates (global frame). For sites and perspective cameras, this is the site/camera xpos. However for orthographic cameras, ray origins are spatially distributed along the image plane."""
+
+    POINT = "point"
+    """The point where the ray intersects the nearest geom surface in the global frame, or (0, 0, 0) if no surface was hit. If this data type is included, intersection points will be visualized as spheres."""
+
+    NORMAL = "normal"
+    """The geom surface normal at the point where the ray intersects it, in the global frame, or (0, 0, 0) if no surface was hit. Note that normals always point towards the outside of the geom surface, regardless of the ray origin. If this data type is included along with either dist or point, normals will be visualized as arrows at the intersection points."""
+
+    DEPTH = "depth"
+    """The distance of the hit point from the camera plane, -1 if no surface was hit. Note that this depth semantic corresponds to depth images in the computer graphics sense."""
+
+
+class SensorInterp(StrEnum):
+    """The interpolation method used when reading from the history buffer. Corresponds to the interp argument in mj_readSensor."""
+
+    ZOH = "zoh"
+    """Zero-order hold (piecewise constant)."""
+
+    LINEAR = "linear"
+    """Piecewise linear interpolation."""
+
+    CUBIC = "cubic"
+    """Cubic spline interpolation (Catmull-Rom)."""
