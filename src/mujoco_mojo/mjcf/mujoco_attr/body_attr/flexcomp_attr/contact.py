@@ -11,7 +11,6 @@ class FlexCompContact(FlexContact):
     attributes = (
         "internal",
         "selfcollide",
-        "vertcollide",
         "activelayers",
         "contype",
         "conaffinity",

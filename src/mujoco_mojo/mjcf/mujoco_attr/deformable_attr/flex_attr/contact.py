@@ -31,7 +31,6 @@ class FlexContact(XMLModel):
         "internal",
         "selfcollide",
         "activelayers",
-        "vertcollide",
         "passive",
     )
 
@@ -40,9 +39,6 @@ class FlexContact(XMLModel):
 
     selfcollide: SelfCollide = SelfCollide.AUTO
     """This determines the strategy for midphase collision pruning of element pairs belonging to the same flex. none means flex elements cannot collide with each other. narrow means narrow phase only (i.e. all pairs are checked). This is a diagnostic tool and is never a good idea in practice. bvh and sap refer to bounding volume hierarchies and sweep-and-prune (which are two different strategies for midphase collision pruning). auto selects sap in 1D and 2D, and bvh in 3D. Which strategy performs better depends on the specifics of the model. The automatic setting is just a simple rule which we have found to perform well in general."""
-
-    vertcollide: bool = False
-    """Enables or disables vertex collisions. if true, spherical geoms are added at the vertices of flex, with radius equal to the radius of the flex. These geoms can collide with other geoms and are not visible by default. If false, no additional geoms are added."""
 
     activelayers: int = 1
     """This only has an effect for 3D flexes. Each tetrahedron is labeled by the model compiler with an integer corresponding to (graph) distance to the outside surface of the flex. Thus outside-facing elements are in layer 0, their neighbors are in layer 1, etc. This attribute specifies how many layers will be allowed to participate in collisions. The default setting 1 means that only one layer (i.e. layer 0) can collide, with itself and with the rest of the world. This is usually sufficient, however if the outer layer is composed of small tetrahedra, another body can "pierce" it and get stuck. In that case the value should be increased."""

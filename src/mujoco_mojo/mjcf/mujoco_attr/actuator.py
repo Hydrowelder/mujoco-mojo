@@ -5,6 +5,7 @@ from pydantic import Field
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.adhesion import ActuatorAdhesion
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.cylinder import ActuatorCylinder
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.damper import ActuatorDamper
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.dcmotor import ActuatorDCMotor
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.general import ActuatorGeneral
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.intvelocity import (
     ActuatorIntegratedVelocity,
@@ -91,6 +92,12 @@ class Actuator(XMLModel):
         exclude_if=is_empty_list,
     )
     """Adhesions actuator elements."""
+
+    dcmotors: list[ActuatorDCMotor] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """DCMotors actuator elements."""
 
     plugins: list[ActuatorPlugin] = Field(
         default_factory=list,
