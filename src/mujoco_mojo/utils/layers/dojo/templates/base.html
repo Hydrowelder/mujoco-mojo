@@ -16,24 +16,24 @@
         media="(prefers-color-scheme: dark)">
 
   <link rel="stylesheet"
-        href="/static/main.css" />
+        href="/mojo-static/main.css" />
 
   <link rel="icon"
         type="image/svg+xml"
-        href="/static/light-logo.svg">
+        href="/mojo-static/light-logo.svg">
   <link rel="apple-touch-icon"
-        href="/static/light-logo.svg">
+        href="/mojo-static/light-logo.svg">
   <link rel="mask-icon"
-        href="/static/light-logo.svg"
+        href="/mojo-static/light-logo.svg"
         color="#06b6d4">
   <link rel="shortcut icon"
-        href="/static/light-logo.svg"
+        href="/mojo-static/light-logo.svg"
         type="image/svg+xml">
 
-  <script src="/static/tailwind.min.js"></script>
-  <script src="/static/main.js"></script>
+  <script src="/mojo-static/tailwind.min.js"></script>
+  <script src="/mojo-static/main.js"></script>
   <script defer
-          src="/static/alpine.min.js"></script>
+          src="/mojo-static/alpine.min.js"></script>
   <script>
     // 1. BLOCKING THEME CHECK
     tailwind.config = { darkMode: "class" };
@@ -41,7 +41,7 @@
 
     if (isDark) {
       document.documentElement.classList.add('dark');
-      const darkPath = "/static/dark-logo.svg";
+      const darkPath = "/mojo-static/dark-logo.svg";
 
       // Update all icon types at once
       document.querySelectorAll('link[rel*="icon"], link[rel="apple-touch-icon"], link[rel="mask-icon"]')
@@ -81,11 +81,11 @@
              target="_blank"
              class="logo-link flex-shrink-0 transition-transform duration-300 active:scale-95">
 
-            <img src="/static/light-logo.svg"
+            <img src="/mojo-static/light-logo.svg"
                  alt="Mojo Logo"
                  class="logo-style dark:hidden w-10 h-10 md:w-12 md:h-12 p-1.5 object-contain block" />
 
-            <img src="/static/dark-logo.svg"
+            <img src="/mojo-static/dark-logo.svg"
                  alt="Mojo Logo"
                  class="logo-style hidden dark:block w-10 h-10 md:w-12 md:h-12 p-1.5 object-contain block" />
 
@@ -112,6 +112,15 @@
             <div class="nav-highlight absolute inset-0 bg-white dark:bg-slate-700 rounded shadow-sm -z-10"></div>
             {% endif %}
           </a>
+          {% if job_type == JobType.OPTIMIZE %}
+          <a href="/optimizer"
+             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-cyan-500 font-bold' if path.startswith('/optimizer') else 'text-slate-500' }} hover:text-cyan-500 transition-colors">
+            Optimizer
+            {% if path.startswith('/optimizer') %}
+            <div class="nav-highlight absolute inset-0 bg-white dark:bg-slate-700 rounded shadow-sm -z-10"></div>
+            {% endif %}
+          </a>
+          {% endif %}
         </nav>
         {% endif %}
       </div>

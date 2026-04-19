@@ -351,7 +351,7 @@ WORKDIR = (Path(__file__).parent / "mc_bumper_optimize").resolve()
 def run_dashboard():
     import optuna_dashboard
 
-    storage_url = f"sqlite:///{WORKDIR / 'mojo.db'}"
+    storage_url = f"sqlite:///{WORKDIR / 'study.db'}"
 
     print("--- Launching Mojo Dojo Post-Processor ---")
     print(f"Database: {storage_url}")
@@ -387,5 +387,5 @@ def run_study():
 
 
 if __name__ == "__main__":
-    run_dashboard()
-    # run_study()
+    # run_dashboard()
+    run_study()
