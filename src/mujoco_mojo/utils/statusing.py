@@ -199,6 +199,9 @@ class JobStatus(MojoBaseModel):
     runtime: tuple[str, Path | None, int | None]
     """What runtime was used. Name of runtime, Path to the runtime, and linenumber."""
 
+    objective: tuple[str, Path | None, int | None]
+    """What objective function was used. Name of function, Path to the function, and linenumber."""
+
     gen_args_used: bool
     """Whether or not *args were used for the generator."""
 
@@ -499,6 +502,7 @@ class JobStatus(MojoBaseModel):
             ),
             "Generator": _parse_func(*self.generator),
             "Runtime": _parse_func(*self.runtime),
+            "Objective": _parse_func(*self.objective),
             "Generator Args Used?": "✅" if self.gen_args_used else "❌",
             "Generator Kwargs Used?": "✅" if self.gen_kwargs_used else "❌",
             "Runtime Args Used?": "✅" if self.run_args_used else "❌",

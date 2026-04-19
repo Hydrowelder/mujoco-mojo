@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Self
 
 from numpydantic import NDArray
@@ -13,6 +14,13 @@ from mujoco_mojo.stochas import (
     DistributionDict,
     NamedValue,
     NamedValueDict,
+    ValueName,
+)
+from mujoco_mojo.stochas.design import (
+    AnyDesignValue,
+    DesignCategorical,
+    DesignFloat,
+    DesignValueDict,
 )
 from mujoco_mojo.utils.log import get_logger
 
@@ -25,13 +33,25 @@ class MojoModel(MojoBaseModel):
     """Mojo is the highest level watcher which manages running jobs."""
 
     mjcf: Mujoco = Field(default_factory=Mujoco)
+    """MuJoCo MJCF model to be writted to XML."""
 
     trial_num: int = NOMINAL_TRIAL_NUM
+    """Trial number identified for this instance of the MuJoCo Mojo model."""
+
     seed: int | None = None
+    """Campaign seed for calculating random numbers."""
+
+    design: DesignValueDict = Field(default_factory=DesignValueDict)
+    """Registry of parameters for hyperparameter tuning."""
+
     dists: DistributionDict = Field(default_factory=DistributionDict)
+    """Random distributions used to generate the MojoModel."""
+
     named: NamedValueDict[NDArray] = Field(default_factory=NamedValueDict[NDArray])
+    """Final 'baked' values from a random draw, global override, or design study."""
 
     _user_data: Any = PrivateAttr(default=None)
+    """User defined data not serialized with the model. This is used for transferring information from one function to another (generator to runtime or objective function)."""
 
     def sample_dist(
         self,
@@ -61,6 +81,7 @@ class MojoModel(MojoBaseModel):
         nv = dist.sample_to_named_value(size=size)
 
         if nv in self.named and not force:
+            # defined with global override
             if warn:
                 logger.warning(
                     f"NamedValue [bold cyan]{nv.name}[/bold cyan] already registered. Returning it instead of the sampled value.",
@@ -72,6 +93,7 @@ class MojoModel(MojoBaseModel):
                 )
             return self.named[nv.name]
         elif nv in self.named and force:
+            # defined with global override but forced to update
             if warn:
                 logger.warning(
                     f"NamedValue [bold cyan]{nv.name}[/bold cyan] already registered. Force setting it to the new value in the registry.",
@@ -83,8 +105,59 @@ class MojoModel(MojoBaseModel):
                 )
             self.named.force_update(nv, warn=False)
         else:
+            # standard random draw
             self.named.update(nv)
         return nv
+
+    def design_float(
+        self,
+        name: str | ValueName,
+        default: float,
+        low: float,
+        high: float,
+        log: bool = False,
+        step: float | None = None,
+    ) -> float:
+        """
+        Registers a continuous or stepped floating point parameter.
+
+        Returns the optimizer's guess if present, otherwise the default.
+        """
+        dv = DesignFloat(
+            name=ValueName(name),
+            low=low,
+            high=high,
+            log=log,
+            step=step,
+            stored_value=default,
+        )
+
+        return float(self._register_design_value(dv))
+
+    def design_categorical[T](
+        self,
+        name: str | ValueName,
+        default: T,
+        choices: Sequence[T],
+    ) -> T:
+        """Registers a categorical (discrete choice) parameter."""
+        dv = DesignCategorical(
+            name=ValueName(name),
+            choices=choices,
+            stored_value=default,
+        )
+        return self._register_design_value(dv)
+
+    def _register_design_value(self, dv: AnyDesignValue) -> Any:
+        self.design[dv.name] = dv
+
+        # the value has already been set and should use the fixed
+        if dv.name in self.named:
+            val = self.named[dv.name].value
+            return val.item() if hasattr(val, "item") else val
+
+        self.named.update(dv)
+        return dv.value
 
     def with_overrides(self, overrides: NamedValueDict[NDArray]) -> Self:
         """
