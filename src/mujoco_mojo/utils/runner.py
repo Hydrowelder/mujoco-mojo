@@ -16,19 +16,21 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 import joblib
 import mujoco
 import numpy as np
 import optuna
 from numpydantic import NDArray
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM, NamedValueDict
 from mujoco_mojo.stochas.design import (
+    DesignCategorical,
+    DesignFloat,
     DesignValueDict,
     NamedValue,
     ValueName,
@@ -37,7 +39,10 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_MC_N_TRIAL,
     DEFAULT_MODEL_CONFIG_NAME,
     DEFAULT_N_PROC,
+    DEFAULT_OP_EVALS_PER_TRIAL,
     DEFAULT_OP_N_TRIAL,
+    DEFAULT_OP_PRUNE_FAILED_TRIALS,
+    DEFAULT_OP_REFINE_SEARCH_FACTOR,
     DEFAULT_OP_SAMPLER,
     DEFAULT_OP_STORAGE,
     DEFAULT_OP_STUDY_NAME,
@@ -47,6 +52,7 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
+    SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, worker_init
 from mujoco_mojo.utils.statusing import (
@@ -130,6 +136,9 @@ class BaseConfig(MojoBaseModel):
     Important:
         Be a good citizen. Use a reasonable number if you are working on a shared resource. You are a jerk if you use everything."""
 
+    resume: bool = DEFAULT_RESUME
+    """Whether to resume a study if the study already exists."""
+
     @property
     def is_parallel(self) -> bool:
         return self.n_proc > 1
@@ -196,11 +205,55 @@ class OptimizerConfig(BaseConfig):
     storage: str | None = DEFAULT_OP_STORAGE
     """Database URL (e.g., 'sqlite:///mojo.db') for multi-node persistence."""
 
-    sampler: Literal["tpe", "cmaes", "random"] = DEFAULT_OP_SAMPLER
+    sampler: SamplerOptions = DEFAULT_OP_SAMPLER
     """The search algorithm. TPE is generally best for noisy physics."""
 
-    resume: bool = True
-    """Whether to resume a study if the storage/name already exists."""
+    evals_per_trial: int = Field(default=DEFAULT_OP_EVALS_PER_TRIAL, ge=1)
+    """
+    Number of times to run the sim with different seeds per trial. The average score is returned to Optuna.
+
+    Reduces 'lucky' trials in noisy physics.
+    """
+
+    refine_search_factor: float | None = Field(
+        default=DEFAULT_OP_REFINE_SEARCH_FACTOR, gt=0, lt=1
+    )
+    """
+    If set (e.g., 0.5), and resume is True, the Runner will shrink the search space bounds by this factor around the current best trial to focus on local refinement.
+
+    Smaller values will more aggressively refine the search space.
+    """
+
+    prune_failed_trials: bool = DEFAULT_OP_PRUNE_FAILED_TRIALS
+    """
+    Whether to immediately stop trials that violate physical constraints (e.g., Mujoco instability) to save compute time.
+    """
+
+    def _get_sampler(self, seed: int | None) -> optuna.samplers.BaseSampler:
+        """Translates the string config into an Optuna Sampler instance."""
+        match self.sampler:
+            case "tpe":
+                return optuna.samplers.TPESampler(seed=seed)
+            case "cmaes":
+                return optuna.samplers.CmaEsSampler(seed=seed)
+            case "random":
+                return optuna.samplers.RandomSampler(seed=seed)
+            case "nsgaii":
+                return optuna.samplers.NSGAIISampler(seed=seed)
+            case "nsgaiii":
+                # NSGA-III is technically for 3+ objectives, but it works as a robust genetic algorithm for single-objective too.
+                return optuna.samplers.NSGAIIISampler(seed=seed)
+            case "qmc":
+                # Quasi-Monte Carlo: Great for uniform coverage of design space
+                return optuna.samplers.QMCSampler(seed=seed)
+            case "gp":
+                # Gaussian Process: Best for very expensive MuJoCo simulations where you can only afford a few dozen trials.
+                return optuna.samplers.GPSampler(seed=seed)
+            case "brute":
+                # No seed supported for Brute Force
+                return optuna.samplers.BruteForceSampler()
+            case _:
+                return optuna.samplers.TPESampler(seed=seed)
 
 
 @dataclass
@@ -523,7 +576,6 @@ class MojoRunner:
     def run(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        resume: bool = DEFAULT_RESUME,
         clean_workdir: bool = False,
         cleanup_delay: int = 10,
         execution_mode: ExecutionMode = ExecutionMode.LOCAL,
@@ -531,7 +583,7 @@ class MojoRunner:
     ) -> bool:
         """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
         if clean_workdir:
-            if resume:
+            if self.config.resume:
                 msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
                 logger.error(msg)
                 raise ValueError(msg)
@@ -547,13 +599,11 @@ class MojoRunner:
             case ExecutionMode.LOCAL:
                 return self.run_local(
                     global_overrides=global_overrides,
-                    resume=resume,
                     trial_nums=trial_nums,
                 )
             case ExecutionMode.SLURM:
                 return self.orchestrate_slurm(
                     global_overrides=global_overrides,
-                    resume=resume,
                     trial_nums=trial_nums,
                 )
             case _:
@@ -564,19 +614,16 @@ class MojoRunner:
     def run_local(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        resume: bool = DEFAULT_RESUME,
         trial_nums: list[int] | None = None,
     ) -> bool:
         if isinstance(self.config, MonteCarloConfig):
             had_fails = self.run_monte_carlo(
                 global_overrides=global_overrides,
-                resume=resume,
                 trial_nums=trial_nums,
             )
         elif isinstance(self.config, OptimizerConfig):
             had_fails = self.run_optimization(
                 global_overrides=global_overrides,
-                resume=resume,
             )
         else:
             msg = f"A configuration for {self.config.__class__.__name__} has not been implemented."
@@ -593,7 +640,6 @@ class MojoRunner:
     def orchestrate_slurm(
         self,
         global_overrides: NamedValueDict[NDArray],
-        resume: bool = DEFAULT_RESUME,
         trial_nums: list[int] | None = None,
     ) -> bool:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
@@ -603,7 +649,6 @@ class MojoRunner:
             try:
                 had_fails = self.orchestrate_slurm_monte_carlo(
                     global_overrides=global_overrides,
-                    resume=resume,
                     trial_nums=trial_nums,
                 )
             except (BdbQuit, KeyboardInterrupt):
@@ -617,7 +662,7 @@ class MojoRunner:
         return had_fails
 
     def execute_single_trial(
-        self, trial_num: int, overrides_payload: dict
+        self, trial_num: int, seed: int | None, overrides_payload: dict
     ) -> tuple[
         MojoModel | None, TrialStatus, mujoco.MjModel | None, mujoco.MjData | None
     ]:
@@ -635,7 +680,7 @@ class MojoRunner:
         return trial.run(
             generator=self.generator,
             runtime=self.runtime,
-            seed=self.seed,
+            seed=seed,
             overrides=overrides,
             gen_args=self.gen_args,
             gen_kwargs=self.gen_kwargs,
@@ -646,7 +691,6 @@ class MojoRunner:
     def run_monte_carlo(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        resume: bool = True,
         trial_nums: list[int] | None = None,
     ) -> bool:
         """Orchestrates a Monte Carlo job."""
@@ -654,7 +698,9 @@ class MojoRunner:
             tn = self.slurm_trial_id
             logger.info(f"SLURM Worker detected. Executing Trial {tn}")
             _mojo_model, trial_status, _, __ = self.execute_single_trial(
-                trial_num=tn, overrides_payload=global_overrides.model_dump()
+                trial_num=tn,
+                seed=self.seed,
+                overrides_payload=global_overrides.model_dump(),
             )
 
             return trial_status.completion == Completion.FAILED
@@ -680,7 +726,7 @@ class MojoRunner:
         )
 
         # decide which trials to execute
-        if resume:
+        if self.config.resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
         status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
@@ -712,6 +758,7 @@ class MojoRunner:
                     executor.submit(
                         self.execute_single_trial,
                         tn,
+                        self.seed,
                         global_overrides.model_dump(),
                     ): tn
                     for tn in to_run
@@ -744,6 +791,7 @@ class MojoRunner:
                 try:
                     _mojo_model, trial_status, _, __ = self.execute_single_trial(
                         trial_num=tn,
+                        seed=self.seed,
                         overrides_payload=global_overrides.model_dump(),
                     )
                     status_tracker.update_trial(
@@ -762,19 +810,6 @@ class MojoRunner:
         status_tracker.generate_report(alert_generation=True)
         return bool(status_tracker.failed_trial_nums)
 
-    def _get_sampler(self) -> optuna.samplers.BaseSampler:
-        """Translates the string config into an Optuna Sampler instance."""
-        assert isinstance(self.config, OptimizerConfig)
-        match self.config.sampler:
-            case "tpe":
-                return optuna.samplers.TPESampler(seed=self.seed)
-            case "cmaes":
-                return optuna.samplers.CmaEsSampler(seed=self.seed)
-            case "random":
-                return optuna.samplers.RandomSampler(seed=self.seed)
-            case _:
-                return optuna.samplers.TPESampler(seed=self.seed)
-
     def discover_design_space(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
@@ -782,6 +817,7 @@ class MojoRunner:
         logger.info("Performing discovery pass to map design space")
         mojo_model, _trial_status, _, __ = self.execute_single_trial(
             trial_num=NOMINAL_TRIAL_NUM,
+            seed=self.seed,
             overrides_payload=global_overrides.model_dump(),
         )
         if mojo_model is None:
@@ -794,7 +830,6 @@ class MojoRunner:
     def run_optimization(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        resume: bool = True,
     ) -> bool:
         assert isinstance(self.config, OptimizerConfig)
         if self.runtime is None:
@@ -815,11 +850,41 @@ class MojoRunner:
             study_name=self.config.study_name,
             direction=self.config.direction,
             storage=self.config.storage,
-            load_if_exists=resume,
-            sampler=self._get_sampler(),
+            load_if_exists=self.config.resume,
+            sampler=self.config._get_sampler(self.seed),
         )
 
-        if not resume:
+        if self.config.resume and self.config.refine_search_factor is not None:
+            try:
+                best_params = study.best_params
+                factor = self.config.refine_search_factor
+                logger.info(
+                    f"Refining float search space (factor: {factor}) around best trial."
+                )
+
+                for name, dv in design_space.items():
+                    if name not in best_params:
+                        continue
+
+                    if isinstance(dv, DesignFloat):
+                        best_val = cast(float, best_params[name])
+                        orig_range = dv.high - dv.low
+                        new_half_range = (orig_range * factor) / 2
+
+                        dv.low = max(dv.low, best_val - new_half_range)
+                        dv.high = min(dv.high, best_val + new_half_range)
+
+                        logger.debug(
+                            f"Refined float '{name}': [{dv.low:.4f}, {dv.high:.4f}]"
+                        )
+                    elif isinstance(dv, DesignCategorical):
+                        logger.debug(f"Skipping refinement for categorical '{name}'.")
+            except ValueError:
+                logger.warning(
+                    "Refinement requested but no successful trials found. Using original bounds."
+                )
+
+        if not self.config.resume:
             nominal_params = {name: dv.value for name, dv in design_space.items()}
             study.enqueue_trial(nominal_params)
             logger.info("Enqueued nominal parameters as the Optuna Trial 0")
@@ -841,11 +906,15 @@ class MojoRunner:
             trial_nums=self.config.trial_nums,
         )
 
+        if self.config.resume:
+            status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
+        status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+
         # define an internal objective for optuna
         def optuna_objective(trial: optuna.Trial) -> float:
-            suggestions = {}
-            for name, dv in design_space.items():
-                suggestions[name] = dv.suggest(trial)
+            assert isinstance(self.config, OptimizerConfig)
+
+            suggestions = {name: dv.suggest(trial) for name, dv in design_space.items()}
 
             # prepare overrides for the trial
             # mash the suggestions into the global overrides
@@ -855,47 +924,74 @@ class MojoRunner:
                     name=ValueName(name), stored_value=np.array([val])
                 )
 
-            # run the trial
-            trial_num = trial.number
-            mojo_model, trial_status, mj_model, mj_data = self.execute_single_trial(
-                trial_num=trial_num, overrides_payload=trial_overrides.model_dump()
-            )
+            trial_scores = []
+            representative_status: TrialStatus | None = None
+            for i in range(self.config.evals_per_trial):
+                current_seed = self.seed + i if self.seed is not None else None
 
-            # handle failures with maximum error if there was an epic fail
-            assert isinstance(self.config, OptimizerConfig)
-            if (
-                trial_status.completion == Completion.FAILED
-                or mojo_model is None
-                or mj_model is None
-                or mj_data is None
-            ):
+                # run the trial
+                trial_num = trial.number
+                mojo_model, iteration_status, mj_model, mj_data = (
+                    self.execute_single_trial(
+                        trial_num=trial_num,
+                        seed=current_seed,
+                        overrides_payload=trial_overrides.model_dump(),
+                    )
+                )
+
+                representative_status = iteration_status
+
+                # handle failures with maximum error if there was an epic fail
+                if (
+                    iteration_status.completion == Completion.FAILED
+                    or mojo_model is None
+                    or mj_model is None
+                    or mj_data is None
+                ):
+                    if self.config.prune_failed_trials:
+                        status_tracker.update_trial(status=iteration_status)
+                        return (
+                            float("inf")
+                            if self.config.direction == "minimize"
+                            else float("-inf")
+                        )
+                    continue
+
+                import mujoco_mojo.runtime as rt
+
+                telemetry_path = (
+                    self.workdir
+                    / "trials"
+                    / f"trial_{trial_num:{self.config.padding_style}}"
+                    / rt.SignalManager.default_output_name()
+                )
+
+                assert self.objective
+                score = self.objective(
+                    mojo_model,
+                    telemetry_path,
+                    mj_model,
+                    mj_data,
+                    *self.run_args,
+                    **self.run_kwargs,
+                )
+                trial_scores.append(score)
+
+            if representative_status is not None:
+                status_tracker.update_trial(status=representative_status)
+            else:
+                # This branch is theoretically unreachable due to ge=1, but prevents the static analysis error.
+                logger.error(f"Trial {trial.number} produced no status.")
+
+            if not trial_scores:
                 return (
                     float("inf")
                     if self.config.direction == "minimize"
                     else float("-inf")
                 )
 
-            import mujoco_mojo.runtime as rt
-
-            telemetry_path = (
-                self.workdir
-                / "trials"
-                / f"trial_{trial_num:{self.config.padding_style}}"
-                / rt.SignalManager.default_output_name()
-            )
-
-            assert self.objective
-            score = self.objective(
-                mojo_model,
-                telemetry_path,
-                mj_model,
-                mj_data,
-                *self.run_args,
-                **self.run_kwargs,
-            )
-
-            status_tracker.update_trial(status=trial_status)
-            return score
+            status_tracker.generate_report()
+            return float(np.mean(trial_scores))
 
         def logging_callback(
             study: optuna.study.Study, frozen_trial: optuna.trial.FrozenTrial
@@ -908,7 +1004,7 @@ class MojoRunner:
             )
 
         try:
-            if not resume:
+            if not self.config.resume:
                 logger.info(
                     f"Processing trial_{0:{self.config.padding_style}} sequentially..."
                 )
@@ -920,7 +1016,7 @@ class MojoRunner:
                     n_jobs=1,
                 )
 
-            remaining = self.config.n_trial - (0 if resume else 1)
+            remaining = self.config.n_trial - (0 if self.config.resume else 1)
             if remaining > 0:
                 logger.info(
                     f"Processing remaining {remaining} trials with {self.config.n_proc} procs..."
@@ -1159,7 +1255,6 @@ class MojoRunner:
     def orchestrate_slurm_monte_carlo(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        resume: bool = True,
         trial_nums: list[int] | None = None,
     ) -> bool:
         """Orchestrates a Monte Carlo SLURM submission."""
@@ -1197,7 +1292,7 @@ class MojoRunner:
         )
 
         # decide which trials to execute
-        if resume:
+        if self.config.resume:
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
         status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 

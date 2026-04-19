@@ -1,6 +1,9 @@
+import threading
 from pathlib import Path
 
 from pydantic import BaseModel
+
+_IO_LOCK = threading.Lock()
 
 
 class MojoBaseModel(BaseModel):
@@ -9,4 +12,5 @@ class MojoBaseModel(BaseModel):
     def dump_to_path(
         self, path: Path, indent: int | None = None, encoding: str = "utf-8"
     ):
-        path.write_text(self.model_dump_json(indent=indent), encoding=encoding)
+        with _IO_LOCK:
+            path.write_text(self.model_dump_json(indent=indent), encoding=encoding)

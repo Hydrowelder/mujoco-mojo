@@ -34,6 +34,7 @@ from ..defaults import (
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
+    SamplerOptions,
 )
 
 console = Console()
@@ -410,7 +411,7 @@ if True:
         ),
     ]
     SamplerType = Annotated[
-        Literal["tpe", "cmaes", "random"],
+        SamplerOptions,
         typer.Option(
             "--sampler",
             "-sm",
@@ -621,7 +622,7 @@ def run_monte_carlo(
     )
 
     # 2. build config
-    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc)
+    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
 
     # 3. run
     console.print(
@@ -632,7 +633,6 @@ def run_monte_carlo(
         extra={"file_only": True},
     )
     had_fails = runner.run(
-        resume=resume,
         global_overrides=global_overrides
         if global_overrides
         else NamedValueDict[NDArray](),
@@ -775,7 +775,7 @@ def run_dojo(
     shared.set_globals(workdir=workdir, owner=job.started_by, job_type=job.job_type)
 
     if job.job_type == JobType.OPTIMIZE:
-        from mujoco_mojo.utils.layers.dojo.routers.optimizer import mount_optuna_engine
+        from mujoco_mojo.utils.layers.dojo.routers.morph import mount_optuna_engine
 
         db_path = f"sqlite:///{workdir / 'study.db'}"
         mount_optuna_engine(dojo_app, db_path)
@@ -805,8 +805,8 @@ def run_dojo(
         )
     )
 
-    uvicorn.run(dojo_app, host=host, port=port, log_level="info")
-    # uvicorn.run(dojo_app, host=host, port=port, log_level="critical")
+    # uvicorn.run(dojo_app, host=host, port=port, log_level="info")
+    uvicorn.run(dojo_app, host=host, port=port, log_level="critical")
 
 
 @run_app.command(name="optimize")
@@ -903,7 +903,6 @@ def run_optimizer(
     )
 
     had_fails = runner.run(
-        resume=resume,
         global_overrides=global_overrides
         if global_overrides
         else NamedValueDict[NDArray](),

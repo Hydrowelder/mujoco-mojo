@@ -1,5 +1,6 @@
 import getpass
 import math
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -220,12 +221,15 @@ class JobStatus(MojoBaseModel):
     _cache: dict[int, TrialStatus] = PrivateAttr(default_factory=dict)
     """Internal cache of TrialStatus objects to avoid redundant I/O."""
 
+    _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
+
     @property
     def _registry(self) -> dict[int, Completion]:
         """Provides a mapping of trial_num to its last known completion status."""
-        reg = {tn: Completion.INCOMPLETE for tn in self.trial_nums}
-        for tn, status in self._cache.items():
-            reg[tn] = status.completion
+        with self._lock:
+            reg = {tn: Completion.INCOMPLETE for tn in self.trial_nums}
+            for tn, status in self._cache.items():
+                reg[tn] = status.completion
 
         return reg
 
@@ -294,7 +298,8 @@ class JobStatus(MojoBaseModel):
 
                 # update the cache immediately
                 if status is not None:
-                    self._cache[tn] = status
+                    with self._lock:
+                        self._cache[tn] = status
 
                 # broadcast status
                 completed_count += 1
@@ -303,17 +308,18 @@ class JobStatus(MojoBaseModel):
                     progress_callback(pct)
 
         # post calculations
-        success_durations = [
-            s.td.total_seconds()
-            for s in self._cache.values()
-            if s.completion == Completion.SUCCESS
-        ]
-        if success_durations:
-            avg_sec = sum(success_durations) / len(success_durations)
-            self.average_trial_duration = timedelta(seconds=avg_sec)
+        with self._lock:
+            success_durations = [
+                s.td.total_seconds()
+                for s in self._cache.values()
+                if s.completion == Completion.SUCCESS
+            ]
+            if success_durations:
+                avg_sec = sum(success_durations) / len(success_durations)
+                self.average_trial_duration = timedelta(seconds=avg_sec)
 
-        if not self.is_done:
-            self.elapsed = datetime.now(UTC) - self.start_time
+            if not self.is_done:
+                self.elapsed = datetime.now(UTC) - self.start_time
         self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     def total_runtimes(
@@ -321,7 +327,10 @@ class JobStatus(MojoBaseModel):
     ) -> dict[Literal["pending", "generating", "solving", "total"], float]:
         totals = {"pending": 0.0, "generating": 0.0, "solving": 0.0}
 
-        for status in self._cache.values():
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        for status in statuses:
             for step_name in totals.keys():
                 step_obj: StepStatus = getattr(status, step_name)
 
@@ -436,23 +445,24 @@ class JobStatus(MojoBaseModel):
 
     def update_trial(self, status: TrialStatus, save: bool = True):
         """Updates the internal registry and average trial duration and optionally persists the global status."""
-        self._cache[status.trial_num] = status
+        with self._lock:
+            self._cache[status.trial_num] = status
 
-        success_durations = [
-            s.td.total_seconds()
-            for s in self._cache.values()
-            if s.completion == Completion.SUCCESS and s.td is not None
-        ]
+            success_durations = [
+                s.td.total_seconds()
+                for s in self._cache.values()
+                if s.completion == Completion.SUCCESS and s.td is not None
+            ]
 
-        if success_durations:
-            self.average_trial_duration = timedelta(
-                seconds=sum(success_durations) / len(success_durations)
-            )
+            if success_durations:
+                self.average_trial_duration = timedelta(
+                    seconds=sum(success_durations) / len(success_durations)
+                )
 
-        self.elapsed = datetime.now(UTC) - self.start_time
+            self.elapsed = datetime.now(UTC) - self.start_time
 
-        if save:
-            self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+            if save:
+                self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     @property
     def is_done(self) -> bool:

@@ -31,15 +31,23 @@ class WSGIPrefixRestorer:
 async def get_optimizer(request: Request):
     """Serves the wrapper frame for the Optuna Dashboard."""
     return shared.templates.TemplateResponse(
-        request=request, name="optimizer.html", context={"request": request}
+        request=request, name="morph.html", context={"request": request}
     )
 
 
 def mount_optuna_engine(app: FastAPI, storage_url: str):
-    """Mounts the Optuna Dashboard as a sub-app at /optimizer."""
+    """Mounts the Optuna Dashboard as a sub-app at /morph."""
+    import warnings
+
+    import optuna
     import optuna_dashboard
     from fastapi.middleware.wsgi import WSGIMiddleware
     from fastapi.staticfiles import StaticFiles
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)
+    warnings.filterwarnings("ignore", category=UserWarning, module="optuna_dashboard")
 
     app.mount(
         "/static",
