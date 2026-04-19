@@ -21,7 +21,7 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 
 ???+ example "Example: MojoGenerate Handle"
     ```python
-    --8<-- "docs/user-guides/example.py:runtime-handle"
+    --8<-- "docs/user-guides/monte_carlo_example.py:runtime-handle"
     ```
 
 ---
@@ -38,7 +38,7 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
 ???+ example "Example: Applying Custom Forces"
     ```python
-    --8<-- "docs/user-guides/example.py:forces"
+    --8<-- "docs/user-guides/monte_carlo_example.py:forces"
     ```
 
 ???+ question "Available Load Types"
@@ -117,7 +117,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
 ???+ example "Example: Telemetry Requests"
     ```python
-    --8<-- "docs/user-guides/example.py:requests"
+    --8<-- "docs/user-guides/monte_carlo_example.py:requests"
     ```
 
 ---
@@ -131,7 +131,7 @@ If you need visual proof of your simulation (or you just need something for a sl
 
 ???+ example "Example: Video Setup"
     ```python
-    --8<-- "docs/user-guides/example.py:video"
+    --8<-- "docs/user-guides/monte_carlo_example.py:video"
     ```
 
 ---
@@ -144,7 +144,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
 ???+ example "Example: Stepping"
     ```python
-    --8<-- "docs/user-guides/example.py:stepping"
+    --8<-- "docs/user-guides/monte_carlo_example.py:stepping"
     ```
 
 ---
@@ -156,5 +156,5 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
 ??? example "Example:Full Runtime Script"
     ```python
-    --8<-- "docs/user-guides/example.py:runtime"
+    --8<-- "docs/user-guides/monte_carlo_example.py:runtime"
     ```

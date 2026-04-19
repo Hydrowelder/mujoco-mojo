@@ -259,7 +259,7 @@ def runtime(
     mj_data: mujoco.MjData,
     *args,
     **kwargs,
-):
+) -> mojo.MojoModel:
     """Executes the physics simulation."""
     # --8<-- [end:runtime-handle]
     assert isinstance(mojo_model._user_data, Handoff)
@@ -298,7 +298,7 @@ def runtime(
             rm.step(mj_model, mj_data)
         # --8<-- [end:stepping]
 
-    return f"Trial {mojo_model.trial_num} complete."
+    return mojo_model
 
 
 # --8<-- [end:runtime]

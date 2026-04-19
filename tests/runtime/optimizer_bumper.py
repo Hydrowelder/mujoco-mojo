@@ -4,6 +4,7 @@ from typing import Literal
 
 import mujoco
 import numpy as np
+import optuna
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -23,10 +24,12 @@ class Handoff:
     It is here to allow encapsulation for defining MJCF elements, while retaining the simple ability to later use those definitions in the runtime.
     """
 
+    box1: mojo.Body
+    box2: mojo.Body
     box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, float, float, float],
     ] = field(default_factory=dict)
 
     def define_spring(
@@ -56,39 +59,40 @@ class Handoff:
         )
 
         # perform random draws
-        stiffness = mojo_model.sample_dist(
-            mojo.TruncatedNormalDistribution(
-                name=mojo.DistName(f"{loc}_stiffness"),
-                nominal=100,
-                mu=100,
-                sigma=20,
-                low=0,
-            )
-        ).squeeze()
-        stroke = mojo_model.sample_dist(
-            mojo.TruncatedNormalDistribution(
-                name=mojo.DistName(f"{loc}_stroke"),
-                nominal=(nom := 1),
-                mu=nom,
-                sigma=nom * 0.1,
-                low=nom * 0.8,
-                high=nom * 1.2,
-            )
-        ).squeeze()
+        stiffness = mojo_model.design_float(
+            name=f"{loc}_stiffness",
+            default=100,
+            low=50,
+            high=200,
+        )
 
-        self.springs.update({loc: (base, tip, stiffness, stroke)})
+        stroke = mojo_model.design_float(
+            name=f"{loc}_stroke",
+            default=(nom := 1),
+            low=nom * 0.8,
+            high=nom * 1.2,
+        )
+
+        preload = mojo_model.design_float(
+            name=f"{loc}_preload",
+            default=(nom := 1000 if loc == "pz" else 750),
+            low=nom * 0.8,
+            high=nom * 1.2,
+        )
+
+        self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
     def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
         assert rm.results_manager is not None
-        base, tip, stiffness, stroke = self.springs[loc]
+        base, tip, stiffness, stroke, preload = self.springs[loc]
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(
             name=f"{loc}_spring",
             action_site=base,  # red box
             xtion_site=tip,  # blue box
-            stiffness=float(stiffness),
-            max_stroke=float(stroke),
-            preload=1000 if loc == "pz" else 750,
+            stiffness=stiffness,
+            max_stroke=stroke,
+            preload=preload,
         ).register_to_rm(rm)
 
         base.request(rm.results_manager)
@@ -254,7 +258,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     ]
 
     # add handoff data
-    handoff = Handoff(box1_rot=box1_rot_site)
+    handoff = Handoff(box1=box1, box2=box2, box1_rot=box1_rot_site)
     mojo_model._user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
@@ -316,23 +320,54 @@ def runtime(
     return mojo_model
 
 
+def objective(
+    mojo_model: mojo.MojoModel,
+    telemetry: Path,
+    mj_model: mujoco.MjModel,
+    mj_data: mujoco.MjData,
+) -> float:
+    """Optimize the relative angular velocity to be low but the translational kinetic energy to be high."""
+    assert isinstance(mojo_model._user_data, Handoff)
+    handoff = mojo_model._user_data
+
+    w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
+    w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)
+    omega_score = float(np.linalg.norm(w1 - w2))
+
+    ke1 = handoff.box1.rt_trans_ke(mj_model, mj_data)
+    ke2 = handoff.box2.rt_trans_ke(mj_model, mj_data)
+    total_ke = ke1 + ke2
+    ke_score = 1 / (total_ke + 1e-6)  # add to prevent divide by zero
+
+    STABILITY_WEIGHT = 10.0
+    ENERGY_WEIGHT = 1.0
+
+    return (STABILITY_WEIGHT * omega_score) + (ENERGY_WEIGHT * ke_score)
+
+
 if __name__ == "__main__":
     from pathlib import Path
 
     mojo.utils.setup_logger()
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    workdir = Path(__file__).parent / "mc_bumper_test_2"
-    # Run the Monte Carlo
+    workdir = Path(__file__).parent / "mc_bumper_optimize"
+
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
+        objective=objective,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
+        config=mojo.utils.OptimizerConfig(
+            n_trial=20,
+            n_proc=4,
+            study_name="stabilize_box",
+            direction="minimize",
+            sampler="tpe",
+        ),
+        seed=42,
     )
 
-    # results, had_fails = runner.run(
-    #     resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
-    # )
+    logger.info("Starting Optimization Study...")
     had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
-
-    print(f"Finished with {had_fails=}")
+    print(f"Optimization finished with {had_fails=}. Results saved to {workdir}.")
