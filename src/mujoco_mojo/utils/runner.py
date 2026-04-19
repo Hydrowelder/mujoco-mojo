@@ -29,8 +29,6 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM, NamedValueDict
 from mujoco_mojo.stochas.design import (
-    DesignCategorical,
-    DesignFloat,
     DesignValueDict,
     NamedValue,
     ValueName,
@@ -847,18 +845,7 @@ class MojoRunner:
         def optuna_objective(trial: optuna.Trial) -> float:
             suggestions = {}
             for name, dv in design_space.items():
-                if isinstance(dv, DesignFloat):
-                    suggestions[name] = trial.suggest_float(
-                        name=name, low=dv.low, high=dv.high, log=dv.log, step=dv.step
-                    )
-                elif isinstance(dv, DesignCategorical):
-                    suggestions[name] = trial.suggest_categorical(
-                        name=name, choices=dv.choices
-                    )
-                else:
-                    msg = f"Unsupported type {type(dv)} for design value!"
-                    logger.error(msg)
-                    raise TypeError(msg)
+                suggestions[name] = dv.suggest(trial)
 
             # prepare overrides for the trial
             # mash the suggestions into the global overrides
@@ -921,13 +908,30 @@ class MojoRunner:
             )
 
         try:
-            study.optimize(
-                func=optuna_objective,
-                n_trials=self.config.n_trial,
-                callbacks=[logging_callback],
-                timeout=self.config.timeout,
-                n_jobs=self.config.n_proc,
-            )
+            if not resume:
+                logger.info(
+                    f"Processing trial_{0:{self.config.padding_style}} sequentially..."
+                )
+                study.optimize(
+                    func=optuna_objective,
+                    n_trials=1,
+                    callbacks=[logging_callback],
+                    timeout=self.config.timeout,
+                    n_jobs=1,
+                )
+
+            remaining = self.config.n_trial - (0 if resume else 1)
+            if remaining > 0:
+                logger.info(
+                    f"Processing remaining {remaining} trials with {self.config.n_proc} procs..."
+                )
+                study.optimize(
+                    func=optuna_objective,
+                    n_trials=remaining,
+                    callbacks=[logging_callback],
+                    timeout=self.config.timeout,
+                    n_jobs=self.config.n_proc,
+                )
         except (BdbQuit, KeyboardInterrupt):
             logger.warning("Optimization inturrupted by user")
             return True

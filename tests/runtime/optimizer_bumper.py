@@ -345,29 +345,47 @@ def objective(
     return (STABILITY_WEIGHT * omega_score) + (ENERGY_WEIGHT * ke_score)
 
 
-if __name__ == "__main__":
-    from pathlib import Path
+WORKDIR = (Path(__file__).parent / "mc_bumper_optimize").resolve()
 
+
+def run_dashboard():
+    import optuna_dashboard
+
+    storage_url = f"sqlite:///{WORKDIR / 'mojo.db'}"
+
+    print("--- Launching Mojo Dojo Post-Processor ---")
+    print(f"Database: {storage_url}")
+    print("Access locally at: http://localhost:8081")
+
+    # We host on 0.0.0.0 so the SSH tunnel can grab it
+    optuna_dashboard.run_server(storage_url, host="0.0.0.0", port=8002)
+
+
+def run_study():
     mojo.utils.setup_logger()
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-    workdir = Path(__file__).parent / "mc_bumper_optimize"
 
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
         objective=objective,
-        workdir=workdir,
+        workdir=WORKDIR,
         config=mojo.utils.OptimizerConfig(
             n_trial=20,
             n_proc=4,
             study_name="stabilize_box",
             direction="minimize",
             sampler="tpe",
+            storage=f"sqlite:///{WORKDIR / 'study.db'}",
         ),
         seed=42,
     )
 
     logger.info("Starting Optimization Study...")
     had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
-    print(f"Optimization finished with {had_fails=}. Results saved to {workdir}.")
+    print(f"Optimization finished with {had_fails=}. Results saved to {WORKDIR}.")
+
+
+if __name__ == "__main__":
+    run_dashboard()
+    # run_study()

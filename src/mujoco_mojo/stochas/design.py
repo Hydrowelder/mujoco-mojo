@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 
+import optuna
 from pydantic import Field
 from stochas.base_collections import BaseDict, BaseList
 from stochas.named_value import NamedValue, ValueName
@@ -15,7 +17,13 @@ __all__ = [
 ]
 
 
-class DesignFloat(NamedValue[float]):
+class OptunaSuggestor(ABC):
+    @abstractmethod
+    def suggest(self, trial: optuna.Trial) -> Any:
+        pass
+
+
+class DesignFloat(NamedValue[float], OptunaSuggestor):
     """
     A NamedValue that represents a floating point design parameter to be optimized.
 
@@ -36,14 +44,29 @@ class DesignFloat(NamedValue[float]):
     step: float | None = None
     """Discretize the search space (e.g., step=0.5)."""
 
+    def suggest(self, trial: optuna.Trial):
+        return trial.suggest_float(
+            name=self.name,
+            low=self.low,
+            high=self.high,
+            log=self.log,
+            step=self.step,
+        )
 
-class DesignCategorical[T](NamedValue[T]):
+
+class DesignCategorical[T](NamedValue[T], OptunaSuggestor):
     """A NamedValue that represents a categorical design parameter to be optimized."""
 
     type: Literal["categorical"] = "categorical"
 
     choices: Sequence[T]
     """For categorical search (e.g., choices=['stiff', 'soft'])."""
+
+    def suggest(self, trial: optuna.Trial):
+        return trial.suggest_categorical(
+            name=self.name,
+            choices=self.choices,  # type: ignore
+        )
 
 
 AnyDesignValue = Annotated[

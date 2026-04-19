@@ -37,6 +37,7 @@ dependencies = [
     "pip>=26.0.1",
     "optuna>=4.8.0",
     "joblib>=1.5.3",
+    "optuna-dashboard>=0.20.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
