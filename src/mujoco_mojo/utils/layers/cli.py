@@ -756,7 +756,7 @@ def run_dojo(
     import uvicorn
 
     import mujoco_mojo.utils.layers.dojo.shared as shared
-    from mujoco_mojo.utils.layers.dojo.main import dojo_app, mount_optimizer
+    from mujoco_mojo.utils.layers.dojo.main import dojo_app
     from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
     status_file = (workdir / JOB_STATUS_FNAME).resolve()
@@ -775,8 +775,10 @@ def run_dojo(
     shared.set_globals(workdir=workdir, owner=job.started_by, job_type=job.job_type)
 
     if job.job_type == JobType.OPTIMIZE:
+        from mujoco_mojo.utils.layers.dojo.routers.optimizer import mount_optuna_engine
+
         db_path = f"sqlite:///{workdir / 'study.db'}"
-        mount_optimizer(dojo_app, db_path)
+        mount_optuna_engine(dojo_app, db_path)
 
     # detect ip
     local_ip = get_local_ip()
