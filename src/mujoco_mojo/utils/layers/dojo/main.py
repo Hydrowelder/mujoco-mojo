@@ -7,7 +7,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 
-from .routers import monitor, mosaic, optimizer
+from .routers import monitor, morph, mosaic
 
 security = HTTPBasic(auto_error=False)
 
@@ -92,6 +92,4 @@ async def not_found_exception_handler(request: Request, exc: HTTPException):
 dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
-dojo_app.include_router(
-    optimizer.router, prefix="/optimizer", dependencies=dependencies
-)
+dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies)

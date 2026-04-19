@@ -9,6 +9,7 @@ const formatTimeAgo = (seconds) => {
 document.addEventListener("alpine:init", () => {
   Alpine.store("dojo", {
     isPageReady: false,
+    isFullscreen: false,
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem("mojo_muted") !== "false",

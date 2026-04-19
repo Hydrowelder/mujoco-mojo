@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 __all__ = [
     "DEFAULT_MC_N_TRIAL",
@@ -35,6 +36,12 @@ DEFAULT_OP_DIRECTION = "minimize"
 DEFAULT_OP_TIMEOUT = None
 DEFAULT_OP_STORAGE = None
 DEFAULT_OP_SAMPLER = "tpe"
+SamplerOptions = Literal[
+    "tpe", "cmaes", "random", "nsgaii", "nsgaiii", "qmc", "gp", "brute"
+]
+DEFAULT_OP_EVALS_PER_TRIAL = 1
+DEFAULT_OP_REFINE_SEARCH_FACTOR = None
+DEFAULT_OP_PRUNE_FAILED_TRIALS = True
 
 # run defaults
 DEFAULT_RESUME = True
