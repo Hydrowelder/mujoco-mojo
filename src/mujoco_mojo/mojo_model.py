@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Any, Self
 
 from numpydantic import NDArray
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, SerializeAsAny
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
@@ -47,7 +47,9 @@ class MojoModel(MojoBaseModel):
     dists: DistributionDict = Field(default_factory=DistributionDict)
     """Random distributions used to generate the MojoModel."""
 
-    named: NamedValueDict[NDArray] = Field(default_factory=NamedValueDict[NDArray])
+    named: SerializeAsAny[NamedValueDict[NDArray]] = Field(
+        default_factory=NamedValueDict[NDArray]
+    )
     """Final 'baked' values from a random draw, global override, or design study."""
 
     _user_data: Any = PrivateAttr(default=None)
