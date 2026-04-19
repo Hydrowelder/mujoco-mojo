@@ -1,6 +1,5 @@
 import asyncio
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -8,7 +7,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 
-from .routers import monitor, mosaic
+from .routers import monitor, mosaic, optimizer
 
 security = HTTPBasic(auto_error=False)
 
@@ -46,9 +45,6 @@ async def lifespan(app: FastAPI):
 
 dojo_app = FastAPI(title="MuJoCo Mojo Dojo", lifespan=lifespan)
 dojo_app.mount("/mojo-static", shared.static, name="mojo_static")
-
-
-dependencies = [Depends(validate_dojo_auth)]
 
 
 @dojo_app.get("/")
@@ -93,28 +89,9 @@ async def not_found_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-def mount_optimizer(app: FastAPI, storage_url: str):
-    """Mounts the Optuna Dashboard as a sub-app at /optimizer."""
-    import optuna_dashboard
-    from fastapi.middleware.wsgi import WSGIMiddleware
-    from fastapi.staticfiles import StaticFiles
-
-    dojo_app.mount(
-        "/static",
-        StaticFiles(directory=Path(optuna_dashboard.__file__).parent / "public"),
-        name="static",
-    )
-
-    optuna_app = optuna_dashboard.wsgi(storage=storage_url)
-    app.mount("/", WSGIMiddleware(optuna_app))
-
-
-@dojo_app.get("/optimizer")
-async def optimizer_view(request: Request):
-    return shared.templates.TemplateResponse(
-        request=request, name="optimizer.html", context={"request": request}
-    )
-
-
+dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
+dojo_app.include_router(
+    optimizer.router, prefix="/optimizer", dependencies=dependencies
+)
