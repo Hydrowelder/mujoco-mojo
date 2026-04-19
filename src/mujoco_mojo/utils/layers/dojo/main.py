@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -44,7 +45,8 @@ async def lifespan(app: FastAPI):
 
 
 dojo_app = FastAPI(title="MuJoCo Mojo Dojo", lifespan=lifespan)
-dojo_app.mount("/static", shared.static, name="static")
+dojo_app.mount("/mojo-static", shared.static, name="mojo_static")
+
 
 dependencies = [Depends(validate_dojo_auth)]
 
@@ -88,6 +90,29 @@ async def not_found_exception_handler(request: Request, exc: HTTPException):
             "message": "The page you are looking for was not able to be found.",
         },
         status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def mount_optimizer(app: FastAPI, storage_url: str):
+    """Mounts the Optuna Dashboard as a sub-app at /optimizer."""
+    import optuna_dashboard
+    from fastapi.middleware.wsgi import WSGIMiddleware
+    from fastapi.staticfiles import StaticFiles
+
+    dojo_app.mount(
+        "/static",
+        StaticFiles(directory=Path(optuna_dashboard.__file__).parent / "public"),
+        name="static",
+    )
+
+    optuna_app = optuna_dashboard.wsgi(storage=storage_url)
+    app.mount("/", WSGIMiddleware(optuna_app))
+
+
+@dojo_app.get("/optimizer")
+async def optimizer_view(request: Request):
+    return shared.templates.TemplateResponse(
+        request=request, name="optimizer.html", context={"request": request}
     )
 
 
