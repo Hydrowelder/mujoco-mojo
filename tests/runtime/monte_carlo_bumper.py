@@ -333,6 +333,6 @@ if __name__ == "__main__":
     # results, had_fails = runner.run(
     #     resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
     # )
-    had_fails = runner.run(resume=False, clean_workdir=True, cleanup_delay=-1)
+    had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
 
     print(f"Finished with {had_fails=}")
