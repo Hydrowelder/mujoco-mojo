@@ -154,7 +154,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
     With your **Generator** and **Runtime** scripts ready, the next step is to learn how to scale these up into massive Monte Carlo jobs using the [Job Runner](running-jobs.md).
 
-??? example "Example:Full Runtime Script"
+??? example "Example: Full Runtime Script"
     ```python
     --8<-- "docs/user-guides/monte_carlo_example.py:runtime"
     ```

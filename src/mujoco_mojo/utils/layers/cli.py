@@ -24,9 +24,11 @@ from ..defaults import (
     DEFAULT_MODEL_CONFIG_NAME,
     DEFAULT_N_PROC,
     DEFAULT_OP_DIRECTION,
+    DEFAULT_OP_EVALS_PER_TRIAL,
     DEFAULT_OP_N_TRIAL,
+    DEFAULT_OP_PRUNE_FAILED_TRIALS,
+    DEFAULT_OP_REFINE_SEARCH_FACTOR,
     DEFAULT_OP_SAMPLER,
-    DEFAULT_OP_STORAGE,
     DEFAULT_OP_STUDY_NAME,
     DEFAULT_OP_TIMEOUT,
     DEFAULT_RESUME,
@@ -419,11 +421,11 @@ if True:
         ),
     ]
     StorageType = Annotated[
-        str | None,
+        bool,
         typer.Option(
             "--storage",
             "-st",
-            help="Database storage URL (e.g., 'sqlite:///mojo.db'). Required for multi-process optimization.",
+            help="Whether or not to use database storage. Required for multi-process optimization.",
         ),
     ]
     TimeoutType = Annotated[
@@ -433,6 +435,22 @@ if True:
             "-to",
             help="Stop searching for new design parameters after N seconds have elapsed.",
         ),
+    ]
+    EvalsPerTrialType = Annotated[
+        int,
+        typer.Option(
+            help="Number of evaluations (different seeds) per trial to average."
+        ),
+    ]
+    RefineSearchFactorType = Annotated[
+        float | None,
+        typer.Option(
+            help="Shrink search bounds by this factor on resume (0.1 = aggressive)."
+        ),
+    ]
+    PruneFailedTrialsType = Annotated[
+        bool,
+        typer.Option(help="Immediately stop trials that hit physics instabilities."),
     ]
 
 # initialize the CLI with rich formatting
@@ -809,7 +827,7 @@ def run_dojo(
     uvicorn.run(dojo_app, host=host, port=port, log_level="critical")
 
 
-@run_app.command(name="optimize")
+@run_app.command(name="optimization")
 def run_optimizer(
     ctx: typer.Context,
     generator: GeneratorType,
@@ -822,9 +840,12 @@ def run_optimizer(
     study_name: StudyNameType = DEFAULT_OP_STUDY_NAME,
     direction: DirectionType = DEFAULT_OP_DIRECTION,
     sampler: SamplerType = DEFAULT_OP_SAMPLER,
-    storage: StorageType = DEFAULT_OP_STORAGE,
+    storage: StorageType = True,
     resume: ResumeType = DEFAULT_RESUME,
     seed: SeedType = DEFAULT_SEED,
+    evals_per_trial: EvalsPerTrialType = DEFAULT_OP_EVALS_PER_TRIAL,
+    refine_search_factor: RefineSearchFactorType = DEFAULT_OP_REFINE_SEARCH_FACTOR,
+    prune_failed_trials: PruneFailedTrialsType = DEFAULT_OP_PRUNE_FAILED_TRIALS,
     clean_workdir: CleanWorkdirType = False,
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
@@ -898,8 +919,11 @@ def run_optimizer(
         study_name=study_name,
         direction=direction,
         sampler=sampler,
-        storage=storage,
+        storage=f"sqlite:///{workdir / 'study.db'}" if storage else None,
         resume=resume,
+        evals_per_trial=evals_per_trial,
+        refine_search_factor=refine_search_factor,
+        prune_failed_trials=prune_failed_trials,
     )
 
     had_fails = runner.run(
