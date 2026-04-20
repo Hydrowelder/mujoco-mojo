@@ -7,7 +7,7 @@ import sys
 from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import typer
 from rich.console import Console
@@ -20,14 +20,23 @@ from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import get_local_ip
 
 from ..defaults import (
-    DEFAULT_MC_N_PROC,
     DEFAULT_MC_N_TRIAL,
     DEFAULT_MODEL_CONFIG_NAME,
+    DEFAULT_N_PROC,
+    DEFAULT_OP_DIRECTION,
+    DEFAULT_OP_EVALS_PER_TRIAL,
+    DEFAULT_OP_N_TRIAL,
+    DEFAULT_OP_PRUNE_FAILED_TRIALS,
+    DEFAULT_OP_REFINE_SEARCH_FACTOR,
+    DEFAULT_OP_SAMPLER,
+    DEFAULT_OP_STUDY_NAME,
+    DEFAULT_OP_TIMEOUT,
     DEFAULT_RESUME,
     DEFAULT_RUNTIME,
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
+    SamplerOptions,
 )
 
 console = Console()
@@ -170,7 +179,15 @@ if True:
         typer.Option(
             "--runtime",
             "-r",
-            help="Optional runtime path",
+            help="Runtime path to use to run dynamics (e.g. 'sim.run')",
+        ),
+    ]
+    ObjectiveType = Annotated[
+        str,
+        typer.Option(
+            "--objective",
+            "-ob",
+            help="Objective function path to score the model (e.g. 'sim.score')",
         ),
     ]
     PostProcessorType = Annotated[
@@ -378,6 +395,64 @@ if True:
         ),
     ]
 
+    # optimize
+    StudyNameType = Annotated[
+        str,
+        typer.Option(
+            "--study-name",
+            "-sn",
+            help="Unique identifier for the Optuna study. Useful for resuming or tracking in a database.",
+        ),
+    ]
+    DirectionType = Annotated[
+        Literal["minimize", "maximize"],
+        typer.Option(
+            "--direction",
+            "-d",
+            help="The optimization goal. Either 'minimize' or 'maximize'.",
+        ),
+    ]
+    SamplerType = Annotated[
+        SamplerOptions,
+        typer.Option(
+            "--sampler",
+            "-sm",
+            help="The search algorithm to use (e.g., 'tpe' for Bayesian, 'cmaes', or 'random').",
+        ),
+    ]
+    StorageType = Annotated[
+        bool,
+        typer.Option(
+            "--storage",
+            "-st",
+            help="Whether or not to use database storage. Required for multi-process optimization.",
+        ),
+    ]
+    TimeoutType = Annotated[
+        float | None,
+        typer.Option(
+            "--timeout",
+            "-to",
+            help="Stop searching for new design parameters after N seconds have elapsed.",
+        ),
+    ]
+    EvalsPerTrialType = Annotated[
+        int,
+        typer.Option(
+            help="Number of evaluations (different seeds) per trial to average."
+        ),
+    ]
+    RefineSearchFactorType = Annotated[
+        float | None,
+        typer.Option(
+            help="Shrink search bounds by this factor on resume (0.1 = aggressive)."
+        ),
+    ]
+    PruneFailedTrialsType = Annotated[
+        bool,
+        typer.Option(help="Immediately stop trials that hit physics instabilities."),
+    ]
+
 # initialize the CLI with rich formatting
 cli_app = typer.Typer(
     name="mujoco-mojo",
@@ -429,6 +504,7 @@ def main(
 def _prepare_runner(
     generator: GeneratorType,
     runtime: RuntimeType,
+    objective: ObjectiveType | None,
     workdir: WorkdirType,
     model_config_name: ModelConfigNameType,
     seed: SeedType,
@@ -453,12 +529,15 @@ def _prepare_runner(
     # resolve code paths
     gen_func = _load_func(generator)
     run_func = _load_func(runtime) if runtime else None
+    objective_func = _load_func(objective) if objective else None
 
     return MojoRunner(
         generator=gen_func,
         generator_path=generator,  # needed for SLURM
         runtime=run_func,
         runtime_path=runtime,  # needed for SLURM
+        objective=objective_func,
+        objective_path=objective,
         workdir=workdir,
         seed=seed,
         model_config_name=model_config_name,
@@ -477,7 +556,7 @@ def run_monte_carlo(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
-    n_proc: NProcType = DEFAULT_MC_N_PROC,
+    n_proc: NProcType = DEFAULT_N_PROC,
     resume: ResumeType = DEFAULT_RESUME,
     seed: SeedType = DEFAULT_SEED,
     clean_workdir: CleanWorkdirType = False,
@@ -550,6 +629,7 @@ def run_monte_carlo(
         generator=generator,
         runtime=runtime,
         workdir=workdir,
+        objective=None,
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
@@ -560,7 +640,7 @@ def run_monte_carlo(
     )
 
     # 2. build config
-    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc)
+    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
 
     # 3. run
     console.print(
@@ -570,8 +650,7 @@ def run_monte_carlo(
         f"Starting {n_trial} trials (using {n_proc} workers)...",
         extra={"file_only": True},
     )
-    _results, had_fails = runner.run(
-        resume=resume,
+    had_fails = runner.run(
         global_overrides=global_overrides
         if global_overrides
         else NamedValueDict[NDArray](),
@@ -696,7 +775,7 @@ def run_dojo(
 
     import mujoco_mojo.utils.layers.dojo.shared as shared
     from mujoco_mojo.utils.layers.dojo.main import dojo_app
-    from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
+    from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
     status_file = (workdir / JOB_STATUS_FNAME).resolve()
     if not status_file.exists():
@@ -711,7 +790,13 @@ def run_dojo(
 
     shared.CURRENT_JOB = job
     shared.AUTH_PASSWORD = password
-    shared.set_globals(workdir=workdir, owner=job.started_by)
+    shared.set_globals(workdir=workdir, owner=job.started_by, job_type=job.job_type)
+
+    if job.job_type == JobType.OPTIMIZE:
+        from mujoco_mojo.utils.layers.dojo.routers.morph import mount_optuna_engine
+
+        db_path = f"sqlite:///{workdir / 'study.db'}"
+        mount_optuna_engine(dojo_app, db_path)
 
     # detect ip
     local_ip = get_local_ip()
@@ -738,17 +823,127 @@ def run_dojo(
         )
     )
 
+    # uvicorn.run(dojo_app, host=host, port=port, log_level="info")
     uvicorn.run(dojo_app, host=host, port=port, log_level="critical")
 
 
-@run_app.command(name="optimize")
+@run_app.command(name="optimization")
 def run_optimizer(
+    ctx: typer.Context,
+    generator: GeneratorType,
+    objective: ObjectiveType,
+    runtime: RuntimeType = DEFAULT_RUNTIME,
+    workdir: WorkdirType = DEFAULT_WORKDIR,
+    n_trial: NTrialType = DEFAULT_OP_N_TRIAL,
+    n_proc: NProcType = DEFAULT_N_PROC,
+    timeout: TimeoutType = DEFAULT_OP_TIMEOUT,
+    study_name: StudyNameType = DEFAULT_OP_STUDY_NAME,
+    direction: DirectionType = DEFAULT_OP_DIRECTION,
+    sampler: SamplerType = DEFAULT_OP_SAMPLER,
+    storage: StorageType = True,
+    resume: ResumeType = DEFAULT_RESUME,
+    seed: SeedType = DEFAULT_SEED,
+    evals_per_trial: EvalsPerTrialType = DEFAULT_OP_EVALS_PER_TRIAL,
+    refine_search_factor: RefineSearchFactorType = DEFAULT_OP_REFINE_SEARCH_FACTOR,
+    prune_failed_trials: PruneFailedTrialsType = DEFAULT_OP_PRUNE_FAILED_TRIALS,
+    clean_workdir: CleanWorkdirType = False,
+    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
+    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    overrides: OverridesType = None,
+    gen_args: GenArgsType = [],
+    gen_kwargs: GenKwargsType = [],
+    run_args: RunArgsType = [],
+    run_kwargs: RunKwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
-    """[dim]Placeholder for future optimization command...[/dim]"""
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-    console.print("[yellow]Optimization engine coming soon![/yellow]")
+    """
+    [bold yellow]Execute an automated Design Optimization study.[/bold yellow]
+
+    This command uses Optuna to intelligently navigate the search space defined by [bold cyan]model.design_float[/bold cyan] and [bold cyan]model.design_categorical[/bold cyan] calls within your generator.
+    """
+    import optuna
+    from numpydantic import NDArray
+
+    from mujoco_mojo.stochas import NamedValueDict
+    from mujoco_mojo.utils.runner import MojoRunner, OptimizerConfig
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    print_logo()
+
+    workdir = workdir.resolve()
+
+    dojo_cmd = f"mujoco-mojo dojo {workdir}"
+    console.print(
+        Panel(
+            f"[bold green]Optimization Engine Engaged![/]\n\n"
+            f"[white]Study:[/]      [cyan]{study_name}[/]\n"
+            f"[white]Direction:[/]  [magenta]{direction}[/]\n"
+            f"[white]Sampler:[/]    [yellow]{sampler}[/]\n\n"
+            f"[white]To monitor live progress, run:[/]\n"
+            f"    [bold yellow]{dojo_cmd}[/]",
+            title="[cyan]Optimizer Launch Control[/]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
+    global_overrides = None
+    if overrides:
+        overrides = overrides.resolve()
+        logger.info(f"Loading global NamedValue overrides from `{overrides}`")
+        global_overrides = NamedValueDict[NDArray].model_validate_json(
+            overrides.read_text()
+        )
+
+    runner: MojoRunner = _prepare_runner(
+        generator=generator,
+        runtime=runtime,
+        workdir=workdir,
+        objective=objective,
+        model_config_name=model_config_name,
+        seed=seed,
+        xml_name=xml_name,
+        gen_args=gen_args,
+        gen_kwargs=gen_kwargs,
+        run_args=run_args,
+        run_kwargs=run_kwargs,
+    )
+
+    runner.config = OptimizerConfig(
+        n_trial=n_trial,
+        n_proc=n_proc,
+        timeout=timeout,
+        study_name=study_name,
+        direction=direction,
+        sampler=sampler,
+        storage=f"sqlite:///{workdir / 'study.db'}" if storage else None,
+        resume=resume,
+        evals_per_trial=evals_per_trial,
+        refine_search_factor=refine_search_factor,
+        prune_failed_trials=prune_failed_trials,
+    )
+
+    had_fails = runner.run(
+        global_overrides=global_overrides
+        if global_overrides
+        else NamedValueDict[NDArray](),
+        clean_workdir=clean_workdir,
+        execution_mode=ExecutionMode.LOCAL,
+    )
+
+    if had_fails:
+        console.print(
+            f"\n[bold red]Optimization finished with errors.[/] See logs in {workdir}"
+        )
+    else:
+        console.print(
+            f"\n[bold green]Optimization study complete![/] Best parameters saved to [italic]{workdir}/best_params.json[/italic]"
+        )
+
+    raise typer.Exit()
 
 
 if __name__ == "__main__":

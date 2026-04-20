@@ -24,12 +24,23 @@ from stochas import (
     ValueName,
 )
 
+from .design import (
+    DesignCategorical,
+    DesignFloat,
+    DesignValueDict,
+    DesignValueList,
+)
+
 __all__ = [
     "NOMINAL_TRIAL_NUM",
     "BaseDict",
     "BaseList",
     "BernoulliDistribution",
     "CategoricalDistribution",
+    "DesignCategorical",
+    "DesignFloat",
+    "DesignValueDict",
+    "DesignValueList",
     "Dist",
     "DistName",
     "Distribution",

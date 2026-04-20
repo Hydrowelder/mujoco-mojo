@@ -21,7 +21,7 @@ It also **must** return a `mojo.MojoModel`.
 
 ???+ example "Example: MojoGenerate Handle"
     ```python
-    --8<-- "docs/user-guides/example.py:generate-handle"
+    --8<-- "docs/user-guides/monte_carlo_example.py:generate-handle"
     ```
 
 ---
@@ -39,7 +39,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
 ??? example "Example: Handoff Class"
     ```python
-    --8<-- "docs/user-guides/example.py:handoff"
+    --8<-- "docs/user-guides/monte_carlo_example.py:handoff"
     ```
 
 ---
@@ -60,7 +60,7 @@ Notice in the following code how enumerations such as `mojo.TextureType.D2` and 
 
 ???+ example "Example: Assets Definition"
     ```python
-    --8<-- "docs/user-guides/example.py:assets"
+    --8<-- "docs/user-guides/monte_carlo_example.py:assets"
     ```
 
 Mojo uses `DepPath` to handle asset paths, ensuring that your models remain portable across different machines. They have identical properties to `pathlib.Path`. In the `MojoModel.mjcf`, wherever you would use a `Path` object, instead use a `DepPath`.
@@ -78,7 +78,7 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 
 ???+ example "Example: Worldbody Definition"
     ```python
-    --8<-- "docs/user-guides/example.py:worldbody"
+    --8<-- "docs/user-guides/monte_carlo_example.py:worldbody"
     ```
 
 ---
@@ -96,7 +96,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ example "Example: Sampling"
     ```python
-    --8<-- "docs/user-guides/example.py:sampling"
+    --8<-- "docs/user-guides/monte_carlo_example.py:sampling"
     ```
 
 ## Finalizing the Model
@@ -105,7 +105,7 @@ Lets tie thing up! At the end of your `generate` function, you attach your `Hand
 
 ???+ example "Example: End of Function"
     ```python
-    --8<-- "docs/user-guides/example.py:generate-finalizing"
+    --8<-- "docs/user-guides/monte_carlo_example.py:generate-finalizing"
     ```
 
 ---
@@ -117,5 +117,5 @@ Lets tie thing up! At the end of your `generate` function, you attach your `Hand
 
 ??? example "Example: Full Generate Script"
     ```python
-    --8<-- "docs/user-guides/example.py:generate"
+    --8<-- "docs/user-guides/monte_carlo_example.py:generate"
     ```

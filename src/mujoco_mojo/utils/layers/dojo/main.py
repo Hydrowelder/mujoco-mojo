@@ -7,7 +7,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 
-from .routers import monitor, mosaic
+from .routers import monitor, morph, mosaic
 
 security = HTTPBasic(auto_error=False)
 
@@ -44,9 +44,7 @@ async def lifespan(app: FastAPI):
 
 
 dojo_app = FastAPI(title="MuJoCo Mojo Dojo", lifespan=lifespan)
-dojo_app.mount("/static", shared.static, name="static")
-
-dependencies = [Depends(validate_dojo_auth)]
+dojo_app.mount("/mojo-static", shared.static, name="mojo_static")
 
 
 @dojo_app.get("/")
@@ -91,5 +89,7 @@ async def not_found_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
+dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies)
