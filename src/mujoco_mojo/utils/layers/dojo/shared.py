@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from mujoco_mojo.utils.statusing import JobStatus
+from mujoco_mojo.utils.statusing import JobStatus, JobType
 
 __all__ = ["CURRENT_JOB", "HERE", "set_globals", "static", "templates"]
 
@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=HERE / "templates")
 static = StaticFiles(directory=HERE / "templates" / "static")
 
 
-def set_globals(workdir: Path, owner: str) -> None:
+def set_globals(workdir: Path, owner: str, job_type: JobType) -> None:
     global WORKDIR
 
     workdir = workdir.resolve()
@@ -28,3 +28,5 @@ def set_globals(workdir: Path, owner: str) -> None:
     templates.env.globals.update(workdir_path=str(workdir))
     templates.env.globals.update(workdir_name=workdir.name)
     templates.env.globals.update(owner=owner)
+    templates.env.globals.update(job_type=job_type)
+    templates.env.globals.update(JobType=JobType)

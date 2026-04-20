@@ -25,6 +25,7 @@ nav:
           - user-guides/dojo.md
           - Monitor: user-guides/monitor.md
           - Mosaic: user-guides/mosaic.md
+      - Optimization: user-guides/optimization.md
       - Reloaded: user-guides/reloaded.md
   # - Code Reference: reference/
   - About: about.md

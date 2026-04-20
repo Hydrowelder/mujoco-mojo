@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mujoco-mojo"
-version = "1.7.6"
+version = "2.0.0"
 description = "A complete MJCF lifecycle and trial orchestration suite for MuJoCo, powered by Pydantic v2."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -35,6 +35,9 @@ dependencies = [
     "uvicorn>=0.41.0",
     "ipykernel>=7.2.0",
     "pip>=26.0.1",
+    "optuna>=4.8.0",
+    "joblib>=1.5.3",
+    "optuna-dashboard>=0.20.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
