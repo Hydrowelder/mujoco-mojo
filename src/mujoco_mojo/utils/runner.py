@@ -16,14 +16,14 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Self, cast
 
 import joblib
 import mujoco
 import numpy as np
 import optuna
 from numpydantic import NDArray
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
@@ -203,7 +203,7 @@ class OptimizerConfig(BaseConfig):
     """Stop the study after this many seconds, regardless of trial count."""
 
     storage: str | None = DEFAULT_OP_STORAGE
-    """Database URL (e.g., 'sqlite:///mojo.db') for multi-node persistence."""
+    """Database URL (e.g., 'sqlite:///study.db') for multi-node persistence."""
 
     sampler: SamplerOptions = DEFAULT_OP_SAMPLER
     """The search algorithm. TPE is generally best for noisy physics."""
@@ -228,6 +228,14 @@ class OptimizerConfig(BaseConfig):
     """
     Whether to immediately stop trials that violate physical constraints (e.g., Mujoco instability) to save compute time.
     """
+
+    @model_validator(mode="after")
+    def validate_storage(self) -> Self:
+        if self.n_proc > 1 and self.storage is None:
+            msg = f"Optimization configuration had more than one proc ({self.n_proc}) but no storage location defined."
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
 
     def _get_sampler(self, seed: int | None) -> optuna.samplers.BaseSampler:
         """Translates the string config into an Optuna Sampler instance."""
@@ -518,7 +526,7 @@ class MojoRunner:
         )
 
     @staticmethod
-    def force_remove_workdir(countdown_from: int, path: Path):
+    def force_remove_dir(countdown_from: int, path: Path):
         if not path.exists():
             return
 
@@ -588,7 +596,7 @@ class MojoRunner:
                 logger.error(msg)
                 raise ValueError(msg)
 
-            self.force_remove_workdir(countdown_from=cleanup_delay, path=self.workdir)
+            self.force_remove_dir(countdown_from=cleanup_delay, path=self.workdir)
 
         self.workdir.mkdir(parents=True, exist_ok=True)
         if not (self.workdir / ".gitignore").exists():
@@ -825,6 +833,17 @@ class MojoRunner:
             logger.error(msg)
             raise ValueError(msg)
         logger.info(f"Number of design space variables found: {len(mojo_model.design)}")
+
+        # delete the workdir
+        self.force_remove_dir(
+            countdown_from=-1,
+            path=Trial._trial_dir(
+                workdir=self.workdir,
+                trial_num=NOMINAL_TRIAL_NUM,
+                padding_style=self.config.padding_style,
+            ),
+        )
+
         return mojo_model.design
 
     def run_optimization(

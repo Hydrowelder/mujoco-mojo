@@ -1,4 +1,3 @@
-# --8<-- [start:imports]
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -10,23 +9,20 @@ import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
 
 logger = mojo.utils.get_logger(__name__)
-# --8<-- [end:imports]
-
-# --8<-- [start:handoff]
-FIXED_CAMERA_NAME = mojo.CameraName("static")
 
 
 @dataclass
 class Handoff:
     """
-    User-defined interconnect between the generator and runtime function.
-    Retains MJCF definitions for use in the physics loop.
+    User-defined interconnect between the generator and runtime function. Encapsulates MJCF elements for seamless reference in the physics loop.
     """
 
+    box1: mojo.Body
+    box2: mojo.Body
     box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, float, float, float],
     ] = field(default_factory=dict)
 
     def define_spring(
@@ -38,6 +34,7 @@ class Handoff:
     ):
         mult = 1 if loc == "pz" else -1
 
+        # Add attachment sites to the bodies
         box1.sites.append(
             base := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_base_site"),
@@ -55,64 +52,51 @@ class Handoff:
             )
         )
 
-        # --8<-- [start:sampling]
-        # Perform random draws tied to the model seed
-        stiffness = mojo_model.sample_dist(
-            mojo.TruncatedNormalDistribution(
-                name=mojo.DistName(f"{loc}_stiffness"),
-                nominal=100,
-                mu=100,
-                sigma=20,
-                low=0,
-            )
-        ).squeeze()
+        # OPTIMIZATION: Define design variables for the search space
+        stiffness = mojo_model.design_float(
+            name=f"{loc}_stiffness",
+            default=100.0,
+            low=50.0,
+            high=200.0,
+        )
 
-        stroke = mojo_model.sample_dist(
-            mojo.TruncatedNormalDistribution(
-                name=mojo.DistName(f"{loc}_stroke"),
-                nominal=(nom := 1),
-                mu=nom,
-                sigma=nom * 0.1,
-                low=nom * 0.8,
-                high=nom * 1.2,
-            )
-        ).squeeze()
-        # --8<-- [end:sampling]
+        stroke = mojo_model.design_float(
+            name=f"{loc}_stroke",
+            default=(nom := 1.0),
+            low=nom * 0.8,
+            high=nom * 1.2,
+        )
 
-        self.springs.update({loc: (base, tip, stiffness, stroke)})
+        preload = mojo_model.design_float(
+            name=f"{loc}_preload",
+            default=(nom := 1000.0 if loc == "pz" else 750.0),
+            low=nom * 0.8,
+            high=nom * 1.2,
+        )
+
+        self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
     def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
         assert rm.results_manager is not None
-        base, tip, stiffness, stroke = self.springs[loc]
+        base, tip, stiffness, stroke, preload = self.springs[loc]
 
-        # --8<-- [start:forces]
         spring_force = rt.PointToPointForce.stroke_compression_spring(
             name=f"{loc}_spring",
             action_site=base,
             xtion_site=tip,
-            stiffness=float(stiffness),
-            max_stroke=float(stroke),
-            preload=1000 if loc == "pz" else 750,
+            stiffness=stiffness,
+            max_stroke=stroke,
+            preload=preload,
         ).register_to_rm(rm)
 
+        # Request high-fidelity telemetry for these components
         base.request(rm.results_manager)
         tip.request(rm.results_manager)
         spring_force.request(rm.results_manager)
-        # --8<-- [end:forces]
 
 
-# --8<-- [end:handoff]
-
-
-# --8<-- [start:generate]
-# --8<-- [start:generate-handle]
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
-    """Generates the MJCF model and samples distributions."""
-    # --8<-- [end:generate-handle]
-    skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
-
-    # --8<-- [start:assets]
-    # Configure simulation assets
+    """Assembles the world and identifies optimization design variables."""
     mojo_model.mjcf.assets = [
         mojo.Asset(
             textures=[
@@ -136,27 +120,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         ),
     ]
 
-    # Handle skybox if in nominal mode
-    if mojo_model.is_nominal:
-        mojo_model.mjcf.assets.append(
-            mojo.Asset(
-                textures=[
-                    mojo.Texture(
-                        name=mojo.TextureName("skybox_texture_colors"),
-                        type=mojo.TextureType.SKYBOX,
-                        fileback=skybox_folder / "nz.png",
-                        filedown=skybox_folder / "ny.png",
-                        filefront=skybox_folder / "pz.png",
-                        fileleft=skybox_folder / "nx.png",
-                        fileright=skybox_folder / "px.png",
-                        fileup=skybox_folder / "py.png",
-                    )
-                ]
-            ),
-        )
-    # --8<-- [end:assets]
-
-    # --8<-- [start:worldbody]
+    # Environment Setup
     mojo_model.mjcf.worldbody = mojo.WorldBody(
         geoms=[]
         if mojo_model.is_nominal
@@ -171,31 +135,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ),
         ]
     )
-    # --8<-- [end:worldbody]
 
     mojo_model.mjcf.options = [
         mojo.Option(timestep=0.001, gravity=np.asarray((0, 0, 0)))
     ]
-    mojo_model.mjcf.visuals = [
-        mojo.Visual(
-            map=mojo.VisualMap(force=4),
-            scale=mojo.VisualScale(forcewidth=0.1),
-        )
-    ]
 
-    mojo_model.mjcf.worldbody.cameras = [
-        mojo.Camera(
-            name=FIXED_CAMERA_NAME,
-            pose=mojo.PoseEuler(
-                pos=np.asarray((0, -10, 0)),
-                euler=np.asarray((90, 0, 0)),
-            ),
-            fovy=30,
-        ),
-    ]
-
-    # --8<-- [start:bodies]
-    # Create two boxes using the walrus operator for immediate referencing
+    # Body Definition
     mojo_model.mjcf.worldbody.bodies.extend(
         [
             box1 := mojo.Body(
@@ -224,7 +169,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ),
         ]
     )
-    # --8<-- [end:bodies]
 
     box1.sites.append(
         box1_rot_site := mojo.SiteSphere(
@@ -235,9 +179,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         )
     )
 
-    # --8<-- [start:generate-finalizing]
-    # Pack and execute handoff
-    handoff = Handoff(box1_rot=box1_rot_site)
+    # Handoff
+    handoff = Handoff(box1=box1, box2=box2, box1_rot=box1_rot_site)
     mojo_model._user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
@@ -245,75 +188,77 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     return mojo_model
 
 
-# --8<-- [end:generate-finalizing]
-
-# --8<-- [end:generate]
-
-
-# --8<-- [start:runtime]
-# --8<-- [start:runtime-handle]
 def runtime(
-    mojo_model: mojo.MojoModel,
-    runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
-    *args,
-    **kwargs,
+    mojo_model, runtime_manager, mj_model, mj_data, *args, **kwargs
 ) -> mojo.MojoModel:
-    """Executes the physics simulation."""
-    # --8<-- [end:runtime-handle]
+    """Executes the physics loop and flushes telemetry."""
     assert isinstance(mojo_model._user_data, Handoff)
 
     with runtime_manager as rm:
-        assert mojo_model.mjcf.worldbody is not None
-        assert rm.results_manager is not None
+        rm.results_manager.record_decimation = 1
 
-        # --8<-- [start:video]
-        if mojo_model.is_nominal:  # Only record the first trial
-            rt.VideoRecorder(
-                path=Path("runtime-anim.gif"),
-                camera_name=FIXED_CAMERA_NAME,
-                show_loads=True,
-            ).setup(mj_model).register_to_rm(rm)
-        # --8<-- [end:video]
-
-        # Register forces from our handoff data
+        # Apply forces defined during generation
         mojo_model._user_data.add_spring_force("pz", rm)
         mojo_model._user_data.add_spring_force("mz", rm)
 
-        # --8<-- [start:requests]
-        # Request telemetry for bodies and sites
-        rm.results_manager.record_decimation = 10  # Only record every 10 steps
         for b in mojo_model.mjcf.worldbody.bodies:
-            b.request(
-                rm.results_manager,
-                attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
-            )
+            b.request(rm.results_manager)
         mojo_model._user_data.box1_rot.request(rm.results_manager)
-        # --8<-- [end:requests]
 
-        # --8<-- [start:stepping]
-        # Step until 2.0 seconds
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
-        # --8<-- [end:stepping]
 
     return mojo_model
 
 
-# --8<-- [end:runtime]
+# --8<-- [start:score]
+# --8<-- [start:score-handle]
+def objective(
+    mojo_model: mojo.MojoModel,
+    telemetry: Path,
+    mj_model: mujoco.MjModel,
+    mj_data: mujoco.MjData,
+) -> float:
+    # --8<-- [end:score-handle]
+    """
+    Score the trial: Low relative angular velocity (stability) weighted against high translational kinetic energy.
+    """
+    assert isinstance(mojo_model._user_data, Handoff)
+    handoff = mojo_model._user_data
 
-# --8<-- [start:main]
+    w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
+    w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)
+    omega_score = float(np.linalg.norm(w1 - w2))
+
+    ke1 = handoff.box1.rt_trans_ke(mj_model, mj_data)
+    ke2 = handoff.box2.rt_trans_ke(mj_model, mj_data)
+    total_ke = ke1 + ke2
+    ke_score = 1 / (total_ke + 1e-6)
+
+    # J = 10*Omega + 1*KE_inv
+    return (10.0 * omega_score) + (1.0 * ke_score)
+
+
+# --8<-- [end:score]
+
+# --- Entry Point ---
 if __name__ == "__main__":
-    mojo.utils.setup_logger()
-    workdir = Path(__file__).parent / "experiment_workspace"
-
+    workdir = Path("./opt_study").resolve()
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
+        objective=objective,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+        config=mojo.utils.OptimizerConfig(
+            n_trial=200,
+            n_proc=4,
+            direction="minimize",
+            sampler="tpe",
+            storage=f"sqlite:///{workdir / 'study.db'}",
+            resume=True,
+        ),
+        seed=42,
     )
 
-    runner.run(clean_workdir=True)
-# --8<-- [end:main]
+    logger.info("Starting Optimization Study...")
+    runner.run()
