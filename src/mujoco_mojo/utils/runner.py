@@ -16,7 +16,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Self, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
 
 import joblib
 import mujoco
@@ -29,8 +29,6 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import (
     NOMINAL_TRIAL_NUM,
-    DesignCategorical,
-    DesignFloat,
     DesignValueDict,
     NamedValue,
     NamedValueDict,
@@ -886,19 +884,8 @@ class MojoRunner:
                     if name not in best_params:
                         continue
 
-                    if isinstance(dv, DesignFloat):
-                        best_val = cast(float, best_params[name])
-                        orig_range = dv.high - dv.low
-                        new_half_range = (orig_range * factor) / 2
+                    dv.refine(factor=factor, best_params=best_params)
 
-                        dv.low = max(dv.low, best_val - new_half_range)
-                        dv.high = min(dv.high, best_val + new_half_range)
-
-                        logger.debug(
-                            f"Refined float '{name}': [{dv.low:.4f}, {dv.high:.4f}]"
-                        )
-                    elif isinstance(dv, DesignCategorical):
-                        logger.debug(f"Skipping refinement for categorical '{name}'.")
             except ValueError:
                 logger.warning(
                     "Refinement requested but no successful trials found. Using original bounds."
@@ -934,7 +921,9 @@ class MojoRunner:
         def optuna_objective(trial: optuna.Trial) -> float:
             assert isinstance(self.config, OptimizerConfig)
 
-            suggestions = {name: dv.suggest(trial) for name, dv in design_space.items()}
+            suggestions = {
+                name: dv.to_optuna(trial) for name, dv in design_space.items()
+            }
 
             # prepare overrides for the trial
             # mash the suggestions into the global overrides
