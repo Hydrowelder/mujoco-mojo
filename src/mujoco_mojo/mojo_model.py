@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import Field, PrivateAttr
-from stochas.base import StochasBase
+from stochas import StochasBase
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
