@@ -53,25 +53,31 @@ class Handoff:
         )
 
         # OPTIMIZATION: Define design variables for the search space
-        stiffness = mojo_model.design_float(
-            name=f"{loc}_stiffness",
-            default=100.0,
-            low=50.0,
-            high=200.0,
+        stiffness = mojo_model.sample_design(
+            mojo.DesignFloat(
+                name=mojo.ValueName(f"{loc}_stiffness"),
+                stored_value=100.0,  # this will act as the default value for trial 0
+                low=50.0,
+                high=200.0,
+            )
         )
 
-        stroke = mojo_model.design_float(
-            name=f"{loc}_stroke",
-            default=(nom := 1.0),
-            low=nom * 0.8,
-            high=nom * 1.2,
+        stroke = mojo_model.sample_design(
+            mojo.DesignFloat(
+                name=mojo.ValueName(f"{loc}_stroke"),
+                stored_value=(nom := 1.0),
+                low=nom * 0.8,
+                high=nom * 1.2,
+            )
         )
 
-        preload = mojo_model.design_float(
-            name=f"{loc}_preload",
-            default=(nom := 1000.0 if loc == "pz" else 750.0),
-            low=nom * 0.8,
-            high=nom * 1.2,
+        preload = mojo_model.sample_design(
+            mojo.DesignFloat(
+                name=mojo.ValueName(f"{loc}_preload"),
+                stored_value=(nom := 1000.0 if loc == "pz" else 750.0),
+                low=nom * 0.8,
+                high=nom * 1.2,
+            )
         )
 
         self.springs.update({loc: (base, tip, stiffness, stroke, preload)})

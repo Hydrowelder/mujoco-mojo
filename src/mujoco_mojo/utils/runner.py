@@ -27,12 +27,13 @@ from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM, NamedValueDict
-from mujoco_mojo.stochas.design import (
+from mujoco_mojo.stochas import (
+    NOMINAL_TRIAL_NUM,
     DesignCategorical,
     DesignFloat,
     DesignValueDict,
     NamedValue,
+    NamedValueDict,
     ValueName,
 )
 from mujoco_mojo.utils.defaults import (

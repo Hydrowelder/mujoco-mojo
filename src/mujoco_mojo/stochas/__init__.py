@@ -4,6 +4,11 @@ from stochas import (
     BaseList,
     BernoulliDistribution,
     CategoricalDistribution,
+    DesignCategorical,
+    DesignFloat,
+    DesignInt,
+    DesignValueDict,
+    DesignValueList,
     Dist,
     DistName,
     Distribution,
@@ -24,13 +29,6 @@ from stochas import (
     ValueName,
 )
 
-from .design import (
-    DesignCategorical,
-    DesignFloat,
-    DesignValueDict,
-    DesignValueList,
-)
-
 __all__ = [
     "NOMINAL_TRIAL_NUM",
     "BaseDict",
@@ -39,6 +37,7 @@ __all__ = [
     "CategoricalDistribution",
     "DesignCategorical",
     "DesignFloat",
+    "DesignInt",
     "DesignValueDict",
     "DesignValueList",
     "Dist",
