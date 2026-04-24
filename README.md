@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dark-hero-logo.svg">
-    <img alt="MuJoCo Mojo" src="docs/assets/light-hero-logo.svg" style="height: 10.0em">
-  </picture>
+    <img alt="MuJoCo Mojo" src="https://raw.githubusercontent.com/hydrowelder/mujoco-mojo/master/docs/assets/dark-hero-logo.svg" style="width: 100%">
 </p>
 
 <p align="center">
