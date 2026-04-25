@@ -17,7 +17,7 @@
 
 ## The Runtime Function Contract
 
-Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `_user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
+Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
 
 ???+ example "Example: MojoGenerate Handle"
     ```python
@@ -32,7 +32,7 @@ The `RuntimeManager` is the orchestrator of your simulation. It is recommended t
 
 ### Defining Loads
 
-This is where the `Handoff` pattern pays off! Since we packed our site references into `_user_data` during generation, we can now easily apply complex forces and torques without searching through the MuJoCo model for IDs.
+This is where the `Handoff` pattern pays off! Since we packed our site references into `user_data` during generation, we can now easily apply complex forces and torques without searching through the MuJoCo model for IDs.
 
 Mojo provides high-level force abstractions like `PointToPointForce`, which automatically handles the math for things like compression springs or hydraulic actuators. When providing reaction sites located on other bodies, the runtime manager also calculates the correct action-reaction forces to apply.
 

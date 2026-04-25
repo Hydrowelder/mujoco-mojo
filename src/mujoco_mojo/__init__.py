@@ -171,7 +171,7 @@ from .mjcf import (
     XYAxes,
     ZAxis,
 )
-from .mojo_model import MojoModel
+from .mojo_model import MojoModel, UserData
 from .stochas import (
     NOMINAL_TRIAL_NUM,
     BaseDict,
@@ -540,6 +540,7 @@ __all__ = [
     "TriangularDistribution",
     "TruncatedNormalDistribution",
     "UniformDistribution",
+    "UserData",
     "ValueName",
     "Vec2",
     "Vec3",
