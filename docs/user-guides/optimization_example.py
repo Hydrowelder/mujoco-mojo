@@ -1,9 +1,9 @@
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import mujoco
 import numpy as np
+from pydantic import Field
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -11,8 +11,7 @@ import mujoco_mojo.runtime as rt
 logger = mojo.utils.get_logger(__name__)
 
 
-@dataclass
-class Handoff:
+class Handoff(mojo.UserData):
     """
     User-defined interconnect between the generator and runtime function. Encapsulates MJCF elements for seamless reference in the physics loop.
     """
@@ -23,7 +22,7 @@ class Handoff:
     springs: dict[
         Literal["pz", "mz"],
         tuple[mojo.AnySite, mojo.AnySite, float, float, float],
-    ] = field(default_factory=dict)
+    ] = Field(default_factory=dict)
 
     def define_spring(
         self,
@@ -187,7 +186,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
     # Handoff
     handoff = Handoff(box1=box1, box2=box2, box1_rot=box1_rot_site)
-    mojo_model._user_data = handoff
+    mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
 
@@ -195,21 +194,28 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
 
 def runtime(
-    mojo_model, runtime_manager, mj_model, mj_data, *args, **kwargs
+    mojo_model: mojo.MojoModel,
+    runtime_manager: rt.RuntimeManager,
+    mj_model: mujoco.MjModel,
+    mj_data: mujoco.MjData,
+    *args,
+    **kwargs,
 ) -> mojo.MojoModel:
     """Executes the physics loop and flushes telemetry."""
-    assert isinstance(mojo_model._user_data, Handoff)
-
     with runtime_manager as rm:
+        handoff = mojo_model.get_user_data(Handoff)
+        assert mojo_model.mjcf.worldbody
+        assert rm.results_manager
+
         rm.results_manager.record_decimation = 1
 
         # Apply forces defined during generation
-        mojo_model._user_data.add_spring_force("pz", rm)
-        mojo_model._user_data.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz", rm)
+        handoff.add_spring_force("mz", rm)
 
         for b in mojo_model.mjcf.worldbody.bodies:
             b.request(rm.results_manager)
-        mojo_model._user_data.box1_rot.request(rm.results_manager)
+        handoff.box1_rot.request(rm.results_manager)
 
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
@@ -229,8 +235,7 @@ def objective(
     """
     Score the trial: Low relative angular velocity (stability) weighted against high translational kinetic energy.
     """
-    assert isinstance(mojo_model._user_data, Handoff)
-    handoff = mojo_model._user_data
+    handoff = mojo_model.get_user_data(Handoff)
 
     w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
     w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)

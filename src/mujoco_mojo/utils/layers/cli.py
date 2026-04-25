@@ -377,6 +377,23 @@ if True:
     ]
 
     # Reloaded
+    ConfigPathFileType = Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-c",
+            help="File which contains a model config definition. Mutually exclusive with the generator option.",
+        ),
+    ]
+    ReloadedGeneratorType = Annotated[
+        str | None,
+        typer.Option(
+            "--generator",
+            "-g",
+            help="Path to generator (e.g. 'sim.gen')",
+        ),
+    ]
+
     class UserInterface(StrEnum):
         OPENGL = "opengl"
         MJVISER = "mjviser"
@@ -698,15 +715,165 @@ def run_monte_carlo(
     raise typer.Exit()
 
 
+@run_app.command(name="single")
+def run_single(
+    ctx: typer.Context,
+    generator: GeneratorType,
+    runtime: RuntimeType = DEFAULT_RUNTIME,
+    workdir: WorkdirType = DEFAULT_WORKDIR,
+    n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
+    n_proc: NProcType = DEFAULT_N_PROC,
+    resume: ResumeType = DEFAULT_RESUME,
+    seed: SeedType = DEFAULT_SEED,
+    clean_workdir: CleanWorkdirType = False,
+    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
+    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
+    overrides: OverridesType = None,
+    trial_nums: TrialNumsType = [],
+    gen_args: GenArgsType = [],
+    gen_kwargs: GenKwargsType = [],
+    run_args: RunArgsType = [],
+    run_kwargs: RunKwargsType = [],
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
+) -> None:
+    """
+    [bold yellow]Execute a single trial.[/bold yellow]
+
+    This command handles the directory setup, distribution salting, and parallel execution of a single physics trial.
+    """
+    from numpydantic import NDArray
+
+    from mujoco_mojo.stochas import NamedValueDict
+    from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
+
+    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+
+    print_logo()
+
+    workdir = workdir.resolve()
+
+    logger.info("Initializing Monte Carlo with CLI!")
+
+    dojo_cmd = f"mujoco-mojo dojo {workdir}"
+    console.print(
+        Panel(
+            "[bold green]Campaign Initialized![/]\n\n"
+            "[white]To monitor progress and view results, run:[/]\n"
+            f"    [bold yellow]{dojo_cmd}[/]",
+            title="[cyan]Launch Control[/]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
+    global_overrides = None
+    if overrides:
+        overrides = overrides.resolve()
+        logger.info(f"Retrieving global NamedValue overrides from `{overrides}`")
+        global_overrides = NamedValueDict[NDArray].model_validate_json(
+            overrides.read_text()
+        )
+
+        if len(global_overrides) == 0:
+            logger.warning(
+                "Global NamedValue overrides had no entries. Continuing anyway."
+            )
+        else:
+            logger.info(
+                f"Global NamedValue overrides had {len(global_overrides)} entries."
+            )
+
+    if n_trial != 0 and trial_nums:
+        logger.warning(
+            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
+        )
+        n_trial = 0
+
+    runner: MojoRunner = _prepare_runner(
+        generator=generator,
+        runtime=runtime,
+        workdir=workdir,
+        objective=None,
+        model_config_name=model_config_name,
+        seed=seed,
+        xml_name=xml_name,
+        gen_args=gen_args,
+        gen_kwargs=gen_kwargs,
+        run_args=run_args,
+        run_kwargs=run_kwargs,
+    )
+
+    # 2. build config
+    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
+
+    # 3. run
+    console.print(
+        f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
+    )
+    logger.info(
+        f"Starting {n_trial} trials (using {n_proc} workers)...",
+        extra={"file_only": True},
+    )
+    had_fails = runner.run(
+        global_overrides=global_overrides
+        if global_overrides
+        else NamedValueDict[NDArray](),
+        clean_workdir=clean_workdir,
+        execution_mode=execution_mode,
+        trial_nums=trial_nums,
+    )
+
+    match execution_mode:
+        case ExecutionMode.LOCAL:
+            if had_fails:
+                preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
+                logger.error(
+                    f"Monte Carlo finished with failures! See results in {runner.workdir.resolve()}",
+                    extra={"file_only": True},
+                )
+            else:
+                preamble = "[bold green]Monte Carlo finished![/bold green]"
+                logger.info(
+                    f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
+                    extra={"file_only": True},
+                )
+            console.print(
+                f"\n{preamble} Results located at [italic underline]{runner.workdir.resolve()}[/italic underline]"
+            )
+        case ExecutionMode.SLURM:
+            if had_fails:
+                finished_msg = (
+                    "[bold red]Failed to orchestrate SLURM Monte Carlo![/bold red]"
+                )
+                logger.error(
+                    "Failed to orchestrate SLURM Monte Carlo!",
+                    extra={"file_only": True},
+                )
+            else:
+                finished_msg = (
+                    "[bold green]SLURM Monte Carlo orchestration finished![/bold green]"
+                )
+                logger.info(
+                    "SLURM Monte Carlo orchestration finished!",
+                    extra={"file_only": True},
+                )
+            console.print(f"\n{finished_msg}")
+
+    raise typer.Exit()
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
-    generator: GeneratorType,
+    generator: ReloadedGeneratorType = None,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     ui: UIType = UserInterface.OPENGL,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
+    config_path: ConfigPathFileType = None,
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     gen_args: GenArgsType = [],
@@ -740,6 +907,7 @@ def run_reloaded(
         workdir=workdir,
         ui=ui,
         overrides_path=overrides_path,
+        config_path=config_path,
         trial_num=trial_num,
         seed=seed,
         model_config_name=model_config_name,

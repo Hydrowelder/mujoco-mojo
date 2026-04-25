@@ -101,12 +101,18 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ## Finalizing the Model
 
-Lets tie thing up! At the end of your `generate` function, you attach your `Handoff` data to the `mojo_model._user_data` attribute. This makes it accessible to the `runtime` function later.
+Lets tie things up! At the end of your `generate` function, you attach your `Handoff` data to the `mojo_model.user_data` attribute. This makes it accessible to the `runtime` function later.
 
 ???+ example "Example: End of Function"
     ```python
     --8<-- "docs/user-guides/monte_carlo_example.py:generate-finalizing"
     ```
+
+???+ note "Note: User Data Validation"
+
+    User data is also required to be serializable! It should be a Pydantic `BaseModel`. If there is something you really are not able to make serializable, you can always use a [`PrivateAttr`](https://pydantic.dev/docs/validation/latest/concepts/models/#private-model-attributes) but this should be considered a last resort.
+
+    All of the Mojo MJCF objects are serializable. For some Numpy helpers, try using `mojo.VecN`!
 
 ---
 

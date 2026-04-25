@@ -1,10 +1,10 @@
 # --8<-- [start:imports]
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import mujoco
 import numpy as np
+from pydantic import Field
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -16,8 +16,7 @@ logger = mojo.utils.get_logger(__name__)
 FIXED_CAMERA_NAME = mojo.CameraName("static")
 
 
-@dataclass
-class Handoff:
+class Handoff(mojo.UserData):
     """
     User-defined interconnect between the generator and runtime function.
     Retains MJCF definitions for use in the physics loop.
@@ -27,7 +26,7 @@ class Handoff:
     springs: dict[
         Literal["pz", "mz"],
         tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
-    ] = field(default_factory=dict)
+    ] = Field(default_factory=dict)
 
     def define_spring(
         self,
@@ -238,7 +237,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     # --8<-- [start:generate-finalizing]
     # Pack and execute handoff
     handoff = Handoff(box1_rot=box1_rot_site)
-    mojo_model._user_data = handoff
+    mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
 
@@ -262,11 +261,11 @@ def runtime(
 ) -> mojo.MojoModel:
     """Executes the physics simulation."""
     # --8<-- [end:runtime-handle]
-    assert isinstance(mojo_model._user_data, Handoff)
 
     with runtime_manager as rm:
-        assert mojo_model.mjcf.worldbody is not None
-        assert rm.results_manager is not None
+        handoff = mojo_model.get_user_data(Handoff)
+        assert mojo_model.mjcf.worldbody
+        assert rm.results_manager
 
         # --8<-- [start:video]
         if mojo_model.is_nominal:  # Only record the first trial
@@ -278,8 +277,8 @@ def runtime(
         # --8<-- [end:video]
 
         # Register forces from our handoff data
-        mojo_model._user_data.add_spring_force("pz", rm)
-        mojo_model._user_data.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz", rm)
+        handoff.add_spring_force("mz", rm)
 
         # --8<-- [start:requests]
         # Request telemetry for bodies and sites
@@ -289,7 +288,7 @@ def runtime(
                 rm.results_manager,
                 attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
             )
-        mojo_model._user_data.box1_rot.request(rm.results_manager)
+        handoff.box1_rot.request(rm.results_manager)
         # --8<-- [end:requests]
 
         # --8<-- [start:stepping]

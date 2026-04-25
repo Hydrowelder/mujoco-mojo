@@ -17,6 +17,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValueDict
+from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
 from mujoco_mojo.utils.visuals import resolve_arrow_coords
@@ -123,11 +124,12 @@ def is_dark_mode() -> bool:
 
 @dataclass
 class MojoReloaded:
-    generator: str
+    generator: str | None
     runtime: str | None
     workdir: Path
     ui: UserInterface
     overrides_path: Path | None
+    config_path: Path | None
     trial_num: int
     seed: int | None
     model_config_name: str
@@ -143,6 +145,28 @@ class MojoReloaded:
     _playback_speed: float = 1.0
     _last_command: str = "run"
 
+    def validate(self):
+        if self.generator and self.config_path:
+            raise ValueError(
+                "Generator option is mutually exclusive with the config option."
+            )
+        elif not self.generator and not self.config_path:
+            raise ValueError("A generator option or config option must be provided.")
+
+        if self.config_path:
+            self.config_path = self.config_path.resolve()
+            if self.seed:
+                logger.warning(
+                    "Since running with a config path, your seed and trial num will be ignored!"
+                )
+            mojo_model = MojoModel.model_validate_json(self.config_path.read_text())
+            self.seed = mojo_model.seed
+            self.trial_num = mojo_model.trial_num
+
+            if self.workdir == DEFAULT_WORKDIR:
+                self.workdir = self.config_path.parent
+                logger.info(f"Using config path folder ({self.workdir}) as workdir!")
+
     def generate_construct(
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
     ) -> tuple[mujoco.MjModel, mujoco.MjData]:
@@ -150,25 +174,29 @@ class MojoReloaded:
         from .cli import _load_func
 
         project_root = Path.cwd()
-        gen_func: MojoGenerator = _load_func(self.generator)
-        module_name = gen_func.__module__
 
-        if module_name in sys.modules:
-            try:
-                recursive_reload(sys.modules[module_name], project_root)
-                gen_func = _load_func(self.generator)
-            except Exception as e:
-                # If there's a syntax error in their change, we'll catch it here
-                logger.error(f"Reload failed: {e}")
-                raise e
+        gen_func = None
+        if self.generator:
+            gen_func: MojoGenerator | None = _load_func(self.generator)
+            module_name = gen_func.__module__
+
+            if module_name in sys.modules:
+                try:
+                    recursive_reload(sys.modules[module_name], project_root)
+                    gen_func = _load_func(self.generator)
+                except Exception as e:
+                    # If there's a syntax error in their change, we'll catch it here
+                    logger.error(f"Reload failed: {e}")
+                    raise e
 
         run_func = None
         if self.runtime:
             run_func: MojoRuntime | None = _load_func(self.runtime)
+            module_name = run_func.__module__
 
-            if run_func.__module__ in sys.modules:
+            if module_name in sys.modules:
                 try:
-                    recursive_reload(sys.modules[run_func.__module__], project_root)
+                    recursive_reload(sys.modules[module_name], project_root)
                     run_func = _load_func(self.runtime)
                 except Exception as e:
                     # If there's a syntax error in their change, we'll catch it here
@@ -195,22 +223,43 @@ class MojoReloaded:
 
         # execute generation
         start = time.time()
-        mojo_model = (
-            MojoModel()
-            .with_overrides(overrides=global_overrides)
-            .with_seed(seed=self.seed)
-            .with_trial_num(self.trial_num)
-        )
-        mojo_model = gen_func(
-            mojo_model,
-            global_overrides,
-            *self.gen_args,
-            **self.gen_kwargs,
-        )
-        mojo_model.dump_to_path(self.workdir / self.model_config_name)
-        mj_model, mj_data = mojo_model.mjcf.prep_for_sim(
-            save_path=self.workdir / self.xml_name
-        )
+        if self.generator:
+            assert gen_func
+            mojo_model = (
+                MojoModel()
+                .with_overrides(overrides=global_overrides)
+                .with_seed(seed=self.seed)
+                .with_trial_num(self.trial_num)
+            )
+            mojo_model = gen_func(
+                mojo_model,
+                global_overrides,
+                *self.gen_args,
+                **self.gen_kwargs,
+            )
+            mojo_model.dump_to_path(self.workdir / self.model_config_name)
+        else:
+            assert self.config_path
+            try:
+                mojo_model = MojoModel.model_validate_json(
+                    self.config_path.read_text()
+                ).with_overrides(overrides=global_overrides)
+                logger.info(
+                    f"Playback mode: Loaded frozen state from {self.config_path.name}"
+                )
+            except Exception as e:
+                msg = f"Failed to load model config: {e}"
+                logger.error(msg)
+                raise ValueError(msg)
+
+        try:
+            mj_model, mj_data = mojo_model.mjcf.prep_for_sim(
+                save_path=self.workdir / self.xml_name
+            )
+        except Exception as e:
+            msg = f"Failed to compile with MuJoCo: {e}"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # sync the viewer
         if on_reload_callback:
@@ -248,6 +297,8 @@ class MojoReloaded:
         return mj_model, mj_data
 
     def run(self):
+        self.validate()
+
         self.workdir = self.workdir.resolve()
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
@@ -446,7 +497,7 @@ class MojoReloaded:
             server = viser.ViserServer(
                 host=self.host,
                 port=self.port,
-                label="MuJoCo Mojo Reloaded",
+                label=f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})",
                 verbose=False,
             )
         server.configure_theme(  # pyright: ignore[reportAttributeAccessIssue]
