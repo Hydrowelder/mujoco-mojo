@@ -1,9 +1,9 @@
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import mujoco
 import numpy as np
+from pydantic import Field
 
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
@@ -15,8 +15,7 @@ BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 
-@dataclass
-class Handoff:
+class Handoff(mojo.UserData):
     """
     This class exists to serve as a user defined interconnect between the generator and runtime function.
 
@@ -27,7 +26,7 @@ class Handoff:
     springs: dict[
         Literal["pz", "mz"],
         tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
-    ] = field(default_factory=dict)
+    ] = Field(default_factory=dict)
 
     def define_spring(
         self,
@@ -255,7 +254,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
     # add handoff data
     handoff = Handoff(box1_rot=box1_rot_site)
-    mojo_model._user_data = handoff
+    mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
 
@@ -274,7 +273,8 @@ def runtime(
     # Identify our sites from the generated model
     # Note: We can find them by name in the worldbody
     assert mojo_model.mjcf.worldbody is not None
-    assert isinstance(mojo_model._user_data, Handoff)
+
+    handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
         assert rm.results_manager is not None
@@ -301,13 +301,13 @@ def runtime(
             ).setup(mj_model).register_to_rm(rm)
 
         # Create compression springs
-        mojo_model._user_data.add_spring_force("pz", rm)
-        mojo_model._user_data.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz", rm)
+        handoff.add_spring_force("mz", rm)
 
         for b in mojo_model.mjcf.worldbody.bodies:
             b.request(rm.results_manager)
 
-        mojo_model._user_data.box1_rot.request(rm.results_manager)
+        handoff.box1_rot.request(rm.results_manager)
 
         # Run for 2 seconds
         while mj_data.time < 2.0:

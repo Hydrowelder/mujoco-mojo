@@ -6,7 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr.hfield import HField
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import Material
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import AnyMesh
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
-from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import Texture
+from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import AnyTexture
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils.utils import is_empty_list
@@ -33,7 +33,7 @@ class Asset(XMLModel):
         default_factory=list,
         exclude_if=is_empty_list,
     )
-    textures: list[Texture] = Field(
+    textures: list[AnyTexture] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )
