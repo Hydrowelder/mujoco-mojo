@@ -466,7 +466,7 @@ class JobStatus(MojoBaseModel):
 
     @property
     def is_done(self) -> bool:
-        return self.n_done == self.n_trial
+        return self.progress == 1
 
     @staticmethod
     def _utc_to_local(utc_aware: datetime) -> datetime:
