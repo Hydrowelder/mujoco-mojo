@@ -21,6 +21,7 @@ from mujoco_mojo.typing import (
     SiteName,
     TendonName,
 )
+from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.log import get_logger
 
@@ -253,6 +254,36 @@ class DataFrame(pl.DataFrame):
         # overwrite with the new rotated data
         return self._from_pl(self.with_columns(new_columns))
 
+    def with_filter_map(
+        self, filter_map: dict[str, list[AnyFilter]], omit_time: bool = True
+    ) -> Self:
+        """
+        Applies specific filter stacks to mapped columns.
+
+        Args:
+            filter_map (dict[str, list[AnyFilter]]): Dictionary mapping column names to a list of filters.
+            omit_time (bool, optional): If True, skips the 'time' column even if present in the map. Defaults to True.
+
+        Returns:
+            Self: DataFrame with the transformed columns overwritten.
+
+        """
+        exprs = []
+        for col_name, filters in filter_map.items():
+            if col_name not in self.columns:
+                continue
+
+            if omit_time and col_name == TIME_COLUMN_NAME:
+                continue
+
+            expr = pl.col(col_name)
+            for f in filters:
+                expr = f.apply(expr)
+
+            exprs.append(expr.alias(col_name))
+
+        return self._from_pl(self.with_columns(exprs))
+
     def with_filters(
         self,
         filters: list[AnyFilter],
@@ -272,21 +303,5 @@ class DataFrame(pl.DataFrame):
 
         """
         target_cols = columns or self.columns
-        if omit_time:
-            target_cols = [c for c in target_cols if c != "time"]
-        exprs = []
-
-        for col_name in target_cols:
-            if col_name not in self.columns:
-                continue
-
-            # start the chain with the raw column
-            expr = pl.col(col_name)
-
-            # pipe the expression through every filter in the stack
-            for f in filters:
-                expr = f.apply(expr)
-
-            exprs.append(expr.alias(col_name))
-
-        return self._from_pl(self.with_columns(exprs))
+        filter_map = {col: filters for col in target_cols}
+        return self.with_filter_map(filter_map, omit_time=omit_time)

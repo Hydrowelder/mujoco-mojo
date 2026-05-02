@@ -11,6 +11,7 @@ import polars as pl
 from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.data_frame import DataFrame
+from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -136,7 +137,7 @@ class SignalManager:
 
     def log_step(self, timestamp: float, data: NamedValueDict[float]):
         """Appends a row to the memory buffer."""
-        row = {"time": timestamp}
+        row = {TIME_COLUMN_NAME: timestamp}
         row.update({k: nv.value for k, nv in data.items()})
 
         self._buffer.append(row)
