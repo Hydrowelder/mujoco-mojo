@@ -32,10 +32,12 @@ def clean_and_copy_file(source: Path, dest: Path) -> None:
 
 def stage_file(file_path: Path):
     """Stage the file in git."""
+    subprocess.run(["ruff", "check", "--fix", str(file_path)], check=True)
     subprocess.run(["git", "add", str(file_path)], check=True)
 
 
 def main():
+    subprocess.run(["pip", "install", "ruff"], check=True)
     for source, dest in MAP.items():
         clean_and_copy_file(source, dest)
         stage_file(dest)
