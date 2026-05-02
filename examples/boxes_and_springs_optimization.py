@@ -205,17 +205,15 @@ def runtime(
     with runtime_manager as rm:
         handoff = mojo_model.get_user_data(Handoff)
         assert mojo_model.mjcf.worldbody
-        assert rm.signal_manager
-
-        rm.signal_manager.record_decimation = 1
 
         # Apply forces defined during generation
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
 
-        for b in mojo_model.mjcf.worldbody.walk_bodies():
-            b.request(rm.signal_manager)
-        handoff.box1_rot.request(rm.signal_manager)
+        if rm.signal_manager:
+            for b in mojo_model.mjcf.worldbody.walk_bodies():
+                b.request(rm.signal_manager)
+            handoff.box1_rot.request(rm.signal_manager)
 
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
@@ -249,7 +247,7 @@ def objective(
 
 # --- Entry Point ---
 if __name__ == "__main__":
-    workdir = Path("./opt_study").resolve()
+    workdir = Path("./optimization_study").resolve()
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
