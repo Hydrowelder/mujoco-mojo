@@ -186,15 +186,25 @@ class Body(XMLModel):
     )
     """Bodies assigned to body. Handled recursively."""
 
-    def _child_body_ids(
-        self, mj_model: mujoco.MjModel, include_self: bool = True
-    ) -> list[int]:
-        ids = [self.get_id(mj_model)] if include_self else []
+    def walk_bodies(self, include_self: bool = False) -> list[Body]:
+        """
+        Recursively traverses the kinematic tree to retrieve all descendant bodies.
+
+        This method performs a depth-first search (DFS) through the nested body hierarchy. It is particularly useful when called from the `worldbody` to get a flattened list of all physical entities in the simulation without including the world origin.
+
+        Args:
+            include_self (bool, optional): If True, the current body is included as the first element in the returned list. Defaults to False.
+
+        Returns:
+            list[Body]: A flattened list of all descendant Body objects, ordered by their depth in the kinematic tree.
+
+        """
+        bodies: list[Body] = [self] if include_self else []
 
         for child in self.bodies:
-            ids.extend(child._child_body_ids(mj_model, include_self=True))
+            bodies.extend(child.walk_bodies(include_self=True))
 
-        return ids
+        return bodies
 
     def rt_mass(self, mj_model: mujoco.MjModel) -> float:
         """Mass of the body from a compiled MjModel."""

@@ -93,7 +93,7 @@ def runtime(
         assert rm.signal_manager
 
         # Request telemetry for bodies and sites
-        for b in mojo_model.mjcf.worldbody.bodies:
+        for b in mojo_model.mjcf.worldbody.walk_bodies():
             b.request(
                 rm.signal_manager,
                 attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
