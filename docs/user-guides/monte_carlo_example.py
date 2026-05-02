@@ -265,7 +265,6 @@ def runtime(
     with runtime_manager as rm:
         handoff = mojo_model.get_user_data(Handoff)
         assert mojo_model.mjcf.worldbody
-        assert rm.signal_manager
 
         # --8<-- [start:video]
         if mojo_model.is_nominal:  # Only record the first trial
@@ -282,13 +281,14 @@ def runtime(
 
         # --8<-- [start:requests]
         # Request telemetry for bodies and sites
-        rm.signal_manager.record_decimation = 10  # Only record every 10 steps
-        for b in mojo_model.mjcf.worldbody.walk_bodies():
-            b.request(
-                rm.signal_manager,
-                attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
-            )
-        handoff.box1_rot.request(rm.signal_manager)
+        if rm.signal_manager:
+            rm.signal_manager.record_decimation = 10  # Only record every 10 steps
+            for b in mojo_model.mjcf.worldbody.walk_bodies():
+                b.request(
+                    rm.signal_manager,
+                    attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
+                )
+            handoff.box1_rot.request(rm.signal_manager)
         # --8<-- [end:requests]
 
         # --8<-- [start:stepping]
@@ -305,7 +305,7 @@ def runtime(
 # --8<-- [start:main]
 if __name__ == "__main__":
     mojo.utils.setup_logger()
-    workdir = Path(__file__).parent / "experiment_workspace"
+    workdir = Path(__file__).parent / "monte_carlo_study"
 
     runner = mojo.utils.MojoRunner(
         generator=generate,
