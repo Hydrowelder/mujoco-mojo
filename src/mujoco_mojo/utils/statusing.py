@@ -601,7 +601,7 @@ class JobStatus(MojoBaseModel):
 
     def to_monitor_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
-        from mujoco_mojo.runtime.results_manager import SignalManager
+        from mujoco_mojo.runtime.signal_manager import SignalManager
 
         # We trigger the disk refresh here so the data is fresh
         # obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())

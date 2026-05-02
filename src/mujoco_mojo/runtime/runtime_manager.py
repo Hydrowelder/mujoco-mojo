@@ -6,7 +6,7 @@ from typing import Any, Protocol, Self, runtime_checkable
 import mujoco
 
 from mujoco_mojo.runtime.load import Load
-from mujoco_mojo.runtime.results_manager import SignalManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 
@@ -25,7 +25,7 @@ class SyncHook(Protocol):
 
 @dataclass
 class RuntimeManager:
-    results_manager: SignalManager | None = None
+    signal_manager: SignalManager | None = None
 
     loads: list[Load] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
@@ -45,8 +45,8 @@ class RuntimeManager:
 
     def __exit__(self, exc_type, exc, tb):
         """Ensure all telemetry is flushed even if the simulation crashed. Also saves recordings"""
-        if self.results_manager:
-            self.results_manager.close()
+        if self.signal_manager:
+            self.signal_manager.close()
 
         if self.video_recorders:
             self.save_recordings()
@@ -97,10 +97,10 @@ class RuntimeManager:
             load.apply_load(mj_model, mj_data)
 
         # record data
-        if self.results_manager and not self._skip_recording:
+        if self.signal_manager and not self._skip_recording:
             mujoco.mj_forward(mj_model, mj_data)
-            self.results_manager.record(mj_model, mj_data)
-            self.results_manager.flush_ledger()
+            self.signal_manager.record(mj_model, mj_data)
+            self.signal_manager.flush_ledger()
 
         # record any frames which are due
         all_arrows = None

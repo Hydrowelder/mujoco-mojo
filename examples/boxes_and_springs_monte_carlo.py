@@ -74,7 +74,7 @@ class Handoff(mojo.UserData):
         self.springs.update({loc: (base, tip, stiffness, stroke)})
 
     def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
-        assert rm.results_manager is not None
+        assert rm.signal_manager is not None
         base, tip, stiffness, stroke = self.springs[loc]
         spring_force = rt.PointToPointForce.stroke_compression_spring(
             name=f"{loc}_spring",
@@ -85,9 +85,9 @@ class Handoff(mojo.UserData):
             preload=1000 if loc == "pz" else 750,
         ).register_to_rm(rm)
 
-        base.request(rm.results_manager)
-        tip.request(rm.results_manager)
-        spring_force.request(rm.results_manager)
+        base.request(rm.signal_manager)
+        tip.request(rm.signal_manager)
+        spring_force.request(rm.signal_manager)
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
@@ -229,7 +229,7 @@ def runtime(
     with runtime_manager as rm:
         handoff = mojo_model.get_user_data(Handoff)
         assert mojo_model.mjcf.worldbody
-        assert rm.results_manager
+        assert rm.signal_manager
         if mojo_model.is_nominal:  # Only record the first trial
             rt.VideoRecorder(
                 path=Path("runtime-anim.gif"),
@@ -241,13 +241,13 @@ def runtime(
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
         # Request telemetry for bodies and sites
-        rm.results_manager.record_decimation = 10  # Only record every 10 steps
+        rm.signal_manager.record_decimation = 10  # Only record every 10 steps
         for b in mojo_model.mjcf.worldbody.bodies:
             b.request(
-                rm.results_manager,
+                rm.signal_manager,
                 attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
             )
-        handoff.box1_rot.request(rm.results_manager)
+        handoff.box1_rot.request(rm.signal_manager)
         # Step until 2.0 seconds
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
