@@ -21,6 +21,7 @@ from mujoco_mojo.typing import (
     SiteName,
     TendonName,
 )
+from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +35,6 @@ class ColumnManifest(TypedDict):
     available_quats: list[str]
 
 
-# TODO add filter stack
 class DataFrame(pl.DataFrame):
     """
     Enhanced Polars DataFrame for MuJoCo Mojo telemetry.
@@ -252,3 +252,41 @@ class DataFrame(pl.DataFrame):
 
         # overwrite with the new rotated data
         return self._from_pl(self.with_columns(new_columns))
+
+    def with_filters(
+        self,
+        filters: list[AnyFilter],
+        columns: list[str] | None = None,
+        omit_time: bool = True,
+    ) -> Self:
+        """
+        Applies a sequential stack of filters to the specified or all numeric columns.
+
+        Args:
+            filters (list[AnyFilter]): List of Filter objects to apply in order (e.g., LowPass -> Derivative).
+            columns (list[str] | None, optional): Specific columns to transform. If None, applies to all available columns. Defaults to None.
+            omit_time (bool, optional): If True, prevents filters from being applied to the 'time' column. Defaults to True.
+
+        Returns:
+            Self: DataFrame with the transformed columns overwritten.
+
+        """
+        target_cols = columns or self.columns
+        if omit_time:
+            target_cols = [c for c in target_cols if c != "time"]
+        exprs = []
+
+        for col_name in target_cols:
+            if col_name not in self.columns:
+                continue
+
+            # start the chain with the raw column
+            expr = pl.col(col_name)
+
+            # pipe the expression through every filter in the stack
+            for f in filters:
+                expr = f.apply(expr)
+
+            exprs.append(expr.alias(col_name))
+
+        return self._from_pl(self.with_columns(exprs))

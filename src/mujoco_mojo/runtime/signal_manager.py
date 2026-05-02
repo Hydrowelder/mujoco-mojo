@@ -8,9 +8,9 @@ from typing import Any, Literal
 import mujoco
 import polars as pl
 
-from mujoco_mojo.runtime.data_frame import DataFrame
 from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
 from mujoco_mojo.typing import SignalCategory
+from mujoco_mojo.utils.data_frame import DataFrame
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
