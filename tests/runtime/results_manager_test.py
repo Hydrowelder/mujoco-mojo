@@ -3,6 +3,7 @@ import pytest
 
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.stochas import NamedValue, ValueName
+from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 
 
 @pytest.fixture
@@ -60,7 +61,7 @@ def test_batching_and_persistence(rm: SignalManager):
     # Verify output has the data
     df = pl.read_parquet(rm.export_path)
     assert df.height == 5
-    assert "time" in df.columns
+    assert TIME_COLUMN_NAME in df.columns
 
 
 def test_record_decimation(rm: SignalManager):
