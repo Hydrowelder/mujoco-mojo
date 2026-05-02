@@ -222,7 +222,6 @@ def runtime(
     **kwargs,
 ) -> mojo.MojoModel:
     """Executes the physics simulation."""
-
     with runtime_manager as rm:
         handoff = mojo_model.get_user_data(Handoff)
         assert mojo_model.mjcf.worldbody
