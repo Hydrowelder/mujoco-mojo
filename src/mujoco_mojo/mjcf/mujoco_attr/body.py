@@ -20,8 +20,18 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
+from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import Angle, BodyName, Mat3, RequestCategory, Sleep, Vec3, VecN
+from mujoco_mojo.typing import (
+    Angle,
+    BodyName,
+    Mat3,
+    RequestCategory,
+    Sleep,
+    Vec3,
+    Vec6,
+    VecN,
+)
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
@@ -195,8 +205,9 @@ class Body(XMLModel):
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> Mat3:
         """Inertia tensor of the body expressed in the world frame."""
-        R = self.rt_xmat(mj_model, mj_data)
-        return R @ np.diag(self.rt_inertia_diag(mj_model)) @ R.T
+        R = self.rt_ximat(mj_model, mj_data)
+        I_diag = np.diag(self.rt_inertia_diag(mj_model))
+        return R @ I_diag @ R.T
 
     def rt_parent_body_id(self, mj_model: mujoco.MjModel) -> int:
         """Parent ID of the body."""
@@ -206,23 +217,17 @@ class Body(XMLModel):
         """Position of the body during runtime."""
         return mj_data.xpos[self.get_id(mj_model)]
 
+    def rt_spatial_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+        """Returns the 6D spatial velocity (ang, lin) at the CoM in world frame."""
+        return mj_data.cvel[self.get_id(mj_model)]
+
     def rt_lin_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        """Linear velocity of the body during runtime."""
-        assert self._mjt_obj is not None
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
-        mujoco.mj_objectVelocity(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
-        )
-        return res[3:6]
+        """Linear velocity of the body center of mass during runtime in the world frame."""
+        return self.rt_spatial_vel(mj_model, mj_data)[3:6]
 
     def rt_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        """Angular velocity of the body during runtime."""
-        assert self._mjt_obj is not None
-        res = np.zeros(6)  # 6 element buffer for angular, linear velocity
-        mujoco.mj_objectVelocity(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
-        )
-        return res[0:3]
+        """Angular velocity of the body center of mass during runtime  in the world frame."""
+        return self.rt_spatial_vel(mj_model, mj_data)[0:3]
 
     def rt_lin_mom(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Linear momentum of the body during runtime."""
@@ -233,6 +238,24 @@ class Body(XMLModel):
         return self.rt_inertia_world(mj_model, mj_data) @ self.rt_ang_vel(
             mj_model, mj_data
         )
+
+    def rt_pe(
+        self,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        ref_point: Vec3 | Pos | AnyPose = np.array((0, 0, 0)),
+    ) -> float:
+        g = mj_model.opt.gravity
+
+        # early exit if gravity is off
+        if g.sum() == 0:
+            return 0
+
+        mass = self.rt_mass(mj_model)
+
+        # calculate datum to center of mass
+        h_rel = self.rt_xipos(mj_model, mj_data) - np.asarray(ref_point)
+        return -mass * np.dot(g, h_rel)
 
     def rt_trans_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
         """Translational kinetic energy of the body during runtime."""
@@ -278,7 +301,9 @@ class Body(XMLModel):
                 "ang_mom",
                 "ke_trans",
                 "ke_rot",
+                "pe",
                 "ke_total",
+                "total_energy",
             ]
         ] = [
             "xvelp",
@@ -289,6 +314,7 @@ class Body(XMLModel):
             "ang_mom",
             "ke_trans",
             "ke_rot",
+            "pe",
             "ke_total",
         ],
     ):
@@ -344,12 +370,18 @@ class Body(XMLModel):
                         val = self.rt_lin_mom(mj_model, mj_data)
                     case "ang_mom":
                         val = self.rt_ang_mom(mj_model, mj_data)
+                    case "pe":
+                        val = self.rt_pe(mj_model, mj_data)
                     case "ke_trans":
                         val = self.rt_trans_ke(mj_model, mj_data)
                     case "ke_rot":
                         val = self.rt_rot_ke(mj_model, mj_data)
                     case "ke_total":
                         val = self.rt_ke(mj_model, mj_data)
+                    case "total_energy":
+                        val = self.rt_ke(mj_model, mj_data) + self.rt_pe(
+                            mj_model, mj_data
+                        )
                     case _:
                         continue
 
