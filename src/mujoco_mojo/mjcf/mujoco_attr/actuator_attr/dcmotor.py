@@ -13,9 +13,9 @@ class ActuatorDCMotor(ActuatorBase):
     """
     This element creates a DC motor actuator. See the DC motor technical note for complete mathematical formulations and parameter semantics, but we include a few important notes below. Note that dcmotor does not conform to the affine gain / bias structure of the general actuation model, except for the stateless case.
 
-    * resistance, motorconst and nominal are each optional, but some combination of them is required. See Section 2.1 of the technical note.
-    * The control input semantic is either the voltage applied to the motor terminals (the default), or a position or velocity target for a PID controller.
-    * Optional features include electrical dynamics (inductance), cogging torque, thermal resistance variation, and LuGre friction.
+    - resistance, motorconst and nominal are each optional, but some combination of them is required. See Section 2.1 of the technical note.
+    - The control input semantic is either the voltage applied to the motor terminals (the default), or a position or velocity target for a PID controller.
+    - Optional features include electrical dynamics (inductance), cogging torque, thermal resistance variation, and LuGre friction.
 
     The underlying general attributes are set to the dcmotor type, and their associated parameter arrays are computed internally:
 

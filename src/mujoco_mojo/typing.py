@@ -305,8 +305,8 @@ class EulerSeq(StrEnum):
     """
     Euler rotation sequences.
 
-    * Lowercase letters denote intrinsic rotations (about the rotating frame).
-    * Uppercase letters denote extrinsic rotations (about the fixed parent frame).
+    - Lowercase letters denote intrinsic rotations (about the rotating frame).
+    - Uppercase letters denote extrinsic rotations (about the fixed parent frame).
     """
 
     # Intrinsic Tait-Bryan
@@ -680,11 +680,11 @@ class Mark(StrEnum):
 
 """Sleep policy for the tree under this body. This attribute is only supported by moving bodies which are the root of a kinematic tree. For the default auto, the compiler will set the sleep policy as follows:
 
-    * A tree which is affected by actuators is not allowed to sleep (overridable).
-    * Trees which are connected by tendons which have non-zero stiffness and damping are not allowed to sleep (overridable).
-    * Trees which are connected by tendons which connect more than two trees are not allowed to sleep (not overridable).
-    * flexes are not allowed to sleep (not overridable).
-    * All other trees are allowed to sleep (overridable).
+    - A tree which is affected by actuators is not allowed to sleep (overridable).
+    - Trees which are connected by tendons which have non-zero stiffness and damping are not allowed to sleep (overridable).
+    - Trees which are connected by tendons which connect more than two trees are not allowed to sleep (not overridable).
+    - flexes are not allowed to sleep (not overridable).
+    - All other trees are allowed to sleep (overridable).
 
     The policies never and allowed constitute user overrides of the automatic compiler policy.
 
@@ -699,11 +699,11 @@ class Sleep(StrEnum):
     AUTO = "auto"
     """Compiler will set the sleep policy as follows:
 
-    * A tree which is affected by actuators is not allowed to sleep (overridable).
-    * Trees which are connected by tendons which have non-zero stiffness and damping are not allowed to sleep (overridable).
-    * Trees which are connected by tendons which connect more than two trees are not allowed to sleep (not overridable).
-    * flexes are not allowed to sleep (not overridable).
-    * All other trees are allowed to sleep (overridable)."""
+    - A tree which is affected by actuators is not allowed to sleep (overridable).
+    - Trees which are connected by tendons which have non-zero stiffness and damping are not allowed to sleep (overridable).
+    - Trees which are connected by tendons which connect more than two trees are not allowed to sleep (not overridable).
+    - flexes are not allowed to sleep (not overridable).
+    - All other trees are allowed to sleep (overridable)."""
 
     NEVER = "never"
     """Constitute user overrides of the automatic compiler policy."""

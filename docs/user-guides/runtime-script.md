@@ -99,10 +99,10 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
 Forget about the difference between `mj_step` and `mj_forward`. Just call `rm.step()`! This method handles:
 
-* Advancing the physics.
-* Updating custom Mojo force plugins.
-* Flushing telemetry to the `ResultsManager` and recording videos.
-* Managing the internal simulation clock for real-time visualization.
+- Advancing the physics.
+- Updating custom Mojo force plugins.
+- Flushing telemetry to the `ResultsManager` and recording videos.
+- Managing the internal simulation clock for real-time visualization.
 
 ---
 

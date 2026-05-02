@@ -19,8 +19,8 @@ The Monitor acts as a nexus for overseeing your `mujoco-mojo run` jobs. It works
 
 The primary progress bar provides a high-level view of your job's timeline.
 
-* **Dynamic Scaling:** The bar fills as trials transition from `pending` to `success` or `failure`.
-* **Visual Completion:** Once a job hits 100%, the interface shifts from Cyan to Emerald, signaling that the data is ready for final export.
+- **Dynamic Scaling:** The bar fills as trials transition from `pending` to `success` or `failure`.
+- **Visual Completion:** Once a job hits 100%, the interface shifts from Cyan to Emerald, signaling that the data is ready for final export.
 
 ### The "Health" Deck
 

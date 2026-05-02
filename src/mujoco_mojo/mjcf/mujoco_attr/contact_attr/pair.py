@@ -60,8 +60,8 @@ class Pair(XMLModel):
     solreffriction: Vec2 = np.array((0, 0))
     """Contact reference acceleration, in the friction dimensions. This attribute has the same semantics as other solref attributes (described in Solver parameters), with two important distictions:
 
-    * The default "0 0" means "use the same values as solref".
-    * This attribute only takes effect for elliptic friction cones, since pyramidal cones mix normal and frictional forces.
+    - The default "0 0" means "use the same values as solref".
+    - This attribute only takes effect for elliptic friction cones, since pyramidal cones mix normal and frictional forces.
 
     Note that as with other solreffriction attributes, the constraint violation is identically 0. Therefore, when using positive semantics solreffriction[1] is ignored, while for negative semantics solreffriction[0] is ignored. See Solver parameters for more details."""
 
