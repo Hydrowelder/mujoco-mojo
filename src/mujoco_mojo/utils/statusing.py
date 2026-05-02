@@ -94,16 +94,16 @@ class TrialStatus(MojoBaseModel):
     generating: StepStatus = Field(default_factory=StepStatus)
     """Generation step.
 
-    * Information on times during which the job sequencer is generating XML (not yet running MuJoCo).
-    * This step must be completed before moving to `solving`.
-    * It is the first step in the sequence."""
+    - Information on times during which the job sequencer is generating XML (not yet running MuJoCo).
+    - This step must be completed before moving to `solving`.
+    - It is the first step in the sequence."""
 
     solving: StepStatus = Field(default_factory=StepStatus)
     """Solving step.
 
-    * Information on times during which the job sequencer is running MuJoCo.
-    * This step is the second step in the sequence.
-    * Completion of the step is the end of the trial."""
+    - Information on times during which the job sequencer is running MuJoCo.
+    - This step is the second step in the sequence.
+    - Completion of the step is the end of the trial."""
 
     _path: Path | None = PrivateAttr(default=None)
     """Where this status file is serialized."""

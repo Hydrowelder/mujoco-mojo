@@ -37,22 +37,22 @@ Dojo isn't just a local tool; it is designed for the modern, distributed enginee
 
 Dojo is built on a "Share First" principle. By serving the dashboard on your local network, anyone with the URL can view the live progress of a Monte Carlo run.
 
-* **The Host Flag:** To make Dojo shareable or viewable on a mobile device, launch with `--host 0.0.0.0`. Mojo will automatically detect your local IP and provide a "Mobile URL" in the terminal.
-* **Basic Auth:** If you are sharing results on a public-facing server, use the `--password` flag. This enables a login screen where users can enter any username and your specified password to keep your data private.
+- **The Host Flag:** To make Dojo shareable or viewable on a mobile device, launch with `--host 0.0.0.0`. Mojo will automatically detect your local IP and provide a "Mobile URL" in the terminal.
+- **Basic Auth:** If you are sharing results on a public-facing server, use the `--password` flag. This enables a login screen where users can enter any username and your specified password to keep your data private.
 
 ### Responsive and Universal UI
 
 Dojo is fully responsive. Whether you are checking a 10,000-trial run from a 4K monitor in the lab or on your phone during a boring meeting, the UI adapts.
 
-* **Light/Dark Mode:** The dashboard automatically respects your system's theme settings, ensuring that your telemetry plots and 3D mosaics look beautiful in any environment.
-* **Mobile-Optimized:** Navigation and "Individual Trial" views are designed to be touch-friendly, allowing you to scrub through simulation data effortlessly.
+- **Light/Dark Mode:** The dashboard automatically respects your system's theme settings, ensuring that your telemetry plots and 3D mosaics look beautiful in any environment.
+- **Mobile-Optimized:** Navigation and "Individual Trial" views are designed to be touch-friendly, allowing you to scrub through simulation data effortlessly.
 
 ### Offline-First Reliability
 
 Dojo is a **zero-dependency** suite. All assets, scripts (including Plotly.js), and styles are bundled locally within the package.
 
-* **Air-Gapped Support:** Dojo does not require an internet connection or external CDNs to function. This guarantees that your visualization tools will work perfectly on isolated compute clusters or in secure lab environments.
-* **Low Latency:** Because all resources are served locally, the interface remains snappy and responsive regardless of your network's external bandwidth.
+- **Air-Gapped Support:** Dojo does not require an internet connection or external CDNs to function. This guarantees that your visualization tools will work perfectly on isolated compute clusters or in secure lab environments.
+- **Low Latency:** Because all resources are served locally, the interface remains snappy and responsive regardless of your network's external bandwidth.
 
 ---
 
@@ -64,17 +64,17 @@ Dojo is split into two primary environments depending on your current needs:
 
 **Real-Time Oversight.** Designed for use while a job is actively running.
 
-* **Live Tracking:** Dynamic progress bars and color-coded status cards.
-* **Success/Failure Analytics:** Built-in checks to identify "empty" vs "failed" runs.
-* **Deep-Linking:** One-click navigation from a status card directly to the trial's telemetry.
+- **Live Tracking:** Dynamic progress bars and color-coded status cards.
+- **Success/Failure Analytics:** Built-in checks to identify "empty" vs "failed" runs.
+- **Deep-Linking:** One-click navigation from a status card directly to the trial's telemetry.
 
 ### Mosaic
 
 **Advanced Telemetry Analysis.** Designed for deep-dives and regression testing.
 
-* **Hardware-Accelerated:** Smooth interaction with millions of data points via Plotly.js.
-* **Dynamic Versus Mode:** Overlay current telemetry against previous trials for instant regression testing.
-* **State Persistence:** Share your exact view configuration (zoom, filters, selected signals) via a single compressed URL.
+- **Hardware-Accelerated:** Smooth interaction with millions of data points via Plotly.js.
+- **Dynamic Versus Mode:** Overlay current telemetry against previous trials for instant regression testing.
+- **State Persistence:** Share your exact view configuration (zoom, filters, selected signals) via a single compressed URL.
 
 ---
 

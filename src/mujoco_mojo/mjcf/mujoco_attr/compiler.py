@@ -86,10 +86,10 @@ class Compiler(XMLModel):
     discardvisual: bool = False
     """This attribute instructs the compiler to discard all model elements which are purely visual and have no effect on the physics (with one exception, see below). This often enables smaller mjModel structs and faster simulation.
 
-    * All materials are discarded.
-    * All textures are discarded.
-    * All geoms with contype=conaffinity=0 are discarded, if they are not referenced in another MJCF element. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body.
-    * All meshes which are not referenced by any geom (in particular those discarded above) are discarded.
+    - All materials are discarded.
+    - All textures are discarded.
+    - All geoms with contype=conaffinity=0 are discarded, if they are not referenced in another MJCF element. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body.
+    - All meshes which are not referenced by any geom (in particular those discarded above) are discarded.
 
     The resulting compiled model will have exactly the same dynamics as the original model. The only engine-level computation which might change is the output of raycasting computations, as used for example by rangefinder sensors, since raycasting reports distances to visual geoms. When visualizing models compiled with this flag, it is important to remember that collision geoms are often placed in a group which is invisible by default.
     """
@@ -100,8 +100,8 @@ class Compiler(XMLModel):
     fusestatic: bool = False
     """This attribute controls a compiler optimization feature where static bodies are fused with their parent, and any elements defined in those bodies are reassigned to the parent. Static bodies are fused with their parent unless
 
-    * They are referenced by another element in the model.
-    * They contain a site which is referenced by a force or torque sensor.
+    - They are referenced by another element in the model.
+    - They contain a site which is referenced by a force or torque sensor.
 
     This optimization is particularly useful when importing URDF models which often have many dummy bodies, but can also be used to optimize MJCF models. After optimization, the new model has identical kinematics and dynamics as the original but is faster to simulate."""
 

@@ -55,11 +55,11 @@ class Camera(XMLModel):
     mode: TrackingMode = TrackingMode.FIXED
     """This attribute specifies how the camera position and orientation in world coordinates are computed in forward kinematics (which in turn determine what the camera sees).
 
-    * `fixed` means that the position and orientation specified below are fixed relative to the body where the camera is defined.
-    * `track` means that the camera position is at a constant offset from the body in world coordinates, while the camera orientation is constant in world coordinates. These constants are determined by applying forward kinematics in qpos0 and treating the camera as fixed. Tracking can be used for example to position a camera above a body, point it down so it sees the body, and have it always remain above the body no matter how the body translates and rotates.
-    * `trackcom` is similar to "track" but the constant spatial offset is defined relative to the center of mass of the kinematic subtree starting at the body in which the camera is defined. This can be used to keep an entire mechanism in view. Note that the subtree center of mass for the world body is the center of mass of the entire model. So if a camera is defined in the world body in mode "trackcom", it will track the entire model.
-    * `targetbody` means that the camera position is fixed in the body frame, while the camera orientation is adjusted so that it always points towards the targeted body (which is specified with the target attribute below). This can be used for example to model an eye that fixates a moving object; the object will be the target, and the camera/eye will be defined in the body corresponding to the head.
-    * `targetbodycom` is the same as "targetbody" but the camera is oriented towards the center of mass of the subtree starting at the target body."""
+    - `fixed` means that the position and orientation specified below are fixed relative to the body where the camera is defined.
+    - `track` means that the camera position is at a constant offset from the body in world coordinates, while the camera orientation is constant in world coordinates. These constants are determined by applying forward kinematics in qpos0 and treating the camera as fixed. Tracking can be used for example to position a camera above a body, point it down so it sees the body, and have it always remain above the body no matter how the body translates and rotates.
+    - `trackcom` is similar to "track" but the constant spatial offset is defined relative to the center of mass of the kinematic subtree starting at the body in which the camera is defined. This can be used to keep an entire mechanism in view. Note that the subtree center of mass for the world body is the center of mass of the entire model. So if a camera is defined in the world body in mode "trackcom", it will track the entire model.
+    - `targetbody` means that the camera position is fixed in the body frame, while the camera orientation is adjusted so that it always points towards the targeted body (which is specified with the target attribute below). This can be used for example to model an eye that fixates a moving object; the object will be the target, and the camera/eye will be defined in the body corresponding to the head.
+    - `targetbodycom` is the same as "targetbody" but the camera is oriented towards the center of mass of the subtree starting at the target body."""
 
     target: BodyName | None = None
     """When the camera mode is "targetbody" or "targetbodycom", this attribute becomes required. It specifies which body should be targeted by the camera. In all other modes this attribute is ignored."""
@@ -87,11 +87,11 @@ class Camera(XMLModel):
 
     output: CameraOutput = CameraOutput.RGB
     """Types of output images supported by the camera.
-        * rgb: RGB image.
-        * depth: Depth image (distance from camera plane).
-        * distance: Distance image (distance from camera origin).
-        * normal: Surface normal image.
-        * segmentation: Segmentation image.
+        - rgb: RGB image.
+        - depth: Depth image (distance from camera plane).
+        - distance: Distance image (distance from camera origin).
+        - normal: Surface normal image.
+        - segmentation: Segmentation image.
 
     This attribute is not used for rendering, but serves as a convenient location to save the output types supported by the camera. The output attribute can contain multiple types, e.g. "rgb normal"."""
 
