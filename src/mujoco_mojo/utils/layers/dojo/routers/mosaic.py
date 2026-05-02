@@ -5,7 +5,7 @@ import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
-from mujoco_mojo.runtime.data_frame import ColumnManifest, DataFrame
+from mujoco_mojo.utils.data_frame import ColumnManifest, DataFrame
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
