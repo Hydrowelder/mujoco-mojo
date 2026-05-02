@@ -1,5 +1,4 @@
 from .color import Color
-from .data_frame import DataFrame
 from .filters import (
     AbsoluteValueFilter,
     AnyFilter,
@@ -36,7 +35,6 @@ __all__ = [
     "AnyFilter",
     "ClipFilter",
     "Color",
-    "DataFrame",
     "DeadbandFilter",
     "DerivativeFilter",
     "FilterType",
