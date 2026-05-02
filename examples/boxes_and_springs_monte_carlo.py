@@ -88,6 +88,8 @@ class Handoff(mojo.UserData):
         base.request(rm.results_manager)
         tip.request(rm.results_manager)
         spring_force.request(rm.results_manager)
+
+
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     """Generates the MJCF model and samples distributions."""
     skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
@@ -213,6 +215,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     handoff.define_spring("mz", box1, box2, mojo_model)
 
     return mojo_model
+
+
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
@@ -249,6 +253,8 @@ def runtime(
             rm.step(mj_model, mj_data)
 
     return mojo_model
+
+
 if __name__ == "__main__":
     mojo.utils.setup_logger()
     workdir = Path(__file__).parent / "experiment_workspace"

@@ -12,6 +12,8 @@ MAP = {
     SRC_DIR / "optimization_example.py": EX_DIR / "boxes_and_springs_optimization.py",
 }
 
+CONFIG_PATH = Path.cwd() / "pyproject.toml"
+
 
 def clean_and_copy_file(source: Path, dest: Path) -> None:
     """
@@ -29,15 +31,30 @@ def clean_and_copy_file(source: Path, dest: Path) -> None:
 
     dest.write_text(cleaned_text, encoding="utf-8")
 
+    try:
+        # Check if config exists, otherwise ruff might fail on missing file
+        ruff_args = ["ruff", "format", str(dest)]
+        if CONFIG_PATH.exists():
+            ruff_args.extend(["--config", str(CONFIG_PATH)])
+
+        subprocess.run(ruff_args, check=True, capture_output=True)
+
+        # Do the same for check --fix
+        check_args = ["ruff", "check", "--fix", str(dest)]
+        if CONFIG_PATH.exists():
+            check_args.extend(["--config", str(CONFIG_PATH)])
+
+        subprocess.run(check_args, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Ruff error on {dest.name}: {e.stderr.decode()}")
+
 
 def stage_file(file_path: Path):
     """Stage the file in git."""
-    subprocess.run(["ruff", "check", "--fix", str(file_path)], check=True)
     subprocess.run(["git", "add", str(file_path)], check=True)
 
 
 def main():
-    subprocess.run(["pip", "install", "ruff"], check=True)
     for source, dest in MAP.items():
         clean_and_copy_file(source, dest)
         stage_file(dest)
