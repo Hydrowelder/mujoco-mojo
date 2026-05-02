@@ -221,6 +221,8 @@ def runtime(
             rm.step(mj_model, mj_data)
 
     return mojo_model
+
+
 def objective(
     mojo_model: mojo.MojoModel,
     telemetry: Path,
@@ -243,6 +245,7 @@ def objective(
 
     # J = 10*Omega + 1*KE_inv
     return (10.0 * omega_score) + (1.0 * ke_score)
+
 
 # --- Entry Point ---
 if __name__ == "__main__":
