@@ -24,7 +24,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
 
@@ -580,7 +580,7 @@ class SiteBase(XMLModel):
 
     def request(
         self,
-        results_manager: SignalManager,
+        signal_manager: SignalManager,
         attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr", "quat"]] = [
             "xpos",
             "quat",
@@ -594,7 +594,7 @@ class SiteBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match attr:
@@ -613,7 +613,7 @@ class SiteBase(XMLModel):
 
                 if isinstance(val, Quat):
                     for i, k in enumerate("wxyz"[: len(val.quat)]):
-                        results_manager.post(
+                        signal_manager.post(
                             value=float(val.quat[i]),
                             category=RequestCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
@@ -622,7 +622,7 @@ class SiteBase(XMLModel):
                 elif val.ndim == 1 and len(val) <= 3:
                     # standard 3-vector, use xyz labeling
                     for i, k in enumerate("xyz"[: len(val)]):
-                        results_manager.post(
+                        signal_manager.post(
                             value=val[i],
                             category=RequestCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
@@ -632,14 +632,14 @@ class SiteBase(XMLModel):
                     # longer arrays (or matrices like xmat), use flattened indices
                     val_flat = val.flatten()
                     for i in range(len(val_flat)):
-                        results_manager.post(
+                        signal_manager.post(
                             value=float(val_flat[i]),
                             category=RequestCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=str(i),
                         )
 
-        results_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
 
 class SiteSphere(SiteBase):

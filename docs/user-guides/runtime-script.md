@@ -99,10 +99,10 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
 Forget about the difference between `mj_step` and `mj_forward`. Just call `rm.step()`! This method handles:
 
-* Advancing the physics.
-* Updating custom Mojo force plugins.
-* Flushing telemetry to the `ResultsManager` and recording videos.
-* Managing the internal simulation clock for real-time visualization.
+- Advancing the physics.
+- Updating custom Mojo force plugins.
+- Flushing telemetry to the `SignalManager` and recording videos.
+- Managing the internal simulation clock for real-time visualization.
 
 ---
 
@@ -111,9 +111,9 @@ Forget about the difference between `mj_step` and `mj_forward`. Just call `rm.st
 Mojo uses a **"Request"** pattern for data logging. Instead of manually creating buffers or writing to CSVs, you simply tell the model what you are interested in.
 
 ???+ tip "Tip: Zero-Logic Logging"
-    The `.request()` method is available on select Mojo objects. It tells the `ResultsManager` to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
+    The `.request()` method is available on select Mojo objects. It tells the `SignalManager` to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
 
-    Custom requests can also be made using the `ResultsManager.post()` method!
+    Custom requests can also be made using the `SignalManager.post()` method!
 
 ???+ example "Example: Telemetry Requests"
     ```python

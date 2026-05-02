@@ -1,13 +1,13 @@
 import polars as pl
 import pytest
 
-from mujoco_mojo.runtime.results_manager import SignalManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.stochas import NamedValue, ValueName
 
 
 @pytest.fixture
 def rm(tmp_path):
-    """Provides a ResultsManager pointing to a temporary directory."""
+    """Provides a SignalManager pointing to a temporary directory."""
     db_file = tmp_path / "test_telemetry.parquet"
     manager = SignalManager(export_path=db_file, batch_size=5)
     yield manager
@@ -86,8 +86,8 @@ def test_record_decimation(rm: SignalManager):
     assert len(rm._buffer) == 2
 
 
-def test_harvest_task_execution(rm: SignalManager):
-    """Verify that scheduled harvest tasks fire during record()."""
+def test_sample_task_execution(rm: SignalManager):
+    """Verify that scheduled sample tasks fire during record()."""
     import mujoco
 
     m = mujoco.MjModel.from_xml_string("<mujoco/>")
@@ -95,13 +95,13 @@ def test_harvest_task_execution(rm: SignalManager):
 
     was_called = False
 
-    def mock_harvest(model, data):
+    def mock_sample(model, data):
         nonlocal was_called
-        rm.post(99.0, "Custom", "Harvested")
+        rm.post(99.0, "Custom", "Sampled")
         was_called = True
 
-    rm.schedule_harvest_task(mock_harvest)
+    rm.register_sampler(mock_sample)
     rm.record(m, d)
 
     assert was_called
-    assert "Custom/Harvested" in rm._buffer[0]
+    assert "Custom/Sampled" in rm._buffer[0]

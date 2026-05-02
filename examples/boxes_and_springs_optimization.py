@@ -3,7 +3,6 @@ from typing import Literal
 
 import mujoco
 import numpy as np
-import optuna
 from pydantic import Field
 
 import mujoco_mojo as mojo
@@ -11,16 +10,10 @@ import mujoco_mojo.runtime as rt
 
 logger = mojo.utils.get_logger(__name__)
 
-FIXED_CAMERA_NAME = mojo.CameraName("static")
-BOX_CAMERA_NAME = mojo.CameraName("box_camera")
-TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
-
 
 class Handoff(mojo.UserData):
     """
-    This class exists to serve as a user defined interconnect between the generator and runtime function.
-
-    It is here to allow encapsulation for defining MJCF elements, while retaining the simple ability to later use those definitions in the runtime.
+    User-defined interconnect between the generator and runtime function. Encapsulates MJCF elements for seamless reference in the physics loop.
     """
 
     box1: mojo.Body
@@ -40,6 +33,7 @@ class Handoff(mojo.UserData):
     ):
         mult = 1 if loc == "pz" else -1
 
+        # Add attachment sites to the bodies
         box1.sites.append(
             base := mojo.SiteSphere(
                 name=mojo.SiteName(f"{loc}_spring_base_site"),
@@ -57,20 +51,20 @@ class Handoff(mojo.UserData):
             )
         )
 
-        # perform random draws
+        # OPTIMIZATION: Define design variables for the search space
         stiffness = mojo_model.sample_design(
             mojo.DesignFloat(
                 name=mojo.ValueName(f"{loc}_stiffness"),
-                stored_value=100,
-                low=50,
-                high=200,
+                stored_value=100.0,  # this will act as the default value for trial 0
+                low=50.0,
+                high=200.0,
             )
         )
 
         stroke = mojo_model.sample_design(
             mojo.DesignFloat(
                 name=mojo.ValueName(f"{loc}_stroke"),
-                stored_value=(nom := 1),
+                stored_value=(nom := 1.0),
                 low=nom * 0.8,
                 high=nom * 1.2,
             )
@@ -79,7 +73,7 @@ class Handoff(mojo.UserData):
         preload = mojo_model.sample_design(
             mojo.DesignFloat(
                 name=mojo.ValueName(f"{loc}_preload"),
-                stored_value=(nom := 1000 if loc == "pz" else 750),
+                stored_value=(nom := 1000.0 if loc == "pz" else 750.0),
                 low=nom * 0.8,
                 high=nom * 1.2,
             )
@@ -93,26 +87,22 @@ class Handoff(mojo.UserData):
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(
             name=f"{loc}_spring",
-            action_site=base,  # red box
-            xtion_site=tip,  # blue box
+            action_site=base,
+            xtion_site=tip,
             stiffness=stiffness,
             max_stroke=stroke,
             preload=preload,
         ).register_to_rm(rm)
 
+        # Request high-fidelity telemetry for these components
         base.request(rm.signal_manager)
         tip.request(rm.signal_manager)
         spring_force.request(rm.signal_manager)
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
-    """Generates two boxes at varying distances."""
-    # Download this skybox from here: https://www.david-gable.com/work/photography/Space/Star-Skybox/p1/
-    skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
-
-    # configure simulation
+    """Assembles the world and identifies optimization design variables."""
     mojo_model.mjcf.assets = [
-        # add a checkerboard
         mojo.Asset(
             textures=[
                 grid_tex := mojo.TextureBuiltIn(
@@ -135,25 +125,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         ),
     ]
 
-    # add a skybox
-    if mojo_model.is_nominal:
-        mojo_model.mjcf.assets.append(
-            mojo.Asset(
-                textures=[
-                    mojo.Texture(
-                        name=mojo.TextureName("skybox_texture_colors"),
-                        type=mojo.TextureType.SKYBOX,
-                        fileback=skybox_folder / "nz.png",
-                        filedown=skybox_folder / "ny.png",
-                        filefront=skybox_folder / "pz.png",
-                        fileleft=skybox_folder / "nx.png",
-                        fileright=skybox_folder / "px.png",
-                        fileup=skybox_folder / "py.png",
-                    )
-                ]
-            ),
-        )
-
+    # Environment Setup
     mojo_model.mjcf.worldbody = mojo.WorldBody(
         geoms=[]
         if mojo_model.is_nominal
@@ -168,22 +140,14 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ),
         ]
     )
+
     mojo_model.mjcf.options = [
-        mojo.Option(
-            timestep=0.001,
-            gravity=np.asarray((0, 0, 0)),
-        )
-    ]
-    mojo_model.mjcf.visuals = [
-        mojo.Visual(
-            map=mojo.VisualMap(force=4),
-            scale=mojo.VisualScale(forcewidth=0.1),
-        )
+        mojo.Option(timestep=0.001, gravity=np.asarray((0, 0, 0)))
     ]
 
-    # create two boxes with sites for the springs
+    # Body Definition
     mojo_model.mjcf.worldbody.bodies.extend(
-        [  # Box 1
+        [
             box1 := mojo.Body(
                 name=mojo.BodyName("box1"),
                 pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
@@ -193,24 +157,9 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                         name=mojo.GeomName("g1"),
                         size=np.asarray([0.5, 0.5, 0.5]),
                         rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
-                        contype=0,
-                        conaffinity=0,
                     )
                 ],
-                cameras=[
-                    mojo.Camera(
-                        name=BOX_CAMERA_NAME,
-                        pose=mojo.PoseEuler(
-                            pos=np.asarray((0.4, 0, 0)),
-                            euler=np.asarray(
-                                (90, -90, 0),
-                            ),
-                        ),
-                        fovy=120,
-                    ),
-                ],
             ),
-            # Box 2
             box2 := mojo.Body(
                 name=mojo.BodyName("box2"),
                 pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
@@ -219,10 +168,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
                         size=np.asarray([0.5, 0.5, 0.5]),
-                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
-                        contype=0,
-                        conaffinity=0,
                     )
                 ],
             ),
@@ -233,36 +179,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         box1_rot_site := mojo.SiteSphere(
             name=mojo.SiteName("box1_rot_site"),
             size=0.2,
-            pose=mojo.PoseEuler(
-                euler=np.asarray((45, 45, 45)),
-                angle=mojo.Angle.DEGREE,
-                eulerseq=mojo.EulerSeq.xyz,
-            ),
+            pose=mojo.PoseEuler(euler=np.asarray((45, 45, 45))),
             rgba=mojo.utils.Color.FUCHSIA_500.rgba,
         )
     )
 
-    mojo_model.mjcf.worldbody.cameras = [
-        mojo.Camera(
-            name=FIXED_CAMERA_NAME,
-            pose=mojo.PoseEuler(
-                pos=np.asarray((0, -10, 0)),
-                euler=np.asarray((90, 0, 0)),
-            ),
-            fovy=30,
-        ),
-        mojo.Camera(
-            name=TRACKING_CAMERA_NAME,
-            pose=mojo.PoseQuat(
-                pos=np.asarray((0, -10, 0)),
-            ),
-            fovy=30,
-            mode=mojo.TrackingMode.TARGETBODY,
-            target=box2.name,
-        ),
-    ]
-
-    # add handoff data
+    # Handoff
     handoff = Handoff(box1=box1, box2=box2, box1_rot=box1_rot_site)
     mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
@@ -279,47 +201,20 @@ def runtime(
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
-    """Executes the spring repulsion simulation."""
-    # Identify our sites from the generated model
-    # Note: We can find them by name in the worldbody
-    assert mojo_model.mjcf.worldbody is not None
-
-    handoff = mojo_model.get_user_data(Handoff)
-
+    """Executes the physics loop and flushes telemetry."""
     with runtime_manager as rm:
-        assert rm.signal_manager is not None
-        rm.signal_manager.record_decimation = 1
+        handoff = mojo_model.get_user_data(Handoff)
+        assert mojo_model.mjcf.worldbody
 
-        if mojo_model.is_nominal and False:
-            rt.VideoRecorder(
-                path=Path("fixed_camera.mp4"),
-                camera_name=FIXED_CAMERA_NAME,
-                show_loads=True,
-                show_net_force=True,
-            ).setup(mj_model).register_to_rm(rm)
-
-            rt.VideoRecorder(
-                path=Path("tracking_camera.mp4"),
-                camera_name=TRACKING_CAMERA_NAME,
-                show_loads=True,
-            ).setup(mj_model).register_to_rm(rm)
-
-            rt.VideoRecorder(
-                path=Path("box_camera.mp4"),
-                camera_name=BOX_CAMERA_NAME,
-                show_net_force=False,
-            ).setup(mj_model).register_to_rm(rm)
-
-        # Create compression springs
+        # Apply forces defined during generation
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
 
-        for b in mojo_model.mjcf.worldbody.walk_bodies():
-            b.request(rm.signal_manager)
+        if rm.signal_manager:
+            for b in mojo_model.mjcf.worldbody.walk_bodies():
+                b.request(rm.signal_manager)
+            handoff.box1_rot.request(rm.signal_manager)
 
-        handoff.box1_rot.request(rm.signal_manager)
-
-        # Run for 2 seconds
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
 
@@ -332,9 +227,10 @@ def objective(
     mj_model: mujoco.MjModel,
     mj_data: mujoco.MjData,
 ) -> float:
-    """Optimize the relative angular velocity to be low but the translational kinetic energy to be high."""
-    assert isinstance(mojo_model.user_data, Handoff)
-    handoff = mojo_model.user_data
+    """
+    Score the trial: Low relative angular velocity (stability) weighted against high translational kinetic energy.
+    """
+    handoff = mojo_model.get_user_data(Handoff)
 
     w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
     w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)
@@ -343,43 +239,30 @@ def objective(
     ke1 = handoff.box1.rt_trans_ke(mj_model, mj_data)
     ke2 = handoff.box2.rt_trans_ke(mj_model, mj_data)
     total_ke = ke1 + ke2
-    ke_score = 1 / (total_ke + 1e-6)  # add to prevent divide by zero
+    ke_score = 1 / (total_ke + 1e-6)
 
-    STABILITY_WEIGHT = 10.0
-    ENERGY_WEIGHT = 1.0
-
-    return (STABILITY_WEIGHT * omega_score) + (ENERGY_WEIGHT * ke_score)
+    # J = 10*Omega + 1*KE_inv
+    return (10.0 * omega_score) + (1.0 * ke_score)
 
 
-WORKDIR = (Path(__file__).parent / "mc_bumper_optimize").resolve()
-
-
-def run_study():
-    mojo.utils.setup_logger()
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-
+# --- Entry Point ---
+if __name__ == "__main__":
+    workdir = Path("./optimization_study").resolve()
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
         objective=objective,
-        workdir=WORKDIR,
+        workdir=workdir,
         config=mojo.utils.OptimizerConfig(
-            n_trial=400,
-            n_proc=10,
-            study_name="stabilize_box",
+            n_trial=200,
+            n_proc=4,
             direction="minimize",
             sampler="tpe",
-            storage=f"sqlite:///{WORKDIR / 'study.db'}",
+            storage=f"sqlite:///{workdir / 'study.db'}",
             resume=True,
         ),
         seed=42,
     )
 
     logger.info("Starting Optimization Study...")
-    had_fails = runner.run()  # , clean_workdir=True, cleanup_delay=-1)
-    print(f"Optimization finished with {had_fails=}. Results saved to {WORKDIR}.")
-
-
-if __name__ == "__main__":
-    # run_dashboard()
-    run_study()
+    runner.run()

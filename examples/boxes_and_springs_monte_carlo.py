@@ -9,17 +9,13 @@ import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
 
 logger = mojo.utils.get_logger(__name__)
-
 FIXED_CAMERA_NAME = mojo.CameraName("static")
-BOX_CAMERA_NAME = mojo.CameraName("box_camera")
-TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 
 class Handoff(mojo.UserData):
     """
-    This class exists to serve as a user defined interconnect between the generator and runtime function.
-
-    It is here to allow encapsulation for defining MJCF elements, while retaining the simple ability to later use those definitions in the runtime.
+    User-defined interconnect between the generator and runtime function.
+    Retains MJCF definitions for use in the physics loop.
     """
 
     box1_rot: mojo.AnySite
@@ -53,8 +49,7 @@ class Handoff(mojo.UserData):
                 rgba=mojo.utils.Color.BLUE_500.rgba,
             )
         )
-
-        # perform random draws
+        # Perform random draws tied to the model seed
         stiffness = mojo_model.sample_dist(
             mojo.TruncatedNormalDistribution(
                 name=mojo.DistName(f"{loc}_stiffness"),
@@ -64,6 +59,7 @@ class Handoff(mojo.UserData):
                 low=0,
             )
         ).squeeze()
+
         stroke = mojo_model.sample_dist(
             mojo.TruncatedNormalDistribution(
                 name=mojo.DistName(f"{loc}_stroke"),
@@ -80,11 +76,10 @@ class Handoff(mojo.UserData):
     def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
         assert rm.signal_manager is not None
         base, tip, stiffness, stroke = self.springs[loc]
-
         spring_force = rt.PointToPointForce.stroke_compression_spring(
             name=f"{loc}_spring",
-            action_site=base,  # red box
-            xtion_site=tip,  # blue box
+            action_site=base,
+            xtion_site=tip,
             stiffness=float(stiffness),
             max_stroke=float(stroke),
             preload=1000 if loc == "pz" else 750,
@@ -96,13 +91,10 @@ class Handoff(mojo.UserData):
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
-    """Generates two boxes at varying distances."""
-    # Download this skybox from here: https://www.david-gable.com/work/photography/Space/Star-Skybox/p1/
+    """Generates the MJCF model and samples distributions."""
     skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
-
-    # configure simulation
+    # Configure simulation assets
     mojo_model.mjcf.assets = [
-        # add a checkerboard
         mojo.Asset(
             textures=[
                 grid_tex := mojo.TextureBuiltIn(
@@ -125,7 +117,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         ),
     ]
 
-    # add a skybox
+    # Handle skybox if in nominal mode
     if mojo_model.is_nominal:
         mojo_model.mjcf.assets.append(
             mojo.Asset(
@@ -143,7 +135,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 ]
             ),
         )
-
     mojo_model.mjcf.worldbody = mojo.WorldBody(
         geoms=[]
         if mojo_model.is_nominal
@@ -158,11 +149,9 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ),
         ]
     )
+
     mojo_model.mjcf.options = [
-        mojo.Option(
-            timestep=0.001,
-            gravity=np.asarray((0, 0, 0)),
-        )
+        mojo.Option(timestep=0.001, gravity=np.asarray((0, 0, 0)))
     ]
     mojo_model.mjcf.visuals = [
         mojo.Visual(
@@ -170,67 +159,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             scale=mojo.VisualScale(forcewidth=0.1),
         )
     ]
-
-    # create two boxes with sites for the springs
-    mojo_model.mjcf.worldbody.bodies.extend(
-        [  # Box 1
-            box1 := mojo.Body(
-                name=mojo.BodyName("box1"),
-                pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
-                freejoints=[mojo.FreeJoint()],
-                geoms=[
-                    mojo.GeomBox(
-                        name=mojo.GeomName("g1"),
-                        size=np.asarray([0.5, 0.5, 0.5]),
-                        rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
-                        contype=0,
-                        conaffinity=0,
-                    )
-                ],
-                cameras=[
-                    mojo.Camera(
-                        name=BOX_CAMERA_NAME,
-                        pose=mojo.PoseEuler(
-                            pos=np.asarray((0.4, 0, 0)),
-                            euler=np.asarray(
-                                (90, -90, 0),
-                            ),
-                        ),
-                        fovy=120,
-                    ),
-                ],
-            ),
-            # Box 2
-            box2 := mojo.Body(
-                name=mojo.BodyName("box2"),
-                pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
-                freejoints=[mojo.FreeJoint()],
-                geoms=[
-                    mojo.GeomBox(
-                        name=mojo.GeomName("g2"),
-                        size=np.asarray([0.5, 0.5, 0.5]),
-                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
-                        rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
-                        contype=0,
-                        conaffinity=0,
-                    )
-                ],
-            ),
-        ]
-    )
-
-    box1.sites.append(
-        box1_rot_site := mojo.SiteSphere(
-            name=mojo.SiteName("box1_rot_site"),
-            size=0.2,
-            pose=mojo.PoseEuler(
-                euler=np.asarray((45, 45, 45)),
-                angle=mojo.Angle.DEGREE,
-                eulerseq=mojo.EulerSeq.xyz,
-            ),
-            rgba=mojo.utils.Color.FUCHSIA_500.rgba,
-        )
-    )
 
     mojo_model.mjcf.worldbody.cameras = [
         mojo.Camera(
@@ -241,18 +169,46 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             ),
             fovy=30,
         ),
-        mojo.Camera(
-            name=TRACKING_CAMERA_NAME,
-            pose=mojo.PoseQuat(
-                pos=np.asarray((0, -10, 0)),
-            ),
-            fovy=30,
-            mode=mojo.TrackingMode.TARGETBODY,
-            target=box2.name,
-        ),
     ]
+    # Create two boxes using the walrus operator for immediate referencing
+    mojo_model.mjcf.worldbody.bodies.extend(
+        [
+            box1 := mojo.Body(
+                name=mojo.BodyName("box1"),
+                pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
+                freejoints=[mojo.FreeJoint()],
+                geoms=[
+                    mojo.GeomBox(
+                        name=mojo.GeomName("g1"),
+                        size=np.asarray([0.5, 0.5, 0.5]),
+                        rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
+                    )
+                ],
+            ),
+            box2 := mojo.Body(
+                name=mojo.BodyName("box2"),
+                pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
+                freejoints=[mojo.FreeJoint()],
+                geoms=[
+                    mojo.GeomBox(
+                        name=mojo.GeomName("g2"),
+                        size=np.asarray([0.5, 0.5, 0.5]),
+                        rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
+                    )
+                ],
+            ),
+        ]
+    )
 
-    # add handoff data
+    box1.sites.append(
+        box1_rot_site := mojo.SiteSphere(
+            name=mojo.SiteName("box1_rot_site"),
+            size=0.2,
+            pose=mojo.PoseEuler(euler=np.asarray((45, 45, 45))),
+            rgba=mojo.utils.Color.FUCHSIA_500.rgba,
+        )
+    )
+    # Pack and execute handoff
     handoff = Handoff(box1_rot=box1_rot_site)
     mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
@@ -269,47 +225,30 @@ def runtime(
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
-    """Executes the spring repulsion simulation."""
-    # Identify our sites from the generated model
-    # Note: We can find them by name in the worldbody
-    assert mojo_model.mjcf.worldbody is not None
-
-    handoff = mojo_model.get_user_data(Handoff)
-
+    """Executes the physics simulation."""
     with runtime_manager as rm:
-        assert rm.signal_manager is not None
-        rm.signal_manager.record_decimation = 1
-
-        if mojo_model.is_nominal and False:
+        handoff = mojo_model.get_user_data(Handoff)
+        assert mojo_model.mjcf.worldbody
+        if mojo_model.is_nominal:  # Only record the first trial
             rt.VideoRecorder(
-                path=Path("fixed_camera.mp4"),
+                path=Path("runtime-anim.gif"),
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
-                show_net_force=True,
             ).setup(mj_model).register_to_rm(rm)
 
-            rt.VideoRecorder(
-                path=Path("tracking_camera.mp4"),
-                camera_name=TRACKING_CAMERA_NAME,
-                show_loads=True,
-            ).setup(mj_model).register_to_rm(rm)
-
-            rt.VideoRecorder(
-                path=Path("box_camera.mp4"),
-                camera_name=BOX_CAMERA_NAME,
-                show_net_force=False,
-            ).setup(mj_model).register_to_rm(rm)
-
-        # Create compression springs
+        # Register forces from our handoff data
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
-
-        for b in mojo_model.mjcf.worldbody.walk_bodies():
-            b.request(rm.signal_manager)
-
-        handoff.box1_rot.request(rm.signal_manager)
-
-        # Run for 2 seconds
+        # Request telemetry for bodies and sites
+        if rm.signal_manager:
+            rm.signal_manager.record_decimation = 10  # Only record every 10 steps
+            for b in mojo_model.mjcf.worldbody.walk_bodies():
+                b.request(
+                    rm.signal_manager,
+                    attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
+                )
+            handoff.box1_rot.request(rm.signal_manager)
+        # Step until 2.0 seconds
         while mj_data.time < 2.0:
             rm.step(mj_model, mj_data)
 
@@ -317,22 +256,14 @@ def runtime(
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-
     mojo.utils.setup_logger()
+    workdir = Path(__file__).parent / "monte_carlo_study"
 
-    workdir = Path(__file__).parent / "mc_bumper_test_2"
-    # Run the Monte Carlo
     runner = mojo.utils.MojoRunner(
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
+        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
     )
 
-    # results, had_fails = runner.run(
-    #     resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
-    # )
-    had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
-
-    print(f"Finished with {had_fails=}")
+    runner.run(clean_workdir=True)

@@ -19,9 +19,9 @@ class Plugin(XMLModel):
 
     The plugin mechanism was designed to overcome the disadvantages of MuJoCo's physics callbacks. These global callbacks (usage example) are still available and useful for fast prototyping or when the user wishes to implement functionality in Python, but are generally deprecated as a stable mechanism for extended functionality. The central features of the plugin mechanism are:
 
-    * Thread safety: Plugin instances (see below) are thread-local, avoiding collisions.
-    * Statefulness: Plugins can be stateful, and their state will be (de)serialized correctly.
-    * Interoperability: Different plugins can coexist without interference.
+    - Thread safety: Plugin instances (see below) are thread-local, avoiding collisions.
+    - Statefulness: Plugins can be stateful, and their state will be (de)serialized correctly.
+    - Interoperability: Different plugins can coexist without interference.
     """
 
     tag = "plugin"

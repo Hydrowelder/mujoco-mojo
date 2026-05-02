@@ -72,10 +72,10 @@ class MeshBase(XMLModel):
     inertia: Inertia = Inertia.CONVEX  # Gable Jan 2026 - I have elected to get out ahead of the upcoming change to convex.
     """This attribute controls how the mesh is used when mass and inertia are inferred from geometry.
 
-    * convex: Use the mesh's convex hull to compute volume and inertia, assuming uniform density.
-    * exact: Compute volume and inertia exactly, even for non-convex meshes. This algorithm requires a well-oriented, watertight mesh and will error otherwise.
-    * legacy: Use the legacy algorithm, leads to volume overcounting for non-convex meshes. Though currently the default to avoid breakages, it is not recommended.
-    * shell: Assume mass is concentrated on the surface of the mesh. Use the mesh's surface to compute the inertia, assuming uniform surface density.
+    - convex: Use the mesh's convex hull to compute volume and inertia, assuming uniform density.
+    - exact: Compute volume and inertia exactly, even for non-convex meshes. This algorithm requires a well-oriented, watertight mesh and will error otherwise.
+    - legacy: Use the legacy algorithm, leads to volume overcounting for non-convex meshes. Though currently the default to avoid breakages, it is not recommended.
+    - shell: Assume mass is concentrated on the surface of the mesh. Use the mesh's surface to compute the inertia, assuming uniform surface density.
     """
 
     smoothnormal: bool = False
