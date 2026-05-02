@@ -13,7 +13,7 @@ from mujoco_mojo.typing import (
     JointLimited,
     JointName,
     JointType,
-    RequestCategory,
+    SignalCategory,
     Vec2,
     Vec3,
     Vec5,
@@ -176,7 +176,7 @@ class Joint(XMLModel):
                 for i, v in enumerate(val):
                     signal_manager.post(
                         value=v,
-                        category=RequestCategory.JOINTS,
+                        category=SignalCategory.JOINTS,
                         subgroup=f"{self.name}/{attr}",
                         # If it's a scalar (Hinge/Slide), we can omit the index suffix
                         attr=str(i) if len(val) > 1 else None,

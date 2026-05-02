@@ -19,7 +19,7 @@ from mujoco_mojo.typing import (
     Mat3,
     MaterialName,
     MeshName,
-    RequestCategory,
+    SignalCategory,
     Vec2,
     Vec3,
     Vec4,
@@ -491,7 +491,7 @@ class GeomBase(XMLModel):
                     for i, k in enumerate("wxyz"[: len(val.quat)]):
                         signal_manager.post(
                             value=float(val.quat[i]),
-                            category=RequestCategory.GEOMS,
+                            category=SignalCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -500,7 +500,7 @@ class GeomBase(XMLModel):
                     for i, k in enumerate("xyz"[: len(val)]):
                         signal_manager.post(
                             value=float(val[i]),
-                            category=RequestCategory.GEOMS,
+                            category=SignalCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -510,7 +510,7 @@ class GeomBase(XMLModel):
                     for i in range(len(val_flat)):
                         signal_manager.post(
                             value=float(val_flat[i]),
-                            category=RequestCategory.GEOMS,
+                            category=SignalCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
                             attr=str(i),
                         )

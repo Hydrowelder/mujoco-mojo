@@ -76,11 +76,11 @@ __all__ = [
     "ModelName",
     "PluginName",
     "RangefinderData",
-    "RequestCategory",
     "SensorAttachableName",
     "SensorInterp",
     "SensorName",
     "SensorObjectType",
+    "SignalCategory",
     "SiteName",
     "Sleep",
     "Solver",
@@ -291,13 +291,20 @@ def empty_list_field():
     return Field(default_factory=list, exclude_if=is_empty_list)
 
 
-class RequestCategory(StrEnum):
+class SignalCategory(StrEnum):
     BODIES = "Bodies"
     SITES = "Sites"
     LOADS = "Loads"
     JOINTS = "Joints"
     SENSORS = "Sensors"
     GEOMS = "Geoms"
+    ACTUATORS = "Actuators"
+    TENDONS = "Tendons"
+    CAMERAS = "Cameras"
+    LIGHTS = "Lights"
+    CONSTRAINTS = "Constraints"
+    PLUGINS = "Plugins"
+    DEFORMABLES = "Deformables"
     CUSTOM = "Custom"
 
 
