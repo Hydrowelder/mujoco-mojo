@@ -344,7 +344,7 @@ class Body(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 match attr:
                     case "xpos":
@@ -426,7 +426,7 @@ class Body(XMLModel):
                         attr=attr,
                     )
 
-        signal_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
     def set_initial_velocity(
         self,
@@ -506,7 +506,7 @@ class WorldBody(Body):
     children = _world_body_children
 
     @staticmethod
-    def get_world_com(
+    def get_com(
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         bodies: list[Body],

@@ -132,7 +132,7 @@ class Load(MojoBaseModel, ABC):
         signal_manager: SignalManager,
         attrs: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 source = self._last_f if attr == "force" else self._last_t
 
@@ -146,7 +146,7 @@ class Load(MojoBaseModel, ABC):
                         attr=k,
                     )
 
-        signal_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
     def get_visuals(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData

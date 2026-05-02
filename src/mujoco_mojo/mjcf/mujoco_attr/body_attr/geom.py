@@ -465,7 +465,7 @@ class GeomBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 # Manual mapping to avoid getattr
                 match attr:
@@ -515,7 +515,7 @@ class GeomBase(XMLModel):
                             attr=str(i),
                         )
 
-        signal_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
 
 class GeomPlane(GeomBase):
