@@ -886,7 +886,7 @@ def run_reloaded(
     quiet: int = 0,
 ) -> None:
     """
-    [bold yellow]Run a development session with the native OpenGL viewer.[/bold yellow]
+    [bold yellow]Run a development session with the native OpenGL viewer or a web browser based GUI.[/bold yellow]
 
     Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
     """

@@ -29,7 +29,7 @@ class SignalManager:
     )
     """Values to be recorded. This dictionary is flushed on every timestep."""
 
-    _harvest_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], None]] = field(
+    _sample_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], None]] = field(
         default_factory=list, init=False
     )
 
@@ -56,8 +56,8 @@ class SignalManager:
         # Ensure directory exists and connect
         self.export_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def schedule_harvest_task(self, task: Callable):
-        self._harvest_tasks.append(task)
+    def register_sampler(self, task: Callable):
+        self._sample_tasks.append(task)
 
     def flush_ledger(self):
         """Clear the ledger for a new timestep."""
@@ -126,7 +126,7 @@ class SignalManager:
         if self._step_count % self.record_decimation != 0:
             return
 
-        for task in self._harvest_tasks:
+        for task in self._sample_tasks:
             task(mj_model, mj_data)
 
         self.log_step(timestamp=mj_data.time, data=self.ledger)

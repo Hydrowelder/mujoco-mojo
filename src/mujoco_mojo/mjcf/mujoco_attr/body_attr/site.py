@@ -594,7 +594,7 @@ class SiteBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match attr:
@@ -639,7 +639,7 @@ class SiteBase(XMLModel):
                             attr=str(i),
                         )
 
-        signal_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
 
 class SiteSphere(SiteBase):

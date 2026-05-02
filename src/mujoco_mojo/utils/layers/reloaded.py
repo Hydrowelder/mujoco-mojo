@@ -38,6 +38,43 @@ class IsRunningCheck(Protocol):
     def __call__(self) -> Any: ...
 
 
+def is_dark_mode() -> bool:
+    """Determine if the system is in dark mode using only the standard library."""
+    import platform
+    import subprocess
+
+    system = platform.system()
+
+    try:
+        if system == "Windows":
+            import winreg
+
+            # Look at the 'Personalize' key for AppsUseLightTheme
+            path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:  # pyright: ignore[reportAttributeAccessIssue]
+                # 0 = Dark, 1 = Light
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")  # pyright: ignore[reportAttributeAccessIssue]
+                return value == 0
+
+        elif system == "Darwin":  # macOS
+            # 'defaults read -g AppleInterfaceStyle' returns 'Dark' or errors out if Light
+            cmd = ["defaults", "read", "-g", "AppleInterfaceStyle"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return "Dark" in result.stdout
+
+        elif system == "Linux":
+            # Check GNOME/GTK settings (most common)
+            cmd = ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return "dark" in result.stdout.lower()
+
+    except Exception:
+        # Fallback to Light Mode if anything fails (e.g. old Windows versions)
+        return False
+
+    return False
+
+
 def recursive_reload(module, project_root: Path, visited: set | None = None):
     """Recursively reloads modules, but only if they live inside project_root."""
     import importlib
@@ -80,46 +117,12 @@ def recursive_reload(module, project_root: Path, visited: set | None = None):
 
     try:
         importlib.reload(module)
+    except (ImportError, ModuleNotFoundError) as e:
+        logger.error(f"Failed to reload {module.__name__}: {e}")
+        raise e
     except Exception:
         # some modules (like namespace packages) can be finicky
         pass
-
-
-def is_dark_mode() -> bool:
-    """Determine if the system is in dark mode using only the standard library."""
-    import platform
-    import subprocess
-
-    system = platform.system()
-
-    try:
-        if system == "Windows":
-            import winreg
-
-            # Look at the 'Personalize' key for AppsUseLightTheme
-            path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:  # pyright: ignore[reportAttributeAccessIssue]
-                # 0 = Dark, 1 = Light
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")  # pyright: ignore[reportAttributeAccessIssue]
-                return value == 0
-
-        elif system == "Darwin":  # macOS
-            # 'defaults read -g AppleInterfaceStyle' returns 'Dark' or errors out if Light
-            cmd = ["defaults", "read", "-g", "AppleInterfaceStyle"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            return "Dark" in result.stdout
-
-        elif system == "Linux":
-            # Check GNOME/GTK settings (most common)
-            cmd = ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            return "dark" in result.stdout.lower()
-
-    except Exception:
-        # Fallback to Light Mode if anything fails (e.g. old Windows versions)
-        return False
-
-    return False
 
 
 @dataclass
@@ -175,33 +178,46 @@ class MojoReloaded:
 
         project_root = Path.cwd()
 
-        gen_func = None
+        def reload_with_check(path_str: str, label: str):
+            """Internal helper to validate file existance before reloading."""
+            try:
+                # attempt to find
+                func = _load_func(path_str)
+                mod = sys.modules.get(func.__module__)
+
+                if mod and hasattr(mod, "__file__") and mod.__file__:
+                    source_file = Path(mod.__file__).resolve()
+
+                    # edge case check: file no longer exists
+                    if not source_file.exists():
+                        console.print(
+                            f"[bold red]Stop![/bold red] The source file for {label} is missing.\n"
+                            f"Expected: [dim]{source_file}[/dim]\n"
+                            f"[yellow]Hint:[/yellow] Did you rename [bold]'{source_file.name}'[/bold] or move it?"
+                        )
+                        raise FileNotFoundError(
+                            f"Unable to find source file for {path_str}. Did you rename or move it?"
+                        )
+
+                    recursive_reload(module=mod, project_root=project_root)
+
+                # reload to get the reference
+                return _load_func(path_str)
+
+            except (ModuleNotFoundError, ImportError):
+                console.print(
+                    f"[bold red]Error:[/bold red] Could not find [bold green]{path_str}[/bold green].\n"
+                    f"[yellow]Hint:[/yellow] Check your spelling or ensure the module path is correct."
+                )
+                raise
+
+        gen_func: MojoGenerator | None = None
         if self.generator:
-            gen_func: MojoGenerator | None = _load_func(self.generator)
-            module_name = gen_func.__module__
+            gen_func = reload_with_check(self.generator, "Generator")
 
-            if module_name in sys.modules:
-                try:
-                    recursive_reload(sys.modules[module_name], project_root)
-                    gen_func = _load_func(self.generator)
-                except Exception as e:
-                    # If there's a syntax error in their change, we'll catch it here
-                    logger.error(f"Reload failed: {e}")
-                    raise e
-
-        run_func = None
+        run_func: MojoRuntime | None = None
         if self.runtime:
-            run_func: MojoRuntime | None = _load_func(self.runtime)
-            module_name = run_func.__module__
-
-            if module_name in sys.modules:
-                try:
-                    recursive_reload(sys.modules[module_name], project_root)
-                    run_func = _load_func(self.runtime)
-                except Exception as e:
-                    # If there's a syntax error in their change, we'll catch it here
-                    logger.error(f"Reload failed: {e}")
-                    raise e
+            run_func = reload_with_check(self.runtime, "Runtime")
 
         global_overrides = NamedValueDict[NDArray]()
         if self.overrides_path and self.overrides_path.exists():
