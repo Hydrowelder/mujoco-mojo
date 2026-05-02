@@ -242,7 +242,7 @@ def runtime(
         handoff.add_spring_force("mz", rm)
         # Request telemetry for bodies and sites
         rm.signal_manager.record_decimation = 10  # Only record every 10 steps
-        for b in mojo_model.mjcf.worldbody.bodies:
+        for b in mojo_model.mjcf.worldbody.walk_bodies():
             b.request(
                 rm.signal_manager,
                 attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],

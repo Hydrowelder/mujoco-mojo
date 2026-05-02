@@ -304,7 +304,7 @@ def runtime(
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
 
-        for b in mojo_model.mjcf.worldbody.bodies:
+        for b in mojo_model.mjcf.worldbody.walk_bodies():
             b.request(rm.signal_manager)
 
         handoff.box1_rot.request(rm.signal_manager)
