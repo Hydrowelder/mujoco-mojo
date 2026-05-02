@@ -15,3 +15,5 @@ mojo.log.*
 site
 mojo-models
 textures
+
+MUJOCO_LOG.TXT

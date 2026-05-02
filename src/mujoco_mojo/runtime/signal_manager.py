@@ -10,7 +10,6 @@ import polars as pl
 
 from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
 from mujoco_mojo.typing import SignalCategory
-from mujoco_mojo.utils.data_frame import DataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
 
@@ -150,7 +149,7 @@ class SignalManager:
         if not self._buffer:
             return
 
-        new_df = DataFrame(self._buffer)
+        new_df = pl.DataFrame(self._buffer)
 
         if self.export_path.exists():
             try:
