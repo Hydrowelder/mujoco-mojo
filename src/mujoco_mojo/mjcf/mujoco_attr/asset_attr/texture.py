@@ -245,12 +245,12 @@ class TextureBuiltIn(TextureBase):
 
     builtin: TextureBuiltInType
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored. The keywords have the following meaning:
-    * gradient
-        * Generates a color gradient from rgb1 to rgb2. The interpolation in color space is done through a sigmoid function. For cube and skybox textures the gradient is along the +Y axis, i.e., from top to bottom for skybox rendering.
-    * checker
-        * Generates a 2-by-2 checker pattern with alternating colors given by rgb1 and rgb2. This is suitable for rendering ground planes and also for marking objects with rotational symmetries. Note that 2d textures can be scaled so as to repeat the pattern as many times as necessary. For cube and skybox textures, the checker pattern is painted on each side of the cube.
-    * flat
-        * Fills the entire texture with rgb1, except for the bottom face of cube and skybox textures which is filled with rgb2."""
+    - gradient
+        - Generates a color gradient from rgb1 to rgb2. The interpolation in color space is done through a sigmoid function. For cube and skybox textures the gradient is along the +Y axis, i.e., from top to bottom for skybox rendering.
+    - checker
+        - Generates a 2-by-2 checker pattern with alternating colors given by rgb1 and rgb2. This is suitable for rendering ground planes and also for marking objects with rotational symmetries. Note that 2d textures can be scaled so as to repeat the pattern as many times as necessary. For cube and skybox textures, the checker pattern is painted on each side of the cube.
+    - flat
+        - Fills the entire texture with rgb1, except for the bottom face of cube and skybox textures which is filled with rgb2."""
 
     rgb1: Vec3 = np.array((0.8, 0.8, 0.8))
     """The first color used for procedural texture generation. This color is also used to fill missing sides of cube and skybox textures loaded from files. The components of this and all other RGB(A) vectors should be in the range [0 1]."""

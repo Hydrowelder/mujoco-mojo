@@ -71,8 +71,8 @@ The `monte-carlo` command is the workhorse of the `mujoco-mojo run` CLI.
 
 Mojo is built for professional simulations where reliability is key. The runner manages the state of your `workdir` to prevent data loss.
 
-* `--resume`: This is the default. Mojo will search the trial status files to in your workdir and only execute trials that are missing or incomplete. Jobs with a failed or success status will be ignored.
-* `--clean-workdir` (`-cw`): Wipes the directory before starting. Use this when you've fundamentally changed your MJCF structure and want a fresh start.
+- `--resume`: This is the default. Mojo will search the trial status files to in your workdir and only execute trials that are missing or incomplete. Jobs with a failed or success status will be ignored.
+- `--clean-workdir` (`-cw`): Wipes the directory before starting. Use this when you've fundamentally changed your MJCF structure and want a fresh start.
 
 ???+ tip "Tip: T-Minus 10, 9, 8, ..."
     When using `--clean-workdir`, if the directory already exists, a short countdown is provided before wiping in case you have any second thoughts!
@@ -83,8 +83,8 @@ Mojo is built for professional simulations where reliability is key. The runner 
 
 Mojo can pass positional or keyword arguments directly to your Python functions from the CLI.
 
-* **Generator Args:** `--gen-arg` (`-ga`) and `--gen-kwarg` (`-gk`)
-* **Runtime Args:** `--run-arg` (`-ra`) and `--run-kwarg` (`-rk`)
+- **Generator Args:** `--gen-arg` (`-ga`) and `--gen-kwarg` (`-gk`)
+- **Runtime Args:** `--run-arg` (`-ra`) and `--run-kwarg` (`-rk`)
 
 ```bash linenums="0"
 # Example: Passing a string keyword and a float to the generator function
@@ -124,10 +124,10 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 
 #### How Orchestration Works
 
-* **Trial Identification:** Mojo scans your workdir and identifies exactly which trials are pending (fully supporting resume logic).
-* **Resource Discovery:** It autodetects your cluster's partitions, CPU limits, memory limits, and maximum array sizes.
-* **Interactive Setup:** You are prompted for job details (Job Name, Partition, Time Limit) with intelligent defaults and safety warnings if your requests exceed node limits.
-* **Automatic Scripting:** Mojo generates a `.sh` sbatch script in your workdir, handles `PYTHONPATH` inclusions, and persists global overrides so workers have the correct context.
+- **Trial Identification:** Mojo scans your workdir and identifies exactly which trials are pending (fully supporting resume logic).
+- **Resource Discovery:** It autodetects your cluster's partitions, CPU limits, memory limits, and maximum array sizes.
+- **Interactive Setup:** You are prompted for job details (Job Name, Partition, Time Limit) with intelligent defaults and safety warnings if your requests exceed node limits.
+- **Automatic Scripting:** Mojo generates a `.sh` sbatch script in your workdir, handles `PYTHONPATH` inclusions, and persists global overrides so workers have the correct context.
 
 #### The SLURM Worker
 

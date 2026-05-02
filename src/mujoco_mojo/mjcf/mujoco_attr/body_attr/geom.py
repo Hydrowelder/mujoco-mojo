@@ -30,7 +30,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
 
@@ -451,7 +451,7 @@ class GeomBase(XMLModel):
 
     def request(
         self,
-        results_manager: SignalManager,
+        signal_manager: SignalManager,
         attrs: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
         ] = [
@@ -465,7 +465,7 @@ class GeomBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 # Manual mapping to avoid getattr
                 match attr:
@@ -489,7 +489,7 @@ class GeomBase(XMLModel):
                 # handle quaternion
                 if isinstance(val, Quat):
                     for i, k in enumerate("wxyz"[: len(val.quat)]):
-                        results_manager.post(
+                        signal_manager.post(
                             value=float(val.quat[i]),
                             category=RequestCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
@@ -498,7 +498,7 @@ class GeomBase(XMLModel):
                 # Handle 3-vectors (pos, vel, acc)
                 elif val.ndim == 1 and len(val) <= 3:
                     for i, k in enumerate("xyz"[: len(val)]):
-                        results_manager.post(
+                        signal_manager.post(
                             value=float(val[i]),
                             category=RequestCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
@@ -508,14 +508,14 @@ class GeomBase(XMLModel):
                     # Handle flattened matrices (xmat)
                     val_flat = val.flatten()
                     for i in range(len(val_flat)):
-                        results_manager.post(
+                        signal_manager.post(
                             value=float(val_flat[i]),
                             category=RequestCategory.GEOMS,
                             subgroup=f"{self.name}/{attr}",
                             attr=str(i),
                         )
 
-        results_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
 
 class GeomPlane(GeomBase):

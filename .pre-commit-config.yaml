@@ -14,6 +14,15 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: copy-docs-examples
+        name: Copy Docs Examples to Examples
+        entry: python scripts/copy_docs_examples_to_examples.py
+        language: python
+        files: ^docs/user-guides/.*\.py$
+        additional_dependencies: [ruff==0.14.14]
+        stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.14.14

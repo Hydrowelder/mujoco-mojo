@@ -9,7 +9,7 @@ from pydantic import PrivateAttr, model_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
-from mujoco_mojo.runtime.results_manager import SignalManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import RequestCategory, Vec3
@@ -129,16 +129,16 @@ class Load(MojoBaseModel, ABC):
 
     def request(
         self,
-        results_manager: SignalManager,
+        signal_manager: SignalManager,
         attrs: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             for attr in attrs:
                 source = self._last_f if attr == "force" else self._last_t
 
                 # iterate through x, y, z, and magnitude (pop. pop.)
                 for i, k in enumerate("xyzm"):
-                    results_manager.post(
+                    signal_manager.post(
                         value=float(source[i]) if self.active else 0.0,
                         category=RequestCategory.LOADS,
                         # nest the force/torque under the function name
@@ -146,7 +146,7 @@ class Load(MojoBaseModel, ABC):
                         attr=k,
                     )
 
-        results_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
 
     def get_visuals(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData

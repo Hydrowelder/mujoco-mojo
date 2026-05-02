@@ -87,9 +87,9 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 
 Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensures that every random draw is:
 
-* **Reproducible** (tied to the job's [seed, distribution name, and trial number](https://hydrowelder.github.io/stochas/reference/stochas/distribution/#stochas.distribution.Distribution.seed)).
-* **Recorded** (stored in the results database as a `NamedValue`).
-* **Overridable** (can be forced to a specific value via the CLI).
+- **Reproducible** (tied to the job's [seed, distribution name, and trial number](https://hydrowelder.github.io/stochas/reference/stochas/distribution/#stochas.distribution.Distribution.seed)).
+- **Recorded** (stored in the results database as a `NamedValue`).
+- **Overridable** (can be forced to a specific value via the CLI).
 
 ???+ note "Note: Squeezing `NamedValues`"
     The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.sqeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)

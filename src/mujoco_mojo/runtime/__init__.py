@@ -7,8 +7,8 @@ from .load import (
     VectorForce,
     VectorTorque,
 )
-from .results_manager import SignalManager
 from .runtime_manager import RuntimeManager
+from .signal_manager import SignalManager
 from .video_recorder import VideoRecorder
 
 __all__ = [

@@ -16,16 +16,16 @@
 The top of the page is dedicated to Data Navigation and Signal Selection.
 Trial Navigation
 
-* **Sequential Access:** Use the PREV and NEXT buttons (or your arrow keys) to flip through trials like a slide deck.
-* **The Warp Box:** Want to jump to a specific trial? Type the number into the center box and hit Enter (or click Warp).
-* **Versus Mode:** Toggle the VS switch to overlay the current trial against a range of other trials. This is essential for identifying outliers in a Monte Carlo run.
+- **Sequential Access:** Use the PREV and NEXT buttons (or your arrow keys) to flip through trials like a slide deck.
+- **The Warp Box:** Want to jump to a specific trial? Type the number into the center box and hit Enter (or click Warp).
+- **Versus Mode:** Toggle the VS switch to overlay the current trial against a range of other trials. This is essential for identifying outliers in a Monte Carlo run.
 
 ### Signal Selection (X and Y Axes)
 
-* **X-Axis:** Usually set to time, but you can map any telemetry signal to the X-axis to create phase-space plots (e.g., `velocity` vs. `position`).
-* **Reference Frame:** For signals which could have a full quaternion defined (ends with `quat:(w|x|y|z)`), a reference frame can be defined to rotate vector based columns (those ending in `:(x|y|z)`). It is assumed these vector columns are defined in the `world` frame.
-* **Y-Axes (Multi-Select):** You can overlay as many signals as you want. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
-* **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them. The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button.
+- **X-Axis:** Usually set to time, but you can map any telemetry signal to the X-axis to create phase-space plots (e.g., `velocity` vs. `position`).
+- **Reference Frame:** For signals which could have a full quaternion defined (ends with `quat:(w|x|y|z)`), a reference frame can be defined to rotate vector based columns (those ending in `:(x|y|z)`). It is assumed these vector columns are defined in the `world` frame.
+- **Y-Axes (Multi-Select):** You can overlay as many signals as you want. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
+- **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them. The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button.
 
 !!! tip "Pro Tip: Regex Filtering"
     The dropdowns aren't just lists; they are Regex-aware. You can use the segment buttons (like quat, ctrl, or sens) to quickly filter down hundreds of signals to just the ones you need.
@@ -73,9 +73,9 @@ Click anywhere on the plot to drop a persistent note. These are saved into the J
 
 Add various shapes to the plot. After selecting an option in the menu, your mouse becomes a placement tool. Clicking on the plot configures the placement of the shape.
 
-* **V-Line:** Draws a vertical line on the plot. The abscissa of the mouse determines the abscissa of the line.
-* **H-Line:** Draws a horizontal line on the plot. The ordinate of the mouse determines the ordinate of the line.
-* **Rect:** Draws a rectangle on the plot. The abscissa and ordinate of the mouse determines one of the corners of the rectangle. Likewise, the second click determines the other corner.
+- **V-Line:** Draws a vertical line on the plot. The abscissa of the mouse determines the abscissa of the line.
+- **H-Line:** Draws a horizontal line on the plot. The ordinate of the mouse determines the ordinate of the line.
+- **Rect:** Draws a rectangle on the plot. The abscissa and ordinate of the mouse determines one of the corners of the rectangle. Likewise, the second click determines the other corner.
 
 <figure align="center">
     <img src="../../assets/user-guides/light-shapes-editor.jpg#only-light" alt="Shapes editor menu" style="width: 60%; height: auto;">
@@ -91,9 +91,9 @@ Every change to the plot configuration is tracked. Use the standard shortcuts (+
 
 Dojo provides a few basic export options to capture an image of the plot or save data from the configuration.
 
-* **Capture Plot:** Three options for saving the plot appearance are provided (SVG, PNG, or JPG)
-* **Filtered CSV:** A CSV file containing the data currently being plotted can be downloaded for a look at the raw data.
-* **Config JSON:** The current page configuration can be downloaded as a JSON so it can be reloaded at a later time.
+- **Capture Plot:** Three options for saving the plot appearance are provided (SVG, PNG, or JPG)
+- **Filtered CSV:** A CSV file containing the data currently being plotted can be downloaded for a look at the raw data.
+- **Config JSON:** The current page configuration can be downloaded as a JSON so it can be reloaded at a later time.
 
 <figure align="center">
     <img src="../../assets/user-guides/light-export-options.jpg#only-light" alt="Export options menu" style="width: 60%; height: auto;">
@@ -107,9 +107,9 @@ At the bottom of the page sits the **Live JSON Configuration**.
 
 Everything you do in the UI is mirrored in this JSON block in real-time, from selecting axes, adding notes, changing colors.
 
-* **Live Editing:** You can type directly into this editor. If you have a specific list of 20 Y-axes you want to add, pasting them into the JSON is often faster than clicking 20 boxes.
-* **Validation:** The editor features a Syntax Health indicator and description of any issues.
-* **Copy/Format:** A copy and format button are also provided to provide improved quality of life.
+- **Live Editing:** You can type directly into this editor. If you have a specific list of 20 Y-axes you want to add, pasting them into the JSON is often faster than clicking 20 boxes.
+- **Validation:** The editor features a Syntax Health indicator and description of any issues.
+- **Copy/Format:** A copy and format button are also provided to provide improved quality of life.
 
 ???+ tip "Tip: Drag and Drop"
     If you downloaded a Config JSON in the [export options menu](#export-options), you can drag and drop that file back on this page to update the JSON configuration!

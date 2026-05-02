@@ -163,11 +163,11 @@ class BaseConfig(MojoBaseModel):
         This dynamically defines the padding style for trial numbers. This is helpful to ensure the filesystem consistently sorts the trials.
 
         Examples:
-        * Suppose you n_trials is 2000 (and the nominal trial_num is 0)
-        * This method would return `04d`
-            * Trial number `0` maps to `0000`
-            * Trial number `123` maps to `0123`
-            * Trial number `1999` will still map to `1999`
+        - Suppose you n_trials is 2000 (and the nominal trial_num is 0)
+        - This method would return `04d`
+            - Trial number `0` maps to `0000`
+            - Trial number `123` maps to `0123`
+            - Trial number `1999` will still map to `1999`
 
         """
         return f"0{self.padding_width}d"
@@ -269,10 +269,10 @@ class Trial:
     Handles the lifecycle of a single simulation run.
 
     The Trial object is responsible for the 'dirty work' of a Monte Carlo run:
-    * Creating directories
-    * Writing the MJCF XML
-    * Saving the configuration snapshot
-    * Triggering the physics runtime.
+    - Creating directories
+    - Writing the MJCF XML
+    - Saving the configuration snapshot
+    - Triggering the physics runtime.
 
     """
 
@@ -407,7 +407,7 @@ class Trial:
                     import mujoco_mojo.runtime as rt
 
                     runtime_manager = rt.RuntimeManager(
-                        results_manager=rt.SignalManager(
+                        signal_manager=rt.SignalManager(
                             export_path=self.trial_dir
                             / rt.SignalManager.default_output_name()
                         )

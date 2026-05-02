@@ -5,7 +5,7 @@ from typing import ClassVar
 import mujoco
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.runtime.results_manager import SignalManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import (
     RequestCategory,
     SensorInterp,
@@ -54,9 +54,9 @@ class SensorBase(XMLModel):
     interp: SensorInterp = SensorInterp.ZOH
     """The interpolation method used when reading from the history buffer. Corresponds to the interp argument in mj_readSensor.
 
-    * zoh: Zero-order hold (piecewise constant).
-    * linear: Piecewise linear interpolation.
-    * cubic: Cubic spline interpolation (Catmull-Rom).
+    - zoh: Zero-order hold (piecewise constant).
+    - linear: Piecewise linear interpolation.
+    - cubic: Cubic spline interpolation (Catmull-Rom).
 
     The interp value is for advanced use-cases, see Delays for details."""
 
@@ -77,14 +77,14 @@ class SensorBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
-    def request(self, results_manager: SignalManager):
+    def request(self, signal_manager: SignalManager):
         """Registers the sensor's output for logging."""
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
             raise ValueError(msg)
 
-        def harvest(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
             sid = self.get_id(mj_model)
 
             # find where this sensor's data starts and how long it is
@@ -97,7 +97,7 @@ class SensorBase(XMLModel):
 
             # post to telemetry
             for i in range(dim):
-                results_manager.post(
+                signal_manager.post(
                     value=val[i],
                     category=RequestCategory.SENSORS,
                     # sensor name serves as the subgroup
@@ -107,4 +107,4 @@ class SensorBase(XMLModel):
                     attr=str(i) if dim > 1 else None,
                 )
 
-        results_manager.schedule_harvest_task(harvest)
+        signal_manager.register_sampler(sample)
