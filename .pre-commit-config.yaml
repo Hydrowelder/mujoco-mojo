@@ -20,9 +20,8 @@ repos:
         name: Copy Docs Examples to Examples
         entry: python scripts/copy_docs_examples_to_examples.py
         language: python
-        pass_filenames: false
+        files: ^docs/user-guides/.*\.py$
         additional_dependencies: [ruff==0.14.14]
-        always_run: true
         stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.

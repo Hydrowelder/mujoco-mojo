@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 # Folder to scan
@@ -55,9 +56,21 @@ def stage_file(file_path: Path):
 
 
 def main():
+    changed_files = [Path(f).resolve() for f in sys.argv[1:]]
+
+    processed_any = False
     for source, dest in MAP.items():
-        clean_and_copy_file(source, dest)
-        stage_file(dest)
+        # Compare resolved absolute paths to be safe
+        if source.resolve() in changed_files:
+            print(f"Syncing example: {source.name} -> {dest.name}")
+            clean_and_copy_file(source, dest)
+            stage_file(dest)
+            processed_any = True
+
+    if not processed_any and len(changed_files) > 0:
+        # This happens if a file in docs/user-guides changed
+        # but it wasn't one specifically listed in your MAP.
+        pass
 
 
 if __name__ == "__main__":
