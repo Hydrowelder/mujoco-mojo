@@ -36,7 +36,7 @@ from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
 if TYPE_CHECKING:
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
 
@@ -186,6 +186,16 @@ class Body(XMLModel):
     )
     """Bodies assigned to body. Handled recursively."""
 
+    def _child_body_ids(
+        self, mj_model: mujoco.MjModel, include_self: bool = True
+    ) -> list[int]:
+        ids = [self.get_id(mj_model)] if include_self else []
+
+        for child in self.bodies:
+            ids.extend(child._child_body_ids(mj_model, include_self=True))
+
+        return ids
+
     def rt_mass(self, mj_model: mujoco.MjModel) -> float:
         """Mass of the body from a compiled MjModel."""
         return mj_model.body_mass[self.get_id(mj_model)]
@@ -286,7 +296,7 @@ class Body(XMLModel):
 
     def request(
         self,
-        results_manager: SignalManager,
+        signal_manager: SignalManager,
         attrs: list[
             Literal[
                 "xpos",
@@ -338,7 +348,7 @@ class Body(XMLModel):
 
                         val_flat = val.flatten()
                         for i in range(len(val_flat)):
-                            results_manager.post(
+                            signal_manager.post(
                                 value=float(val_flat[i]),
                                 category=RequestCategory.BODIES,
                                 subgroup=f"{self.name}/{attr}",
@@ -353,7 +363,7 @@ class Body(XMLModel):
                                 val = self.rt_xiquat(mj_model, mj_data)
 
                         for i, k in enumerate("wxyz"[: len(val.quat)]):
-                            results_manager.post(
+                            signal_manager.post(
                                 value=float(val.quat[i]),
                                 category=RequestCategory.BODIES,
                                 subgroup=f"{self.name}/{attr}",
@@ -391,7 +401,7 @@ class Body(XMLModel):
                     full_vec = np.append(val, mag)
 
                     for i, k in enumerate("xyzm"):
-                        results_manager.post(
+                        signal_manager.post(
                             value=full_vec[i],
                             category=RequestCategory.BODIES,
                             subgroup=f"{self.name}/{attr}",
@@ -399,14 +409,14 @@ class Body(XMLModel):
                         )
                 else:
                     # scalar output
-                    results_manager.post(
+                    signal_manager.post(
                         value=float(val),
                         category=RequestCategory.BODIES,
                         subgroup=self.name,
                         attr=attr,
                     )
 
-        results_manager.schedule_harvest_task(harvest)
+        signal_manager.schedule_harvest_task(harvest)
 
     def set_initial_velocity(
         self,

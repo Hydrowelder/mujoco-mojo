@@ -88,7 +88,7 @@ class Handoff(mojo.UserData):
         self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
     def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
-        assert rm.results_manager is not None
+        assert rm.signal_manager is not None
         base, tip, stiffness, stroke, preload = self.springs[loc]
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(
@@ -100,9 +100,9 @@ class Handoff(mojo.UserData):
             preload=preload,
         ).register_to_rm(rm)
 
-        base.request(rm.results_manager)
-        tip.request(rm.results_manager)
-        spring_force.request(rm.results_manager)
+        base.request(rm.signal_manager)
+        tip.request(rm.signal_manager)
+        spring_force.request(rm.signal_manager)
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
@@ -287,8 +287,8 @@ def runtime(
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
-        assert rm.results_manager is not None
-        rm.results_manager.record_decimation = 1
+        assert rm.signal_manager is not None
+        rm.signal_manager.record_decimation = 1
 
         if mojo_model.is_nominal and False:
             rt.VideoRecorder(
@@ -315,9 +315,9 @@ def runtime(
         handoff.add_spring_force("mz", rm)
 
         for b in mojo_model.mjcf.worldbody.bodies:
-            b.request(rm.results_manager)
+            b.request(rm.signal_manager)
 
-        handoff.box1_rot.request(rm.results_manager)
+        handoff.box1_rot.request(rm.signal_manager)
 
         # Run for 2 seconds
         while mj_data.time < 2.0:

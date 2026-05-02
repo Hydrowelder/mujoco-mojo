@@ -1,13 +1,13 @@
 import polars as pl
 import pytest
 
-from mujoco_mojo.runtime.results_manager import SignalManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.stochas import NamedValue, ValueName
 
 
 @pytest.fixture
 def rm(tmp_path):
-    """Provides a ResultsManager pointing to a temporary directory."""
+    """Provides a SignalManager pointing to a temporary directory."""
     db_file = tmp_path / "test_telemetry.parquet"
     manager = SignalManager(export_path=db_file, batch_size=5)
     yield manager

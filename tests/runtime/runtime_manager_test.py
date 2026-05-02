@@ -4,8 +4,8 @@ import mujoco
 import numpy as np
 
 from mujoco_mojo.runtime.load import Load
-from mujoco_mojo.runtime.results_manager import SignalManager
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 
 
 class MockLoad(Load):
@@ -20,7 +20,7 @@ def test_runtime_manager_lifecycle(rm: SignalManager):
     """Verify that __enter__ and __exit__ handle cleanup correctly."""
     # Patch close to ensure it's called
     with patch.object(rm, "close") as mock_close:
-        with RuntimeManager(results_manager=rm) as mgr:
+        with RuntimeManager(signal_manager=rm) as mgr:
             assert mgr._resolved is False
 
         # Verify close was called on exit
@@ -32,7 +32,7 @@ def test_resolution_on_first_step(
 ):
     """Verify that resolve() is automatically called during the first step."""
     model, data = mj_setup
-    mgr = RuntimeManager(results_manager=rm)
+    mgr = RuntimeManager(signal_manager=rm)
 
     # Add a mock load
     load: Load = MagicMock(spec=Load)
@@ -50,7 +50,7 @@ def test_buffer_clearing_hygiene(
 ):
     """CRITICAL: Verify that step() clears the applied force buffers."""
     model, data = mj_setup
-    mgr = RuntimeManager(results_manager=rm)
+    mgr = RuntimeManager(signal_manager=rm)
 
     # Manually dirty the buffers
     data.qfrc_applied[0] = 50.0

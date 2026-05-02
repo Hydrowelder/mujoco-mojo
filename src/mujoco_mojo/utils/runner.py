@@ -407,7 +407,7 @@ class Trial:
                     import mujoco_mojo.runtime as rt
 
                     runtime_manager = rt.RuntimeManager(
-                        results_manager=rt.SignalManager(
+                        signal_manager=rt.SignalManager(
                             export_path=self.trial_dir
                             / rt.SignalManager.default_output_name()
                         )

@@ -43,7 +43,7 @@ async def get_mosaic(request: Request):
 async def get_valid_trials():
     """Scans the workdir for folders containing 'telemetry.parquet'"""
     job = shared.CURRENT_JOB
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
     if job is None:
         logger.warning("Mosaic accessed but CURRENT_JOB is None.")
@@ -77,7 +77,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
     port = request.url.port or 8000
 
     # 1. Get the sorted list of all trials that actually have data
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
     valid_ids = []
     for tn in job.trial_nums:
@@ -174,7 +174,7 @@ async def get_trial_data(
         dict: Dictionary containing split columns and their associated data.
 
     """
-    from mujoco_mojo.runtime.results_manager import SignalManager
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
     job = shared.CURRENT_JOB
     if not job:
