@@ -7,7 +7,7 @@ from pydantic import Field
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.edge import FlexEdge
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import Vec2, Vec5
+from mujoco_mojo.typing import EdgeEquality, Vec2, Vec5
 
 __all__ = ["FlexCompEdge"]
 
@@ -25,8 +25,8 @@ class FlexCompEdge(XMLModel):
         "damping",
     )
 
-    equality: bool = False
-    """When enabled, an equality constraint of type flex is added to the model, referencing the automatically-generated flex by name."""
+    equality: EdgeEquality = EdgeEquality.FALSE
+    """The type of equality constraint applied to this edge. If false, no equality constraint is applied. If true, then edge constraints are enforced. If vert, an averaged constraint is used, see flexvert. If strain, then a constraint is added to enforce that the invariants of the strain tensor do not change; this is only equality constraint type supported for trilinear and quadratic dofs elements and here."""
 
     solref: Vec2 = SOLREF_DEFAULT
     """The standard constraint parameters, passed through to the automatically generated equality constraint."""

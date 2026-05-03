@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import ClassVar
 
 import mujoco
+import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
@@ -12,6 +14,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
     FlexCompElasticity,
 )
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.pin import FlexCompPin
+from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex import Flex
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -77,6 +80,7 @@ class FlexComp(XMLModel):
         "dim",
         "dof",
         "count",
+        "cellcount",
         "spacing",
         "radius",
         "rigid",
@@ -101,14 +105,15 @@ class FlexComp(XMLModel):
     name: str
     """The name of the flex element being generated automatically. This name is used as a prefix for all bodies that are automatically generated here, and is also referenced by the corresponding flex equality constraint (if applicable)."""
 
-    dim: int | None = None
+    dim: int = 2
     """Dimensionality of the flex object. This value must be 1, 2 or 3. The flex elements are capsules in 1D, triangles with radius in 2D, and tetrahedra with radius in 3D. Certain flexcomp types imply a dimensionality, in which case the value specified here is ignored."""
 
-    dof: FlexCompDOF | None = None
+    dof: FlexCompDOF = FlexCompDOF.FULL
     """The parametrization of the flex's degrees of freedom (dofs). See the video on the right illustrating the different parametrizations with deformable spheres. The three models in the video are respectively sphere_full, sphere_radial and sphere_trilinear.
 
     - `full`: Three translational dofs per vertex. This is the most expressive but also the most expensive option.
     - `radial`: A single radial translational dof per vertex. Note that unlike in the "full" case, the radial parametrization requires a free joint at the flex's parent in order for free body motion to be possible. This type of parametrization is appropriate for shapes that are relatively spherical.
+    - `2d`: Two orthogonal translational dofs (X and Y) per vertex. This restricts the motion of the vertices to planes parallel to the parent body's X-Y plane.
     - `trilinear`: Three translational dofs at each corner of the bounding box of the flex, for a total of 24 dofs for the entire flex, independent of the number of vertices. The positions of the vertices are updated using trilinear interpolation over the bounding box.
 
     Trilinear and quadratic flexes are much faster than the previous two options, and are the preferred choice if the expected deformations can be captured by the reduced parametriation. For example, see the video on the right comparing full and trilinear flexes for modeling deformable gripper pads.
@@ -120,7 +125,7 @@ class FlexComp(XMLModel):
     Note that a higher interpolation order generally requires a smaller time step for stability, although usually not as large as with the "full" option and a fine mesh.
     """
 
-    type: FlexCompType | None = None
+    type: FlexCompType = FlexCompType.GRID
     """This attribute determines the type of flexcomp object. The remaining attributes and sub-elements are then interpreted according to the type. Default settings are also adjusted depending on the type. Different types correspond to different methods for specifying the flexcomp points and the stretchable elements that connect them. They fall in three categories: direct specification entered in the XML, direct specification loaded from file, and automated generation from higher-level specification.
 
     `grid` generates a rectangular grid of points in 1D, 2D or 3D as specified by dim. The number of points in each dimension is determined by count while the grid spacing in each dimension is determined by spacing. Make sure the spacing is sufficiently large relative to radius to avoid permanent contacts. In 2D and 3D the grid is automatically triangulated, and corresponding flex elements are created (triangles or tetrahedra). In 1D the elements are capsules connecting consecutive pairs of points.
@@ -141,10 +146,13 @@ class FlexComp(XMLModel):
 
     `direct` allows the user to specify the point and element data of the flexcomp directly in the XML. Note that flexcomp will still generate moving bodies automatically, as well as automate other settings; so it still provides convenience compared to specifing the corresponding flex directly.
     """
-    count: tuple[int, int, int] | None = None
+    count: tuple[int, int, int] = (10, 10, 10)
     """The number of automatically generated points in each dimension. This and the next attribute only apply to types grid, box, cylinder, ellipsoid."""
 
-    spacing: Vec3 | None = None
+    cellcount: tuple[int, int, int] = (1, 1, 1)
+    """Specifies the number of cells in each dimension for the background interpolation grid when using **trilinear** or **quadratic** dofs."""
+
+    spacing: Vec3 = np.array((0.02, 0.02, 0.02))
     """The spacing between the automatically generated points in each dimension. The spacing should be sufficiently large compared to the radius, to avoid permanent contacts."""
 
     point: VecN | None = None
@@ -156,10 +164,10 @@ class FlexComp(XMLModel):
     texcoord: VecN | None = None
     """Texture coordinates of each point, passed through to the automatically-generated flex. Note that flexcomp does not generate texture coordinates automatically, except for 2D grids, box, cylinder and ellipsoid. For all other types, the user can specify explicit texture coordinates here, even if the points themselves were generated automatically. This requires understanding of the layout of the automatically-generated points and how they correspond to the texture referenced by the material."""
 
-    mass: float | None = None
+    mass: float = 1.0
     """The mass of each automatically-generated body equals this value divided by the number of points. Note that pinning some points does not affect the mass of the other bodies."""
 
-    inertiabox: float | None = None
+    inertiabox: float = 0.005
     """Even though the automatically-generated bodies have the physics of point masses, with slider joints, MuJoCo still requires each body to have rotational inertia. The inertias generated here are diagonal, and are computed such that the corresponding equivalent-inertia boxes have sides equal to this value."""
 
     file: DepPath | None = None
@@ -175,35 +183,45 @@ class FlexComp(XMLModel):
 
     Other orientations are options in place of quat."""
 
-    scale: Vec3 | None = None
+    scale: Vec3 = np.asarray((1, 1, 1))
     """Scaling of all point coordinates, for types that specify coordinates explicitly. Scaling is applied after the pose transformation."""
 
-    radius: float | None = None
+    radius: float = Field(
+        default_factory=lambda: deepcopy(Flex.model_fields["radius"].default),
+    )
     """Radius of all flex elements. It can be zero in 3D, but must be positive in 1D and 2D. The radius affects both collision detection and rendering. In 1D and 2D it is needed to make the elements volumetric.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    material: MaterialName | None = None
+    material: MaterialName | None = Field(
+        default_factory=lambda: deepcopy(Flex.model_fields["material"].default),
+    )
     """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    rgba: Vec4 | None = None
+    rgba: Vec4 = Field(
+        default_factory=lambda: deepcopy(Flex.model_fields["rgba"].default),
+    )
     """Instead of creating material assets and referencing them, this attribute can be used to set color and transparency only. This is not as flexible as the material mechanism, but is more convenient and is often sufficient. If the value of this attribute is different from the internal default, it takes precedence over the material.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    group: int | None = None
+    group: int = Field(
+        default_factory=lambda: deepcopy(Flex.model_fields["group"].default),
+    )
     """Integer group to which the flex belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of flexes.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    flatskin: bool | None = None
+    flatskin: bool = Field(
+        default_factory=lambda: deepcopy(Flex.model_fields["flatskin"].default),
+    )
     """This attribute determines whether 2D and 3D flexes that are rendered in flexskin mode will use smooth or flat shading. The default smooth shading is suitable in most cases, however if the object is intended to have visible sharp edges (such as a cube) then flat shading is more natural.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    origin: Vec3 | None = None
+    origin: Vec3 = np.asarray((0, 0, 0))
     """The origin of the flexcomp. Used for generating a volumetric mesh from an OBJ surface mesh. Each surface triangle is connected to the origin to create a tetrahedron, so the resulting volumetric mesh is guaranteed to be well-formed only for convex shapes."""
 
     contacts: list[FlexCompContact] = Field(

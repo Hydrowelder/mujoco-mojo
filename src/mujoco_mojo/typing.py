@@ -36,6 +36,7 @@ __all__ = [
     "Coordinate",
     "DeformableSkinName",
     "DynType",
+    "EdgeEquality",
     "EnableDisable",
     "EulerSeq",
     "FlexCompDOF",
@@ -884,8 +885,14 @@ class FlexCompDOF(StrEnum):
     RADIAL = "radial"
     """A single radial translational dof per vertex. Note that unlike in the "full" case, the radial parametrization requires a free joint at the flex's parent in order for free body motion to be possible. This type of parametrization is appropriate for shapes that are relatively spherical."""
 
+    D2 = "2d"
+    """Two orthogonal translational dofs (X and Y) per vertex. This restricts the motion of the vertices to planes parallel to the parent body's X-Y plane."""
+
     TRILINEAR = "trilinear"
     """Three translational dofs at each corner of the bounding box of the flex, for a total of 24 dofs for the entire flex, independent of the number of vertices. The positions of the vertices are updated using trilinear interpolation over the bounding box."""
+
+    QUADRATIC = "quadratic"
+    """Three translational dofs per corner, edge, face, and volume of the bounding box of the flex, for a total of 81 dofs for the entire flex, independent of the number of vertices. The positions of the vertices are updated using quadratic interpolation over the bounding box. While this option requires more degrees of freedom than trilinear flexes, it enables curved deformation modes, while the only modes achievable for trilinear flexes are strech/compression and shear. To understand the difference between the two parametrizations, see a trilinear cube and a quadratic cube."""
 
 
 class FlexCompType(StrEnum):
@@ -1144,3 +1151,19 @@ class SensorInterp(StrEnum):
 
     CUBIC = "cubic"
     """Cubic spline interpolation (Catmull-Rom)."""
+
+
+class EdgeEquality(StrEnum):
+    """The type of equality constraint applied to this edge."""
+
+    TRUE = "true"
+    """No equality constraint is applied."""
+
+    FALSE = "false"
+    """Edge constraints are enforced."""
+
+    VERT = "vert"
+    """Averaged constraint is used, see flexvert."""
+
+    STRAIN = "strain"
+    """A constraint is added to enforce that the invariants of the strain tensor do not change; this is only equality constraint type supported for trilinear and quadratic dofs elements and here."""

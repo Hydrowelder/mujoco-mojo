@@ -4,6 +4,8 @@ mujoco_mojo is a collection of Python objects built to make working with MuJoCo 
 It provides vast bindings for all MJCF XML schema objects, tools to convert to XML, run MuJoCo simulations, and more.
 """
 
+from mujoco_mojo.__about__ import __version__  # noqa: F401
+
 from . import utils
 from .mjcf import (
     Actuator,
@@ -221,6 +223,7 @@ from .typing import (
     Coordinate,
     DeformableSkinName,
     DynType,
+    EdgeEquality,
     EnableDisable,
     EulerSeq,
     FlexCompDOF,
@@ -350,6 +353,7 @@ __all__ = [
     "DistributionDict",
     "DistributionList",
     "DynType",
+    "EdgeEquality",
     "EnableDisable",
     "Equality",
     "EqualityConnectBody",

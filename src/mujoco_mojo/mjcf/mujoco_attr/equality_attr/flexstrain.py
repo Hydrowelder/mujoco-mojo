@@ -13,10 +13,10 @@ class EqualityFlexStrain(EqualityBase):
 
     tag = "flexstrain"
 
-    attributes = (
-        *EqualityBase.attributes,
-        "flex",
-    )
+    attributes = (*EqualityBase.attributes, "flex", "cell")
 
     flex: FlexName
     """Name of the flex whose strain is being constrained."""
+
+    cell: tuple[int, int, int] | None = None
+    """3D grid index (i, j, k) identifying the cell in the flex object. The grid size is specified in the cellcount attribute."""

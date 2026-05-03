@@ -72,9 +72,6 @@ Install `mujoco-mojo` in your project using the following:
     pip install mujoco-mojo
     ```
 
-!!! warning
-    At the time of writing, MuJoCo supports up to Python 3.13. This package is built on modern Python requiring 3.12 or above.
-
 ---
 
 ## Features
