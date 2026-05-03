@@ -13,7 +13,7 @@ from mujoco_mojo.typing import (
     GeomType,
     Mat3,
     MaterialName,
-    RequestCategory,
+    SignalCategory,
     SiteName,
     Vec2,
     Vec3,
@@ -615,7 +615,7 @@ class SiteBase(XMLModel):
                     for i, k in enumerate("wxyz"[: len(val.quat)]):
                         signal_manager.post(
                             value=float(val.quat[i]),
-                            category=RequestCategory.SITES,
+                            category=SignalCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -624,7 +624,7 @@ class SiteBase(XMLModel):
                     for i, k in enumerate("xyz"[: len(val)]):
                         signal_manager.post(
                             value=val[i],
-                            category=RequestCategory.SITES,
+                            category=SignalCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -634,7 +634,7 @@ class SiteBase(XMLModel):
                     for i in range(len(val_flat)):
                         signal_manager.post(
                             value=float(val_flat[i]),
-                            category=RequestCategory.SITES,
+                            category=SignalCategory.SITES,
                             subgroup=f"{self.name}/{attr}",
                             attr=str(i),
                         )

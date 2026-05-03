@@ -15,8 +15,11 @@ __all__ = [
     "DEFAULT_RUNTIME",
     "DEFAULT_SEED",
     "DEFAULT_XML_NAME",
+    "TIME_COLUMN_NAME",
 ]
 
+TIME_COLUMN_NAME = "time"
+"""Name of the time column in signal outputs."""
 
 # MojoRunner defaults
 DEFAULT_RUNTIME = None

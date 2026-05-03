@@ -38,6 +38,7 @@ dependencies = [
     "optuna>=4.8.0",
     "joblib>=1.5.3",
     "optuna-dashboard>=0.20.0",
+    "pint>=0.25.3",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -12,7 +12,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
-from mujoco_mojo.typing import RequestCategory, Vec3
+from mujoco_mojo.typing import SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
@@ -140,7 +140,7 @@ class Load(MojoBaseModel, ABC):
                 for i, k in enumerate("xyzm"):
                     signal_manager.post(
                         value=float(source[i]) if self.active else 0.0,
-                        category=RequestCategory.LOADS,
+                        category=SignalCategory.LOADS,
                         # nest the force/torque under the function name
                         subgroup=f"{self.name}/{attr}",
                         attr=k,

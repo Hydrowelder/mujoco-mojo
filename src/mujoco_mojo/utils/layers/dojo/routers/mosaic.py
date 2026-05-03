@@ -1,13 +1,11 @@
 import socket
 from functools import lru_cache
-from typing import TypedDict
 
-import numpy as np
 import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from scipy.spatial.transform import Rotation as R
 
+from mujoco_mojo.utils.dataframe import ColumnManifest, MojoFrame
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -109,43 +107,13 @@ async def get_trial_viewer(request: Request, trial_id: str):
     )
 
 
-class ColumnManifest(TypedDict):
-    all: list[str]
-    rotateable_vectors: list[str]
-    available_quats: list[str]
-
-
 @lru_cache(maxsize=128)
 def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
-    schema = pl.read_parquet(path_str, n_rows=0).schema
-    real_cols: list[str] = list(schema.keys())
-
-    # Map prefixes to the total set of suffixes they possess
-    prefix_map: dict[str, set[str]] = {}
-    for c in real_cols:
-        if ":" in c:
-            prefix, suffix = c.rsplit(":", 1)
-            prefix_map.setdefault(prefix, set()).add(suffix)
-
-    # Strict set comparison ensures quaternions and vectors are disjoint
-    # A quaternion (w,x,y,z) will not match {"x", "y", "z"}
-    rotateable_vectors = [
-        p for p, s in prefix_map.items() if {"x", "y", "z"}.issubset(s) and "w" not in s
-    ]
-
-    available_quats = [
-        p for p, s in prefix_map.items() if {"w", "x", "y", "z"}.issubset(s)
-    ]
-
-    return {
-        "all": real_cols,
-        "rotateable_vectors": sorted(rotateable_vectors),
-        "available_quats": sorted(available_quats),
-    }
+    return MojoFrame.from_metadata(path_str).mojo.get_manifest()
 
 
-@lru_cache(maxsize=2048)  # Increased size because we are caching individual columns
+@lru_cache(maxsize=2048)
 def _get_atomic_column(path_str: str, col_name: str, mtime: float):
     """
     Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
@@ -189,8 +157,7 @@ async def get_trial_data(
             status_code=404, detail=f"Database not found for {trial_id}"
         )
 
-    # THE CACHE BREAKER: Get the file's last modified time
-    # If you restart a job, the new file will have a new mtime.
+    # use the files last modified time as a cache breaker
     mtime = db_path.stat().st_mtime
     db_path_str = str(db_path)
 
@@ -198,17 +165,12 @@ async def get_trial_data(
     column_manifest = _get_column_manifest(db_path_str, mtime)
 
     try:
-        data = {}
         requested = cols.split(",") if cols else []
+        available_cols = set(column_manifest["all"])
 
-        col_set = set(column_manifest["all"])
+        # determine columns to request
+        fetch_targets = [c for c in requested if c in available_cols]
 
-        # primary data fetch
-        for col in requested:
-            if col in col_set:
-                data[col] = _get_atomic_column(db_path_str, col, mtime)
-
-        # rotate vector is possible
         if rotate_by:
             q_family = [
                 f"{rotate_by}:x",
@@ -216,58 +178,25 @@ async def get_trial_data(
                 f"{rotate_by}:z",
                 f"{rotate_by}:w",
             ]
+            for q in q_family:
+                if q in available_cols and q not in fetch_targets:
+                    fetch_targets.append(q)
 
-            if not all(q in col_set for q in q_family):
-                logger.warning(
-                    f"Incomplete quaternion family for: {trial_id} {rotate_by}"
-                )
-            else:
-                # load quat data (N, 4)
-                qs = np.column_stack(
-                    [_get_atomic_column(db_path_str, q, mtime) for q in q_family]
-                )
-                rot_transformer = R.from_quat(qs).inv()
+        # early exit for no found columns
+        if not fetch_targets:
+            return {"columns": column_manifest, "data": {}}
 
-                # identify vector families in the requested cols
-                vec_prefixes = set(
-                    c.rsplit(":", 1)[0]
-                    for c in requested
-                    if any(c.endswith(s) for s in [":x", ":y", ":z"])
-                )
+        # assemble dataframe
+        raw_data = {
+            col: _get_atomic_column(db_path_str, col, mtime) for col in fetch_targets
+        }
+        df = MojoFrame.from_dict(raw_data)
 
-                for prefix in vec_prefixes:
-                    f_family = [f"{prefix}:x", f"{prefix}:y", f"{prefix}:z"]
+        if rotate_by:
+            # rotate from world to rotate_by frame
+            df = df.mojo.with_rotation(quat_base=rotate_by, invert=True)
 
-                    if all(v in col_set for v in f_family):
-                        # Load the 3D vectors (N, 3)
-                        vs = np.column_stack(
-                            [
-                                _get_atomic_column(db_path_str, v, mtime)
-                                for v in f_family
-                            ]
-                        )
-
-                        # 5. Apply the rotation to the entire array at once
-                        raw_sample = vs[-1]
-                        v_rot = rot_transformer.apply(vs)
-                        rot_sample = v_rot[-1]
-
-                        logger.debug(f"ROTATION CHECK [{prefix}]:")
-                        logger.debug(f"  BEFORE: {raw_sample}")
-                        logger.debug(f"  AFTER:  {rot_sample}")
-                        logger.debug(
-                            f"  DIFF:   {np.linalg.norm(raw_sample - rot_sample)}"
-                        )
-                        logger.debug(f"  QUAT AT SAMPLE: {qs[-1]}")
-
-                        # 6. Overwrite the original keys for the frontend
-                        data[f"{prefix}:x"] = v_rot[:, 0].tolist()
-                        data[f"{prefix}:y"] = v_rot[:, 1].tolist()
-                        data[f"{prefix}:z"] = v_rot[:, 2].tolist()
-
-                        logger.debug(
-                            f"Vectorized rotation complete for {prefix} in {rotate_by} frame."
-                        )
+        data = {col: df[col].to_list() for col in requested if col in df.columns}
 
         return {
             "columns": column_manifest,  # Full list of headers for the sidebar
