@@ -54,9 +54,6 @@ or with `pip`:
 pip install mujoco-mojo
 ```
 
-> [!WARNING]
-> At the time of writing, MuJoCo supports up to Python 3.13
-
 ---
 
 

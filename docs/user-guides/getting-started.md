@@ -21,9 +21,6 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
     pip install mujoco-mojo
     ```
 
-!!! warning
-    At the time of writing, MuJoCo supports up to Python 3.13. This package is built on modern Python requiring 3.12 or above.
-
 ---
 
 ## Core Concepts

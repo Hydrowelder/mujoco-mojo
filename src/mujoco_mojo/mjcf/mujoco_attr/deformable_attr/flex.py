@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import mujoco
 import numpy as np
@@ -35,6 +35,8 @@ class Flex(XMLModel):
         "texcoord",
         "elemtexcoord",
         "node",
+        "cellcount",
+        "dof",
     )
     children = ("contact", "edge", "elasticity")
 
@@ -61,7 +63,7 @@ class Flex(XMLModel):
     elemtexcoord: VecN | None = None
     """Texture indices for each face. If omitted, texture are assumed to be vertex-based."""
 
-    element: VecN | None = None
+    element: VecN
     """For each element of the flex, this lists the zero-based indices of the vertices forming that flex element. We need two vertices to specify a capsule, three vertices to specify a triangle, and four vertices to specify a tetrahedron - which is why the number of indices equals (dim+1) times the number of elements. In 2D, the vertices should be listed in counter-clockwise order. In 1D and 3D the order is irrelevant; in 3D the model compiler will rearrange the vertices as needed. Repeated vertex indices within a flex element are not allowed. The topology of the flex is not enforced; it could correspond to a continuous soft body, or a collection of disconnected stretchable elements, or anything in-between."""
 
     flatskin: bool = False
@@ -78,6 +80,12 @@ class Flex(XMLModel):
 
     node: str | None = None
     """The degrees-of-freedom of the flex. An array of MuJoCo body names (separated by white space) to which each node belongs. The number of body names should equal the number of nodes (nnode). See the flexcomp dof attribute for more details."""
+
+    cellcount: tuple[int, int, int] | None = None
+    """When using trilinear or quadratic dofs, this specifies the number of cells in each dimension for the background interpolation grid."""
+
+    dof: Literal["trilinear, quadratic"] | None = None
+    """Interpolation order for the flex."""
 
     edge: FlexEdge | None = None
     """Edge constraint properties of Flex."""
