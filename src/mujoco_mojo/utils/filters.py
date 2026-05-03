@@ -3,6 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 import numpy as np
+import pint
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from scipy.signal import savgol_filter
@@ -21,6 +22,7 @@ __all__ = [
     "NormalizeFilter",
     "RollingMeanFilter",
     "ScaleFilter",
+    "UnitFilter",
     "WrapFilter",
     "ZeroingFilter",
     "filter_adapter",
@@ -42,6 +44,7 @@ class FilterType(StrEnum):
     MEDIAN = "median"
     NORMALIZE = "normalize"
     SAVITZKY_GOLAY = "savitzky_golay"
+    UNIT = "unit"
 
 
 class BaseFilter(ABC, BaseModel):
@@ -295,6 +298,105 @@ class SavitzkyGolayFilter(BaseFilter):
         )
 
 
+ureg = pint.UnitRegistry()
+# --- Kinematics ---
+AngleUnit = Literal["rad", "deg", "rad/s", "deg/s", "rad/s^2", "deg/s^2", "rev", "rpm"]
+LenUnit = Literal["m", "mm", "cm", "km", "in", "ft", "thou"]
+VelUnit = Literal["m/s", "ft/s", "in/s", "km/h", "mph"]
+AccUnit = Literal["m/s^2", "g", "ft/s^2", "in/s^2"]
+
+# --- Dynamics & Statics ---
+MassUnit = Literal["kg", "lbm", "slug", "g", "mg"]
+ForceUnit = Literal["N", "lbf", "kN", "mN"]
+TorqueUnit = Literal["N*m", "N*mm", "mN*m", "lbf*ft", "lbf*in", "ozf*in"]
+InertiaUnit = Literal["kg*m^2", "lbm*in^2", "lbm*ft^2", "slug*ft^2"]
+
+# --- Work & Thermodynamics ---
+EnergyUnit = Literal["J", "kJ", "mJ", "W*s", "ft*lbf", "BTU"]
+PowerUnit = Literal["W", "kW", "hp", "ft*lbf/s"]
+PressureUnit = Literal["Pa", "kPa", "psi", "bar", "atm", "torr"]
+
+# --- Temporal & Electronics ---
+TimeUnit = Literal["s", "ms", "us", "ns", "min", "hr"]
+FreqUnit = Literal["Hz", "kHz", "MHz", "rad/s"]
+
+# --- Dimensionless & Ratios ---
+MiscUnit = Literal["dimensionless", "pct", "count", "bit", "V", "A"]
+
+SignalUnit = (
+    AngleUnit
+    | LenUnit
+    | VelUnit
+    | AccUnit
+    | MassUnit
+    | ForceUnit
+    | TorqueUnit
+    | InertiaUnit
+    | EnergyUnit
+    | PowerUnit
+    | PressureUnit
+    | TimeUnit
+    | FreqUnit
+    | MiscUnit
+    | str
+)
+
+try:
+    # explicitly map lbm and lbf to avoid ambiguity
+    ureg.define("lbm = pound")
+    ureg.define("lbf = force_pound")
+except pint.errors.RedefinitionError:
+    # already defined in some Pint versions
+    pass
+
+
+class UnitFilter(BaseFilter):
+    """
+    Unit conversion using Pint.
+    Ensures dimensional consistency and applies necessary scaling/offsets.
+    """
+
+    type: Literal[FilterType.UNIT] = FilterType.UNIT
+    """The discriminator type for Pydantic."""
+
+    from_unit: SignalUnit
+    """The original unit of the telemetry data (e.g., 'rad')."""
+    to_unit: SignalUnit
+    """The target unit for analysis/display (e.g., 'deg')."""
+
+    @model_validator(mode="after")
+    def validate_units(self) -> Self:
+        try:
+            # check if units are dimensionally compatible
+            source = ureg.parse_units(self.from_unit)
+            target = ureg.parse_units(self.to_unit)
+
+            # ensure valid dimensionality (not converting meters to degrees)
+            if source.dimensionality != target.dimensionality:
+                raise ValueError(
+                    f"Incompatible units: {self.from_unit} and {self.to_unit} ({source.dimensionality} != {target.dimensionality})"
+                )
+        except pint.UndefinedUnitError as e:
+            raise ValueError(f"Unknown unit definition: {e}")
+        return self
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        # applies y = mx + b
+        # m (factor) is the difference between converting 1.0 and 0.0
+        # b (offset) is the value of 0.0 in the target unit
+
+        # zero-point offset (e.g., 273.15 for C -> K)
+        b = ureg.Quantity(0.0, self.from_unit).to(self.to_unit).magnitude
+
+        # the scaling factor (the slope)
+        # for meters -> mm, this is (1000 - 0) = 1000
+        # for Celsius -> Kelvin, this is (274.15 - 273.15) = 1.0
+        val_at_one = ureg.Quantity(1.0, self.from_unit).to(self.to_unit).magnitude
+        m = val_at_one - b
+
+        return (expr * m) + b
+
+
 AnyFilter = Annotated[
     ScaleFilter
     | AbsoluteValueFilter
@@ -307,6 +409,7 @@ AnyFilter = Annotated[
     | ClipFilter
     | DeadbandFilter
     | ZeroingFilter
+    | UnitFilter
     | MedianFilter
     | NormalizeFilter
     | WrapFilter,

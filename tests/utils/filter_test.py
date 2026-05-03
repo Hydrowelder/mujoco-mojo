@@ -18,6 +18,7 @@ from mujoco_mojo.utils.filters import (
     RollingMeanFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
+    UnitFilter,
     WrapFilter,
     ZeroingFilter,
 )
@@ -266,3 +267,81 @@ def test_savitzky_golay_validation():
     # Order >= window should fail
     with pytest.raises(ValidationError):
         SavitzkyGolayFilter(window=5, order=5)
+
+
+def test_unit_filter_basic_conversion(signal_df: MojoFrame):
+    """Verifies standard scaling conversion (e.g., meters to millimeters)."""
+    # 1.0 m -> 1000.0 mm
+    f = UnitFilter(from_unit="m", to_unit="mm")
+    result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
+    assert result == [0.0, 1000.0, 2000.0, 3000.0, 4000.0]
+
+
+def test_unit_filter_rotation_conversion(signal_df: MojoFrame):
+    """Verifies angular conversion (radians to degrees)."""
+    f = UnitFilter(from_unit="rad", to_unit="deg")
+    result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
+    expected = [np.degrees(x) for x in [0.0, 1.0, 2.0, 3.0, 4.0]]
+    assert np.allclose(result, expected)
+
+
+def test_unit_filter_mass_vs_force():
+    """Ensures lbm and lbf are handled as distinct dimensions."""
+    # 1 lbm -> kg (Mass)
+    f_mass = UnitFilter(from_unit="lbm", to_unit="kg")
+    # 1 lbf -> N (Force)
+    f_force = UnitFilter(from_unit="lbf", to_unit="N")
+
+    df = pl.DataFrame({"m": [1.0], "f": [1.0]})
+    res = df.select(
+        [
+            f_mass.apply(pl.col("m")).alias("m_kg"),
+            f_force.apply(pl.col("f")).alias("f_N"),
+        ]
+    )
+
+    # 1 pound-mass is ~0.453 kg
+    assert np.allclose(res["m_kg"][0], 0.453592, atol=1e-5)
+    # 1 pound-force is ~4.448 N
+    assert np.allclose(res["f_N"][0], 4.44822, atol=1e-5)
+
+
+def test_unit_filter_offset_conversion():
+    """Verifies affine transformations with offsets (e.g., Celsius to Kelvin)."""
+    df = pl.DataFrame({"temp_c": [0.0, 100.0]})
+    # Pint uses 'degC' for Celsius and 'K' for Kelvin
+    f = UnitFilter(from_unit="degC", to_unit="K")
+    result = df.select(f.apply(pl.col("temp_c")))["temp_c"].to_list()
+
+    # Freezing point check (273.15) and boiling point check (373.15)
+    assert np.allclose(result, [273.15, 373.15])
+
+
+def test_unit_filter_dimensionality_mismatch():
+    """Ensures Pydantic prevents incompatible unit conversions (e.g., Length to Time)."""
+    # Length to Time should raise ValueError via model_validator
+    with pytest.raises(ValidationError) as exc:
+        UnitFilter(from_unit="m", to_unit="s")
+    assert "Incompatible units" in str(exc.value)
+
+    # Angle to Force
+    with pytest.raises(ValidationError):
+        UnitFilter(from_unit="rad", to_unit="lbf")
+
+
+def test_unit_filter_undefined_unit():
+    """Ensures Pydantic catches nonsense unit strings that Pint cannot parse."""
+    with pytest.raises(ValidationError) as exc:
+        UnitFilter(from_unit="rad", to_unit="not_a_physical_unit")
+    assert "Unknown unit definition" in str(exc.value)
+
+
+def test_unit_filter_custom_string_fallback():
+    """Verifies that strings outside the Literal list but valid in Pint still work."""
+    # 'parsec' isn't in our AngleUnit/LenUnit/etc literals, but Pint knows it
+    f = UnitFilter(from_unit="m", to_unit="parsec")
+    # approx 1 parsec in meters
+    df = pl.DataFrame({"x": [3.086e16]})
+    result = df.select(f.apply(pl.col("x")))["x"][0]
+
+    assert np.allclose(result, 1.0, rtol=1e-3)

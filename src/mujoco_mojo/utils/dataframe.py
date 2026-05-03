@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
 import polars as pl
 from scipy.spatial.transform import Rotation as R
@@ -29,29 +29,58 @@ logger = get_logger(__name__)
 
 
 class MojoFrameProtocol(Protocol):
+    """Protocol to tell type checkers that .mojo is available on the DataFrame."""
+
     @property
     def mojo(self) -> MojoNamespace: ...
 
 
+class _MojoFrame(pl.DataFrame):
+    """
+    Internal implementation of MojoFrame to house static loaders.
+    By using an underscored name, we avoid redeclaration errors later.
+    """
+
+    @classmethod
+    def from_metadata(cls, path: Path | str, *args: Any, **kwargs: Any) -> MojoFrame:
+        """Instantiates a zero-row DataFrame for fast schema discovery."""
+        return cls.from_pl(pl.read_parquet(source=path, n_rows=0, *args, **kwargs))
+
+    @classmethod
+    def read_parquet(
+        cls,
+        path: Path | str,
+        columns: list[int] | list[str] | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> MojoFrame:
+        """Loads a DataFrame containing only the specific telemetry columns requested."""
+        return cls.from_pl(
+            pl.read_parquet(source=path, columns=columns, *args, **kwargs)
+        )
+
+    @classmethod
+    def from_pl(cls, df: pl.DataFrame) -> MojoFrame:
+        """
+        Converts a standard Polars DataFrame into a MojoFrame for the static analyzer.
+        """
+        return cast(MojoFrame, df)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], *args: Any, **kwargs: Any) -> MojoFrame:
+        """Creates a MojoFrame from a dictionary."""
+        return cls.from_pl(pl.DataFrame(data=data, *args, **kwargs))
+
+
 if TYPE_CHECKING:
-
-    class MojoFrame(pl.DataFrame, MojoFrameProtocol): ...
+    # MojoFrame is seen by the IDE as the combination of:
+    # 1. Our loaders (_MojoFrame)
+    # 2. Polars methods (pl.DataFrame)
+    # 3. Our namespace (MojoFrameProtocol)
+    class MojoFrame(_MojoFrame, MojoFrameProtocol): ...
 else:
-    MojoFrame = pl.DataFrame
-
-
-def read_frame_metadata(path: Path | str, *args, **kwargs) -> MojoFrame:
-    """Instantiates a zero-row DataFrame for fast schema discovery."""
-    return cast(MojoFrame, pl.read_parquet(source=path, n_rows=0, *args, **kwargs))
-
-
-def read_frame_columns(
-    path: Path | str, columns: list[str], *args, **kwargs
-) -> MojoFrame:
-    """Instantiates a DataFrame containing only the specific columns requested."""
-    return cast(
-        MojoFrame, pl.read_parquet(source=path, columns=columns, *args, **kwargs)
-    )
+    # At runtime, it's just our internal class
+    MojoFrame = _MojoFrame
 
 
 class ColumnManifest(TypedDict):

@@ -6,11 +6,7 @@ import polars as pl
 import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
-from mujoco_mojo.utils.dataframe import (
-    MojoFrame,
-    read_frame_columns,
-    read_frame_metadata,
-)
+from mujoco_mojo.utils.dataframe import MojoFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
 
@@ -44,7 +40,7 @@ def test_from_metadata(tmp_path: Path, sample_data: MojoFrame):
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
 
-    meta_df = read_frame_metadata(path)
+    meta_df = MojoFrame.from_metadata(path)
     assert isinstance(meta_df, pl.DataFrame)
     assert meta_df.height == 0
     assert len(meta_df.columns) == len(sample_data.columns)
@@ -56,7 +52,7 @@ def test_from_columns(tmp_path: Path, sample_data: MojoFrame):
     sample_data.write_parquet(path)
 
     cols = [TIME_COLUMN_NAME, "Bodies/racket/xpos:x"]
-    col_df = read_frame_columns(path, columns=cols)
+    col_df = MojoFrame.read_parquet(path, columns=cols)
     assert col_df.columns == cols
     assert col_df.height == 3
 
