@@ -178,7 +178,7 @@ def runtime(
             # It will be logged to "Bodies/racket:nutation_deg" ("category/subgroup:attr")
             runtime_manager.signal_manager.post(
                 value=float(nutation_deg),
-                category=mojo.RequestCategory.BODIES,
+                category=mojo.SignalCategory.BODIES,
                 subgroup=f"{handoff.racket.name}",
                 attr="nutation_deg",
             )

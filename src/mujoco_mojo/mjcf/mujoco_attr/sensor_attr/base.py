@@ -7,9 +7,9 @@ import mujoco
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import (
-    RequestCategory,
     SensorInterp,
     SensorName,
+    SignalCategory,
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
@@ -99,7 +99,7 @@ class SensorBase(XMLModel):
             for i in range(dim):
                 signal_manager.post(
                     value=val[i],
-                    category=RequestCategory.SENSORS,
+                    category=SignalCategory.SENSORS,
                     # sensor name serves as the subgroup
                     subgroup=self.name,
                     # vector sensor (IMU/FT) components are indexed

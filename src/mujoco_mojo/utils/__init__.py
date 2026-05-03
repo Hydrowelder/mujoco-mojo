@@ -1,3 +1,4 @@
+from . import filters
 from .color import Color
 from .interp import Interpolator
 from .log import get_logger, setup_logger
@@ -22,6 +23,7 @@ __all__ = [
     "MonteCarloConfig",
     "OptimizerConfig",
     "Trial",
+    "filters",
     "get_logger",
     "is_empty_list",
     "setup_logger",

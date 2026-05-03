@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import mujoco
 import polars as pl
 
 from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
-from mujoco_mojo.typing import RequestCategory
+from mujoco_mojo.typing import SignalCategory
+from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +32,7 @@ class SignalManager:
     )
     """Values to be recorded. This dictionary is flushed on every timestep."""
 
-    _sample_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], None]] = field(
+    _sample_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], Any]] = field(
         default_factory=list, init=False
     )
 
@@ -66,7 +69,7 @@ class SignalManager:
     def post(
         self,
         value: float | NamedValue[float],
-        category: RequestCategory | str,
+        category: SignalCategory | str,
         subgroup: str | None = None,
         attr: str | None = None,
     ):
@@ -81,13 +84,13 @@ class SignalManager:
 
         Args:
             value (float | NamedValue[float]): The numeric data to record. If a NamedValue is passed and 'subgroup' is not provided, the NamedValue's internal name is used as the subgroup.
-            category (Literal["Bodies", "Joints", "Sensors", "Loads", "Custom"]): _description_
-            subgroup (str | None, optional): The top-level organizational folder (e.g., "Bodies"). Defaults to None.
+            category (SignalCategory | str): Top level category (e.g., "Bodies")
+            subgroup (str | None, optional): The second-level organizational folder. Defaults to None.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
 
         Examples:
             >>> # Becomes "Bodies/Hand:xpos_x"
-            >>> manager.post(1.2, "Bodies", "Hand", "xpos_x")
+            >>> manager.post(1.2, SignalCategory.BODIES, "Hand", "xpos_x")
 
             >>> # Becomes "Sensors/IMU"
             >>> manager.post(9.81, "Sensors", "IMU")
@@ -133,7 +136,7 @@ class SignalManager:
 
     def log_step(self, timestamp: float, data: NamedValueDict[float]):
         """Appends a row to the memory buffer."""
-        row = {"time": timestamp}
+        row = {TIME_COLUMN_NAME: timestamp}
         row.update({k: nv.value for k, nv in data.items()})
 
         self._buffer.append(row)

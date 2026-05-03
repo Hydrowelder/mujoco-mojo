@@ -26,7 +26,7 @@ from mujoco_mojo.typing import (
     Angle,
     BodyName,
     Mat3,
-    RequestCategory,
+    SignalCategory,
     Sleep,
     Vec3,
     Vec6,
@@ -360,7 +360,7 @@ class Body(XMLModel):
                         for i in range(len(val_flat)):
                             signal_manager.post(
                                 value=float(val_flat[i]),
-                                category=RequestCategory.BODIES,
+                                category=SignalCategory.BODIES,
                                 subgroup=f"{self.name}/{attr}",
                                 attr=str(i),
                             )
@@ -375,7 +375,7 @@ class Body(XMLModel):
                         for i, k in enumerate("wxyz"[: len(val.quat)]):
                             signal_manager.post(
                                 value=float(val.quat[i]),
-                                category=RequestCategory.BODIES,
+                                category=SignalCategory.BODIES,
                                 subgroup=f"{self.name}/{attr}",
                                 attr=k,
                             )
@@ -413,7 +413,7 @@ class Body(XMLModel):
                     for i, k in enumerate("xyzm"):
                         signal_manager.post(
                             value=full_vec[i],
-                            category=RequestCategory.BODIES,
+                            category=SignalCategory.BODIES,
                             subgroup=f"{self.name}/{attr}",
                             attr=k,
                         )
@@ -421,7 +421,7 @@ class Body(XMLModel):
                     # scalar output
                     signal_manager.post(
                         value=float(val),
-                        category=RequestCategory.BODIES,
+                        category=SignalCategory.BODIES,
                         subgroup=self.name,
                         attr=attr,
                     )
