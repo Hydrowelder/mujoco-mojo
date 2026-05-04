@@ -76,16 +76,35 @@ source = "vcs"
 version_scheme = "post-release"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mujoco_mojo"]
+only-include = ["src/mujoco_mojo"]
 
 [tool.hatch.build.targets.sdist]
 include = [
+    "src/**/*.py",
     "src/mujoco_mojo/**/*.html",
     "src/mujoco_mojo/**/*.js",
     "src/mujoco_mojo/**/*.mp3",
     "src/mujoco_mojo/**/*.svg",
     "src/mujoco_mojo/**/*.css",
 ]
+
+[tool.hatch.envs.types]
+extra-dependencies = ["mypy>=1.0.0"]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/mujoco_mojo tests}"
+
+[tool.coverage.run]
+source_pkgs = ["mujoco_mojo", "tests"]
+branch = true
+parallel = true
+omit = ["src/mujoco_mojo/__about__.py"]
+
+[tool.coverage.paths]
+mujoco_mojo = ["src/mujoco_mojo", "*/mujoco-mojo/src/mujoco_mojo"]
+tests = ["tests", "*/mujoco-mojo/tests"]
+
+[tool.coverage.report]
+exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
 
 [dependency-groups]
 dev = [
