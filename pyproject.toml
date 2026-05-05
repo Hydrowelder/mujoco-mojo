@@ -66,26 +66,8 @@ keywords = [
     "mjcf",
 ]
 
-[project.scripts]
-mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
-
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.version.raw-options]
-version_scheme = "post-release"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/mujoco_mojo"]
-
-[tool.hatch.build.targets.sdist]
-include = [
-    "src/mujoco_mojo/**/*.html",
-    "src/mujoco_mojo/**/*.js",
-    "src/mujoco_mojo/**/*.mp3",
-    "src/mujoco_mojo/**/*.svg",
-    "src/mujoco_mojo/**/*.css",
-]
+[project.optional-dependencies]
+reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
 
 [dependency-groups]
 dev = [
@@ -106,7 +88,27 @@ dev = [
     "watchfiles>=1.1.1",
     "zensical>=0.0.31",
 ]
-reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
+
+[project.scripts]
+mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "post-release"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mujoco_mojo"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/mujoco_mojo/**/*.html",
+    "src/mujoco_mojo/**/*.js",
+    "src/mujoco_mojo/**/*.mp3",
+    "src/mujoco_mojo/**/*.svg",
+    "src/mujoco_mojo/**/*.css",
+]
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
