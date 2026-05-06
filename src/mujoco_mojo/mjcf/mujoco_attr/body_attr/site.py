@@ -616,7 +616,7 @@ class SiteBase(XMLModel):
                         signal_manager.post(
                             value=float(val.quat[i]),
                             category=SignalCategory.SITES,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 elif val.ndim == 1 and len(val) <= 3:
@@ -625,7 +625,7 @@ class SiteBase(XMLModel):
                         signal_manager.post(
                             value=val[i],
                             category=SignalCategory.SITES,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 else:
@@ -635,7 +635,7 @@ class SiteBase(XMLModel):
                         signal_manager.post(
                             value=float(val_flat[i]),
                             category=SignalCategory.SITES,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=str(i),
                         )
 

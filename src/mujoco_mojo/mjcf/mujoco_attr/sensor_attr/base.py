@@ -101,7 +101,7 @@ class SensorBase(XMLModel):
                     value=val[i],
                     category=SignalCategory.SENSORS,
                     # sensor name serves as the subgroup
-                    subgroup=self.name,
+                    subgroups=(str(self.name),),
                     # vector sensor (IMU/FT) components are indexed
                     # scalars (Touch/Range) are not
                     attr=str(i) if dim > 1 else None,

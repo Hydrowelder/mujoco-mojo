@@ -27,10 +27,6 @@ from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 
-import mujoco_mojo as mojo
-
-mojo.utils.filters.TaringFilter
-
 
 class MojoFrameProtocol(Protocol):
     """Protocol to tell type checkers that .mojo is available on the DataFrame."""
@@ -117,12 +113,26 @@ class MojoNamespace:
         # Matches Category/Name:Attr or Category/Name/Sub:Attr
         return _MojoFrame.from_pl(self._df.select(pl.col(rf"^[^/]+/{name}/.*$")))
 
+    def select_channel(self, channel: str) -> MojoDataFrame:
+        """
+        Selects all components of a specific channel across any category.
+
+        Matches the logical 'folder' before the attribute separator.
+        Example: 'xpos' matches 'Bodies/Hand/xpos:x' and 'Bodies/Hand/xpos:y'.
+        """
+        # Regex Breakdown:
+        # ^.*/        -> Start and match any prefix ending in a slash (the path)
+        # {channel}   -> The specific channel name (e.g., xpos)
+        # (?::.*)?    -> Optionally match a colon followed by any attribute component
+        # $           -> End of string
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*/{channel}(?::.*)?$")))
+
     def select_attribute(self, attr: str) -> MojoDataFrame:
         """
         Selects a specific attribute across all categories and objects.
-        Matches exact scalars (':nutation_deg') or vector groups (':xvelr:x').
+        Matches exact scalars (':nutation_deg') or vector groups (':x').
         """
-        # Matches ':attr' at the end of a string OR ':attr:' followed by anything
+        # Matches ':attr' at the end of a string OR ':attr' followed by anything
         return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*/{attr}(:.*)?$")))
 
     def select_custom(self, name: str) -> MojoDataFrame:

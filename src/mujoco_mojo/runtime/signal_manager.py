@@ -70,7 +70,8 @@ class SignalManager:
         self,
         value: float | NamedValue[float],
         category: SignalCategory | str,
-        subgroup: str | None = None,
+        subgroups: str | tuple[str, ...] = (),
+        *,
         attr: str | None = None,
     ):
         """
@@ -85,34 +86,33 @@ class SignalManager:
         Args:
             value (float | NamedValue[float]): The numeric data to record. If a NamedValue is passed and 'subgroup' is not provided, the NamedValue's internal name is used as the subgroup.
             category (SignalCategory | str): Top level category (e.g., "Bodies")
-            subgroup (str | None, optional): The second-level organizational folder. Defaults to None.
+            subgroups (str | tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
 
         Examples:
-            >>> # Becomes "Bodies/Hand:xpos_x"
-            >>> manager.post(1.2, SignalCategory.BODIES, "Hand", "xpos_x")
+            >>> # Becomes "Bodies/Hand/xpos:x"
+            >>> manager.post(1.2, SignalCategory.BODIES, ("Hand", "xpos"), "x")
 
-            >>> # Becomes "Sensors/IMU"
-            >>> manager.post(9.81, "Sensors", "IMU")
+            >>> # Becomes "Sensors/IMU/Accel:z"
+            >>> manager.post(9.81, "Sensors", ("IMU", "Accel"), attr="z")
 
             >>> # Using NamedValue (Becomes "Joints/Elbow:qpos")
             >>> nv = NamedValue(name="Elbow", value=0.4)
             >>> manager.post(nv, "Joints", attr="qpos")
 
         """
+        if isinstance(subgroups, str):
+            subgroups = (subgroups,)
+
         # extract the base name and value
         if isinstance(value, NamedValue):
             stored_val = float(value.value)
-            effective_name = subgroup or value.name
+            effective_subgroups = list(subgroups) if subgroups else [value.name]
         else:
             stored_val = float(value)
-            effective_name = subgroup
+            effective_subgroups = list(subgroups)
 
-        # build the folder path ('/' for folders, ':' for components/attrs)
-        path_parts = [category]
-        if effective_name:
-            path_parts.append(effective_name)
-
+        path_parts = [str(category)] + [str(s) for s in effective_subgroups if s]
         full_key = "/".join(path_parts)
 
         if attr:
