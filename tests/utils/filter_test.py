@@ -3,7 +3,7 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from mujoco_mojo.utils.dataframe import MojoFrame
+from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.filters import (
     AbsoluteValueFilter,
     AnyFilter,
@@ -18,9 +18,9 @@ from mujoco_mojo.utils.filters import (
     RollingMeanFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
+    TaringFilter,
     UnitFilter,
     WrapFilter,
-    ZeroingFilter,
 )
 
 
@@ -35,7 +35,7 @@ def signal_df():
 # --- Math & Basic Transformation Tests ---
 
 
-def test_scale_filter(signal_df: MojoFrame):
+def test_scale_filter(signal_df: MojoDataFrame):
     f = ScaleFilter(factor=2.0, offset=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     # Expected: (x * 2) + 1 -> [1, 3, 5, 7, 9]
@@ -49,11 +49,11 @@ def test_absolute_value_filter():
     assert result == [1.0, 0.0, 1.0]
 
 
-def test_zeroing_filter(signal_df: MojoFrame):
+def test_zeroing_filter(signal_df: MojoDataFrame):
     # Offsets the entire series so the first value is 0
     # Our 'val' already starts at 0, so let's use a shifted version
     df = signal_df.with_columns(pl.col("val") + 10.0)
-    f = ZeroingFilter()
+    f = TaringFilter()
     result = df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == [0.0, 1.0, 2.0, 3.0, 4.0]
 
@@ -61,7 +61,7 @@ def test_zeroing_filter(signal_df: MojoFrame):
 # --- Calculus & Signal Processing Tests ---
 
 
-def test_derivative_filter(signal_df: MojoFrame):
+def test_derivative_filter(signal_df: MojoDataFrame):
     # Ramp 0, 1, 2, 3, 4 with dt=1.0 should have derivative of 1.0
     f = DerivativeFilter(dt=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
@@ -69,21 +69,21 @@ def test_derivative_filter(signal_df: MojoFrame):
     assert result == [0.0, 1.0, 1.0, 1.0, 1.0]
 
 
-def test_integral_filter(signal_df: MojoFrame):
+def test_integral_filter(signal_df: MojoDataFrame):
     # Integral of [0, 1, 2] with dt=1.0 is cumsum [0, 1, 3]
     f = IntegralFilter(dt=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == [0.0, 1.0, 3.0, 6.0, 10.0]
 
 
-def test_low_pass_filter(signal_df: MojoFrame):
+def test_low_pass_filter(signal_df: MojoDataFrame):
     # Alpha=1.0 should return the original signal (no smoothing)
     f = LowPassFilter(alpha=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == signal_df["val"].to_list()
 
 
-def test_deadband_filter(signal_df: MojoFrame):
+def test_deadband_filter(signal_df: MojoDataFrame):
     f = DeadbandFilter(threshold=0.1)
     result = signal_df.select(f.apply(pl.col("noise")))["noise"].to_list()
     # noise: [-0.001, 0.005, 0.5, -0.5, 0.001]
@@ -94,7 +94,7 @@ def test_deadband_filter(signal_df: MojoFrame):
 # --- Boundary & Circular Tests ---
 
 
-def test_clip_filter(signal_df: MojoFrame):
+def test_clip_filter(signal_df: MojoDataFrame):
     f = ClipFilter(min=1.5, max=3.5)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == [1.5, 1.5, 2.0, 3.0, 3.5]
@@ -109,7 +109,7 @@ def test_wrap_filter():
     assert np.allclose(result, [0.5, 2.5, 1.0])
 
 
-def test_normalize_filter(signal_df: MojoFrame):
+def test_normalize_filter(signal_df: MojoDataFrame):
     f = NormalizeFilter()
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert np.allclose(result[0], 0.0)
@@ -134,7 +134,7 @@ def test_pydantic_constraints():
 
 
 def test_filter_adapter_parsing():
-    from mujoco_mojo.utils.filters import filter_adapter
+    from mujoco_mojo.utils.filters.filters import filter_adapter
 
     # Simulate a JSON payload from the frontend
     payload = {
@@ -148,10 +148,10 @@ def test_filter_adapter_parsing():
     assert isinstance(stack_dict["Bodies/racket/xvelr:y"][0], ScaleFilter)
 
 
-def test_filter_chaining_integrity(signal_df: MojoFrame):
+def test_filter_chaining_integrity(signal_df: MojoDataFrame):
     """Verifies that multiple filters can be stacked without side effects."""
     # Recipe: Offset by 10, then zero it out (should return original ramp)
-    stack: list[AnyFilter] = [ScaleFilter(factor=1.0, offset=10.0), ZeroingFilter()]
+    stack: list[AnyFilter] = [ScaleFilter(factor=1.0, offset=10.0), TaringFilter()]
 
     expr = pl.col("val")
     for f in stack:
@@ -190,7 +190,7 @@ def test_null_handling_persistence():
     assert np.isnan(result[3])
 
 
-def test_high_pass_filter(signal_df: MojoFrame):
+def test_high_pass_filter(signal_df: MojoDataFrame):
     # If alpha is very low, the LowPass part captures the DC offset.
     # Subtracting it should leave us near zero for a constant signal.
     df = pl.DataFrame({"x": [10.0] * 20})  # Constant signal
@@ -201,7 +201,7 @@ def test_high_pass_filter(signal_df: MojoFrame):
     assert np.allclose(result[-1], 0.0, atol=1e-2)
 
 
-def test_rolling_mean_filter(signal_df: MojoFrame):
+def test_rolling_mean_filter(signal_df: MojoDataFrame):
     # window=3, center=True on [0, 1, 2, 3, 4]
     # At index 2 (val=2.0), window is [1, 2, 3], mean is 2.0
     f = RollingMeanFilter(window=3, center=True)
@@ -269,7 +269,7 @@ def test_savitzky_golay_validation():
         SavitzkyGolayFilter(window=5, order=5)
 
 
-def test_unit_filter_basic_conversion(signal_df: MojoFrame):
+def test_unit_filter_basic_conversion(signal_df: MojoDataFrame):
     """Verifies standard scaling conversion (e.g., meters to millimeters)."""
     # 1.0 m -> 1000.0 mm
     f = UnitFilter(from_unit="m", to_unit="mm")
@@ -277,7 +277,7 @@ def test_unit_filter_basic_conversion(signal_df: MojoFrame):
     assert result == [0.0, 1000.0, 2000.0, 3000.0, 4000.0]
 
 
-def test_unit_filter_rotation_conversion(signal_df: MojoFrame):
+def test_unit_filter_rotation_conversion(signal_df: MojoDataFrame):
     """Verifies angular conversion (radians to degrees)."""
     f = UnitFilter(from_unit="rad", to_unit="deg")
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
