@@ -27,6 +27,10 @@ from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 
+import mujoco_mojo as mojo
+
+mojo.utils.filters.TaringFilter
+
 
 class MojoFrameProtocol(Protocol):
     """Protocol to tell type checkers that .mojo is available on the DataFrame."""
@@ -42,7 +46,9 @@ class _MojoFrame(pl.DataFrame):
     """
 
     @classmethod
-    def from_metadata(cls, path: Path | str, *args: Any, **kwargs: Any) -> MojoFrame:
+    def from_metadata(
+        cls, path: Path | str, *args: Any, **kwargs: Any
+    ) -> MojoDataFrame:
         """Instantiates a zero-row DataFrame for fast schema discovery."""
         return cls.from_pl(pl.read_parquet(source=path, n_rows=0, *args, **kwargs))
 
@@ -53,21 +59,23 @@ class _MojoFrame(pl.DataFrame):
         columns: list[int] | list[str] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> MojoFrame:
+    ) -> MojoDataFrame:
         """Loads a DataFrame containing only the specific telemetry columns requested."""
         return cls.from_pl(
             pl.read_parquet(source=path, columns=columns, *args, **kwargs)
         )
 
     @classmethod
-    def from_pl(cls, df: pl.DataFrame) -> MojoFrame:
+    def from_pl(cls, df: pl.DataFrame) -> MojoDataFrame:
         """
         Converts a standard Polars DataFrame into a MojoFrame for the static analyzer.
         """
-        return cast(MojoFrame, df)
+        return cast(MojoDataFrame, df)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], *args: Any, **kwargs: Any) -> MojoFrame:
+    def from_dict(
+        cls, data: dict[str, Any], *args: Any, **kwargs: Any
+    ) -> MojoDataFrame:
         """Creates a MojoFrame from a dictionary."""
         return cls.from_pl(pl.DataFrame(data=data, *args, **kwargs))
 
@@ -77,10 +85,10 @@ if TYPE_CHECKING:
     # 1. Our loaders (_MojoFrame)
     # 2. Polars methods (pl.DataFrame)
     # 3. Our namespace (MojoFrameProtocol)
-    class MojoFrame(_MojoFrame, MojoFrameProtocol): ...
+    class MojoDataFrame(_MojoFrame, MojoFrameProtocol): ...
 else:
     # At runtime, it's just our internal class
-    MojoFrame = _MojoFrame
+    MojoDataFrame = _MojoFrame
 
 
 class ColumnManifest(TypedDict):
@@ -100,72 +108,98 @@ class MojoNamespace:
     def __init__(self, df: pl.DataFrame):
         self._df = df
 
-    def select_category(self, category: SignalCategory | str) -> pl.DataFrame:
+    def select_category(self, category: SignalCategory | str) -> MojoDataFrame:
         """Filter columns belonging to a specific SignalCategory (e.g., 'Bodies')."""
-        return self._df.select(pl.col(rf"^{category}/.*$"))
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^{category}/.*$")))
 
-    def select_name(self, name: str) -> pl.DataFrame:
+    def select_name(self, name: str) -> MojoDataFrame:
         """General filter for columns associated with a specific object name (e.g., 'racket')."""
         # Matches Category/Name:Attr or Category/Name/Sub:Attr
-        return self._df.select(pl.col(rf"^[^/]+/{name}/.*$"))
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^[^/]+/{name}/.*$")))
 
-    def select_attribute(self, attr: str) -> pl.DataFrame:
+    def select_attribute(self, attr: str) -> MojoDataFrame:
         """
         Selects a specific attribute across all categories and objects.
         Matches exact scalars (':nutation_deg') or vector groups (':xvelr:x').
         """
         # Matches ':attr' at the end of a string OR ':attr:' followed by anything
-        return self._df.select(pl.col(rf"^.*/{attr}(:.*)?$"))
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*/{attr}(:.*)?$")))
 
-    def select_custom(self, name: str) -> pl.DataFrame:
-        return self._df.select(pl.col(rf"^{SignalCategory.CUSTOM}/{name}/.*$"))
+    def select_custom(self, name: str) -> MojoDataFrame:
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.CUSTOM}/{name}/.*$"))
+        )
 
-    def select_body(self, name: BodyName) -> pl.DataFrame:
-        return self._df.select(pl.col(rf"^{SignalCategory.BODIES}/{name}/.*$"))
+    def select_body(self, name: BodyName) -> MojoDataFrame:
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.BODIES}/{name}/.*$"))
+        )
 
-    def select_joint(self, name: JointName) -> pl.DataFrame:
+    def select_joint(self, name: JointName) -> MojoDataFrame:
         """Select all signals belonging to a specific Joint (qpos, qvel, etc.)."""
-        return self._df.select(pl.col(rf"^{SignalCategory.JOINTS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.JOINTS}/{name}/.*$"))
+        )
 
-    def select_site(self, name: SiteName) -> pl.DataFrame:
+    def select_site(self, name: SiteName) -> MojoDataFrame:
         """Select all signals recorded at a specific Site."""
-        return self._df.select(pl.col(rf"^{SignalCategory.SITES}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.SITES}/{name}/.*$"))
+        )
 
-    def select_geom(self, name: GeomName) -> pl.DataFrame:
+    def select_geom(self, name: GeomName) -> MojoDataFrame:
         """Select all signals associated with a specific Geom (contacts, etc.)."""
-        return self._df.select(pl.col(rf"^{SignalCategory.GEOMS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.GEOMS}/{name}/.*$"))
+        )
 
-    def select_sensor(self, name: SensorName) -> pl.DataFrame:
+    def select_sensor(self, name: SensorName) -> MojoDataFrame:
         """Select data from a specific named Sensor."""
-        return self._df.select(pl.col(rf"^{SignalCategory.SENSORS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.SENSORS}/{name}/.*$"))
+        )
 
-    def select_actuator(self, name: ActuatorName) -> pl.DataFrame:
+    def select_actuator(self, name: ActuatorName) -> MojoDataFrame:
         """Select data from a specific Actuator."""
-        return self._df.select(pl.col(rf"^{SignalCategory.ACTUATORS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.ACTUATORS}/{name}/.*$"))
+        )
 
-    def select_tendon(self, name: TendonName) -> pl.DataFrame:
+    def select_tendon(self, name: TendonName) -> MojoDataFrame:
         """Select data from a specific Tendon."""
-        return self._df.select(pl.col(rf"^{SignalCategory.TENDONS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.TENDONS}/{name}/.*$"))
+        )
 
-    def select_camera(self, name: CameraName) -> pl.DataFrame:
+    def select_camera(self, name: CameraName) -> MojoDataFrame:
         """Select pose or FOV data from a specific Camera."""
-        return self._df.select(pl.col(rf"^{SignalCategory.CAMERAS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.CAMERAS}/{name}/.*$"))
+        )
 
-    def select_light(self, name: LightName) -> pl.DataFrame:
+    def select_light(self, name: LightName) -> MojoDataFrame:
         """Select pose or intensity data from a specific Light."""
-        return self._df.select(pl.col(rf"^{SignalCategory.LIGHTS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.LIGHTS}/{name}/.*$"))
+        )
 
-    def select_equality(self, name: EqualityName) -> pl.DataFrame:
+    def select_equality(self, name: EqualityName) -> MojoDataFrame:
         """Select force/error data from an Equality constraint."""
-        return self._df.select(pl.col(rf"^{SignalCategory.CONSTRAINTS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.CONSTRAINTS}/{name}/.*$"))
+        )
 
-    def select_plugin(self, name: InstanceName) -> pl.DataFrame:
+    def select_plugin(self, name: InstanceName) -> MojoDataFrame:
         """Select custom state data from a specific Plugin Instance."""
-        return self._df.select(pl.col(rf"^{SignalCategory.PLUGINS}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.PLUGINS}/{name}/.*$"))
+        )
 
-    def select_flex(self, name: FlexName) -> pl.DataFrame:
+    def select_flex(self, name: FlexName) -> MojoDataFrame:
         """Select vertex/stress data from a Deformable Flex object."""
-        return self._df.select(pl.col(rf"^{SignalCategory.DEFORMABLES}/{name}/.*$"))
+        return _MojoFrame.from_pl(
+            self._df.select(pl.col(rf"^{SignalCategory.DEFORMABLES}/{name}/.*$"))
+        )
 
     def _get_base_map(self) -> dict[str, set[str]]:
         """
@@ -224,7 +258,7 @@ class MojoNamespace:
             "available_quats": sorted(list(self.quaternion_bases)),
         }
 
-    def with_rotation(self, quat_base: str, invert: bool = True) -> pl.DataFrame:
+    def with_rotation(self, quat_base: str, invert: bool = True) -> MojoDataFrame:
         """
         Rotates all 3D vectors into a new frame using the specified quaternion.
 
@@ -241,7 +275,7 @@ class MojoNamespace:
             logger.warning(
                 f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
             )
-            return self._df
+            return _MojoFrame.from_pl(self._df)
 
         # extract roation data (N, 4)
         q_cols = [f"{quat_base}:{k}" for k in "xyzw"]  # w last for scipy!
@@ -268,11 +302,11 @@ class MojoNamespace:
             )
 
         # overwrite with the new rotated data
-        return self._df.with_columns(new_columns)
+        return _MojoFrame.from_pl(self._df.with_columns(new_columns))
 
     def with_filter_map(
         self, filter_map: dict[str, list[AnyFilter]], omit_time: bool = True
-    ) -> pl.DataFrame:
+    ) -> MojoDataFrame:
         """
         Applies specific filter stacks to mapped columns.
 
@@ -298,14 +332,14 @@ class MojoNamespace:
 
             exprs.append(expr.alias(col_name))
 
-        return self._df.with_columns(exprs)
+        return _MojoFrame.from_pl(self._df.with_columns(exprs))
 
     def with_filters(
         self,
         filters: list[AnyFilter],
         columns: list[str] | None = None,
         omit_time: bool = True,
-    ) -> pl.DataFrame:
+    ) -> MojoDataFrame:
         """
         Applies a sequential stack of filters to the specified or all numeric columns.
 

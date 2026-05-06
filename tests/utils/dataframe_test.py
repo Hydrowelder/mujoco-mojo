@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
-from mujoco_mojo.utils.dataframe import MojoFrame
+from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
 
@@ -35,24 +35,24 @@ def sample_data():
 # --- IO & Initialization Tests ---
 
 
-def test_from_metadata(tmp_path: Path, sample_data: MojoFrame):
+def test_from_metadata(tmp_path: Path, sample_data: MojoDataFrame):
     """Verifies that from_metadata reads 0 rows but preserves schema."""
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
 
-    meta_df = MojoFrame.from_metadata(path)
+    meta_df = MojoDataFrame.from_metadata(path)
     assert isinstance(meta_df, pl.DataFrame)
     assert meta_df.height == 0
     assert len(meta_df.columns) == len(sample_data.columns)
 
 
-def test_from_columns(tmp_path: Path, sample_data: MojoFrame):
+def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame):
     """Verifies that only specific columns are loaded."""
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
 
     cols = [TIME_COLUMN_NAME, "Bodies/racket/xpos:x"]
-    col_df = MojoFrame.read_parquet(path, columns=cols)
+    col_df = MojoDataFrame.read_parquet(path, columns=cols)
     assert col_df.columns == cols
     assert col_df.height == 3
 
@@ -60,14 +60,14 @@ def test_from_columns(tmp_path: Path, sample_data: MojoFrame):
 # --- Selection Logic Tests ---
 
 
-def test_select_category(sample_data: MojoFrame):
+def test_select_category(sample_data: MojoDataFrame):
     """Tests filtering by top-level SignalCategory."""
     bodies = sample_data.mojo.select_category(SignalCategory.BODIES)
     assert all(c.startswith("Bodies/") for c in bodies.columns)
     assert "Joints/hinge_1/qpos" not in bodies.columns
 
 
-def test_select_name(sample_data: MojoFrame):
+def test_select_name(sample_data: MojoDataFrame):
     """Tests filtering by object name across categories."""
     racket = sample_data.mojo.select_name("racket")
     # Should include xpos, xiquat, and nutation
@@ -76,7 +76,7 @@ def test_select_name(sample_data: MojoFrame):
     assert "Joints/hinge_1/qpos" not in racket.columns
 
 
-def test_select_attribute(sample_data: MojoFrame):
+def test_select_attribute(sample_data: MojoDataFrame):
     """Tests selecting a specific attribute (scalar or vector)."""
     # Test vector attribute
     xpos = sample_data.mojo.select_attribute("xpos")
@@ -91,7 +91,7 @@ def test_select_attribute(sample_data: MojoFrame):
     assert nutation.columns == ["Bodies/racket/nutation_deg"]
 
 
-def test_select_body(sample_data: MojoFrame):
+def test_select_body(sample_data: MojoDataFrame):
     """Tests the specific body selection helper."""
     body_df = sample_data.mojo.select_body(BodyName("racket"))
     assert "Bodies/racket/xpos:x" in body_df.columns
@@ -101,7 +101,7 @@ def test_select_body(sample_data: MojoFrame):
 # --- Discovery & Manifest Tests ---
 
 
-def test_discovery_properties(sample_data: MojoFrame):
+def test_discovery_properties(sample_data: MojoDataFrame):
     """Verifies internal identification of triplets and quaternions."""
     # Bases
     assert "Bodies/racket/xpos" in sample_data.mojo.rotatable_bases
@@ -115,7 +115,7 @@ def test_discovery_properties(sample_data: MojoFrame):
     assert "Bodies/racket/xiquat:w" in sample_data.mojo.quaternion_columns
 
 
-def test_get_manifest(sample_data: MojoFrame):
+def test_get_manifest(sample_data: MojoDataFrame):
     """Ensures the manifest dictionary matches frontend expectations."""
     manifest = sample_data.mojo.get_manifest()
     assert manifest["all"] == sample_data.columns
@@ -126,7 +126,7 @@ def test_get_manifest(sample_data: MojoFrame):
 # --- Physics Transformation Tests ---
 
 
-def test_with_rotation_identity(sample_data: MojoFrame):
+def test_with_rotation_identity(sample_data: MojoDataFrame):
     """Rotating by identity [0,0,0,1] should result in zero change."""
     # Our sample_data quat is already identity
     rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
@@ -135,7 +135,7 @@ def test_with_rotation_identity(sample_data: MojoFrame):
         assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
 
 
-def test_with_rotation_90deg_z(sample_data: MojoFrame):
+def test_with_rotation_90deg_z(sample_data: MojoDataFrame):
     """Tests a 90-degree Z-axis rotation."""
     # quat for 90deg about Z: [0, 0, sin(45), cos(45)]
     q90 = [0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)]
@@ -143,7 +143,7 @@ def test_with_rotation_90deg_z(sample_data: MojoFrame):
     # Create data with 90deg rotation
     rows = sample_data.height
     df_q = cast(
-        MojoFrame,
+        MojoDataFrame,
         sample_data.with_columns(
             [
                 pl.Series("Bodies/racket/xiquat:x", [q90[0]] * rows),
@@ -167,7 +167,7 @@ def test_with_rotation_90deg_z(sample_data: MojoFrame):
 # --- Filter Logic Tests ---
 
 
-def test_with_filters_omit_time(sample_data: MojoFrame):
+def test_with_filters_omit_time(sample_data: MojoDataFrame):
     """Ensures filters skip the time column by default using real ScaleFilter."""
     # Factor 10, Offset 0 (Linear transform)
     filter_stack: list[AnyFilter] = [ScaleFilter(factor=10.0, offset=0.0)]
@@ -180,7 +180,7 @@ def test_with_filters_omit_time(sample_data: MojoFrame):
     assert filtered["Bodies/racket/xpos:x"][0] == 10.0
 
 
-def test_with_filter_map(sample_data: MojoFrame):
+def test_with_filter_map(sample_data: MojoDataFrame):
     """Tests applying specific real filters to specific columns."""
     filter_map: dict[str, list[AnyFilter]] = {
         "Joints/hinge_1/qpos": [ScaleFilter(factor=1.0, offset=1.0)],
