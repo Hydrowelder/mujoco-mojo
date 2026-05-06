@@ -142,7 +142,7 @@ class Load(MojoBaseModel, ABC):
                         value=float(source[i]) if self.active else 0.0,
                         category=SignalCategory.LOADS,
                         # nest the force/torque under the function name
-                        subgroup=f"{self.name}/{attr}",
+                        subgroups=(f"{self.name}", attr),
                         attr=k,
                     )
 
