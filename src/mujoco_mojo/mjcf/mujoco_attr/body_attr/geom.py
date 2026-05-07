@@ -492,7 +492,7 @@ class GeomBase(XMLModel):
                         signal_manager.post(
                             value=float(val.quat[i]),
                             category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 # Handle 3-vectors (pos, vel, acc)
@@ -501,7 +501,7 @@ class GeomBase(XMLModel):
                         signal_manager.post(
                             value=float(val[i]),
                             category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 else:
@@ -511,7 +511,7 @@ class GeomBase(XMLModel):
                         signal_manager.post(
                             value=float(val_flat[i]),
                             category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=str(i),
                         )
 

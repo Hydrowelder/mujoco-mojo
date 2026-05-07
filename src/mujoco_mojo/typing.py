@@ -306,6 +306,7 @@ class SignalCategory(StrEnum):
     CONSTRAINTS = "Constraints"
     PLUGINS = "Plugins"
     DEFORMABLES = "Deformables"
+    CLEARANCES = "Clearances"
     CUSTOM = "Custom"
 
 

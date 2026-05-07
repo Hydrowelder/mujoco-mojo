@@ -5,7 +5,7 @@ import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
-from mujoco_mojo.utils.dataframe import ColumnManifest, MojoFrame
+from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -110,7 +110,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
 @lru_cache(maxsize=128)
 def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
-    return MojoFrame.from_metadata(path_str).mojo.get_manifest()
+    return MojoDataFrame.from_metadata(path_str).mojo.get_manifest()
 
 
 @lru_cache(maxsize=2048)
@@ -190,7 +190,7 @@ async def get_trial_data(
         raw_data = {
             col: _get_atomic_column(db_path_str, col, mtime) for col in fetch_targets
         }
-        df = MojoFrame.from_dict(raw_data)
+        df = MojoDataFrame.from_dict(raw_data)
 
         if rotate_by:
             # rotate from world to rotate_by frame
