@@ -177,7 +177,7 @@ class Joint(XMLModel):
                     signal_manager.post(
                         value=v,
                         category=SignalCategory.JOINTS,
-                        subgroup=f"{self.name}/{attr}",
+                        subgroups=(f"{self.name}", attr),
                         # If it's a scalar (Hinge/Slide), we can omit the index suffix
                         attr=str(i) if len(val) > 1 else None,
                     )

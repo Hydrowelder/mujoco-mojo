@@ -361,7 +361,7 @@ class Body(XMLModel):
                             signal_manager.post(
                                 value=float(val_flat[i]),
                                 category=SignalCategory.BODIES,
-                                subgroup=f"{self.name}/{attr}",
+                                subgroups=(f"{self.name}", attr),
                                 attr=str(i),
                             )
                         continue
@@ -376,7 +376,7 @@ class Body(XMLModel):
                             signal_manager.post(
                                 value=float(val.quat[i]),
                                 category=SignalCategory.BODIES,
-                                subgroup=f"{self.name}/{attr}",
+                                subgroups=(f"{self.name}", attr),
                                 attr=k,
                             )
                         continue
@@ -414,7 +414,7 @@ class Body(XMLModel):
                         signal_manager.post(
                             value=full_vec[i],
                             category=SignalCategory.BODIES,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 else:
@@ -422,7 +422,7 @@ class Body(XMLModel):
                     signal_manager.post(
                         value=float(val),
                         category=SignalCategory.BODIES,
-                        subgroup=self.name,
+                        subgroups=(f"{self.name}", attr),
                         attr=attr,
                     )
 

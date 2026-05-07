@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import Annotated, Literal, Self
@@ -21,10 +23,11 @@ __all__ = [
     "MedianFilter",
     "NormalizeFilter",
     "RollingMeanFilter",
+    "SavitzkyGolayFilter",
     "ScaleFilter",
+    "TaringFilter",
     "UnitFilter",
     "WrapFilter",
-    "ZeroingFilter",
     "filter_adapter",
 ]
 
@@ -38,7 +41,7 @@ class FilterType(StrEnum):
     HIGH_PASS = "high_pass"
     CLIP = "clip"
     ROLLING_MEAN = "rolling_mean"
-    ZEROING = "zeroing"
+    TARING = "taring"
     DEADBAND = "deadband"
     WRAP = "wrap"
     MEDIAN = "median"
@@ -163,7 +166,7 @@ class ClipFilter(BaseFilter):
     """Optional upper bound; values above this will be set to max."""
 
     @model_validator(mode="after")
-    def validate_range(self) -> "ClipFilter":
+    def validate_range(self) -> ClipFilter:
         if self.min is not None and self.max is not None:
             if self.min >= self.max:
                 raise ValueError(
@@ -191,10 +194,10 @@ class RollingMeanFilter(BaseFilter):
         return expr.rolling_mean(window_size=self.window, center=self.center)
 
 
-class ZeroingFilter(BaseFilter):
+class TaringFilter(BaseFilter):
     """Offsets the entire signal so that the first sample is zero."""
 
-    type: Literal[FilterType.ZEROING] = FilterType.ZEROING
+    type: Literal[FilterType.TARING] = FilterType.TARING
     """The discriminator type for Pydantic."""
 
     def apply(self, expr: pl.Expr) -> pl.Expr:
@@ -408,7 +411,7 @@ AnyFilter = Annotated[
     | SavitzkyGolayFilter
     | ClipFilter
     | DeadbandFilter
-    | ZeroingFilter
+    | TaringFilter
     | UnitFilter
     | MedianFilter
     | NormalizeFilter
