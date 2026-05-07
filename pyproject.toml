@@ -89,6 +89,8 @@ dev = [
     "watchfiles>=1.1.1",
     "zensical>=0.0.31",
 ]
+
+[project.optional-dependencies]
 reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
 
 [tool.ruff]
