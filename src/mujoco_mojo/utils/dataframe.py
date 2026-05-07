@@ -104,6 +104,11 @@ class MojoNamespace:
     def __init__(self, df: pl.DataFrame):
         self._df = df
 
+    @property
+    def time(self) -> pl.Series:
+        """Access the master simulation time column."""
+        return self._df.get_column(TIME_COLUMN_NAME)
+
     def select_category(self, category: SignalCategory | str) -> MojoDataFrame:
         """Filter columns belonging to a specific SignalCategory (e.g., 'Bodies')."""
         return _MojoFrame.from_pl(self._df.select(pl.col(rf"^{category}/.*$")))
