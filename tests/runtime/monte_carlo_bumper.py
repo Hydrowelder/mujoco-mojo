@@ -316,9 +316,7 @@ def runtime(
     return mojo_model
 
 
-if __name__ == "__main__":
-    from pathlib import Path
-
+def main():
     mojo.utils.setup_logger()
 
     workdir = Path(__file__).parent / "mc_bumper_test_2"
@@ -330,9 +328,39 @@ if __name__ == "__main__":
         config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1),
     )
 
-    # results, had_fails = runner.run(
-    #     resume=False, clean_workdir=True, cleanup_delay=-1, trial_ids=[0]
-    # )
     had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
 
     print(f"Finished with {had_fails=}")
+
+
+def profile():
+    import cProfile
+    import pstats
+
+    mojo.utils.setup_logger()
+
+    workdir = Path(__file__).parent / "mc_bumper_test_2"
+    # Run the Monte Carlo
+    runner = mojo.utils.MojoRunner(
+        generator=generate,
+        runtime=runtime,
+        workdir=workdir,
+        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1, resume=False),
+    )
+
+    profiler = cProfile.Profile()
+    profiler.enable()
+    had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
+    profiler.disable()
+
+    stats = pstats.Stats(profiler).sort_stats("cumulative")
+    stats.dump_stats(save_as := "baseline.prof")
+    stats.print_callees(30, "apply_load")
+
+    print(f"To view results run:\n\tsnakeviz {save_as}")
+    print(f"Finished with {had_fails=}")
+
+
+if __name__ == "__main__":
+    # main()
+    profile()
