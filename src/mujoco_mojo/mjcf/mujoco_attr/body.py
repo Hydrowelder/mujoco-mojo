@@ -17,7 +17,6 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
-from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.position import Pos
@@ -29,6 +28,7 @@ from mujoco_mojo.typing import (
     SignalCategory,
     Sleep,
     Vec3,
+    Vec4,
     Vec6,
     VecN,
 )
@@ -210,12 +210,24 @@ class Body(XMLModel):
         """Mass of the body from a compiled MjModel."""
         return mj_model.body_mass[self.get_id(mj_model)]
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
+    def rt_xmat(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
+    ) -> Mat3:
         """Rotation matrix the body during runtime."""
-        return np.asarray(mj_data.xmat[self.get_id(mj_model)]).reshape(3, 3)
+        return (
+            mj_data.xmat[self.get_id(mj_model)]
+            if flatten
+            else mj_data.xmat[self.get_id(mj_model)].reshape(3, 3)
+        )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
-        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+        """
+        Returns the (w, x, y, z) quaternion from the body's rotation matrix.
+        Uses MuJoCo's internal C utility for speed.
+        """
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        return quat
 
     def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> Vec3:
         """Diagonalized inertia tensor of the body (body relative)."""
@@ -297,12 +309,24 @@ class Body(XMLModel):
         """Position of the body inertial frame during runtime."""
         return mj_data.xipos[self.get_id(mj_model)]
 
-    def rt_ximat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
+    def rt_ximat(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
+    ) -> Mat3:
         """Rotation matrix the body during runtime."""
-        return np.asarray(mj_data.ximat[self.get_id(mj_model)]).reshape(3, 3)
+        return (
+            mj_data.ximat[self.get_id(mj_model)]
+            if flatten
+            else mj_data.ximat[self.get_id(mj_model)].reshape(3, 3)
+        )
 
-    def rt_xiquat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
-        return Quat.from_matrix(self.rt_ximat(mj_model, mj_data))
+    def rt_xiquat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+        """
+        Returns the (w, x, y, z) quaternion from the body's inertial rotation matrix.
+        Uses MuJoCo's internal C utility for speed.
+        """
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, self.rt_ximat(mj_model, mj_data, flatten=True))
+        return quat
 
     def request(
         self,
@@ -352,14 +376,13 @@ class Body(XMLModel):
                     case "xmat" | "ximat":
                         match attr:
                             case "xmat":
-                                val = self.rt_xmat(mj_model, mj_data)
+                                val = self.rt_xmat(mj_model, mj_data, flatten=True)
                             case "ximat":
-                                val = self.rt_ximat(mj_model, mj_data)
+                                val = self.rt_ximat(mj_model, mj_data, flatten=True)
 
-                        val_flat = val.flatten()
-                        for i in range(len(val_flat)):
+                        for i in range(len(val)):
                             signal_manager.post(
-                                value=float(val_flat[i]),
+                                value=float(val[i]),
                                 category=SignalCategory.BODIES,
                                 subgroups=(f"{self.name}", attr),
                                 attr=str(i),
@@ -372,9 +395,9 @@ class Body(XMLModel):
                             case "xiquat":
                                 val = self.rt_xiquat(mj_model, mj_data)
 
-                        for i, k in enumerate("wxyz"[: len(val.quat)]):
+                        for i, k in enumerate("wxyz"):
                             signal_manager.post(
-                                value=float(val.quat[i]),
+                                value=float(val[i]),
                                 category=SignalCategory.BODIES,
                                 subgroups=(f"{self.name}", attr),
                                 attr=k,
