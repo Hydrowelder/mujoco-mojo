@@ -100,7 +100,6 @@ class RuntimeManager:
         if self.signal_manager and not self._skip_recording:
             mujoco.mj_forward(mj_model, mj_data)
             self.signal_manager.record(mj_model, mj_data)
-            self.signal_manager.flush_ledger()
 
         # record any frames which are due
         all_arrows = None

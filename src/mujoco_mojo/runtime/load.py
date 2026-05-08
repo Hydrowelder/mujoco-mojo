@@ -12,7 +12,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
-from mujoco_mojo.typing import SignalCategory, Vec3
+from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 
@@ -55,11 +55,17 @@ class Load(MojoBaseModel, ABC):
     _user_data: Any = PrivateAttr(default=None)
     """User defined information for the to use."""
 
-    _last_f: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_f: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
-    _last_t: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_t: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
+
+    def handle_inactive(self):
+        # [3] is magnitude
+        if not np.isclose(0, self._last_f[3] + self._last_f[3]):
+            self._last_f = np.zeros(4)
+            self._last_t = np.zeros(4)
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
@@ -78,10 +84,7 @@ class Load(MojoBaseModel, ABC):
         if self.rel_to_site is None:
             return local
 
-        # Get the 3x3 rotation matrix for the reference site
-        # MuJoCo stores this as a flat 9-element array in site_xmat
-        rot = self.rel_to_site.rt_xmat(mj_model, mj_data)
-        return rot @ local
+        return self.rel_to_site.rt_xmat(mj_model, mj_data) @ local
 
     @abstractmethod
     def calculate(
@@ -107,6 +110,7 @@ class Load(MojoBaseModel, ABC):
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         if not self.active:
+            self.handle_inactive()
             return
 
         f_world, t_world = self.calculate(mj_model=mj_model, mj_data=mj_data)
@@ -215,6 +219,10 @@ class PointToPointForce(Load):
         return self
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        if not self.active:
+            self.handle_inactive()
+            return
+
         super().apply_load(mj_model, mj_data)
 
         f_world = self._last_f[:3]
@@ -423,6 +431,10 @@ class BodyReactionForce(Load):
             self.xtion_body.get_id(mj_model)
 
     def apply_load(self, mj_model, mj_data):
+        if not self.active:
+            self.handle_inactive()
+            return
+
         super().apply_load(mj_model, mj_data)
 
         if self.xtion_body is None:
