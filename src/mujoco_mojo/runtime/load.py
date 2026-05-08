@@ -104,7 +104,7 @@ class Load(MojoBaseModel, ABC):
 
         """
 
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
+    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
         runtime_manager.add_load(self)
         return self
 
