@@ -61,6 +61,12 @@ class Load(MojoBaseModel, ABC):
     _last_t: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
 
+    def handle_inactive(self):
+        # [3] is magnitude
+        if not np.isclose(0, self._last_f[3] + self._last_f[3]):
+            self._last_f = np.zeros(4)
+            self._last_t = np.zeros(4)
+
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
         self.action_site.get_id(mj_model)
@@ -104,10 +110,7 @@ class Load(MojoBaseModel, ABC):
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         if not self.active:
-            # [3] is magnitude
-            if not np.isclose(0, self._last_f[3] + self._last_f[3]):
-                self._last_f = np.zeros(4)
-                self._last_t = np.zeros(4)
+            self.handle_inactive()
             return
 
         f_world, t_world = self.calculate(mj_model=mj_model, mj_data=mj_data)
@@ -217,10 +220,7 @@ class PointToPointForce(Load):
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         if not self.active:
-            # [3] is magnitude
-            if not np.isclose(0, self._last_f[3] + self._last_f[3]):
-                self._last_f = np.zeros(4)
-                self._last_t = np.zeros(4)
+            self.handle_inactive()
             return
 
         super().apply_load(mj_model, mj_data)
@@ -432,10 +432,7 @@ class BodyReactionForce(Load):
 
     def apply_load(self, mj_model, mj_data):
         if not self.active:
-            # [3] is magnitude
-            if not np.isclose(0, self._last_f[3] + self._last_f[3]):
-                self._last_f = np.zeros(4)
-                self._last_t = np.zeros(4)
+            self.handle_inactive()
             return
 
         super().apply_load(mj_model, mj_data)

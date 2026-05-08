@@ -354,8 +354,8 @@ def profile():
     profiler.disable()
 
     stats = pstats.Stats(profiler).sort_stats("cumulative")
-    stats.dump_stats(save_as := "sm_optimized.prof")
-    stats.print_stats(20)
+    stats.dump_stats(save_as := "baseline.prof")
+    stats.print_callees(30, "apply_load")
 
     print(f"To view results run:\n\tsnakeviz {save_as}")
     print(f"Finished with {had_fails=}")
