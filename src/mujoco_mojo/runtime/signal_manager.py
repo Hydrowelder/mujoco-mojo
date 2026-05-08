@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 import mujoco
+import numpy as np
 import polars as pl
 
-from mujoco_mojo.stochas import NamedValue, NamedValueDict, ValueName
-from mujoco_mojo.typing import SignalCategory
+from mujoco_mojo.typing import SignalCategory, VecN
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
 
@@ -27,17 +27,31 @@ class SignalManager:
     record_decimation: int = 1
     """How many steps between each recording should be performed."""
 
-    ledger: NamedValueDict[float] = field(
-        default_factory=NamedValueDict[float], init=False
+    # === BEGIN PRIVATE API ===
+    _key_cache: dict[tuple[str, tuple[str, ...], str], str] = field(
+        default_factory=dict, init=False
     )
-    """Values to be recorded. This dictionary is flushed on every timestep."""
+    """Caches (category, subgroups, attr) tuples to their joined string keys."""
+
+    _key_to_idx: dict[str, int] = field(default_factory=dict, init=False)
+    """Maps signal strings to their specific column index in the NumPy buffer."""
+
+    _data_buffer: VecN = field(init=False)
+    """2D NumPy array (batch_size, n_signals) for high-speed value insertion."""
 
     _sample_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], Any]] = field(
         default_factory=list, init=False
     )
+    """Functions to be called to sample values to be recorded."""
 
-    _buffer: list[dict[str, float]] = field(default_factory=list, init=False)
+    _buffer_row_idx: int = 0
+    """Current row position in the pre-allocated data buffer."""
+
     _step_count: int = -1
+    """Global counter of physics steps to handle decimation."""
+
+    _n_cols: int = 0
+    """Current number of unique signals registered."""
 
     @staticmethod
     def default_output_name() -> Literal["telemetry.parquet"]:
@@ -56,21 +70,30 @@ class SignalManager:
         return self.default_table_name()
 
     def __post_init__(self):
-        # Ensure directory exists and connect
+        # ensure directory exists and connect
         self.export_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def register_sampler(self, task: Callable):
-        self._sample_tasks.append(task)
+        # pre-allocate some columns as a starting guess; grow as needed
+        self._data_buffer = np.zeros((self.batch_size, 100), dtype=np.float64)
 
-    def flush_ledger(self):
-        """Clear the ledger for a new timestep."""
-        self.ledger = NamedValueDict[float]()
+        # ensure time is always index 0
+        self._key_to_idx[TIME_COLUMN_NAME] = 0
+        self._n_cols = 1
+        logger.debug(
+            f"SignalManager initialized: Batch size={self.batch_size}, Path={self.export_path}"
+        )
+
+    def register_sampler(self, task: Callable[[mujoco.MjModel, mujoco.MjData], Any]):
+        self._sample_tasks.append(task)
+        logger.debug(
+            f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
+        )
 
     def post(
         self,
-        value: float | NamedValue[float],
+        value: float,
         category: SignalCategory | str,
-        subgroups: str | tuple[str, ...] = (),
+        subgroups: tuple[str, ...] = (),
         *,
         attr: str | None = None,
     ):
@@ -84,9 +107,9 @@ class SignalManager:
             (e.g., "Bodies/Link_1:xpos_x")
 
         Args:
-            value (float | NamedValue[float]): The numeric data to record. If a NamedValue is passed and 'subgroup' is not provided, the NamedValue's internal name is used as the subgroup.
+            value (float): The numeric data to record.
             category (SignalCategory | str): Top level category (e.g., "Bodies")
-            subgroups (str | tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
+            subgroups (tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
 
         Examples:
@@ -96,63 +119,84 @@ class SignalManager:
             >>> # Becomes "Sensors/IMU/Accel:z"
             >>> manager.post(9.81, "Sensors", ("IMU", "Accel"), attr="z")
 
-            >>> # Using NamedValue (Becomes "Joints/Elbow:qpos")
-            >>> nv = NamedValue(name="Elbow", value=0.4)
-            >>> manager.post(nv, "Joints", attr="qpos")
-
         """
-        if isinstance(subgroups, str):
-            subgroups = (subgroups,)
+        # use tuple as cache key to avoid string construction
+        cache_lookup = (str(category), subgroups, attr if attr is not None else "")
 
-        # extract the base name and value
-        if isinstance(value, NamedValue):
-            stored_val = float(value.value)
-            effective_subgroups = list(subgroups) if subgroups else [value.name]
+        if cache_lookup in self._key_cache:
+            # fast path for cached signal
+            full_key = self._key_cache[cache_lookup]
         else:
-            stored_val = float(value)
-            effective_subgroups = list(subgroups)
+            # slow path for a new signal
+            path_parts = [str(category)] + [str(s) for s in subgroups if s]
+            full_key = "/".join(path_parts)
+            if attr:
+                full_key += f":{attr}"
 
-        path_parts = [str(category)] + [str(s) for s in effective_subgroups if s]
-        full_key = "/".join(path_parts)
+            self._key_cache[cache_lookup] = full_key
 
-        if attr:
-            full_key += f":{attr}"
+        # get column index
+        if full_key in self._key_to_idx:
+            idx = self._key_to_idx[full_key]
+        else:
+            # register a new signal column
+            idx = self._n_cols
+            self._key_to_idx[full_key] = idx
+            self._n_cols += 1
 
-        # inject to ledger for next flush
-        self.ledger[full_key] = NamedValue[float](
-            name=ValueName(full_key), stored_value=stored_val
-        )
+            logger.debug(f"New signal registered: {full_key} at index {idx}")
+
+            # grow buffer if exceeding the initial guess
+            if self._n_cols > self._data_buffer.shape[1]:
+                n_cols_to_add = 50
+                new_width = self._data_buffer.shape[1] + n_cols_to_add
+                logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
+
+                growth = np.zeros((self.batch_size, n_cols_to_add), dtype=np.float64)
+                self._data_buffer = np.hstack([self._data_buffer, growth])
+
+        # write value to buffer for next flush
+        self._data_buffer[self._buffer_row_idx, idx] = value
 
     def record(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-        """Finalizes the ledger and sends to the buffer/results file."""
+        """Executes all samplers and advances the buffer index. Flushes if due."""
         self._step_count += 1
         if self._step_count % self.record_decimation != 0:
             return
 
+        # record simulation time
+        self._data_buffer[self._buffer_row_idx, 0] = mj_data.time
+
+        # run samplers
         for task in self._sample_tasks:
             task(mj_model, mj_data)
 
-        self.log_step(timestamp=mj_data.time, data=self.ledger)
+        self._buffer_row_idx += 1
 
-    def log_step(self, timestamp: float, data: NamedValueDict[float]):
-        """Appends a row to the memory buffer."""
-        row = {TIME_COLUMN_NAME: timestamp}
-        row.update({k: nv.value for k, nv in data.items()})
-
-        self._buffer.append(row)
-
-        if len(self._buffer) >= self.batch_size:
+        if self._buffer_row_idx >= self.batch_size:
             self.flush()
 
     def flush(self):
         """Commits the memory buffer to the output file."""
-        if not self._buffer:
+        if self._buffer_row_idx == 0:
             return
 
-        new_df = pl.DataFrame(self._buffer)
+        # build column names from mapping
+        sorted_keys = sorted(self._key_to_idx.keys(), key=lambda x: self._key_to_idx[x])
+
+        # slice only the used portion of the buffer
+        new_df = pl.from_numpy(
+            data=self._data_buffer[: self._buffer_row_idx, : self._n_cols],
+            schema=sorted_keys,
+        )
+
+        logger.debug(
+            f"Flushing {self._buffer_row_idx} steps to {self.export_path.name}"
+        )
 
         if self.export_path.exists():
             try:
+                # Use diagonal concat to safely handle signals added mid-simulation
                 existing_df = pl.read_parquet(self.export_path)
                 combined_df = pl.concat([existing_df, new_df], how="diagonal")
                 combined_df.write_parquet(self.export_path, compression="zstd")
@@ -161,7 +205,9 @@ class SignalManager:
         else:
             new_df.write_parquet(self.export_path, compression="zstd")
 
-        self._buffer = []
+        # reset buffer for next batch
+        self._buffer_row_idx = 0
+        self._data_buffer.fill(0.0)
 
     def close(self):
         self.flush()

@@ -7,7 +7,6 @@ import numpy as np
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
-from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -408,12 +407,24 @@ class GeomBase(XMLModel):
         """Returns the world position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
-        """Returns the world orientation matrix of the geom."""
-        return mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+    def rt_xmat(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
+    ) -> Mat3:
+        """Rotation matrix the geom during runtime."""
+        return (
+            mj_data.geom_xmat[self.get_id(mj_model)]
+            if flatten
+            else mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+        )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
-        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+        """
+        Returns the (w, x, y, z) quaternion from the geom's rotation matrix.
+        Uses MuJoCo's internal C utility for speed.
+        """
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        return quat
 
     def rt_xvel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
@@ -483,23 +494,27 @@ class GeomBase(XMLModel):
                         val = self.rt_xaccr(mj_model, mj_data)
                     case "quat":
                         val = self.rt_quat(mj_model, mj_data)
+
+                        for i, k in enumerate("wxyz"):
+                            signal_manager.post(
+                                value=float(val[i]),
+                                category=SignalCategory.GEOMS,
+                                subgroups=(f"{self.name}", attr),
+                                attr=k,
+                            )
+                        continue
                     case _:
                         continue
 
-                # handle quaternion
-                if isinstance(val, Quat):
-                    for i, k in enumerate("wxyz"[: len(val.quat)]):
-                        signal_manager.post(
-                            value=float(val.quat[i]),
-                            category=SignalCategory.GEOMS,
-                            subgroups=(f"{self.name}", attr),
-                            attr=k,
-                        )
                 # Handle 3-vectors (pos, vel, acc)
-                elif val.ndim == 1 and len(val) <= 3:
-                    for i, k in enumerate("xyz"[: len(val)]):
+                if val.ndim == 1 and len(val) <= 3:
+                    # vector output (x, y, z + magnitude)
+                    mag = np.linalg.norm(val)
+                    full_vec = np.append(val, mag)
+
+                    for i, k in enumerate("xyzm"):
                         signal_manager.post(
-                            value=float(val[i]),
+                            value=float(full_vec[i]),
                             category=SignalCategory.GEOMS,
                             subgroups=(f"{self.name}", attr),
                             attr=k,
