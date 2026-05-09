@@ -16,20 +16,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class PhaseExit(IntEnum):
+class ProximityType(IntEnum):
     """Exit types from proximity calculations."""
 
     BROADPHASE = 0
-    """Returned value is from the broadphase checks (bounding sphere to bounding sphere)."""
+    """Returned value is from a broadphase test (bounding sphere to bounding sphere)."""
 
-    VERTEX_TO_VERTEX = 2
-    """Returned value is from the vertex to vertex checks."""
+    VERTEX_TO_VERTEX = 1
+    """Returned value is from a vertex to vertex test."""
 
     VERTEX_TO_FACE = 2
-    """Returned value is from the vertex to vertex checks."""
+    """Returned value is from a vertex to face test."""
 
     FACE_TO_FACE = 3
-    """Returned value is from the manifold to manifold checks."""
+    """Returned value is from a face to face test."""
 
 
 class ProximityMixin(MojoBaseModel):
@@ -41,11 +41,16 @@ class ProximityMixin(MojoBaseModel):
     _baked_query: trimesh.proximity.ProximityQuery | None = PrivateAttr(default=None)
     """Pre-computed BVH query object for fast distance lookups."""
 
+    _baked_manager: trimesh.collision.CollisionManager | None = PrivateAttr(
+        default=None
+    )
+    """Collision manager for face to face path."""
+
     _local_verts: MatN | None = PrivateAttr(default=None)
     _local_faces: MatN | None = PrivateAttr(default=None)
     _rad: float = PrivateAttr(default=np.nan)
 
-    def bake_proximity(self, mj_model: mujoco.MjModel):
+    def bake_proximity(self, mj_model: mujoco.MjModel, proximity_type: ProximityType):
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
         geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
 
@@ -74,7 +79,16 @@ class ProximityMixin(MojoBaseModel):
         self._baked_mesh = trimesh.Trimesh(
             vertices=self._local_verts, faces=self._local_faces
         )
-        self._baked_query = trimesh.proximity.ProximityQuery(self._baked_mesh)
+        match proximity_type:
+            case ProximityType.FACE_TO_FACE:
+                if not geom_self.name:
+                    msg = "To perform face to face proximity calculations, geom must have a name"
+                    logger.error(msg)
+                    raise ValueError(msg)
+                self._baked_manager = trimesh.collision.CollisionManager()
+                self._baked_manager.add_object(geom_self.name, self._baked_mesh)
+            case _:
+                self._baked_query = trimesh.proximity.ProximityQuery(self._baked_mesh)
 
         logger.debug(f"Baked BVH for {geom_self.name} ({len(self._local_faces)} faces)")
 
@@ -86,7 +100,7 @@ class ProximityMixin(MojoBaseModel):
         mj_data: mujoco.MjData,
         dist_max: float,
         fromto: Literal[False] = False,
-    ) -> tuple[float, PhaseExit]: ...
+    ) -> tuple[float, ProximityType]: ...
 
     @overload
     def get_vertex_to_face_proximity(
@@ -96,7 +110,58 @@ class ProximityMixin(MojoBaseModel):
         mj_data: mujoco.MjData,
         dist_max: float,
         fromto: Literal[True],
-    ) -> tuple[tuple[float, Vec3, Vec3], PhaseExit]: ...
+    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+
+    @overload
+    def get_face_to_face_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[False] = False,
+    ) -> tuple[float, ProximityType]: ...
+
+    @overload
+    def get_face_to_face_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[True],
+    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+
+    @classmethod
+    def _broadphase_test(
+        cls,
+        rad_a: float,
+        pos_a: Vec3,
+        rad_b: float,
+        pos_b: Vec3,
+        dist_max: float,
+        fromto: bool = False,
+    ) -> tuple[float | tuple[float, Vec3, Vec3], bool]:
+        """
+        Performs a broadphase proximity test on bounding spheres.
+
+        Args:
+            rad_a (float): Bounding radius of A.
+            pos_a (Vec3): Position of center of A.
+            rad_b (float): Bounding radius of B.
+            pos_b (Vec3): Position of center of B.
+            dist_max (float): The 'cutoff' distance. If the objects are further than this, dist_max will be returned and exit early (fromto will also return as zeros).
+            fromto (bool, optional): Whether or not to return the locations of the minimum distances. Defaults to False.
+
+        Returns:
+            tuple[float | tuple[float, Vec3, Vec3], bool]: Unsigned (`>= 0`) minimum distance from self to other, world location of minimum distance on self, world location of minimum distance on other, and if the result is greater than dist_max.
+
+        """
+        dist = float(np.linalg.norm(pos_a - pos_b) - (rad_a + rad_b))
+        if dist > dist_max:
+            res = (dist, np.zeros(3), np.zeros(3)) if fromto else dist
+            return res, True
+        return dist, False
 
     def get_vertex_to_face_proximity(
         self,
@@ -105,7 +170,7 @@ class ProximityMixin(MojoBaseModel):
         mj_data: mujoco.MjData,
         dist_max: float,
         fromto: bool = False,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], PhaseExit]:
+    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
         """
         Calculates the vertex to face distance using a multi-phase Bounding Volume Hierarchy (BVH) query.
 
@@ -130,12 +195,12 @@ class ProximityMixin(MojoBaseModel):
 
         """
         if self._baked_query is None:
-            self.bake_proximity(mj_model)
+            self.bake_proximity(mj_model, ProximityType.VERTEX_TO_FACE)
         if other._baked_query is None:
-            other.bake_proximity(mj_model)
+            other.bake_proximity(mj_model, ProximityType.VERTEX_TO_FACE)
         assert self._baked_query and other._baked_query
         assert self._local_verts is not None and other._local_verts is not None
-        assert self._rad != np.nan and other._rad != np.nan
+        assert not np.isnan(self._rad) and not np.isnan(other._rad)
 
         geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
 
@@ -147,16 +212,16 @@ class ProximityMixin(MojoBaseModel):
         pos_other = other.rt_xpos(mj_model, mj_data)
 
         # find center to center to center distance and return early if broad phase
-        broadphase_dist = float(
-            np.linalg.norm(pos_self - pos_other) - (rad_self + rad_other)
+        d_est, skip = self._broadphase_test(
+            rad_a=rad_self,
+            pos_a=pos_self,
+            rad_b=rad_other,
+            pos_b=pos_other,
+            dist_max=dist_max,
+            fromto=fromto,
         )
-        if broadphase_dist > dist_max:
-            res = (
-                (broadphase_dist, np.zeros(3), np.zeros(3))
-                if fromto
-                else broadphase_dist
-            )
-            return res, PhaseExit.BROADPHASE
+        if skip:
+            return d_est, ProximityType.BROADPHASE
 
         # ========== COORDINATE TRANSFORMATION ==========
         mat_self = geom_self.rt_xmat(mj_model, mj_data)  # already Mat3 (3x3)
@@ -189,7 +254,7 @@ class ProximityMixin(MojoBaseModel):
                 res = (min_dist, p_self, p_other)
             else:
                 res = min_dist
-            return res, PhaseExit.VERTEX_TO_FACE
+            return res, ProximityType.VERTEX_TO_FACE
         else:
             min_dist = float(min_b)
             if fromto:
@@ -199,4 +264,92 @@ class ProximityMixin(MojoBaseModel):
                 res = (min_dist, p_self, p_other)
             else:
                 res = min_dist
-            return res, PhaseExit.VERTEX_TO_FACE
+            return res, ProximityType.VERTEX_TO_FACE
+
+    def get_face_to_face_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: bool = False,
+    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+        """
+        Calculates the face to face distance using a multi-phase Bounding Volume Hierarchy (BVH) query.
+
+        This is more accurate than the vertex to face method, but comes at higher computational cost.
+
+        Phases:
+            1. Broad Phase: Sphere-Sphere check (object level).
+            2. Mid Phase: BVH Traversal (eliminating triangle groups). No exit here.
+            3. Narrow Phase: Face-to-Face proximity.
+
+        Args:
+            other (AnyGeom): The other geom to test against.
+            mj_model (mujoco.MjModel): Compiled MuJoCo model.
+            mj_data (mujoco.MjData): MuJoCo runtime data.
+            dist_max (float): The 'cutoff' distance. If the objects are further than this, dist_max will be returned and exit early (fromto will also return as zeros).
+            fromto (bool): Whether or not to return the locations of the minimum distances.
+
+        Returns:
+            tuple[float | tuple[float, Vec3, Vec3], PhaseExit]: Unsigned (`>= 0`) minimum distance between from self to other and which phase the exit occurred in.
+
+            **OR**
+
+            **tuple[float | tuple[float, Vec3, Vec3], PhaseExit]**: Unsigned (`>= 0`) minimum distance from self to other, world location of minimum distance on self, world location of minimum distance on other, and which phase the exit occurred in.
+
+        """
+        if self._baked_manager is None:
+            self.bake_proximity(mj_model, ProximityType.FACE_TO_FACE)
+        if other._baked_manager is None:
+            other.bake_proximity(mj_model, ProximityType.FACE_TO_FACE)
+        assert self._baked_manager and other._baked_manager
+        assert not np.isnan(self._rad) and not np.isnan(other._rad)
+
+        geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
+
+        # ========== BROADPHASE: Sphere-Sphere check ==========
+        rad_self = self._rad
+        rad_other = other._rad
+
+        pos_self = geom_self.rt_xpos(mj_model, mj_data)
+        pos_other = other.rt_xpos(mj_model, mj_data)
+
+        # find center to center to center distance and return early if broad phase
+        d_est, skip = self._broadphase_test(
+            rad_a=rad_self,
+            pos_a=pos_self,
+            rad_b=rad_other,
+            pos_b=pos_other,
+            dist_max=dist_max,
+            fromto=fromto,
+        )
+        if skip:
+            return d_est, ProximityType.BROADPHASE
+
+        # ========== NARROWPHASE ==========
+        # set the other transformation relative to self's local frame
+        t_self = np.eye(4)
+        t_self[:3, :3] = geom_self.rt_xmat(mj_model, mj_data)
+        t_self[:3, 3] = geom_self.rt_xpos(mj_model, mj_data)
+
+        t_other = np.eye(4)
+        t_other[:3, :3] = other.rt_xmat(mj_model, mj_data)
+        t_other[:3, 3] = other.rt_xpos(mj_model, mj_data)
+
+        self._baked_manager.set_transform(geom_self.name, t_self)
+        other._baked_manager.set_transform(other.name, t_other)
+
+        # CollisionManager returns distance and the two closest points
+        result = self._baked_manager.min_distance_other(
+            other._baked_manager, return_data=True
+        )
+        min_dist = float(result[0])
+        data = result[1]
+
+        if fromto and data is not None:
+            p_self = data.point(geom_self.name)  # pyright: ignore[reportAttributeAccessIssue]
+            p_other = data.point(other.name)  # pyright: ignore[reportAttributeAccessIssue]
+            return (min_dist, p_self, p_other), ProximityType.FACE_TO_FACE
+
+        return min_dist, ProximityType.FACE_TO_FACE
