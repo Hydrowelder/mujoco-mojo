@@ -19,16 +19,19 @@ logger = get_logger(__name__)
 class ProximityType(IntEnum):
     """Exit types from proximity calculations."""
 
-    BROADPHASE = 0
+    SPHERE_TO_SPHERE = 0
     """Returned value is from a broadphase test (bounding sphere to bounding sphere)."""
 
-    VERTEX_TO_VERTEX = 1
-    """Returned value is from a vertex to vertex test."""
+    CONVEX_HULL = 1
+    """Returned value is from a convex hull to convex hull test."""
 
-    VERTEX_TO_FACE = 2
+    # VERTEX_TO_VERTEX = 2
+    # """Returned value is from a vertex to vertex test."""
+
+    VERTEX_TO_FACE = 3
     """Returned value is from a vertex to face test."""
 
-    FACE_TO_FACE = 3
+    FACE_TO_FACE = 4
     """Returned value is from a face to face test."""
 
 
@@ -55,7 +58,11 @@ class ProximityMixin(MojoBaseModel):
         geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
 
         # cache bounding radius
-        self._rad = geom_self.geom_rbound(mj_model)
+        self._rad = geom_self.rbound(mj_model)
+
+        match proximity_type:
+            case ProximityType.SPHERE_TO_SPHERE | ProximityType.CONVEX_HULL:
+                return
 
         # get mesh id and data from mujoco
         mesh_id = mj_model.geom_dataid[geom_self.get_id(mj_model)]
@@ -221,7 +228,7 @@ class ProximityMixin(MojoBaseModel):
             fromto=fromto,
         )
         if skip:
-            return d_est, ProximityType.BROADPHASE
+            return d_est, ProximityType.SPHERE_TO_SPHERE
 
         # ========== COORDINATE TRANSFORMATION ==========
         mat_self = geom_self.rt_xmat(mj_model, mj_data)  # already Mat3 (3x3)
@@ -325,7 +332,7 @@ class ProximityMixin(MojoBaseModel):
             fromto=fromto,
         )
         if skip:
-            return d_est, ProximityType.BROADPHASE
+            return d_est, ProximityType.SPHERE_TO_SPHERE
 
         # ========== NARROWPHASE ==========
         # set the other transformation relative to self's local frame
@@ -353,3 +360,192 @@ class ProximityMixin(MojoBaseModel):
             return (min_dist, p_self, p_other), ProximityType.FACE_TO_FACE
 
         return min_dist, ProximityType.FACE_TO_FACE
+
+    @overload
+    def get_convex_hull_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[False] = False,
+    ) -> tuple[float, ProximityType]: ...
+
+    @overload
+    def get_convex_hull_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[True],
+    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+
+    def get_convex_hull_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: bool = False,
+    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+        """
+        Calculates the shortest distance between two geometries using their convex hull.
+
+        Args:
+            other (AnyGeom): Second AnyGeom to test against.
+            mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
+            mj_data (mujoco.MjData): The current simulation state.
+            dist_max (float): The 'cutoff' distance. If the objects are further than this, dist_max will be returned and exit early (fromto will also return as zeros).
+            fromto (bool, optional): Whether or not to return the locations of the minimum distances.
+
+        Returns:
+            tuple[float | tuple[float, Vec3, Vec3], ProximityType]: Signed (`>= 0`) minimum distance from self to other, world location of minimum distance on self, world location of minimum distance on other, and which phase the exit occurred in.
+
+        """
+        geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
+
+        # ========== BROADPHASE ==========
+        if np.isnan(self._rad):
+            self.bake_proximity(mj_model, ProximityType.CONVEX_HULL)
+        if np.isnan(other._rad):
+            other.bake_proximity(mj_model, ProximityType.CONVEX_HULL)
+        assert not np.isnan(self._rad) and not np.isnan(other._rad)
+
+        d_est, skip = self._broadphase_test(
+            rad_a=self._rad,
+            rad_b=other._rad,
+            pos_a=geom_self.rt_xpos(mj_model, mj_data),
+            pos_b=other.rt_xpos(mj_model, mj_data),
+            dist_max=dist_max,
+            fromto=fromto,
+        )
+
+        if skip:
+            return d_est, ProximityType.SPHERE_TO_SPHERE
+
+        # ========== NARROWPHASE ==========
+        # temp buffer for MuJoCo's 6-element output [x1,y1,z1, x2,y2,z2]
+        mj_fromto = np.zeros(6)
+        min_dist = mujoco.mj_geomDistance(
+            m=mj_model,
+            d=mj_data,
+            geom1=geom_self.get_id(mj_model),
+            geom2=other.get_id(mj_model),
+            distmax=d_est[0] if isinstance(d_est, tuple) else d_est,
+            fromto=mj_fromto,
+        )
+
+        if fromto:
+            res = (min_dist, mj_fromto[:3].copy(), mj_fromto[3:6].copy())
+        else:
+            res = min_dist
+        return res, ProximityType.CONVEX_HULL
+
+    @overload
+    def get_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[False] = False,
+        algorithm: ProximityType = ProximityType.CONVEX_HULL,
+    ) -> tuple[float, ProximityType]: ...
+
+    @overload
+    def get_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: Literal[True],
+        algorithm: ProximityType = ProximityType.CONVEX_HULL,
+    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+
+    def get_proximity(
+        self,
+        other: AnyGeom,
+        mj_model: mujoco.MjModel,
+        mj_data: mujoco.MjData,
+        dist_max: float,
+        fromto: bool = False,
+        algorithm: ProximityType = ProximityType.CONVEX_HULL,
+    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+        """
+        Calculates the shortest distance between two geometries using the specified proximity algorithm.
+
+        This is a general dispatcher method that routes to different proximity calculation algorithms
+        based on the `mode` parameter. Each mode offers different tradeoffs between speed and precision:
+
+        **Modes:**
+            - `SPHERE_TO_SPHERE`: Fastest. Uses bounding sphere distance only (broadphase).
+            - `CONVEX_HULL`: Fast & accurate. Uses MuJoCo's convex hull-based distance (default).
+            - `VERTEX_TO_FACE`: Accurate. Multi-phase BVH with vertex-to-surface queries.
+            - `FACE_TO_FACE`: Most accurate but slowest. Full mesh-to-mesh distance calculation.
+
+        **Phases (for non-sphere modes):**
+            1. Broad Phase: Sphere-Sphere check (object level).
+            2. Narrow Phase: Algorithm-specific distance calculation.
+
+        Args:
+            other (AnyGeom): The other geometry to test against.
+            mj_model (mujoco.MjModel): Compiled MuJoCo model.
+            mj_data (mujoco.MjData): MuJoCo runtime data.
+            dist_max (float): The 'cutoff' distance. If objects are further than this, dist_max will be returned and exit early (fromto will also return as zeros).
+            fromto (bool, optional): Whether to return the locations of the minimum distances. Defaults to False.
+            algorithm (ProximityType, optional): Which proximity algorithm to use. Defaults to CONVEX_HULL.
+
+        Returns:
+            tuple[float, ProximityType]: If fromto=False, returns the unsigned (`>= 0`) minimum distance and which algorithm produced the result.
+
+            tuple[tuple[float, Vec3, Vec3], ProximityType]: If fromto=True, returns the minimum distance, world location of minimum distance on self, world location of minimum distance on other, and which algorithm produced the result.
+
+        """
+        match algorithm:
+            case ProximityType.SPHERE_TO_SPHERE:
+                geom_self: AnyGeom = self  # pyright: ignore[reportAssignmentType]
+
+                if np.isnan(self._rad):
+                    self.bake_proximity(mj_model, ProximityType.SPHERE_TO_SPHERE)
+                if np.isnan(other._rad):
+                    other.bake_proximity(mj_model, ProximityType.SPHERE_TO_SPHERE)
+                assert not np.isnan(self._rad) and not np.isnan(other._rad)
+                d_est, _skip = self._broadphase_test(
+                    rad_a=self._rad,
+                    rad_b=other._rad,
+                    pos_a=geom_self.rt_xpos(mj_model, mj_data),
+                    pos_b=other.rt_xpos(mj_model, mj_data),
+                    dist_max=dist_max,
+                    fromto=fromto,
+                )
+                return d_est, ProximityType.SPHERE_TO_SPHERE
+            case ProximityType.CONVEX_HULL:
+                return self.get_convex_hull_proximity(
+                    other=other,
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    dist_max=dist_max,
+                    fromto=fromto,
+                )
+            case ProximityType.VERTEX_TO_FACE:
+                return self.get_vertex_to_face_proximity(
+                    other=other,
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    dist_max=dist_max,
+                    fromto=fromto,
+                )
+            case ProximityType.FACE_TO_FACE:
+                return self.get_face_to_face_proximity(
+                    other=other,
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    dist_max=dist_max,
+                    fromto=fromto,
+                )
+            case _:
+                msg = f"Method for {algorithm.name} not implemented."
+                logger.error(msg)
+                raise NotImplementedError(msg)
