@@ -27,6 +27,7 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.proximity import ProximityMixin
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -75,7 +76,7 @@ _geom_attr = (
 )
 
 
-class GeomBase(XMLModel):
+class GeomBase(XMLModel, ProximityMixin):
     """
     This element creates a geom, and attaches it rigidly to the body within which the geom is defined. Multiple geoms can be attached to the same body. At runtime they determine the appearance and collision properties of the body. At compile time they can also determine the inertial properties of the body, depending on the presence of the inertial element and the setting of the inertiafromgeom attribute of compiler. This is done by summing the masses and inertias of all geoms attached to the body with geom group in the range specified by the inertiagrouprange attribute of compiler. The geom masses and inertias are computed using the geom shape, a specified density or a geom mass which implies a density, and the assumption of uniform density.
 
@@ -191,6 +192,10 @@ class GeomBase(XMLModel):
     def geom_aabb_radius(self, mj_model: mujoco.MjModel) -> float:
         """Returns the radius of a bounding sphere of the geom."""
         return np.max(mj_model.geom_size[self.get_id(mj_model)])
+
+    def geom_rbound(self, mj_model: mujoco.MjModel) -> float:
+        """Returns the radius of a bounding sphere of the geom."""
+        return mj_model.geom_rbound[self.get_id(mj_model)]
 
     @classmethod
     def _get_geom_dist_between_geom(
