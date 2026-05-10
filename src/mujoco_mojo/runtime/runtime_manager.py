@@ -7,8 +7,9 @@ import mujoco
 
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
+from mujoco_mojo.runtime.video_recorder import ArrowConfig, LineConfig, VideoRecorder
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.proximity import Proximity
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,7 @@ class SyncHook(Protocol):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         arrows: list[ArrowConfig],
+        lines: list[LineConfig],
     ) -> Any: ...
 
 
@@ -28,6 +30,7 @@ class RuntimeManager:
     signal_manager: SignalManager | None = None
 
     loads: list[Load] = field(default_factory=list)
+    proximities: list[Proximity] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     playback_speed: float = 1.0
@@ -68,6 +71,9 @@ class RuntimeManager:
     def add_load(self, load: Load):
         self.loads.append(load)
 
+    def add_proximity(self, proximity: Proximity):
+        pass
+
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
 
@@ -103,9 +109,11 @@ class RuntimeManager:
 
         # record any frames which are due
         all_arrows = None
+        all_lines = None
         if self.video_recorders or self._sync_hook:
             # gather arrows for forcing functions
             all_arrows: list[ArrowConfig] | None = []
+            all_lines: list[LineConfig] | None = []
 
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
@@ -121,8 +129,8 @@ class RuntimeManager:
         mujoco.mj_step(mj_model, mj_data)
 
         if self._sync_hook:
-            assert all_arrows is not None
-            self._sync_hook(mj_model, mj_data, all_arrows)
+            assert all_arrows is not None and all_lines is not None
+            self._sync_hook(mj_model, mj_data, all_arrows, all_lines)
 
         if self.playback_speed > 0:
             sim_elapsed = mj_data.time - self._start_sim_time
