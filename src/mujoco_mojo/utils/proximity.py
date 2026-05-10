@@ -4,14 +4,17 @@ from typing import TYPE_CHECKING, Literal, Self, overload
 
 import mujoco
 import numpy as np
-from pydantic import field_validator, model_validator
+from pydantic import PrivateAttr, field_validator, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
+from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.visualization import LineConfig
 
 if TYPE_CHECKING:
+    from mujoco_mojo.runtime.runtime_manager import RuntimeManager
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
@@ -28,6 +31,10 @@ class Proximity(MojoBaseModel):
     geom_2: Proximityable
     """Second geometry to perform proximity calculations for."""
 
+    _last_t: float = PrivateAttr(default=np.nan)
+    _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
+    _last_p2: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
+
     @field_validator("geom_1", "geom_2")
     @classmethod
     def validate_geom_named(cls, v: Proximityable) -> Proximityable:
@@ -43,6 +50,15 @@ class Proximity(MojoBaseModel):
             msg = "Unable to determine proximity to geometry (geom_1 and geom_2 have the same name)"
             logger.error(msg)
             raise ValueError(msg)
+        return self
+
+    def update_last(self, p1: Vec3, p2: Vec3, mj_data: mujoco.MjData):
+        self._last_t = mj_data.time
+        self._last_p1 = p1
+        self._last_p2 = p2
+
+    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
+        runtime_manager.add_proximity(self)
         return self
 
     @overload
@@ -124,6 +140,8 @@ class Proximity(MojoBaseModel):
         else:
             p1 = pos_geom_1
             p2 = pos_geom_2
+
+        self.update_last(p1, p2, mj_data)
         return (dist, p1, p2), exceeds_dist_max
 
     @overload
@@ -196,7 +214,10 @@ class Proximity(MojoBaseModel):
         min_dist = max(0.0, min_dist)  # clip from below to zero
 
         if fromto:
-            res = (min_dist, mj_fromto[:3].copy(), mj_fromto[3:6].copy())
+            p1 = mj_fromto[:3].copy()
+            p2 = mj_fromto[3:6].copy()
+            self.update_last(p1, p2, mj_data)
+            res = (min_dist, p1, p2)
         else:
             res = min_dist
         return res, ProximityType.CONVEX_HULL
@@ -309,6 +330,8 @@ class Proximity(MojoBaseModel):
             if fromto:
                 p1 = (pts_on_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
                 p2 = (geom_2_v_in_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
+
+                self.update_last(p1, p2, mj_data)
                 res = (min_dist, p1, p2)
             else:
                 res = min_dist
@@ -319,6 +342,8 @@ class Proximity(MojoBaseModel):
                 # pt_on_geom_2 was calculated in geom_2's local frame
                 p2 = (pts_on_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
                 p1 = (geom_1_v_in_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
+
+                self.update_last(p1, p2, mj_data)
                 res = (min_dist, p1, p2)
             else:
                 res = min_dist
@@ -416,6 +441,8 @@ class Proximity(MojoBaseModel):
         if fromto and data is not None:
             p1 = data.point(self.geom_1.name)  # pyright: ignore[reportAttributeAccessIssue]
             p2 = data.point(self.geom_2.name)  # pyright: ignore[reportAttributeAccessIssue]
+
+            self.update_last(p1, p2, mj_data)
             return (min_dist, p1, p2), ProximityType.FACE_TO_FACE
 
         return min_dist, ProximityType.FACE_TO_FACE
@@ -515,7 +542,24 @@ class Proximity(MojoBaseModel):
                 logger.error(msg)
                 raise NotImplementedError(msg)
 
-    def request_proximity(
+    def get_visuals(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, warn_stale: bool = True
+    ) -> LineConfig:
+        if np.any(np.isnan(self._last_p1)) or np.any(np.isnan(self._last_p2)):
+            msg = "Unable to get visuals since Proximity has not been primed. Use `request` or `get_proximity` with fromto to fill values for visual"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if self._last_t != mj_data.time and warn_stale:
+            logger.warning(
+                f"Current sim time ({mj_data.time:.5f}) does not match the last proximity time {self._last_t:.5f}. This indicates stale values will be visualized."
+            )
+
+        return LineConfig(
+            pos1=self._last_p1, pos2=self._last_p2, color=Color.WHITE.rgba, width=0.005
+        )
+
+    def request(
         self,
         signal_manager: SignalManager,
         dist_max: float,

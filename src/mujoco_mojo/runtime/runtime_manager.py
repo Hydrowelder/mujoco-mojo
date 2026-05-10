@@ -7,9 +7,10 @@ import mujoco
 
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.runtime.video_recorder import ArrowConfig, LineConfig, VideoRecorder
+from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity import Proximity
+from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
 
@@ -69,10 +70,25 @@ class RuntimeManager:
         self._resolved = True
 
     def add_load(self, load: Load):
+        # check if load name already registered
+        for _l in self.loads:
+            if load.name == _l.name:
+                logger.warning(f"Load with name {load.name} has already registed")
         self.loads.append(load)
 
     def add_proximity(self, proximity: Proximity):
-        pass
+        # check if the pair is already being checked
+        assert proximity.geom_1.name and proximity.geom_2.name
+
+        search = sorted([proximity.geom_1.name, proximity.geom_2.name])
+        for p in self.proximities:
+            assert p.geom_1.name and p.geom_2.name
+            if search == sorted([p.geom_1.name, p.geom_2.name]):
+                logger.warning(
+                    f"Proximities for {proximity.geom_1.name} and {proximity.geom_2.name} have already been registered"
+                )
+
+        self.proximities.append(proximity)
 
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
@@ -118,11 +134,17 @@ class RuntimeManager:
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
 
+            for proximity in self.proximities:
+                all_lines.append(proximity.get_visuals(mj_model, mj_data))
+
         if self.video_recorders:
-            assert all_arrows is not None
+            assert all_arrows is not None and all_lines is not None
             for recorder in self.video_recorders:
                 recorder.capture_frame(
-                    mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    custom_arrows=all_arrows,
+                    custom_lines=all_lines,
                 )
 
         # integrate physics and advance the time

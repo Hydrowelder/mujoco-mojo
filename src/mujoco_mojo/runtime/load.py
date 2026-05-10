@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Self
@@ -10,11 +12,11 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.visualization import ArrowConfig
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
@@ -88,9 +90,7 @@ class Load(MojoBaseModel, ABC):
 
     @abstractmethod
     def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the force for the timestep.
@@ -104,7 +104,7 @@ class Load(MojoBaseModel, ABC):
 
         """
 
-    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
+    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
         runtime_manager.add_load(self)
         return self
 
