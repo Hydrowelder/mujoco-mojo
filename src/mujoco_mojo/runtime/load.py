@@ -166,23 +166,23 @@ class Load(MojoBaseModel, ABC):
         f_vec = self._last_f[:3]
         if np.linalg.norm(f_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": action_pos,
-                    "vec": f_vec,
-                    "color": Color.EMERALD_500.rgba,
-                    "is_torque": False,
-                }
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=f_vec,
+                    color=Color.EMERALD_500.rgba,
+                    is_torque=False,
+                )
             )
 
         t_vec = self._last_t[:3]
         if np.linalg.norm(t_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": action_pos,
-                    "vec": t_vec,
-                    "color": Color.AMBER_500.rgba,
-                    "is_torque": True,
-                }
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=t_vec,
+                    color=Color.AMBER_500.rgba,
+                    is_torque=True,
+                )
             )
 
         return visuals
@@ -256,12 +256,12 @@ class PointToPointForce(Load):
 
         if np.linalg.norm(f_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": xtion_pos,
-                    "vec": -f_vec,  # opposite direction
-                    "color": Color.ROSE_500.rgba,  # Red for Reaction
-                    "is_torque": False,
-                }
+                ArrowConfig(
+                    pos=xtion_pos,
+                    vec=-f_vec,  # opposite direction
+                    color=Color.ROSE_500.rgba,  # Red for Reaction
+                    is_torque=False,
+                )
             )
 
         return visuals

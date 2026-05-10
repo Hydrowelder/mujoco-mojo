@@ -27,7 +27,7 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.proximity import ProximityMixin
+from mujoco_mojo.utils.proximity_mixin import ProximityMixin
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -270,9 +270,6 @@ class GeomBase(XMLModel):
         """
         Registers specific geom attributes for logging.
 
-        See Also:
-            `request_proximity`: Part of GeomMesh, will request mesh to mesh geometric distances.
-
         """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
@@ -501,3 +498,5 @@ AnyGeom = Annotated[
     | GeomSDF,
     Field(discriminator="type"),
 ]
+
+Proximityable = Annotated[GeomMesh, Field(discriminator="type")]
