@@ -39,6 +39,8 @@ dependencies = [
     "joblib>=1.5.3",
     "optuna-dashboard>=0.20.0",
     "pint>=0.25.3",
+    "python-fcl>=0.7.0.11",
+    "rtree>=1.4.1",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -74,6 +76,7 @@ mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 [dependency-groups]
 dev = [
     "griffe-pydantic>=1.2.0",
+    "matplotlib>=3.10.8",
     "mkdocs>=1.6.1",
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-glightbox>=0.5.2",

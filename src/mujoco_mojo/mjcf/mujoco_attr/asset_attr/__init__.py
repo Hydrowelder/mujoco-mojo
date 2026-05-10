@@ -4,6 +4,7 @@ from .hfield import HField
 from .material import Material
 from .material_attr import Layer
 from .mesh import (
+    AnyMesh,
     Mesh,
     MeshCone,
     MeshHemisphere,
@@ -17,6 +18,7 @@ from .model import Model
 from .texture import Texture, TextureBuiltIn
 
 __all__ = [
+    "AnyMesh",
     "HField",
     "Layer",
     "Material",

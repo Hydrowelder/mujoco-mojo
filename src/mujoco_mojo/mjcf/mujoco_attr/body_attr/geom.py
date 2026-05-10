@@ -76,7 +76,7 @@ _geom_attr = (
 )
 
 
-class GeomBase(XMLModel, ProximityMixin):
+class GeomBase(XMLModel):
     """
     This element creates a geom, and attaches it rigidly to the body within which the geom is defined. Multiple geoms can be attached to the same body. At runtime they determine the appearance and collision properties of the body. At compile time they can also determine the inertial properties of the body, depending on the presence of the inertial element and the setting of the inertiafromgeom attribute of compiler. This is done by summing the masses and inertias of all geoms attached to the body with geom group in the range specified by the inertiagrouprange attribute of compiler. The geom masses and inertias are computed using the geom shape, a specified density or a geom mass which implies a density, and the assumption of uniform density.
 
@@ -189,9 +189,12 @@ class GeomBase(XMLModel, ProximityMixin):
         """Returns the position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
+    def geom_size(self, mj_model: mujoco.MjModel) -> float:
+        return mj_model.geom_size[self.get_id(mj_model)]
+
     def geom_aabb_radius(self, mj_model: mujoco.MjModel) -> float:
-        """Returns the radius of a bounding sphere of the geom."""
-        return np.max(mj_model.geom_size[self.get_id(mj_model)])
+        """Returns the radius of a bounding sphere of the geom wrapped to its AABB."""
+        return np.max(self.geom_size(mj_model))
 
     def rbound(self, mj_model: mujoco.MjModel) -> float:
         """Returns the radius of a bounding sphere of the geom."""
@@ -264,7 +267,13 @@ class GeomBase(XMLModel, ProximityMixin):
             "quat",
         ],
     ):
-        """Registers specific geom attributes for logging."""
+        """
+        Registers specific geom attributes for logging.
+
+        See Also:
+            `request_proximity`: Part of GeomMesh, will request mesh to mesh geometric distances.
+
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
@@ -457,7 +466,7 @@ class GeomBox(GeomBase):
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
-class GeomMesh(GeomBase):
+class GeomMesh(GeomBase, ProximityMixin):
     """This element creates a mesh geometry."""
 
     attributes = (*_geom_attr, "type", "mesh")
