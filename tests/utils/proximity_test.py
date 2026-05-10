@@ -28,6 +28,7 @@ class ModelWithGeoms:
     def compile(self) -> tuple[mujoco.MjModel, mujoco.MjData]:
         # copy assets to shared dir
         workdir = Path(__file__).parent / "proximity_test_model"
+        workdir.mkdir(exist_ok=True, parents=True)
         (workdir / ".gitignore").write_text("*")
         asset_dir = workdir / "assets"
         rel_to_xml = Path(os.path.relpath(asset_dir, workdir))
