@@ -55,9 +55,12 @@ class CompiledModel(ModelWithGeoms):
         )
 
 
+MESHES_DIR = mojo.DepPath(__file__).parent.parent / "meshes"
+
+
 def _bunny_mesh_file() -> mojo.DepPath:
     """Return path to bunny2.stl mesh file."""
-    mesh_path = mojo.DepPath(__file__).parent / "meshes" / "bunny2.stl"
+    mesh_path = MESHES_DIR / "bunny2.stl"
     assert mesh_path.exists(), f"Mesh file not found: {mesh_path}"
     return mesh_path
 
@@ -69,7 +72,7 @@ def bunny_mesh_file() -> mojo.DepPath:
 
 def _ball_mesh_file() -> mojo.DepPath:
     """Return path to ball.stl mesh file."""
-    mesh_path = mojo.DepPath(__file__).parent / "meshes" / "ball.stl"
+    mesh_path = MESHES_DIR / "ball.stl"
     assert mesh_path.exists(), f"Mesh file not found: {mesh_path}"
     return mesh_path
 
@@ -81,7 +84,7 @@ def ball_mesh_file() -> mojo.DepPath:
 
 def _cup_mesh_file() -> mojo.DepPath:
     """Return path to cup.stl mesh file."""
-    mesh_path = mojo.DepPath(__file__).parent / "meshes" / "cup.stl"
+    mesh_path = MESHES_DIR / "cup.stl"
     assert mesh_path.exists(), f"Mesh file not found: {mesh_path}"
     return mesh_path
 
