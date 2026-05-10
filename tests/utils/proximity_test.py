@@ -666,10 +666,6 @@ def test_radius_caching(compiled_model: CompiledModel):
     assert compiled_model.bunny_in_cup_geom._rad == cached_rad
 
 
-def test_implemented_request():
-    assert False, "Implement line render in rendered view"
-
-
 if __name__ == "__main__":
     ball_path = _ball_mesh_file()
     cup_path = _cup_mesh_file()

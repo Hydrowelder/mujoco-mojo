@@ -15,12 +15,11 @@ from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValueDict
 from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
-from mujoco_mojo.utils.visuals import resolve_arrow_coords
+from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .cli import UserInterface
 
@@ -413,40 +412,21 @@ class MojoReloaded:
 
         with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
 
-            def sync(m: mujoco.MjModel, d: mujoco.MjData, arrows: list[ArrowConfig]):
+            def sync(
+                m: mujoco.MjModel,
+                d: mujoco.MjData,
+                arrows: list[ArrowConfig],
+                lines: list[LineConfig],
+            ):
                 assert viewer.user_scn
                 viewer.user_scn.ngeom = 0
 
                 for arrow in arrows:
-                    if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom:
-                        break
+                    arrow.draw_in_scene(mj_model=m, scene=viewer.user_scn)
 
-                    geom = viewer.user_scn.geoms[viewer.user_scn.ngeom]
-                    mujoco.mjv_initGeom(
-                        geom=geom,
-                        type=mujoco.mjtGeom.mjGEOM_ARROW,
-                        size=np.zeros(3),
-                        pos=np.zeros(3),
-                        mat=np.zeros(9),
-                        rgba=np.asarray(arrow["color"], dtype=np.float32),
-                    )
+                for line in lines:
+                    line.draw_in_scene(scene=viewer.user_scn)
 
-                    start, end, width = resolve_arrow_coords(
-                        mj_model=mj_model,
-                        pos=arrow["pos"],
-                        vec=arrow["vec"],
-                        is_torque=arrow["is_torque"],
-                    )
-
-                    mujoco.mjv_connector(
-                        geom=geom,
-                        type=mujoco.mjtGeom.mjGEOM_ARROW,
-                        width=width,
-                        from_=start,
-                        to=end,
-                    )
-                    geom.rgba = arrow["color"]
-                    viewer.user_scn.ngeom += 1
                 viewer.sync()
 
             def reload_handler(m: mujoco.MjModel, d: mujoco.MjData):
@@ -457,8 +437,8 @@ class MojoReloaded:
 
             reload_handler(mj_model, mj_data)
 
-            self._sync_hook = lambda mj_model, mj_data, arrows: sync(
-                mj_model, mj_data, arrows
+            self._sync_hook = lambda mj_model, mj_data, arrows, lines: sync(
+                mj_model, mj_data, arrows, lines
             )
             self._interactive_loop(
                 lambda mj_model, mj_data: reload_handler(mj_model, mj_data),
@@ -531,11 +511,16 @@ class MojoReloaded:
         state["scene"].create_visualization_gui()
         state["scene"].create_scene_gui()
 
-        def sync(m: mujoco.MjModel, d: mujoco.MjData, arrows: list[ArrowConfig]):
+        def sync(
+            m: mujoco.MjModel,
+            d: mujoco.MjData,
+            arrows: list[ArrowConfig],
+            lines: list[LineConfig],
+        ):
             state["scene"].update_from_mjdata(d)
             node_name = "mojo_arrows"
 
-            if not arrows:
+            if not arrows and not lines:
                 # If no arrows this frame, clear the batch and exit
                 server.scene.remove_by_name(node_name)
                 return
@@ -545,16 +530,17 @@ class MojoReloaded:
             line_width = 2.0
 
             for arrow in arrows:
-                start, end, w = resolve_arrow_coords(
-                    mj_model=m,
-                    pos=arrow["pos"],
-                    vec=arrow["vec"],
-                    is_torque=arrow["is_torque"],
-                )
+                start, end, w = arrow.resolve_arrow_coords(mj_model=m)
 
                 line_width = w * 200.0
                 all_segments.append(np.stack([start, end]))
-                color_uint8 = tuple(int(x * 255) for x in arrow["color"][:3])
+                color_uint8 = tuple(int(x * 255) for x in arrow.color[:3])
+                all_colors.append([color_uint8, color_uint8])
+
+            for line in lines:
+                line_width = line.width * 200.0
+                all_segments.append(np.stack([line.pos1, line.pos2]))
+                color_uint8 = tuple(int(x * 255) for x in line.color[:3])
                 all_colors.append([color_uint8, color_uint8])
 
             points_batch = np.array(all_segments, dtype=np.float32)
@@ -576,8 +562,8 @@ class MojoReloaded:
         update_scene(mj_model, mj_data)
         _print_connection_panel()
 
-        self._sync_hook = lambda mj_model, mj_data, arrows: sync(
-            mj_model, mj_data, arrows
+        self._sync_hook = lambda mj_model, mj_data, arrows, lines: sync(
+            mj_model, mj_data, arrows, lines
         )
         self._interactive_loop(
             lambda mj_model, mj_data: update_scene(mj_model, mj_data), lambda: True
