@@ -8,10 +8,8 @@ import numpy as np
 from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
-from mujoco_mojo.mjcf.orientation import Quat
-from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
+from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -96,10 +94,10 @@ class MeshBase(XMLModel):
     face: tuple[tuple[int, int, int], ...] | None = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
-    refpos: Pos = Pos(pos=np.array((1, 1, 1)))
+    refpos: Vec3 = np.array((1, 1, 1))
     """Reference position relative to which the 3D vertex coordinates are defined. This vector is subtracted from the positions."""
 
-    refquat: Quat = Quat()
+    refquat: Vec4 = np.array((1, 0, 0, 0))
     """Reference orientation relative to which the 3D vertex coordinates and normals are defined. The conjugate of this quaternion is used to rotate the positions and normals. The model compiler normalizes the quaternion automatically."""
 
     material: MaterialName | None = None
@@ -314,7 +312,7 @@ class Mesh(MeshBase):
     6. Compute the center of mass and inertia matrix of the union-of-pyramids. Use eigenvalue decomposition to find the principal axes of inertia. Center and align the mesh, saving the translational and rotational offsets for subsequent geom-related computations.
     """
 
-    builtin: Literal[None] = Field(None, exclude=True)
+    builtin: Literal["none"] = "none"
 
 
 class MeshSphere(MeshBase):
