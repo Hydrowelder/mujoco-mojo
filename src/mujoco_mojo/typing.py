@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import IntEnum, StrEnum, unique
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -76,6 +76,7 @@ __all__ = [
     "MeshName",
     "ModelName",
     "PluginName",
+    "ProximityType",
     "RangefinderData",
     "SensorAttachableName",
     "SensorInterp",
@@ -306,7 +307,7 @@ class SignalCategory(StrEnum):
     CONSTRAINTS = "Constraints"
     PLUGINS = "Plugins"
     DEFORMABLES = "Deformables"
-    CLEARANCES = "Clearances"
+    PROXIMITIES = "Proximities"
     CUSTOM = "Custom"
 
 
@@ -1168,3 +1169,23 @@ class EdgeEquality(StrEnum):
 
     STRAIN = "strain"
     """A constraint is added to enforce that the invariants of the strain tensor do not change; this is only equality constraint type supported for trilinear and quadratic dofs elements and here."""
+
+
+@unique
+class ProximityType(IntEnum):
+    """Exit types from proximity calculations."""
+
+    SPHERE_TO_SPHERE = 0
+    """Returned value is from a broadphase test (bounding sphere to bounding sphere)."""
+
+    CONVEX_HULL = 1
+    """Returned value is from a convex hull to convex hull test."""
+
+    # VERTEX_TO_VERTEX = 2
+    # """Returned value is from a vertex to vertex test."""
+
+    VERTEX_TO_FACE = 3
+    """Returned value is from a vertex to face test."""
+
+    FACE_TO_FACE = 4
+    """Returned value is from a face to face test."""

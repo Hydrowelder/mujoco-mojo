@@ -3,6 +3,7 @@ from .color import Color
 from .dataframe import MojoDataFrame
 from .interp import Interpolator
 from .log import get_logger, setup_logger
+from .proximity import Proximity
 from .runner import (
     MojoGenerator,
     MojoObjective,
@@ -24,6 +25,7 @@ __all__ = [
     "MojoRuntime",
     "MonteCarloConfig",
     "OptimizerConfig",
+    "Proximity",
     "Trial",
     "filters",
     "get_logger",

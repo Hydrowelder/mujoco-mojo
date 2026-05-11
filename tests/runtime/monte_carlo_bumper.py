@@ -27,6 +27,8 @@ class Handoff(mojo.UserData):
         Literal["pz", "mz"],
         tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
     ] = Field(default_factory=dict)
+    box1_bunny: mojo.GeomMesh
+    box2_bunny: mojo.GeomMesh
 
     def define_spring(
         self,
@@ -99,6 +101,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     """Generates two boxes at varying distances."""
     # Download this skybox from here: https://www.david-gable.com/work/photography/Space/Star-Skybox/p1/
     skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
+    MESHES_DIR = mojo.DepPath(__file__).parent.parent / "meshes"
 
     # configure simulation
     mojo_model.mjcf.assets = [
@@ -122,8 +125,16 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     texrepeat=np.asarray((1, 1)),
                 )
             ],
+            meshes=[
+                bunny_mesh := mojo.Mesh(
+                    name=mojo.MeshName("bunny_mesh"),
+                    file=MESHES_DIR / "bunny2.stl",
+                    scale=np.ones(3) * 2,
+                ),
+            ],
         ),
     ]
+    assert bunny_mesh.name
 
     # add a skybox
     if mojo_model.is_nominal:
@@ -185,7 +196,15 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                         rgba=mojo.utils.Color.ROSE_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
-                    )
+                    ),
+                    box1_bunny := mojo.GeomMesh(
+                        name=mojo.GeomName("box1_bunny"),
+                        mesh=bunny_mesh.name,
+                        pose=mojo.PoseEuler(
+                            euler=np.array((90, 0, 0)), pos=np.array((0, 0, 0.5))
+                        ),
+                        rgba=mojo.utils.Color.AMBER_500.rgba,
+                    ),
                 ],
                 cameras=[
                     mojo.Camera(
@@ -209,11 +228,18 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
                         size=np.asarray([0.5, 0.5, 0.5]),
-                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
-                    )
+                    ),
+                    box2_bunny := mojo.GeomMesh(
+                        name=mojo.GeomName("box2_bunny"),
+                        mesh=bunny_mesh.name,
+                        pose=mojo.PoseEuler(
+                            euler=np.array((90, 0, 0)), pos=np.array((0, 0, 0.5))
+                        ),
+                        rgba=mojo.utils.Color.EMERALD_500.rgba,
+                    ),
                 ],
             ),
         ]
@@ -253,7 +279,9 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     ]
 
     # add handoff data
-    handoff = Handoff(box1_rot=box1_rot_site)
+    handoff = Handoff(
+        box1_rot=box1_rot_site, box1_bunny=box1_bunny, box2_bunny=box2_bunny
+    )
     mojo_model.user_data = handoff
     handoff.define_spring("pz", box1, box2, mojo_model)
     handoff.define_spring("mz", box1, box2, mojo_model)
@@ -277,37 +305,50 @@ def runtime(
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
-        assert rm.signal_manager is not None
-        rm.signal_manager.record_decimation = 1
-
-        if mojo_model.is_nominal and False:
+        if mojo_model.is_nominal:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
                 show_net_force=True,
+                show_proximities=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("tracking_camera.mp4"),
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
+                show_proximities=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("box_camera.mp4"),
                 camera_name=BOX_CAMERA_NAME,
-                show_net_force=False,
             ).setup(mj_model).register_to_rm(rm)
 
         # Create compression springs
         handoff.add_spring_force("pz", rm)
         handoff.add_spring_force("mz", rm)
 
-        for b in mojo_model.mjcf.worldbody.walk_bodies():
-            b.request(rm.signal_manager)
+        proximity = mojo.utils.Proximity(
+            geom_1=handoff.box1_bunny,
+            geom_2=handoff.box2_bunny,
+            dist_max=3,
+            algorithm=mojo.ProximityType.CONVEX_HULL,
+        ).register_to_rm(rm)
 
-        handoff.box1_rot.request(rm.signal_manager)
+        if rm.signal_manager:
+            rm.signal_manager.record_decimation = 1
+
+            for b in mojo_model.mjcf.worldbody.walk_bodies():
+                b.request(rm.signal_manager)
+
+            proximity.request(
+                signal_manager=rm.signal_manager,
+                attrs=["dist", "fromto", "prox_type"],
+            )
+
+            handoff.box1_rot.request(rm.signal_manager)
 
         # Run for 2 seconds
         while mj_data.time < 2.0:

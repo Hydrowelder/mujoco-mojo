@@ -17,14 +17,14 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument     | Description                                                               |
-|:-------------|:--------------------------------------------------------------------------|
-| `--help`     | Describes all available arguments. Used on its own.                       |
-| `--generator`| **(Required)** Import path to your `MojoGenerate` function.               |
-| `--runtime`  | Optional import path to your `MojoRuntime` function.                      |
-| `--ui`       | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based). |
-| `--seed`     | Set the global seed for stochastic draws.                                 |
-| `--port`     | Port for the web-based viewers (default: `8080`).                         |
+| Argument           | Description                                                               |
+|:-------------------|:--------------------------------------------------------------------------|
+| `--help`           | Describes all available arguments. Used on its own.                       |
+| `--generator`      | **(Required)** Import path to your `MojoGenerate` function.               |
+| `--runtime`        | Optional import path to your `MojoRuntime` function.                      |
+| `--user-interface` | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based). |
+| `--seed`           | Set the global seed for stochastic draws.                                 |
+| `--port`           | Port for the web-based viewers (default: `8080`).                         |
 
 ---
 

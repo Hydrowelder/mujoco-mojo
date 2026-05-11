@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import (
     SensorInterp,
     SensorName,
@@ -13,6 +12,9 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
 
