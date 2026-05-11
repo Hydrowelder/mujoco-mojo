@@ -392,11 +392,11 @@ class MojoReloaded:
 
             try:
                 start = time.time()
-                with console.status("[bold]Processing...[/bold]"):
-                    new_mj_model, new_mj_data = self.generate_construct(
-                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
-                    )
-                    on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
+                console.print("[bold]Processing...[/bold]")
+                new_mj_model, new_mj_data = self.generate_construct(
+                    use_runtime=use_runtime, on_reload_callback=on_reload_callback
+                )
+                on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
                 console.print(
                     f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
                 )
@@ -432,6 +432,9 @@ class MojoReloaded:
             def reload_handler(m: mujoco.MjModel, d: mujoco.MjData):
                 sim = viewer._get_sim()
                 if sim:
+                    if viewer.user_scn and d.time == 0.0:
+                        # ensure the custom visual layer is wiped on every model reload
+                        viewer.user_scn.ngeom = 0
                     sim.load(m, d, str(self.workdir / self.xml_name))
                     viewer.sync()
 

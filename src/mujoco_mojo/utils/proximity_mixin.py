@@ -10,7 +10,7 @@ from mujoco_mojo.typing import MatN, ProximityType, Vec3
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
-    from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomMesh
+    from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ class ProximityMixin(MojoBaseModel):
             tuple[float, Vec3]: Tight radius and the local centroid offset.
 
         """
-        geom_self: GeomMesh = self  # pyright: ignore[reportAssignmentType]
+        geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
         if self._local_verts is None:
             mesh_id = mj_model.geom_dataid[geom_self.get_id(mj_model)]
             if mesh_id == -1:
@@ -65,7 +65,7 @@ class ProximityMixin(MojoBaseModel):
 
     def bake_proximity(self, mj_model: mujoco.MjModel, proximity_type: ProximityType):
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
-        geom_self: GeomMesh = self  # pyright: ignore[reportAssignmentType]
+        geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
 
         # cache bounding radius
         # self._rad = geom_self.rbound(mj_model)

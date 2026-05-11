@@ -135,7 +135,9 @@ class RuntimeManager:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
 
             for proximity in self.proximities:
-                all_lines.append(proximity.get_visuals(mj_model, mj_data))
+                visual = proximity.get_visuals(mj_model, mj_data)
+                if visual is not None:
+                    all_lines.append(visual)
 
         if self.video_recorders:
             assert all_arrows is not None and all_lines is not None

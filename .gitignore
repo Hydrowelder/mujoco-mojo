@@ -17,3 +17,6 @@ mojo-models
 textures
 
 MUJOCO_LOG.TXT
+
+/*.mp4
+/*.gif
