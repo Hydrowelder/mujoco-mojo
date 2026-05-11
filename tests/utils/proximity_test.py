@@ -257,15 +257,12 @@ def test_proximity_type_enum():
 def force_sphere_to_sphere(
     compiled_model: CompiledModel, algorithm: mojo.ProximityType
 ):
-    dist, prox_type = mojo.utils.Proximity(
-        geom_1=compiled_model.cup_geom, geom_2=compiled_model.bunny_in_cup_geom
-    ).get_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
+    dist, _p1, _p2, prox_type = mojo.utils.Proximity(
+        geom_1=compiled_model.cup_geom,
+        geom_2=compiled_model.bunny_in_cup_geom,
         dist_max=-np.inf,
-        fromto=False,
         algorithm=algorithm,
-    )
+    ).get_proximity(compiled_model.mj_model, compiled_model.mj_data)
     assert isinstance(dist, (float, np.floating))
     assert dist >= 0.0
     assert prox_type == mojo.ProximityType.SPHERE_TO_SPHERE
@@ -274,26 +271,13 @@ def force_sphere_to_sphere(
 def test_convex_hull_proximity(compiled_model: CompiledModel):
     """Test convex hull proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=1.0,
     )
 
-    # Test without fromto
-    dist, prox_type = proximity.get_convex_hull_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=1.0,
-        fromto=False,
-    )
-    assert isinstance(dist, (float, np.floating))
-    assert dist >= 0.0  # ball is inside the cup and we are using convex hull
-    assert prox_type == mojo.ProximityType.CONVEX_HULL
-
-    # Test with fromto
-    (dist, p1, p2), prox_type = proximity.get_convex_hull_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=1.0,
-        fromto=True,
+    dist, p1, p2, prox_type = proximity.get_convex_hull_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
 
     assert isinstance(dist, (float, np.floating))
@@ -305,26 +289,14 @@ def test_convex_hull_proximity(compiled_model: CompiledModel):
 def test_vertex_to_face_proximity(compiled_model: CompiledModel):
     """Test vertex-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
-    )
-
-    # Test without fromto
-    dist, prox_type = proximity.get_vertex_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
         dist_max=1.0,
-        fromto=False,
     )
-    assert isinstance(dist, (float, np.floating))
-    assert dist >= 0.0
-    assert prox_type == mojo.ProximityType.VERTEX_TO_FACE
 
     # Test with fromto
-    (dist, p1, p2), prox_type = proximity.get_vertex_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=1.0,
-        fromto=True,
+    dist, p1, p2, prox_type = proximity.get_vertex_to_face_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
 
     assert isinstance(dist, (float, np.floating))
@@ -336,26 +308,14 @@ def test_vertex_to_face_proximity(compiled_model: CompiledModel):
 def test_face_to_face_proximity(compiled_model: CompiledModel):
     """Test face-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
-    )
-
-    # Test without fromto
-    dist, prox_type = proximity.get_face_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
         dist_max=1.0,
-        fromto=False,
     )
-    assert isinstance(dist, (float, np.floating))
-    assert dist >= 0.0
-    assert prox_type == mojo.ProximityType.FACE_TO_FACE
 
     # Test with fromto
-    (dist, p1, p2), prox_type = proximity.get_face_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=1.0,
-        fromto=True,
+    dist, p1, p2, prox_type = proximity.get_face_to_face_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
     assert isinstance(dist, (float, np.floating))
     assert p1.shape == (3,)
@@ -366,27 +326,15 @@ def test_face_to_face_proximity(compiled_model: CompiledModel):
 def test_sphere_to_sphere_proximity(compiled_model: CompiledModel):
     """Test sphere-to-sphere (broadphase only) proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
-    )
-
-    # Test without fromto
-    dist, prox_type = proximity.get_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
         dist_max=1.0,
-        fromto=False,
         algorithm=mojo.ProximityType.SPHERE_TO_SPHERE,
     )
-    assert isinstance(dist, (float, np.floating))
-    assert prox_type == mojo.ProximityType.SPHERE_TO_SPHERE
 
     # Test with fromto
-    (dist, p1, p2), prox_type = proximity.get_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=1.0,
-        fromto=True,
-        algorithm=mojo.ProximityType.SPHERE_TO_SPHERE,
+    dist, p1, p2, prox_type = proximity.get_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
     assert isinstance(dist, (float, np.floating))
     assert p1.shape == (3,)
@@ -396,23 +344,24 @@ def test_sphere_to_sphere_proximity(compiled_model: CompiledModel):
 
 def test_get_proximity_dispatcher(compiled_model: CompiledModel):
     """Test get_proximity dispatcher method."""
-    proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
-    )
-
     # Test each algorithm type returns correct mojo.ProximityType
     for algo in list(mojo.ProximityType):
-        dist, prox_type = proximity.get_proximity(
-            compiled_model.mj_model,
-            compiled_model.mj_data,
+        proximity = mojo.utils.Proximity(
+            geom_1=compiled_model.bunny_in_cup_geom,
+            geom_2=compiled_model.cup_geom,
             dist_max=1.0,
             algorithm=algo,
+        )
+        dist, p1, p2, prox_type = proximity.get_proximity(
+            compiled_model.mj_model, compiled_model.mj_data
         )
         assert prox_type == algo, (
             f"{algo.name}: returned prox_type ({prox_type.name}) does not match commanded {algo.name}"
         )
         assert isinstance(dist, (float, np.floating))
         assert dist >= 0.0
+        assert p1.shape == (3,)
+        assert p2.shape == (3,)
 
 
 def test_proximity_reciprocity(compiled_model: CompiledModel):
@@ -423,25 +372,23 @@ def test_proximity_reciprocity(compiled_model: CompiledModel):
     geom_b = compiled_model.cup_geom
     for algo in list(mojo.ProximityType):
         # Query A to B
-        (dist_ab, p1_ab, p2_ab), _ = mojo.utils.Proximity(
-            geom_1=geom_a, geom_2=geom_b
-        ).get_proximity(
-            mj_model=compiled_model.mj_model,
-            mj_data=compiled_model.mj_data,
+        dist_ab, p1_ab, p2_ab, _ = mojo.utils.Proximity(
+            geom_1=geom_a,
+            geom_2=geom_b,
             dist_max=10.0,
-            fromto=True,
             algorithm=algo,
+        ).get_proximity(
+            mj_model=compiled_model.mj_model, mj_data=compiled_model.mj_data
         )
 
         # Query B to A
-        (dist_ba, p1_ba, p2_ba), _ = mojo.utils.Proximity(
-            geom_1=geom_b, geom_2=geom_a
-        ).get_proximity(
-            mj_model=compiled_model.mj_model,
-            mj_data=compiled_model.mj_data,
+        dist_ba, p1_ba, p2_ba, _ = mojo.utils.Proximity(
+            geom_1=geom_b,
+            geom_2=geom_a,
             dist_max=10.0,
-            fromto=True,
             algorithm=algo,
+        ).get_proximity(
+            mj_model=compiled_model.mj_model, mj_data=compiled_model.mj_data
         )
 
         # Assert Distance Reciprocity
@@ -457,24 +404,6 @@ def test_proximity_reciprocity(compiled_model: CompiledModel):
         )
         assert np.allclose(p2_ab, p1_ba, atol=1e-7), (
             f"{algo.name}: Contact points not swapped correctly for p2. p2_ab: {p2_ab}, p1_ba: {p1_ba}"
-        )
-
-
-def test_invalid_proximity_algorithm_raises_error(
-    compiled_model: CompiledModel,
-):
-    """Test that invalid proximity algorithm raises NotImplementedError."""
-    # Create invalid algorithm value
-    invalid_algo = 999
-
-    with pytest.raises(NotImplementedError, match="not implemented"):
-        mojo.utils.Proximity(
-            geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
-        ).get_proximity(
-            compiled_model.mj_model,
-            compiled_model.mj_data,
-            dist_max=1.0,
-            algorithm=invalid_algo,  # pyright: ignore[reportArgumentType]
         )
 
 
@@ -503,25 +432,25 @@ def test_algorithm_distance_ordering(compiled_model: CompiledModel):
     # Get distances from all algorithms
     results: dict[mojo.ProximityType, float] = {}
     for algo in list(mojo.ProximityType):
-        dist, prox_type = mojo.utils.Proximity(
+        dist, p1, p2, prox_type = mojo.utils.Proximity(
             geom_1=compiled_model.bunny_below_cup_geom,
             geom_2=compiled_model.bunny_in_cup_geom,
+            dist_max=10.0,
+            algorithm=algo,
         ).get_proximity(
             compiled_model.mj_model,
             compiled_model.mj_data,
-            dist_max=10.0,
-            fromto=False,
-            algorithm=algo,
         )
         assert prox_type == algo, (
             f"{algo.name}: returned prox_type ({prox_type.name}) does not match commanded {algo.name}"
         )
         assert dist >= 0
+        assert p1.shape == (3,)
+        assert p2.shape == (3,)
         results[algo] = float(dist)
 
     # Sort by algo.value then check for monotonically increasing
     sorted_results = sorted(results.items(), key=lambda x: x[0].value)
-    print(sorted_results)
     for i in range(len(sorted_results) - 1):
         current_algo, current_dist = sorted_results[i]
         next_algo, next_dist = sorted_results[i + 1]
@@ -536,21 +465,16 @@ def test_fromto_returns_valid_points(compiled_model: CompiledModel):
     """Test that fromto parameter returns valid closest points."""
     # Test each algorithm with fromto=True
     for algo in list(mojo.ProximityType):
-        result, prox_type = mojo.utils.Proximity(
-            geom_1=compiled_model.bunny_below_cup_geom, geom_2=compiled_model.cup_geom
-        ).get_proximity(
-            compiled_model.mj_model,
-            compiled_model.mj_data,
+        dist, p1, p2, prox_type = mojo.utils.Proximity(
+            geom_1=compiled_model.bunny_below_cup_geom,
+            geom_2=compiled_model.cup_geom,
             dist_max=np.inf,
             algorithm=algo,
-            fromto=True,
-        )
+        ).get_proximity(compiled_model.mj_model, compiled_model.mj_data)
 
-        dist, p1, p2 = result
         assert prox_type == algo, (
             f"{algo.name}: returned prox_type ({prox_type.name}) does not match commanded {algo.name}"
         )
-        print(prox_type.name, result)
         # Verify points are valid (not NaN)
         assert not np.any(np.isnan(p1)), f"{algo.name}: p1 contains NaN {p1=}"
         assert not np.any(np.isnan(p2)), f"{algo.name}: p2 contains NaN {p2=}"
@@ -625,24 +549,22 @@ def test_baked_mesh_properties(compiled_model: CompiledModel):
 def test_proximity_caching(compiled_model: CompiledModel):
     """Test that proximity calculations are cached properly."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom, geom_2=compiled_model.cup_geom
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=10.0,
     )
     # First call should bake
     assert compiled_model.bunny_in_cup_geom._baked_query is None
-    dist1, _ = proximity.get_vertex_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=10.0,
+    dist1, _p1, _p2, _ = proximity.get_vertex_to_face_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
 
     # After first call, should be cached
     assert compiled_model.bunny_in_cup_geom._baked_query is not None
 
     # Second call should use cache
-    dist2, _ = proximity.get_vertex_to_face_proximity(
-        compiled_model.mj_model,
-        compiled_model.mj_data,
-        dist_max=10.0,
+    dist2, _p1, _p2, _ = proximity.get_vertex_to_face_proximity(
+        compiled_model.mj_model, compiled_model.mj_data
     )
 
     # Results should be identical

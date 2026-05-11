@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Self, overload
+from typing import TYPE_CHECKING, Literal, Self
 
 import mujoco
 import numpy as np
@@ -30,6 +30,15 @@ class Proximity(MojoBaseModel):
 
     geom_2: Proximityable
     """Second geometry to perform proximity calculations for."""
+
+    dist_max: float
+    """The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early."""
+
+    algorithm: ProximityType = ProximityType.CONVEX_HULL
+    """What algorithm should be used for the narrowphase test."""
+
+    visualize: bool = True
+    """Wheter or not to visualize this proximity in the MuJoCo viewer."""
 
     _last_t: float = PrivateAttr(default=np.nan)
     _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
@@ -61,42 +70,20 @@ class Proximity(MojoBaseModel):
         runtime_manager.add_proximity(self)
         return self
 
-    @overload
     def get_sphere_to_sphere_proximity(
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[False] = False,
-    ) -> tuple[float, bool]: ...
-
-    @overload
-    def get_sphere_to_sphere_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[True],
-    ) -> tuple[tuple[float, Vec3, Vec3], bool]: ...
-
-    def get_sphere_to_sphere_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: bool = False,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], bool]:
+    ) -> tuple[float, Vec3, Vec3, bool]:
         """
         Calculates the shortest distance between two geometries using their bounding spheres.
 
         Args:
             mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
             mj_data (mujoco.MjData): The current simulation state.
-            dist_max (float): The 'cutoff' distance. If the objects are further than this, the method will return True in the tuple.
-            fromto (bool, optional): Whether or not to return the locations of the minimum distances.
 
         Returns:
-            tuple[float | tuple[float, Vec3, Vec3], bool]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and if the estimated distance exceeds dist_max.
+            tuple[float, Vec3, Vec3, bool]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and if the estimated distance exceeds dist_max.
 
         """
         # get world orientations and origins
@@ -128,10 +115,7 @@ class Proximity(MojoBaseModel):
         dist = d_centers - (rad_geom_1 + rad_geom_2)
 
         dist = max(0.0, dist)  # clip to zero
-        exceeds_dist_max = dist > dist_max
-
-        if not fromto:
-            return dist, exceeds_dist_max
+        exceeds_dist_max = dist > self.dist_max
 
         if d_centers > 1e-9:
             unit_vec = vec_geom_1_to_geom_2 / d_centers
@@ -142,44 +126,22 @@ class Proximity(MojoBaseModel):
             p2 = pos_geom_2
 
         self.update_last(p1, p2, mj_data)
-        return (dist, p1, p2), exceeds_dist_max
-
-    @overload
-    def get_convex_hull_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[False] = False,
-    ) -> tuple[float, ProximityType]: ...
-
-    @overload
-    def get_convex_hull_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[True],
-    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+        return dist, p1, p2, exceeds_dist_max
 
     def get_convex_hull_proximity(
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: bool = False,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+    ) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
         Calculates the shortest distance between two geometries using their convex hull.
 
         Args:
             mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
             mj_data (mujoco.MjData): The current simulation state.
-            dist_max (float): The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early.
-            fromto (bool, optional): Whether or not to return the locations of the minimum distances.
 
         Returns:
-            tuple[float | tuple[float, Vec3, Vec3], ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
 
         """
         # ========== BROADPHASE ==========
@@ -189,15 +151,12 @@ class Proximity(MojoBaseModel):
         if self.geom_2._proximity_configured_for != ProximityType.CONVEX_HULL:
             self.geom_2.bake_proximity(mj_model, ProximityType.CONVEX_HULL)
 
-        d_est, skip = self.get_sphere_to_sphere_proximity(
-            mj_model=mj_model,
-            mj_data=mj_data,
-            dist_max=dist_max,
-            fromto=fromto,
+        d_est, p1, p2, skip = self.get_sphere_to_sphere_proximity(
+            mj_model=mj_model, mj_data=mj_data
         )
 
         if skip:
-            return d_est, ProximityType.SPHERE_TO_SPHERE
+            return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== NARROWPHASE ==========
         # temp buffer for MuJoCo's 6-element output [x1,y1,z1, x2,y2,z2]
@@ -207,46 +166,22 @@ class Proximity(MojoBaseModel):
             d=mj_data,
             geom1=self.geom_1.get_id(mj_model),
             geom2=self.geom_2.get_id(mj_model),
-            distmax=dist_max,
+            distmax=self.dist_max,
             fromto=mj_fromto,
         )
 
         min_dist = max(0.0, min_dist)  # clip from below to zero
 
-        if fromto:
-            p1 = mj_fromto[:3].copy()
-            p2 = mj_fromto[3:6].copy()
-            self.update_last(p1, p2, mj_data)
-            res = (min_dist, p1, p2)
-        else:
-            res = min_dist
-        return res, ProximityType.CONVEX_HULL
-
-    @overload
-    def get_vertex_to_face_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[False] = False,
-    ) -> tuple[float, ProximityType]: ...
-
-    @overload
-    def get_vertex_to_face_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[True],
-    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+        p1 = mj_fromto[:3].copy()
+        p2 = mj_fromto[3:6].copy()
+        self.update_last(p1, p2, mj_data)
+        return min_dist, p1, p2, ProximityType.CONVEX_HULL
 
     def get_vertex_to_face_proximity(
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: bool = False,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+    ) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
         Calculates the vertex to face distance using a multi-phase Bounding Volume Hierarchy (BVH) query.
 
@@ -262,11 +197,7 @@ class Proximity(MojoBaseModel):
             fromto (bool): Whether or not to return the locations of the minimum distances.
 
         Returns:
-            tuple[float | tuple[float, Vec3, Vec3], PhaseExit]: Unsigned (`>= 0`) minimum distance between from geom_1 to geom_2 and which phase the exit occurred in.
-
-            **OR**
-
-            **tuple[float | tuple[float, Vec3, Vec3], PhaseExit]**: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
 
         """
         if self.geom_1._proximity_configured_for != ProximityType.VERTEX_TO_FACE:
@@ -283,14 +214,11 @@ class Proximity(MojoBaseModel):
 
         # ========== BROADPHASE: Sphere-Sphere check ==========
         # find center to center to center distance and return early if broad phase
-        d_est, skip = self.get_sphere_to_sphere_proximity(
-            mj_model=mj_model,
-            mj_data=mj_data,
-            dist_max=dist_max,
-            fromto=fromto,
+        d_est, p1, p2, skip = self.get_sphere_to_sphere_proximity(
+            mj_model=mj_model, mj_data=mj_data
         )
         if skip:
-            return d_est, ProximityType.SPHERE_TO_SPHERE
+            return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== COORDINATE TRANSFORMATION ==========
         pos_geom_1 = self.geom_1.rt_xpos(mj_model, mj_data)
@@ -327,53 +255,26 @@ class Proximity(MojoBaseModel):
         # find global min
         if min_a < min_b:
             min_dist = float(min_a)
-            if fromto:
-                p1 = (pts_on_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
-                p2 = (geom_2_v_in_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
+            p1 = (pts_on_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
+            p2 = (geom_2_v_in_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
 
-                self.update_last(p1, p2, mj_data)
-                res = (min_dist, p1, p2)
-            else:
-                res = min_dist
-            return res, ProximityType.VERTEX_TO_FACE
+            self.update_last(p1, p2, mj_data)
+            return min_dist, p1, p2, ProximityType.VERTEX_TO_FACE
         else:
             min_dist = float(min_b)
-            if fromto:
-                # pt_on_geom_2 was calculated in geom_2's local frame
-                p2 = (pts_on_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
-                p1 = (geom_1_v_in_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
 
-                self.update_last(p1, p2, mj_data)
-                res = (min_dist, p1, p2)
-            else:
-                res = min_dist
-            return res, ProximityType.VERTEX_TO_FACE
+            # pt_on_geom_2 was calculated in geom_2's local frame
+            p2 = (pts_on_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
+            p1 = (geom_1_v_in_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
 
-    @overload
-    def get_face_to_face_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[False] = False,
-    ) -> tuple[float, ProximityType]: ...
-
-    @overload
-    def get_face_to_face_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[True],
-    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+            self.update_last(p1, p2, mj_data)
+            return min_dist, p1, p2, ProximityType.VERTEX_TO_FACE
 
     def get_face_to_face_proximity(
         self,
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: bool = False,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+    ) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
         Calculates the face to face distance using a multi-phase Bounding Volume Hierarchy (BVH) query.
 
@@ -391,11 +292,7 @@ class Proximity(MojoBaseModel):
             fromto (bool): Whether or not to return the locations of the minimum distances.
 
         Returns:
-            tuple[float | tuple[float, Vec3, Vec3], PhaseExit]: Unsigned (`>= 0`) minimum distance between from geom_1 to geom_2 and which phase the exit occurred in.
-
-            **OR**
-
-            **tuple[float | tuple[float, Vec3, Vec3], PhaseExit]**: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
 
         """
         if self.geom_1._proximity_configured_for != ProximityType.FACE_TO_FACE:
@@ -409,14 +306,11 @@ class Proximity(MojoBaseModel):
         # ========== BROADPHASE: Sphere-Sphere check ==========
 
         # find center to center to center distance and return early if broad phase
-        d_est, skip = self.get_sphere_to_sphere_proximity(
-            mj_model=mj_model,
-            mj_data=mj_data,
-            dist_max=dist_max,
-            fromto=fromto,
+        d_est, p1, p2, skip = self.get_sphere_to_sphere_proximity(
+            mj_model=mj_model, mj_data=mj_data
         )
         if skip:
-            return d_est, ProximityType.SPHERE_TO_SPHERE
+            return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== NARROWPHASE ==========
         # set the other transformation relative to geom_1's local frame
@@ -438,48 +332,20 @@ class Proximity(MojoBaseModel):
         min_dist = float(result[0])  # pyright: ignore[reportIndexIssue]
         data = result[1]  # pyright: ignore[reportIndexIssue]
 
-        if fromto and data is not None:
-            p1 = data.point(self.geom_1.name)  # pyright: ignore[reportAttributeAccessIssue]
-            p2 = data.point(self.geom_2.name)  # pyright: ignore[reportAttributeAccessIssue]
+        assert data
+        p1 = data.point(self.geom_1.name)  # pyright: ignore[reportAttributeAccessIssue]
+        p2 = data.point(self.geom_2.name)  # pyright: ignore[reportAttributeAccessIssue]
 
-            self.update_last(p1, p2, mj_data)
-            return (min_dist, p1, p2), ProximityType.FACE_TO_FACE
-
-        return min_dist, ProximityType.FACE_TO_FACE
-
-    @overload
-    def get_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[False] = False,
-        algorithm: ProximityType = ProximityType.CONVEX_HULL,
-    ) -> tuple[float, ProximityType]: ...
-
-    @overload
-    def get_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Literal[True],
-        algorithm: ProximityType = ProximityType.CONVEX_HULL,
-    ) -> tuple[tuple[float, Vec3, Vec3], ProximityType]: ...
+        self.update_last(p1, p2, mj_data)
+        return min_dist, p1, p2, ProximityType.FACE_TO_FACE
 
     def get_proximity(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: bool = False,
-        algorithm: ProximityType = ProximityType.CONVEX_HULL,
-    ) -> tuple[float | tuple[float, Vec3, Vec3], ProximityType]:
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
         Calculates the shortest distance between two geometries using the specified proximity algorithm.
 
-        This is a general dispatcher method that routes to different proximity calculation algorithms
-        based on the `mode` parameter. Each mode offers different tradeoffs between speed and precision:
+        This is a general dispatcher method that routes to different proximity calculation algorithms based on the `algorithm` parameter. Each mode offers different tradeoffs between speed and precision:
 
         **Modes:**
             - `SPHERE_TO_SPHERE`: Fastest. Uses bounding sphere distance only (broadphase).
@@ -494,9 +360,6 @@ class Proximity(MojoBaseModel):
         Args:
             mj_model (mujoco.MjModel): Compiled MuJoCo model.
             mj_data (mujoco.MjData): MuJoCo runtime data.
-            dist_max (float): The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early.
-            fromto (bool, optional): Whether to return the locations of the minimum distances. Defaults to False.
-            algorithm (ProximityType, optional): Which proximity algorithm to use. Defaults to CONVEX_HULL.
 
         Returns:
             tuple[float, ProximityType]: If fromto=False, returns the unsigned (`>= 0`) minimum distance and which algorithm produced the result.
@@ -504,56 +367,46 @@ class Proximity(MojoBaseModel):
             tuple[tuple[float, Vec3, Vec3], ProximityType]: If fromto=True, returns the minimum distance, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which algorithm produced the result.
 
         """
-        match algorithm:
+        match self.algorithm:
             case ProximityType.SPHERE_TO_SPHERE:
-                d_est, _skip = self.get_sphere_to_sphere_proximity(
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=dist_max,
-                    fromto=fromto,
+                d_est, p1, p2, _skip = self.get_sphere_to_sphere_proximity(
+                    mj_model=mj_model, mj_data=mj_data
                 )
-                return d_est, ProximityType.SPHERE_TO_SPHERE
+                return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
             case ProximityType.CONVEX_HULL:
                 return self.get_convex_hull_proximity(
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=dist_max,
-                    fromto=fromto,
+                    mj_model=mj_model, mj_data=mj_data
                 )
             case ProximityType.VERTEX_TO_FACE:
                 return self.get_vertex_to_face_proximity(
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=dist_max,
-                    fromto=fromto,
+                    mj_model=mj_model, mj_data=mj_data
                 )
             case ProximityType.FACE_TO_FACE:
                 return self.get_face_to_face_proximity(
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=dist_max,
-                    fromto=fromto,
+                    mj_model=mj_model, mj_data=mj_data
                 )
             case _:
-                if isinstance(algorithm, ProximityType):
-                    msg = f"Method for {algorithm.name} not implemented."
-                else:
-                    msg = f"Method for unknown algorithm ({algorithm}) not implemented."
+                msg = f"Method for {self.algorithm.name} not implemented."
                 logger.error(msg)
                 raise NotImplementedError(msg)
 
     def get_visuals(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, warn_stale: bool = True
-    ) -> LineConfig:
-        if np.any(np.isnan(self._last_p1)) or np.any(np.isnan(self._last_p2)):
-            msg = "Unable to get visuals since Proximity has not been primed. Use `request` or `get_proximity` with fromto to fill values for visual"
-            logger.error(msg)
-            raise ValueError(msg)
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
+    ) -> LineConfig | None:
+        if not self.visualize:
+            return
 
-        if self._last_t != mj_data.time and warn_stale:
-            logger.warning(
-                f"Current sim time ({mj_data.time:.5f}) does not match the last proximity time {self._last_t:.5f}. This indicates stale values will be visualized."
-            )
+        is_stale = self._last_t != mj_data.time
+        is_uninitialized = any(
+            [
+                np.any(np.isnan(self._last_p1)),
+                np.any(np.isnan(self._last_p2)),
+                np.isnan(self._last_t),
+            ]
+        )
+        if is_stale or is_uninitialized:
+            # run the solver
+            self.get_proximity(mj_model, mj_data)
 
         return LineConfig(
             pos1=self._last_p1, pos2=self._last_p2, color=Color.WHITE.rgba, width=0.005
@@ -562,8 +415,6 @@ class Proximity(MojoBaseModel):
     def request(
         self,
         signal_manager: SignalManager,
-        dist_max: float,
-        algorithm: ProximityType,
         attrs: list[Literal["dist", "fromto", "prox_type"]] = ["dist", "prox_type"],
     ):
         """
@@ -578,12 +429,9 @@ class Proximity(MojoBaseModel):
         pair_name = f"{self.geom_1.name}_to_{self.geom_2.name}"
 
         def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            (dist, p1, p2), prox_type = self.get_proximity(
+            dist, p1, p2, prox_type = self.get_proximity(
                 mj_model=mj_model,
                 mj_data=mj_data,
-                dist_max=dist_max,
-                fromto=True,
-                algorithm=algorithm,
             )
 
             for attr in attrs:

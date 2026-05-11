@@ -189,11 +189,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 name=mojo.BodyName("box1"),
                 pose=mojo.PoseQuat(pos=np.asarray([-0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
-                inertial=mojo.Inertial(
-                    mass=1000,
-                    pos=mojo.Pos(pos=np.asarray([-0.5, 0, 0])),
-                    diaginertia=np.ones(3) * 1 / 6,
-                ),
                 geoms=[
                     mojo.GeomBox(
                         name=mojo.GeomName("g1"),
@@ -205,8 +200,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     box1_bunny := mojo.GeomMesh(
                         name=mojo.GeomName("box1_bunny"),
                         mesh=bunny_mesh.name,
-                        pose=mojo.PoseEuler(euler=np.array((0, 0, 0))),
-                        rgba=mojo.utils.Color.ROSE_500.rgba,
+                        pose=mojo.PoseEuler(
+                            euler=np.array((90, 0, 0)), pos=np.array((0, 0, 0.5))
+                        ),
+                        rgba=mojo.utils.Color.AMBER_500.rgba,
                     ),
                 ],
                 cameras=[
@@ -227,16 +224,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                 name=mojo.BodyName("box2"),
                 pose=mojo.PoseQuat(pos=np.asarray([0.5, 0, 0])),
                 freejoints=[mojo.FreeJoint()],
-                inertial=mojo.Inertial(
-                    mass=1000,
-                    pos=mojo.Pos(pos=np.asarray([0.5, 0, 0])),
-                    diaginertia=np.ones(3) * 1 / 6,
-                ),
                 geoms=[
                     mojo.GeomBox(
                         name=mojo.GeomName("g2"),
                         size=np.asarray([0.5, 0.5, 0.5]),
-                        # rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         rgba=mojo.utils.Color.CYAN_500.with_alpha(0.5),
                         contype=0,
                         conaffinity=0,
@@ -244,8 +235,10 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
                     box2_bunny := mojo.GeomMesh(
                         name=mojo.GeomName("box2_bunny"),
                         mesh=bunny_mesh.name,
-                        pose=mojo.PoseEuler(euler=np.array((0, 0, 0))),
-                        rgba=mojo.utils.Color.CYAN_500.rgba,
+                        pose=mojo.PoseEuler(
+                            euler=np.array((90, 0, 0)), pos=np.array((0, 0, 0.5))
+                        ),
+                        rgba=mojo.utils.Color.EMERALD_500.rgba,
                     ),
                 ],
             ),
@@ -312,7 +305,7 @@ def runtime(
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
-        if mojo_model.is_nominal and False:
+        if mojo_model.is_nominal:
             rt.VideoRecorder(
                 path=Path("fixed_camera.mp4"),
                 camera_name=FIXED_CAMERA_NAME,
@@ -338,7 +331,10 @@ def runtime(
         handoff.add_spring_force("mz", rm)
 
         proximity = mojo.utils.Proximity(
-            geom_1=handoff.box1_bunny, geom_2=handoff.box2_bunny
+            geom_1=handoff.box1_bunny,
+            geom_2=handoff.box2_bunny,
+            dist_max=3,
+            algorithm=mojo.ProximityType.CONVEX_HULL,
         ).register_to_rm(rm)
 
         if rm.signal_manager:
@@ -349,8 +345,6 @@ def runtime(
 
             proximity.request(
                 signal_manager=rm.signal_manager,
-                dist_max=np.inf,
-                algorithm=mojo.ProximityType.FACE_TO_FACE,
                 attrs=["dist", "fromto", "prox_type"],
             )
 

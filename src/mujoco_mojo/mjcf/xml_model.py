@@ -15,6 +15,7 @@ from xml.etree.ElementTree import Element
 
 import mujoco
 import numpy as np
+from filelock import FileLock
 from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
@@ -386,25 +387,27 @@ class XMLModel(MojoBaseModel):
 
                         # copy the file
                         dest_file = target_dir / item.name
+                        lock_path = dest_file.with_suffix(dest_file.suffix + ".lock")
 
-                        should_copy = True
-                        if dest_file.exists():
-                            # files already in the destination skipped
-                            if get_checksum(item) == get_checksum(dest_file):
-                                should_copy = False
+                        with FileLock(lock_path):
+                            needs_update = True
+                            if dest_file.exists():
+                                # files already in the destination skipped
+                                if get_checksum(item) == get_checksum(dest_file):
+                                    needs_update = False
+                                    logger.debug(
+                                        f"Dependency asset {item.resolve()} was already in the shared asset directory {target_dir.resolve()} (as identified by filename and MD5 hash) so the file will be skipped from being copied."
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Asset file {value} already in assets bundle. Old file will be overwritten."
+                                    )
+
+                            if needs_update:
                                 logger.debug(
-                                    f"Dependency asset {item.resolve()} was already in the shared asset directory {target_dir.resolve()} (as identified by filename and MD5 hash) so the file will be skipped from being copied."
+                                    f"Copying dependency asset from {item.resolve()} to {dest_file.resolve()}"
                                 )
-                            else:
-                                logger.warning(
-                                    f"Asset file {value} already in assets bundle. Old file will be overwritten."
-                                )
-
-                        if should_copy:
-                            logger.debug(
-                                f"Copying dependency asset from {item.resolve()} to {dest_file.resolve()}"
-                            )
-                            shutil.copy2(item, dest_file)
+                                shutil.copy2(item, dest_file)
 
                         new_values.append(rel_to_xml / item.name)
                         changed = True
