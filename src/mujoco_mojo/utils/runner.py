@@ -748,51 +748,52 @@ class MojoRunner:
                 f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
             )
             # needed for logging on Windows
-            m = multiprocessing.Manager()
-            log_queue = m.Queue()
+            with multiprocessing.Manager() as m:
+                log_queue = m.Queue()
 
-            parent_log_level = logging.getLogger().getEffectiveLevel()
-            listener = QueueListener(log_queue, *logging.getLogger().handlers)
-            listener.start()
+                parent_log_level = logging.getLogger().getEffectiveLevel()
+                listener = QueueListener(log_queue, *logging.getLogger().handlers)
+                listener.start()
 
-            executor = ProcessPoolExecutor(
-                max_workers=self.config.n_proc,
-                initializer=worker_init,
-                initargs=(log_queue, parent_log_level),
-            )
-            try:
-                future_to_tn = {
-                    executor.submit(
-                        self.execute_single_trial,
-                        tn,
-                        self.seed,
-                        global_overrides.model_dump(),
-                    ): tn
-                    for tn in to_run
-                }
-                for f in as_completed(future_to_tn):
-                    tn = future_to_tn[f]
-                    try:
-                        _mojo_model, trial_status, _, __ = f.result()
-                        status_tracker.update_trial(status=trial_status)
-                    except (BdbQuit, KeyboardInterrupt):
-                        # user is quitting from breakpoint() or CTRL+C
-                        raise
-                    except Exception as e:
-                        logger.exception(f"Trial {tn} failed: {e}")
-                        status_tracker.update_trial(
-                            status=TrialStatus(
-                                trial_num=tn, completion=Completion.FAILED
+                executor = ProcessPoolExecutor(
+                    max_workers=self.config.n_proc,
+                    initializer=worker_init,
+                    initargs=(log_queue, parent_log_level),
+                )
+                try:
+                    future_to_tn = {
+                        executor.submit(
+                            self.execute_single_trial,
+                            tn,
+                            self.seed,
+                            global_overrides.model_dump(),
+                        ): tn
+                        for tn in to_run
+                    }
+                    for f in as_completed(future_to_tn):
+                        tn = future_to_tn[f]
+                        try:
+                            _mojo_model, trial_status, _, __ = f.result()
+                            status_tracker.update_trial(status=trial_status)
+                        except (BdbQuit, KeyboardInterrupt):
+                            # user is quitting from breakpoint() or CTRL+C
+                            raise
+                        except Exception as e:
+                            logger.exception(f"Trial {tn} failed: {e}")
+                            status_tracker.update_trial(
+                                status=TrialStatus(
+                                    trial_num=tn, completion=Completion.FAILED
+                                )
                             )
-                        )
-                    status_tracker.generate_report()
-            except (BdbQuit, KeyboardInterrupt):
-                # allows killing the job with one CTRL+C
-                logger.warning("Interrupt recieved. Stopping all trials.")
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise
-            finally:
-                executor.shutdown(wait=True)
+                        status_tracker.generate_report()
+                except (BdbQuit, KeyboardInterrupt):
+                    # allows killing the job with one CTRL+C
+                    logger.warning("Interrupt recieved. Stopping all trials.")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise
+                finally:
+                    listener.stop()
+                    executor.shutdown(wait=True)
         else:
             for tn in to_run:
                 try:
