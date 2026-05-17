@@ -7,8 +7,10 @@ import mujoco
 
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.runtime.video_recorder import ArrowConfig, VideoRecorder
+from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.proximity import Proximity
+from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
 
@@ -20,6 +22,7 @@ class SyncHook(Protocol):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         arrows: list[ArrowConfig],
+        lines: list[LineConfig],
     ) -> Any: ...
 
 
@@ -28,6 +31,7 @@ class RuntimeManager:
     signal_manager: SignalManager | None = None
 
     loads: list[Load] = field(default_factory=list)
+    proximities: list[Proximity] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     playback_speed: float = 1.0
@@ -66,7 +70,25 @@ class RuntimeManager:
         self._resolved = True
 
     def add_load(self, load: Load):
+        # check if load name already registered
+        for _l in self.loads:
+            if load.name == _l.name:
+                logger.warning(f"Load with name {load.name} has already registed")
         self.loads.append(load)
+
+    def add_proximity(self, proximity: Proximity):
+        # check if the pair is already being checked
+        assert proximity.geom_1.name and proximity.geom_2.name
+
+        search = sorted([proximity.geom_1.name, proximity.geom_2.name])
+        for p in self.proximities:
+            assert p.geom_1.name and p.geom_2.name
+            if search == sorted([p.geom_1.name, p.geom_2.name]):
+                logger.warning(
+                    f"Proximities for {proximity.geom_1.name} and {proximity.geom_2.name} have already been registered"
+                )
+
+        self.proximities.append(proximity)
 
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
@@ -100,30 +122,39 @@ class RuntimeManager:
         if self.signal_manager and not self._skip_recording:
             mujoco.mj_forward(mj_model, mj_data)
             self.signal_manager.record(mj_model, mj_data)
-            self.signal_manager.flush_ledger()
 
         # record any frames which are due
         all_arrows = None
+        all_lines = None
         if self.video_recorders or self._sync_hook:
             # gather arrows for forcing functions
             all_arrows: list[ArrowConfig] | None = []
+            all_lines: list[LineConfig] | None = []
 
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(mj_model, mj_data))
 
+            for proximity in self.proximities:
+                visual = proximity.get_visuals(mj_model, mj_data)
+                if visual is not None:
+                    all_lines.append(visual)
+
         if self.video_recorders:
-            assert all_arrows is not None
+            assert all_arrows is not None and all_lines is not None
             for recorder in self.video_recorders:
                 recorder.capture_frame(
-                    mj_model=mj_model, mj_data=mj_data, custom_arrows=all_arrows
+                    mj_model=mj_model,
+                    mj_data=mj_data,
+                    custom_arrows=all_arrows,
+                    custom_lines=all_lines,
                 )
 
         # integrate physics and advance the time
         mujoco.mj_step(mj_model, mj_data)
 
         if self._sync_hook:
-            assert all_arrows is not None
-            self._sync_hook(mj_model, mj_data, all_arrows)
+            assert all_arrows is not None and all_lines is not None
+            self._sync_hook(mj_model, mj_data, all_arrows, all_lines)
 
         if self.playback_speed > 0:
             sim_elapsed = mj_data.time - self._start_sim_time

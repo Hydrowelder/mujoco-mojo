@@ -1,25 +1,17 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Self, TypedDict
+from typing import TYPE_CHECKING, Self
 
 import mujoco
-import numpy as np
 
-from mujoco_mojo.typing import CameraName, Vec3, Vec4
+from mujoco_mojo.typing import CameraName
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.visuals import resolve_arrow_coords
+from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 logger = get_logger(__name__)
-
-
-class ArrowConfig(TypedDict):
-    pos: Vec3
-    vec: Vec3
-    color: Vec4
-    is_torque: bool
 
 
 @dataclass
@@ -29,6 +21,7 @@ class VideoRecorder:
     show_loads: bool = False
     show_net_force: bool = False
     show_contacts: bool = False
+    show_proximities: bool = False
     fps: int = 30
     width: int = 640
     height: int = 480
@@ -62,6 +55,7 @@ class VideoRecorder:
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
         custom_arrows: list[ArrowConfig],
+        custom_lines: list[LineConfig],
     ):
         """Captures the current state as a video frame."""
         if mj_data.time < self._next_record_time:
@@ -76,55 +70,15 @@ class VideoRecorder:
 
         if custom_arrows and self.show_loads:
             for arrow in custom_arrows:
-                self._add_arrow_to_scene(
-                    mj_model=mj_model,
-                    pos=arrow["pos"],
-                    vec=arrow["vec"],
-                    color=arrow["color"],
-                    is_torque=arrow["is_torque"],
-                )
+                arrow.draw_in_scene(mj_model, self._renderer.scene)
+
+        if custom_lines and self.show_proximities:
+            for line in custom_lines:
+                line.draw_in_scene(self._renderer.scene)
 
         # capture and increment the clock for the next frame
         self._frames.append(self._renderer.render())
         self._next_record_time += 1 / self.fps
-
-    def _add_arrow_to_scene(
-        self,
-        mj_model: mujoco.MjModel,
-        pos: Vec3,
-        vec: Vec3,
-        color: Vec4,
-        is_torque: bool,
-    ):
-        if self._renderer.scene.ngeom >= self._renderer.scene.maxgeom:
-            logger.warning("Unable to draw arrow due to geom. quantity limit")
-            return
-
-        # grab current geom slot
-        geom = self._renderer.scene.geoms[self._renderer.scene.ngeom]
-
-        # initialize with default
-        mujoco.mjv_initGeom(
-            geom=geom,
-            type=mujoco.mjtGeom.mjGEOM_ARROW,
-            size=np.zeros(3),
-            pos=np.zeros(3),
-            mat=np.zeros(9),
-            rgba=np.asarray(color, dtype=np.float32),
-        )
-
-        # calculate native scaling
-        start, end, width = resolve_arrow_coords(mj_model, pos, vec, is_torque)
-
-        # use connector to solve pos and rot. mat.
-        mujoco.mjv_connector(
-            geom=geom,
-            type=mujoco.mjtGeom.mjGEOM_ARROW,
-            width=width,
-            from_=start,
-            to=end,
-        )
-        self._renderer.scene.ngeom += 1
 
     def save(self):
         """Writes the captured frames to a video file."""

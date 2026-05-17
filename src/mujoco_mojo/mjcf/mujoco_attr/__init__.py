@@ -16,6 +16,7 @@ from .actuator_attr import (
 )
 from .asset import Asset
 from .asset_attr import (
+    AnyMesh,
     HField,
     Layer,
     Material,
@@ -171,6 +172,7 @@ __all__ = [
     "ActuatorVelocity",
     "AnyCompositeGeom",
     "AnyGeom",
+    "AnyMesh",
     "AnySite",
     "Asset",
     "Attach",

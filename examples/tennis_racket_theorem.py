@@ -179,7 +179,7 @@ def runtime(
             runtime_manager.signal_manager.post(
                 value=float(nutation_deg),
                 category=mojo.SignalCategory.BODIES,
-                subgroup=f"{handoff.racket.name}",
+                subgroups=(f"{handoff.racket.name}",),
                 attr="nutation_deg",
             )
 
