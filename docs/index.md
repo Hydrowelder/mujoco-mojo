@@ -27,6 +27,9 @@ hide:
   <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml" class="badge-link">
     <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg?branch=master" alt="Tests & Release Status">
   </a>
+  <a href="https://github.com/astral-sh/ruff" class="badge-link" style="text-decoration:none;">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff">
+  </a>
   <a href="https://docs.pydantic.dev/latest/" class="badge-link">
     <img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2">
   </a>
@@ -39,8 +42,8 @@ hide:
   <a href="https://github.com/Hydrowelder/mujoco-mojo/discussions" class="badge-link">
     <img src="https://img.shields.io/badge/discussions-GitHub-blue?logo=github&logoColor=white" alt="GitHub Discussions">
   </a>
-  <a href="https://pypistats.org/packages/mujoco-mojo" class="badge-link">
-    <img src="https://img.shields.io/pypi/dm/mujoco-mojo.svg?cacheSeconds=86400" alt="Downloads">
+  <a href="https://pepy.tech/projects/mujoco-mojo">
+    <img src="https://static.pepy.tech/personalized-badge/mujoco-mojo?period=monthly&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads%2Fmonth" alt="PyPI Downloads">
   </a>
 </p>
 

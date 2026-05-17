@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 import mujoco
 import numpy as np
+import trimesh
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
-from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -28,6 +28,7 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.proximity_mixin import ProximityMixin
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -189,231 +190,39 @@ class GeomBase(XMLModel):
         """Returns the position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
+    def geom_size(self, mj_model: mujoco.MjModel) -> float:
+        return mj_model.geom_size[self.get_id(mj_model)]
+
     def geom_aabb_radius(self, mj_model: mujoco.MjModel) -> float:
+        """Returns the radius of a bounding sphere of the geom wrapped to its AABB."""
+        return np.max(self.geom_size(mj_model))
+
+    def rbound(self, mj_model: mujoco.MjModel) -> float:
         """Returns the radius of a bounding sphere of the geom."""
-        return np.max(mj_model.geom_size[self.get_id(mj_model)])
-
-    @classmethod
-    def _get_geom_dist_between_geom(
-        cls,
-        geom_1: AnyGeom,
-        geom_2: AnyGeom,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Vec6,
-    ) -> float:
-        return mujoco.mj_geomDistance(
-            m=mj_model,
-            d=mj_data,
-            geom1=geom_1.get_id(mj_model=mj_model),
-            geom2=geom_2.get_id(mj_model=mj_model),
-            distmax=dist_max,
-            fromto=fromto,
-        )
-
-    @classmethod
-    def _get_geom_dist_between_geoms_acc(
-        cls,
-        geom_1: AnyGeom | list[AnyGeom],
-        geom_2: AnyGeom | list[AnyGeom],
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Vec6,
-    ) -> float:
-        """The brute force, but accurate method which checks every pair and returns the minimum distance."""
-        list_1 = geom_1 if isinstance(geom_1, list) else [geom_1]
-        list_2 = geom_2 if isinstance(geom_2, list) else [geom_2]
-
-        min_dist = dist_max
-        temp_fromto = np.zeros(6)
-        fromto = temp_fromto
-
-        for g1 in list_1:
-            for g2 in list_2:
-                d = cls._get_geom_dist_between_geom(
-                    geom_1=g1,
-                    geom_2=g2,
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=min_dist,  # use min_dist
-                    fromto=temp_fromto,
-                )
-                if d < min_dist:
-                    min_dist = d
-                    fromto[:] = temp_fromto
-
-                # early exit if contacting
-                if min_dist < 0.0:
-                    return min_dist
-        return min_dist
-
-    @classmethod
-    def _get_geom_dist_between_geoms_auto(
-        cls,
-        geom_1: AnyGeom | list[AnyGeom],
-        geom_2: AnyGeom | list[AnyGeom],
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Vec6,
-    ) -> float:
-        """
-        Broadphase and narrowphase method to calculate geometric distance.
-
-        Uses bounding spheres (like an Axis-Aligned Bounding Box) to set the threshold at which the full accuracy calculation is performed. If the center to center distance between the geoms minus their radii is less than dist_max the explicit calculation is performed.
-        """
-        list_1 = geom_1 if isinstance(geom_1, list) else [geom_1]
-        list_2 = geom_2 if isinstance(geom_2, list) else [geom_2]
-
-        min_dist = dist_max
-        temp_fromto = np.zeros(6)
-        fromto = temp_fromto
-
-        for g1 in list_1:
-            # center of the geom and its max radius
-            pos1 = g1.geom_xpos(mj_model=mj_model, mj_data=mj_data)
-            rad1 = g1.geom_aabb_radius(mj_model=mj_model)
-
-            for g2 in list_2:
-                pos2 = g2.geom_xpos(mj_model=mj_model, mj_data=mj_data)
-                rad2 = g2.geom_aabb_radius(mj_model=mj_model)
-
-                d_centers = float(np.linalg.norm(pos1 - pos2))
-                d_approx = d_centers - (rad1 + rad2)
-
-                # broad phase elimination
-                if d_approx > min_dist:
-                    continue
-
-                # candidate pair for min distance
-                d_real = cls._get_geom_dist_between_geom(
-                    geom_1=g1,
-                    geom_2=g2,
-                    mj_model=mj_model,
-                    mj_data=mj_data,
-                    dist_max=min_dist,  # use min_dist
-                    fromto=temp_fromto,
-                )
-
-                if d_real < min_dist:
-                    min_dist = d_real
-                    fromto[:] = temp_fromto
-
-                if min_dist < 0.0:
-                    return min_dist
-
-        return min_dist
-
-    @classmethod
-    def get_geom_dist_between_geoms(
-        cls,
-        geom_1: AnyGeom | list[AnyGeom],
-        geom_2: AnyGeom | list[AnyGeom],
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Vec6 | None = None,
-        auto: bool = True,
-    ) -> float:
-        """
-        Calculates the shortest distance between a geometry (or geometries) and geometry (or geometries).
-
-        This method is intended for use with geometry which has been decomposed to get around the limitation that all geometries are convex hulls. This method wraps the low-level `mujoco.mj_geomDistance` function. It computes the signed distance between two geoms based on their current poses in `mj_data`.
-
-        Args:
-            geom_1 (Geom | list[Geom]): First Geom/collection of Geom to check.
-            geom_2 (Geom): Second Geom/collection of Geom to check against.
-            mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
-            mj_data (mujoco.MjData): The current simulation state.
-            dist_max (float): The maximum search distance. If geoms are further apart than this, the function returns `dist_max`.
-            fromto (Vec6 | None, optional): A 6-element NumPy array (float64) used as an output buffer. After execution, it contains the global coordinates of the two closest points: [x1, y1, z1, x2, y2, z2]. These values are mutated **in place**. Defaults to None.
-            auto (bool, optional): If True, an Axis-Aligned Bounding Box (AABB) like method is used where bounding spheres approximate clearances if the geoms are distant from one another (dist_max < distance between centers minus the bounding radii). When set to True, will use a brute force method to calculate geometric distance. Defaults to True.
-
-        Returns:
-            float: The shortest distance between the two geoms. A negative value indicates penetration (overlap). Returns `dist_max` if no intersection is found within the specified range.
-
-        Note:
-            Both geoms must belong to the provided `mj_model`. This calculation is computationally more expensive than bounding box checks as it accounts for the specific shapes (mesh, primitive, etc.).
-
-        """
-        if fromto is None:
-            fromto = np.zeros(6)
-        else:
-            fromto = fromto
-        if auto:
-            return cls._get_geom_dist_between_geoms_auto(
-                geom_1=geom_1,
-                geom_2=geom_2,
-                mj_model=mj_model,
-                mj_data=mj_data,
-                dist_max=dist_max,
-                fromto=fromto,
-            )
-        else:
-            return cls._get_geom_dist_between_geoms_acc(
-                geom_1=geom_1,
-                geom_2=geom_2,
-                mj_model=mj_model,
-                mj_data=mj_data,
-                dist_max=dist_max,
-                fromto=fromto,
-            )
-
-    def get_geom_dist(
-        self,
-        other: AnyGeom,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        dist_max: float,
-        fromto: Vec6 | None = None,
-        auto: bool = True,
-    ) -> float:
-        """
-        Calculates the shortest distance between this geometry and another.
-
-        This method wraps the low-level `mujoco.mj_geomDistance` function. It computes the signed distance between two geoms based on their current poses in `mj_data`.
-
-        Args:
-            other (Geom): The target Geom to check against.
-            mj_model (mujoco.MjModel): The compiled MuJoCo model instance.
-            mj_data (mujoco.MjData): The current simulation state.
-            dist_max (float): The maximum search distance. If geoms are further apart than this, the function returns `dist_max`.
-            fromto (Vec6 | None, optional): A 6-element NumPy array (float64) used as an output buffer. After execution, it contains the global coordinates of the two closest points: [x1, y1, z1, x2, y2, z2]. These values are mutated **in place**. Defaults to None.
-            auto (bool, optional): If True, an Axis-Aligned Bounding Box (AABB) like method is used where bounding spheres approximate clearances if the geoms are distant from one another (dist_max < distance between centers minus the bounding radii). When set to True, will use a brute force method to calculate geometric distance. Defaults to True.
-
-        Returns:
-            float: The shortest distance between the two geoms. A negative value indicates penetration (overlap). Returns `dist_max` if no intersection is found within the specified range.
-
-        Note:
-            Both geoms must belong to the provided `mj_model`. This calculation is computationally more expensive than bounding box checks as it accounts for the specific shapes (mesh, primitive, etc.).
-
-        """
-        if fromto is None:
-            fromto = np.zeros(6)
-        else:
-            fromto = fromto
-        return self.get_geom_dist_between_geoms(
-            mj_model=mj_model,
-            mj_data=mj_data,
-            geom_1=self,  # self is a Geom # pyright: ignore[reportArgumentType]
-            geom_2=other,
-            dist_max=dist_max,
-            fromto=fromto,
-            auto=auto,
-        )
+        return mj_model.geom_rbound[self.get_id(mj_model)]
 
     def rt_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
         """Returns the world position of the center of the geom."""
         return mj_data.geom_xpos[self.get_id(mj_model)]
 
-    def rt_xmat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Mat3:
-        """Returns the world orientation matrix of the geom."""
-        return mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+    def rt_xmat(
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
+    ) -> Mat3:
+        """Rotation matrix the geom during runtime."""
+        return (
+            mj_data.geom_xmat[self.get_id(mj_model)]
+            if flatten
+            else mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+        )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Quat:
-        return Quat.from_matrix(self.rt_xmat(mj_model, mj_data))
+    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+        """
+        Returns the (w, x, y, z) quaternion from the geom's rotation matrix.
+        Uses MuJoCo's internal C utility for speed.
+        """
+        quat = np.empty(4)
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        return quat
 
     def rt_xvel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
@@ -454,12 +263,12 @@ class GeomBase(XMLModel):
         signal_manager: SignalManager,
         attrs: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
-        ] = [
-            "xpos",
-            "quat",
-        ],
+        ] = ["xpos", "quat"],
     ):
-        """Registers specific geom attributes for logging."""
+        """
+        Registers specific geom attributes for logging.
+
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
@@ -483,25 +292,29 @@ class GeomBase(XMLModel):
                         val = self.rt_xaccr(mj_model, mj_data)
                     case "quat":
                         val = self.rt_quat(mj_model, mj_data)
+
+                        for i, k in enumerate("wxyz"):
+                            signal_manager.post(
+                                value=float(val[i]),
+                                category=SignalCategory.GEOMS,
+                                subgroups=(f"{self.name}", attr),
+                                attr=k,
+                            )
+                        continue
                     case _:
                         continue
 
-                # handle quaternion
-                if isinstance(val, Quat):
-                    for i, k in enumerate("wxyz"[: len(val.quat)]):
-                        signal_manager.post(
-                            value=float(val.quat[i]),
-                            category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
-                            attr=k,
-                        )
                 # Handle 3-vectors (pos, vel, acc)
-                elif val.ndim == 1 and len(val) <= 3:
-                    for i, k in enumerate("xyz"[: len(val)]):
+                if val.ndim == 1 and len(val) <= 3:
+                    # vector output (x, y, z + magnitude)
+                    mag = np.linalg.norm(val)
+                    full_vec = np.append(val, mag)
+
+                    for i, k in enumerate("xyzm"):
                         signal_manager.post(
-                            value=float(val[i]),
+                            value=float(full_vec[i]),
                             category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=k,
                         )
                 else:
@@ -511,7 +324,7 @@ class GeomBase(XMLModel):
                         signal_manager.post(
                             value=float(val_flat[i]),
                             category=SignalCategory.GEOMS,
-                            subgroup=f"{self.name}/{attr}",
+                            subgroups=(f"{self.name}", attr),
                             attr=str(i),
                         )
 
@@ -648,7 +461,7 @@ class GeomBox(GeomBase):
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
 
-class GeomMesh(GeomBase):
+class GeomMesh(GeomBase, ProximityMixin):
     """This element creates a mesh geometry."""
 
     attributes = (*_geom_attr, "type", "mesh")
@@ -660,6 +473,31 @@ class GeomMesh(GeomBase):
 
     mesh: MeshName
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
+
+    def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
+        # get mesh id and data from mujoco
+        mesh_id = mj_model.geom_dataid[self.get_id(mj_model)]
+
+        if mesh_id == -1:
+            msg = "Exact proximity mesh tool is not currently supported for geoms of this type. Please use the `SPHERE_TO_SPHERE`/`CONVEX_HULL` algorithm, or convert the Geom to a GeomMesh."
+            logger.error(msg)
+            raise TypeError(msg)
+
+        # extract vertices and faces
+        if self._local_verts is None:
+            adr = mj_model.mesh_vertadr[mesh_id]
+            num = mj_model.mesh_vertnum[mesh_id]
+            self._local_verts = mj_model.mesh_vert[adr : adr + num].copy()
+
+        f_adr = mj_model.mesh_faceadr[mesh_id]
+        f_num = mj_model.mesh_facenum[mesh_id]
+        self._local_faces = mj_model.mesh_face[f_adr : f_adr + f_num].copy()
+
+        # create a trimesh and its proximity query
+        self._baked_mesh = trimesh.Trimesh(
+            vertices=self._local_verts, faces=self._local_faces
+        )
+        return self._baked_mesh
 
 
 class GeomSDF(GeomBase):
@@ -683,3 +521,5 @@ AnyGeom = Annotated[
     | GeomSDF,
     Field(discriminator="type"),
 ]
+
+Proximityable = Annotated[GeomMesh, Field(discriminator="type")]

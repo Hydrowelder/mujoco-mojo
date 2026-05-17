@@ -1,11 +1,10 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
-
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "mujoco-mojo"
-dynamic = ["version"]
+version = "2.2.1"
 description = "A complete MJCF lifecycle and trial orchestration suite for MuJoCo, powered by Pydantic v2."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -40,6 +39,9 @@ dependencies = [
     "joblib>=1.5.3",
     "optuna-dashboard>=0.20.0",
     "pint>=0.25.3",
+    "python-fcl>=0.7.0.11",
+    "rtree>=1.4.1",
+    "filelock>=3.29.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -72,7 +74,7 @@ reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
 [dependency-groups]
 dev = [
     "griffe-pydantic>=1.2.0",
-    "hatch>=1.16.5",
+    "matplotlib>=3.10.8",
     "mkdocs>=1.6.1",
     "mkdocs-gen-files>=0.6.0",
     "mkdocs-glightbox>=0.5.2",
@@ -92,23 +94,8 @@ dev = [
 [project.scripts]
 mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.version.raw-options]
-version_scheme = "post-release"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/mujoco_mojo"]
-
-[tool.hatch.build.targets.sdist]
-include = [
-    "src/mujoco_mojo/**/*.html",
-    "src/mujoco_mojo/**/*.js",
-    "src/mujoco_mojo/**/*.mp3",
-    "src/mujoco_mojo/**/*.svg",
-    "src/mujoco_mojo/**/*.css",
-]
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
@@ -152,7 +139,6 @@ ignore = [
 ]
 
 [tool.pyright]
-reportUnnecessaryCast = true
 stubPath = "typings"
 venvPath = ".."
 venv = ".venv"

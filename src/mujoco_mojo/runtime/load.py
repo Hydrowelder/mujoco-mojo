@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Self
@@ -10,11 +12,11 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.runtime.video_recorder import ArrowConfig
 from mujoco_mojo.stochas import NamedValue
-from mujoco_mojo.typing import SignalCategory, Vec3
+from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.visualization import ArrowConfig
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
@@ -55,11 +57,17 @@ class Load(MojoBaseModel, ABC):
     _user_data: Any = PrivateAttr(default=None)
     """User defined information for the to use."""
 
-    _last_f: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_f: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
-    _last_t: Vec3 = PrivateAttr(default_factory=lambda: np.zeros(4))
+    _last_t: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
+
+    def handle_inactive(self):
+        # [3] is magnitude
+        if not np.isclose(0, self._last_f[3] + self._last_f[3]):
+            self._last_f = np.zeros(4)
+            self._last_t = np.zeros(4)
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
@@ -78,16 +86,11 @@ class Load(MojoBaseModel, ABC):
         if self.rel_to_site is None:
             return local
 
-        # Get the 3x3 rotation matrix for the reference site
-        # MuJoCo stores this as a flat 9-element array in site_xmat
-        rot = self.rel_to_site.rt_xmat(mj_model, mj_data)
-        return rot @ local
+        return self.rel_to_site.rt_xmat(mj_model, mj_data) @ local
 
     @abstractmethod
     def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the force for the timestep.
@@ -101,12 +104,13 @@ class Load(MojoBaseModel, ABC):
 
         """
 
-    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
+    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
         runtime_manager.add_load(self)
         return self
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         if not self.active:
+            self.handle_inactive()
             return
 
         f_world, t_world = self.calculate(mj_model=mj_model, mj_data=mj_data)
@@ -142,7 +146,7 @@ class Load(MojoBaseModel, ABC):
                         value=float(source[i]) if self.active else 0.0,
                         category=SignalCategory.LOADS,
                         # nest the force/torque under the function name
-                        subgroup=f"{self.name}/{attr}",
+                        subgroups=(f"{self.name}", attr),
                         attr=k,
                     )
 
@@ -162,23 +166,23 @@ class Load(MojoBaseModel, ABC):
         f_vec = self._last_f[:3]
         if np.linalg.norm(f_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": action_pos,
-                    "vec": f_vec,
-                    "color": Color.EMERALD_500.rgba,
-                    "is_torque": False,
-                }
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=f_vec,
+                    color=Color.EMERALD_500.rgba,
+                    is_torque=False,
+                )
             )
 
         t_vec = self._last_t[:3]
         if np.linalg.norm(t_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": action_pos,
-                    "vec": t_vec,
-                    "color": Color.AMBER_500.rgba,
-                    "is_torque": True,
-                }
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=t_vec,
+                    color=Color.AMBER_500.rgba,
+                    is_torque=True,
+                )
             )
 
         return visuals
@@ -215,6 +219,10 @@ class PointToPointForce(Load):
         return self
 
     def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        if not self.active:
+            self.handle_inactive()
+            return
+
         super().apply_load(mj_model, mj_data)
 
         f_world = self._last_f[:3]
@@ -248,12 +256,12 @@ class PointToPointForce(Load):
 
         if np.linalg.norm(f_vec) > 1e-4:
             visuals.append(
-                {
-                    "pos": xtion_pos,
-                    "vec": -f_vec,  # opposite direction
-                    "color": Color.ROSE_500.rgba,  # Red for Reaction
-                    "is_torque": False,
-                }
+                ArrowConfig(
+                    pos=xtion_pos,
+                    vec=-f_vec,  # opposite direction
+                    color=Color.ROSE_500.rgba,  # Red for Reaction
+                    is_torque=False,
+                )
             )
 
         return visuals
@@ -423,6 +431,10 @@ class BodyReactionForce(Load):
             self.xtion_body.get_id(mj_model)
 
     def apply_load(self, mj_model, mj_data):
+        if not self.active:
+            self.handle_inactive()
+            return
+
         super().apply_load(mj_model, mj_data)
 
         if self.xtion_body is None:

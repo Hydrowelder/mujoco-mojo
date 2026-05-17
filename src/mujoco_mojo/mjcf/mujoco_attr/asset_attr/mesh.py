@@ -1,19 +1,32 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, overload
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    NotRequired,
+    Self,
+    TypedDict,
+    Unpack,
+    overload,
+)
 
 import mujoco
 import numpy as np
+import trimesh
+import trimesh.visual
 from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
-from mujoco_mojo.mjcf.orientation import Quat
-from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3
+from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
 
+if TYPE_CHECKING:
+    from trimesh.typed import BooleanEngineType
 logger = get_logger(__name__)
 
 __all__ = [
@@ -31,6 +44,7 @@ _mesh_attr = (
     "name",
     "class_",
     "content_type",
+    "scale",
     "file",
     "vertex",
     "normal",
@@ -38,12 +52,29 @@ _mesh_attr = (
     "face",
     "refpos",
     "refquat",
-    "scale",
     "smoothnormal",
     "maxhullvert",
     "inertia",
     "material",
 )
+
+
+class MeshAttributes(TypedDict):
+    name: NotRequired[MeshName | None]
+    class_: NotRequired[str | None]
+    content_type: NotRequired[str | None]
+    file: NotRequired[DepPath | None]
+    scale: NotRequired[Vec3]
+    inertia: NotRequired[Inertia]
+    smoothnormal: NotRequired[bool]
+    maxhullvert: NotRequired[int]
+    vertex: NotRequired[tuple[tuple[float, float, float], ...] | None]
+    normal: NotRequired[tuple[tuple[float, float, float], ...] | None]
+    texcoord: NotRequired[tuple[tuple[float, float], ...] | None]
+    face: NotRequired[tuple[tuple[int, int, int], ...] | None]
+    refpos: NotRequired[Vec3]
+    refquat: NotRequired[Vec4]
+    material: NotRequired[MaterialName | None]
 
 
 class MeshBase(XMLModel):
@@ -96,10 +127,10 @@ class MeshBase(XMLModel):
     face: tuple[tuple[int, int, int], ...] | None = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
-    refpos: Pos = Pos(pos=np.array((1, 1, 1)))
+    refpos: Vec3 = np.array((1, 1, 1))
     """Reference position relative to which the 3D vertex coordinates are defined. This vector is subtracted from the positions."""
 
-    refquat: Quat = Quat()
+    refquat: Vec4 = np.array((1, 0, 0, 0))
     """Reference orientation relative to which the 3D vertex coordinates and normals are defined. The conjugate of this quaternion is used to rotate the positions and normals. The model compiler normalizes the quaternion automatically."""
 
     material: MaterialName | None = None
@@ -314,7 +345,158 @@ class Mesh(MeshBase):
     6. Compute the center of mass and inertia matrix of the union-of-pyramids. Use eigenvalue decomposition to find the principal axes of inertia. Center and align the mesh, saving the translational and rotational offsets for subsequent geom-related computations.
     """
 
-    builtin: Literal[None] = Field(None, exclude=True)
+    builtin: Literal["none"] = "none"
+
+    @classmethod
+    def new_from_trimesh(
+        cls,
+        mesh: trimesh.Trimesh | trimesh.Scene,
+        **kwargs: Unpack[MeshAttributes],
+    ) -> Self:
+        """
+        Creates a Mesh instance from a trimesh object.
+
+        Automatically extracts vertices, faces, and (if present) normals/texcoords.
+        """
+        if isinstance(mesh, trimesh.Scene):
+            mesh = mesh.to_mesh()
+
+        assert isinstance(mesh, trimesh.Trimesh)
+        mesh.process(validate=True)
+        mesh.fill_holes()
+
+        # mandatory geometry data
+        extracted_data: dict[str, Any] = {
+            "vertex": tuple(map(tuple, mesh.vertices.tolist())),
+            "face": tuple(map(tuple, mesh.faces.tolist())),
+        }
+
+        # extract normals (if they exist and weren't provided)
+        if "normal" not in kwargs:
+            # only pull if the count matches
+            v_normals = getattr(mesh, "vertex_normals", None)
+            if v_normals is not None and len(v_normals) == len(mesh.vertices):
+                extracted_data["normal"] = tuple(map(tuple, v_normals.tolist()))
+
+        # extract texture coordinates (if they exist and weren't provided)
+        if "texcoord" not in kwargs:
+            if isinstance(mesh.visual, trimesh.visual.TextureVisuals):
+                uvs = mesh.visual.uv
+                if uvs is not None and len(uvs) == len(mesh.vertices):
+                    extracted_data["texcoord"] = tuple(map(tuple, uvs.tolist()))
+
+        # merge kwargs
+        final_attrs = {**extracted_data, **kwargs}
+
+        return cls(**final_attrs)
+
+    @classmethod
+    def new_frustum(
+        cls,
+        radius_bottom: float,
+        radius_top: float,
+        height: float,
+        sections: int = 32,
+        wall_thickness: float = 0.0,
+        engine: BooleanEngineType = None,
+        base_at_zero: bool = True,
+        **kwargs: Unpack[MeshAttributes],
+    ) -> Self:
+        """
+        Generates a conical frustum (tapered cylinder).
+
+        Args:
+            radius_bottom (float): Radius at z = -height/2.
+            radius_top (float): Radius at z = +height/2.
+            height (float): Total height of the frustum.
+            sections (int): Number of radial segments.
+            wall_thickness (float): Thickness of the walls (makes a hollow frustum if not equal to zero).
+            engine (BooleanEngineType): Which engine to use for boolean subtraction (only used for hollow volumes, reccomended to use "manifold" but requires `manifold3d`).
+            base_at_zero (bool): Whether or not to shift the volume so it sits on z=0 instead of underground.
+            **kwargs (MeshAttributes): Standard MuJoCo mesh attributes (name, inertia, etc.)
+
+        Example:
+            <img src="https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/docs/assets/mesh/frustums.jpg" width="300" />
+
+            Two frustums generated using this method. The red frustum has its wall thickness set to 0 and its bottom radius is greater than the top. The cyan frustum has a non-zero wall thickness and a larger top radius than the bottom resulting in a hollow volume. The cyan frustum has more sections than the red.
+
+        """
+        # create the outer mesh
+        mesh = trimesh.creation.cylinder(radius=1.0, height=height, sections=sections)
+
+        def taper_mesh(m: trimesh.Trimesh, r_b: float, r_t: float) -> None:
+            verts = m.vertices.copy()
+            # Dynamically find the midpoint of the specific mesh's height extent
+            z_ext = m.bounds[:, 2]
+            z_mid = (z_ext[1] - z_ext[0]) / 4
+
+            mask_top = verts[:, 2] > z_mid
+            mask_bottom = verts[:, 2] < -z_mid
+
+            verts[mask_top, :2] *= r_t
+            verts[mask_bottom, :2] *= r_b
+            m.vertices = verts
+
+        taper_mesh(mesh, radius_bottom, radius_top)
+
+        if wall_thickness != 0:
+            inner = trimesh.creation.cylinder(
+                radius=1.0, height=height + 0.02, sections=sections
+            )
+            taper_mesh(
+                inner, radius_bottom - wall_thickness, radius_top - wall_thickness
+            )
+
+            # perform boolean subtraction to make it hollow
+            # Note: This requires the 'manifold' or 'blender' engine installed for trimesh,
+            # otherwise it falls back to a simpler but less robust internal boolean.
+            mesh = mesh.difference(inner, engine=engine)
+
+        if base_at_zero:
+            mesh.apply_translation([0, 0, height / 2])
+        return cls.new_from_trimesh(mesh, **kwargs)
+
+    @classmethod
+    def new_hollow_box(
+        cls,
+        width: float,
+        depth: float,
+        height: float,
+        wall_thickness: float = 0.02,
+        engine: BooleanEngineType = None,
+        base_at_zero: bool = True,
+        **kwargs: Unpack[MeshAttributes],
+    ) -> Self:
+        """
+        Generates an open-top box with physical wall thickness (concave bin).
+
+        Args:
+            width (float): Total outer dimension along X.
+            depth (float): Total outer dimension along Y.
+            height (float): Total outer dimension along Z.
+            wall_thickness (float): Thickness of the walls and bottom floor.
+            engine (BooleanEngineType): Engine to use for boolean subtraction.
+            base_at_zero (bool): Shift volume so it sits on z=0 instead of underground.
+            **kwargs (MeshAttributes): Standard MuJoCo mesh attributes (name, inertia, etc.)
+
+        """
+        # outer box centered at (0, 0, 0)
+        outer = trimesh.creation.box(extents=(width, depth, height))
+
+        # inner cutout box
+        inner = trimesh.creation.box(
+            extents=(width - (2 * wall_thickness), depth - (2 * wall_thickness), height)
+        )
+
+        # shift the inner tool up by the floor thickness
+        inner.apply_translation([0, 0, wall_thickness])
+
+        mesh = outer.difference(inner, engine=engine)
+
+        if base_at_zero:
+            mesh.apply_translation([0, 0, height / 2])
+
+        return cls.new_from_trimesh(mesh, **kwargs)
 
 
 class MeshSphere(MeshBase):
