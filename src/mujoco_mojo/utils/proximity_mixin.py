@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import mujoco
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class ProximityMixin(MojoBaseModel):
+class ProximityMixin(MojoBaseModel, ABC):
     _baked_mesh: trimesh.Trimesh | None = PrivateAttr(default=None)
     """Internal trimesh representation of the geometry."""
 
@@ -63,6 +64,10 @@ class ProximityMixin(MojoBaseModel):
 
         return radius, centroid
 
+    @abstractmethod
+    def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
+        """Generates a trimesh object to be used with proximity calculations."""
+
     def bake_proximity(self, mj_model: mujoco.MjModel, proximity_type: ProximityType):
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
         geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
@@ -75,28 +80,13 @@ class ProximityMixin(MojoBaseModel):
             case ProximityType.SPHERE_TO_SPHERE | ProximityType.CONVEX_HULL:
                 return
 
-        # get mesh id and data from mujoco
-        mesh_id = mj_model.geom_dataid[geom_self.get_id(mj_model)]
-
-        if mesh_id == -1:
-            msg = "Exact proximity mesh tool is not currently supported for geoms of this type. Please use the `SPHERE_TO_SPHERE`/`CONVEX_HULL` algorithm, or convert the Geom to a GeomMesh."
-            logger.error(msg)
-            raise TypeError(msg)
-
-        # extract vertices and faces
-        if self._local_verts is None:
-            adr = mj_model.mesh_vertadr[mesh_id]
-            num = mj_model.mesh_vertnum[mesh_id]
-            self._local_verts = mj_model.mesh_vert[adr : adr + num].copy()
-
-        f_adr = mj_model.mesh_faceadr[mesh_id]
-        f_num = mj_model.mesh_facenum[mesh_id]
-        self._local_faces = mj_model.mesh_face[f_adr : f_adr + f_num].copy()
-
-        # create a trimesh and its proximity query
-        self._baked_mesh = trimesh.Trimesh(
-            vertices=self._local_verts, faces=self._local_faces
+        self.trimesh(mj_model)
+        assert (
+            self._baked_mesh
+            and self._local_faces is not None
+            and self._local_verts is not None
         )
+
         match proximity_type:
             case ProximityType.FACE_TO_FACE:
                 if not geom_self.name:
