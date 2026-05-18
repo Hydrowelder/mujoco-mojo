@@ -34,6 +34,72 @@
   <script src="/mojo-static/js/main.js"></script>
   <script defer
           src="/mojo-static/vendored/alpine.min.js"></script>
+  <style type="text/tailwindcss">
+    @layer components {
+      /* ── Surfaces ──────────────────────────────────────────────────────── */
+      .card {
+        @apply bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-md;
+      }
+      .card-hover {
+        @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default;
+      }
+
+      /* ── Floating panels (tooltips, sidebar pop-outs) ──────────────────── */
+      .panel {
+        @apply bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4;
+      }
+      /* Add positioning + width classes per usage: absolute top-full mt-2 w-80 etc. */
+      .tooltip-panel {
+        @apply panel absolute top-full mt-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300];
+      }
+
+      /* ── Header toggle buttons ─────────────────────────────────────────── */
+      .btn {
+        @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;
+      }
+      .btn-icon {
+        @apply h-9 w-9 rounded-lg border flex items-center justify-center shadow-sm;
+      }
+      .btn-primary {
+        @apply bg-cyan-500 text-white border-cyan-600 shadow-inner;
+      }
+      .btn-ghost {
+        @apply bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-700 text-slate-400;
+      }
+      .btn-sound-on {
+        @apply bg-cyan-50 dark:bg-cyan-900/20 border-cyan-500 text-cyan-500;
+      }
+
+      /* ── Sidebar action buttons (trial viewer) ─────────────────────────── */
+      .sidebar-btn {
+        @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500;
+      }
+
+      /* ── Trial number badges ───────────────────────────────────────────── */
+      .badge {
+        @apply inline-flex items-center justify-center px-2 py-1 rounded-md font-mono text-sm;
+      }
+      .badge-success {
+        @apply badge bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-400 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-emerald-100 dark:hover:bg-emerald-800/50;
+      }
+      .badge-failure {
+        @apply badge bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-rose-100 dark:hover:bg-rose-800/50;
+      }
+      .badge-disabled {
+        @apply badge bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60;
+      }
+      /* Mosaic / available-trial tile (larger px-3 py-2, cyan hover) */
+      .badge-tile {
+        @apply inline-flex items-center justify-center px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 rounded-md font-mono text-sm font-bold transition-all duration-200 shadow-sm hover:scale-110 hover:border-cyan-500 hover:text-cyan-500 active:scale-95;
+      }
+
+      /* ── Form inputs ───────────────────────────────────────────────────── */
+      /* Usage: add w-full, padding, and shadow classes per context */
+      .input-field {
+        @apply bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500;
+      }
+    }
+  </style>
   <script>
     // 1. BLOCKING THEME CHECK
     tailwind.config = { darkMode: "class" };
@@ -134,8 +200,8 @@
 
           <!-- auto refresh toggle button -->
           <button @click="$store.dojo.toggleAuto()"
-                  class="h-9 px-3 border rounded-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shadow-sm"
-                  :class="$store.dojo.isAutoRefresh ? 'bg-cyan-500 text-white border-cyan-600 shadow-inner' : 'bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-700 text-slate-400'"
+                  class="btn"
+                  :class="$store.dojo.isAutoRefresh ? 'btn-primary' : 'btn-ghost'"
                   :title="$store.dojo.isAutoRefresh ? 'Disable Auto-refresh' : 'Enable Auto-refresh'">
             <div class="w-2 h-2 rounded-full shrink-0"
                  :class="$store.dojo.isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-slate-400'"></div>
@@ -145,8 +211,8 @@
 
           <!-- mute/unmute toggle button -->
           <button @click="$store.dojo.toggleMute()"
-                  class="h-9 w-9 rounded-lg border transition-all duration-200 flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
-                  :class="$store.dojo.isMuted ? 'bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-700 text-slate-400' : 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-500 text-cyan-500'"
+                  class="btn-icon"
+                  :class="$store.dojo.isMuted ? 'btn-ghost' : 'btn-sound-on'"
                   :title="$store.dojo.isMuted ? 'Unmute completion chime' : 'Mute completion chime'">
             <svg x-show="$store.dojo.isMuted"
                  class="w-5 h-5"
@@ -174,7 +240,7 @@
 
           <!-- theme selector -->
           <div x-data="{ theme: localStorage.theme || 'system', setTheme(val) { this.theme = val; if (val === 'system') { localStorage.removeItem('theme'); document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches); } else { localStorage.theme = val; document.documentElement.classList.toggle('dark', val === 'dark'); } } }"
-               class="flex h-9 bg-white dark:bg-slate-800 p-1 rounded-lg border border-slate-400 dark:border-slate-700 shadow-sm">
+               class="card rounded-lg shadow-sm flex h-9 p-1">
             <!-- set to light -->
             <button @click="setTheme('light')"
                     class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
@@ -225,7 +291,7 @@
 
         <!-- job metadata -->
         {% if status_code is not defined %}
-        <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-400 dark:border-slate-700 shadow-md space-y-1 w-full md:w-64">
+        <div class="card p-3 space-y-1 w-full md:w-64">
           <div class="flex items-center gap-2">
             <span class="text-sm uppercase font-black text-slate-500 w-auto">Owner</span>
             <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate">{{ owner }}</p>
