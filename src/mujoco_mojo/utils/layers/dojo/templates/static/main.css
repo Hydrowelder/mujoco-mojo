@@ -142,3 +142,20 @@ kbd {
     box-shadow: 0 2px 0 #0f172a;
     /* Deeper shadow for dark mode */
 }
+
+/* --- 6. Number Inputs (hide native browser spin arrows) --- */
+/* Usage: add width, padding, and text-size utilities per context */
+.number-input {
+    background: transparent;
+    text-align: center;
+    outline: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    color: #06b6d4; /* cyan-500 */
+    appearance: textfield;
+}
+
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+    appearance: none;
+}
