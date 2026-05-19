@@ -1,3 +1,5 @@
+import json
+import re
 import socket
 from functools import lru_cache
 
@@ -6,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
+from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
+from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -13,6 +17,23 @@ from .. import shared
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+def _format_filter_error(raw: str) -> str:
+    """Extract a short, human-readable message from a Pydantic validation error."""
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line.startswith("Value error,"):
+            continue
+        msg = line.removeprefix("Value error,").strip()
+        m = re.match(r"Unknown unit definition: '(.+?)' is not defined", msg)
+        if m:
+            return f"Unknown unit '{m.group(1)}'"
+        m = re.match(r"Incompatible units: (.+?) and (.+?) \(", msg)
+        if m:
+            return f"Incompatible units: {m.group(1)} → {m.group(2)}"
+        return msg
+    return "Filter validation failed — check filter settings"
 
 
 def get_network_ip():
@@ -107,6 +128,112 @@ async def get_trial_viewer(request: Request, trial_id: str):
     )
 
 
+@router.get("/api/filter-schema")
+async def get_filter_schema():
+    """Returns metadata for all available filter types, derived from Pydantic models."""
+    from pydantic_core import PydanticUndefined
+
+    from mujoco_mojo.utils.filters.filters import (
+        AbsoluteValueFilter,
+        ClipFilter,
+        DeadbandFilter,
+        DerivativeFilter,
+        HighPassFilter,
+        IntegralFilter,
+        LowPassFilter,
+        MedianFilter,
+        NormalizeFilter,
+        RollingMeanFilter,
+        SavitzkyGolayFilter,
+        ScaleFilter,
+        TaringFilter,
+        UnitFilter,
+        WrapFilter,
+    )
+
+    FILTER_CLASSES = [
+        ScaleFilter,
+        AbsoluteValueFilter,
+        DerivativeFilter,
+        IntegralFilter,
+        LowPassFilter,
+        HighPassFilter,
+        ClipFilter,
+        RollingMeanFilter,
+        TaringFilter,
+        DeadbandFilter,
+        WrapFilter,
+        MedianFilter,
+        NormalizeFilter,
+        SavitzkyGolayFilter,
+        UnitFilter,
+    ]
+
+    def _infer_type(prop: dict) -> str:
+        if "anyOf" in prop:
+            non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
+            prop = non_null[0] if non_null else {}
+        t = prop.get("type", "")
+        if t == "integer":
+            return "int"
+        if t == "number":
+            return "float"
+        if t == "boolean":
+            return "bool"
+        return "string"
+
+    result = []
+    for cls in FILTER_CLASSES:
+        schema = cls.model_json_schema()
+        props = schema.get("properties", {})
+        type_val = str(cls.model_fields["type"].default)
+
+        params = []
+        for name, field_info in cls.model_fields.items():
+            if name == "type":
+                continue
+            prop = props.get(name, {})
+            if "anyOf" in prop:
+                non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
+                prop_clean = {**prop, **(non_null[0] if non_null else {})}
+            else:
+                prop_clean = prop
+
+            default = field_info.default
+            if default is PydanticUndefined:
+                default = None
+            elif isinstance(default, float):
+                default = round(float(default), 8)
+
+            p: dict = {"name": name, "type": _infer_type(prop), "default": default}
+            if "minimum" in prop_clean:
+                p["min"] = prop_clean["minimum"]
+            if "maximum" in prop_clean:
+                p["max"] = prop_clean["maximum"]
+            if "exclusiveMinimum" in prop_clean:
+                p["exclusive_min"] = prop_clean["exclusiveMinimum"]
+            if "exclusiveMaximum" in prop_clean:
+                p["exclusive_max"] = prop_clean["exclusiveMaximum"]
+            params.append(p)
+
+        description = (cls.__doc__ or "").strip()
+        description = description.split("\n")[0].strip()
+
+        entry: dict = {
+            "type": type_val,
+            "label": type_val.replace("_", " ").title(),
+            "description": description,
+            "params": params,
+        }
+        if type_val == "unit":
+            entry["unit_groups"] = [
+                {"label": label, "units": units} for label, units in _UNIT_GROUPS
+            ]
+        result.append(entry)
+
+    return result
+
+
 @lru_cache(maxsize=128)
 def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
@@ -123,7 +250,10 @@ def _get_atomic_column(path_str: str, col_name: str, mtime: float):
 
 @router.get("/{trial_id}/data")
 async def get_trial_data(
-    trial_id: str, cols: str = Query(None), rotate_by: str = Query(None)
+    trial_id: str,
+    cols: str = Query(None),
+    rotate_by: str = Query(None),
+    filters: str = Query(None),
 ):
     """
     Loops over the columns in the trial_id provided and returns their data. Optionally performs a rotation if requested and there are an associated x, y, and z column.
@@ -132,6 +262,7 @@ async def get_trial_data(
         trial_id (str): Trial to search (e.g. `"trial_001"`).
         cols (str, optional): Comma separated list of column names to return data for (e.g. `"/Bodies/body1/xpos:x,/Bodies/body2/xpos:m"`). Defaults to Query(None).
         rotate_by (str, optional): Quaternion family to rotate vectors by (e.g. `"/Bodies/body1/quat"`). Defaults to Query(None).
+        filters (str, optional): String representation of filters to be applied sequentially. Defaults to Query(None).
 
     Raises:
         HTTPException: Raised if no shared.CURRENT_JOB was set.
@@ -196,11 +327,38 @@ async def get_trial_data(
             # rotate from world to rotate_by frame
             df = df.mojo.with_rotation(quat_base=rotate_by, invert=True)
 
-        data = {col: df[col].to_list() for col in requested if col in df.columns}
+        # parse validated filter stacks (col_name → list[AnyFilter])
+        col_filters: dict = {}
+        filter_errors: list[str] = []
+        if filters:
+            try:
+                col_filters = _filter_adapter.validate_python(json.loads(filters))
+            except Exception as e:
+                logger.warning(f"Could not parse filters for {trial_id}: {e}")
+                filter_errors.append(_format_filter_error(str(e)))
+
+        # build response data, applying per-column filters where present
+        data: dict = {}
+        for col in requested:
+            if col not in df.columns:
+                continue
+            series = df[col]
+            filter_list = col_filters.get(col)
+            if filter_list:
+                if series.dtype != pl.Float64:
+                    series = series.cast(pl.Float64)
+                tmp = pl.DataFrame({col: series})
+                expr = pl.col(col)
+                for f in filter_list:
+                    expr = f.apply(expr)
+                tmp = tmp.with_columns(expr.alias(col))
+                series = tmp[col]
+            data[col] = series.to_list()
 
         return {
-            "columns": column_manifest,  # Full list of headers for the sidebar
-            "data": data,  # Actual arrays for the requested traces
+            "columns": column_manifest,
+            "data": data,
+            "filter_errors": filter_errors,
         }
 
     except Exception as e:

@@ -4,10 +4,13 @@ import type { AlpineMagics } from './types/global';
 import type {
   Annotation,
   DojoStore,
+  FilterEntry,
+  FilterSchema,
   PlotConfig,
   Shape,
   TrialDataResponse,
   TrialManifest,
+  UnitGroup,
   YAxisConfig,
 } from './models';
 
@@ -97,6 +100,14 @@ function trialViewer(trialId: string, externalUrl: string) {
     isValidConfig: true,
     configErrors: [] as string[],
     isEditingRaw: false,
+
+    // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
+    filterSchemas: [] as FilterSchema[],
+    // tracks the last filter fingerprint that was fetched for each col; used to detect
+    // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
+    filterFingerprints: {} as Record<string, string>,
+    // in-progress signal editor edits that survive closing/reopening the panel
+    signalDrafts: {} as Record<string, { draft: YAxisConfig; baseSnapshot: string }>,
 
     // --- MATCHUP STATE ---
     vsDatasets: {} as Record<string, Record<string, number[]>>,
@@ -188,11 +199,31 @@ function trialViewer(trialId: string, externalUrl: string) {
       const colParams = new URLSearchParams();
       if (requiredCols.length > 0) colParams.append('cols', requiredCols.join(','));
       if (this.config.refFrame) colParams.append('rotate_by', this.config.refFrame);
+
+      // include active filter stacks for requested yAxis columns
+      const filtersPayload: Record<string, object[]> = {};
+      for (const col of requiredCols) {
+        const yConfig = this.config.yAxes[col];
+        if (yConfig?.filters && yConfig.filters.length > 0) {
+          const active = yConfig.filters
+            .filter((f) => f.enabled !== false)
+            .map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== 'enabled')));
+          if (active.length > 0) filtersPayload[col] = active;
+        }
+      }
+      if (Object.keys(filtersPayload).length > 0) {
+        colParams.append('filters', JSON.stringify(filtersPayload));
+      }
+
       const queryStr = colParams.toString();
       if (queryStr) url += `?${queryStr}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
-      return resp.json() as Promise<TrialDataResponse>;
+      const result = await resp.json() as TrialDataResponse;
+      if (result.filter_errors && result.filter_errors.length > 0) {
+        result.filter_errors.forEach((msg) => this.notify(msg, 'error'));
+      }
+      return result;
     },
 
     async trickleFetch(id: string, columnList: string[], label: string, isVsDataset: boolean, loopId: number) {
@@ -399,6 +430,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       observer.observe(document.documentElement, { attributes: true });
 
       try {
+        const schemaResp = await fetch('/mosaic/api/filter-schema');
+        this.filterSchemas = await schemaResp.json() as FilterSchema[];
+      } catch (e) {
+        console.warn('Failed to load filter schemas', e);
+      }
+
+      try {
         const statusResp = await fetch('/monitor/api/status');
         const statusData = await statusResp.json() as { error?: boolean; is_complete: boolean; padding_style: string };
         if (statusData && !statusData.error) {
@@ -564,6 +602,25 @@ function trialViewer(trialId: string, externalUrl: string) {
           await this.syncVsRange();
         }
         this.pushHistory();
+
+        // detect filter changes by comparing against the last-fetched fingerprint rather
+        // than oldValue, because Alpine.js $watch does not reliably deep-clone oldValue
+        // for nested reactive objects — both value and oldValue may point to the same data
+        const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
+          const current = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+          return current !== (this.filterFingerprints[col] ?? '[]');
+        });
+        if (changedFilterCols.length > 0) {
+          changedFilterCols.forEach((col) => {
+            this.filterFingerprints[col] = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+            if (this.data) delete this.data[col];
+          });
+          this.vsDatasets = {};
+          const resp = await this.fetchTrialData(this.trialId, changedFilterCols);
+          this.data = { ...(this.data ?? {}), ...resp.data };
+          if (this.config.vsEnabled) await this.syncVsRange();
+        }
+
         this.saveAndRender();
       });
 
@@ -966,7 +1023,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           label: '',
           width: 3,
           opacity: 1,
-          scale: '1.0',
+          filters: [],
           dash: 'solid',
           marker: 'none',
         };
@@ -1002,15 +1059,84 @@ function trialViewer(trialId: string, externalUrl: string) {
         opacity: obj.opacity ?? 1.0,
         dash: obj.dash ?? 'solid',
         marker: obj.marker ?? 'none',
-        scale: obj.scale ?? '1.0',
       };
     },
 
-    parseScale(scaleStr: string): number {
-      try {
-        const safe = String(scaleStr).replace(/pi/gi, String(Math.PI)).replace(/[^-()\d/*+.]/g, '');
-        return (Function('"use strict"; return (' + safe + ')')() as number) || 1.0;
-      } catch { return 1.0; }
+    // -----------------------------------------------------------------------
+    // Filter stack management
+    // -----------------------------------------------------------------------
+    getFilterSchema(filterType: string): FilterSchema | undefined {
+      return this.filterSchemas.find((s) => s.type === filterType);
+    },
+
+    getUnitOptions(groups: UnitGroup[] | undefined, fromUnit: string | null | undefined): UnitGroup[] {
+      if (!groups) return [];
+      if (!fromUnit) return groups;
+      const match = groups.find((g) => g.units.includes(fromUnit));
+      return match ? [match] : groups;
+    },
+
+    getFilterSummary(entry: FilterEntry): string {
+      const schema = this.filterSchemas.find((s) => s.type === entry.type);
+      if (!schema || schema.params.length === 0) return '';
+      if (entry.type === 'unit') return `${entry['from_unit'] ?? '?'} → ${entry['to_unit'] ?? '?'}`;
+      const parts = schema.params
+        .filter((p) => (entry as Record<string, unknown>)[p.name] != null)
+        .map((p) => {
+          const val = (entry as Record<string, unknown>)[p.name];
+          if (typeof val === 'boolean') return `${p.name}=${val ? 'on' : 'off'}`;
+          if (typeof val === 'number') return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          return `${p.name}=${val as string}`;
+        });
+      return parts.slice(0, 3).join(', ');
+    },
+
+    addFilterToTemp(temp: YAxisConfig, filterType: string) {
+      const schema = this.filterSchemas.find((s) => s.type === filterType);
+      if (!schema) return;
+      if (!temp.filters) temp.filters = [];
+      const entry: FilterEntry = { type: filterType, enabled: true };
+      for (const p of schema.params) {
+        (entry as Record<string, unknown>)[p.name] = p.default;
+      }
+      temp.filters.push(entry);
+    },
+
+    removeFilterFromTemp(temp: YAxisConfig, index: number) {
+      if (!temp.filters) return;
+      temp.filters.splice(index, 1);
+    },
+
+    moveFilterInTemp(temp: YAxisConfig, index: number, direction: number) {
+      if (!temp.filters) return;
+      const newIdx = index + direction;
+      if (newIdx < 0 || newIdx >= temp.filters.length) return;
+      const [item] = temp.filters.splice(index, 1);
+      if (item) temp.filters.splice(newIdx, 0, item);
+    },
+
+    setFilterParamOnTemp(temp: YAxisConfig, filterIndex: number, paramName: string, value: unknown) {
+      if (!temp.filters?.[filterIndex]) return;
+      (temp.filters[filterIndex] as Record<string, unknown>)[paramName] = value;
+    },
+
+    applySignalConfig(col: string, temp: YAxisConfig) {
+      // deep copy prevents temp.filters from sharing a reference with config.yAxes[col].filters
+      this.config.yAxes[col] = JSON.parse(JSON.stringify(temp)) as YAxisConfig;
+      delete this.signalDrafts[col];
+      // config watcher handles pushHistory + filter re-fetch + saveAndRender
+    },
+
+    getDraft(col: string): { draft: YAxisConfig; baseSnapshot: string } | null {
+      return (this.signalDrafts as Record<string, { draft: YAxisConfig; baseSnapshot: string }>)[col] ?? null;
+    },
+
+    saveDraft(col: string, draft: YAxisConfig, baseSnapshot: string) {
+      (this.signalDrafts as Record<string, { draft: YAxisConfig; baseSnapshot: string }>)[col] = { draft, baseSnapshot };
+    },
+
+    clearDraft(col: string) {
+      delete (this.signalDrafts as Record<string, { draft: YAxisConfig; baseSnapshot: string }>)[col];
     },
 
     // -----------------------------------------------------------------------
@@ -1030,13 +1156,11 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
 
       activeDatasets.forEach((dataset) => {
-        keys.forEach((key, i) => {
-          const p = this.getYProps(key, i);
-          const scale = this.parseScale(p.scale);
+        keys.forEach((key) => {
           const series = dataset[key];
           if (!series) return;
           for (let j = 0; j < series.length; j++) {
-            const val = (series[j] ?? 0) * scale;
+            const val = series[j] ?? 0;
             if (val < globalMin) globalMin = val;
             if (val > globalMax) globalMax = val;
           }
@@ -1074,11 +1198,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       const yKeys = Object.keys(this.config.yAxes);
       let traces: object[] = yKeys.map((key, i) => {
         const p = this.getYProps(key, i);
-        const scale = this.parseScale(p.scale);
         if (!this.data![p.name]) return null;
         return {
           x: this.data![this.config.xAxis],
-          y: this.data![p.name]!.map((v) => v * scale),
+          y: this.data![p.name]!,
           name: p.label,
           mode: this.config.linemode,
           type: 'scatter',
@@ -1102,11 +1225,10 @@ function trialViewer(trialId: string, externalUrl: string) {
           const vsTraces = yKeys.map((key, i) => {
             const p = this.getYProps(key, i);
             if (!dataset[p.name]) return null;
-            const scale = this.parseScale(p.scale);
             const isFirst = !legendTracker.has(key);
             const t = {
               x: dataset[this.config.xAxis],
-              y: dataset[p.name]!.map((v) => v * scale),
+              y: dataset[p.name]!,
               name: `${p.label} (<i>vs.</i>)`,
               legendgroup: `group_${key}`,
               showlegend: isFirst,

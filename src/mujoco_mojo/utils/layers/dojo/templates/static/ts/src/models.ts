@@ -43,6 +43,40 @@ export interface TrialDataResponse {
     rotateable_vectors: string[];
   };
   data: Record<string, number[]>;
+  filter_errors?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Filter stack (per-signal server-side transformations)
+// ---------------------------------------------------------------------------
+
+export interface FilterEntry {
+  type: string;
+  enabled?: boolean;
+  [key: string]: unknown;
+}
+
+export interface FilterParamSchema {
+  name: string;
+  type: 'float' | 'int' | 'bool' | 'string';
+  default: number | boolean | string | null;
+  min?: number;
+  max?: number;
+  exclusive_min?: number;
+  exclusive_max?: number;
+}
+
+export interface UnitGroup {
+  label: string;
+  units: string[];
+}
+
+export interface FilterSchema {
+  type: string;
+  label: string;
+  description: string;
+  params: FilterParamSchema[];
+  unit_groups?: UnitGroup[];
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +88,7 @@ export interface YAxisConfig {
   color: string;
   width: number;
   opacity: number;
-  scale: string;
+  filters: FilterEntry[];
   dash: DashStyle;
   marker: MarkerSymbol;
 }

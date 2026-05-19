@@ -134,6 +134,13 @@
       isValidConfig: true,
       configErrors: [],
       isEditingRaw: false,
+      // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
+      filterSchemas: [],
+      // tracks the last filter fingerprint that was fetched for each col; used to detect
+      // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
+      filterFingerprints: {},
+      // in-progress signal editor edits that survive closing/reopening the panel
+      signalDrafts: {},
       // --- MATCHUP STATE ---
       vsDatasets: {},
       allTrials: [],
@@ -221,11 +228,26 @@
         const colParams = new URLSearchParams();
         if (requiredCols.length > 0) colParams.append("cols", requiredCols.join(","));
         if (this.config.refFrame) colParams.append("rotate_by", this.config.refFrame);
+        const filtersPayload = {};
+        for (const col of requiredCols) {
+          const yConfig = this.config.yAxes[col];
+          if (yConfig?.filters && yConfig.filters.length > 0) {
+            const active = yConfig.filters.filter((f) => f.enabled !== false).map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+            if (active.length > 0) filtersPayload[col] = active;
+          }
+        }
+        if (Object.keys(filtersPayload).length > 0) {
+          colParams.append("filters", JSON.stringify(filtersPayload));
+        }
         const queryStr = colParams.toString();
         if (queryStr) url += `?${queryStr}`;
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
-        return resp.json();
+        const result = await resp.json();
+        if (result.filter_errors && result.filter_errors.length > 0) {
+          result.filter_errors.forEach((msg) => this.notify(msg, "error"));
+        }
+        return result;
       },
       async trickleFetch(id, columnList, label, isVsDataset, loopId) {
         const CHUNK_SIZE = 10;
@@ -415,6 +437,12 @@
         });
         observer.observe(document.documentElement, { attributes: true });
         try {
+          const schemaResp = await fetch("/mosaic/api/filter-schema");
+          this.filterSchemas = await schemaResp.json();
+        } catch (e) {
+          console.warn("Failed to load filter schemas", e);
+        }
+        try {
           const statusResp = await fetch("/monitor/api/status");
           const statusData = await statusResp.json();
           if (statusData && !statusData.error) {
@@ -568,6 +596,20 @@
             await this.syncVsRange();
           }
           this.pushHistory();
+          const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
+            const current = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+            return current !== (this.filterFingerprints[col] ?? "[]");
+          });
+          if (changedFilterCols.length > 0) {
+            changedFilterCols.forEach((col) => {
+              this.filterFingerprints[col] = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+              if (this.data) delete this.data[col];
+            });
+            this.vsDatasets = {};
+            const resp2 = await this.fetchTrialData(this.trialId, changedFilterCols);
+            this.data = { ...this.data ?? {}, ...resp2.data };
+            if (this.config.vsEnabled) await this.syncVsRange();
+          }
           this.saveAndRender();
         });
         void this.startBackgroundDiscovery();
@@ -971,7 +1013,7 @@
             label: "",
             width: 3,
             opacity: 1,
-            scale: "1.0",
+            filters: [],
             dash: "solid",
             marker: "none"
           };
@@ -1002,17 +1044,70 @@
           width: obj.width ?? 3,
           opacity: obj.opacity ?? 1,
           dash: obj.dash ?? "solid",
-          marker: obj.marker ?? "none",
-          scale: obj.scale ?? "1.0"
+          marker: obj.marker ?? "none"
         };
       },
-      parseScale(scaleStr) {
-        try {
-          const safe = String(scaleStr).replace(/pi/gi, String(Math.PI)).replace(/[^-()\d/*+.]/g, "");
-          return Function('"use strict"; return (' + safe + ")")() || 1;
-        } catch {
-          return 1;
+      // -----------------------------------------------------------------------
+      // Filter stack management
+      // -----------------------------------------------------------------------
+      getFilterSchema(filterType) {
+        return this.filterSchemas.find((s) => s.type === filterType);
+      },
+      getUnitOptions(groups, fromUnit) {
+        if (!groups) return [];
+        if (!fromUnit) return groups;
+        const match = groups.find((g) => g.units.includes(fromUnit));
+        return match ? [match] : groups;
+      },
+      getFilterSummary(entry) {
+        const schema = this.filterSchemas.find((s) => s.type === entry.type);
+        if (!schema || schema.params.length === 0) return "";
+        if (entry.type === "unit") return `${entry["from_unit"] ?? "?"} \u2192 ${entry["to_unit"] ?? "?"}`;
+        const parts = schema.params.filter((p) => entry[p.name] != null).map((p) => {
+          const val = entry[p.name];
+          if (typeof val === "boolean") return `${p.name}=${val ? "on" : "off"}`;
+          if (typeof val === "number") return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          return `${p.name}=${val}`;
+        });
+        return parts.slice(0, 3).join(", ");
+      },
+      addFilterToTemp(temp, filterType) {
+        const schema = this.filterSchemas.find((s) => s.type === filterType);
+        if (!schema) return;
+        if (!temp.filters) temp.filters = [];
+        const entry = { type: filterType, enabled: true };
+        for (const p of schema.params) {
+          entry[p.name] = p.default;
         }
+        temp.filters.push(entry);
+      },
+      removeFilterFromTemp(temp, index) {
+        if (!temp.filters) return;
+        temp.filters.splice(index, 1);
+      },
+      moveFilterInTemp(temp, index, direction) {
+        if (!temp.filters) return;
+        const newIdx = index + direction;
+        if (newIdx < 0 || newIdx >= temp.filters.length) return;
+        const [item] = temp.filters.splice(index, 1);
+        if (item) temp.filters.splice(newIdx, 0, item);
+      },
+      setFilterParamOnTemp(temp, filterIndex, paramName, value) {
+        if (!temp.filters?.[filterIndex]) return;
+        temp.filters[filterIndex][paramName] = value;
+      },
+      applySignalConfig(col, temp) {
+        this.config.yAxes[col] = JSON.parse(JSON.stringify(temp));
+        delete this.signalDrafts[col];
+      },
+      getDraft(col) {
+        return this.signalDrafts[col] ?? null;
+      },
+      saveDraft(col, draft, baseSnapshot) {
+        this.signalDrafts[col] = { draft, baseSnapshot };
+      },
+      clearDraft(col) {
+        delete this.signalDrafts[col];
       },
       // -----------------------------------------------------------------------
       // Range helpers
@@ -1029,13 +1124,11 @@
           });
         }
         activeDatasets.forEach((dataset) => {
-          keys.forEach((key, i) => {
-            const p = this.getYProps(key, i);
-            const scale = this.parseScale(p.scale);
+          keys.forEach((key) => {
             const series = dataset[key];
             if (!series) return;
             for (let j = 0; j < series.length; j++) {
-              const val = (series[j] ?? 0) * scale;
+              const val = series[j] ?? 0;
               if (val < globalMin) globalMin = val;
               if (val > globalMax) globalMax = val;
             }
@@ -1067,11 +1160,10 @@
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
-          const scale = this.parseScale(p.scale);
           if (!this.data[p.name]) return null;
           return {
             x: this.data[this.config.xAxis],
-            y: this.data[p.name].map((v) => v * scale),
+            y: this.data[p.name],
             name: p.label,
             mode: this.config.linemode,
             type: "scatter",
@@ -1094,11 +1186,10 @@
             const vsTraces = yKeys.map((key, i) => {
               const p = this.getYProps(key, i);
               if (!dataset[p.name]) return null;
-              const scale = this.parseScale(p.scale);
               const isFirst = !legendTracker.has(key);
               const t = {
                 x: dataset[this.config.xAxis],
-                y: dataset[p.name].map((v) => v * scale),
+                y: dataset[p.name],
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
