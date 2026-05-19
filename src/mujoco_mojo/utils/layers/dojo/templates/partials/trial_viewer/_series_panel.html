@@ -1,391 +1,391 @@
-    <!-- ══════════════════════════════════════════════════════════════════
+<!-- ══════════════════════════════════════════════════════════════════
          SERIES PANEL  ·  _series_panel.html
          row 1: x-axis selector · rotation / reference-frame selector
          row 2: y-axis selector · active signal ribbon chips
                 · per-signal style config (color, line, marker, scale)
          ══════════════════════════════════════════════════════════════════ -->
 
-    <!-- series selections -->
-    <div class="card px-2 py-0 flex flex-col gap-0 w-full"
-         x-show="!loading && data">
+<!-- series selections -->
+<div class="card px-2 py-0 flex flex-col gap-0 w-full"
+     x-show="!loading && data">
 
-        <!-- row 1 -->
-        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
-            <!-- x axis selector -->
-            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                <span class="text-sm font-black uppercase text-slate-400 w-auto">
-                    X-Axis
-                </span>
+    <!-- row 1 -->
+    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
+        <!-- x axis selector -->
+        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                X-Axis
+            </span>
 
-                <div class="group cursor-help sm:relative">
-                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
-                         fill="none"
-                         stroke="currentColor"
-                         viewBox="0 0 24 24">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2.5"
-                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+            <div class="group cursor-help sm:relative">
+                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                     fill="none"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2.5"
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
 
-                    <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
-                            X-Axis Signal
+                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        X-Axis Signal
+                    </p>
+
+                    <div class="space-y-3">
+                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Determines the <span class="font-bold text-slate-900 dark:text-white">independent variable</span> for the plot. While <code class="text-cyan-500 font-mono">time</code> is the default, any telemetry signal can be mapped here to create phase-space or correlation plots.
                         </p>
-
-                        <div class="space-y-3">
-                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                Determines the <span class="font-bold text-slate-900 dark:text-white">independent variable</span> for the plot. While <code class="text-cyan-500 font-mono">time</code> is the default, any telemetry signal can be mapped here to create phase-space or correlation plots.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- dropdown -->
-                <div class="relative flex-1 sm:flex-none"
-                     @click.away="xMenuOpen = false">
-                    <button @click="xMenuOpen = !xMenuOpen"
-                            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
-                        <span x-text="config.xAxis"
-                              class="truncate"></span>
-                        <svg class="w-3 h-3 transition-transform"
-                             :class="xMenuOpen ? 'rotate-180' : ''"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path d="M19 9l-7 7-7-7"
-                                  stroke-width="3" />
-                        </svg>
-                    </button>
-
-                    <div x-show="xMenuOpen"
-                         x-transition
-                         class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
-
-                        <div class="relative mb-2">
-                            <input type="text"
-                                   x-model="xSearch"
-                                   placeholder="Filter..."
-                                   class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-                            <button x-show="xSearch"
-                                    type="button"
-                                    @mousedown.prevent="xSearch = ''"
-                                    class="{{ clear_btn }}">
-                                <svg class="w-3 h-3"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="3"
-                                          d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="flex flex-col gap-1 mb-2">
-                            <template x-for="depth in getActiveLevels('x')"
-                                      :key="depth">
-                                <div x-show="getSegmentsAtDepth('x', depth).length > 0"
-                                     class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
-                                    <template x-for="seg in getSegmentsAtDepth('x', depth)"
-                                              :key="seg">
-                                        <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
-                                                :class="isSegmentActive('x', seg, depth)
-            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                                class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                                x-text="seg"></button>
-                                    </template>
-                                </div>
-                            </template>
-
-                            <div x-show="getAvailableSuffixes('x').length > 0"
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
-                                <template x-for="sfx in getAvailableSuffixes('x')"
-                                          :key="sfx">
-                                    <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
-                                            :class="isSegmentActive('x', sfx, 'suffix')
-            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                            x-text="sfx"></button>
-                                </template>
-                            </div>
-                        </div>
-
-                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
-                            <template x-for="col in getFilteredCols('x')"
-                                      :key="col">
-                                <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                        class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                    <span class="text-sm font-mono font-bold pr-2"
-                                          :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                          x-text="col"></span>
-                                    <span x-show="config.xAxis === col"
-                                          class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
-                                </button>
-                            </template>
-
-                            <div x-show="getFilteredCols('x').length === 0"
-                                 class="text-sm font-mono italic text-slate-400 p-2">
-                                No matching signals...
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- rotation selector -->
-            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                <span class="text-sm font-black uppercase text-slate-400 w-auto">
-                    Ref. Frame
-                </span>
-
-                <div class="group cursor-help sm:relative">
-                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+            <!-- dropdown -->
+            <div class="relative flex-1 sm:flex-none"
+                 @click.away="xMenuOpen = false">
+                <button @click="xMenuOpen = !xMenuOpen"
+                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
+                    <span x-text="config.xAxis"
+                          class="truncate"></span>
+                    <svg class="w-3 h-3 transition-transform"
+                         :class="xMenuOpen ? 'rotate-180' : ''"
                          fill="none"
                          stroke="currentColor"
                          viewBox="0 0 24 24">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2.5"
-                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path d="M19 9l-7 7-7-7"
+                              stroke-width="3" />
                     </svg>
+                </button>
 
-                    <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div x-show="xMenuOpen"
+                     x-transition
+                     class="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
 
-                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
-                            Rotation Logic
-                        </p>
+                    <div class="relative mb-2">
+                        <input type="text"
+                               x-model="xSearch"
+                               placeholder="Filter..."
+                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
+                        <button x-show="xSearch"
+                                type="button"
+                                @mousedown.prevent="xSearch = ''"
+                                class="{{ clear_btn }}">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
-                        <div class="space-y-3">
-                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                This allows for the dynamic rotation of 3D signals about specific frames.
-                                Valid frames must contain <code class="text-cyan-500 font-mono font-bold">quat:w,x,y,z</code> components.
-                            </p>
-
-                            <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
-                                <p class="text-xs text-slate-500 dark:text-slate-400 italic">
-                                    <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-[10px]">Filter Active:</strong>
-                                    Y-Axis selection is restricted to 3D vectors when a reference frame is selected.
-                                </p>
+                    <div class="flex flex-col gap-1 mb-2">
+                        <template x-for="depth in getActiveLevels('x')"
+                                  :key="depth">
+                            <div x-show="getSegmentsAtDepth('x', depth).length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+                                <template x-for="seg in getSegmentsAtDepth('x', depth)"
+                                          :key="seg">
+                                    <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
+                                            :class="isSegmentActive('x', seg, depth)
+            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="seg"></button>
+                                </template>
                             </div>
+                        </template>
+
+                        <div x-show="getAvailableSuffixes('x').length > 0"
+                             class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
+                            <template x-for="sfx in getAvailableSuffixes('x')"
+                                      :key="sfx">
+                                <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
+                                        :class="isSegmentActive('x', sfx, 'suffix')
+            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                        class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                        x-text="sfx"></button>
+                            </template>
                         </div>
                     </div>
-                </div>
 
-                <div class="relative flex-1 sm:flex-none"
-                     @click.away="refFrameMenuOpen = false">
-                    <button @click="refFrameMenuOpen = !refFrameMenuOpen"
-                            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[140px]">
-                        <span x-text="config.refFrame || 'world'"
-                              class="truncate"></span>
-                        <svg class="w-3 h-3 transition-transform"
-                             :class="refFrameMenuOpen ? 'rotate-180' : ''"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path d="M19 9l-7 7-7-7"
-                                  stroke-width="3" />
-                        </svg>
-                    </button>
-
-                    <div x-show="refFrameMenuOpen"
-                         x-transition
-                         class="absolute top-full left-0 mt-2 w-full sm:w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2 sm:w-64">
-
-                        <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
-                            <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold"
-                                      :class="!config.refFrame ? 'text-cyan-500' : 'text-slate-400'">world</span>
-                                <span x-show="!config.refFrame"
-                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                        <template x-for="col in getFilteredCols('x')"
+                                  :key="col">
+                            <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                <span class="text-sm font-mono font-bold pr-2"
+                                      :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                      x-text="col"></span>
+                                <span x-show="config.xAxis === col"
+                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
                             </button>
+                        </template>
 
-                            <template x-for="q in availableQuats"
-                                      :key="q">
-                                <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
-                                        class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                    <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
-                                          :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                          x-text="q"></span>
-                                    <span x-show="config.refFrame === q"
-                                          class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
-                                </button>
-                            </template>
+                        <div x-show="getFilteredCols('x').length === 0"
+                             class="text-sm font-mono italic text-slate-400 p-2">
+                            No matching signals...
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- row 2 -->
-        <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
-            <!-- y axis selector -->
-            <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                <span class="text-sm font-black uppercase text-slate-400 w-auto">
-                    Y-Axes
-                </span>
+        <!-- rotation selector -->
+        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                Ref. Frame
+            </span>
 
-                <div class="group cursor-help sm:relative">
-                    <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
-                         fill="none"
-                         stroke="currentColor"
-                         viewBox="0 0 24 24">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2.5"
-                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+            <div class="group cursor-help sm:relative">
+                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                     fill="none"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2.5"
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
 
-                    <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                        <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
-                            Y-Axis Signals
+                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        Rotation Logic
+                    </p>
+
+                    <div class="space-y-3">
+                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            This allows for the dynamic rotation of 3D signals about specific frames.
+                            Valid frames must contain <code class="text-cyan-500 font-mono font-bold">quat:w,x,y,z</code> components.
                         </p>
 
-                        <div class="space-y-3">
-                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                Represents the <span class="font-bold text-slate-900 dark:text-white">dependent variables</span>. You can select multiple signals to overlay them on the same plot area.
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
+                            <p class="text-xs text-slate-500 dark:text-slate-400 italic">
+                                <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-[10px]">Filter Active:</strong>
+                                Y-Axis selection is restricted to 3D vectors when a reference frame is selected.
                             </p>
-
-                            <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                                Use the arrows on the active signal chips to reorder them. The sequence in the ribbon determines the <span class="text-cyan-500 font-bold">color mapping</span> and legend order.
-                            </p>
-
-                            <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
-                                <p class="text-xs text-slate-500 dark:text-slate-400 italic text-xs">
-                                    <strong class="text-cyan-500 not-italic uppercase">Pro Tip:</strong>
-                                    Shift+Click the arrows to shift a signal immediately to the start or end of the list.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="relative"
-                     @click.away="yMenuOpen = false">
-                    <button @click="yMenuOpen = !yMenuOpen"
-                            class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
-                        <span x-text="Object.keys(config.yAxes).length"></span>
-                        <svg class="w-3 h-3 transition-transform"
-                             :class="yMenuOpen ? 'rotate-180' : ''"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path d="M19 9l-7 7-7-7"
-                                  stroke-width="3" />
-                        </svg>
-                    </button>
-
-                    <div x-show="yMenuOpen"
-                         x-transition
-                         class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
-
-                        <div class="relative mb-2">
-                            <input type="text"
-                                   x-model="ySearch"
-                                   placeholder="Filter..."
-                                   class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-
-                            <button x-show="ySearch"
-                                    type="button"
-                                    @mousedown.prevent="ySearch = ''"
-                                    class="{{ clear_btn }}"
-                                    x-transition:enter="transition duration-75"
-                                    x-transition:enter-start="opacity-0"
-                                    x-transition:enter-end="opacity-100">
-                                <svg class="w-3 h-3"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="3"
-                                          d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="flex flex-col gap-1 mb-4">
-                            <template x-for="depth in getActiveLevels('y')"
-                                      :key="depth">
-                                <div x-show="getSegmentsAtDepth('y', depth).length > 0"
-                                     x-transition
-                                     class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
-
-                                    <template x-for="seg in getSegmentsAtDepth('y', depth)"
-                                              :key="seg">
-                                        <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
-                                                :class="isSegmentActive('y', seg, depth)
-            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
-                                                class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                                x-text="seg"></button>
-                                    </template>
-                                </div>
-                            </template>
-
-                            <div x-show="getAvailableSuffixes('y').length > 0"
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
-                                <template x-for="sfx in getAvailableSuffixes('y')"
-                                          :key="sfx">
-                                    <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
-                                            :class="isSegmentActive('y', sfx, 'suffix')
-            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
-                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
-                                            x-text="sfx"></button>
-                                </template>
-                            </div>
-                        </div>
-
-                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
-                            <template x-for="col in getFilteredCols('y')"
-                                      :key="col">
-                                <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
-                                    <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                        <input type="checkbox"
-                                               :checked="config.yAxes[col]"
-                                               @click.stop="toggleY(col)"
-                                               class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
-                                        <span class="text-sm font-mono font-bold"
-                                              :class="config.yAxes[col] ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                              x-text="col"></span>
-                                    </label>
-                                </template>
-                            </template>
-                        </div>
-
-                        <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
-                            <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
-                                  x-text="`${getFilteredCols('y').length} Signals`"
-                                  x-show="getFilteredCols('y').length > 0"></span>
-
-                            <button @click="clearYAxes()"
-                                    x-show="Object.keys(config.yAxes).length > 0"
-                                    x-transition
-                                    class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
-                                <svg class="w-3 h-3 transition-transform group-hover:scale-110"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="2.5"
-                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                Deselect All
-                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- selected ribbon -->
-            <div class="flex-1 w-full min-w-0 relative"
-                 x-data="{
+
+            <div class="relative flex-1 sm:flex-none"
+                 @click.away="refFrameMenuOpen = false">
+                <button @click="refFrameMenuOpen = !refFrameMenuOpen"
+                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[140px]">
+                    <span x-text="config.refFrame || 'world'"
+                          class="truncate"></span>
+                    <svg class="w-3 h-3 transition-transform"
+                         :class="refFrameMenuOpen ? 'rotate-180' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7"
+                              stroke-width="3" />
+                    </svg>
+                </button>
+
+                <div x-show="refFrameMenuOpen"
+                     x-transition
+                     class="absolute top-full left-0 mt-2 w-full sm:w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2 sm:w-64">
+
+                    <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                        <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
+                                class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
+                            <span class="text-sm font-mono font-bold"
+                                  :class="!config.refFrame ? 'text-cyan-500' : 'text-slate-400'">world</span>
+                            <span x-show="!config.refFrame"
+                                  class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                        </button>
+
+                        <template x-for="q in availableQuats"
+                                  :key="q">
+                            <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
+                                      :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                      x-text="q"></span>
+                                <span x-show="config.refFrame === q"
+                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- row 2 -->
+    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
+        <!-- y axis selector -->
+        <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+                Y-Axes
+            </span>
+
+            <div class="group cursor-help sm:relative">
+                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                     fill="none"
+                     stroke="currentColor"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2.5"
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+
+                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        Y-Axis Signals
+                    </p>
+
+                    <div class="space-y-3">
+                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Represents the <span class="font-bold text-slate-900 dark:text-white">dependent variables</span>. You can select multiple signals to overlay them on the same plot area.
+                        </p>
+
+                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Use the arrows on the active signal chips to reorder them. The sequence in the ribbon determines the <span class="text-cyan-500 font-bold">color mapping</span> and legend order.
+                        </p>
+
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
+                            <p class="text-xs text-slate-500 dark:text-slate-400 italic text-xs">
+                                <strong class="text-cyan-500 not-italic uppercase">Pro Tip:</strong>
+                                Shift+Click the arrows to shift a signal immediately to the start or end of the list.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative"
+                 @click.away="yMenuOpen = false">
+                <button @click="yMenuOpen = !yMenuOpen"
+                        class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
+                    <span x-text="Object.keys(config.yAxes).length"></span>
+                    <svg class="w-3 h-3 transition-transform"
+                         :class="yMenuOpen ? 'rotate-180' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7"
+                              stroke-width="3" />
+                    </svg>
+                </button>
+
+                <div x-show="yMenuOpen"
+                     x-transition
+                     class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
+
+                    <div class="relative mb-2">
+                        <input type="text"
+                               x-model="ySearch"
+                               placeholder="Filter..."
+                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
+
+                        <button x-show="ySearch"
+                                type="button"
+                                @mousedown.prevent="ySearch = ''"
+                                class="{{ clear_btn }}"
+                                x-transition:enter="transition duration-75"
+                                x-transition:enter-start="opacity-0"
+                                x-transition:enter-end="opacity-100">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex flex-col gap-1 mb-4">
+                        <template x-for="depth in getActiveLevels('y')"
+                                  :key="depth">
+                            <div x-show="getSegmentsAtDepth('y', depth).length > 0"
+                                 x-transition
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+
+                                <template x-for="seg in getSegmentsAtDepth('y', depth)"
+                                          :key="seg">
+                                    <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
+                                            :class="isSegmentActive('y', seg, depth)
+            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="seg"></button>
+                                </template>
+                            </div>
+                        </template>
+
+                        <div x-show="getAvailableSuffixes('y').length > 0"
+                             class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
+                            <template x-for="sfx in getAvailableSuffixes('y')"
+                                      :key="sfx">
+                                <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
+                                        :class="isSegmentActive('y', sfx, 'suffix')
+            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                        class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                        x-text="sfx"></button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
+                        <template x-for="col in getFilteredCols('y')"
+                                  :key="col">
+                            <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
+                                <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                    <input type="checkbox"
+                                           :checked="config.yAxes[col]"
+                                           @click.stop="toggleY(col)"
+                                           class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
+                                    <span class="text-sm font-mono font-bold"
+                                          :class="config.yAxes[col] ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                          x-text="col"></span>
+                                </label>
+                            </template>
+                        </template>
+                    </div>
+
+                    <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
+                        <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
+                              x-text="`${getFilteredCols('y').length} Signals`"
+                              x-show="getFilteredCols('y').length > 0"></span>
+
+                        <button @click="clearYAxes()"
+                                x-show="Object.keys(config.yAxes).length > 0"
+                                x-transition
+                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
+                            <svg class="w-3 h-3 transition-transform group-hover:scale-110"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2.5"
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Deselect All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- selected ribbon -->
+        <div class="flex-1 w-full min-w-0 relative"
+             x-data="{
         canScrollLeft: false,
         canScrollRight: false,
         checkScroll() {
@@ -395,15 +395,15 @@
             this.canScrollRight = el.scrollLeft < (el.scrollWidth - el.clientWidth - 2);
         }
      }"
-                 x-init="
+             x-init="
         $nextTick(() => checkScroll());
         $watch('config.yAxes', () => $nextTick(() => checkScroll()));
      ">
 
-                <div x-ref="ribbon"
-                     @scroll="checkScroll()"
-                     class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
-                     :style="`
+            <div x-ref="ribbon"
+                 @scroll="checkScroll()"
+                 class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
+                 :style="`
             mask-image: linear-gradient(
                 to right,
                 ${canScrollLeft ? 'transparent' : 'black'} 0%,
@@ -420,41 +420,41 @@
             );
          `">
 
-                    <template x-for="(col, index) in Object.keys(config.yAxes)"
-                              :key="col">
-                        <!-- ribbon chip -->
-                        <div class="relative shrink-0"
-                             x-data="{
+                <template x-for="(col, index) in Object.keys(config.yAxes)"
+                          :key="col">
+                    <!-- ribbon chip -->
+                    <div class="relative shrink-0"
+                         x-data="{
         open: false,
         coords: { top: 0, left: 0, width: 0 }
      }">
-                            <span x-ref="anchor"
-                                  class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
-                                  :style="`
+                        <span x-ref="anchor"
+                              class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
+                              :style="`
                 background-color: ${config.yAxes[col].color || getSignalColor(index)}1a;
                 border-color: ${config.yAxes[col].color || getSignalColor(index)}4d;
                 color: ${config.yAxes[col].color || getSignalColor(index)};
               `"
-                                  @mouseenter="$el.style.borderColor = (config.yAxes[col].color || getSignalColor(index))"
-                                  @mouseleave="if(!open) $el.style.borderColor = (config.yAxes[col].color || getSignalColor(index)) + '4d'">
+                              @mouseenter="$el.style.borderColor = (config.yAxes[col].color || getSignalColor(index))"
+                              @mouseleave="if(!open) $el.style.borderColor = (config.yAxes[col].color || getSignalColor(index)) + '4d'">
 
-                                <!-- shift left arrow -->
-                                <button @click.stop="shiftY(index, -1, $event.shiftKey)"
-                                        x-show="index > 0"
-                                        class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-                                    <svg class="w-3.5 h-3.5"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              stroke-width="3"
-                                              d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                </button>
+                            <!-- shift left arrow -->
+                            <button @click.stop="shiftY(index, -1, $event.shiftKey)"
+                                    x-show="index > 0"
+                                    class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                                <svg class="w-3.5 h-3.5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
 
-                                <!-- config button -->
-                                <button @click="
+                            <!-- config button -->
+                            <button @click="
                     const rect = $refs.anchor.getBoundingClientRect();
                     // We add the current scroll position to the coordinates
                     coords = {
@@ -464,109 +464,141 @@
                     };
                     open = !open;
                 "
-                                        class="px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1.5 transition-colors">
-                                    <span x-text="config.yAxes[col]?.label || col"></span>
-                                    <svg class="w-3 h-3 opacity-30 transition-transform"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         viewBox="0 0 24 24">
-                                        <path d="M19 9l-7 7-7-7"
-                                              stroke-width="4" />
-                                    </svg>
-                                </button>
+                                    class="px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1.5 transition-colors">
+                                <span x-text="config.yAxes[col]?.label || col"></span>
+                                <svg class="w-3 h-3 opacity-30 transition-transform"
+                                     :class="open ? 'rotate-180' : ''"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path d="M19 9l-7 7-7-7"
+                                          stroke-width="4" />
+                                </svg>
+                            </button>
 
-                                <!-- shift right arrow -->
-                                <button @click.stop="shiftY(index, 1, $event.shiftKey)"
-                                        x-show="index < Object.keys(config.yAxes).length - 1"
-                                        class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-                                    <svg class="w-3.5 h-3.5"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              stroke-width="3"
-                                              d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
+                            <!-- shift right arrow -->
+                            <button @click.stop="shiftY(index, 1, $event.shiftKey)"
+                                    x-show="index < Object.keys(config.yAxes).length - 1"
+                                    class="p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                                <svg class="w-3.5 h-3.5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
 
-                                <div class="w-px h-3 bg-current opacity-20 mx-0.5"></div>
+                            <div class="w-px h-3 bg-current opacity-20 mx-0.5"></div>
 
-                                <!-- delete signal -->
-                                <button @click.stop="toggleY(col)"
-                                        class="p-0.5 rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10">
-                                    <svg class="w-2.5 h-2.5"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              stroke-width="3.5"
-                                              d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </span>
+                            <!-- delete signal -->
+                            <button @click.stop="toggleY(col)"
+                                    class="p-0.5 rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10">
+                                <svg class="w-2.5 h-2.5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3.5"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </span>
 
-                            <!-- dropdown -->
-                            <template x-teleport="body">
-                                <div x-show="open"
-                                     x-transition
-                                     @click.away="open = false"
-                                     x-data="{
+                        <!-- dropdown -->
+                        <template x-teleport="body">
+                            <div x-show="open"
+                                 x-transition
+                                 @click.away="open = false"
+                                 x-data="{
     isDirty: false,
-    temp: { label: '', color: '', width: 3, opacity: 1, scale: '1.0', dash: 'solid', marker: 'none' }
+    temp: { label: '', color: '', width: 3, opacity: 1, filters: [], dash: 'solid', marker: 'none' },
+    tempSnapshot: '',
+    expandedFilterIdx: null,
+    addFilterOpen: false,
 }"
-                                     x-init="$watch('open', value => {
-            if(value) {
+                                 x-init="
+    $watch('open', value => {
+        const cfgStr = JSON.stringify(config.yAxes[col]);
+        if (value) {
+            const stored = getDraft(col);
+            if (stored && stored.baseSnapshot === cfgStr) {
+                temp = JSON.parse(JSON.stringify(stored.draft));
+                tempSnapshot = cfgStr;
+                isDirty = JSON.stringify(stored.draft) !== cfgStr;
+            } else {
                 temp = JSON.parse(JSON.stringify(config.yAxes[col]));
+                tempSnapshot = cfgStr;
                 isDirty = false;
             }
-         })"
-                                     :style="`
+            console.debug('[mojo] signal editor opened:', col, { hasChanges: JSON.stringify(temp) !== tempSnapshot, snapshot: tempSnapshot.slice(0, 80) });
+        } else {
+            const hasChanges = JSON.stringify(temp) !== tempSnapshot;
+            console.debug('[mojo] signal editor closed:', col, { hasChanges });
+            if (hasChanges) {
+                saveDraft(col, JSON.parse(JSON.stringify(temp)), tempSnapshot);
+            } else {
+                clearDraft(col);
+            }
+        }
+    });
+    $watch('config.yAxes', () => {
+        if (!config.yAxes[col]) return;
+        const cfgStr = JSON.stringify(config.yAxes[col]);
+        if (cfgStr !== tempSnapshot) {
+            tempSnapshot = cfgStr;
+            clearDraft(col);
+            if (open) { temp = JSON.parse(JSON.stringify(config.yAxes[col])); isDirty = false; }
+        }
+    });
+"
+                                 :style="`
             position: absolute;
             top: ${coords.top + 12}px;
             left: ${Math.max(10, coords.left - (320/2) + (coords.width/2))}px;
          `"
-                                     class="w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[600]">
+                                 class="w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[600]">
 
-                                    <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-white dark:bg-slate-800 border-t border-l border-slate-400 dark:border-slate-700"></div>
+                                <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-white dark:bg-slate-800 border-t border-l border-slate-400 dark:border-slate-700"></div>
 
-                                    <div class="relative z-10 space-y-4">
-                                        <div class="flex items-center justify-between">
-                                            <p class="text-sm font-black uppercase text-slate-500 tracking-tight truncate max-w-[220px]"
-                                               x-text="col"></p>
-                                            <button @click="open = false"
-                                                    class="text-slate-400 hover:text-rose-500 transition-colors">
-                                                <svg class="w-5 h-5"
-                                                     fill="none"
-                                                     stroke="currentColor"
-                                                     viewBox="0 0 24 24">
-                                                    <path d="M6 18L18 6M6 6l12 12"
-                                                          stroke-width="3" />
-                                                </svg>
-                                            </button>
-                                        </div>
+                                <div class="relative z-10 space-y-4">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-sm font-black uppercase text-slate-500 tracking-tight truncate max-w-[220px]"
+                                           x-text="col"></p>
+                                        <button @click="open = false"
+                                                class="text-slate-400 hover:text-rose-500 transition-colors">
+                                            <svg class="w-5 h-5"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path d="M6 18L18 6M6 6l12 12"
+                                                      stroke-width="3" />
+                                            </svg>
+                                        </button>
+                                    </div>
 
-                                        <button @click="config.yAxes[col] = { ...temp }; saveAndRender(); isDirty = false;"
-                                                :disabled="!isDirty"
-                                                :class="isDirty
+                                    <button @click="console.debug('[mojo] applying changes for:', col, JSON.parse(JSON.stringify(temp))); applySignalConfig(col, temp); isDirty = false;"
+                                            :disabled="JSON.stringify(temp) === tempSnapshot"
+                                            :class="JSON.stringify(temp) !== tempSnapshot
                         ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-md'
                         : 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
-                                                class="w-full py-2 rounded-md font-bold uppercase text-xs tracking-widest transition-all">
-                                            Apply Changes
-                                        </button>
+                                            class="w-full py-2 rounded-md font-bold uppercase text-xs tracking-widest transition-all">
+                                        Apply Changes
+                                    </button>
 
-                                        <div class="space-y-1">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Legend Label</label>
-                                            <input type="text"
-                                                   x-model="temp.label"
-                                                   @input="isDirty = true"
-                                                   :placeholder="temp.label || col"
-                                                   class="input-field w-full px-3 py-2" />
-                                        </div>
-                                        <div class="space-y-2"
-                                             x-init="$nextTick(() => {
+                                    <div class="space-y-1">
+                                        <label class="text-sm font-bold text-slate-500 uppercase">Legend Label</label>
+                                        <input type="text"
+                                               x-model="temp.label"
+                                               @input="isDirty = true"
+                                               :placeholder="temp.label || col"
+                                               class="input-field w-full px-3 py-2" />
+                                    </div>
+                                    <div class="space-y-2"
+                                         x-init="$nextTick(() => {
                     const picker = new iro.ColorPicker($refs.picker, {
                         width: 280,
                         height: 180,
@@ -602,143 +634,346 @@
                     });
 
                     picker.on('color:change', (color) => {
+                        if (temp.color === color.hexString) return;
                         temp.color = color.hexString;
                         isDirty = true;
                     });
                  })">
-                                            <div class="flex items-center justify-between mb-1">
-                                                <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Signal Color</label>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Signal Color</label>
 
-                                                <div class="flex gap-1.5">
-                                                    <template x-for="color in plotColors"
-                                                              :key="color">
-                                                        <button @click="temp.color = color; isDirty = true"
-                                                                class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
-                                                                :style="`background-color: ${color}`"
-                                                                :class="temp.color === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
-                                                        </button>
-                                                    </template>
-                                                </div>
+                                            <div class="flex gap-1.5">
+                                                <template x-for="color in plotColors"
+                                                          :key="color">
+                                                    <button @click="temp.color = color; isDirty = true"
+                                                            class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            :style="`background-color: ${color}`"
+                                                            :class="temp.color === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
+                                                    </button>
+                                                </template>
                                             </div>
-                                            <div class="flex justify-center">
-                                                <div x-ref="picker"></div>
-                                            </div>
+                                        </div>
+                                        <div class="flex justify-center">
+                                            <div x-ref="picker"></div>
+                                        </div>
 
-                                            <div class="flex gap-2">
-                                                <div class="relative flex-1">
-                                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">#</span>
+                                        <div class="flex gap-2">
+                                            <div class="relative flex-1">
+                                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">#</span>
 
-                                                    <input type="text"
-                                                           :value="(temp.color || '').replace('#', '')"
-                                                           @input="
+                                                <input type="text"
+                                                       :value="(temp.color || '').replace('#', '')"
+                                                       @input="
                    let v = $event.target.value.replace(/[^a-fA-F0-9]/g, '').substring(0, 6);
                    temp.color = '#' + v;
                    isDirty = true;
                "
-                                                           class="w-full pl-7 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-cyan-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
-                                                </div>
-
-                                                <div class="w-10 h-10 rounded-md border border-slate-300 dark:border-slate-800 shadow-inner shrink-0"
-                                                     :style="`background-color: ${temp.color}`"></div>
+                                                       class="w-full pl-7 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-cyan-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
                                             </div>
+
+                                            <div class="w-10 h-10 rounded-md border border-slate-300 dark:border-slate-800 shadow-inner shrink-0"
+                                                 :style="`background-color: ${temp.color}`"></div>
                                         </div>
+                                    </div>
 
-                                        <div class="grid grid-cols-2 gap-4">
-                                            <div class="space-y-1">
-                                                <label class="text-sm font-bold text-slate-500 uppercase">Width: <span class="text-cyan-500"
-                                                          x-text="temp.width"></span></label>
-                                                <input type="range"
-                                                       min="0.5"
-                                                       max="8"
-                                                       step="0.5"
-                                                       x-model.number="temp.width"
-                                                       @input="isDirty = true"
-                                                       class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                                            </div>
-                                            <div class="space-y-1">
-                                                <label class="text-sm font-bold text-slate-500 uppercase">Opacity: <span class="text-cyan-500"
-                                                          x-text="Math.round(temp.opacity*100)+'%'"></span></label>
-                                                <input type="range"
-                                                       min="0.1"
-                                                       max="1"
-                                                       step="0.05"
-                                                       x-model.number="temp.opacity"
-                                                       @input="isDirty = true"
-                                                       class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                                            </div>
-                                        </div>
-
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <div class="space-y-1"
-                                                 x-data="{ sOpen: false }">
-                                                <label class="text-sm font-bold text-slate-500 uppercase">Style</label>
-                                                <button @click="sOpen = !sOpen"
-                                                        class="{{ dropdown_trigger_sm }}">
-                                                    <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
-                                                    <svg class="w-2 h-2"
-                                                         fill="none"
-                                                         stroke="currentColor"
-                                                         viewBox="0 0 24 24">
-                                                        <path d="M19 9l-7 7-7-7"
-                                                              stroke-width="4" />
-                                                    </svg>
-                                                </button>
-                                                <div x-show="sOpen"
-                                                     @click.away="sOpen = false"
-                                                     class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
-                                                    <template x-for="opt in opts.dash">
-                                                        <button @click="temp.dash = opt; isDirty = true; sOpen = false"
-                                                                class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-cyan-500/10 hover:text-cyan-500 dark:text-slate-300"
-                                                                x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                            <div class="space-y-1"
-                                                 x-data="{ mOpen: false }">
-                                                <label class="text-sm font-bold text-slate-500 uppercase">Marker</label>
-                                                <button @click="mOpen = !mOpen"
-                                                        class="{{ dropdown_trigger_sm }}">
-                                                    <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
-                                                    <svg class="w-2 h-2"
-                                                         fill="none"
-                                                         stroke="currentColor"
-                                                         viewBox="0 0 24 24">
-                                                        <path d="M19 9l-7 7-7-7"
-                                                              stroke-width="4" />
-                                                    </svg>
-                                                </button>
-                                                <div x-show="mOpen"
-                                                     @click.away="mOpen = false"
-                                                     class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
-                                                    <template x-for="opt in opts.marker">
-                                                        <button @click="temp.marker = opt; isDirty = true; mOpen = false"
-                                                                class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-cyan-500/10 hover:text-cyan-500 dark:text-slate-300"
-                                                                x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
-                                                    </template>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Scale Evaluator: <span class="text-cyan-500"
-                                                      x-text="'(' + parseScale(temp.scale || '1.0').toFixed(4) + ')'"></span></label>
-                                            <input type="text"
-                                                   x-model="temp.scale"
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="space-y-1">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Width: <span class="text-cyan-500"
+                                                      x-text="temp.width"></span></label>
+                                            <input type="range"
+                                                   min="0.5"
+                                                   max="8"
+                                                   step="0.5"
+                                                   x-model.number="temp.width"
                                                    @input="isDirty = true"
-                                                   placeholder="1.0"
-                                                   class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
+                                                   class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Opacity: <span class="text-cyan-500"
+                                                      x-text="Math.round(temp.opacity*100)+'%'"></span></label>
+                                            <input type="range"
+                                                   min="0.1"
+                                                   max="1"
+                                                   step="0.05"
+                                                   x-model.number="temp.opacity"
+                                                   @input="isDirty = true"
+                                                   class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="space-y-1"
+                                             x-data="{ sOpen: false }">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Style</label>
+                                            <button @click="sOpen = !sOpen"
+                                                    class="{{ dropdown_trigger_sm }}">
+                                                <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
+                                                <svg class="w-2 h-2"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path d="M19 9l-7 7-7-7"
+                                                          stroke-width="4" />
+                                                </svg>
+                                            </button>
+                                            <div x-show="sOpen"
+                                                 @click.away="sOpen = false"
+                                                 class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                <template x-for="opt in opts.dash">
+                                                    <button @click="temp.dash = opt; isDirty = true; sOpen = false"
+                                                            class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 dark:text-slate-300"
+                                                            x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        <div class="space-y-1"
+                                             x-data="{ mOpen: false }">
+                                            <label class="text-sm font-bold text-slate-500 uppercase">Marker</label>
+                                            <button @click="mOpen = !mOpen"
+                                                    class="{{ dropdown_trigger_sm }}">
+                                                <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
+                                                <svg class="w-2 h-2"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path d="M19 9l-7 7-7-7"
+                                                          stroke-width="4" />
+                                                </svg>
+                                            </button>
+                                            <div x-show="mOpen"
+                                                 @click.away="mOpen = false"
+                                                 class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                <template x-for="opt in opts.marker">
+                                                    <button @click="temp.marker = opt; isDirty = true; mOpen = false"
+                                                            class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 dark:text-slate-300"
+                                                            x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ── FILTER STACK ── -->
+                                    <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Filters</label>
+                                            <!-- add filter dropdown -->
+                                            <div class="relative"
+                                                 @click.away="addFilterOpen = false">
+                                                <button @click="addFilterOpen = !addFilterOpen"
+                                                        class="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/20 transition-colors font-mono font-bold">
+                                                    <svg class="w-3 h-3"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round"
+                                                              stroke-linejoin="round"
+                                                              stroke-width="3"
+                                                              d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                    Add
+                                                </button>
+                                                <div x-show="addFilterOpen"
+                                                     x-transition
+                                                     class="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[700] max-h-72 overflow-y-auto custom-scrollbar">
+                                                    <template x-for="schema in filterSchemas"
+                                                              :key="schema.type">
+                                                        <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
+                                                                class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                                                            <span class="block text-[10px] font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                                  x-text="schema.type.replace(/_/g, ' ')"></span>
+                                                            <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
+                                                                  x-text="schema.description"></span>
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- filter entries -->
+                                        <div class="space-y-1">
+                                            <template x-for="(f, fi) in (temp.filters ?? [])"
+                                                      :key="fi">
+                                                <div class="rounded-md border transition-all"
+                                                     :class="f.enabled !== false ? 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30' : 'border-slate-200 dark:border-slate-800 opacity-40'">
+                                                    <!-- header row -->
+                                                    <div class="flex items-center gap-1.5 px-2 py-1.5">
+                                                        <!-- reorder -->
+                                                        <div class="flex flex-col shrink-0">
+                                                            <button @click="moveFilterInTemp(temp, fi, -1); isDirty = true"
+                                                                    :disabled="fi === 0"
+                                                                    class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-end justify-center">
+                                                                <svg class="w-3 h-3"
+                                                                     fill="none"
+                                                                     stroke="currentColor"
+                                                                     viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round"
+                                                                          stroke-linejoin="round"
+                                                                          stroke-width="3"
+                                                                          d="M5 15l7-7 7 7" />
+                                                                </svg>
+                                                            </button>
+                                                            <button @click="moveFilterInTemp(temp, fi, 1); isDirty = true"
+                                                                    :disabled="fi >= (temp.filters ?? []).length - 1"
+                                                                    class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-start justify-center">
+                                                                <svg class="w-3 h-3"
+                                                                     fill="none"
+                                                                     stroke="currentColor"
+                                                                     viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round"
+                                                                          stroke-linejoin="round"
+                                                                          stroke-width="3"
+                                                                          d="M19 9l-7 7-7-7" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                        <!-- type badge -->
+                                                        <span class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 uppercase shrink-0"
+                                                              x-text="f.type.replace(/_/g, ' ')"></span>
+                                                        <!-- param summary -->
+                                                        <span class="flex-1 text-xs font-mono text-slate-500 dark:text-slate-400 truncate min-w-0"
+                                                              x-text="getFilterSummary(f)"></span>
+                                                        <!-- expand params -->
+                                                        <button @click="expandedFilterIdx = (expandedFilterIdx === fi) ? null : fi"
+                                                                x-show="(getFilterSchema(f.type)?.params ?? []).length > 0"
+                                                                :class="expandedFilterIdx === fi ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
+                                                                class="hover:text-cyan-500 transition-colors shrink-0">
+                                                            <svg class="w-3.5 h-3.5 transition-transform"
+                                                                 :class="expandedFilterIdx === fi ? 'rotate-180' : ''"
+                                                                 fill="none"
+                                                                 stroke="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round"
+                                                                      stroke-linejoin="round"
+                                                                      stroke-width="3"
+                                                                      d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                        <!-- enable toggle -->
+                                                        <button @click="f.enabled = (f.enabled !== false) ? false : true; isDirty = true"
+                                                                :class="f.enabled !== false ? 'text-cyan-500' : 'text-slate-400 dark:text-slate-600'"
+                                                                :title="f.enabled !== false ? 'Disable filter' : 'Enable filter'"
+                                                                class="transition-colors shrink-0">
+                                                            <svg class="w-3.5 h-3.5"
+                                                                 viewBox="0 0 24 24"
+                                                                 fill="none"
+                                                                 stroke="currentColor">
+                                                                <circle cx="12"
+                                                                        cy="12"
+                                                                        r="5"
+                                                                        :fill="f.enabled !== false ? 'currentColor' : 'none'"
+                                                                        stroke-width="2" />
+                                                            </svg>
+                                                        </button>
+                                                        <!-- delete -->
+                                                        <button @click="removeFilterFromTemp(temp, fi); isDirty = true; if(expandedFilterIdx === fi) expandedFilterIdx = null"
+                                                                class="text-slate-500 dark:text-slate-400 hover:text-rose-500 transition-colors shrink-0">
+                                                            <svg class="w-3.5 h-3.5"
+                                                                 fill="none"
+                                                                 stroke="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round"
+                                                                      stroke-linejoin="round"
+                                                                      stroke-width="3"
+                                                                      d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <!-- param editor -->
+                                                    <div x-show="expandedFilterIdx === fi"
+                                                         x-transition
+                                                         class="px-3 pb-2 pt-1 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                                                        <template x-for="param in (getFilterSchema(f.type)?.params ?? [])"
+                                                                  :key="param.name">
+                                                            <div class="flex items-center gap-2">
+                                                                <span class="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wide w-20 shrink-0"
+                                                                      x-text="param.name"></span>
+                                                                <!-- float / int -->
+                                                                <template x-if="param.type === 'float' || param.type === 'int'">
+                                                                    <input type="number"
+                                                                           :value="f[param.name]"
+                                                                           :step="param.type === 'int' ? 1 : 0.01"
+                                                                           :min="param.min ?? param.exclusive_min ?? undefined"
+                                                                           :max="param.max ?? undefined"
+                                                                           @change="setFilterParamOnTemp(temp, fi, param.name, param.type === 'int' ? parseInt($event.target.value) : parseFloat($event.target.value)); isDirty = true"
+                                                                           class="input-field no-spin flex-1 px-2 py-1 text-xs text-right" />
+                                                                </template>
+                                                                <!-- bool -->
+                                                                <template x-if="param.type === 'bool'">
+                                                                    <input type="checkbox"
+                                                                           :checked="f[param.name]"
+                                                                           @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.checked); isDirty = true"
+                                                                           class="rounded accent-cyan-500 w-4 h-4" />
+                                                                </template>
+                                                                <!-- UnitFilter dropdowns for from_unit / to_unit -->
+                                                                <template x-if="param.type === 'string' && f.type === 'unit'">
+                                                                    <div class="flex-1 relative"
+                                                                         x-data="{ uOpen: false }"
+                                                                         @click.away="uOpen = false">
+                                                                        <button @click="uOpen = !uOpen"
+                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                            <span class="text-xs"
+                                                                                  x-text="f[param.name] || '— select —'"></span>
+                                                                            <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
+                                                                                 :class="uOpen ? 'rotate-180' : ''"
+                                                                                 fill="none"
+                                                                                 stroke="currentColor"
+                                                                                 viewBox="0 0 24 24">
+                                                                                <path stroke-linecap="round"
+                                                                                      stroke-linejoin="round"
+                                                                                      stroke-width="3"
+                                                                                      d="M19 9l-7 7-7-7" />
+                                                                            </svg>
+                                                                        </button>
+                                                                        <div x-show="uOpen"
+                                                                             x-transition
+                                                                             class="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-52 overflow-y-auto custom-scrollbar">
+                                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
+                                                                                      :key="group.label">
+                                                                                <div>
+                                                                                    <div class="px-2 pt-1.5 pb-0.5 text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
+                                                                                         x-text="group.label"></div>
+                                                                                    <template x-for="unit in group.units"
+                                                                                              :key="unit">
+                                                                                        <button @click="setFilterParamOnTemp(temp, fi, param.name, unit); isDirty = true; uOpen = false"
+                                                                                                :class="f[param.name] === unit ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 transition-colors"
+                                                                                                x-text="unit">
+                                                                                        </button>
+                                                                                    </template>
+                                                                                </div>
+                                                                            </template>
+                                                                        </div>
+                                                                    </div>
+                                                                </template>
+                                                                <!-- regular string input for non-unit params -->
+                                                                <template x-if="param.type === 'string' && f.type !== 'unit'">
+                                                                    <input type="text"
+                                                                           :value="f[param.name]"
+                                                                           @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
+                                                                           class="input-field flex-1 px-2 py-1 text-xs" />
+                                                                </template>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <!-- empty state -->
+                                            <p x-show="(temp.filters ?? []).length === 0"
+                                               class="text-xs font-mono italic text-slate-500 dark:text-slate-500 text-center py-2 border border-dashed border-slate-300 dark:border-slate-700 rounded-md">
+                                                No filters — raw signal
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
-                            </template>
-                        </div>
-                    </template>
+                            </div>
+                        </template>
+                    </div>
+                </template>
 
-                    <template x-if="Object.keys(config.yAxes).length === 0">
-                        <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
-                    </template>
-                </div>
+                <template x-if="Object.keys(config.yAxes).length === 0">
+                    <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
+                </template>
             </div>
         </div>
     </div>
-
+</div>

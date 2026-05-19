@@ -159,3 +159,8 @@ kbd {
 .number-input::-webkit-inner-spin-button {
     appearance: none;
 }
+
+/* Pair with .input-field to hide browser spin arrows without changing aesthetics */
+.no-spin { appearance: textfield; }
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button { appearance: none; }
