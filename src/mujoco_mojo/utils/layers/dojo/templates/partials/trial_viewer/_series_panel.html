@@ -49,7 +49,7 @@
                         class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
                     <span x-text="config.xAxis"
                           class="truncate"></span>
-                    <svg class="w-3 h-3 transition-transform"
+                    <svg class="w-3 h-3 transition-transform duration-200"
                          :class="xMenuOpen ? 'rotate-180' : ''"
                          fill="none"
                          stroke="currentColor"
@@ -119,7 +119,7 @@
                         <template x-for="col in getFilteredCols('x')"
                                   :key="col">
                             <button @click="config.xAxis = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
                                 <span class="text-sm font-mono font-bold pr-2"
                                       :class="config.xAxis === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="col"></span>
@@ -182,7 +182,7 @@
                         class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[140px]">
                     <span x-text="config.refFrame || 'world'"
                           class="truncate"></span>
-                    <svg class="w-3 h-3 transition-transform"
+                    <svg class="w-3 h-3 transition-transform duration-200"
                          :class="refFrameMenuOpen ? 'rotate-180' : ''"
                          fill="none"
                          stroke="currentColor"
@@ -198,7 +198,7 @@
 
                     <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
                         <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
-                                class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
+                                class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
                             <span class="text-sm font-mono font-bold"
                                   :class="!config.refFrame ? 'text-cyan-500' : 'text-slate-400'">world</span>
                             <span x-show="!config.refFrame"
@@ -208,7 +208,7 @@
                         <template x-for="q in availableQuats"
                                   :key="q">
                             <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
                                 <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
                                       :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
                                       x-text="q"></span>
@@ -271,7 +271,7 @@
                 <button @click="yMenuOpen = !yMenuOpen"
                         class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
                     <span x-text="Object.keys(config.yAxes).length"></span>
-                    <svg class="w-3 h-3 transition-transform"
+                    <svg class="w-3 h-3 transition-transform duration-200"
                          :class="yMenuOpen ? 'rotate-180' : ''"
                          fill="none"
                          stroke="currentColor"
@@ -584,7 +584,7 @@
                                             :disabled="JSON.stringify(temp) === tempSnapshot"
                                             :class="JSON.stringify(temp) !== tempSnapshot
                         ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-md'
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
+                        : 'bg-slate-300 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
                                             class="w-full py-2 rounded-md font-bold uppercase text-xs tracking-widest transition-all">
                                         Apply Changes
                                     </button>
@@ -702,50 +702,60 @@
                                     </div>
 
                                     <div class="grid grid-cols-2 gap-2">
-                                        <div class="space-y-1"
+                                        <div class="space-y-1 relative"
                                              x-data="{ sOpen: false }">
                                             <label class="text-sm font-bold text-slate-500 uppercase">Style</label>
                                             <button @click="sOpen = !sOpen"
+                                                    @click.away="sOpen = false"
                                                     class="{{ dropdown_trigger_sm }}">
                                                 <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
-                                                <svg class="w-2 h-2"
+                                                <svg class="w-3 h-3 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                                     :class="sOpen ? 'rotate-180' : ''"
                                                      fill="none"
                                                      stroke="currentColor"
+                                                     stroke-width="3"
                                                      viewBox="0 0 24 24">
-                                                    <path d="M19 9l-7 7-7-7"
-                                                          stroke-width="4" />
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </button>
                                             <div x-show="sOpen"
-                                                 @click.away="sOpen = false"
-                                                 class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                 x-transition
+                                                 class="{{ dropdown_panel }} z-[310]">
                                                 <template x-for="opt in opts.dash">
                                                     <button @click="temp.dash = opt; isDirty = true; sOpen = false"
-                                                            class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 dark:text-slate-300"
+                                                            class="{{ dropdown_option }}"
+                                                            :class="temp.dash === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
                                             </div>
                                         </div>
-                                        <div class="space-y-1"
+                                        <div class="space-y-1 relative"
                                              x-data="{ mOpen: false }">
                                             <label class="text-sm font-bold text-slate-500 uppercase">Marker</label>
                                             <button @click="mOpen = !mOpen"
+                                                    @click.away="mOpen = false"
                                                     class="{{ dropdown_trigger_sm }}">
                                                 <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
-                                                <svg class="w-2 h-2"
+                                                <svg class="w-3 h-3 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                                     :class="mOpen ? 'rotate-180' : ''"
                                                      fill="none"
                                                      stroke="currentColor"
+                                                     stroke-width="3"
                                                      viewBox="0 0 24 24">
-                                                    <path d="M19 9l-7 7-7-7"
-                                                          stroke-width="4" />
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </button>
                                             <div x-show="mOpen"
-                                                 @click.away="mOpen = false"
-                                                 class="absolute mt-1 w-32 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-xl z-[310] overflow-hidden">
+                                                 x-transition
+                                                 class="{{ dropdown_panel }} z-[310]">
                                                 <template x-for="opt in opts.marker">
                                                     <button @click="temp.marker = opt; isDirty = true; mOpen = false"
-                                                            class="w-full text-left px-3 py-1.5 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 dark:text-slate-300"
+                                                            class="{{ dropdown_option }}"
+                                                            :class="temp.marker === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
                                             </div>
@@ -778,7 +788,7 @@
                                                     <template x-for="schema in filterSchemas"
                                                               :key="schema.type">
                                                         <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
-                                                                class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                                                                class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700">
                                                             <span class="block text-[10px] font-mono font-black text-cyan-500 uppercase mb-0.5"
                                                                   x-text="schema.type.replace(/_/g, ' ')"></span>
                                                             <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
@@ -936,7 +946,7 @@
                                                                                               :key="unit">
                                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, unit); isDirty = true; uOpen = false"
                                                                                                 :class="f[param.name] === unit ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 transition-colors"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700"
                                                                                                 x-text="unit">
                                                                                         </button>
                                                                                     </template>
