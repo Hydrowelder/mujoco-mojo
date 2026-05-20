@@ -1118,6 +1118,11 @@
         if (!temp.filters?.[filterIndex]) return;
         temp.filters[filterIndex][paramName] = value;
       },
+      duplicateFilterInTemp(temp, index) {
+        if (!temp.filters?.[index]) return;
+        const copy = JSON.parse(JSON.stringify(temp.filters[index]));
+        temp.filters.splice(index + 1, 0, copy);
+      },
       // -----------------------------------------------------------------------
       // Profiles
       // -----------------------------------------------------------------------
@@ -1135,6 +1140,9 @@
           this.notify("Enter a profile name", "error");
           return;
         }
+        const normalise = (s) => s.toLowerCase().replace(/\s+/g, "_");
+        const existing = this.profiles.find((p) => normalise(p.name) === normalise(name));
+        if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
         try {
           const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
             method: "POST",

@@ -371,7 +371,7 @@
                 :class="$store.dojo.isConnected ? 'bg-emerald-500' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'"></span>
         </div>
 
-        <span class="text-[10px] uppercase font-black tracking-widest transition-colors duration-500"
+        <span class="text-xs uppercase font-black tracking-widest transition-colors duration-500"
               :class="$store.dojo.isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
               x-text="$store.dojo.isConnected ? 'Live' : 'Down'"></span>
       </div>
@@ -450,7 +450,7 @@
           <span class="text-xs font-black uppercase tracking-widest text-slate-500">Notifications</span>
           <span x-show="$store.dojo.unreadCount > 0"
                 x-text="$store.dojo.unreadCount"
-                class="text-[10px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none"></span>
+                class="text-xs font-black bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none"></span>
         </div>
         <button @click="$store.dojo.clearNotifications()"
                 x-show="$store.dojo.notifications.length > 0"
@@ -465,9 +465,9 @@
         <template x-for="notif in $store.dojo.notifications"
                   :key="notif.id">
           <div class="flex gap-3 px-4 py-3"
-               :class="notif.read ? 'opacity-50' : 'bg-cyan-500/5 dark:bg-cyan-500/5'">
+               :class="!notif.read ? 'bg-cyan-500/5 dark:bg-cyan-500/5' : ''">
 
-            <!-- Type icon -->
+            <!-- Type icon — always full opacity so colour coding stays readable -->
             <div class="w-4 h-4 mt-0.5 shrink-0"
                  :class="{
                    'text-emerald-500': notif.type === 'success',
@@ -508,9 +508,11 @@
 
             <!-- Message + timestamp -->
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-mono text-slate-800 dark:text-slate-200 leading-snug break-words"
+              <!-- unread: full contrast; read: gently dimmed text only, not icons -->
+              <p class="text-sm font-mono leading-snug break-words"
+                 :class="notif.read ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'"
                  x-text="notif.message"></p>
-              <p class="text-xs text-slate-800 dark:text-slate-200 mt-0.5 font-mono"
+              <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-mono"
                  x-text="notifTimeAgo(notif.timestamp, $store.dojo.notifTick)"></p>
             </div>
 
