@@ -101,6 +101,11 @@ function trialViewer(trialId: string, externalUrl: string) {
     configErrors: [] as string[],
     isEditingRaw: false,
 
+    // --- PROFILES ---
+    profiles: [] as Array<{ name: string; modified: number }>,
+    profilesOpen: false,
+    profileNameDraft: '',
+
     // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
     filterSchemas: [] as FilterSchema[],
     // tracks the last filter fingerprint that was fetched for each col; used to detect
@@ -1132,6 +1137,56 @@ function trialViewer(trialId: string, externalUrl: string) {
     setFilterParamOnTemp(temp: YAxisConfig, filterIndex: number, paramName: string, value: unknown) {
       if (!temp.filters?.[filterIndex]) return;
       (temp.filters[filterIndex] as Record<string, unknown>)[paramName] = value;
+    },
+
+    // -----------------------------------------------------------------------
+    // Profiles
+    // -----------------------------------------------------------------------
+    async loadProfiles() {
+      try {
+        const resp = await fetch('/mosaic/api/profiles');
+        this.profiles = await resp.json() as Array<{ name: string; modified: number }>;
+      } catch (e) {
+        console.warn('[mojo] Failed to load profiles', e);
+      }
+    },
+
+    async saveProfile() {
+      const name = this.profileNameDraft.trim();
+      if (!name) { this.notify('Enter a profile name', 'error'); return; }
+      try {
+        const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.config),
+        });
+        if (!resp.ok) throw new Error('Save failed');
+        const result = await resp.json() as { name: string };
+        this.profileNameDraft = '';
+        await this.loadProfiles();
+        this.notify(`Profile "${result.name}" saved`, 'success');
+      } catch { this.notify('Failed to save profile', 'error'); }
+    },
+
+    async loadProfile(name: string) {
+      try {
+        const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`);
+        if (!resp.ok) throw new Error('Not found');
+        const loaded = await resp.json() as Partial<PlotConfig>;
+        this.config = { ...this.config, ...loaded };
+        this.notify(`Profile "${name}" loaded`, 'success');
+      } catch { this.notify(`Failed to load "${name}"`, 'error'); }
+    },
+
+    async deleteProfile(name: string) {
+      try {
+        const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
+          method: 'DELETE',
+        });
+        if (!resp.ok) throw new Error('Delete failed');
+        await this.loadProfiles();
+        this.notify(`Profile "${name}" deleted`, 'info');
+      } catch { this.notify(`Failed to delete "${name}"`, 'error'); }
     },
 
     applySignalConfig(col: string, temp: YAxisConfig) {
