@@ -168,7 +168,7 @@
 
                         <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
                             <p class="text-xs text-slate-500 dark:text-slate-400 italic">
-                                <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-[10px]">Filter Active:</strong>
+                                <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-xs">Filter Active:</strong>
                                 Y-Axis selection is restricted to 3D vectors when a reference frame is selected.
                             </p>
                         </div>
@@ -789,7 +789,7 @@
                                                               :key="schema.type">
                                                         <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
                                                                 class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700">
-                                                            <span class="block text-[10px] font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                            <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
                                                                   x-text="schema.type.replace(/_/g, ' ')"></span>
                                                             <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
                                                                   x-text="schema.description"></span>
@@ -837,7 +837,7 @@
                                                             </button>
                                                         </div>
                                                         <!-- type badge -->
-                                                        <span class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 uppercase shrink-0"
+                                                        <span class="text-xs font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 uppercase shrink-0"
                                                               x-text="f.type.replace(/_/g, ' ')"></span>
                                                         <!-- param summary -->
                                                         <span class="flex-1 text-xs font-mono text-slate-500 dark:text-slate-400 truncate min-w-0"
@@ -874,6 +874,26 @@
                                                                         stroke-width="2" />
                                                             </svg>
                                                         </button>
+                                                        <!-- duplicate -->
+                                                        <button @click="duplicateFilterInTemp(temp, fi); isDirty = true; expandedFilterIdx = fi + 1"
+                                                                title="Duplicate filter"
+                                                                class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 transition-colors shrink-0">
+                                                            <svg class="w-3.5 h-3.5"
+                                                                 fill="none"
+                                                                 stroke="currentColor"
+                                                                 viewBox="0 0 24 24">
+                                                                <rect x="9"
+                                                                      y="9"
+                                                                      width="13"
+                                                                      height="13"
+                                                                      rx="2"
+                                                                      stroke-width="2" />
+                                                                <path stroke-linecap="round"
+                                                                      stroke-linejoin="round"
+                                                                      stroke-width="2"
+                                                                      d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                                                            </svg>
+                                                        </button>
                                                         <!-- delete -->
                                                         <button @click="removeFilterFromTemp(temp, fi); isDirty = true; if(expandedFilterIdx === fi) expandedFilterIdx = null"
                                                                 class="text-slate-500 dark:text-slate-400 hover:text-rose-500 transition-colors shrink-0">
@@ -895,7 +915,7 @@
                                                         <template x-for="param in (getFilterSchema(f.type)?.params ?? [])"
                                                                   :key="param.name">
                                                             <div class="flex items-center gap-2">
-                                                                <span class="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wide w-20 shrink-0"
+                                                                <span class="text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wide w-20 shrink-0"
                                                                       x-text="param.name"></span>
                                                                 <!-- float / int -->
                                                                 <template x-if="param.type === 'float' || param.type === 'int'">

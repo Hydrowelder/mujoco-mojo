@@ -1139,6 +1139,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       (temp.filters[filterIndex] as Record<string, unknown>)[paramName] = value;
     },
 
+    duplicateFilterInTemp(temp: YAxisConfig, index: number) {
+      if (!temp.filters?.[index]) return;
+      const copy = JSON.parse(JSON.stringify(temp.filters[index])) as FilterEntry;
+      temp.filters.splice(index + 1, 0, copy);
+    },
+
     // -----------------------------------------------------------------------
     // Profiles
     // -----------------------------------------------------------------------
@@ -1154,6 +1160,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     async saveProfile() {
       const name = this.profileNameDraft.trim();
       if (!name) { this.notify('Enter a profile name', 'error'); return; }
+      // check for an existing profile with the same normalised name (spaces → underscores)
+      const normalise = (s: string) => s.toLowerCase().replace(/\s+/g, '_');
+      const existing = this.profiles.find((p) => normalise(p.name) === normalise(name));
+      if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
       try {
         const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
           method: 'POST',
