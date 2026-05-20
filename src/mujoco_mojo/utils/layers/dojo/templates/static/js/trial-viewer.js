@@ -57,6 +57,10 @@
         setTimeout(() => {
           this.showToast = false;
         }, 3e3);
+        try {
+          Alpine.store("dojo").addNotification?.(msg, type);
+        } catch {
+        }
       }
     };
   }
@@ -139,6 +143,8 @@
       // tracks the last filter fingerprint that was fetched for each col; used to detect
       // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
       filterFingerprints: {},
+      // deduplicates filter error toasts so VS mode (N parallel fetches) shows each error once
+      _shownFilterErrors: /* @__PURE__ */ new Set(),
       // in-progress signal editor edits that survive closing/reopening the panel
       signalDrafts: {},
       // --- MATCHUP STATE ---
@@ -245,7 +251,13 @@
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
         const result = await resp.json();
         if (result.filter_errors && result.filter_errors.length > 0) {
-          result.filter_errors.forEach((msg) => this.notify(msg, "error"));
+          result.filter_errors.forEach((msg) => {
+            if (!this._shownFilterErrors.has(msg)) {
+              this._shownFilterErrors.add(msg);
+              this.notify(msg, "error");
+              setTimeout(() => this._shownFilterErrors.delete(msg), 5e3);
+            }
+          });
         }
         return result;
       },
@@ -415,7 +427,7 @@
           const parts = col.split(":");
           const suffix = parts.pop();
           const family = parts.join(":");
-          return ["x", "y", "z"].includes(suffix ?? "") && this.rotateableVectors.includes(family);
+          return ["x", "y", "z"].includes(suffix ?? "") && (this.rotateableVectors ?? []).includes(family);
         });
       },
       get availableQuats() {
@@ -457,7 +469,7 @@
           const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
           const response = await this.fetchTrialData(this.trialId, initialCols);
           this.columns = response.columns.all.sort();
-          this.rotateableVectors = response.columns.rotateable_vectors;
+          this.rotateableVectors = response.columns.rotatable_vectors ?? [];
           this.data = response.data;
           const params = new URLSearchParams(window.location.search);
           const shared = params.get("v");
@@ -578,13 +590,14 @@
         });
         this.$watch("config.refFrame", async (newValue, oldValue) => {
           console.debug(`[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`);
+          this.notify(`Frame: ${newValue || "world"}`, "info");
           this.discoveryId++;
           this.data = {};
           this.vsDatasets = {};
           const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
           const response = await this.fetchTrialData(this.trialId, initialCols);
           this.columns = response.columns.all.sort();
-          this.rotateableVectors = response.columns.rotateable_vectors;
+          this.rotateableVectors = response.columns.rotatable_vectors ?? [];
           this.data = response.data;
           void this.startBackgroundDiscovery();
           if (this.config.vsEnabled) await this.syncVsRange();
@@ -661,6 +674,9 @@
           this.vsDatasets = { ...this.vsDatasets };
           this.config.vsRange = [start, end];
           this.config.vsEnabled = true;
+          if (targetIds.length > 0) {
+            this.notify(`Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`, "info");
+          }
         } finally {
           this.vsLoading = false;
         }
@@ -947,8 +963,10 @@
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          this.notify(`${format.toUpperCase()} saved (${resW}\xD7${resH})`, "success");
         } catch (e) {
           console.error("Export failed", e);
+          this.notify("Export failed", "error");
         } finally {
           this.downloadOpen = false;
         }

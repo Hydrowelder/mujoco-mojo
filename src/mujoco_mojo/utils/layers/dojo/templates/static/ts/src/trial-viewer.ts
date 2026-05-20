@@ -106,6 +106,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     // tracks the last filter fingerprint that was fetched for each col; used to detect
     // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
     filterFingerprints: {} as Record<string, string>,
+    // deduplicates filter error toasts so VS mode (N parallel fetches) shows each error once
+    _shownFilterErrors: new Set<string>(),
     // in-progress signal editor edits that survive closing/reopening the panel
     signalDrafts: {} as Record<string, { draft: YAxisConfig; baseSnapshot: string }>,
 
@@ -221,7 +223,14 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = await resp.json() as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
-        result.filter_errors.forEach((msg) => this.notify(msg, 'error'));
+        result.filter_errors.forEach((msg) => {
+          if (!(this._shownFilterErrors as Set<string>).has(msg)) {
+            (this._shownFilterErrors as Set<string>).add(msg);
+            this.notify(msg, 'error');
+            // clear after 5 s so the same error can resurface if the user tries again
+            setTimeout(() => (this._shownFilterErrors as Set<string>).delete(msg), 5000);
+          }
+        });
       }
       return result;
     },
@@ -404,7 +413,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const parts = col.split(':');
         const suffix = parts.pop();
         const family = parts.join(':');
-        return ['x', 'y', 'z'].includes(suffix ?? '') && this.rotateableVectors.includes(family);
+        return ['x', 'y', 'z'].includes(suffix ?? '') && (this.rotateableVectors ?? []).includes(family);
       });
     },
 
@@ -452,7 +461,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
-        this.rotateableVectors = response.columns.rotateable_vectors;
+        this.rotateableVectors = response.columns.rotatable_vectors ?? [];
         this.data = response.data;
 
         const params = new URLSearchParams(window.location.search);
@@ -579,13 +588,14 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       this.$watch('config.refFrame', async (newValue: string | null, oldValue: string | null) => {
         console.debug(`[Mojo] Frame Change: ${oldValue ?? 'world'} -> ${newValue ?? 'world'}`);
+        this.notify(`Frame: ${newValue || 'world'}`, 'info');
         this.discoveryId++;
         this.data = {};
         this.vsDatasets = {};
         const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
-        this.rotateableVectors = response.columns.rotateable_vectors;
+        this.rotateableVectors = response.columns.rotatable_vectors ?? [];
         this.data = response.data;
         void this.startBackgroundDiscovery();
         if (this.config.vsEnabled) await this.syncVsRange();
@@ -680,6 +690,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.vsDatasets = { ...this.vsDatasets };
         this.config.vsRange = [start, end];
         this.config.vsEnabled = true;
+        if (targetIds.length > 0) {
+          this.notify(`Comparing ${targetIds.length} trial${targetIds.length === 1 ? '' : 's'}`, 'info');
+        }
       } finally {
         this.vsLoading = false;
       }
@@ -958,7 +971,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      } catch (e) { console.error('Export failed', e); }
+        this.notify(`${format.toUpperCase()} saved (${resW}×${resH})`, 'success');
+      } catch (e) { console.error('Export failed', e); this.notify('Export failed', 'error'); }
       finally { this.downloadOpen = false; }
     },
 

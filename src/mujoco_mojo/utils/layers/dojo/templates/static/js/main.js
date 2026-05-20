@@ -6,9 +6,19 @@
     const mins = Math.floor(seconds / 60);
     return mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
   }
+  function notifTimeAgo(timestamp, _tick) {
+    const diff = Math.floor((Date.now() - timestamp) / 1e3);
+    if (diff < 60) return "Just now";
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
 
   // src/store.ts
   window.formatTimeAgo = formatTimeAgo;
+  window.notifTimeAgo = notifTimeAgo;
   document.addEventListener("alpine:init", () => {
     Alpine.store("dojo", {
       isPageReady: false,
@@ -71,6 +81,15 @@
         "Adjusting the differential girdlespring tension..."
       ],
       init() {
+        try {
+          const raw = localStorage.getItem("mojo_notif");
+          if (raw) {
+            const saved = JSON.parse(raw);
+            this.notifications = saved.n ?? [];
+            this.unreadCount = saved.u ?? 0;
+          }
+        } catch {
+        }
         this.checkServerHealth();
         setInterval(() => this.checkServerHealth(), 1e4);
         this.startGlobalSync();
@@ -195,6 +214,49 @@
         this.secondsSinceUpdate = 0;
         this.isComplete = isComplete;
         if (isComplete) this.stopGlobalSync();
+      },
+      // ── Notification history ───────────────────────────────────────────────
+      notifications: [],
+      unreadCount: 0,
+      notifOpen: false,
+      notifTick: Date.now(),
+      _saveNotifications() {
+        try {
+          localStorage.setItem("mojo_notif", JSON.stringify({
+            n: this.notifications,
+            u: this.unreadCount
+          }));
+        } catch {
+        }
+      },
+      addNotification(message, type) {
+        this.notifications.unshift({
+          id: Date.now() + Math.random(),
+          message,
+          type,
+          timestamp: Date.now(),
+          read: !!this.notifOpen
+        });
+        if (this.notifications.length > 100) {
+          this.notifications.length = 100;
+        }
+        if (!this.notifOpen) this.unreadCount++;
+        this._saveNotifications();
+      },
+      openNotifications() {
+        this.notifOpen = !this.notifOpen;
+        if (this.notifOpen) {
+          this.notifications.forEach((n) => {
+            n.read = true;
+          });
+          this.unreadCount = 0;
+          this._saveNotifications();
+        }
+      },
+      clearNotifications() {
+        this.notifications = [];
+        this.unreadCount = 0;
+        this._saveNotifications();
       }
     });
     const store = Alpine.store("dojo");
@@ -203,6 +265,9 @@
         store.secondsSinceUpdate = Math.floor((Date.now() - store.lastUpdate) / 1e3);
       }
     }, 1e3);
+    setInterval(() => {
+      store.notifTick = Date.now();
+    }, 3e4);
     if (!store.isPageReady) {
       store.loadStartTime = Date.now();
       store.startLoadingMessages();
