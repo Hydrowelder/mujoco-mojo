@@ -46,8 +46,13 @@ def stage_file(file_path: Path):
     subprocess.run(["git", "add", str(file_path)], check=True)
 
 
+SKIP_DIRS = {"node_modules", "__pycache__", ".venv", ".git"}
+
+
 def main():
     for file_path in SRC_DIR.rglob("*.*"):
+        if SKIP_DIRS & set(file_path.parts):
+            continue
         if file_path.suffix in {".py", ".md", ".txt", ".json", ".xml"}:
             modified = fix_file(file_path)
             if modified:

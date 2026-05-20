@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from scipy.signal import savgol_filter
 
 __all__ = [
+    "UNIT_GROUPS",
     "AbsoluteValueFilter",
     "AnyFilter",
     "ClipFilter",
@@ -302,55 +303,49 @@ class SavitzkyGolayFilter(BaseFilter):
 
 
 ureg = pint.UnitRegistry()
-# --- Kinematics ---
-AngleUnit = Literal["rad", "deg", "rad/s", "deg/s", "rad/s^2", "deg/s^2", "rev", "rpm"]
-LenUnit = Literal["m", "mm", "cm", "km", "in", "ft", "thou"]
-VelUnit = Literal["m/s", "ft/s", "in/s", "km/h", "mph"]
-AccUnit = Literal["m/s^2", "g", "ft/s^2", "in/s^2"]
-
-# --- Dynamics & Statics ---
-MassUnit = Literal["kg", "lbm", "slug", "g", "mg"]
-ForceUnit = Literal["N", "lbf", "kN", "mN"]
-TorqueUnit = Literal["N*m", "N*mm", "mN*m", "lbf*ft", "lbf*in", "ozf*in"]
-InertiaUnit = Literal["kg*m^2", "lbm*in^2", "lbm*ft^2", "slug*ft^2"]
-
-# --- Work & Thermodynamics ---
-EnergyUnit = Literal["J", "kJ", "mJ", "W*s", "ft*lbf", "BTU"]
-PowerUnit = Literal["W", "kW", "hp", "ft*lbf/s"]
-PressureUnit = Literal["Pa", "kPa", "psi", "bar", "atm", "torr"]
-
-# --- Temporal & Electronics ---
-TimeUnit = Literal["s", "ms", "us", "ns", "min", "hr"]
-FreqUnit = Literal["Hz", "kHz", "MHz", "rad/s"]
-
-# --- Dimensionless & Ratios ---
-MiscUnit = Literal["dimensionless", "pct", "count", "bit", "V", "A"]
-
-SignalUnit = (
-    AngleUnit
-    | LenUnit
-    | VelUnit
-    | AccUnit
-    | MassUnit
-    | ForceUnit
-    | TorqueUnit
-    | InertiaUnit
-    | EnergyUnit
-    | PowerUnit
-    | PressureUnit
-    | TimeUnit
-    | FreqUnit
-    | MiscUnit
-    | str
-)
-
 try:
-    # explicitly map lbm and lbf to avoid ambiguity
     ureg.define("lbm = pound")
     ureg.define("lbf = force_pound")
+    ureg.define("ozf = force_ounce")
 except pint.errors.RedefinitionError:
-    # already defined in some Pint versions
     pass
+
+# ---------------------------------------------------------------------------
+# Unit groups — single source of truth for both the frontend smart dropdown
+# and the SignalUnit type annotation on UnitFilter.  To add a new unit,
+# add it here; SignalUnit is derived automatically.  Verify that pint can
+# parse any new string via `ureg.parse_units(...)` before committing.
+# ---------------------------------------------------------------------------
+UNIT_GROUPS: list[tuple[str, list[str]]] = [
+    # --- Kinematics ---
+    ("Angle", ["rad", "deg", "mrad", "rev", "rpm"]),
+    ("Angular Velocity", ["rad/s", "deg/s"]),
+    ("Angular Accel.", ["rad/s^2", "deg/s^2"]),
+    ("Length", ["m", "mm", "cm", "um", "km", "in", "ft", "thou"]),
+    ("Velocity", ["m/s", "mm/s", "cm/s", "ft/s", "in/s", "km/h", "mph"]),
+    ("Acceleration", ["m/s^2", "mm/s^2", "ft/s^2", "in/s^2"]),
+    # --- Dynamics & Statics ---
+    ("Mass", ["kg", "g", "mg", "lbm", "slug"]),
+    ("Force", ["N", "mN", "uN", "kN", "lbf"]),
+    ("Torque", ["N*m", "N*mm", "mN*m", "kN*m", "lbf*ft", "lbf*in", "ozf*in"]),
+    ("Inertia", ["kg*m^2", "kg*mm^2", "lbm*in^2", "lbm*ft^2", "slug*ft^2"]),
+    # --- Work & Thermodynamics ---
+    ("Energy", ["J", "mJ", "kJ", "W*s", "W*h", "kW*h", "ft*lbf", "BTU"]),
+    ("Power", ["W", "mW", "kW", "MW", "hp", "ft*lbf/s"]),
+    ("Pressure", ["Pa", "kPa", "MPa", "psi", "bar", "atm", "torr"]),
+    # --- Temporal & Electronics ---
+    ("Time", ["s", "ms", "us", "ns", "min", "hr"]),
+    ("Frequency", ["Hz", "kHz", "MHz"]),
+    ("Voltage", ["V", "mV", "kV"]),
+    ("Current", ["A", "mA"]),
+    # --- Dimensionless & Ratios ---
+    ("Misc.", ["dimensionless", "pct", "count", "bit"]),
+]
+
+# Derived automatically — Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
+# in Python 3.9+ because x[a, b] and x[(a, b)] make the same __getitem__ call.
+_ALL_UNITS: tuple[str, ...] = tuple(u for _, us in UNIT_GROUPS for u in us)
+SignalUnit = Literal[_ALL_UNITS] | str
 
 
 class UnitFilter(BaseFilter):
@@ -362,9 +357,10 @@ class UnitFilter(BaseFilter):
     type: Literal[FilterType.UNIT] = FilterType.UNIT
     """The discriminator type for Pydantic."""
 
-    from_unit: SignalUnit
+    from_unit: SignalUnit  # pyright: ignore[reportInvalidTypeForm]
     """The original unit of the telemetry data (e.g., 'rad')."""
-    to_unit: SignalUnit
+
+    to_unit: SignalUnit  # pyright: ignore[reportInvalidTypeForm]
     """The target unit for analysis/display (e.g., 'deg')."""
 
     @model_validator(mode="after")
