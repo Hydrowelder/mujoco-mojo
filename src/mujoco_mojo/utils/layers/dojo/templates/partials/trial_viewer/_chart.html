@@ -914,6 +914,92 @@
             </button>
         </div>
 
+        <!-- ── PROFILES ───────────────────────────────────────────────── -->
+        <div class="flex flex-col gap-2">
+            <div class="relative"
+                 @click.away="profilesOpen = false">
+                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
+                        class="sidebar-btn"
+                        :class="profilesOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
+                        title="Saved Profiles">
+                    <svg class="w-5 h-5"
+                         :class="profilesOpen ? 'text-cyan-500' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7.414A2 2 0 0020.414 7L17 3.586A2 2 0 0015.586 3H5z" />
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M8 21v-5a2 2 0 012-2h4a2 2 0 012 2v5M8 7h8" />
+                    </svg>
+                    <span class="text-xs font-black uppercase tracking-tighter">Profiles</span>
+                </button>
+
+                <div x-show="profilesOpen"
+                     x-transition
+                     class="absolute right-full top-0 mr-4 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
+
+                    <p class="text-base font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                        Saved Profiles
+                    </p>
+
+                    <!-- Save new profile -->
+                    <div class="flex gap-2 mb-4">
+                        <input type="text"
+                               x-model="profileNameDraft"
+                               @keydown.enter="saveProfile()"
+                               placeholder="Profile name..."
+                               class="input-field flex-1 px-2 py-1.5 text-sm" />
+                        <button @click="saveProfile()"
+                                :disabled="!profileNameDraft.trim()"
+                                class="btn btn-primary text-xs font-black uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed">
+                            Save
+                        </button>
+                    </div>
+
+                    <!-- Profile list -->
+                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                        <template x-for="p in profiles"
+                                  :key="p.name">
+                            <div class="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 group">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 truncate"
+                                       x-text="p.name"></p>
+                                    <p class="text-[10px] text-slate-400 dark:text-slate-500 font-mono"
+                                       x-text="notifTimeAgo(p.modified, $store.dojo.notifTick)"></p>
+                                </div>
+                                <button @click="loadProfile(p.name)"
+                                        class="text-xs px-2 py-1 rounded bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500 hover:text-white font-bold transition-colors shrink-0">
+                                    Load
+                                </button>
+                                <button @click="deleteProfile(p.name)"
+                                        class="text-slate-400 hover:text-rose-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                                    <svg class="w-3.5 h-3.5"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="3"
+                                              d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+
+                        <p x-show="profiles.length === 0"
+                           class="text-xs font-mono italic text-slate-400 dark:text-slate-600 text-center py-4">
+                            No profiles saved yet
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ── DOWNLOAD OPTIONS ─────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"

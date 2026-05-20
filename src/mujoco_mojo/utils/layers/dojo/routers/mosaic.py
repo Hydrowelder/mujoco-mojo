@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import re
 import socket
 from functools import lru_cache
+from pathlib import Path
 from typing import get_args
 
 import polars as pl
@@ -274,6 +277,83 @@ async def get_filter_schema():
         result.append(entry)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Profiles  ·  named saved views stored under {workdir}/profiles/
+# ---------------------------------------------------------------------------
+
+
+def _get_profiles_dir() -> Path | None:
+    job = shared.CURRENT_JOB
+    if not job:
+        return None
+    d: Path = job.workdir / "profiles"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def _sanitize_profile_name(name: str) -> str:
+    """Return a filesystem-safe stem from the user-supplied profile name."""
+    name = name.strip()[:128]
+    name = re.sub(r"[^\w\s\-]", "", name)  # keep word chars, whitespace, hyphens
+    name = re.sub(r"\s+", "_", name)  # spaces → underscores
+    name = re.sub(r"_+", "_", name).strip("_")
+    return name[:64] or "profile"
+
+
+@router.get("/api/profiles")
+async def list_profiles():
+    """List all saved profiles for the current job."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    profiles = [
+        {"name": f.stem, "modified": int(f.stat().st_mtime * 1000)}
+        for f in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    ]
+    return profiles
+
+
+@router.get("/api/profiles/{name}")
+async def get_profile(name: str):
+    """Return the PlotConfig JSON for a saved profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    path = d / f"{_sanitize_profile_name(name)}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.post("/api/profiles/{name}")
+async def save_profile(name: str, request: Request):
+    """Save the current PlotConfig as a named profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    safe = _sanitize_profile_name(name)
+    if not safe:
+        raise HTTPException(status_code=400, detail="Invalid profile name")
+    body = await request.json()
+    (d / f"{safe}.json").write_text(
+        json.dumps(body, separators=(",", ":")), encoding="utf-8"
+    )
+    return {"name": safe}
+
+
+@router.delete("/api/profiles/{name}")
+async def delete_profile(name: str):
+    """Delete a saved profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    path = d / f"{_sanitize_profile_name(name)}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Profile not found")
+    path.unlink()
+    return {"deleted": name}
 
 
 @lru_cache(maxsize=128)
