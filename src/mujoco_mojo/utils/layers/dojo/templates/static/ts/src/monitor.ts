@@ -26,6 +26,7 @@ function monitor() {
       progress: 0,
       padding_style: '02d',
     } as JobStatus,
+    prevStatus: { n_done: 0, n_success: 0, n_failed: 0 },
     stats: [] as StatCard[],
     hasInitialData: false,
     hasCelebrated: false,
@@ -52,10 +53,32 @@ function monitor() {
     },
 
     handleDataUpdate(data: JobStatus) {
+      const wasInit = this.hasInitialData;
+      const prev = { ...this.prevStatus } as { n_done: number; n_success: number; n_failed: number };
+      this.prevStatus = { n_done: data.n_done, n_success: data.n_success, n_failed: data.n_failed };
       this.status = data;
       this.hasInitialData = true;
       this.refreshStats();
-      if (this.status.is_complete) this.handleCompletion();
+
+      if (this.status.is_complete) {
+        this.handleCompletion();
+      } else if (wasInit) {
+        const newDone = data.n_done - prev.n_done;
+        if (newDone > 0) {
+          const newFailed = data.n_failed - prev.n_failed;
+          const store = Alpine.store('dojo') as DojoStore;
+          if (newDone === 1) {
+            const failed = newFailed === 1;
+            const trialId = failed ? data.failure_tns.at(-1) : data.success_tns.at(-1);
+            store.addNotification(`Trial ${trialId} ${failed ? 'failed' : 'succeeded'}`, failed ? 'error' : 'success');
+          } else {
+            store.addNotification(
+              `${newDone} trials done — ${newDone - newFailed} ok, ${newFailed} failed`,
+              newFailed > 0 ? 'error' : 'success',
+            );
+          }
+        }
+      }
     },
 
     refreshStats() {
@@ -113,6 +136,22 @@ function monitor() {
 
     handleCompletion() {
       if (this.hasCelebrated) return;
+
+      // Use localStorage so the notification only fires once per job across all page navigations.
+      // The key is the job's start_time — unique per job run.
+      const celebKey = `mojo_celebrated_${this.status.start_time}`;
+      if (localStorage.getItem(celebKey)) {
+        this.hasCelebrated = true;  // sync in-memory flag so future calls within this session are fast
+        return;
+      }
+      localStorage.setItem(celebKey, '1');
+      this.hasCelebrated = true;
+
+      const store = Alpine.store('dojo') as DojoStore;
+      store.addNotification(
+        `Job complete in ${this.status.elapsed} — ${this.status.n_success} succeeded, ${this.status.n_failed} failed`,
+        this.status.n_failed > 0 ? 'error' : 'success',
+      );
       const theme = this.getHolidayTheme();
       const chime = document.getElementById('chime') as HTMLAudioElement | null;
 

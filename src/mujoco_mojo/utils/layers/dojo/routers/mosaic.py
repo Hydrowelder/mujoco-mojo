@@ -19,21 +19,98 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-def _format_filter_error(raw: str) -> str:
-    """Extract a short, human-readable message from a Pydantic validation error."""
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line.startswith("Value error,"):
-            continue
-        msg = line.removeprefix("Value error,").strip()
-        m = re.match(r"Unknown unit definition: '(.+?)' is not defined", msg)
-        if m:
-            return f"Unknown unit '{m.group(1)}'"
-        m = re.match(r"Incompatible units: (.+?) and (.+?) \(", msg)
-        if m:
-            return f"Incompatible units: {m.group(1)} → {m.group(2)}"
-        return msg
-    return "Filter validation failed — check filter settings"
+_FILTER_TYPE_NAMES = {
+    "scale",
+    "absolute_value",
+    "derivative",
+    "integral",
+    "low_pass",
+    "high_pass",
+    "clip",
+    "rolling_mean",
+    "taring",
+    "deadband",
+    "wrap",
+    "median",
+    "normalize",
+    "savitzky_golay",
+    "unit",
+}
+
+_CONSTRAINT_OPS = {
+    "less_than_equal": "≤",
+    "less_than": "<",
+    "greater_than_equal": "≥",
+    "greater_than": ">",
+}
+
+
+def _format_filter_error(exc: Exception) -> str:
+    """Format a Pydantic ValidationError into a short, human-readable message."""
+    from pydantic import ValidationError
+
+    if not isinstance(exc, ValidationError):
+        return str(exc).split("\n")[0] or "Filter error"
+
+    try:
+        errors = exc.errors(include_url=False)
+    except TypeError:
+        errors = exc.errors()  # older pydantic build without include_url kwarg
+
+    if not errors:
+        return "Filter validation failed — check filter settings"
+
+    first = errors[0]
+    loc: tuple = first.get("loc", ())
+    msg: str = first.get("msg", "")
+    err_type: str = first.get("type", "")
+    ctx: dict = first.get("ctx", {}) or {}
+
+    # Resolve filter type and field from location tuple
+    # e.g. ('/Bodies/xpos:x', 0, 'low_pass', 'alpha') → filter='Low Pass', field='alpha'
+    filter_label: str | None = None
+    field_name: str | None = None
+    for i, part in enumerate(loc):
+        if isinstance(part, str) and part in _FILTER_TYPE_NAMES:
+            filter_label = part.replace("_", " ").title()
+            if i + 1 < len(loc) and isinstance(loc[i + 1], str):
+                field_name = loc[i + 1]
+
+    prefix = f"{filter_label}: " if filter_label else ""
+
+    # ── Unit-specific model validator errors ──────────────────────────────
+    m = re.match(r"Value error, Unknown unit definition: '(.+?)' is not defined", msg)
+    if m:
+        return f"Unknown unit '{m.group(1)}'"
+    m = re.match(r"Value error, Incompatible units: (.+?) and (.+?) \(", msg)
+    if m:
+        return f"Incompatible units: {m.group(1)} → {m.group(2)}"
+
+    # ── Generic model validator (custom @model_validator) ─────────────────
+    if msg.startswith("Value error, "):
+        clean = msg.removeprefix("Value error, ")
+        return f"{prefix}{clean}"
+
+    # ── Field-level numeric constraint (gt, ge, lt, le) ───────────────────
+    if err_type in _CONSTRAINT_OPS:
+        op = _CONSTRAINT_OPS[err_type]
+        # Use next/in to avoid treating 0 as falsy (ctx.get("gt") or ... breaks on gt=0)
+        limit = next((ctx[k] for k in ("gt", "ge", "lt", "le") if k in ctx), None)
+        field_str = f"{field_name} " if field_name else ""
+        return f"{prefix}{field_str}must be {op} {limit}"
+
+    # ── Tagged-union discriminator mismatch (bad filter type string) ───────
+    if "union" in err_type or "tagged" in err_type:
+        return "Unknown filter type — check filter configuration"
+
+    # ── Fallback: clean up the raw Pydantic message ───────────────────────
+    clean = re.sub(r"\s*\[type=\w+.*?\]\s*$", "", msg).strip()
+    clean = clean.removeprefix("Value error,").strip()
+    return (
+        f"{prefix}{clean}"
+        if clean
+        else "Filter validation failed — check filter settings"
+    )
 
 
 def get_network_ip():
@@ -335,7 +412,7 @@ async def get_trial_data(
                 col_filters = _filter_adapter.validate_python(json.loads(filters))
             except Exception as e:
                 logger.warning(f"Could not parse filters for {trial_id}: {e}")
-                filter_errors.append(_format_filter_error(str(e)))
+                filter_errors.append(_format_filter_error(e))
 
         # build response data, applying per-column filters where present
         data: dict = {}

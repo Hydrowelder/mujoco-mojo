@@ -16,9 +16,11 @@ export function createToastMixin(): ToastMixin {
       this.toastMessage = msg;
       this.toastType = type;
       this.showToast = true;
-      setTimeout(() => {
-        this.showToast = false;
-      }, 3000);
+      setTimeout(() => { this.showToast = false; }, 3000);
+      // also push to the global notification history (store may not be ready on first call)
+      try {
+        (Alpine.store('dojo') as { addNotification?: (m: string, t: string) => void }).addNotification?.(msg, type);
+      } catch { /* ignore */ }
     },
   };
 }

@@ -1,8 +1,9 @@
-import { formatTimeAgo } from './lib/format';
-import type { DojoStore } from './models';
+import { formatTimeAgo, notifTimeAgo } from './lib/format';
+import type { DojoStore, NotificationEntry } from './models';
 
-// Expose formatTimeAgo as a global — base.html calls it directly in x-text expressions.
+// Expose time helpers as globals — HTML templates call them in x-text expressions.
 window.formatTimeAgo = formatTimeAgo;
+window.notifTimeAgo = notifTimeAgo;
 
 document.addEventListener('alpine:init', () => {
   Alpine.store('dojo', {
@@ -69,6 +70,16 @@ document.addEventListener('alpine:init', () => {
     ],
 
     init() {
+      // Restore notification history persisted from a previous page/tab
+      try {
+        const raw = localStorage.getItem('mojo_notif');
+        if (raw) {
+          const saved = JSON.parse(raw) as { n: NotificationEntry[]; u: number };
+          this.notifications = saved.n ?? [];
+          this.unreadCount = saved.u ?? 0;
+        }
+      } catch { /* ignore corrupt data */ }
+
       this.checkServerHealth();
       setInterval(() => this.checkServerHealth(), 10000);
       this.startGlobalSync();
@@ -210,6 +221,51 @@ document.addEventListener('alpine:init', () => {
       this.isComplete = isComplete;
       if (isComplete) this.stopGlobalSync();
     },
+
+    // ── Notification history ───────────────────────────────────────────────
+    notifications: [] as NotificationEntry[],
+    unreadCount: 0,
+    notifOpen: false,
+    notifTick: Date.now(),
+
+    _saveNotifications() {
+      try {
+        localStorage.setItem('mojo_notif', JSON.stringify({
+          n: this.notifications,
+          u: this.unreadCount,
+        }));
+      } catch { /* quota exceeded — ignore */ }
+    },
+
+    addNotification(message: string, type: string) {
+      (this.notifications as NotificationEntry[]).unshift({
+        id: Date.now() + Math.random(),
+        message,
+        type: type as 'success' | 'error' | 'info',
+        timestamp: Date.now(),
+        read: !!(this.notifOpen as boolean),
+      });
+      if ((this.notifications as NotificationEntry[]).length > 100) {
+        (this.notifications as NotificationEntry[]).length = 100;
+      }
+      if (!(this.notifOpen as boolean)) (this.unreadCount as number)++;
+      this._saveNotifications();
+    },
+
+    openNotifications() {
+      this.notifOpen = !this.notifOpen;
+      if (this.notifOpen) {
+        (this.notifications as NotificationEntry[]).forEach((n) => { n.read = true; });
+        this.unreadCount = 0;
+        this._saveNotifications();
+      }
+    },
+
+    clearNotifications() {
+      this.notifications = [] as NotificationEntry[];
+      this.unreadCount = 0;
+      this._saveNotifications();
+    },
   });
 
   const store = Alpine.store('dojo') as DojoStore & {
@@ -225,6 +281,9 @@ document.addEventListener('alpine:init', () => {
       store.secondsSinceUpdate = Math.floor((Date.now() - store.lastUpdate) / 1000);
     }
   }, 1000);
+
+  // Tick every 30 s so notifTimeAgo expressions re-evaluate ("Just now" → "1m ago" etc.)
+  setInterval(() => { store.notifTick = Date.now(); }, 30_000);
 
   if (!store.isPageReady) {
     store.loadStartTime = Date.now();

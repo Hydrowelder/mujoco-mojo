@@ -40,7 +40,8 @@ export interface TrialManifest {
 export interface TrialDataResponse {
   columns: {
     all: string[];
-    rotateable_vectors: string[];
+    rotatable_vectors: string[];
+    available_quats: string[];
   };
   data: Record<string, number[]>;
   filter_errors?: string[];
@@ -136,6 +137,18 @@ export interface PlotConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Notification history
+// ---------------------------------------------------------------------------
+
+export interface NotificationEntry {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+  timestamp: number;
+  read: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Alpine store shape (used for typed store access across components)
 // ---------------------------------------------------------------------------
 
@@ -151,8 +164,15 @@ export interface DojoStore {
   secondsSinceUpdate: number;
   lastUpdate: number | null;
   source: EventSource | null;
+  notifications: NotificationEntry[];
+  unreadCount: number;
+  notifOpen: boolean;
+  notifTick: number;
   startGlobalSync(): void;
   stopGlobalSync(): void;
   setPageReady(val: boolean, force?: boolean): void;
   updateSync(timestamp: number, isComplete?: boolean): void;
+  addNotification(message: string, type: 'success' | 'error' | 'info'): void;
+  openNotifications(): void;
+  clearNotifications(): void;
 }

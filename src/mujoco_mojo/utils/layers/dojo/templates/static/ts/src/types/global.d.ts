@@ -43,6 +43,7 @@ declare global {
   // Globals exposed by the compiled bundles for Alpine x-data usage
   interface Window {
     formatTimeAgo(seconds: number): string;
+    notifTimeAgo(timestamp: number, tick?: number): string;
     trialViewer(trialId: string, externalUrl: string): object;
     monitor(): object;
     mosaic(): object;
