@@ -1,11 +1,21 @@
+from __future__ import annotations
+
+import json
+import re
 import socket
 from functools import lru_cache
+from pathlib import Path
+from typing import get_args
 
 import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
+from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
+from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
+from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
+from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -13,6 +23,93 @@ from .. import shared
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+# Derived from FilterType enum — automatically includes any new filter type added to filters.py.
+# Used to identify the filter name in Pydantic error location tuples when formatting messages.
+_FILTER_TYPE_NAMES: set[str] = {str(ft) for ft in _FilterType}
+
+# Derived from AnyFilter's union members — automatically includes any new filter class.
+# AnyFilter = Annotated[ScaleFilter | AbsoluteValueFilter | ..., Field(discriminator="type")]
+# get_args(AnyFilter)[0] is the bare union; get_args of that gives the individual classes.
+_annotated_args = get_args(_AnyFilter)
+_FILTER_CLASSES: list[type] = (
+    list(get_args(_annotated_args[0])) if _annotated_args else []
+)
+
+_CONSTRAINT_OPS = {
+    "less_than_equal": "≤",
+    "less_than": "<",
+    "greater_than_equal": "≥",
+    "greater_than": ">",
+}
+
+
+def _format_filter_error(exc: Exception) -> str:
+    """Format a Pydantic ValidationError into a short, human-readable message."""
+    from pydantic import ValidationError
+
+    if not isinstance(exc, ValidationError):
+        return str(exc).split("\n")[0] or "Filter error"
+
+    try:
+        errors = exc.errors(include_url=False)
+    except TypeError:
+        errors = exc.errors()  # older pydantic build without include_url kwarg
+
+    if not errors:
+        return "Filter validation failed — check filter settings"
+
+    first = errors[0]
+    loc: tuple = first.get("loc", ())
+    msg: str = first.get("msg", "")
+    err_type: str = first.get("type", "")
+    ctx: dict = first.get("ctx", {}) or {}
+
+    # Resolve filter type and field from location tuple
+    # e.g. ('/Bodies/xpos:x', 0, 'low_pass', 'alpha') → filter='Low Pass', field='alpha'
+    filter_label: str | None = None
+    field_name: str | None = None
+    for i, part in enumerate(loc):
+        if isinstance(part, str) and part in _FILTER_TYPE_NAMES:
+            filter_label = part.replace("_", " ").title()
+            if i + 1 < len(loc) and isinstance(loc[i + 1], str):
+                field_name = loc[i + 1]
+
+    prefix = f"{filter_label}: " if filter_label else ""
+
+    # ── Unit-specific model validator errors ──────────────────────────────
+    m = re.match(r"Value error, Unknown unit definition: '(.+?)' is not defined", msg)
+    if m:
+        return f"Unknown unit '{m.group(1)}'"
+    m = re.match(r"Value error, Incompatible units: (.+?) and (.+?) \(", msg)
+    if m:
+        return f"Incompatible units: {m.group(1)} → {m.group(2)}"
+
+    # ── Generic model validator (custom @model_validator) ─────────────────
+    if msg.startswith("Value error, "):
+        clean = msg.removeprefix("Value error, ")
+        return f"{prefix}{clean}"
+
+    # ── Field-level numeric constraint (gt, ge, lt, le) ───────────────────
+    if err_type in _CONSTRAINT_OPS:
+        op = _CONSTRAINT_OPS[err_type]
+        # Use next/in to avoid treating 0 as falsy (ctx.get("gt") or ... breaks on gt=0)
+        limit = next((ctx[k] for k in ("gt", "ge", "lt", "le") if k in ctx), None)
+        field_str = f"{field_name} " if field_name else ""
+        return f"{prefix}{field_str}must be {op} {limit}"
+
+    # ── Tagged-union discriminator mismatch (bad filter type string) ───────
+    if "union" in err_type or "tagged" in err_type:
+        return "Unknown filter type — check filter configuration"
+
+    # ── Fallback: clean up the raw Pydantic message ───────────────────────
+    clean = re.sub(r"\s*\[type=\w+.*?\]\s*$", "", msg).strip()
+    clean = clean.removeprefix("Value error,").strip()
+    return (
+        f"{prefix}{clean}"
+        if clean
+        else "Filter validation failed — check filter settings"
+    )
 
 
 def get_network_ip():
@@ -107,6 +204,158 @@ async def get_trial_viewer(request: Request, trial_id: str):
     )
 
 
+@router.get("/api/filter-schema")
+async def get_filter_schema():
+    """
+    Returns metadata for all available filter types, derived from Pydantic models.
+
+    Filter classes are auto-discovered from AnyFilter's union — no changes needed here
+    when a new filter is added to filters.py.
+    """
+    from pydantic_core import PydanticUndefined
+
+    def _infer_type(prop: dict) -> str:
+        if "anyOf" in prop:
+            non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
+            prop = non_null[0] if non_null else {}
+        t = prop.get("type", "")
+        if t == "integer":
+            return "int"
+        if t == "number":
+            return "float"
+        if t == "boolean":
+            return "bool"
+        return "string"
+
+    result = []
+    for cls in _FILTER_CLASSES:
+        schema = cls.model_json_schema()
+        props = schema.get("properties", {})
+        type_val = str(cls.model_fields["type"].default)
+
+        params = []
+        for name, field_info in cls.model_fields.items():
+            if name == "type":
+                continue
+            prop = props.get(name, {})
+            if "anyOf" in prop:
+                non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
+                prop_clean = {**prop, **(non_null[0] if non_null else {})}
+            else:
+                prop_clean = prop
+
+            default = field_info.default
+            if default is PydanticUndefined:
+                default = None
+            elif isinstance(default, float):
+                default = round(float(default), 8)
+
+            p: dict = {"name": name, "type": _infer_type(prop), "default": default}
+            if "minimum" in prop_clean:
+                p["min"] = prop_clean["minimum"]
+            if "maximum" in prop_clean:
+                p["max"] = prop_clean["maximum"]
+            if "exclusiveMinimum" in prop_clean:
+                p["exclusive_min"] = prop_clean["exclusiveMinimum"]
+            if "exclusiveMaximum" in prop_clean:
+                p["exclusive_max"] = prop_clean["exclusiveMaximum"]
+            params.append(p)
+
+        description = (cls.__doc__ or "").strip()
+        description = description.split("\n")[0].strip()
+
+        entry: dict = {
+            "type": type_val,
+            "label": type_val.replace("_", " ").title(),
+            "description": description,
+            "params": params,
+        }
+        if type_val == "unit":
+            entry["unit_groups"] = [
+                {"label": label, "units": units} for label, units in _UNIT_GROUPS
+            ]
+        result.append(entry)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Profiles  ·  named saved views stored under {workdir}/profiles/
+# ---------------------------------------------------------------------------
+
+
+def _get_profiles_dir() -> Path | None:
+    job = shared.CURRENT_JOB
+    if not job:
+        return None
+    d: Path = job.workdir / "profiles"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def _sanitize_profile_name(name: str) -> str:
+    """Return a filesystem-safe stem from the user-supplied profile name."""
+    name = name.strip()[:128]
+    name = re.sub(r"[^\w\s\-]", "", name)  # keep word chars, whitespace, hyphens
+    name = re.sub(r"\s+", "_", name)  # spaces → underscores
+    name = re.sub(r"_+", "_", name).strip("_")
+    return name[:64] or "profile"
+
+
+@router.get("/api/profiles")
+async def list_profiles():
+    """List all saved profiles for the current job."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    profiles = [
+        {"name": f.stem, "modified": int(f.stat().st_mtime * 1000)}
+        for f in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    ]
+    return profiles
+
+
+@router.get("/api/profiles/{name}")
+async def get_profile(name: str):
+    """Return the PlotConfig JSON for a saved profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    path = d / f"{_sanitize_profile_name(name)}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.post("/api/profiles/{name}")
+async def save_profile(name: str, request: Request):
+    """Save the current PlotConfig as a named profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    safe = _sanitize_profile_name(name)
+    if not safe:
+        raise HTTPException(status_code=400, detail="Invalid profile name")
+    body = await request.json()
+    (d / f"{safe}.json").write_text(
+        json.dumps(body, separators=(",", ":")), encoding="utf-8"
+    )
+    return {"name": safe}
+
+
+@router.delete("/api/profiles/{name}")
+async def delete_profile(name: str):
+    """Delete a saved profile."""
+    d = _get_profiles_dir()
+    if d is None:
+        raise HTTPException(status_code=404, detail="No active job")
+    path = d / f"{_sanitize_profile_name(name)}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Profile not found")
+    path.unlink()
+    return {"deleted": name}
+
+
 @lru_cache(maxsize=128)
 def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
@@ -123,7 +372,10 @@ def _get_atomic_column(path_str: str, col_name: str, mtime: float):
 
 @router.get("/{trial_id}/data")
 async def get_trial_data(
-    trial_id: str, cols: str = Query(None), rotate_by: str = Query(None)
+    trial_id: str,
+    cols: str = Query(None),
+    rotate_by: str = Query(None),
+    filters: str = Query(None),
 ):
     """
     Loops over the columns in the trial_id provided and returns their data. Optionally performs a rotation if requested and there are an associated x, y, and z column.
@@ -132,6 +384,7 @@ async def get_trial_data(
         trial_id (str): Trial to search (e.g. `"trial_001"`).
         cols (str, optional): Comma separated list of column names to return data for (e.g. `"/Bodies/body1/xpos:x,/Bodies/body2/xpos:m"`). Defaults to Query(None).
         rotate_by (str, optional): Quaternion family to rotate vectors by (e.g. `"/Bodies/body1/quat"`). Defaults to Query(None).
+        filters (str, optional): String representation of filters to be applied sequentially. Defaults to Query(None).
 
     Raises:
         HTTPException: Raised if no shared.CURRENT_JOB was set.
@@ -196,11 +449,38 @@ async def get_trial_data(
             # rotate from world to rotate_by frame
             df = df.mojo.with_rotation(quat_base=rotate_by, invert=True)
 
-        data = {col: df[col].to_list() for col in requested if col in df.columns}
+        # parse validated filter stacks (col_name → list[AnyFilter])
+        col_filters: dict = {}
+        filter_errors: list[str] = []
+        if filters:
+            try:
+                col_filters = _filter_adapter.validate_python(json.loads(filters))
+            except Exception as e:
+                logger.warning(f"Could not parse filters for {trial_id}: {e}")
+                filter_errors.append(_format_filter_error(e))
+
+        # build response data, applying per-column filters where present
+        data: dict = {}
+        for col in requested:
+            if col not in df.columns:
+                continue
+            series = df[col]
+            filter_list = col_filters.get(col)
+            if filter_list:
+                if series.dtype != pl.Float64:
+                    series = series.cast(pl.Float64)
+                tmp = pl.DataFrame({col: series})
+                expr = pl.col(col)
+                for f in filter_list:
+                    expr = f.apply(expr)
+                tmp = tmp.with_columns(expr.alias(col))
+                series = tmp[col]
+            data[col] = series.to_list()
 
         return {
-            "columns": column_manifest,  # Full list of headers for the sidebar
-            "data": data,  # Actual arrays for the requested traces
+            "columns": column_manifest,
+            "data": data,
+            "filter_errors": filter_errors,
         }
 
     except Exception as e:

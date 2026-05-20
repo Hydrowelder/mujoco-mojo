@@ -68,11 +68,8 @@ keywords = [
     "mjcf",
 ]
 
-[project.scripts]
-mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
-
-[tool.setuptools.package-data]
-"*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
+[project.optional-dependencies]
+reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
 
 [dependency-groups]
 dev = [
@@ -94,8 +91,11 @@ dev = [
     "zensical>=0.0.31",
 ]
 
-[project.optional-dependencies]
-reloaded = ["mjviser>=0.0.11", "viser>=1.0.26"]
+[project.scripts]
+mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
+
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
