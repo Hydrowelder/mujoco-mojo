@@ -2,6 +2,7 @@ import json
 import re
 import socket
 from functools import lru_cache
+from typing import get_args
 
 import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -9,6 +10,8 @@ from fastapi.responses import HTMLResponse
 
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
+from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
+from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
 from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
 from mujoco_mojo.utils.log import get_logger
 
@@ -18,24 +21,17 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
+# Derived from FilterType enum — automatically includes any new filter type added to filters.py.
+# Used to identify the filter name in Pydantic error location tuples when formatting messages.
+_FILTER_TYPE_NAMES: set[str] = {str(ft) for ft in _FilterType}
 
-_FILTER_TYPE_NAMES = {
-    "scale",
-    "absolute_value",
-    "derivative",
-    "integral",
-    "low_pass",
-    "high_pass",
-    "clip",
-    "rolling_mean",
-    "taring",
-    "deadband",
-    "wrap",
-    "median",
-    "normalize",
-    "savitzky_golay",
-    "unit",
-}
+# Derived from AnyFilter's union members — automatically includes any new filter class.
+# AnyFilter = Annotated[ScaleFilter | AbsoluteValueFilter | ..., Field(discriminator="type")]
+# get_args(AnyFilter)[0] is the bare union; get_args of that gives the individual classes.
+_annotated_args = get_args(_AnyFilter)
+_FILTER_CLASSES: list[type] = (
+    list(get_args(_annotated_args[0])) if _annotated_args else []
+)
 
 _CONSTRAINT_OPS = {
     "less_than_equal": "≤",
@@ -207,44 +203,13 @@ async def get_trial_viewer(request: Request, trial_id: str):
 
 @router.get("/api/filter-schema")
 async def get_filter_schema():
-    """Returns metadata for all available filter types, derived from Pydantic models."""
+    """
+    Returns metadata for all available filter types, derived from Pydantic models.
+
+    Filter classes are auto-discovered from AnyFilter's union — no changes needed here
+    when a new filter is added to filters.py.
+    """
     from pydantic_core import PydanticUndefined
-
-    from mujoco_mojo.utils.filters.filters import (
-        AbsoluteValueFilter,
-        ClipFilter,
-        DeadbandFilter,
-        DerivativeFilter,
-        HighPassFilter,
-        IntegralFilter,
-        LowPassFilter,
-        MedianFilter,
-        NormalizeFilter,
-        RollingMeanFilter,
-        SavitzkyGolayFilter,
-        ScaleFilter,
-        TaringFilter,
-        UnitFilter,
-        WrapFilter,
-    )
-
-    FILTER_CLASSES = [
-        ScaleFilter,
-        AbsoluteValueFilter,
-        DerivativeFilter,
-        IntegralFilter,
-        LowPassFilter,
-        HighPassFilter,
-        ClipFilter,
-        RollingMeanFilter,
-        TaringFilter,
-        DeadbandFilter,
-        WrapFilter,
-        MedianFilter,
-        NormalizeFilter,
-        SavitzkyGolayFilter,
-        UnitFilter,
-    ]
 
     def _infer_type(prop: dict) -> str:
         if "anyOf" in prop:
@@ -260,7 +225,7 @@ async def get_filter_schema():
         return "string"
 
     result = []
-    for cls in FILTER_CLASSES:
+    for cls in _FILTER_CLASSES:
         schema = cls.model_json_schema()
         props = schema.get("properties", {})
         type_val = str(cls.model_fields["type"].default)
