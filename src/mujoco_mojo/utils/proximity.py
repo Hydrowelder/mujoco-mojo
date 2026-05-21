@@ -193,8 +193,6 @@ class Proximity(MojoBaseModel):
         Args:
             mj_model (mujoco.MjModel): Compiled MuJoCo model.
             mj_data (mujoco.MjData): MuJoCo runtime data.
-            dist_max (float): The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early.
-            fromto (bool): Whether or not to return the locations of the minimum distances.
 
         Returns:
             tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
@@ -288,8 +286,6 @@ class Proximity(MojoBaseModel):
         Args:
             mj_model (mujoco.MjModel): Compiled MuJoCo model.
             mj_data (mujoco.MjData): MuJoCo runtime data.
-            dist_max (float): The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early.
-            fromto (bool): Whether or not to return the locations of the minimum distances.
 
         Returns:
             tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
