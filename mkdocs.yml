@@ -29,7 +29,6 @@ nav:
       - Optimization: user-guides/optimization.md
       - Reloaded: user-guides/reloaded.md
   - Code Reference:
-      - reference/index.md
       - mujoco_mojo:
           - reference/mujoco_mojo/index.md
           - MojoModel: reference/mujoco_mojo/mojo_model.md

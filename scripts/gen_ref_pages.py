@@ -47,24 +47,6 @@ MODULES: list[tuple[str, str]] = [
 # ---------------------------------------------------------------------------
 # Hand-written stub for mujoco_mojo.mjcf (too large to autodoc)
 # ---------------------------------------------------------------------------
-INDEX_PAGE = """\
-# Code Reference
-
-API reference for `mujoco_mojo`, generated from source docstrings.
-
-| Module | Description |
-|---|---|
-| [mujoco_mojo](mujoco_mojo/index.md) | Top-level package exports |
-| [mujoco_mojo.mojo_model](mujoco_mojo/mojo_model.md) | `MojoModel` and `UserData` |
-| [mujoco_mojo.base](mujoco_mojo/base.md) | Base classes and protocols |
-| [mujoco_mojo.visualization](mujoco_mojo/visualization.md) | Visualization utilities |
-| [mujoco_mojo.typing](mujoco_mojo/typing.md) | Type aliases and enumerations |
-| [mujoco_mojo.stochas](mujoco_mojo/stochas.md) | Distributions and named values |
-| [mujoco_mojo.mjcf](mujoco_mojo/mjcf.md) | MJCF object model (links to MuJoCo XML docs) |
-| [mujoco_mojo.runtime](mujoco_mojo/runtime/index.md) | Runtime management |
-| [mujoco_mojo.utils](mujoco_mojo/utils/index.md) | General utilities |
-"""
-
 MJCF_STUB = """\
 # mujoco\\_mojo.mjcf
 
@@ -88,10 +70,6 @@ body = mojo.Body(name=mojo.BodyName("my_body"))
 def main() -> None:
     DOCS_REF.mkdir(parents=True, exist_ok=True)
 
-    index_page = DOCS_REF / "index.md"
-    index_page.write_text(INDEX_PAGE, encoding="utf-8")
-    print(f"  {index_page.relative_to(ROOT)}")
-
     for module, rel_path in MODULES:
         dest = DOCS_REF / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -102,7 +80,7 @@ def main() -> None:
     mjcf_page.write_text(MJCF_STUB, encoding="utf-8")
     print(f"  {mjcf_page.relative_to(ROOT)}")
 
-    print(f"\nWrote {len(MODULES) + 2} pages to {DOCS_REF.relative_to(ROOT)}/")
+    print(f"\nWrote {len(MODULES) + 1} pages to {DOCS_REF.relative_to(ROOT)}/")
 
 
 if __name__ == "__main__":
