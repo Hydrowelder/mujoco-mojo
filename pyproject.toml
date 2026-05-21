@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "mujoco-mojo"
-version = "2.2.2"
+dynamic = ["version"]
 description = "A complete MJCF lifecycle and trial orchestration suite for MuJoCo, powered by Pydantic v2."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -94,9 +94,12 @@ dev = [
 [project.scripts]
 mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 
-[tool.setuptools.package-data]
-"mujoco_mojo.templates" = ["*.py", "*.sh"]
-"*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mujoco_mojo"]
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
