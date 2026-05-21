@@ -24,7 +24,7 @@ jobs:
       - name: Install Python 3.13
         run: uv python install 3.13
       - name: Generate API reference pages
-        run: uv run --python 3.13 --group dev python mujoco-mojo/scripts/gen_ref_pages.py
+        run: uv run --python 3.13 --group dev python scripts/gen_ref_pages.py
       - run: uv run --python 3.13 --group dev zensical build --clean
       - uses: actions/upload-pages-artifact@v4
         with:
