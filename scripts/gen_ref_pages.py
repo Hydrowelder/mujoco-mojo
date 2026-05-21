@@ -19,8 +19,6 @@ DOCS_REF = ROOT / "docs" / "reference"
 # Modules to document: (dotted identifier, output path relative to DOCS_REF)
 # ---------------------------------------------------------------------------
 MODULES: list[tuple[str, str]] = [
-    # top-level package
-    ("mujoco_mojo", "mujoco_mojo/index.md"),
     ("mujoco_mojo.mojo_model", "mujoco_mojo/mojo_model.md"),
     ("mujoco_mojo.base", "mujoco_mojo/base.md"),
     ("mujoco_mojo.visualization", "mujoco_mojo/visualization.md"),
