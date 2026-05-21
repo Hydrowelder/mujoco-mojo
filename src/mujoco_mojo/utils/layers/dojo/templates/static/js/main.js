@@ -28,6 +28,8 @@
       isMuted: localStorage.getItem("mojo_muted") !== "false",
       isAutoRefresh: localStorage.getItem("mojo_auto") !== "false",
       isConnected: false,
+      _wasConnected: null,
+      globalToast: { show: false, message: "", type: "info" },
       isSyncing: false,
       syncProgress: 0,
       secondsSinceUpdate: 0,
@@ -91,10 +93,33 @@
         } catch {
         }
         this.checkServerHealth();
-        setInterval(() => this.checkServerHealth(), 1e4);
+        setInterval(() => this.checkServerHealth(), 5e3);
         this.startGlobalSync();
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) this.checkServerHealth();
+        });
+      },
+      toast(message, type = "info") {
+        this.globalToast = { show: true, message, type };
+        setTimeout(() => {
+          this.globalToast = { ...this.globalToast, show: false };
+        }, 3500);
+      },
+      _setConnected(connected) {
+        this.isConnected = connected;
+        if (this._wasConnected === null) {
+          if (connected) this._wasConnected = true;
+          return;
+        }
+        if (connected === this._wasConnected) return;
+        this._wasConnected = connected;
+        const message = connected ? "Server connection restored." : "Server connection lost.";
+        const type = connected ? "success" : "error";
+        this.toast(message, type);
+        this.addNotification(message, type);
       },
       async checkServerHealth() {
+        if (document.hidden) return;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2e3);
         try {
@@ -104,9 +129,10 @@
             signal: controller.signal
           });
           clearTimeout(timeoutId);
-          this.isConnected = response.ok;
+          this._setConnected(response.ok);
+          if (!response.ok && this.source) this.stopGlobalSync();
         } catch {
-          this.isConnected = false;
+          this._setConnected(false);
           if (this.source) this.stopGlobalSync();
         }
       },
@@ -160,6 +186,9 @@
       startGlobalSync() {
         if (this.source || !this.isAutoRefresh || this.isComplete) return;
         this.source = new EventSource("/monitor/api/status/stream");
+        this.source.onopen = () => {
+          this._setConnected(true);
+        };
         this.source.onmessage = (event) => {
           if (!event.data || !event.data.trim()) return;
           try {
@@ -180,6 +209,7 @@
           console.error("[Mojo Sync] Connection lost. Attempting recovery...");
           this.isSyncing = false;
           this.stopGlobalSync();
+          this.checkServerHealth();
           setTimeout(() => this.startGlobalSync(), 5e3);
         };
       },
@@ -187,7 +217,6 @@
         if (this.source) {
           this.source.close();
           this.source = null;
-          this.isConnected = false;
           this.isSyncing = false;
         }
       },

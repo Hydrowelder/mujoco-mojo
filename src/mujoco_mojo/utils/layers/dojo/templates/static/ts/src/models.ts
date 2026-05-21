@@ -159,6 +159,8 @@ export interface DojoStore {
   isMuted: boolean;
   isAutoRefresh: boolean;
   isConnected: boolean;
+  _wasConnected: boolean | null;
+  globalToast: { show: boolean; message: string; type: 'success' | 'error' | 'info' };
   isSyncing: boolean;
   syncProgress: number;
   secondsSinceUpdate: number;
@@ -168,6 +170,8 @@ export interface DojoStore {
   unreadCount: number;
   notifOpen: boolean;
   notifTick: number;
+  toast(message: string, type?: 'success' | 'error' | 'info'): void;
+  _setConnected(connected: boolean): void;
   startGlobalSync(): void;
   stopGlobalSync(): void;
   setPageReady(val: boolean, force?: boolean): void;

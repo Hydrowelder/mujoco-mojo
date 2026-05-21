@@ -668,6 +668,38 @@ class MojoRunner:
             raise NotImplementedError(msg)
         return had_fails
 
+    def _renumber_trial_folders(self, workdir: Path, new_padding_style: str) -> None:
+        """
+        Rename trial folders whose zero-padding no longer matches new_padding_style.
+
+        This is needed when a job is resumed with a larger n_trial that widens the padding (e.g. 20 trials used 'trial_00'; expanding to 200 requires 'trial_000').
+
+        Without renaming, the status scanner looks for 'trial_000' and misses 'trial_00', causing already-completed trials to be scheduled again.
+        """
+        trials_dir = workdir / "trials"
+        if not trials_dir.exists():
+            return
+
+        for folder in sorted(trials_dir.iterdir()):
+            if not folder.is_dir() or not folder.name.startswith("trial_"):
+                continue
+            suffix = folder.name[len("trial_") :]
+            try:
+                trial_num = int(suffix)
+            except ValueError:
+                continue
+            expected_name = f"trial_{trial_num:{new_padding_style}}"
+            if folder.name == expected_name:
+                continue
+            new_path = trials_dir / expected_name
+            if new_path.exists():
+                logger.warning(
+                    f"Cannot renumber {folder.name} -> {expected_name}: target already exists. Skipping."
+                )
+                continue
+            folder.rename(new_path)
+            logger.info(f"Renumbered {folder.name} -> {expected_name}")
+
     def execute_single_trial(
         self, trial_num: int, seed: int | None, overrides_payload: dict
     ) -> tuple[
@@ -734,6 +766,9 @@ class MojoRunner:
 
         # decide which trials to execute
         if self.config.resume:
+            self._renumber_trial_folders(
+                self.workdir.resolve(), self.config.padding_style
+            )
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
         status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
@@ -1303,6 +1338,9 @@ class MojoRunner:
 
         # decide which trials to execute
         if self.config.resume:
+            self._renumber_trial_folders(
+                self.workdir.resolve(), self.config.padding_style
+            )
             status_tracker.refresh_from_disk(n_proc=self.config.n_proc)
         status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
