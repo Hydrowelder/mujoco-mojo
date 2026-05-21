@@ -17,14 +17,20 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument           | Description                                                               |
-|:-------------------|:--------------------------------------------------------------------------|
-| `--help`           | Describes all available arguments. Used on its own.                       |
-| `--generator`      | **(Required)** Import path to your `MojoGenerate` function.               |
-| `--runtime`        | Optional import path to your `MojoRuntime` function.                      |
-| `--user-interface` | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based). |
-| `--seed`           | Set the global seed for stochastic draws.                                 |
-| `--port`           | Port for the web-based viewers (default: `8080`).                         |
+| Argument           | Shortcut | Description                                                                    |
+|:-------------------|:---------|:-------------------------------------------------------------------------------|
+| `--help`           |          | Describes all available arguments. Used on its own.                            |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                       |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.    |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                               |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                 |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).      |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).              |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                      |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.   |
+| `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                    |
+| `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.         |
+| `--port`           | `-p`     | Port for the web-based viewers (default: `8080`).                              |
 
 ---
 
@@ -38,6 +44,31 @@ Once Reloaded is running, your terminal becomes an interactive command center. Y
 | `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
 | `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
 | `exit`               | Safely close the server and visualizer.                                                      |
+
+---
+
+## Loading a Saved Model Config
+
+As an alternative to calling a generator function, Reloaded can load a previously saved `model_config.json` directly using `--config`. This is useful when you want to inspect the exact model that was used in a specific trial without running any Python generation logic.
+
+```bash linenums="0"
+mujoco-mojo reloaded --config ./results/trial_0042/model_config.json
+```
+
+This mode is mutually exclusive with `--generator`.
+
+---
+
+## Inspecting a Specific Trial
+
+When iterating on a stochastic simulation, it is often necessary to reproduce the exact random state of a particular trial. Pass `--trial-num` to seed the session with that trial's distribution draws.
+
+```bash linenums="0"
+# Open trial 42 in the viewer, using the same seed and random draws as the original campaign
+mujoco-mojo reloaded -g sim.generate -r sim.runtime --seed 123 --trial-num 42
+```
+
+Combined with `--overrides`, you can also lock specific named values to fixed quantities while keeping everything else stochastic, which helps isolate the effect of individual parameters.
 
 ---
 

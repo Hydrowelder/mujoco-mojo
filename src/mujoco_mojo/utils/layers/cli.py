@@ -721,7 +721,7 @@ def run_single(
     generator: GeneratorType,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
+    n_trial: NTrialType = 1,
     n_proc: NProcType = DEFAULT_N_PROC,
     resume: ResumeType = DEFAULT_RESUME,
     seed: SeedType = DEFAULT_SEED,
@@ -741,7 +741,7 @@ def run_single(
     """
     [bold yellow]Execute a single trial.[/bold yellow]
 
-    This command handles the directory setup, distribution salting, and parallel execution of a single physics trial.
+    This command handles the directory setup, distribution salting, and execution of a single physics trial.
     """
     from numpydantic import NDArray
 
@@ -754,12 +754,12 @@ def run_single(
 
     workdir = workdir.resolve()
 
-    logger.info("Initializing Monte Carlo with CLI!")
+    logger.info("Initializing single trial with CLI!")
 
     dojo_cmd = f"mujoco-mojo dojo {workdir}"
     console.print(
         Panel(
-            "[bold green]Campaign Initialized![/]\n\n"
+            "[bold green]Trial Ready![/]\n\n"
             "[white]To monitor progress and view results, run:[/]\n"
             f"    [bold yellow]{dojo_cmd}[/]",
             title="[cyan]Launch Control[/]",
@@ -805,17 +805,12 @@ def run_single(
         run_kwargs=run_kwargs,
     )
 
-    # 2. build config
     runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
 
-    # 3. run
-    console.print(
-        f"[bold magenta]Starting {n_trial} trials[/bold magenta] (using {n_proc} workers)..."
-    )
-    logger.info(
-        f"Starting {n_trial} trials (using {n_proc} workers)...",
-        extra={"file_only": True},
-    )
+    trial_id = trial_nums[0] if trial_nums else 0
+    console.print(f"[bold magenta]Running trial {trial_id}[/bold magenta]...")
+    logger.info(f"Running trial {trial_id}...", extra={"file_only": True})
+
     had_fails = runner.run(
         global_overrides=global_overrides
         if global_overrides
@@ -828,15 +823,15 @@ def run_single(
     match execution_mode:
         case ExecutionMode.LOCAL:
             if had_fails:
-                preamble = "[bold red]Monte Carlo finished with failures![/bold red]"
+                preamble = "[bold red]Trial finished with failures![/bold red]"
                 logger.error(
-                    f"Monte Carlo finished with failures! See results in {runner.workdir.resolve()}",
+                    f"Trial finished with failures! See results in {runner.workdir.resolve()}",
                     extra={"file_only": True},
                 )
             else:
-                preamble = "[bold green]Monte Carlo finished![/bold green]"
+                preamble = "[bold green]Trial finished![/bold green]"
                 logger.info(
-                    f"Monte Carlo finished! See results in {runner.workdir.resolve()}",
+                    f"Trial finished! See results in {runner.workdir.resolve()}",
                     extra={"file_only": True},
                 )
             console.print(
@@ -844,19 +839,17 @@ def run_single(
             )
         case ExecutionMode.SLURM:
             if had_fails:
-                finished_msg = (
-                    "[bold red]Failed to orchestrate SLURM Monte Carlo![/bold red]"
-                )
+                finished_msg = "[bold red]Failed to orchestrate SLURM trial![/bold red]"
                 logger.error(
-                    "Failed to orchestrate SLURM Monte Carlo!",
+                    "Failed to orchestrate SLURM trial!",
                     extra={"file_only": True},
                 )
             else:
                 finished_msg = (
-                    "[bold green]SLURM Monte Carlo orchestration finished![/bold green]"
+                    "[bold green]SLURM trial orchestration finished![/bold green]"
                 )
                 logger.info(
-                    "SLURM Monte Carlo orchestration finished!",
+                    "SLURM trial orchestration finished!",
                     extra={"file_only": True},
                 )
             console.print(f"\n{finished_msg}")

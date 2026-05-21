@@ -13,25 +13,23 @@ Mojo uses a single, unified command structure for all job types. By adjusting a 
 
 ### Running a Single Trial
 
-To run exactly one trial (usually trial `0`), simply set the trial count to `1` or specify a specific trial number.
+Use `mujoco-mojo run single` when you want to execute exactly one trial. It accepts the same arguments as `run monte-carlo` and is the recommended command when running a baseline or re-running an individual trial for inspection.
 
 ```bash linenums="0"
-# Run one trial using nominal values
-mujoco-mojo run monte-carlo --generator sim.generate --runtime sim.runtime --seed 123 --n-trial 1
+# Run trial 0 (nominal values)
+mujoco-mojo run single -g sim.generate -r sim.runtime --seed 123
 
-# Or run a specific trial from a previous distribution
-mujoco-mojo run monte-carlo -g sim.generate -r sim.runtime --seed 123 --trial-num 42
+# Re-run a specific trial from a previous campaign
+mujoco-mojo run single -g sim.generate -r sim.runtime --seed 123 --trial-num 42
 ```
 
 ???+ note "Note: Nominal Run"
-    For stochastic values, trial number `0` will use the distribution's `nominal_value` (if provided). This allows you to not only be able to recreate a model, but also build a "baseline" simulation.
+    Trial number `0` uses each distribution's `nominal_value` (if one was provided). This gives you a deterministic baseline that reflects design intent rather than a stochastic draw.
 
-    This helps you with defining the design intent, rather than letting chaos take over!
-
-More than one `--trial-num` argument can be passed to the command. This will make it so those select trials are run:
+You can also target specific trials within a full `run monte-carlo` campaign by passing `--trial-num` one or more times. This is useful for re-running failed trials without re-running the entire job.
 
 ```bash linenums="0"
-# This will run trials 12 and 42
+# Re-run only trials 12 and 42
 mujoco-mojo run monte-carlo -g sim.generate -r sim.runtime --seed 123 --trial-num 12 --trial-num 42
 ```
 

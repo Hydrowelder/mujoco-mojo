@@ -13,6 +13,7 @@ mojo.log
 mojo.log.*
 
 site
+docs/reference/
 mojo-models
 textures
 
