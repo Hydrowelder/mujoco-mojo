@@ -95,6 +95,7 @@ dev = [
 mujoco-mojo = "mujoco_mojo.utils.layers.cli:cli_app"
 
 [tool.setuptools.package-data]
+"mujoco_mojo.templates" = ["*.py", "*.sh"]
 "*" = ["*.html", "*.js", "*.mp3", "*.svg", "*.css"]
 
 [tool.ruff]

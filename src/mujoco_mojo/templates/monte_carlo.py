@@ -1,0 +1,36 @@
+import mujoco
+
+import mujoco_mojo as mojo
+import mujoco_mojo.runtime as rt
+
+logger = mojo.utils.get_logger(__name__)
+
+
+class UserData(mojo.UserData):
+    """Pass state from generate() to runtime()."""
+
+    pass
+
+
+def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+    user_data = UserData()
+    mojo_model.mjcf.worldbody = mojo.WorldBody()
+    mojo_model.user_data = user_data
+    return mojo_model
+
+
+def runtime(
+    mojo_model: mojo.MojoModel,
+    runtime_manager: rt.RuntimeManager,
+    mj_model: mujoco.MjModel,
+    mj_data: mujoco.MjData,
+    *args,
+    **kwargs,
+) -> mojo.MojoModel:
+    _user_data = mojo_model.get_user_data(UserData)
+
+    with runtime_manager as rm:
+        while mj_data.time < 1.0:
+            rm.step(mj_model, mj_data)
+
+    return mojo_model

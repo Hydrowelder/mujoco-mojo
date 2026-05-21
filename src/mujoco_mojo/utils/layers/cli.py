@@ -864,6 +864,72 @@ def run_single(
     raise typer.Exit()
 
 
+@cli_app.command(name="init")
+def init_project(
+    optimizer: Annotated[
+        bool,
+        typer.Option(
+            "--optimizer/--no-optimizer",
+            "-op/-nop",
+            help="Include an [bold cyan]objective[/bold cyan] function stub for use with [bold]mujoco-mojo run optimization[/bold].",
+        ),
+    ] = False,
+) -> None:
+    """
+    [bold yellow]Initialize a new empty mujoco-mojo project.[/bold yellow]
+
+    Writes a [bold cyan]simulation.py[/bold cyan] scaffold to the current directory containing stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
+    """
+    import os
+    from importlib.resources import files
+
+    tmpl = files("mujoco_mojo.templates")
+
+    py_dest = Path("simulation.py")
+    run_dest = Path("run.sh")
+    reloaded_dest = Path("reloaded.sh")
+
+    conflicts = [p for p in (py_dest, run_dest, reloaded_dest) if p.exists()]
+    if conflicts:
+        names = ", ".join(f"[bold cyan]{p}[/bold cyan]" for p in conflicts)
+        console.print(
+            f"[bold red]Error:[/bold red] {names} already exist. "
+            "Remove them first or rename them before running init."
+        )
+        raise typer.Exit(code=1)
+
+    py_template = "optimization.py" if optimizer else "monte_carlo.py"
+    sh_template = "run_opt.sh" if optimizer else "run_mc.sh"
+
+    py_dest.write_text(
+        tmpl.joinpath(py_template).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    run_dest.write_text(
+        tmpl.joinpath(sh_template).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    reloaded_dest.write_text(
+        tmpl.joinpath("reloaded.sh").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+    os.chmod(run_dest, 0o755)
+    os.chmod(reloaded_dest, 0o755)
+
+    w = max(len(str(p)) for p in (py_dest, run_dest, reloaded_dest))
+    console.print(
+        Panel(
+            f"[bold green]Project initialized![/bold green]\n\n"
+            f"  [bold cyan]{str(py_dest).ljust(w)}[/bold cyan]  - simulation stubs\n"
+            f"  [bold cyan]{str(run_dest).ljust(w)}[/bold cyan]  - run the campaign\n"
+            f"  [bold cyan]{str(reloaded_dest).ljust(w)}[/bold cyan]  - interactive viewer\n\n"
+            f"[white]Get started:[/white]\n"
+            f"    [bold yellow]bash run.sh[/bold yellow]",
+            title="[cyan]Mojo Init[/cyan]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: ReloadedGeneratorType = None,

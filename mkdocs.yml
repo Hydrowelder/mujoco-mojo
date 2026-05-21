@@ -16,6 +16,7 @@ nav:
   - User Guide:
       # - user-guide.md
       - Getting Started: user-guides/getting-started.md
+      - Initializing a Project: user-guides/init.md
       - Generate Script: user-guides/generate-script.md
       - Runtime Script: user-guides/runtime-script.md
       - Running Jobs:
