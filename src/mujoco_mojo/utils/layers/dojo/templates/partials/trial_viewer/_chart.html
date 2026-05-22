@@ -7,7 +7,8 @@
              undo · redo · download
          ══════════════════════════════════════════════════════════════════ -->
 
-<div class="flex flex-row gap-4 items-stretch h-[600px]">
+<div x-init="$watch('$store.dojo.isFullscreen', () => $nextTick(() => Plotly.Plots.resize(document.getElementById('plot-area'))))"
+     class="flex flex-row gap-4 items-stretch h-[600px]">
     <!-- ── PLOT AREA ────────────────────────────────────────────────── -->
     <div class="card flex-1 rounded-2xl shadow-2xl p-2 relative">
         <div :class="(data && Object.keys(config.yAxes).length > 0) ? 'opacity-100' : 'opacity-0 pointer-events-none'"

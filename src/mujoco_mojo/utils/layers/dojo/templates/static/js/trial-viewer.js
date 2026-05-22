@@ -2,7 +2,13 @@
 (() => {
   // src/lib/options.ts
   var DASH_OPTIONS = ["solid", "dash", "dot", "dashdot"];
-  var MARKER_OPTIONS = ["none", "circle", "square", "diamond", "cross"];
+  var MARKER_OPTIONS = [
+    "none",
+    "circle",
+    "square",
+    "diamond",
+    "cross"
+  ];
   var GRID_OPTIONS = ["none", "major", "all"];
   var LINE_MODE_OPTIONS = [
     { label: "Lines", value: "lines" },
@@ -67,7 +73,19 @@
 
   // src/trial-viewer.ts
   var tw = {
-    slate: { 50: "#f8fafc", 100: "#f1f5f9", 200: "#e2e8f0", 300: "#cbd5e1", 400: "#94a3b8", 500: "#64748b", 600: "#475569", 700: "#334155", 800: "#1e293b", 900: "#0f172a", 950: "#020617" },
+    slate: {
+      50: "#f8fafc",
+      100: "#f1f5f9",
+      200: "#e2e8f0",
+      300: "#cbd5e1",
+      400: "#94a3b8",
+      500: "#64748b",
+      600: "#475569",
+      700: "#334155",
+      800: "#1e293b",
+      900: "#0f172a",
+      950: "#020617"
+    },
     cyan: { 400: "#22d3ee", 500: "#06b6d4", 600: "#0891b2" },
     emerald: { 500: "#10b981" },
     blue: { 500: "#3b82f6" },
@@ -125,7 +143,14 @@
       columns: [],
       rotateableVectors: [],
       discoveryId: 0,
-      plotColors: [tw.cyan[500], tw.emerald[500], tw.blue[500], tw.violet[500], tw.amber[500], tw.rose[500]],
+      plotColors: [
+        tw.cyan[500],
+        tw.emerald[500],
+        tw.blue[500],
+        tw.violet[500],
+        tw.amber[500],
+        tw.rose[500]
+      ],
       // Toast (shared mixin)
       ...createToastMixin(),
       // Options — exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
@@ -192,7 +217,9 @@
         if (this.historyIndex > 0) {
           this.isUndoing = true;
           this.historyIndex--;
-          this.config = JSON.parse(this.historyStack[this.historyIndex] ?? "{}");
+          this.config = JSON.parse(
+            this.historyStack[this.historyIndex] ?? "{}"
+          );
           this.persistHistory();
           void this.$nextTick(() => {
             this.isUndoing = false;
@@ -204,7 +231,9 @@
         if (this.historyIndex < this.historyStack.length - 1) {
           this.isUndoing = true;
           this.historyIndex++;
-          this.config = JSON.parse(this.historyStack[this.historyIndex] ?? "{}");
+          this.config = JSON.parse(
+            this.historyStack[this.historyIndex] ?? "{}"
+          );
           this.persistHistory();
           void this.$nextTick(() => {
             this.isUndoing = false;
@@ -213,7 +242,10 @@
         }
       },
       persistHistory() {
-        localStorage.setItem("mojo_mosaic_history", JSON.stringify({ stack: this.historyStack, index: this.historyIndex }));
+        localStorage.setItem(
+          "mojo_mosaic_history",
+          JSON.stringify({ stack: this.historyStack, index: this.historyIndex })
+        );
       },
       shiftY(index, direction, isWarp = false) {
         const keys = Object.keys(this.config.yAxes);
@@ -238,13 +270,19 @@
       async fetchTrialData(id, requiredCols = []) {
         let url = `/mosaic/${id}/data`;
         const colParams = new URLSearchParams();
-        if (requiredCols.length > 0) colParams.append("cols", requiredCols.join(","));
-        if (this.config.refFrame) colParams.append("rotate_by", this.config.refFrame);
+        if (requiredCols.length > 0)
+          colParams.append("cols", requiredCols.join(","));
+        if (this.config.refFrame)
+          colParams.append("rotate_by", this.config.refFrame);
         const filtersPayload = {};
         for (const col of requiredCols) {
           const yConfig = this.config.yAxes[col];
           if (yConfig?.filters && yConfig.filters.length > 0) {
-            const active = yConfig.filters.filter((f) => f.enabled !== false).map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+            const active = yConfig.filters.filter((f) => f.enabled !== false).map(
+              (f) => Object.fromEntries(
+                Object.entries(f).filter(([k]) => k !== "enabled")
+              )
+            );
             if (active.length > 0) filtersPayload[col] = active;
           }
         }
@@ -261,7 +299,10 @@
             if (!this._shownFilterErrors.has(msg)) {
               this._shownFilterErrors.add(msg);
               this.notify(msg, "error");
-              setTimeout(() => this._shownFilterErrors.delete(msg), 5e3);
+              setTimeout(
+                () => this._shownFilterErrors.delete(msg),
+                5e3
+              );
             }
           });
         }
@@ -276,13 +317,19 @@
           try {
             const resp = await this.fetchTrialData(id, chunk);
             if (isVsDataset) {
-              this.vsDatasets[id] = { ...this.vsDatasets[id] ?? {}, ...resp.data };
+              this.vsDatasets[id] = {
+                ...this.vsDatasets[id] ?? {},
+                ...resp.data
+              };
               this.vsDatasets = { ...this.vsDatasets };
             } else {
               this.data = { ...this.data ?? {}, ...resp.data };
             }
-            if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y))) this.renderPlot();
-            console.debug(`Dojo Hydration [${label}]: ${i + chunk.length}/${columnList.length}`);
+            if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y)))
+              this.renderPlot();
+            console.debug(
+              `Dojo Hydration [${label}]: ${i + chunk.length}/${columnList.length}`
+            );
           } catch (e) {
             console.warn(`Hydration failed for ${id}`, e);
           }
@@ -290,8 +337,17 @@
       },
       async startBackgroundDiscovery() {
         const currentId = ++this.discoveryId;
-        const pendingCols = this.columns.filter((c) => !Object.prototype.hasOwnProperty.call(this.data ?? {}, c));
-        if (pendingCols.length > 0) await this.trickleFetch(this.trialId, pendingCols, "Current", false, currentId);
+        const pendingCols = this.columns.filter(
+          (c) => !Object.prototype.hasOwnProperty.call(this.data ?? {}, c)
+        );
+        if (pendingCols.length > 0)
+          await this.trickleFetch(
+            this.trialId,
+            pendingCols,
+            "Current",
+            false,
+            currentId
+          );
         if (currentId !== this.discoveryId) return;
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
@@ -303,8 +359,17 @@
         for (const id of draftIds) {
           if (currentId !== this.discoveryId) return;
           const existing = this.vsDatasets[id];
-          const needsFetch = !existing || activeCols.some((c) => !Object.prototype.hasOwnProperty.call(existing, c));
-          if (needsFetch) await this.trickleFetch(id, activeCols, `Draft ${id}`, true, currentId);
+          const needsFetch = !existing || activeCols.some(
+            (c) => !Object.prototype.hasOwnProperty.call(existing, c)
+          );
+          if (needsFetch)
+            await this.trickleFetch(
+              id,
+              activeCols,
+              `Draft ${id}`,
+              true,
+              currentId
+            );
         }
       },
       // -----------------------------------------------------------------------
@@ -328,13 +393,27 @@
         if (this.placementMode === "vline") {
           newShape = { type: "vline", x0: pt.x, color: defaultColor, label: "" };
         } else if (this.placementMode === "hline") {
-          newShape = { type: "hline", x0: pt.x, y0: pt.y, color: defaultColor, label: "" };
+          newShape = {
+            type: "hline",
+            x0: pt.x,
+            y0: pt.y,
+            color: defaultColor,
+            label: ""
+          };
         } else if (this.placementMode === "rect") {
           if (!this.rectStart) {
             this.rectStart = { x: pt.x, y: pt.y };
             return true;
           }
-          newShape = { type: "rect", x0: this.rectStart.x, x1: pt.x, y0: this.rectStart.y, y1: pt.y, color: defaultColor, label: "" };
+          newShape = {
+            type: "rect",
+            x0: this.rectStart.x,
+            x1: pt.x,
+            y0: this.rectStart.y,
+            y1: pt.y,
+            color: defaultColor,
+            label: ""
+          };
           this.rectStart = null;
         }
         if (newShape) {
@@ -381,7 +460,9 @@
       startAnnEdit(index) {
         this.annEditIndex = index;
         this.annDraft = { ...this.config.annotations[index] };
-        void this.$nextTick(() => this.$refs["annInput"]?.focus());
+        void this.$nextTick(
+          () => this.$refs["annInput"]?.focus()
+        );
       },
       cancelAnnDraft() {
         this.annDraft = null;
@@ -403,12 +484,23 @@
           newRangeX[0] -= newRangeX[1] - xMax;
           newRangeX[1] = xMax;
         }
-        const fullY = this.calculatePaddedRange(Object.keys(this.config.yAxes), false);
+        const fullY = this.calculatePaddedRange(
+          Object.keys(this.config.yAxes),
+          false
+        );
         const ySpan = Math.abs(fullY[1] - fullY[0]) * 0.2;
-        const newRangeY = [ann.y - ySpan / 2, ann.y + ySpan / 2];
+        const newRangeY = [
+          ann.y - ySpan / 2,
+          ann.y + ySpan / 2
+        ];
         this.config.rangeX = newRangeX;
         this.config.rangeY = newRangeY;
-        void Plotly.relayout(el, { "xaxis.range": newRangeX, "yaxis.range": newRangeY, "xaxis.autorange": false, "yaxis.autorange": false });
+        void Plotly.relayout(el, {
+          "xaxis.range": newRangeX,
+          "yaxis.range": newRangeY,
+          "xaxis.autorange": false,
+          "yaxis.autorange": false
+        });
         this.saveAndRender();
       },
       deleteAnnotation(index) {
@@ -450,7 +542,8 @@
         const observer = new MutationObserver((mutations) => {
           if (mutations.some((m) => m.attributeName === "class")) {
             this.theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
-            if (this.data && Object.keys(this.config.yAxes).length > 0) this.renderPlot();
+            if (this.data && Object.keys(this.config.yAxes).length > 0)
+              this.renderPlot();
           }
         });
         observer.observe(document.documentElement, { attributes: true });
@@ -464,7 +557,10 @@
           const statusResp = await fetch("/monitor/api/status");
           const statusData = await statusResp.json();
           if (statusData && !statusData.error) {
-            Alpine.store("dojo").updateSync(Date.now(), statusData.is_complete);
+            Alpine.store("dojo").updateSync(
+              Date.now(),
+              statusData.is_complete
+            );
             const match = statusData.padding_style.match(/\d+/);
             this.paddingLen = match ? parseInt(match[0]) : 2;
           }
@@ -472,7 +568,10 @@
           console.warn("Dojo offline", e);
         }
         try {
-          const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+          const initialCols = [
+            this.config.xAxis,
+            ...Object.keys(this.config.yAxes)
+          ];
           const response = await this.fetchTrialData(this.trialId, initialCols);
           this.columns = response.columns.all.sort();
           this.rotateableVectors = response.columns.rotatable_vectors ?? [];
@@ -508,39 +607,57 @@
                 return;
               }
               if (event["xaxis.range[0]"] !== void 0) {
-                this.config.rangeX = [event["xaxis.range[0]"], event["xaxis.range[1]"]];
+                this.config.rangeX = [
+                  event["xaxis.range[0]"],
+                  event["xaxis.range[1]"]
+                ];
               }
               if (event["yaxis.range[0]"] !== void 0) {
-                this.config.rangeY = [event["yaxis.range[0]"], event["yaxis.range[1]"]];
+                this.config.rangeY = [
+                  event["yaxis.range[0]"],
+                  event["yaxis.range[1]"]
+                ];
               }
             });
             plotEl.addEventListener("click", (e) => {
               if (!this.placementMode) return;
               const target = e.target;
-              if (!target.classList.contains("nsewdrag") && !target.classList.contains("drag")) return;
+              if (!target.classList.contains("nsewdrag") && !target.classList.contains("drag"))
+                return;
               const rect = plotEl.getBoundingClientRect();
               const fullLayout = plotEl._fullLayout;
               if (!fullLayout) return;
               this.handlePlotClickForShapes({
-                x: fullLayout.xaxis.p2l(e.clientX - rect.left - fullLayout.margin.l),
-                y: fullLayout.yaxis.p2l(e.clientY - rect.top - fullLayout.margin.t)
+                x: fullLayout.xaxis.p2l(
+                  e.clientX - rect.left - fullLayout.margin.l
+                ),
+                y: fullLayout.yaxis.p2l(
+                  e.clientY - rect.top - fullLayout.margin.t
+                )
               });
             });
             document.addEventListener("mousedown", (e) => {
               if (e.button !== 1) return;
               const rect = plotEl.getBoundingClientRect();
-              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom)
+                return;
               e.preventDefault();
               const fullLayout = plotEl._fullLayout;
               if (!fullLayout) return;
-              const xVal = fullLayout.xaxis.p2l(e.clientX - rect.left - fullLayout.margin.l);
-              const yVal = fullLayout.yaxis.p2l(e.clientY - rect.top - fullLayout.margin.t);
+              const xVal = fullLayout.xaxis.p2l(
+                e.clientX - rect.left - fullLayout.margin.l
+              );
+              const yVal = fullLayout.yaxis.p2l(
+                e.clientY - rect.top - fullLayout.margin.t
+              );
               setTimeout(() => {
                 this.annDraft = { x: xVal, y: yVal, text: "" };
                 this.annEditIndex = null;
                 this.annotationsOpen = true;
                 void this.$nextTick(() => {
-                  document.querySelector('[x-ref="annInput"]')?.focus();
+                  document.querySelector(
+                    '[x-ref="annInput"]'
+                  )?.focus();
                 });
               }, 0);
             });
@@ -577,7 +694,8 @@
             document.querySelector('input[type="number"]')?.focus();
           }
           if (e.key === "Escape") {
-            if (["INPUT", "TEXTAREA"].includes(tag)) e.target.blur();
+            if (["INPUT", "TEXTAREA"].includes(tag))
+              e.target.blur();
             this.placementMode = null;
             this.rectStart = null;
             this.cancelAnnDraft();
@@ -592,7 +710,8 @@
           }
           if (["INPUT", "TEXTAREA"].includes(tag)) return;
           if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
-          if (e.key === "ArrowRight") document.getElementById("nav-next")?.click();
+          if (e.key === "ArrowRight")
+            document.getElementById("nav-next")?.click();
           const isZ = e.key.toLowerCase() === "z";
           const isY = e.key.toLowerCase() === "y";
           const cmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -622,26 +741,36 @@
           if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
           this.discoveryTimeout = setTimeout(() => {
             if (this.vsDraft.enabled) {
-              console.debug("Predictive Sync: User adjusted range, starting hydration...");
+              console.debug(
+                "Predictive Sync: User adjusted range, starting hydration..."
+              );
               void this.startBackgroundDiscovery();
             }
           }, 500);
         });
-        this.$watch("config.refFrame", async (newValue, oldValue) => {
-          console.debug(`[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`);
-          this.notify(`Frame: ${newValue || "world"}`, "info");
-          this.discoveryId++;
-          this.data = {};
-          this.vsDatasets = {};
-          const initialCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
-          const response = await this.fetchTrialData(this.trialId, initialCols);
-          this.columns = response.columns.all.sort();
-          this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-          this.data = response.data;
-          void this.startBackgroundDiscovery();
-          if (this.config.vsEnabled) await this.syncVsRange();
-          this.saveAndRender();
-        });
+        this.$watch(
+          "config.refFrame",
+          async (newValue, oldValue) => {
+            console.debug(
+              `[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`
+            );
+            this.notify(`Frame: ${newValue || "world"}`, "info");
+            this.discoveryId++;
+            this.data = {};
+            this.vsDatasets = {};
+            const initialCols = [
+              this.config.xAxis,
+              ...Object.keys(this.config.yAxes)
+            ];
+            const response = await this.fetchTrialData(this.trialId, initialCols);
+            this.columns = response.columns.all.sort();
+            this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+            this.data = response.data;
+            void this.startBackgroundDiscovery();
+            if (this.config.vsEnabled) await this.syncVsRange();
+            this.saveAndRender();
+          }
+        );
         this.$watch("config", async (value, oldValue) => {
           if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
           if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis !== oldValue.xAxis || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
@@ -649,16 +778,27 @@
           }
           this.pushHistory();
           const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
-            const current = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+            const current = JSON.stringify(
+              (value.yAxes[col]?.filters ?? []).filter(
+                (f) => f.enabled !== false
+              )
+            );
             return current !== (this.filterFingerprints[col] ?? "[]");
           });
           if (changedFilterCols.length > 0) {
             changedFilterCols.forEach((col) => {
-              this.filterFingerprints[col] = JSON.stringify((value.yAxes[col]?.filters ?? []).filter((f) => f.enabled !== false));
+              this.filterFingerprints[col] = JSON.stringify(
+                (value.yAxes[col]?.filters ?? []).filter(
+                  (f) => f.enabled !== false
+                )
+              );
               if (this.data) delete this.data[col];
             });
             this.vsDatasets = {};
-            const resp2 = await this.fetchTrialData(this.trialId, changedFilterCols);
+            const resp2 = await this.fetchTrialData(
+              this.trialId,
+              changedFilterCols
+            );
             this.data = { ...this.data ?? {}, ...resp2.data };
             if (this.config.vsEnabled) await this.syncVsRange();
           }
@@ -691,10 +831,18 @@
           if (this.config.refFrame) {
             const families = /* @__PURE__ */ new Set();
             Object.keys(this.config.yAxes).forEach((col) => {
-              if (col.includes(":")) families.add(col.substring(0, col.lastIndexOf(":")));
+              if (col.includes(":"))
+                families.add(col.substring(0, col.lastIndexOf(":")));
             });
-            families.forEach((fam) => activeCols.push(`${fam}:x`, `${fam}:y`, `${fam}:z`));
-            activeCols.push(`${this.config.refFrame}:w`, `${this.config.refFrame}:x`, `${this.config.refFrame}:y`, `${this.config.refFrame}:z`);
+            families.forEach(
+              (fam) => activeCols.push(`${fam}:x`, `${fam}:y`, `${fam}:z`)
+            );
+            activeCols.push(
+              `${this.config.refFrame}:w`,
+              `${this.config.refFrame}:x`,
+              `${this.config.refFrame}:y`,
+              `${this.config.refFrame}:z`
+            );
           }
           activeCols = [...new Set(activeCols)];
           const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
@@ -702,19 +850,29 @@
             const n = parseInt(id.split("_").pop() ?? "");
             return n >= start && n <= end && n !== currentNum;
           });
-          await Promise.all(targetIds.map(async (id) => {
-            const existing = this.vsDatasets[id];
-            const needsFetch = !existing || activeCols.some((col) => !Object.prototype.hasOwnProperty.call(existing, col)) || this.config.refFrame !== null;
-            if (needsFetch) {
-              const response = await this.fetchTrialData(id, activeCols);
-              this.vsDatasets[id] = { ...this.vsDatasets[id] ?? {}, ...response.data };
-            }
-          }));
+          await Promise.all(
+            targetIds.map(async (id) => {
+              const existing = this.vsDatasets[id];
+              const needsFetch = !existing || activeCols.some(
+                (col) => !Object.prototype.hasOwnProperty.call(existing, col)
+              ) || this.config.refFrame !== null;
+              if (needsFetch) {
+                const response = await this.fetchTrialData(id, activeCols);
+                this.vsDatasets[id] = {
+                  ...this.vsDatasets[id] ?? {},
+                  ...response.data
+                };
+              }
+            })
+          );
           this.vsDatasets = { ...this.vsDatasets };
           this.config.vsRange = [start, end];
           this.config.vsEnabled = true;
           if (targetIds.length > 0) {
-            this.notify(`Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`, "info");
+            this.notify(
+              `Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`,
+              "info"
+            );
           }
         } finally {
           this.vsLoading = false;
@@ -751,7 +909,9 @@
           const query = new RegExp(pattern, "i");
           return this.smartSort(base.filter((c) => query.test(c)));
         } catch {
-          return this.smartSort(base.filter((c) => c.toLowerCase().includes(search.toLowerCase())));
+          return this.smartSort(
+            base.filter((c) => c.toLowerCase().includes(search.toLowerCase()))
+          );
         }
       },
       toggleRegexSegment(field, segment, depth) {
@@ -775,7 +935,9 @@
           }
           pathPart = parts.join("/");
           if (pathPart && pathPart.toLowerCase() !== "time") {
-            const isFolder = this.columns.some((c) => c.toLowerCase().startsWith(pathPart.toLowerCase() + "/"));
+            const isFolder = this.columns.some(
+              (c) => c.toLowerCase().startsWith(pathPart.toLowerCase() + "/")
+            );
             if (isFolder) pathPart += "/";
           }
         }
@@ -801,7 +963,10 @@
         const search = this[field + "Search"] ?? "";
         const [pathPart = "", suffixPart = ""] = search.split(":");
         const selected = (suffixPart ?? "").replace(/[()]/g, "").split("|").filter(Boolean).map((s) => ":" + s);
-        const pathRegex = new RegExp("^" + (pathPart ?? "").replace(/\//g, "\\/?"), "i");
+        const pathRegex = new RegExp(
+          "^" + (pathPart ?? "").replace(/\//g, "\\/?"),
+          "i"
+        );
         const matches = base.filter((c) => pathRegex.test(c));
         const available = matches.map((c) => c.includes(":") ? ":" + c.split(":").pop() : null).filter(Boolean);
         return this.smartSort([.../* @__PURE__ */ new Set([...selected, ...available])]);
@@ -833,24 +998,29 @@
         if (!this.configRaw) return "";
         let html = this.configRaw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])|(\S+)/g;
-        return html.replace(regex, (match, _token, _i1, _i2, _i3, garbage) => {
-          if (garbage) return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
-          let cls = "text-slate-500 dark:text-slate-400";
-          if (/^"/.test(match)) {
-            cls = /:$/.test(match) ? "text-cyan-600 dark:text-cyan-300" : "text-emerald-600 dark:text-emerald-400";
-          } else if (/true|false/.test(match)) {
-            cls = "text-violet-600 dark:text-violet-400";
-          } else if (/null/.test(match)) {
-            cls = "text-rose-500";
-          } else if (/-?\d/.test(match)) {
-            cls = "text-amber-600 dark:text-amber-500";
+        return html.replace(
+          regex,
+          (match, _token, _i1, _i2, _i3, garbage) => {
+            if (garbage)
+              return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
+            let cls = "text-slate-500 dark:text-slate-400";
+            if (/^"/.test(match)) {
+              cls = /:$/.test(match) ? "text-cyan-600 dark:text-cyan-300" : "text-emerald-600 dark:text-emerald-400";
+            } else if (/true|false/.test(match)) {
+              cls = "text-violet-600 dark:text-violet-400";
+            } else if (/null/.test(match)) {
+              cls = "text-rose-500";
+            } else if (/-?\d/.test(match)) {
+              cls = "text-amber-600 dark:text-amber-500";
+            }
+            return `<span class="${cls}">${match}</span>`;
           }
-          return `<span class="${cls}">${match}</span>`;
-        });
+        );
       },
       validateConfig(cfg) {
         const errors = [];
-        if (!this.columns.includes(cfg.xAxis)) errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
+        if (!this.columns.includes(cfg.xAxis))
+          errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
         if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
           errors.push("yAxes must be a hashmap.");
         } else {
@@ -858,7 +1028,8 @@
             if (!this.columns.includes(y)) errors.push(`Y-Axis "${y}" missing.`);
           });
         }
-        if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1]) errors.push("Comparison range start cannot be greater than end.");
+        if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
+          errors.push("Comparison range start cannot be greater than end.");
         return errors;
       },
       updateFromRaw() {
@@ -937,9 +1108,14 @@
       // -----------------------------------------------------------------------
       copyShareLink() {
         try {
-          const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(this.config));
+          const encoded = LZString.compressToEncodedURIComponent(
+            JSON.stringify(this.config)
+          );
           const shareBase = this.externalUrl + window.location.pathname;
-          void this.copyToClipboard(`${shareBase}?v=${encoded}`, "Shareable link copied!");
+          void this.copyToClipboard(
+            `${shareBase}?v=${encoded}`,
+            "Shareable link copied!"
+          );
         } catch {
           this.notify("Link generation failed", "error");
         }
@@ -948,7 +1124,9 @@
         void this.copyToClipboard(this.configRaw, "JSON Config copied!");
       },
       resetConfig() {
-        if (confirm("Reset plot to factory defaults? This will clear your current view.")) {
+        if (confirm(
+          "Reset plot to factory defaults? This will clear your current view."
+        )) {
           localStorage.removeItem("mojo_mosaic_config");
           this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
           if (this.columns.includes("time")) this.config.xAxis = "time";
@@ -989,20 +1167,37 @@
         const bgColor = isDark ? tw.slate[800] : "#ffffff";
         const resW = Math.round(1280 * scale);
         const resH = Math.round(720 * scale);
-        this.notify(`Exporting ${resW}x${resH} ${format.toUpperCase()}...`, "info");
+        this.notify(
+          `Exporting ${resW}x${resH} ${format.toUpperCase()}...`,
+          "info"
+        );
         try {
           const origPaper = el.layout.paper_bgcolor;
           const origPlot = el.layout.plot_bgcolor;
-          await Plotly.relayout(el, { paper_bgcolor: bgColor, plot_bgcolor: bgColor });
-          const dataUrl = await Plotly.toImage(el, { format: plotlyFormat, width: 1280, height: 720, scale });
-          await Plotly.relayout(el, { paper_bgcolor: origPaper, plot_bgcolor: origPlot });
+          await Plotly.relayout(el, {
+            paper_bgcolor: bgColor,
+            plot_bgcolor: bgColor
+          });
+          const dataUrl = await Plotly.toImage(el, {
+            format: plotlyFormat,
+            width: 1280,
+            height: 720,
+            scale
+          });
+          await Plotly.relayout(el, {
+            paper_bgcolor: origPaper,
+            plot_bgcolor: origPlot
+          });
           const link = document.createElement("a");
           link.href = dataUrl;
           link.download = `${this.trialId}_${resW}p.${format}`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          this.notify(`${format.toUpperCase()} saved (${resW}\xD7${resH})`, "success");
+          this.notify(
+            `${format.toUpperCase()} saved (${resW}\xD7${resH})`,
+            "success"
+          );
         } catch (e) {
           console.error("Export failed", e);
           this.notify("Export failed", "error");
@@ -1019,7 +1214,9 @@
           csv += activeCols.map((col) => this.data[col]?.[i] ?? "").join(",") + "\n";
         }
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+        link.href = URL.createObjectURL(
+          new Blob([csv], { type: "text/csv;charset=utf-8;" })
+        );
         link.setAttribute("download", `${this.trialId}_filtered.csv`);
         document.body.appendChild(link);
         link.click();
@@ -1029,7 +1226,11 @@
       },
       downloadJSON() {
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([JSON.stringify(this.config, null, 4)], { type: "application/json" }));
+        link.href = URL.createObjectURL(
+          new Blob([JSON.stringify(this.config, null, 4)], {
+            type: "application/json"
+          })
+        );
         link.setAttribute("download", `${this.trialId}_config.json`);
         document.body.appendChild(link);
         link.click();
@@ -1046,7 +1247,9 @@
         const reader = new FileReader();
         reader.onload = (event) => {
           try {
-            const imported = JSON.parse(event.target?.result);
+            const imported = JSON.parse(
+              event.target?.result
+            );
             this.config = { ...this.config, ...imported };
             this.notify("Configuration restored!", "success");
             this.configRaw = JSON.stringify(this.config, null, 4);
@@ -1085,7 +1288,8 @@
         this.notify("Signals Cleared", "info");
       },
       warpToTrial() {
-        if (this.warpId === null || this.warpId === void 0 || this.warpId === "") return;
+        if (this.warpId === null || this.warpId === void 0 || this.warpId === "")
+          return;
         const paddedNum = String(this.warpId).padStart(this.paddingLen, "0");
         window.location.href = `/mosaic/trial_${paddedNum}`;
       },
@@ -1119,11 +1323,14 @@
       getFilterSummary(entry) {
         const schema = this.filterSchemas.find((s) => s.type === entry.type);
         if (!schema || schema.params.length === 0) return "";
-        if (entry.type === "unit") return `${entry["from_unit"] ?? "?"} \u2192 ${entry["to_unit"] ?? "?"}`;
+        if (entry.type === "unit")
+          return `${entry["from_unit"] ?? "?"} \u2192 ${entry["to_unit"] ?? "?"}`;
         const parts = schema.params.filter((p) => entry[p.name] != null).map((p) => {
           const val = entry[p.name];
-          if (typeof val === "boolean") return `${p.name}=${val ? "on" : "off"}`;
-          if (typeof val === "number") return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          if (typeof val === "boolean")
+            return `${p.name}=${val ? "on" : "off"}`;
+          if (typeof val === "number")
+            return `${p.name}=${parseFloat(val.toFixed(4))}`;
           return `${p.name}=${val}`;
         });
         return parts.slice(0, 3).join(", ");
@@ -1155,7 +1362,9 @@
       },
       duplicateFilterInTemp(temp, index) {
         if (!temp.filters?.[index]) return;
-        const copy = JSON.parse(JSON.stringify(temp.filters[index]));
+        const copy = JSON.parse(
+          JSON.stringify(temp.filters[index])
+        );
         temp.filters.splice(index + 1, 0, copy);
       },
       // -----------------------------------------------------------------------
@@ -1171,23 +1380,29 @@
           const resp = await fetch("/mosaic/api/profiles");
           this.profiles = await resp.json();
           const colSet = new Set(this.columns);
-          const frames = new Set(this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", "")));
+          const frames = new Set(
+            this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", ""))
+          );
           const warnings = {};
-          await Promise.all(this.profiles.map(async (p) => {
-            try {
-              const pr = await fetch(this._profileUrl(p.name));
-              if (!pr.ok) return;
-              const cfg = await pr.json();
-              const w = [];
-              if (cfg.xAxis && !colSet.has(cfg.xAxis)) w.push(`x-axis "${cfg.xAxis}"`);
-              for (const key of Object.keys(cfg.yAxes ?? {})) {
-                if (!colSet.has(key)) w.push(`"${key}"`);
+          await Promise.all(
+            this.profiles.map(async (p) => {
+              try {
+                const pr = await fetch(this._profileUrl(p.name));
+                if (!pr.ok) return;
+                const cfg = await pr.json();
+                const w = [];
+                if (cfg.xAxis && !colSet.has(cfg.xAxis))
+                  w.push(`x-axis "${cfg.xAxis}"`);
+                for (const key of Object.keys(cfg.yAxes ?? {})) {
+                  if (!colSet.has(key)) w.push(`"${key}"`);
+                }
+                if (cfg.refFrame && !frames.has(cfg.refFrame))
+                  w.push(`frame "${cfg.refFrame}"`);
+                if (w.length) warnings[p.name] = w;
+              } catch {
               }
-              if (cfg.refFrame && !frames.has(cfg.refFrame)) w.push(`frame "${cfg.refFrame}"`);
-              if (w.length) warnings[p.name] = w;
-            } catch {
-            }
-          }));
+            })
+          );
           this.profileWarnings = warnings;
         } catch (e) {
           console.warn("[mojo] Failed to load profiles", e);
@@ -1200,7 +1415,9 @@
           return;
         }
         const normalise = (s) => s.toLowerCase().replace(/\s+/g, "_");
-        const existing = this.profiles.find((p) => normalise(p.name) === normalise(name));
+        const existing = this.profiles.find(
+          (p) => normalise(p.name) === normalise(name)
+        );
         if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
         try {
           const resp = await fetch(this._profileUrl(name), {
@@ -1226,20 +1443,29 @@
           }
           const loaded = await resp.json();
           const colSet = new Set(this.columns);
-          const frames = new Set(this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", "")));
+          const frames = new Set(
+            this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", ""))
+          );
           const missing = [];
-          if (loaded.xAxis && !colSet.has(loaded.xAxis)) missing.push(`x-axis "${loaded.xAxis}"`);
+          if (loaded.xAxis && !colSet.has(loaded.xAxis))
+            missing.push(`x-axis "${loaded.xAxis}"`);
           for (const key of Object.keys(loaded.yAxes ?? {})) {
             if (!colSet.has(key)) missing.push(`signal "${key}"`);
           }
-          if (loaded.refFrame && !frames.has(loaded.refFrame)) missing.push(`frame "${loaded.refFrame}"`);
+          if (loaded.refFrame && !frames.has(loaded.refFrame))
+            missing.push(`frame "${loaded.refFrame}"`);
           if (missing.length) {
-            throw new Error(`references columns not in this trial: ${missing.join(", ")}`);
+            throw new Error(
+              `references columns not in this trial: ${missing.join(", ")}`
+            );
           }
           this.config = { ...this.config, ...loaded };
           this.notify(`Profile "${name}" loaded`, "success");
         } catch (e) {
-          this.notify(`Failed to load "${name}": ${e.message}`, "error");
+          this.notify(
+            `Failed to load "${name}": ${e.message}`,
+            "error"
+          );
         }
       },
       async deleteProfile(name) {
@@ -1321,17 +1547,29 @@
             name: p.label,
             mode: this.config.linemode,
             type: "scatter",
-            line: { width: p.width, color: p.color, shape: this.config.interp, dash: p.dash },
+            line: {
+              width: p.width,
+              color: p.color,
+              shape: this.config.interp,
+              dash: p.dash
+            },
             marker: { size: 6, symbol: p.marker },
             opacity: p.opacity,
-            hoverlabel: { namelength: -1, bgcolor: tooltipBg, bordercolor: tooltipBorder, font: { family: "monospace", size: 12, color: tooltipFont } },
+            hoverlabel: {
+              namelength: -1,
+              bgcolor: tooltipBg,
+              bordercolor: tooltipBorder,
+              font: { family: "monospace", size: 12, color: tooltipFont }
+            },
             hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`
           };
         }).filter((t) => t !== null);
         if (this.config.vsEnabled) {
           const [start, end] = this.config.vsRange;
           const legendTracker = /* @__PURE__ */ new Set();
-          const sortedVsIds = Object.keys(this.vsDatasets).sort((a, b) => parseInt(a.split("_").pop() ?? "0") - parseInt(b.split("_").pop() ?? "0"));
+          const sortedVsIds = Object.keys(this.vsDatasets).sort(
+            (a, b) => parseInt(a.split("_").pop() ?? "0") - parseInt(b.split("_").pop() ?? "0")
+          );
           sortedVsIds.forEach((vsId) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
             if (n < start || n > end || vsId === this.trialId) return;
@@ -1349,7 +1587,12 @@
                 showlegend: isFirst,
                 mode: this.config.linemode,
                 type: "scatter",
-                line: { width: 1, color: p.color, shape: this.config.interp, dash: "dot" },
+                line: {
+                  width: 1,
+                  color: p.color,
+                  shape: this.config.interp,
+                  dash: "dot"
+                },
                 opacity: 0.35,
                 marker: { size: 4, symbol: p.marker },
                 hoverlabel: { namelength: -1 },
@@ -1365,7 +1608,10 @@
           type: this.config.xScale ?? "linear",
           ...this.config.rangeX ? {
             autorange: false,
-            range: this.config.xScale === "log" ? [Math.log10(Math.max(1e-6, this.config.rangeX[0])), Math.log10(Math.max(1e-6, this.config.rangeX[1]))] : this.config.rangeX
+            range: this.config.xScale === "log" ? [
+              Math.log10(Math.max(1e-6, this.config.rangeX[0])),
+              Math.log10(Math.max(1e-6, this.config.rangeX[1]))
+            ] : this.config.rangeX
           } : { autorange: true },
           dtick: this.config.xScale === "log" && this.config.xLogBase ? Math.log10(this.config.xLogBase) : void 0,
           gridcolor: majorGrid,
@@ -1373,7 +1619,10 @@
           minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
-          title: { text: this.config.xAxisTitle || this.config.xAxis, font: { size: 14, color: textColor, family: "monospace" } },
+          title: {
+            text: this.config.xAxisTitle || this.config.xAxis,
+            font: { size: 14, color: textColor, family: "monospace" }
+          },
           showspikes: showX,
           spikemode: "across",
           spikelinecolor: spikeColor,
@@ -1384,7 +1633,10 @@
           type: this.config.yScale ?? "linear",
           ...this.config.rangeY ? {
             autorange: false,
-            range: this.config.yScale === "log" ? [Math.log10(Math.max(1e-6, this.config.rangeY[0])), Math.log10(Math.max(1e-6, this.config.rangeY[1]))] : this.config.rangeY
+            range: this.config.yScale === "log" ? [
+              Math.log10(Math.max(1e-6, this.config.rangeY[0])),
+              Math.log10(Math.max(1e-6, this.config.rangeY[1]))
+            ] : this.config.rangeY
           } : { autorange: true },
           dtick: this.config.yScale === "log" && this.config.yLogBase ? Math.log10(this.config.yLogBase) : void 0,
           gridcolor: majorGrid,
@@ -1392,7 +1644,10 @@
           minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
-          title: { text: this.config.yAxisTitle + frameLabel, font: { size: 14, color: textColor, family: "monospace" } },
+          title: {
+            text: this.config.yAxisTitle + frameLabel,
+            font: { size: 14, color: textColor, family: "monospace" }
+          },
           showspikes: showY,
           spikemode: "across",
           spikelinecolor: spikeColor,
@@ -1400,14 +1655,47 @@
         };
         const layout = {
           uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}`,
-          title: this.config.title ? { text: this.config.title, font: { family: "monospace", size: 16, color: isDark ? tw.slate[200] : tw.slate[800], weight: "bold" }, x: 0, xanchor: "left" } : null,
+          title: this.config.title ? {
+            text: this.config.title,
+            font: {
+              family: "monospace",
+              size: 16,
+              color: isDark ? tw.slate[200] : tw.slate[800],
+              weight: "bold"
+            },
+            x: 0,
+            xanchor: "left"
+          } : null,
           paper_bgcolor: "rgba(0,0,0,0)",
           plot_bgcolor: "rgba(0,0,0,0)",
-          margin: { t: this.config.title ? 60 : 30, r: this.config.legendPos === "right" ? 150 : 30, b: this.config.legendPos === "bottom" ? 80 : 50, l: this.config.yAxisTitle ? 80 : 60 },
+          margin: {
+            t: this.config.title ? 60 : 30,
+            r: this.config.legendPos === "right" ? 150 : 30,
+            b: this.config.legendPos === "bottom" ? 80 : 50,
+            l: this.config.yAxisTitle ? 80 : 60
+          },
           hovermode: isHoverDisabled ? false : this.config.hover,
-          hoverlabel: { bgcolor: tooltipBg, bordercolor: tooltipBorder, font: { family: "monospace", size: 12, color: tooltipFont }, align: "left" },
+          hoverlabel: {
+            bgcolor: tooltipBg,
+            bordercolor: tooltipBorder,
+            font: { family: "monospace", size: 12, color: tooltipFont },
+            align: "left"
+          },
           showlegend: this.config.legendPos !== "hidden",
-          legend: this.config.legendPos === "right" ? { orientation: "v", x: 1.02, y: 1, font: { family: "monospace", size: 14, color: textColor }, groupclick: "togglegroup" } : { orientation: "h", y: -0.2, x: 0.5, xanchor: "center", font: { family: "monospace", size: 14, color: textColor }, groupclick: "togglegroup" },
+          legend: this.config.legendPos === "right" ? {
+            orientation: "v",
+            x: 1.02,
+            y: 1,
+            font: { family: "monospace", size: 14, color: textColor },
+            groupclick: "togglegroup"
+          } : {
+            orientation: "h",
+            y: -0.2,
+            x: 0.5,
+            xanchor: "center",
+            font: { family: "monospace", size: 14, color: textColor },
+            groupclick: "togglegroup"
+          },
           xaxis: xAxisObj,
           yaxis: yAxisObj,
           annotations: [
@@ -1419,7 +1707,11 @@
               arrowhead: 2,
               ax: 0,
               ay: -40,
-              font: { family: "monospace", size: 12, color: isDark ? tw.slate[50] : tw.slate[900] },
+              font: {
+                family: "monospace",
+                size: 12,
+                color: isDark ? tw.slate[50] : tw.slate[900]
+              },
               bgcolor: isDark ? tw.slate[800] : tw.slate[50],
               bordercolor: tw.cyan[500],
               borderwidth: 1,
@@ -1438,19 +1730,72 @@
                 x = s.x0;
                 y = s.y1 ?? 0;
               }
-              return { x, y, xref, yref, text: `<b>${s.label}</b>`, showarrow: false, xanchor, yanchor, font: { size: 10, color: s.color || tw.cyan[500], family: "monospace" }, bgcolor: isDark ? tw.slate[900] + "B3" : tw.slate[50] + "B3", borderpad: 2 };
+              return {
+                x,
+                y,
+                xref,
+                yref,
+                text: `<b>${s.label}</b>`,
+                showarrow: false,
+                xanchor,
+                yanchor,
+                font: {
+                  size: 10,
+                  color: s.color || tw.cyan[500],
+                  family: "monospace"
+                },
+                bgcolor: isDark ? tw.slate[900] + "B3" : tw.slate[50] + "B3",
+                borderpad: 2
+              };
             })
           ],
           shapes: (this.config.shapes ?? []).map((s) => {
             const shapeColor = s.color || tw.cyan[500];
-            const base = { line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" }, layer: "below" };
-            if (s.type === "vline") return { ...base, type: "line", x0: s.x0, x1: s.x0, y0: 0, y1: 1, yref: "paper" };
-            if (s.type === "hline") return { ...base, type: "line", y0: s.y0, y1: s.y0, x0: 0, x1: 1, xref: "paper" };
-            if (s.type === "rect") return { ...base, type: "rect", x0: s.x0, x1: s.x1, y0: s.y0, y1: s.y1, fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`, line: { ...base.line, width: 1 } };
+            const base = {
+              line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
+              layer: "below"
+            };
+            if (s.type === "vline")
+              return {
+                ...base,
+                type: "line",
+                x0: s.x0,
+                x1: s.x0,
+                y0: 0,
+                y1: 1,
+                yref: "paper"
+              };
+            if (s.type === "hline")
+              return {
+                ...base,
+                type: "line",
+                y0: s.y0,
+                y1: s.y0,
+                x0: 0,
+                x1: 1,
+                xref: "paper"
+              };
+            if (s.type === "rect")
+              return {
+                ...base,
+                type: "rect",
+                x0: s.x0,
+                x1: s.x1,
+                y0: s.y0,
+                y1: s.y1,
+                fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
+                line: { ...base.line, width: 1 }
+              };
             return base;
           })
         };
-        const config = { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ["toImage"], doubleClick: false };
+        const config = {
+          responsive: true,
+          displaylogo: false,
+          displayModeBar: true,
+          modeBarButtonsToRemove: ["toImage"],
+          doubleClick: false
+        };
         return Plotly.react("plot-area", traces, layout, config);
       }
     };

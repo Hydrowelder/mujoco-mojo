@@ -7,36 +7,25 @@
     document.addEventListener("alpine:init", () => {
         const store = Alpine.store("dojo");
         if (store) {
-            if (typeof store.isFullscreen === 'undefined') store.isFullscreen = false;
+            // Morph has its own fullscreen (the iframe fills the screen), so reset
+            // the shared state without writing to localStorage — navigating back to
+            // Monitor/Mosaic/Trial Viewer will still restore their last fullscreen state.
+            store.isFullscreen = false;
             store.setPageReady(true, true);
         }
     });
 
-    // Central function to exit Zen Mode
-    const exitFullscreen = () => {
-        const store = Alpine.store("dojo");
-        if (store && store.isFullscreen) {
-            store.isFullscreen = false;
-        }
-    };
-
-    // 1. Listen on the Parent (Dojo) window
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') exitFullscreen();
-    });
-
-    // 2. Listen inside the Child (Optuna) iframe
-    // This function is called by the iframe's onload attribute
+    // Forward Escape from inside the Optuna iframe to the parent store.
+    // Called by the iframe's onload attribute.
     const attachIframeListeners = () => {
         const iframe = document.getElementById('optuna-iframe');
         if (!iframe || !iframe.contentWindow) return;
-
         try {
             iframe.contentWindow.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') exitFullscreen();
+                if (e.key === 'Escape') Alpine.store('dojo').isFullscreen = false;
             });
         } catch (e) {
-            console.warn("Could not attach Escape listener to iframe. This usually happens if the iframe is cross-origin.");
+            console.warn("Could not attach Escape listener to iframe (cross-origin).");
         }
     };
 </script>
@@ -49,31 +38,6 @@
 
         <div class="w-full h-full overflow-hidden border border-slate-300 dark:border-slate-700 shadow-2xl bg-white"
              :class="$store.dojo.isFullscreen ? 'rounded-none border-none' : 'rounded-2xl'">
-
-            <button @click="$store.dojo.isFullscreen = !$store.dojo.isFullscreen"
-                    class="absolute top-4 right-4 z-[110] p-2 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-cyan-500 hover:text-white text-slate-500 rounded-lg shadow-lg border border-slate-300 dark:border-slate-600 transition-all active:scale-95">
-                <svg x-show="!$store.dojo.isFullscreen"
-                     class="w-6 h-6"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
-                </svg>
-                <svg x-show="$store.dojo.isFullscreen"
-                     x-cloak
-                     class="w-6 h-6"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M9 9V4.5M9 9H4.5M9 9L3 3M15 9V4.5M15 9H19.5M15 9L21 3M9 15V19.5M9 15H4.5M9 15L3 21M15 15V19.5M15 15H19.5M15 15L21 21" />
-                </svg>
-            </button>
 
             <iframe id="optuna-iframe"
                     src="/dashboard/"

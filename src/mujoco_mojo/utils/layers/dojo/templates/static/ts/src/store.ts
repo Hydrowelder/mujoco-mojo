@@ -8,7 +8,7 @@ window.notifTimeAgo = notifTimeAgo;
 document.addEventListener('alpine:init', () => {
   Alpine.store('dojo', {
     isPageReady: false,
-    isFullscreen: false,
+    isFullscreen: localStorage.getItem('mojo_fullscreen') === 'true',
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem('mojo_muted') !== 'false',
@@ -169,6 +169,14 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    toggleFullscreen() {
+      this.isFullscreen = !this.isFullscreen;
+      localStorage.setItem('mojo_fullscreen', String(this.isFullscreen));
+    },
+    exitFullscreen() {
+      this.isFullscreen = false;
+      localStorage.setItem('mojo_fullscreen', 'false');
+    },
     toggleMute() {
       this.isMuted = !this.isMuted;
       localStorage.setItem('mojo_muted', this.isMuted.toString());
