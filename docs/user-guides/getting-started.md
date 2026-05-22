@@ -283,23 +283,23 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
 
 > Thanks to the work by [@kevinzakka](https://github.com/google-deepmind/mujoco/issues/1292#issuecomment-1874138201) and [@mluogh-xdof](https://github.com/google-deepmind/mujoco/issues/1292#issuecomment-3208219200) for figuring all this out!
 
-1. In your terminal:
+1. From your project root, generate stubs into a local `typings/` directory:
 
     ```bash linenums="0"
-    pybind11-stubgen mujoco -o ~/typings/ --numpy-array-wrap-with-annotated
+    pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated
     ```
 
 2. Recent MuJoCo builds compiled with newer pybind11 versions correctly expose enums as `SupportsInt`. If you encounter Pyright enum type errors, apply the compatibility patch:
 
     ```bash linenums="0"
-    python ~/typings/patch_mujoco_enums.py ~/typings/mujoco/_enums.pyi
+    python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi
     ```
 
 3. Then in `pyproject.toml` (for me, VSCode already type hints correctly, but this should fix things if you use `pyright` with your pre-commit hooks):
 
     ```toml title="pyproject.toml"
     [tool.pyright]
-    stubPath = "~/typings"
+    stubPath = "typings"
     venvPath = "."
     venv = ".venv"
     ```
