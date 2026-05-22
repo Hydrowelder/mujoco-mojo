@@ -94,7 +94,7 @@
     rose: { 500: "#ef4444" }
   };
   var DEFAULT_CONFIG = {
-    xAxis: "time",
+    xAxis: { col: "time", filters: [] },
     yAxes: {},
     refFrame: null,
     grid: "all",
@@ -176,6 +176,7 @@
       // tracks the last filter fingerprint that was fetched for each col; used to detect
       // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
       filterFingerprints: {},
+      xAxisFilterFingerprint: "[]",
       // deduplicates filter error toasts so VS mode (N parallel fetches) shows each error once
       _shownFilterErrors: /* @__PURE__ */ new Set(),
       // in-progress signal editor edits that survive closing/reopening the panel
@@ -277,15 +278,19 @@
         if (this.config.refFrame)
           colParams.append("rotate_by", this.config.refFrame);
         const filtersPayload = {};
+        const toActiveFilters = (filters) => filters.filter((f) => f.enabled !== false).map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
         for (const col of requiredCols) {
           const yConfig = this.config.yAxes[col];
           if (yConfig?.filters && yConfig.filters.length > 0) {
-            const active = yConfig.filters.filter((f) => f.enabled !== false).map(
-              (f) => Object.fromEntries(
-                Object.entries(f).filter(([k]) => k !== "enabled")
-              )
-            );
+            const active = toActiveFilters(yConfig.filters);
             if (active.length > 0) filtersPayload[col] = active;
+          }
+          if (col === this.config.xAxis.col) {
+            const xFilters = this.config.xAxis?.filters ?? [];
+            if (xFilters.length > 0) {
+              const active = toActiveFilters(xFilters);
+              if (active.length > 0) filtersPayload[col] = active;
+            }
           }
         }
         if (Object.keys(filtersPayload).length > 0) {
@@ -353,7 +358,7 @@
         if (currentId !== this.discoveryId) return;
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
         const draftIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
           return n >= start && n <= end && id !== this.trialId;
@@ -473,7 +478,7 @@
       jumpToAnnotation(ann) {
         const el = document.getElementById("plot-area");
         if (!el || !this.data) return;
-        const xValues = this.data[this.config.xAxis] ?? [];
+        const xValues = this.data[this.config.xAxis.col] ?? [];
         const xMin = xValues[0] ?? 0;
         const xMax = xValues[xValues.length - 1] ?? 100;
         const xSpan = (xMax - xMin) * 0.1;
@@ -571,7 +576,7 @@
         }
         try {
           const initialCols = [
-            this.config.xAxis,
+            this.config.xAxis.col,
             ...Object.keys(this.config.yAxes)
           ];
           const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -763,7 +768,7 @@
             this.data = {};
             this.vsDatasets = {};
             const initialCols = [
-              this.config.xAxis,
+              this.config.xAxis.col,
               ...Object.keys(this.config.yAxes)
             ];
             const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -777,7 +782,7 @@
         );
         this.$watch("config", async (value, oldValue) => {
           if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
-          if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis !== oldValue.xAxis || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
+          if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis.col !== oldValue?.xAxis?.col || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
             await this.syncVsRange();
           }
           this.pushHistory();
@@ -789,7 +794,19 @@
             );
             return current !== (this.filterFingerprints[col] ?? "[]");
           });
-          if (changedFilterCols.length > 0) {
+          const xFilterCurrent = JSON.stringify(
+            (value.xAxis?.filters ?? []).filter((f) => f.enabled !== false)
+          );
+          const xFilterChanged = xFilterCurrent !== this.xAxisFilterFingerprint;
+          if (xFilterChanged) {
+            this.xAxisFilterFingerprint = xFilterCurrent;
+            if (this.data) delete this.data[value.xAxis.col];
+          }
+          const colsToRefetch = [
+            ...xFilterChanged ? [value.xAxis.col] : [],
+            ...changedFilterCols
+          ];
+          if (colsToRefetch.length > 0) {
             changedFilterCols.forEach((col) => {
               this.filterFingerprints[col] = JSON.stringify(
                 (value.yAxes[col]?.filters ?? []).filter(
@@ -799,10 +816,7 @@
               if (this.data) delete this.data[col];
             });
             this.vsDatasets = {};
-            const resp2 = await this.fetchTrialData(
-              this.trialId,
-              changedFilterCols
-            );
+            const resp2 = await this.fetchTrialData(this.trialId, colsToRefetch);
             this.data = { ...this.data ?? {}, ...resp2.data };
             if (this.config.vsEnabled) await this.syncVsRange();
           }
@@ -831,7 +845,7 @@
         try {
           const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
           const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-          let activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+          let activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
           if (this.config.refFrame) {
             const families = /* @__PURE__ */ new Set();
             Object.keys(this.config.yAxes).forEach((col) => {
@@ -1069,7 +1083,7 @@
             console.error("Stored config corrupt");
           }
         } else {
-          if (this.columns.includes("time")) this.config.xAxis = "time";
+          if (this.columns.includes("time")) this.config.xAxis.col = "time";
         }
         const savedHistory = localStorage.getItem("mojo_mosaic_history");
         if (savedHistory) {
@@ -1133,7 +1147,7 @@
         )) {
           localStorage.removeItem("mojo_mosaic_config");
           this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-          if (this.columns.includes("time")) this.config.xAxis = "time";
+          if (this.columns.includes("time")) this.config.xAxis.col = "time";
           this.notify("Settings Reset", "info");
           this.configRaw = JSON.stringify(this.config, null, 4);
         }
@@ -1211,8 +1225,8 @@
       },
       downloadCSV() {
         if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-        const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
-        const rowCount = this.data[this.config.xAxis]?.length ?? 0;
+        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+        const rowCount = this.data[this.config.xAxis.col]?.length ?? 0;
         let csv = activeCols.join(",") + "\n";
         for (let i = 0; i < rowCount; i++) {
           csv += activeCols.map((col) => this.data[col]?.[i] ?? "").join(",") + "\n";
@@ -1317,6 +1331,68 @@
       // -----------------------------------------------------------------------
       getFilterSchema(filterType) {
         return this.filterSchemas.find((s) => s.type === filterType);
+      },
+      evalMathExpr(expr) {
+        const s = String(expr ?? "").trim();
+        if (!s) return null;
+        const n = Number(s);
+        if (!isNaN(n)) return n;
+        try {
+          const fn = new Function(
+            "pi",
+            "e",
+            "sin",
+            "cos",
+            "tan",
+            "asin",
+            "acos",
+            "atan",
+            "atan2",
+            "sqrt",
+            "cbrt",
+            "log",
+            "log2",
+            "log10",
+            "abs",
+            "floor",
+            "ceil",
+            "round",
+            "sign",
+            "pow",
+            "exp",
+            "max",
+            "min",
+            `"use strict"; return (${s})`
+          );
+          const result = fn(
+            Math.PI,
+            Math.E,
+            Math.sin,
+            Math.cos,
+            Math.tan,
+            Math.asin,
+            Math.acos,
+            Math.atan,
+            Math.atan2,
+            Math.sqrt,
+            Math.cbrt,
+            Math.log,
+            Math.log2,
+            Math.log10,
+            Math.abs,
+            Math.floor,
+            Math.ceil,
+            Math.round,
+            Math.sign,
+            Math.pow,
+            Math.exp,
+            Math.max,
+            Math.min
+          );
+          if (typeof result === "number" && isFinite(result)) return result;
+        } catch {
+        }
+        return null;
       },
       getUnitOptions(groups, fromUnit) {
         if (!groups) return [];
@@ -1555,7 +1631,7 @@
           if (isPolar) {
             return {
               r: this.data[p.name],
-              theta: this.data[this.config.xAxis],
+              theta: this.data[this.config.xAxis.col],
               name: p.label,
               mode: this.config.linemode,
               type: "scatterpolar",
@@ -1572,7 +1648,7 @@
             };
           }
           return {
-            x: this.data[this.config.xAxis],
+            x: this.data[this.config.xAxis.col],
             y: this.data[p.name],
             name: p.label,
             mode: this.config.linemode,
@@ -1612,7 +1688,7 @@
               };
               const t = isPolar ? {
                 r: dataset[p.name],
-                theta: dataset[this.config.xAxis],
+                theta: dataset[this.config.xAxis.col],
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
@@ -1624,7 +1700,7 @@
                 hoverlabel: { namelength: -1 },
                 hovertemplate: `<b>${key}</b> (#${n})<br>\u03B8: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`
               } : {
-                x: dataset[this.config.xAxis],
+                x: dataset[this.config.xAxis.col],
                 y: dataset[p.name],
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
@@ -1659,7 +1735,7 @@
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
           title: {
-            text: this.config.xAxisTitle || this.config.xAxis,
+            text: this.config.xAxisTitle || this.config.xAxis.col,
             font: { size: 14, color: textColor, family: "monospace" }
           },
           showspikes: showX,
@@ -1709,14 +1785,14 @@
               gridcolor: majorGrid,
               tickfont: { color: textColor, size: 14, family: "monospace" },
               title: {
-                text: this.config.xAxisTitle || this.config.xAxis,
+                text: this.config.xAxisTitle || this.config.xAxis.col,
                 font: { size: 14, color: textColor, family: "monospace" }
               }
             }
           }
         } : { xaxis: xAxisObj, yaxis: yAxisObj };
         const layout = {
-          uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
+          uirevision: `${this.trialId}_${this.config.xAxis.col}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
           title: this.config.title ? {
             text: this.config.title,
             font: {

@@ -47,6 +47,11 @@ export interface Shape {
 
 export type ShapeType = "vline" | "hline" | "rect";
 
+export interface XAxisConfig {
+  col?: string;
+  filters?: FilterEntry[];
+}
+
 export interface YAxisConfig {
   label: string;
   color: string;
@@ -59,7 +64,7 @@ export interface YAxisConfig {
 
 /** Complete serialisable state of a trial-viewer plot. */
 export interface PlotConfig {
-  xAxis: string;
+  xAxis?: XAxisConfig;
   yAxes: Record<string, YAxisConfig>;
   refFrame: string | null;
   grid: GridMode;

@@ -478,7 +478,7 @@
                                 <div class="relative mb-2">
                                     <input type="text"
                                            x-model.lazy="config.xAxisTitle"
-                                           :placeholder="config.xAxis"
+                                           :placeholder="config.xAxis.col"
                                            class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
 
                                     <button x-show="config.xAxisTitle"
@@ -559,8 +559,12 @@
                  @click.outside="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }">
                 <button @click="annotationsOpen = !annotationsOpen"
                         class="sidebar-btn disabled:opacity-20"
-                        :class="annotationsOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
-                        title="Manage Notes">
+                        :class="{
+                    'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50': annotationsOpen && config.plotType !== 'polar',
+                    'text-slate-400 hover:text-cyan-500': config.plotType !== 'polar',
+                    'opacity-30 cursor-not-allowed pointer-events-none': config.plotType === 'polar'
+                }"
+                        :title="config.plotType === 'polar' ? 'Notes not available in Polar mode' : 'Manage Notes'">
                     <svg class="w-5 h-5"
                          :class="annotationsOpen ? 'text-cyan-500' : ''"
                          fill="none"

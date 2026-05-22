@@ -40,7 +40,7 @@ const tw = {
 } as const;
 
 const DEFAULT_CONFIG: PlotConfig = {
-  xAxis: "time",
+  xAxis: { col: "time", filters: [] },
   yAxes: {},
   refFrame: null,
   grid: "all",
@@ -134,6 +134,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     // tracks the last filter fingerprint that was fetched for each col; used to detect
     // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
     filterFingerprints: {} as Record<string, string>,
+    xAxisFilterFingerprint: "[]" as string,
     // deduplicates filter error toasts so VS mode (N parallel fetches) shows each error once
     _shownFilterErrors: new Set<string>(),
     // in-progress signal editor edits that survive closing/reopening the panel
@@ -251,19 +252,24 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (this.config.refFrame)
         colParams.append("rotate_by", this.config.refFrame);
 
-      // include active filter stacks for requested yAxis columns
+      // include active filter stacks for requested columns (x-axis and y-axes)
       const filtersPayload: Record<string, object[]> = {};
+      const toActiveFilters = (filters: { enabled?: boolean; [k: string]: unknown }[]) =>
+        filters
+          .filter((f) => f.enabled !== false)
+          .map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
       for (const col of requiredCols) {
         const yConfig = this.config.yAxes[col];
         if (yConfig?.filters && yConfig.filters.length > 0) {
-          const active = yConfig.filters
-            .filter((f) => f.enabled !== false)
-            .map((f) =>
-              Object.fromEntries(
-                Object.entries(f).filter(([k]) => k !== "enabled"),
-              ),
-            );
+          const active = toActiveFilters(yConfig.filters);
           if (active.length > 0) filtersPayload[col] = active;
+        }
+        if (col === this.config.xAxis.col) {
+          const xFilters = this.config.xAxis?.filters ?? [];
+          if (xFilters.length > 0) {
+            const active = toActiveFilters(xFilters);
+            if (active.length > 0) filtersPayload[col] = active;
+          }
         }
       }
       if (Object.keys(filtersPayload).length > 0) {
@@ -342,7 +348,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
       const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+      const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
 
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
@@ -492,7 +498,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           })
         | null;
       if (!el || !this.data) return;
-      const xValues = this.data[this.config.xAxis] ?? [];
+      const xValues = this.data[this.config.xAxis.col] ?? [];
       const xMin = xValues[0] ?? 0;
       const xMax = xValues[xValues.length - 1] ?? 100;
       const xSpan = (xMax - xMin) * 0.1;
@@ -614,7 +620,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       try {
         const initialCols = [
-          this.config.xAxis,
+          this.config.xAxis.col,
           ...Object.keys(this.config.yAxes),
         ];
         const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -865,7 +871,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.data = {};
           this.vsDatasets = {};
           const initialCols = [
-            this.config.xAxis,
+            this.config.xAxis.col,
             ...Object.keys(this.config.yAxes),
           ];
           const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -883,7 +889,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (
           this.config.vsEnabled &&
           oldValue?.vsEnabled &&
-          (value.xAxis !== oldValue.xAxis ||
+          (value.xAxis.col !== oldValue?.xAxis?.col ||
             Object.keys(value.yAxes).length !==
               Object.keys(oldValue.yAxes ?? {}).length)
         ) {
@@ -902,7 +908,21 @@ function trialViewer(trialId: string, externalUrl: string) {
           );
           return current !== (this.filterFingerprints[col] ?? "[]");
         });
-        if (changedFilterCols.length > 0) {
+        // detect x-axis filter changes
+        const xFilterCurrent = JSON.stringify(
+          (value.xAxis?.filters ?? []).filter((f) => f.enabled !== false),
+        );
+        const xFilterChanged = xFilterCurrent !== this.xAxisFilterFingerprint;
+        if (xFilterChanged) {
+          this.xAxisFilterFingerprint = xFilterCurrent;
+          if (this.data) delete this.data[value.xAxis.col];
+        }
+
+        const colsToRefetch = [
+          ...(xFilterChanged ? [value.xAxis.col] : []),
+          ...changedFilterCols,
+        ];
+        if (colsToRefetch.length > 0) {
           changedFilterCols.forEach((col) => {
             this.filterFingerprints[col] = JSON.stringify(
               (value.yAxes[col]?.filters ?? []).filter(
@@ -912,10 +932,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             if (this.data) delete this.data[col];
           });
           this.vsDatasets = {};
-          const resp = await this.fetchTrialData(
-            this.trialId,
-            changedFilterCols,
-          );
+          const resp = await this.fetchTrialData(this.trialId, colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
           if (this.config.vsEnabled) await this.syncVsRange();
         }
@@ -949,7 +966,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+        let activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
 
         if (this.config.refFrame) {
           const families = new Set<string>();
@@ -1255,7 +1272,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           console.error("Stored config corrupt");
         }
       } else {
-        if (this.columns.includes("time")) this.config.xAxis = "time";
+        if (this.columns.includes("time")) this.config.xAxis.col = "time";
       }
 
       const savedHistory = localStorage.getItem("mojo_mosaic_history");
@@ -1330,7 +1347,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       ) {
         localStorage.removeItem("mojo_mosaic_config");
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
-        if (this.columns.includes("time")) this.config.xAxis = "time";
+        if (this.columns.includes("time")) this.config.xAxis.col = "time";
         this.notify("Settings Reset", "info");
         this.configRaw = JSON.stringify(this.config, null, 4);
       }
@@ -1413,8 +1430,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     downloadCSV() {
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
-      const rowCount = this.data[this.config.xAxis]?.length ?? 0;
+      const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+      const rowCount = this.data[this.config.xAxis.col]?.length ?? 0;
       let csv = activeCols.join(",") + "\n";
       for (let i = 0; i < rowCount; i++) {
         csv +=
@@ -1535,6 +1552,35 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     getFilterSchema(filterType: string): FilterSchema | undefined {
       return this.filterSchemas.find((s) => s.type === filterType);
+    },
+
+    evalMathExpr(expr: string): number | null {
+      const s = String(expr ?? "").trim();
+      if (!s) return null;
+      const n = Number(s);
+      if (!isNaN(n)) return n;
+      try {
+        // Expose a safe math context — no access to globals beyond these names.
+        const fn = new Function(
+          "pi", "e",
+          "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+          "sqrt", "cbrt", "log", "log2", "log10",
+          "abs", "floor", "ceil", "round", "sign",
+          "pow", "exp", "max", "min",
+          `"use strict"; return (${s})`,
+        );
+        const result = fn(
+          Math.PI, Math.E,
+          Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2,
+          Math.sqrt, Math.cbrt, Math.log, Math.log2, Math.log10,
+          Math.abs, Math.floor, Math.ceil, Math.round, Math.sign,
+          Math.pow, Math.exp, Math.max, Math.min,
+        ) as unknown;
+        if (typeof result === "number" && isFinite(result)) return result;
+      } catch {
+        // invalid expression — fall through
+      }
+      return null;
     },
 
     getUnitOptions(
@@ -1847,7 +1893,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           if (isPolar) {
             return {
               r: this.data![p.name]!,
-              theta: this.data![this.config.xAxis],
+              theta: this.data![this.config.xAxis.col],
               name: p.label,
               mode: this.config.linemode,
               type: "scatterpolar",
@@ -1864,7 +1910,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             };
           }
           return {
-            x: this.data![this.config.xAxis],
+            x: this.data![this.config.xAxis.col],
             y: this.data![p.name]!,
             name: p.label,
             mode: this.config.linemode,
@@ -1910,7 +1956,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               const t = isPolar
                 ? {
                     r: dataset[p.name]!,
-                    theta: dataset[this.config.xAxis],
+                    theta: dataset[this.config.xAxis.col],
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
@@ -1923,7 +1969,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     hovertemplate: `<b>${key}</b> (#${n})<br>θ: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`,
                   }
                 : {
-                    x: dataset[this.config.xAxis],
+                    x: dataset[this.config.xAxis.col],
                     y: dataset[p.name]!,
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
@@ -1968,7 +2014,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.xAxisTitle || this.config.xAxis,
+          text: this.config.xAxisTitle || this.config.xAxis.col,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showX,
@@ -2032,7 +2078,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 gridcolor: majorGrid,
                 tickfont: { color: textColor, size: 14, family: "monospace" },
                 title: {
-                  text: this.config.xAxisTitle || this.config.xAxis,
+                  text: this.config.xAxisTitle || this.config.xAxis.col,
                   font: { size: 14, color: textColor, family: "monospace" },
                 },
               },
@@ -2041,7 +2087,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         : { xaxis: xAxisObj, yaxis: yAxisObj };
 
       const layout = {
-        uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
+        uirevision: `${this.trialId}_${this.config.xAxis.col}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
         title: this.config.title
           ? {
               text: this.config.title,

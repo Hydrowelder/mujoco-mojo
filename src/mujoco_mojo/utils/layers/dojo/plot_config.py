@@ -103,6 +103,11 @@ class FilterEntry(BaseModel):
     enabled: bool = True
 
 
+class XAxisConfig(BaseModel):
+    col: str = "time"
+    filters: list[FilterEntry] = []
+
+
 class YAxisConfig(BaseModel):
     label: str
     color: str
@@ -133,7 +138,7 @@ class Shape(BaseModel):
 class PlotConfig(BaseModel):
     """Complete serialisable state of a trial-viewer plot."""
 
-    xAxis: str
+    xAxis: XAxisConfig = Field(default_factory=XAxisConfig)
     yAxes: dict[str, YAxisConfig]
     refFrame: str | None
     grid: GridMode
