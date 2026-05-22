@@ -140,6 +140,8 @@
       isEditingRaw: false,
       // --- PROFILES ---
       profiles: [],
+      profileWarnings: {},
+      profileSearch: "",
       profilesOpen: false,
       profileNameDraft: "",
       // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
@@ -321,7 +323,7 @@
       },
       handlePlotClickForShapes(pt) {
         if (!this.placementMode) return false;
-        const defaultColor = tw.cyan[500];
+        const defaultColor = this.plotColors[this.config.shapes.length % this.plotColors.length];
         let newShape = null;
         if (this.placementMode === "vline") {
           newShape = { type: "vline", x0: pt.x, color: defaultColor, label: "" };
@@ -493,11 +495,16 @@
           void this.$nextTick(async () => {
             await this.renderPlot();
             const plotEl = document.getElementById("plot-area");
+            plotEl.on("plotly_doubleclick", () => {
+              this.config.rangeX = null;
+              this.config.rangeY = null;
+              void this.renderPlot();
+            });
             plotEl.on("plotly_relayout", (event) => {
-              if (event["xaxis.autorange"] ?? event["yaxis.autorange"]) {
+              if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
                 this.config.rangeX = null;
                 this.config.rangeY = null;
-                this.renderPlot();
+                void this.renderPlot();
                 return;
               }
               if (event["xaxis.range[0]"] !== void 0) {
@@ -508,29 +515,47 @@
               }
             });
             plotEl.addEventListener("click", (e) => {
+              if (!this.placementMode) return;
               const target = e.target;
-              const isPlotValue = target.classList.contains("nsewdrag") || target.classList.contains("drag");
-              if (!isPlotValue) return;
+              if (!target.classList.contains("nsewdrag") && !target.classList.contains("drag")) return;
               const rect = plotEl.getBoundingClientRect();
+              const fullLayout = plotEl._fullLayout;
+              if (!fullLayout) return;
+              this.handlePlotClickForShapes({
+                x: fullLayout.xaxis.p2l(e.clientX - rect.left - fullLayout.margin.l),
+                y: fullLayout.yaxis.p2l(e.clientY - rect.top - fullLayout.margin.t)
+              });
+            });
+            document.addEventListener("mousedown", (e) => {
+              if (e.button !== 1) return;
+              const rect = plotEl.getBoundingClientRect();
+              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+              e.preventDefault();
               const fullLayout = plotEl._fullLayout;
               if (!fullLayout) return;
               const xVal = fullLayout.xaxis.p2l(e.clientX - rect.left - fullLayout.margin.l);
               const yVal = fullLayout.yaxis.p2l(e.clientY - rect.top - fullLayout.margin.t);
-              const pt = { x: xVal, y: yVal };
-              if (this.placementMode) {
-                this.handlePlotClickForShapes(pt);
-                return;
-              }
               setTimeout(() => {
-                this.annDraft = { x: pt.x, y: pt.y, text: "" };
+                this.annDraft = { x: xVal, y: yVal, text: "" };
                 this.annEditIndex = null;
                 this.annotationsOpen = true;
                 void this.$nextTick(() => {
-                  const input = document.querySelector('[x-ref="annInput"]');
-                  input?.focus();
+                  document.querySelector('[x-ref="annInput"]')?.focus();
                 });
               }, 0);
             });
+            new MutationObserver((mutations) => {
+              for (const { addedNodes } of mutations) {
+                for (const node of addedNodes) {
+                  if (!(node instanceof HTMLElement)) continue;
+                  const notif = node.classList.contains("plotly-notifier") ? node : node.querySelector?.(".plotly-notifier");
+                  if (!notif) continue;
+                  const text = notif.textContent?.replace(/×/g, "").trim();
+                  if (text) this.notify(text, "info");
+                  notif.style.display = "none";
+                }
+              }
+            }).observe(document.body, { childList: true, subtree: true });
             setTimeout(() => {
               if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
             }, 100);
@@ -552,8 +577,18 @@
             document.querySelector('input[type="number"]')?.focus();
           }
           if (e.key === "Escape") {
-            this.yMenuOpen = this.settingsOpen = this.editorOpen = false;
             if (["INPUT", "TEXTAREA"].includes(tag)) e.target.blur();
+            this.placementMode = null;
+            this.rectStart = null;
+            this.cancelAnnDraft();
+            this.cancelShapeDraft();
+            this.annotationsOpen = false;
+            this.shapesOpen = false;
+            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+            this.profilesOpen = this.vsMenuOpen = false;
+            this.profileSearch = "";
+            window.dispatchEvent(new CustomEvent("mojo:escape"));
           }
           if (["INPUT", "TEXTAREA"].includes(tag)) return;
           if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
@@ -1125,11 +1160,35 @@
       },
       // -----------------------------------------------------------------------
       // Profiles
+      // Encode each path segment individually so 'project/name' becomes 'project/name'
+      // in the URL (not 'project%2Fname'), matching the {name:path} FastAPI route.
+      _profileUrl(name) {
+        return `/mosaic/api/profiles/${name.split("/").map(encodeURIComponent).join("/")}`;
+      },
       // -----------------------------------------------------------------------
       async loadProfiles() {
         try {
           const resp = await fetch("/mosaic/api/profiles");
           this.profiles = await resp.json();
+          const colSet = new Set(this.columns);
+          const frames = new Set(this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", "")));
+          const warnings = {};
+          await Promise.all(this.profiles.map(async (p) => {
+            try {
+              const pr = await fetch(this._profileUrl(p.name));
+              if (!pr.ok) return;
+              const cfg = await pr.json();
+              const w = [];
+              if (cfg.xAxis && !colSet.has(cfg.xAxis)) w.push(`x-axis "${cfg.xAxis}"`);
+              for (const key of Object.keys(cfg.yAxes ?? {})) {
+                if (!colSet.has(key)) w.push(`"${key}"`);
+              }
+              if (cfg.refFrame && !frames.has(cfg.refFrame)) w.push(`frame "${cfg.refFrame}"`);
+              if (w.length) warnings[p.name] = w;
+            } catch {
+            }
+          }));
+          this.profileWarnings = warnings;
         } catch (e) {
           console.warn("[mojo] Failed to load profiles", e);
         }
@@ -1144,7 +1203,7 @@
         const existing = this.profiles.find((p) => normalise(p.name) === normalise(name));
         if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
         try {
-          const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
+          const resp = await fetch(this._profileUrl(name), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(this.config)
@@ -1160,20 +1219,32 @@
       },
       async loadProfile(name) {
         try {
-          const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`);
-          if (!resp.ok) throw new Error("Not found");
+          const resp = await fetch(this._profileUrl(name));
+          if (!resp.ok) {
+            const body = await resp.json().catch(() => ({}));
+            throw new Error(body.detail ?? `HTTP ${resp.status}`);
+          }
           const loaded = await resp.json();
+          const colSet = new Set(this.columns);
+          const frames = new Set(this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", "")));
+          const missing = [];
+          if (loaded.xAxis && !colSet.has(loaded.xAxis)) missing.push(`x-axis "${loaded.xAxis}"`);
+          for (const key of Object.keys(loaded.yAxes ?? {})) {
+            if (!colSet.has(key)) missing.push(`signal "${key}"`);
+          }
+          if (loaded.refFrame && !frames.has(loaded.refFrame)) missing.push(`frame "${loaded.refFrame}"`);
+          if (missing.length) {
+            throw new Error(`references columns not in this trial: ${missing.join(", ")}`);
+          }
           this.config = { ...this.config, ...loaded };
           this.notify(`Profile "${name}" loaded`, "success");
-        } catch {
-          this.notify(`Failed to load "${name}"`, "error");
+        } catch (e) {
+          this.notify(`Failed to load "${name}": ${e.message}`, "error");
         }
       },
       async deleteProfile(name) {
         try {
-          const resp = await fetch(`/mosaic/api/profiles/${encodeURIComponent(name)}`, {
-            method: "DELETE"
-          });
+          const resp = await fetch(this._profileUrl(name), { method: "DELETE" });
           if (!resp.ok) throw new Error("Delete failed");
           await this.loadProfiles();
           this.notify(`Profile "${name}" deleted`, "info");
@@ -1240,8 +1311,6 @@
         const isHoverDisabled = this.config.hover === "none";
         const showX = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("x") || this.config.hover === "closest");
         const showY = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("y") || this.config.hover === "closest");
-        const displayRangeX = this.config.rangeX ?? this.calculatePaddedRange([this.config.xAxis], false);
-        const displayRangeY = this.config.rangeY ?? this.calculatePaddedRange(Object.keys(this.config.yAxes));
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
@@ -1294,7 +1363,10 @@
         }
         const xAxisObj = {
           type: this.config.xScale ?? "linear",
-          range: this.config.xScale === "log" ? [Math.log10(Math.max(1e-6, displayRangeX[0])), Math.log10(Math.max(1e-6, displayRangeX[1]))] : displayRangeX,
+          ...this.config.rangeX ? {
+            autorange: false,
+            range: this.config.xScale === "log" ? [Math.log10(Math.max(1e-6, this.config.rangeX[0])), Math.log10(Math.max(1e-6, this.config.rangeX[1]))] : this.config.rangeX
+          } : { autorange: true },
           dtick: this.config.xScale === "log" && this.config.xLogBase ? Math.log10(this.config.xLogBase) : void 0,
           gridcolor: majorGrid,
           showgrid: this.config.grid !== "none",
@@ -1302,7 +1374,6 @@
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
           title: { text: this.config.xAxisTitle || this.config.xAxis, font: { size: 14, color: textColor, family: "monospace" } },
-          autorange: false,
           showspikes: showX,
           spikemode: "across",
           spikelinecolor: spikeColor,
@@ -1311,7 +1382,10 @@
         const frameLabel = this.config.refFrame ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>` : "";
         const yAxisObj = {
           type: this.config.yScale ?? "linear",
-          range: this.config.yScale === "log" ? [Math.log10(Math.max(1e-6, displayRangeY[0])), Math.log10(Math.max(1e-6, displayRangeY[1]))] : displayRangeY,
+          ...this.config.rangeY ? {
+            autorange: false,
+            range: this.config.yScale === "log" ? [Math.log10(Math.max(1e-6, this.config.rangeY[0])), Math.log10(Math.max(1e-6, this.config.rangeY[1]))] : this.config.rangeY
+          } : { autorange: true },
           dtick: this.config.yScale === "log" && this.config.yLogBase ? Math.log10(this.config.yLogBase) : void 0,
           gridcolor: majorGrid,
           showgrid: this.config.grid !== "none",
@@ -1319,7 +1393,6 @@
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
           title: { text: this.config.yAxisTitle + frameLabel, font: { size: 14, color: textColor, family: "monospace" } },
-          autorange: false,
           showspikes: showY,
           spikemode: "across",
           spikelinecolor: spikeColor,
@@ -1377,7 +1450,7 @@
             return base;
           })
         };
-        const config = { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ["toImage"] };
+        const config = { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ["toImage"], doubleClick: false };
         return Plotly.react("plot-area", traces, layout, config);
       }
     };

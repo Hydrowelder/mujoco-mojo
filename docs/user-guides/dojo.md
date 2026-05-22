@@ -78,5 +78,18 @@ Dojo is split into two primary environments depending on your current needs:
 
 ---
 
+## Plot Notes
+
+The trial viewer supports freeform notes anchored to specific points on a plot.
+
+- **Add a note:** Middle-click anywhere on the plot area. The Notes panel opens with the cursor's data coordinates pre-filled.
+- **Edit or delete:** Open the Notes panel (the speech-bubble icon in the sidebar) and use the edit/delete controls next to each note.
+- **Jump to a note:** Click the note's coordinates in the list to zoom the plot to that location.
+- **Close the panel:** Left-click anywhere outside the Notes panel, or press ++esc++.
+
+Notes are persisted in the trial's saved configuration and are included when sharing a view via the share URL.
+
+---
+
 !!! success
     Dojo is now live! Now that you have the interface running, move on to the **Monitor** tool to learn how to track your job's progress in real-time.

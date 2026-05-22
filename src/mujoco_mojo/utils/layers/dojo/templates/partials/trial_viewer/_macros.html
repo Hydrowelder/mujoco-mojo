@@ -1,0 +1,65 @@
+{% macro color_picker(color_model, ref_name, label, on_change='', width=280) %}
+{%- set box_h = (width * 160) // 280 -%}
+<div class="space-y-2"
+     x-init="$nextTick(() => {
+    const picker = new iro.ColorPicker($refs.{{ ref_name }}, {
+        width: {{ width }},
+        height: {{ width }},
+        color: {{ color_model }} || '#06b6d4',
+        padding: 0,
+        handleRadius: 9,
+        borderWidth: 1,
+        borderColor: '#000000',
+        layout: [
+            {
+                component: iro.ui.Box,
+                options: { margin: 10, width: {{ width }}, boxHeight: {{ box_h }} }
+            },
+            {
+                component: iro.ui.Slider,
+                options: { sliderType: 'hue', width: {{ width }}, height: 20, margin: 10 }
+            }
+        ]
+    });
+    $watch('{{ color_model }}', value => {
+        if (value && value !== picker.color.hexString) picker.color.set(value);
+    });
+    picker.on('color:change', color => {
+        if ({{ color_model }} === color.hexString) return;
+        {{ color_model }} = color.hexString;
+        {% if on_change %}{{ on_change }};{% endif %}
+    });
+})">
+    <div class="flex items-center justify-between mb-1">
+        <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">{{ label }}</label>
+        <div class="flex gap-1.5">
+            <template x-for="color in plotColors"
+                      :key="color">
+                <button @click="{{ color_model }} = color{% if on_change %}; {{ on_change }}{% endif %}"
+                        class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
+                        :style="`background-color: ${color}`"
+                        :class="{{ color_model }} === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
+                </button>
+            </template>
+        </div>
+    </div>
+    <div class="flex justify-center">
+        <div x-ref="{{ ref_name }}"></div>
+    </div>
+    <div class="flex gap-2 mt-1">
+        <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">#</span>
+            <input type="text"
+                   :value="({{ color_model }} || '').replace('#', '')"
+                   @input="
+                       let v = $event.target.value.replace(/[^a-fA-F0-9]/g, '').substring(0, 6);
+                       {{ color_model }} = '#' + v;
+                       {% if on_change %}{{ on_change }};{% endif %}
+                   "
+                   class="w-full pl-7 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-cyan-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
+        </div>
+        <div class="w-10 h-10 rounded-md border border-slate-300 dark:border-slate-800 shadow-inner shrink-0"
+             :style="'background-color: ' + ({{ color_model }})"></div>
+    </div>
+</div>
+{% endmacro %}

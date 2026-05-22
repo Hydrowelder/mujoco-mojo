@@ -19,16 +19,17 @@ from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
+from ..plot_config import PlotConfig as _PlotConfig
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Derived from FilterType enum — automatically includes any new filter type added to filters.py.
+# Derived from FilterType enum ; automatically includes any new filter type added to filters.py.
 # Used to identify the filter name in Pydantic error location tuples when formatting messages.
 _FILTER_TYPE_NAMES: set[str] = {str(ft) for ft in _FilterType}
 
-# Derived from AnyFilter's union members — automatically includes any new filter class.
+# Derived from AnyFilter's union members ; automatically includes any new filter class.
 # AnyFilter = Annotated[ScaleFilter | AbsoluteValueFilter | ..., Field(discriminator="type")]
 # get_args(AnyFilter)[0] is the bare union; get_args of that gives the individual classes.
 _annotated_args = get_args(_AnyFilter)
@@ -57,7 +58,7 @@ def _format_filter_error(exc: Exception) -> str:
         errors = exc.errors()  # older pydantic build without include_url kwarg
 
     if not errors:
-        return "Filter validation failed — check filter settings"
+        return "Filter validation failed - check filter settings"
 
     first = errors[0]
     loc: tuple = first.get("loc", ())
@@ -100,7 +101,7 @@ def _format_filter_error(exc: Exception) -> str:
 
     # ── Tagged-union discriminator mismatch (bad filter type string) ───────
     if "union" in err_type or "tagged" in err_type:
-        return "Unknown filter type — check filter configuration"
+        return "Unknown filter type - check filter configuration"
 
     # ── Fallback: clean up the raw Pydantic message ───────────────────────
     clean = re.sub(r"\s*\[type=\w+.*?\]\s*$", "", msg).strip()
@@ -108,7 +109,7 @@ def _format_filter_error(exc: Exception) -> str:
     return (
         f"{prefix}{clean}"
         if clean
-        else "Filter validation failed — check filter settings"
+        else "Filter validation failed - check filter settings"
     )
 
 
@@ -209,7 +210,7 @@ async def get_filter_schema():
     """
     Returns metadata for all available filter types, derived from Pydantic models.
 
-    Filter classes are auto-discovered from AnyFilter's union — no changes needed here
+    Filter classes are auto-discovered from AnyFilter's union; no changes needed here
     when a new filter is added to filters.py.
     """
     from pydantic_core import PydanticUndefined
@@ -280,80 +281,116 @@ async def get_filter_schema():
 
 
 # ---------------------------------------------------------------------------
-# Profiles  ·  named saved views stored under {workdir}/profiles/
+# Profiles  ·  named saved views stored under ~/.mujoco-mojo/profiles/
 # ---------------------------------------------------------------------------
 
 
-def _get_profiles_dir() -> Path | None:
-    job = shared.CURRENT_JOB
-    if not job:
-        return None
-    d: Path = job.workdir / "profiles"
-    d.mkdir(exist_ok=True)
+def _get_profiles_dir() -> Path:
+    d: Path = Path.home() / ".mujoco-mojo" / "profiles"
+    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _sanitize_profile_name(name: str) -> str:
-    """Return a filesystem-safe stem from the user-supplied profile name."""
-    name = name.strip()[:128]
-    name = re.sub(r"[^\w\s\-]", "", name)  # keep word chars, whitespace, hyphens
-    name = re.sub(r"\s+", "_", name)  # spaces → underscores
-    name = re.sub(r"_+", "_", name).strip("_")
-    return name[:64] or "profile"
+    """
+    Return a filesystem-safe relative path from the user-supplied profile name.
+
+    Supports folder separators, e.g. 'robotics/arm_reach/baseline'.
+    Each segment is sanitized independently; empty segments are dropped.
+    """
+    name = name.strip()[:256]
+    segments = [s.strip() for s in name.split("/") if s.strip()]
+    safe: list[str] = []
+    for seg in segments:
+        seg = re.sub(r"[^\w\s\-]", "", seg)
+        seg = re.sub(r"\s+", "_", seg)
+        seg = re.sub(r"_+", "_", seg).strip("_")
+        if seg:
+            safe.append(seg[:64])
+    return "/".join(safe) or "profile"
+
+
+def _resolve_profile_path(name: str) -> Path:
+    """Return the resolved path for a profile, raising 400 if it escapes the profiles dir."""
+    d = _get_profiles_dir()
+    path = (d / f"{_sanitize_profile_name(name)}.json").resolve()
+    if not path.is_relative_to(d.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid profile name")
+    return path
 
 
 @router.get("/api/profiles")
 async def list_profiles():
-    """List all saved profiles for the current job."""
+    """List all saved profiles, including those in sub-folders."""
     d = _get_profiles_dir()
-    if d is None:
-        raise HTTPException(status_code=404, detail="No active job")
     profiles = [
-        {"name": f.stem, "modified": int(f.stat().st_mtime * 1000)}
-        for f in sorted(d.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        {
+            "name": f.relative_to(d).with_suffix("").as_posix(),
+            "modified": int(f.stat().st_mtime * 1000),
+        }
+        for f in sorted(
+            d.rglob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
     ]
     return profiles
 
 
-@router.get("/api/profiles/{name}")
+@router.get("/api/profiles/{name:path}")
 async def get_profile(name: str):
-    """Return the PlotConfig JSON for a saved profile."""
-    d = _get_profiles_dir()
-    if d is None:
-        raise HTTPException(status_code=404, detail="No active job")
-    path = d / f"{_sanitize_profile_name(name)}.json"
+    """Return the PlotConfig JSON for a saved profile, validated against the schema."""
+    from pydantic import ValidationError
+
+    path = _resolve_profile_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Profile not found")
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        config = _PlotConfig.model_validate(data)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Profile '{name}' failed validation and cannot be loaded: {exc}",
+        ) from exc
+    return config.model_dump()
 
 
-@router.post("/api/profiles/{name}")
-async def save_profile(name: str, request: Request):
-    """Save the current PlotConfig as a named profile."""
+_PROFILE_MAX_BYTES = 512 * 1024  # 512 KB (more than enough for any real PlotConfig)
+
+
+@router.post("/api/profiles/{name:path}")
+async def save_profile(name: str, request: Request, body: _PlotConfig):
+    """
+    Save the current PlotConfig as a named profile.
+
+    FastAPI/Pydantic validates the request body structure automatically.
+    The Content-Length header is checked first as a lightweight size guard.
+    Sub-folder paths (e.g. 'project/baseline') are supported; directories
+    are created automatically.
+    """
+    cl = request.headers.get("content-length")
+    if cl and int(cl) > _PROFILE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Profile payload too large")
+    path = _resolve_profile_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body.model_dump_json(), encoding="utf-8")
     d = _get_profiles_dir()
-    if d is None:
-        raise HTTPException(status_code=404, detail="No active job")
-    safe = _sanitize_profile_name(name)
-    if not safe:
-        raise HTTPException(status_code=400, detail="Invalid profile name")
-    body = await request.json()
-    (d / f"{safe}.json").write_text(
-        json.dumps(body, separators=(",", ":")), encoding="utf-8"
-    )
-    return {"name": safe}
+    return {"name": path.relative_to(d).with_suffix("").as_posix()}
 
 
-@router.delete("/api/profiles/{name}")
+@router.delete("/api/profiles/{name:path}")
 async def delete_profile(name: str):
     """Delete a saved profile."""
-    d = _get_profiles_dir()
-    if d is None:
-        raise HTTPException(status_code=404, detail="No active job")
-    path = d / f"{_sanitize_profile_name(name)}.json"
+    path = _resolve_profile_path(name)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Profile not found")
     path.unlink()
-    return {"deleted": name}
+    d = _get_profiles_dir()
+    # Remove empty parent directories up to (but not including) the profiles root.
+    parent = path.parent
+    while parent != d and parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+    return {"deleted": path.relative_to(d).with_suffix("").as_posix()}
 
 
 @lru_cache(maxsize=128)

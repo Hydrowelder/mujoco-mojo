@@ -1,49 +1,72 @@
 // ---------------------------------------------------------------------------
 // Option arrays — single source of truth for every select/dropdown in the UI.
 // Each array is `as const` so element types narrow to their literal values.
+//
+// Named types (DashStyle, GridMode, …) are generated from plot_config.py
+// and imported from plot-config.generated.ts to avoid duplication.
 // ---------------------------------------------------------------------------
 
-export const DASH_OPTIONS = ['solid', 'dash', 'dot', 'dashdot'] as const;
-export type DashStyle = (typeof DASH_OPTIONS)[number];
+import type {
+  DashStyle,
+  GridMode,
+  HoverMode,
+  InterpMode,
+  LegendPos,
+  LineMode,
+  MarkerSymbol,
+  ScaleType,
+} from "./plot-config.generated";
 
-export const MARKER_OPTIONS = ['none', 'circle', 'square', 'diamond', 'cross'] as const;
-export type MarkerSymbol = (typeof MARKER_OPTIONS)[number];
+export type {
+  DashStyle,
+  GridMode,
+  HoverMode,
+  InterpMode,
+  LegendPos,
+  LineMode,
+  MarkerSymbol,
+  ScaleType,
+};
 
-export const GRID_OPTIONS = ['none', 'major', 'all'] as const;
-export type GridMode = (typeof GRID_OPTIONS)[number];
+export const DASH_OPTIONS: DashStyle[] = ["solid", "dash", "dot", "dashdot"];
+
+export const MARKER_OPTIONS: MarkerSymbol[] = [
+  "none",
+  "circle",
+  "square",
+  "diamond",
+  "cross",
+];
+
+export const GRID_OPTIONS: GridMode[] = ["none", "major", "all"];
 
 export const LINE_MODE_OPTIONS = [
-  { label: 'Lines', value: 'lines' },
-  { label: 'Markers', value: 'markers' },
-  { label: 'Both', value: 'lines+markers' },
+  { label: "Lines", value: "lines" as LineMode },
+  { label: "Markers", value: "markers" as LineMode },
+  { label: "Both", value: "lines+markers" as LineMode },
 ] as const;
-export type LineMode = (typeof LINE_MODE_OPTIONS)[number]['value'];
 
 export const INTERP_OPTIONS = [
-  { label: 'Linear', value: 'linear' },
-  { label: 'Spline', value: 'spline' },
-  { label: 'Step (HV)', value: 'hv' },
-  { label: 'Step (VH)', value: 'vh' },
-  { label: 'Step (HVH)', value: 'hvh' },
-  { label: 'Step (VHV)', value: 'vhv' },
+  { label: "Linear", value: "linear" as InterpMode },
+  { label: "Spline", value: "spline" as InterpMode },
+  { label: "Step (HV)", value: "hv" as InterpMode },
+  { label: "Step (VH)", value: "vh" as InterpMode },
+  { label: "Step (HVH)", value: "hvh" as InterpMode },
+  { label: "Step (VHV)", value: "vhv" as InterpMode },
 ] as const;
-export type InterpMode = (typeof INTERP_OPTIONS)[number]['value'];
 
 export const HOVER_OPTIONS = [
-  { label: 'Unified X', value: 'x unified' },
-  { label: 'Unified Y', value: 'y unified' },
-  { label: 'Closest', value: 'closest' },
-  { label: 'X Axis', value: 'x' },
-  { label: 'Y Axis', value: 'y' },
-  { label: 'Off', value: 'none' },
+  { label: "Unified X", value: "x unified" as HoverMode },
+  { label: "Unified Y", value: "y unified" as HoverMode },
+  { label: "Closest", value: "closest" as HoverMode },
+  { label: "X Axis", value: "x" as HoverMode },
+  { label: "Y Axis", value: "y" as HoverMode },
+  { label: "Off", value: "none" as HoverMode },
 ] as const;
-export type HoverMode = (typeof HOVER_OPTIONS)[number]['value'];
 
-export const LEGEND_POS_OPTIONS = ['bottom', 'right', 'hidden'] as const;
-export type LegendPos = (typeof LEGEND_POS_OPTIONS)[number];
+export const LEGEND_POS_OPTIONS: LegendPos[] = ["bottom", "right", "hidden"];
 
-export const SCALE_OPTIONS = ['linear', 'log'] as const;
-export type ScaleType = (typeof SCALE_OPTIONS)[number];
+export const SCALE_OPTIONS: ScaleType[] = ["linear", "log"];
 
 // ---------------------------------------------------------------------------
 // Label-lookup helpers — derive the display string for a current config value.

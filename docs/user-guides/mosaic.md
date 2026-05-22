@@ -58,7 +58,7 @@ Adjust the visual style. Switch between Lines, Markers, or both. Change interpol
 
 ### Notes Editor
 
-Click anywhere on the plot to drop a persistent note. These are saved into the JSON config and help you flag specific events (like "Impact Start" or "Sensor Saturation"). The editor allows you to go back and edit the note's label. Typos happen!
+**Middle-click** anywhere on the plot to drop a persistent note at the exact data coordinates of your cursor. Notes are saved into the JSON config and help you flag specific events (like "Impact Start" or "Sensor Saturation"). The editor allows you to go back and edit the note's label. Press ++esc++ to cancel an in-progress note or close the panel.
 
 ???+ tip "Tip: Clickable Buttons"
     You can click on a note in the editor to "focus" on the note!
@@ -71,17 +71,37 @@ Click anywhere on the plot to drop a persistent note. These are saved into the J
 
 ### Shapes Editor
 
-Add various shapes to the plot. After selecting an option in the menu, your mouse becomes a placement tool. Clicking on the plot configures the placement of the shape.
+Add various shapes to the plot. After selecting an option in the menu, your mouse becomes a placement tool. Clicking on the plot configures the placement of the shape. Press ++esc++ at any time to cancel placement.
 
 - **V-Line:** Draws a vertical line on the plot. The abscissa of the mouse determines the abscissa of the line.
 - **H-Line:** Draws a horizontal line on the plot. The ordinate of the mouse determines the ordinate of the line.
 - **Rect:** Draws a rectangle on the plot. The abscissa and ordinate of the mouse determines one of the corners of the rectangle. Likewise, the second click determines the other corner.
+
+Each new shape is automatically assigned the next color in the preset palette so overlapping shapes remain visually distinct. The shape editor includes a full color picker (identical to the signal color picker) for precise color control.
 
 <figure align="center">
     <img src="../../assets/user-guides/light-shapes-editor.jpg#only-light" alt="Shapes editor menu" style="width: 60%; height: auto;">
     <img src="../../assets/user-guides/dark-shapes-editor.jpg#only-dark" alt="Shapes editor menu" style="width: 60%; height: auto;">
     <figcaption>The menu for <b>shapes editor</b> is active and in editing mode. A shape's label and color is being edited. The plot area shows a vertical (yellow) and horizontal (red) line and a rectangle (purple).</figcaption>
 </figure>
+
+### Saved Profiles
+
+Profiles save your complete plot configuration (selected signals, axes, display settings, zoom, annotations, and shapes) under a named key so you can restore a view instantly.
+
+Profiles are stored globally in `~/.mujoco-mojo/profiles/` and are available across all workdirs, making it easy to share a standard analysis setup between projects.
+
+**Creating a profile**
+
+Type a name in the save box and press **Save** or ++enter++. To organize profiles into folders use a `folder/name` path, for example `arm-reach/baseline`. Folders are created automatically and the input field offers Tab-completion for existing folder names.
+
+**Loading a profile**
+
+Click **Load** next to any profile in the list. If the profile references signals, axes, or reference frames that do not exist in the current trial it will be rejected with an error toast rather than silently applying an invalid configuration. Profiles that are incompatible with the current trial are marked with a warning icon in the list.
+
+**Searching profiles**
+
+A search box filters the profile list by name (including folder path) as you type.
 
 ### Undo/Redo
 

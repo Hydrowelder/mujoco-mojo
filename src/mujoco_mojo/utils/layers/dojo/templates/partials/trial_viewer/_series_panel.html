@@ -427,7 +427,8 @@
                          x-data="{
         open: false,
         coords: { top: 0, left: 0, width: 0 }
-     }">
+     }"
+                         @mojo:escape.window="open = false">
                         <span x-ref="anchor"
                               class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
                               :style="`
@@ -597,84 +598,8 @@
                                                :placeholder="temp.label || col"
                                                class="input-field w-full px-3 py-2" />
                                     </div>
-                                    <div class="space-y-2"
-                                         x-init="$nextTick(() => {
-                    const picker = new iro.ColorPicker($refs.picker, {
-                        width: 280,
-                        height: 180,
-                        color: temp.color || '#ffffff',
-                        padding: 0,
-                        handleRadius: 9,
-                        borderWidth: 1,
-                        borderColor: '#000000',
-                        layout: [
-                            {
-                                component: iro.ui.Box,
-                                options: {
-                                    margin: 10,
-                                    width: 280,
-                                    boxHeight: 160,
-                                }
-                            },
-                            {
-                                component: iro.ui.Slider,
-                                options: {
-                                    sliderType: 'hue',
-                                    width: 280,
-                                    height: 20,
-                                    margin: 10
-                                }
-                            }
-                        ]
-                    });
-                    $watch('temp.color', value => {
-                        if (value && value !== picker.color.hexString) {
-                            picker.color.set(value);
-                        }
-                    });
-
-                    picker.on('color:change', (color) => {
-                        if (temp.color === color.hexString) return;
-                        temp.color = color.hexString;
-                        isDirty = true;
-                    });
-                 })">
-                                        <div class="flex items-center justify-between mb-1">
-                                            <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Signal Color</label>
-
-                                            <div class="flex gap-1.5">
-                                                <template x-for="color in plotColors"
-                                                          :key="color">
-                                                    <button @click="temp.color = color; isDirty = true"
-                                                            class="w-5 h-5 rounded-full border border-white dark:border-slate-900 shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-cyan-500 outline-none"
-                                                            :style="`background-color: ${color}`"
-                                                            :class="temp.color === color ? 'ring-2 ring-cyan-500 scale-110' : ''">
-                                                    </button>
-                                                </template>
-                                            </div>
-                                        </div>
-                                        <div class="flex justify-center">
-                                            <div x-ref="picker"></div>
-                                        </div>
-
-                                        <div class="flex gap-2">
-                                            <div class="relative flex-1">
-                                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">#</span>
-
-                                                <input type="text"
-                                                       :value="(temp.color || '').replace('#', '')"
-                                                       @input="
-                   let v = $event.target.value.replace(/[^a-fA-F0-9]/g, '').substring(0, 6);
-                   temp.color = '#' + v;
-                   isDirty = true;
-               "
-                                                       class="w-full pl-7 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-cyan-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500" />
-                                            </div>
-
-                                            <div class="w-10 h-10 rounded-md border border-slate-300 dark:border-slate-800 shadow-inner shrink-0"
-                                                 :style="`background-color: ${temp.color}`"></div>
-                                        </div>
-                                    </div>
+                                    {% from 'partials/trial_viewer/_macros.html' import color_picker %}
+                                    {{ color_picker('temp.color', 'seriesPicker', 'Signal Color', on_change='isDirty = true') }}
 
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">

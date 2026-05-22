@@ -517,7 +517,7 @@
         <!-- ── ANNOTATION EDITOR ────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.outside="if (!annDraft) annotationsOpen = false">
+                 @click.outside="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }">
                 <button @click="annotationsOpen = !annotationsOpen"
                         class="sidebar-btn disabled:opacity-20"
                         :class="annotationsOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
@@ -552,7 +552,7 @@
                          class="py-12 px-4 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                         <p class="text-sm font-bold text-slate-400 uppercase tracking-tight leading-relaxed">
                             No notes yet.<br>
-                            <span class="text-cyan-500/80">Click any point on the plot</span><br>
+                            <span class="text-cyan-500/80">Middle-click any point on the plot</span><br>
                             to drop a new note.
                         </p>
                     </div>
@@ -776,28 +776,19 @@
                     </button>
 
                     <!-- editor -->
+                    {% from 'partials/trial_viewer/_macros.html' import color_picker %}
                     <template x-if="shapeDraft">
-                        <div class="mb-6 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg">
-                            <div class="flex justify-between items-center mb-2">
-                                <p class="text-sm font-bold text-cyan-500 uppercase"
-                                   x-text="shapeEditIndex !== null ? 'Edit Shape' : 'New Shape'"></p>
-                                <div class="flex gap-1.5">
-                                    <template x-for="color in plotColors"
-                                              :key="color">
-                                        <button @click="shapeDraft.color = color"
-                                                class="w-3 h-3 rounded-full border border-white/20 transition-transform hover:scale-125"
-                                                :style="`background-color: ${color}`"
-                                                :class="shapeDraft.color === color ? 'ring-1 ring-offset-1 ring-slate-400' : ''"></button>
-                                    </template>
-                                </div>
-                            </div>
+                        <div class="mb-6 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg space-y-3">
+                            <p class="text-sm font-bold text-cyan-500 uppercase"
+                               x-text="shapeEditIndex !== null ? 'Edit Shape' : 'New Shape'"></p>
+                            {{ color_picker('shapeDraft.color', 'shapePicker', 'Shape Color', width=240) }}
                             <input type="text"
                                    x-model="shapeDraft.label"
                                    placeholder="Add a label..."
                                    @keydown.enter="saveShape()"
                                    @keydown.escape="cancelShapeDraft()"
                                    class="input-field w-full shadow-sm px-2 py-1.5" />
-                            <div class="flex justify-end gap-2 mt-2">
+                            <div class="flex justify-end gap-2">
                                 <button @click="cancelShapeDraft()"
                                         class="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase">Cancel</button>
                                 <button @click="saveShape()"
@@ -921,8 +912,8 @@
         <!-- ── PROFILES ───────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.away="profilesOpen = false">
-                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
+                 @click.away="profilesOpen = false; profileSearch = ''">
+                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles(); else profileSearch = ''"
                         class="sidebar-btn"
                         :class="profilesOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
                         title="Saved Profiles">
@@ -947,37 +938,157 @@
                      x-transition
                      class="absolute right-full top-0 mr-4 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[200]">
 
-                    <p class="text-base font-black uppercase text-slate-400 mb-4 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
-                        Saved Profiles
-                    </p>
+                    <div class="flex items-center justify-between mb-4 border-b border-slate-200 dark:border-slate-700 pb-1">
+                        <p class="text-base font-black uppercase text-slate-400 tracking-widest">
+                            Saved Profiles
+                        </p>
+
+                        <div class="group cursor-help relative">
+                            <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2.5"
+                                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+
+                            <div class="tooltip-panel right-0 bottom-full top-auto mt-0 mb-2 w-72">
+                                <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                                    Saved Profiles
+                                </p>
+                                <div class="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                    <p>
+                                        Profiles save your entire <span class="font-bold text-slate-900 dark:text-white">plot configuration</span>: selected signals, x-axis, display settings, zoom, annotations, and shapes.
+                                    </p>
+                                    <p>
+                                        Use <code class="text-cyan-500 font-mono">folder/name</code> to organise profiles into sub-folders, e.g. <code class="text-cyan-500 font-mono">arm-reach/baseline</code>. Folders are created automatically.
+                                    </p>
+                                    <p>
+                                        Profiles are stored globally in <code class="text-cyan-500 font-mono">~/.mujoco-mojo/profiles/</code> and are available across all workdirs.
+                                    </p>
+                                    <p>
+                                        Loading a profile whose signals or axes are <span class="font-bold text-rose-500">not present in the current trial</span> will be rejected to prevent an invalid plot state.
+                                    </p>
+                                    <p class="text-slate-400 italic">
+                                        Profiles with incompatible columns are marked with a <span class="text-amber-500 not-italic">⚠</span> warning icon.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Save new profile -->
-                    <div class="flex gap-2 mb-4">
+                    <div class="mb-4"
+                         x-data="{
+                             get _dirs() {
+                                 const s = new Set();
+                                 profiles.forEach(p => {
+                                     const parts = p.name.split('/');
+                                     for (let i = 1; i < parts.length; i++)
+                                         s.add(parts.slice(0, i).join('/') + '/');
+                                 });
+                                 return [...s].sort();
+                             },
+                             get suggestion() {
+                                 const v = profileNameDraft;
+                                 if (!v) return '';
+                                 return this._dirs.find(d => d.startsWith(v) && d !== v) ?? '';
+                             },
+                             accept() { if (this.suggestion) profileNameDraft = this.suggestion; }
+                         }">
+                        <div class="flex gap-2">
+                            <input type="text"
+                                   x-model="profileNameDraft"
+                                   @keydown.tab.prevent="accept()"
+                                   @keydown.enter="saveProfile()"
+                                   @keydown.escape.stop="profileNameDraft = ''"
+                                   placeholder="name or folder/name"
+                                   class="input-field flex-1 px-2 py-1.5" />
+                            <button @click="saveProfile()"
+                                    :disabled="!profileNameDraft.trim()"
+                                    class="btn btn-primary text-xs font-black uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed">
+                                Save
+                            </button>
+                        </div>
+                        <!-- directory suggestion hint -->
+                        <div x-show="suggestion"
+                             class="mt-1 flex items-center gap-1.5 text-xs font-mono">
+                            <button @click="accept()"
+                                    class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
+                                    x-text="suggestion"></button>
+                            <kbd>Tab</kbd>
+                        </div>
+                    </div>
+
+                    <!-- Search -->
+                    <div x-show="profiles.length > 0"
+                         class="relative mb-2">
+                        <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                        </svg>
                         <input type="text"
-                               x-model="profileNameDraft"
-                               @keydown.enter="saveProfile()"
-                               placeholder="Profile name..."
-                               class="input-field flex-1 px-2 py-1.5 text-sm" />
-                        <button @click="saveProfile()"
-                                :disabled="!profileNameDraft.trim()"
-                                class="btn btn-primary text-xs font-black uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed">
-                            Save
+                               x-model="profileSearch"
+                               @keydown.escape.stop="profileSearch = ''"
+                               placeholder="Filter profiles..."
+                               class="input-field w-full pl-7 pr-7 py-1.5 text-sm" />
+                        <button x-show="profileSearch"
+                                @click="profileSearch = ''"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors">
+                            <svg class="w-3.5 h-3.5"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2.5"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
                         </button>
                     </div>
 
                     <!-- Profile list -->
                     <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
-                        <template x-for="p in profiles"
+                        <template x-for="p in profiles.filter(p => !profileSearch || p.name.toLowerCase().includes(profileSearch.toLowerCase()))"
                                   :key="p.name">
                             <div class="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 group">
                                 <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 truncate"
-                                       x-text="p.name"></p>
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 flex items-baseline min-w-0 overflow-hidden">
+                                            <template x-if="p.name.includes('/')">
+                                                <span class="font-normal text-slate-400 dark:text-slate-500 shrink-0"
+                                                      x-text="p.name.substring(0, p.name.lastIndexOf('/') + 1)"></span>
+                                            </template>
+                                            <span class="truncate"
+                                                  x-text="p.name.includes('/') ? p.name.substring(p.name.lastIndexOf('/') + 1) : p.name"></span>
+                                        </p>
+                                        <template x-if="profileWarnings[p.name]">
+                                            <span :title="'Not in this trial: ' + (profileWarnings[p.name] || []).join(', ')"
+                                                  class="text-amber-500 shrink-0 cursor-help">
+                                                <svg class="w-3.5 h-3.5"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          stroke-width="2"
+                                                          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                </svg>
+                                            </span>
+                                        </template>
+                                    </div>
                                     <p class="text-xs text-slate-400 dark:text-slate-500 font-mono"
                                        x-text="notifTimeAgo(p.modified, $store.dojo.notifTick)"></p>
                                 </div>
                                 <button @click="loadProfile(p.name)"
-                                        class="text-xs px-2 py-1 rounded bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500 hover:text-white font-bold transition-colors shrink-0">
+                                        class="text-xs px-2 py-1 rounded bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500 hover:text-white font-bold transition-colors shrink-0 uppercase">
                                     Load
                                 </button>
                                 <button @click="deleteProfile(p.name)"
@@ -998,6 +1109,10 @@
                         <p x-show="profiles.length === 0"
                            class="text-xs font-mono italic text-slate-400 dark:text-slate-600 text-center py-4">
                             No profiles saved yet
+                        </p>
+                        <p x-show="profiles.length > 0 && profileSearch && !profiles.some(p => p.name.toLowerCase().includes(profileSearch.toLowerCase()))"
+                           class="text-xs font-mono italic text-slate-400 dark:text-slate-600 text-center py-4">
+                            No profiles match "<span x-text="profileSearch"></span>"
                         </p>
                     </div>
                 </div>
