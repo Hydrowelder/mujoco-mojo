@@ -428,6 +428,7 @@
         open: false,
         coords: { top: 0, left: 0, width: 0 }
      }"
+                         x-init="$watch('open', v => $store.dojo.overlayCount = Math.max(0, $store.dojo.overlayCount + (v ? 1 : -1)))"
                          @mojo:escape.window="open = false">
                         <span x-ref="anchor"
                               class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
@@ -599,7 +600,7 @@
                                                class="input-field w-full px-3 py-2" />
                                     </div>
                                     {% from 'partials/trial_viewer/_macros.html' import color_picker %}
-                                    {{ color_picker('temp.color', 'seriesPicker', 'Signal Color', on_change='isDirty = true') }}
+                                    {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true') }}
 
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">

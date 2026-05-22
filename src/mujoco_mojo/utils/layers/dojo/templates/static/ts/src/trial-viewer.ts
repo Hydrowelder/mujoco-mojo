@@ -766,6 +766,10 @@ function trialViewer(trialId: string, externalUrl: string) {
         (Alpine.store("dojo") as DojoStore).setPageReady(true);
       }
 
+      // Capture phase so this runs before Alpine's bubble-phase window listeners
+      // (e.g. @keydown.escape.window in base.html). stopImmediatePropagation()
+      // in the Escape branch then prevents those listeners from firing when a
+      // panel was open.
       window.addEventListener("keydown", (e) => {
         if (e.repeat) return;
         const tag = (e.target as HTMLElement).tagName;
@@ -776,6 +780,14 @@ function trialViewer(trialId: string, externalUrl: string) {
           )?.focus();
         }
         if (e.key === "Escape") {
+          const anyOpen = !!(
+            this.placementMode || this.annotationsOpen || this.shapesOpen ||
+            this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen ||
+            this.settingsOpen || this.downloadOpen || this.editorOpen ||
+            this.profilesOpen || this.vsMenuOpen ||
+            (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
+            ["INPUT", "TEXTAREA"].includes(tag)
+          );
           if (["INPUT", "TEXTAREA"].includes(tag))
             (e.target as HTMLElement).blur();
           this.placementMode = null;
@@ -789,6 +801,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.profilesOpen = this.vsMenuOpen = false;
           this.profileSearch = "";
           window.dispatchEvent(new CustomEvent("mojo:escape"));
+          // Stop immediate propagation when something was open so Alpine's
+          // bubble-phase @keydown.escape.window handler doesn't also fire.
+          if (anyOpen) e.stopImmediatePropagation();
         }
         if (["INPUT", "TEXTAREA"].includes(tag)) return;
         if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
@@ -807,7 +822,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           e.preventDefault();
           this.redo();
         }
-      });
+      }, { capture: true });
 
       const resp = await fetch("/mosaic/api/trials");
       const data = (await resp.json()) as TrialManifest;

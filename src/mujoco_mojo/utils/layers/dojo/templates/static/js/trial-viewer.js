@@ -694,6 +694,7 @@
             document.querySelector('input[type="number"]')?.focus();
           }
           if (e.key === "Escape") {
+            const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
             if (["INPUT", "TEXTAREA"].includes(tag))
               e.target.blur();
             this.placementMode = null;
@@ -707,6 +708,7 @@
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
             window.dispatchEvent(new CustomEvent("mojo:escape"));
+            if (anyOpen) e.stopImmediatePropagation();
           }
           if (["INPUT", "TEXTAREA"].includes(tag)) return;
           if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
@@ -724,7 +726,7 @@
             e.preventDefault();
             this.redo();
           }
-        });
+        }, { capture: true });
         const resp = await fetch("/mosaic/api/trials");
         const data = await resp.json();
         this.allTrials = data.trials ?? [];

@@ -9,6 +9,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.store('dojo', {
     isPageReady: false,
     isFullscreen: localStorage.getItem('mojo_fullscreen') === 'true',
+    overlayCount: 0,
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem('mojo_muted') !== 'false',
