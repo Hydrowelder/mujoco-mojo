@@ -1,13 +1,19 @@
-import type {
+export type {
+  Annotation,
   DashStyle,
+  FilterEntry,
   GridMode,
   HoverMode,
   InterpMode,
   LegendPos,
   LineMode,
   MarkerSymbol,
+  PlotConfig,
   ScaleType,
-} from './lib/options';
+  Shape,
+  ShapeType,
+  YAxisConfig,
+} from "./lib/plot-config.generated";
 
 // ---------------------------------------------------------------------------
 // Backend API shapes
@@ -51,15 +57,9 @@ export interface TrialDataResponse {
 // Filter stack (per-signal server-side transformations)
 // ---------------------------------------------------------------------------
 
-export interface FilterEntry {
-  type: string;
-  enabled?: boolean;
-  [key: string]: unknown;
-}
-
 export interface FilterParamSchema {
   name: string;
-  type: 'float' | 'int' | 'bool' | 'string';
+  type: "float" | "int" | "bool" | "string";
   default: number | boolean | string | null;
   min?: number;
   max?: number;
@@ -80,61 +80,8 @@ export interface FilterSchema {
   unit_groups?: UnitGroup[];
 }
 
-// ---------------------------------------------------------------------------
-// Plot configuration (the serialized state stored in localStorage / URL)
-// ---------------------------------------------------------------------------
-
-export interface YAxisConfig {
-  label: string;
-  color: string;
-  width: number;
-  opacity: number;
-  filters: FilterEntry[];
-  dash: DashStyle;
-  marker: MarkerSymbol;
-}
-
-export interface Annotation {
-  x: number;
-  y: number;
-  text: string;
-}
-
-export interface Shape {
-  type: 'vline' | 'hline' | 'rect';
-  x0: number;
-  x1?: number;
-  y0?: number;
-  y1?: number;
-  color: string;
-  dash?: DashStyle;
-  label: string;
-}
-
-export interface PlotConfig {
-  xAxis: string;
-  yAxes: Record<string, YAxisConfig>;
-  refFrame: string | null;
-  grid: GridMode;
-  linemode: LineMode;
-  interp: InterpMode;
-  hover: HoverMode;
-  title: string;
-  xAxisTitle: string;
-  yAxisTitle: string;
-  showSpike: boolean;
-  legendPos: LegendPos;
-  rangeX: [number, number] | null;
-  rangeY: [number, number] | null;
-  xScale: ScaleType;
-  yScale: ScaleType;
-  xLogBase?: number;
-  yLogBase?: number;
-  vsEnabled: boolean;
-  vsRange: [number, number];
-  annotations: Annotation[];
-  shapes: Shape[];
-}
+// PlotConfig and related types are generated from plot_config.py — see the
+// re-exports at the top of this file and lib/plot-config.generated.ts.
 
 // ---------------------------------------------------------------------------
 // Notification history
@@ -143,7 +90,7 @@ export interface PlotConfig {
 export interface NotificationEntry {
   id: number;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: "success" | "error" | "info";
   timestamp: number;
   read: boolean;
 }
@@ -160,7 +107,11 @@ export interface DojoStore {
   isAutoRefresh: boolean;
   isConnected: boolean;
   _wasConnected: boolean | null;
-  globalToast: { show: boolean; message: string; type: 'success' | 'error' | 'info' };
+  globalToast: {
+    show: boolean;
+    message: string;
+    type: "success" | "error" | "info";
+  };
   isSyncing: boolean;
   syncProgress: number;
   secondsSinceUpdate: number;
@@ -170,13 +121,13 @@ export interface DojoStore {
   unreadCount: number;
   notifOpen: boolean;
   notifTick: number;
-  toast(message: string, type?: 'success' | 'error' | 'info'): void;
+  toast(message: string, type?: "success" | "error" | "info"): void;
   _setConnected(connected: boolean): void;
   startGlobalSync(): void;
   stopGlobalSync(): void;
   setPageReady(val: boolean, force?: boolean): void;
   updateSync(timestamp: number, isComplete?: boolean): void;
-  addNotification(message: string, type: 'success' | 'error' | 'info'): void;
+  addNotification(message: string, type: "success" | "error" | "info"): void;
   openNotifications(): void;
   clearNotifications(): void;
 }
