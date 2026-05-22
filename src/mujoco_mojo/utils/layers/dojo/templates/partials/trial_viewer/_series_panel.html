@@ -332,6 +332,45 @@
                                                        @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
                                                        class="input-field flex-1 px-2 py-1 text-xs"/>
                                             </template>
+                                            <template x-if="param.type === 'col'">
+                                                <div class="flex-1 relative"
+                                                     x-data="{ cOpen: false, cSearch: '', cCoords: { top: 0, left: 0, width: 0 } }"
+                                                     @click.away="cOpen = false">
+                                                    <button x-ref="cBtn"
+                                                            @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
+                                                            class="{{ dropdown_trigger_sm }}">
+                                                        <span class="text-xs truncate" x-text="f[param.name] || '— none —'"></span>
+                                                        <svg class="w-2.5 h-2.5 shrink-0 transition-transform" :class="cOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"/></svg>
+                                                    </button>
+                                                    <template x-teleport="body">
+                                                        <div x-show="cOpen"
+                                                             x-transition
+                                                             @click.stop
+                                                             @click.away="cOpen = false"
+                                                             :style="`position:absolute;top:${cCoords.top}px;left:${cCoords.left}px;width:14rem;`"
+                                                             class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                             style="display:none;">
+                                                            <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                <input type="text" x-model="cSearch" placeholder="Filter..." class="input-field w-full px-2 py-1 text-xs"/>
+                                                            </div>
+                                                            <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                <button @click="setFilterParamOnTemp(temp, fi, param.name, null); isDirty = true; cOpen = false"
+                                                                        :class="!f[param.name] ? 'bg-cyan-500 text-white font-bold' : 'text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                        class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-slate-200 dark:border-slate-700 italic">
+                                                                    — none (use dt) —
+                                                                </button>
+                                                                <template x-for="c in [...columns.filter(c => !cSearch || c.toLowerCase().includes(cSearch.toLowerCase()))].sort((a,b) => a==='time' ? -1 : b==='time' ? 1 : 0)" :key="c">
+                                                                    <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; cOpen = false"
+                                                                            :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                            x-text="c">
+                                                                    </button>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </div>
                                     </template>
                                 </div>
@@ -1122,6 +1161,46 @@
                                                                            :value="f[param.name]"
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
                                                                            class="input-field flex-1 px-2 py-1 text-xs" />
+                                                                </template>
+                                                                <!-- column reference dropdown -->
+                                                                <template x-if="param.type === 'col'">
+                                                                    <div class="flex-1 relative"
+                                                                         x-data="{ cOpen: false, cSearch: '', cCoords: { top: 0, left: 0, width: 0 } }"
+                                                                         @click.away="cOpen = false">
+                                                                        <button x-ref="cBtn"
+                                                                                @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
+                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                            <span class="text-xs truncate" x-text="f[param.name] || '— none —'"></span>
+                                                                            <svg class="w-2.5 h-2.5 shrink-0 transition-transform" :class="cOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"/></svg>
+                                                                        </button>
+                                                                        <template x-teleport="body">
+                                                                            <div x-show="cOpen"
+                                                                                 x-transition
+                                                                                 @click.stop
+                                                                                 @click.away="cOpen = false"
+                                                                                 :style="`position:absolute;top:${cCoords.top}px;left:${cCoords.left}px;width:14rem;`"
+                                                                                 class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                                                 style="display:none;">
+                                                                                <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                                    <input type="text" x-model="cSearch" placeholder="Filter..." class="input-field w-full px-2 py-1 text-xs"/>
+                                                                                </div>
+                                                                                <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                                    <button @click="setFilterParamOnTemp(temp, fi, param.name, null); isDirty = true; cOpen = false"
+                                                                                            :class="!f[param.name] ? 'bg-cyan-500 text-white font-bold' : 'text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                                            class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-slate-200 dark:border-slate-700 italic">
+                                                                                        — none (use dt) —
+                                                                                    </button>
+                                                                                    <template x-for="c in [...columns.filter(c => !cSearch || c.toLowerCase().includes(cSearch.toLowerCase()))].sort((a,b) => a==='time' ? -1 : b==='time' ? 1 : 0)" :key="c">
+                                                                                        <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; cOpen = false"
+                                                                                                :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                                                x-text="c">
+                                                                                        </button>
+                                                                                    </template>
+                                                                                </div>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
                                                                 </template>
                                                             </div>
                                                         </template>
