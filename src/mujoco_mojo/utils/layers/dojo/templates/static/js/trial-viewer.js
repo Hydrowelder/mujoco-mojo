@@ -1037,8 +1037,8 @@
       },
       validateConfig(cfg) {
         const errors = [];
-        if (!this.columns.includes(cfg.xAxis))
-          errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
+        if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col))
+          errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
         if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
           errors.push("yAxes must be a hashmap.");
         } else {
@@ -1471,8 +1471,8 @@
                 if (!pr.ok) return;
                 const cfg = await pr.json();
                 const w = [];
-                if (cfg.xAxis && !colSet.has(cfg.xAxis))
-                  w.push(`x-axis "${cfg.xAxis}"`);
+                if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
+                  w.push(`x-axis "${cfg.xAxis.col}"`);
                 for (const key of Object.keys(cfg.yAxes ?? {})) {
                   if (!colSet.has(key)) w.push(`"${key}"`);
                 }
@@ -1527,8 +1527,8 @@
             this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", ""))
           );
           const missing = [];
-          if (loaded.xAxis && !colSet.has(loaded.xAxis))
-            missing.push(`x-axis "${loaded.xAxis}"`);
+          if (loaded.xAxis?.col && !colSet.has(loaded.xAxis.col))
+            missing.push(`x-axis "${loaded.xAxis.col}"`);
           for (const key of Object.keys(loaded.yAxes ?? {})) {
             if (!colSet.has(key)) missing.push(`signal "${key}"`);
           }
@@ -1936,7 +1936,7 @@
         const plotEl = document.getElementById("plot-area");
         if (plotEl && this._renderedPlotType !== this.config.plotType) {
           Plotly.purge(plotEl);
-          this._renderedPlotType = this.config.plotType;
+          this._renderedPlotType = this.config.plotType ?? null;
           return Plotly.newPlot("plot-area", traces, layout, config);
         }
         return Plotly.react("plot-area", traces, layout, config);

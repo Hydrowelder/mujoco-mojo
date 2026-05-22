@@ -6,6 +6,8 @@ declare global {
   // Minimal Plotly surface used by trial-viewer
   const Plotly: {
     react(el: string | HTMLElement, data: object[], layout: object, config?: object): Promise<void>;
+    newPlot(el: string | HTMLElement, data: object[], layout: object, config?: object): Promise<void>;
+    purge(el: string | HTMLElement): void;
     relayout(el: string | HTMLElement, update: object): Promise<void>;
     toImage(el: string | HTMLElement, opts: object): Promise<string>;
     Plots: { resize(el: HTMLElement): void };
