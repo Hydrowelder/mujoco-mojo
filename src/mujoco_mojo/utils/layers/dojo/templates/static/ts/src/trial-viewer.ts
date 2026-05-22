@@ -40,7 +40,7 @@ const tw = {
 } as const;
 
 const DEFAULT_CONFIG: PlotConfig = {
-  xAxis: "time",
+  xAxis: { col: "time", filters: [] },
   yAxes: {},
   refFrame: null,
   grid: "all",
@@ -56,6 +56,7 @@ const DEFAULT_CONFIG: PlotConfig = {
   rangeY: null,
   xScale: "linear",
   yScale: "linear",
+  plotType: "cartesian",
   vsEnabled: false,
   vsRange: [0, 10],
   annotations: [],
@@ -79,6 +80,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     isMac: /Mac|iPhone|iPod|iPad/.test(navigator.platform),
     data: null as Record<string, number[]> | null,
     errorState: null as string | null,
+    _renderedPlotType: null as string | null,
 
     // --- UI / MENU STATES ---
     theme: "dark",
@@ -132,6 +134,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     // tracks the last filter fingerprint that was fetched for each col; used to detect
     // real filter changes without relying on Alpine.js's (unreliable) oldValue deep clone
     filterFingerprints: {} as Record<string, string>,
+    xAxisFilterFingerprint: "[]" as string,
     // deduplicates filter error toasts so VS mode (N parallel fetches) shows each error once
     _shownFilterErrors: new Set<string>(),
     // in-progress signal editor edits that survive closing/reopening the panel
@@ -249,19 +252,24 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (this.config.refFrame)
         colParams.append("rotate_by", this.config.refFrame);
 
-      // include active filter stacks for requested yAxis columns
+      // include active filter stacks for requested columns (x-axis and y-axes)
       const filtersPayload: Record<string, object[]> = {};
+      const toActiveFilters = (filters: { enabled?: boolean; [k: string]: unknown }[]) =>
+        filters
+          .filter((f) => f.enabled !== false)
+          .map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
       for (const col of requiredCols) {
         const yConfig = this.config.yAxes[col];
         if (yConfig?.filters && yConfig.filters.length > 0) {
-          const active = yConfig.filters
-            .filter((f) => f.enabled !== false)
-            .map((f) =>
-              Object.fromEntries(
-                Object.entries(f).filter(([k]) => k !== "enabled"),
-              ),
-            );
+          const active = toActiveFilters(yConfig.filters);
           if (active.length > 0) filtersPayload[col] = active;
+        }
+        if (col === this.config.xAxis!.col!) {
+          const xFilters = this.config.xAxis?.filters ?? [];
+          if (xFilters.length > 0) {
+            const active = toActiveFilters(xFilters);
+            if (active.length > 0) filtersPayload[col] = active;
+          }
         }
       }
       if (Object.keys(filtersPayload).length > 0) {
@@ -340,7 +348,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
       const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
 
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
@@ -490,7 +498,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           })
         | null;
       if (!el || !this.data) return;
-      const xValues = this.data[this.config.xAxis] ?? [];
+      const xValues = this.data[this.config.xAxis!.col!] ?? [];
       const xMin = xValues[0] ?? 0;
       const xMax = xValues[xValues.length - 1] ?? 100;
       const xSpan = (xMax - xMin) * 0.1;
@@ -612,7 +620,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       try {
         const initialCols = [
-          this.config.xAxis,
+          this.config.xAxis!.col!,
           ...Object.keys(this.config.yAxes),
         ];
         const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -766,6 +774,10 @@ function trialViewer(trialId: string, externalUrl: string) {
         (Alpine.store("dojo") as DojoStore).setPageReady(true);
       }
 
+      // Capture phase so this runs before Alpine's bubble-phase window listeners
+      // (e.g. @keydown.escape.window in base.html). stopImmediatePropagation()
+      // in the Escape branch then prevents those listeners from firing when a
+      // panel was open.
       window.addEventListener("keydown", (e) => {
         if (e.repeat) return;
         const tag = (e.target as HTMLElement).tagName;
@@ -776,6 +788,14 @@ function trialViewer(trialId: string, externalUrl: string) {
           )?.focus();
         }
         if (e.key === "Escape") {
+          const anyOpen = !!(
+            this.placementMode || this.annotationsOpen || this.shapesOpen ||
+            this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen ||
+            this.settingsOpen || this.downloadOpen || this.editorOpen ||
+            this.profilesOpen || this.vsMenuOpen ||
+            (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
+            ["INPUT", "TEXTAREA"].includes(tag)
+          );
           if (["INPUT", "TEXTAREA"].includes(tag))
             (e.target as HTMLElement).blur();
           this.placementMode = null;
@@ -789,6 +809,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.profilesOpen = this.vsMenuOpen = false;
           this.profileSearch = "";
           window.dispatchEvent(new CustomEvent("mojo:escape"));
+          // Stop immediate propagation when something was open so Alpine's
+          // bubble-phase @keydown.escape.window handler doesn't also fire.
+          if (anyOpen) e.stopImmediatePropagation();
         }
         if (["INPUT", "TEXTAREA"].includes(tag)) return;
         if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
@@ -807,7 +830,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           e.preventDefault();
           this.redo();
         }
-      });
+      }, { capture: true });
 
       const resp = await fetch("/mosaic/api/trials");
       const data = (await resp.json()) as TrialManifest;
@@ -848,7 +871,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.data = {};
           this.vsDatasets = {};
           const initialCols = [
-            this.config.xAxis,
+            this.config.xAxis!.col!,
             ...Object.keys(this.config.yAxes),
           ];
           const response = await this.fetchTrialData(this.trialId, initialCols);
@@ -866,7 +889,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (
           this.config.vsEnabled &&
           oldValue?.vsEnabled &&
-          (value.xAxis !== oldValue.xAxis ||
+          (value.xAxis!.col! !== oldValue?.xAxis?.col ||
             Object.keys(value.yAxes).length !==
               Object.keys(oldValue.yAxes ?? {}).length)
         ) {
@@ -885,7 +908,21 @@ function trialViewer(trialId: string, externalUrl: string) {
           );
           return current !== (this.filterFingerprints[col] ?? "[]");
         });
-        if (changedFilterCols.length > 0) {
+        // detect x-axis filter changes
+        const xFilterCurrent = JSON.stringify(
+          (value.xAxis?.filters ?? []).filter((f) => f.enabled !== false),
+        );
+        const xFilterChanged = xFilterCurrent !== this.xAxisFilterFingerprint;
+        if (xFilterChanged) {
+          this.xAxisFilterFingerprint = xFilterCurrent;
+          if (this.data) delete this.data[value.xAxis!.col!];
+        }
+
+        const colsToRefetch = [
+          ...(xFilterChanged ? [value.xAxis!.col!] : []),
+          ...changedFilterCols,
+        ];
+        if (colsToRefetch.length > 0) {
           changedFilterCols.forEach((col) => {
             this.filterFingerprints[col] = JSON.stringify(
               (value.yAxes[col]?.filters ?? []).filter(
@@ -895,10 +932,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             if (this.data) delete this.data[col];
           });
           this.vsDatasets = {};
-          const resp = await this.fetchTrialData(
-            this.trialId,
-            changedFilterCols,
-          );
+          const resp = await this.fetchTrialData(this.trialId, colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
           if (this.config.vsEnabled) await this.syncVsRange();
         }
@@ -932,7 +966,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
+        let activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
 
         if (this.config.refFrame) {
           const families = new Set<string>();
@@ -1190,8 +1224,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     validateConfig(cfg: PlotConfig): string[] {
       const errors: string[] = [];
-      if (!this.columns.includes(cfg.xAxis))
-        errors.push(`X-Axis "${cfg.xAxis}" not found in telemetry.`);
+      if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col))
+        errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
       if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
         errors.push("yAxes must be a hashmap.");
       } else {
@@ -1238,7 +1272,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           console.error("Stored config corrupt");
         }
       } else {
-        if (this.columns.includes("time")) this.config.xAxis = "time";
+        if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
       }
 
       const savedHistory = localStorage.getItem("mojo_mosaic_history");
@@ -1313,7 +1347,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       ) {
         localStorage.removeItem("mojo_mosaic_config");
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
-        if (this.columns.includes("time")) this.config.xAxis = "time";
+        if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
         this.notify("Settings Reset", "info");
         this.configRaw = JSON.stringify(this.config, null, 4);
       }
@@ -1396,8 +1430,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     downloadCSV() {
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-      const activeCols = [this.config.xAxis, ...Object.keys(this.config.yAxes)];
-      const rowCount = this.data[this.config.xAxis]?.length ?? 0;
+      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+      const rowCount = this.data[this.config.xAxis!.col!]?.length ?? 0;
       let csv = activeCols.join(",") + "\n";
       for (let i = 0; i < rowCount; i++) {
         csv +=
@@ -1520,6 +1554,35 @@ function trialViewer(trialId: string, externalUrl: string) {
       return this.filterSchemas.find((s) => s.type === filterType);
     },
 
+    evalMathExpr(expr: string): number | null {
+      const s = String(expr ?? "").trim();
+      if (!s) return null;
+      const n = Number(s);
+      if (!isNaN(n)) return n;
+      try {
+        // Expose a safe math context — no access to globals beyond these names.
+        const fn = new Function(
+          "pi", "e",
+          "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+          "sqrt", "cbrt", "log", "log2", "log10",
+          "abs", "floor", "ceil", "round", "sign",
+          "pow", "exp", "max", "min",
+          `"use strict"; return (${s})`,
+        );
+        const result = fn(
+          Math.PI, Math.E,
+          Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2,
+          Math.sqrt, Math.cbrt, Math.log, Math.log2, Math.log10,
+          Math.abs, Math.floor, Math.ceil, Math.round, Math.sign,
+          Math.pow, Math.exp, Math.max, Math.min,
+        ) as unknown;
+        if (typeof result === "number" && isFinite(result)) return result;
+      } catch {
+        // invalid expression — fall through
+      }
+      return null;
+    },
+
     getUnitOptions(
       groups: UnitGroup[] | undefined,
       fromUnit: string | null | undefined,
@@ -1621,8 +1684,8 @@ function trialViewer(trialId: string, externalUrl: string) {
               if (!pr.ok) return;
               const cfg = (await pr.json()) as Partial<PlotConfig>;
               const w: string[] = [];
-              if (cfg.xAxis && !colSet.has(cfg.xAxis))
-                w.push(`x-axis "${cfg.xAxis}"`);
+              if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
+                w.push(`x-axis "${cfg.xAxis!.col!}"`);
               for (const key of Object.keys(cfg.yAxes ?? {})) {
                 if (!colSet.has(key)) w.push(`"${key}"`);
               }
@@ -1685,8 +1748,8 @@ function trialViewer(trialId: string, externalUrl: string) {
             .map((c) => c.replace(":w", "")),
         );
         const missing: string[] = [];
-        if (loaded.xAxis && !colSet.has(loaded.xAxis))
-          missing.push(`x-axis "${loaded.xAxis}"`);
+        if (loaded.xAxis?.col && !colSet.has(loaded.xAxis.col))
+          missing.push(`x-axis "${loaded.xAxis!.col!}"`);
         for (const key of Object.keys(loaded.yAxes ?? {})) {
           if (!colSet.has(key)) missing.push(`signal "${key}"`);
         }
@@ -1815,23 +1878,44 @@ function trialViewer(trialId: string, externalUrl: string) {
         !isHoverDisabled &&
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
+      const isPolar = this.config.plotType === "polar";
       const yKeys = Object.keys(this.config.yAxes);
       let traces: object[] = yKeys
         .map((key, i) => {
           const p = this.getYProps(key, i);
           if (!this.data![p.name]) return null;
+          const lineStyle = {
+            width: p.width,
+            color: p.color,
+            shape: this.config.interp,
+            dash: p.dash,
+          };
+          if (isPolar) {
+            return {
+              r: this.data![p.name]!,
+              theta: this.data![this.config.xAxis!.col!],
+              name: p.label,
+              mode: this.config.linemode,
+              type: "scatterpolar",
+              line: lineStyle,
+              marker: { size: 6, symbol: p.marker },
+              opacity: p.opacity,
+              hoverlabel: {
+                namelength: -1,
+                bgcolor: tooltipBg,
+                bordercolor: tooltipBorder,
+                font: { family: "monospace", size: 12, color: tooltipFont },
+              },
+              hovertemplate: `<b>${key}</b><br>θ: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`,
+            };
+          }
           return {
-            x: this.data![this.config.xAxis],
+            x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
             name: p.label,
             mode: this.config.linemode,
             type: "scatter",
-            line: {
-              width: p.width,
-              color: p.color,
-              shape: this.config.interp,
-              dash: p.dash,
-            },
+            line: lineStyle,
             marker: { size: 6, symbol: p.marker },
             opacity: p.opacity,
             hoverlabel: {
@@ -1863,25 +1947,41 @@ function trialViewer(trialId: string, externalUrl: string) {
               const p = this.getYProps(key, i);
               if (!dataset[p.name]) return null;
               const isFirst = !legendTracker.has(key);
-              const t = {
-                x: dataset[this.config.xAxis],
-                y: dataset[p.name]!,
-                name: `${p.label} (<i>vs.</i>)`,
-                legendgroup: `group_${key}`,
-                showlegend: isFirst,
-                mode: this.config.linemode,
-                type: "scatter",
-                line: {
-                  width: 1,
-                  color: p.color,
-                  shape: this.config.interp,
-                  dash: "dot",
-                },
-                opacity: 0.35,
-                marker: { size: 4, symbol: p.marker },
-                hoverlabel: { namelength: -1 },
-                hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
+              const lineStyle = {
+                width: 1,
+                color: p.color,
+                shape: this.config.interp,
+                dash: "dot",
               };
+              const t = isPolar
+                ? {
+                    r: dataset[p.name]!,
+                    theta: dataset[this.config.xAxis!.col!],
+                    name: `${p.label} (<i>vs.</i>)`,
+                    legendgroup: `group_${key}`,
+                    showlegend: isFirst,
+                    mode: this.config.linemode,
+                    type: "scatterpolar",
+                    line: lineStyle,
+                    opacity: 0.35,
+                    marker: { size: 4, symbol: p.marker },
+                    hoverlabel: { namelength: -1 },
+                    hovertemplate: `<b>${key}</b> (#${n})<br>θ: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`,
+                  }
+                : {
+                    x: dataset[this.config.xAxis!.col!],
+                    y: dataset[p.name]!,
+                    name: `${p.label} (<i>vs.</i>)`,
+                    legendgroup: `group_${key}`,
+                    showlegend: isFirst,
+                    mode: this.config.linemode,
+                    type: "scatter",
+                    line: lineStyle,
+                    opacity: 0.35,
+                    marker: { size: 4, symbol: p.marker },
+                    hoverlabel: { namelength: -1 },
+                    hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
+                  };
               legendTracker.add(key);
               return t;
             })
@@ -1914,7 +2014,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.xAxisTitle || this.config.xAxis,
+          text: this.config.xAxisTitle || this.config.xAxis!.col!,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showX,
@@ -1960,8 +2060,34 @@ function trialViewer(trialId: string, externalUrl: string) {
         spikethickness: -2,
       };
 
+      const polarLayout = isPolar
+        ? {
+            polar: {
+              bgcolor: "rgba(0,0,0,0)",
+              radialaxis: {
+                color: textColor,
+                gridcolor: majorGrid,
+                tickfont: { color: textColor, size: 14, family: "monospace" },
+                title: {
+                  text: this.config.yAxisTitle || "r",
+                  font: { size: 14, color: textColor, family: "monospace" },
+                },
+              },
+              angularaxis: {
+                color: textColor,
+                gridcolor: majorGrid,
+                tickfont: { color: textColor, size: 14, family: "monospace" },
+                title: {
+                  text: this.config.xAxisTitle || this.config.xAxis!.col!,
+                  font: { size: 14, color: textColor, family: "monospace" },
+                },
+              },
+            },
+          }
+        : { xaxis: xAxisObj, yaxis: yAxisObj };
+
       const layout = {
-        uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}`,
+        uirevision: `${this.trialId}_${this.config.xAxis!.col!}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
         title: this.config.title
           ? {
               text: this.config.title,
@@ -2008,9 +2134,8 @@ function trialViewer(trialId: string, externalUrl: string) {
                 font: { family: "monospace", size: 14, color: textColor },
                 groupclick: "togglegroup",
               },
-        xaxis: xAxisObj,
-        yaxis: yAxisObj,
-        annotations: [
+        ...polarLayout,
+        annotations: isPolar ? [] : [
           ...(this.config.annotations ?? []).map((ann) => ({
             x: ann.x,
             y: ann.y,
@@ -2068,7 +2193,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               };
             }),
         ],
-        shapes: (this.config.shapes ?? []).map((s) => {
+        shapes: isPolar ? [] : (this.config.shapes ?? []).map((s) => {
           const shapeColor = s.color || tw.cyan[500];
           const base = {
             line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
@@ -2116,6 +2241,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         modeBarButtonsToRemove: ["toImage"],
         doubleClick: false as const,
       };
+      const plotEl = document.getElementById("plot-area");
+      if (plotEl && this._renderedPlotType !== this.config.plotType) {
+        Plotly.purge(plotEl);
+        this._renderedPlotType = this.config.plotType ?? null;
+        return Plotly.newPlot("plot-area", traces, layout, config);
+      }
       return Plotly.react("plot-area", traces, layout, config);
     },
   };

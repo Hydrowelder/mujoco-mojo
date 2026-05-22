@@ -60,6 +60,16 @@ class BaseFilter(ABC, BaseModel):
     def apply(self, expr: pl.Expr) -> pl.Expr:
         """Applies the transformation to a Polars expression."""
 
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        """
+        Override for filters that need access to other columns.
+        Receives the current (already-transformed) series and the original dataframe.
+        Return None to fall back to apply(expr).
+        """
+        return None
+
 
 class ScaleFilter(BaseFilter):
     """Applies a linear transformation: (value * factor) + offset."""
@@ -97,11 +107,24 @@ class DerivativeFilter(BaseFilter):
     """The discriminator type for Pydantic."""
 
     dt: float = Field(default=0.001, gt=0)
-    """The time step between samples in seconds."""
+    """The time step between samples in seconds. Ignored when wrt_col is set."""
+
+    wrt_col: str | None = Field(default=None, json_schema_extra={"ui_type": "col"})
+    """Optional column to differentiate with respect to instead of a fixed dt."""
 
     def apply(self, expr: pl.Expr) -> pl.Expr:
         # Backward difference: (x[n] - x[n-1]) / dt
         return expr.diff().fill_null(0) / self.dt
+
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        if not self.wrt_col or self.wrt_col not in df.columns:
+            return None
+        wrt = df[self.wrt_col].cast(pl.Float64)
+        # Avoid divide-by-zero at the first sample
+        dx = wrt.diff().fill_null(strategy="forward").fill_null(1)
+        return series.cast(pl.Float64).diff().fill_null(0) / dx
 
 
 class IntegralFilter(BaseFilter):
@@ -114,11 +137,23 @@ class IntegralFilter(BaseFilter):
     """The discriminator type for Pydantic."""
 
     dt: float = Field(default=0.001, gt=0)
-    """The time step between samples in seconds."""
+    """The time step between samples in seconds. Ignored when wrt_col is set."""
+
+    wrt_col: str | None = Field(default=None, json_schema_extra={"ui_type": "col"})
+    """Optional column to integrate with respect to instead of a fixed dt."""
 
     def apply(self, expr: pl.Expr) -> pl.Expr:
-        # Simple cumulative trapezoidal or rectangular integration
+        # Simple rectangular integration with fixed step
         return expr.cum_sum() * self.dt
+
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        if not self.wrt_col or self.wrt_col not in df.columns:
+            return None
+        wrt = df[self.wrt_col].cast(pl.Float64)
+        dx = wrt.diff().fill_null(0)
+        return (series.cast(pl.Float64) * dx).cum_sum()
 
 
 class LowPassFilter(BaseFilter):

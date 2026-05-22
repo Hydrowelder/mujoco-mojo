@@ -199,7 +199,9 @@
 
         <!-- versus selector -->
         <div class="relative w-full sm:w-[280px]"
-             x-data="{ open: false }">
+             x-data="{ open: false }"
+             x-init="$watch('open', v => $store.dojo.overlayCount = Math.max(0, $store.dojo.overlayCount + (v ? 1 : -1)))"
+             @mojo:escape.window="open = false">
             <div @click="if(vsDraft.enabled) open = !open"
                  class="flex items-center h-9 bg-slate-300/50 dark:bg-slate-800/50 p-1 rounded-md border border-slate-300 dark:border-slate-800 transition-all w-full justify-between select-none shadow-md"
                  :class="vsDraft.enabled ? 'cursor-pointer hover:border-slate-400 dark:hover:border-slate-600' : 'cursor-default'">
@@ -267,7 +269,7 @@
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100"
                  @click.away="open = false"
-                 class="absolute top-full right-0 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md z-[400] p-4 space-y-4 shadow-none">
+                 class="absolute top-full right-0 mt-1 w-full panel z-[400] space-y-4">
 
                 <p class="text-sm sm:text-sm font-black uppercase text-slate-400 tracking-widest border-b border-slate-100 dark:border-slate-800 pb-1">Range Settings</p>
 

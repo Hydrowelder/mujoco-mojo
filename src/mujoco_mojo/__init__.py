@@ -2,6 +2,30 @@
 mujoco_mojo is a collection of Python objects built to make working with MuJoCo via Python easier.
 
 It provides vast bindings for all MJCF XML schema objects, tools to convert to XML, run MuJoCo simulations, and more.
+
+MuJoCo Type Stubs:
+------------------
+
+MuJoCo does not ship Python type stubs. Generate them once with pybind11-stubgen:
+
+.. code-block:: bash
+    pip install pybind11-stubgen
+    pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated
+
+Run this from the project root. The ``typings/`` directory is gitignored.
+Then add to pyproject.toml:
+
+.. code-block:: toml
+    [tool.pyright]
+    stubPath = "typings"
+    venvPath = "."
+    venv = ".venv"
+
+If you encounter Pyright enum errors on recent MuJoCo builds, apply the
+compatibility patch that ships alongside the stubs:
+
+.. code-block:: bash
+    python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi
 """
 
 from mujoco_mojo.__about__ import __version__  # noqa: F401

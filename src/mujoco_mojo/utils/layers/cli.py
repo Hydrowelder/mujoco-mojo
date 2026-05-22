@@ -921,6 +921,25 @@ def init_project(
             border_style="cyan",
         )
     )
+    if not Path("typings", "mujoco").exists():
+        console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
+        console.print(
+            "[bold white]MuJoCo does not ship Python type stubs.[/bold white] "
+            "Generate them once for Pylance/Pyright autocomplete:\n\n"
+            "[bold yellow]"
+            "pip install pybind11-stubgen\n"
+            "pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated"
+            "[/bold yellow]\n\n"
+            "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]:\n\n"
+            "[dim]"
+            "\\[tool.pyright]\n"
+            'stubPath = "typings"\n'
+            'venvPath = "."\n'
+            'venv    = ".venv"'
+            "[/dim]\n\n"
+            "[dim]Enum errors? Run: "
+            "python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi[/dim]"
+        )
 
 
 @cli_app.command(name="reloaded")

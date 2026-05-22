@@ -1,5 +1,5 @@
 // ============================================================
-// AUTO-GENERATED — do not edit manually.
+// AUTO-GENERATED - do not edit manually.
 // Source: src/mujoco_mojo/utils/layers/dojo/plot_config.py
 // Regenerate: python scripts/gen_ts_models.py
 // ============================================================
@@ -20,13 +20,7 @@ export interface FilterEntry {
 
 export type GridMode = "none" | "major" | "all";
 
-export type HoverMode =
-  | "x unified"
-  | "y unified"
-  | "closest"
-  | "x"
-  | "y"
-  | "none";
+export type HoverMode = "x unified" | "y unified" | "closest" | "x" | "y" | "none";
 
 export type InterpMode = "linear" | "spline" | "hv" | "vh" | "hvh" | "vhv";
 
@@ -35,6 +29,8 @@ export type LegendPos = "bottom" | "right" | "hidden";
 export type LineMode = "lines" | "markers" | "lines+markers";
 
 export type MarkerSymbol = "none" | "circle" | "square" | "diamond" | "cross";
+
+export type PlotType = "cartesian" | "polar";
 
 export type ScaleType = "linear" | "log";
 
@@ -51,6 +47,11 @@ export interface Shape {
 
 export type ShapeType = "vline" | "hline" | "rect";
 
+export interface XAxisConfig {
+  col?: string;
+  filters?: FilterEntry[];
+}
+
 export interface YAxisConfig {
   label: string;
   color: string;
@@ -63,7 +64,7 @@ export interface YAxisConfig {
 
 /** Complete serialisable state of a trial-viewer plot. */
 export interface PlotConfig {
-  xAxis: string;
+  xAxis?: XAxisConfig;
   yAxes: Record<string, YAxisConfig>;
   refFrame: string | null;
   grid: GridMode;
@@ -81,6 +82,7 @@ export interface PlotConfig {
   yScale: ScaleType;
   xLogBase?: number | null;
   yLogBase?: number | null;
+  plotType?: PlotType;
   vsEnabled: boolean;
   vsRange: [number, number];
   annotations: Annotation[];

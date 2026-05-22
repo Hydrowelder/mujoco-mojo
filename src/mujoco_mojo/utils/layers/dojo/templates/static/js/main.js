@@ -22,7 +22,8 @@
   document.addEventListener("alpine:init", () => {
     Alpine.store("dojo", {
       isPageReady: false,
-      isFullscreen: false,
+      isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
+      overlayCount: 0,
       loadStartTime: Date.now(),
       isComplete: false,
       isMuted: localStorage.getItem("mojo_muted") !== "false",
@@ -172,6 +173,14 @@
           clearInterval(this.loadingInterval);
           this.loadingInterval = null;
         }
+      },
+      toggleFullscreen() {
+        this.isFullscreen = !this.isFullscreen;
+        localStorage.setItem("mojo_fullscreen", String(this.isFullscreen));
+      },
+      exitFullscreen() {
+        this.isFullscreen = false;
+        localStorage.setItem("mojo_fullscreen", "false");
       },
       toggleMute() {
         this.isMuted = !this.isMuted;

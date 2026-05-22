@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
+
+if TYPE_CHECKING:
+    from typing import Self
 
 import polars as pl
 from scipy.spatial.transform import Rotation as R
@@ -26,13 +29,6 @@ from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
-
-
-class MojoFrameProtocol(Protocol):
-    """Protocol to tell type checkers that .mojo is available on the DataFrame."""
-
-    @property
-    def mojo(self) -> MojoNamespace: ...
 
 
 class _MojoFrame(pl.DataFrame):
@@ -78,10 +74,30 @@ class _MojoFrame(pl.DataFrame):
 
 if TYPE_CHECKING:
     # MojoFrame is seen by the IDE as the combination of:
-    # 1. Our loaders (_MojoFrame)
+    # 1. loaders (_MojoFrame)
     # 2. Polars methods (pl.DataFrame)
-    # 3. Our namespace (MojoFrameProtocol)
-    class MojoDataFrame(_MojoFrame, MojoFrameProtocol): ...
+    # 3. namespace (MojoFrameProtocol)
+    class MojoDataFrame(_MojoFrame):
+        @property
+        def mojo(self) -> MojoNamespace: ...
+
+        # override polars methods that return DataFrame so the type propagates
+        def select(self, *args: Any, **kwargs: Any) -> Self: ...
+        def filter(self, *args: Any, **kwargs: Any) -> Self: ...
+        def with_columns(self, *args: Any, **kwargs: Any) -> Self: ...
+        def sort(self, *args: Any, **kwargs: Any) -> Self: ...
+        def head(self, *args: Any, **kwargs: Any) -> Self: ...
+        def tail(self, *args: Any, **kwargs: Any) -> Self: ...
+        def limit(self, *args: Any, **kwargs: Any) -> Self: ...
+        def slice(self, *args: Any, **kwargs: Any) -> Self: ...
+        def rename(self, *args: Any, **kwargs: Any) -> Self: ...
+        def drop(self, *args: Any, **kwargs: Any) -> Self: ...
+        def drop_nulls(self, *args: Any, **kwargs: Any) -> Self: ...
+        def unique(self, *args: Any, **kwargs: Any) -> Self: ...
+        def sample(self, *args: Any, **kwargs: Any) -> Self: ...
+        def join(self, *args: Any, **kwargs: Any) -> Self: ...
+        def hstack(self, *args: Any, **kwargs: Any) -> Self: ...
+        def vstack(self, *args: Any, **kwargs: Any) -> Self: ...
 else:
     # At runtime, it's just our internal class
     MojoDataFrame = _MojoFrame
@@ -93,7 +109,6 @@ class ColumnManifest(TypedDict):
     available_quats: list[str]
 
 
-@pl.api.register_dataframe_namespace("mojo")
 class MojoNamespace:
     """
     Enhanced Polars DataFrame for MuJoCo Mojo telemetry.
@@ -370,3 +385,7 @@ class MojoNamespace:
         target_cols = columns or self._df.columns
         filter_map = {col: filters for col in target_cols}
         return self.with_filter_map(filter_map, omit_time=omit_time)
+
+
+if not TYPE_CHECKING:
+    pl.api.register_dataframe_namespace("mojo")(MojoNamespace)

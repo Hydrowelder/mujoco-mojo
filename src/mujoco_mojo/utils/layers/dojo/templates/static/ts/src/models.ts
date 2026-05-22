@@ -102,6 +102,7 @@ export interface NotificationEntry {
 export interface DojoStore {
   isPageReady: boolean;
   isFullscreen: boolean;
+  overlayCount: number;
   isComplete: boolean;
   isMuted: boolean;
   isAutoRefresh: boolean;

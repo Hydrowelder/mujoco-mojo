@@ -84,6 +84,11 @@ class ShapeType(StrEnum):
     rect = "rect"
 
 
+class PlotType(StrEnum):
+    cartesian = "cartesian"
+    polar = "polar"
+
+
 # ---------------------------------------------------------------------------
 # Composite models
 # ---------------------------------------------------------------------------
@@ -96,6 +101,11 @@ class FilterEntry(BaseModel):
 
     type: str
     enabled: bool = True
+
+
+class XAxisConfig(BaseModel):
+    col: str = "time"
+    filters: list[FilterEntry] = []
 
 
 class YAxisConfig(BaseModel):
@@ -128,7 +138,7 @@ class Shape(BaseModel):
 class PlotConfig(BaseModel):
     """Complete serialisable state of a trial-viewer plot."""
 
-    xAxis: str
+    xAxis: XAxisConfig = Field(default_factory=XAxisConfig)
     yAxes: dict[str, YAxisConfig]
     refFrame: str | None
     grid: GridMode
@@ -146,6 +156,7 @@ class PlotConfig(BaseModel):
     yScale: ScaleType
     xLogBase: float | None = None
     yLogBase: float | None = None
+    plotType: PlotType = PlotType.cartesian
     vsEnabled: bool
     vsRange: Annotated[tuple[float, float], Field()]
     annotations: list[Annotation]

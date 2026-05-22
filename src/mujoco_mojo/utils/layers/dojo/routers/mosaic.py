@@ -216,6 +216,8 @@ async def get_filter_schema():
     from pydantic_core import PydanticUndefined
 
     def _infer_type(prop: dict) -> str:
+        if prop.get("ui_type") == "col":
+            return "col"
         if "anyOf" in prop:
             non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
             prop = non_null[0] if non_null else {}
@@ -506,12 +508,15 @@ async def get_trial_data(
             if filter_list:
                 if series.dtype != pl.Float64:
                     series = series.cast(pl.Float64)
-                tmp = pl.DataFrame({col: series})
-                expr = pl.col(col)
                 for f in filter_list:
-                    expr = f.apply(expr)
-                tmp = tmp.with_columns(expr.alias(col))
-                series = tmp[col]
+                    # context-aware filters (e.g. derivative/integral wrt another col)
+                    ctx = f.apply_with_context(series, df)
+                    if ctx is not None:
+                        series = ctx
+                    else:
+                        tmp = pl.DataFrame({col: series})
+                        tmp = tmp.with_columns(f.apply(pl.col(col)).alias(col))
+                        series = tmp[col]
             data[col] = series.to_list()
 
         return {

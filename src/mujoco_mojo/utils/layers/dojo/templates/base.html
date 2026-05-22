@@ -101,6 +101,11 @@
       }
     }
   </style>
+  <style>
+    /* ── Plotly modebar ────────────────────────────────────────────────────── */
+    .modebar { border-radius: 0.5rem; overflow: hidden; }
+    .modebar-group { border-radius: 0.5rem; }
+  </style>
   <script>
     // 1. BLOCKING THEME CHECK
     tailwind.config = { darkMode: "class" };
@@ -139,9 +144,9 @@
   </div>
 
   <!-- header and main page contents -->
-  <div class=" max-w-6xl mx-auto p-4 md:p-8">
-    <header x-show="!$store.dojo.isFullscreen"
-            class="w-full flex flex-col md:flex-row justify-between items-stretch md:items-end border-b border-slate-400 dark:border-slate-700 pb-6 mb-4 gap-6">
+  <div x-data
+       :class="$store.dojo.isFullscreen ? 'w-full px-4 py-4' : 'max-w-6xl mx-auto p-4 md:p-8'">
+    <header class="w-full flex flex-col md:flex-row justify-between items-stretch md:items-end border-b border-slate-400 dark:border-slate-700 pb-6 mb-4 gap-6">
       <!-- logo, title, and nav selection -->
       <div class="w-full md:w-auto flex flex-col gap-4">
         <div class="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
@@ -194,9 +199,9 @@
       </div>
 
       <div x-data
-           class="w-full md:w-auto flex flex-col gap-3 items-stretch md:items-end">
-        <!-- control buttons -->
-        <div class="flex items-center justify-start md:justify-between w-full md:w-64 gap-3 md:gap-0">
+           class="w-full md:w-auto flex flex-col gap-3 items-stretch">
+        <!-- control buttons: refresh · mute · theme · fullscreen -->
+        <div class="flex items-center gap-2">
           {% if status_code is not defined %}
 
           <!-- auto refresh toggle button -->
@@ -288,11 +293,40 @@
               </svg>
             </button>
           </div>
+
+          {% if status_code is not defined %}
+          <!-- fullscreen toggle button -->
+          <button @click="$store.dojo.toggleFullscreen()"
+                  class="btn-icon btn-ghost"
+                  :title="$store.dojo.isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'">
+            <svg x-show="!$store.dojo.isFullscreen"
+                 class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+            </svg>
+            <svg x-show="$store.dojo.isFullscreen"
+                 x-cloak
+                 class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M9 9V4.5M9 9H4.5M9 9L3 3M15 9V4.5M15 9H19.5M15 9L21 3M9 15V19.5M9 15H4.5M9 15L3 21M15 15V19.5M15 15H19.5M15 15L21 21" />
+            </svg>
+          </button>
+          {% endif %}
         </div>
 
         <!-- job metadata -->
         {% if status_code is not defined %}
-        <div class="card p-3 space-y-1 w-full md:w-64">
+        <div class="card p-3 space-y-1 w-full">
           <div class="flex items-center gap-2">
             <span class="text-sm uppercase font-black text-slate-500 w-auto">Owner</span>
             <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate">{{ owner }}</p>
@@ -309,7 +343,8 @@
     </header>
 
     <main class="relative min-h-[500px]"
-          x-data>
+          x-data
+          @keydown.escape.window="$store.dojo.exitFullscreen()">
 
       <div x-show="!$store.dojo.isPageReady"
            class="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl transition-all duration-300"
@@ -344,19 +379,15 @@
       </div>
 
       <div class="transition-all duration-500 ease-out"
-           :class="{
-          'opacity-0 blur-md scale-98 pointer-events-none': !$store.dojo.isPageReady,
-          'opacity-100': $store.dojo.isPageReady && $store.dojo.isFullscreen,
-          'opacity-100 blur-0 scale-100': $store.dojo.isPageReady && !$store.dojo.isFullscreen
-       }">
+           :class="!$store.dojo.isPageReady ? 'opacity-0 blur-md scale-98 pointer-events-none' : 'opacity-100'">
         {% block content %}{% endblock %}
       </div>
     </main>
   </div>
 
   <footer x-data
-          x-show="!$store.dojo.isFullscreen"
-          class="max-w-6xl mx-auto px-8 mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-sm text-slate-400 font-mono">
+          class="mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-sm text-slate-400 font-mono"
+          :class="$store.dojo.isFullscreen ? 'w-full px-4' : 'max-w-6xl mx-auto px-8'">
     <div class="flex items-center gap-3"
          x-data>
       <!-- combined connection + sync pill -->
