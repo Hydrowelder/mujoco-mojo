@@ -84,6 +84,11 @@ class ShapeType(StrEnum):
     rect = "rect"
 
 
+class PlotType(StrEnum):
+    cartesian = "cartesian"
+    polar = "polar"
+
+
 # ---------------------------------------------------------------------------
 # Composite models
 # ---------------------------------------------------------------------------
@@ -146,6 +151,7 @@ class PlotConfig(BaseModel):
     yScale: ScaleType
     xLogBase: float | None = None
     yLogBase: float | None = None
+    plotType: PlotType = PlotType.cartesian
     vsEnabled: bool
     vsRange: Annotated[tuple[float, float], Field()]
     annotations: list[Annotation]

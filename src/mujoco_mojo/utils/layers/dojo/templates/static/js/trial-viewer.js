@@ -110,6 +110,7 @@
     rangeY: null,
     xScale: "linear",
     yScale: "linear",
+    plotType: "cartesian",
     vsEnabled: false,
     vsRange: [0, 10],
     annotations: [],
@@ -128,6 +129,7 @@
       isMac: /Mac|iPhone|iPod|iPad/.test(navigator.platform),
       data: null,
       errorState: null,
+      _renderedPlotType: null,
       // --- UI / MENU STATES ---
       theme: "dark",
       xMenuOpen: false,
@@ -1539,22 +1541,43 @@
         const isHoverDisabled = this.config.hover === "none";
         const showX = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("x") || this.config.hover === "closest");
         const showY = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("y") || this.config.hover === "closest");
+        const isPolar = this.config.plotType === "polar";
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
           if (!this.data[p.name]) return null;
+          const lineStyle = {
+            width: p.width,
+            color: p.color,
+            shape: this.config.interp,
+            dash: p.dash
+          };
+          if (isPolar) {
+            return {
+              r: this.data[p.name],
+              theta: this.data[this.config.xAxis],
+              name: p.label,
+              mode: this.config.linemode,
+              type: "scatterpolar",
+              line: lineStyle,
+              marker: { size: 6, symbol: p.marker },
+              opacity: p.opacity,
+              hoverlabel: {
+                namelength: -1,
+                bgcolor: tooltipBg,
+                bordercolor: tooltipBorder,
+                font: { family: "monospace", size: 12, color: tooltipFont }
+              },
+              hovertemplate: `<b>${key}</b><br>\u03B8: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`
+            };
+          }
           return {
             x: this.data[this.config.xAxis],
             y: this.data[p.name],
             name: p.label,
             mode: this.config.linemode,
             type: "scatter",
-            line: {
-              width: p.width,
-              color: p.color,
-              shape: this.config.interp,
-              dash: p.dash
-            },
+            line: lineStyle,
             marker: { size: 6, symbol: p.marker },
             opacity: p.opacity,
             hoverlabel: {
@@ -1581,7 +1604,26 @@
               const p = this.getYProps(key, i);
               if (!dataset[p.name]) return null;
               const isFirst = !legendTracker.has(key);
-              const t = {
+              const lineStyle = {
+                width: 1,
+                color: p.color,
+                shape: this.config.interp,
+                dash: "dot"
+              };
+              const t = isPolar ? {
+                r: dataset[p.name],
+                theta: dataset[this.config.xAxis],
+                name: `${p.label} (<i>vs.</i>)`,
+                legendgroup: `group_${key}`,
+                showlegend: isFirst,
+                mode: this.config.linemode,
+                type: "scatterpolar",
+                line: lineStyle,
+                opacity: 0.35,
+                marker: { size: 4, symbol: p.marker },
+                hoverlabel: { namelength: -1 },
+                hovertemplate: `<b>${key}</b> (#${n})<br>\u03B8: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`
+              } : {
                 x: dataset[this.config.xAxis],
                 y: dataset[p.name],
                 name: `${p.label} (<i>vs.</i>)`,
@@ -1589,12 +1631,7 @@
                 showlegend: isFirst,
                 mode: this.config.linemode,
                 type: "scatter",
-                line: {
-                  width: 1,
-                  color: p.color,
-                  shape: this.config.interp,
-                  dash: "dot"
-                },
+                line: lineStyle,
                 opacity: 0.35,
                 marker: { size: 4, symbol: p.marker },
                 hoverlabel: { namelength: -1 },
@@ -1655,8 +1692,31 @@
           spikelinecolor: spikeColor,
           spikethickness: -2
         };
+        const polarLayout = isPolar ? {
+          polar: {
+            bgcolor: "rgba(0,0,0,0)",
+            radialaxis: {
+              color: textColor,
+              gridcolor: majorGrid,
+              tickfont: { color: textColor, size: 14, family: "monospace" },
+              title: {
+                text: this.config.yAxisTitle || "r",
+                font: { size: 14, color: textColor, family: "monospace" }
+              }
+            },
+            angularaxis: {
+              color: textColor,
+              gridcolor: majorGrid,
+              tickfont: { color: textColor, size: 14, family: "monospace" },
+              title: {
+                text: this.config.xAxisTitle || this.config.xAxis,
+                font: { size: 14, color: textColor, family: "monospace" }
+              }
+            }
+          }
+        } : { xaxis: xAxisObj, yaxis: yAxisObj };
         const layout = {
-          uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}`,
+          uirevision: `${this.trialId}_${this.config.xAxis}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
           title: this.config.title ? {
             text: this.config.title,
             font: {
@@ -1698,9 +1758,8 @@
             font: { family: "monospace", size: 14, color: textColor },
             groupclick: "togglegroup"
           },
-          xaxis: xAxisObj,
-          yaxis: yAxisObj,
-          annotations: [
+          ...polarLayout,
+          annotations: isPolar ? [] : [
             ...(this.config.annotations ?? []).map((ann) => ({
               x: ann.x,
               y: ann.y,
@@ -1751,7 +1810,7 @@
               };
             })
           ],
-          shapes: (this.config.shapes ?? []).map((s) => {
+          shapes: isPolar ? [] : (this.config.shapes ?? []).map((s) => {
             const shapeColor = s.color || tw.cyan[500];
             const base = {
               line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
@@ -1798,6 +1857,12 @@
           modeBarButtonsToRemove: ["toImage"],
           doubleClick: false
         };
+        const plotEl = document.getElementById("plot-area");
+        if (plotEl && this._renderedPlotType !== this.config.plotType) {
+          Plotly.purge(plotEl);
+          this._renderedPlotType = this.config.plotType;
+          return Plotly.newPlot("plot-area", traces, layout, config);
+        }
         return Plotly.react("plot-area", traces, layout, config);
       }
     };

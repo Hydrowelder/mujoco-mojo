@@ -75,6 +75,44 @@
                     </p>
 
                     <div class="space-y-4">
+                        <!-- plot type toggle -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase">Plot Type</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button @click="config.plotType = 'cartesian'; saveAndRender()"
+                                        class="py-2 rounded-lg border text-xs font-bold transition-all flex flex-col items-center gap-1"
+                                        :class="config.plotType !== 'polar'
+                                            ? 'bg-cyan-500 text-white border-cyan-500'
+                                            : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
+                                    <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.25">
+                                        <line x1="4" y1="2" x2="4" y2="18"/>
+                                        <line x1="10" y1="2" x2="10" y2="18"/>
+                                        <line x1="16" y1="2" x2="16" y2="18"/>
+                                        <line x1="2" y1="4" x2="18" y2="4"/>
+                                        <line x1="2" y1="10" x2="18" y2="10"/>
+                                        <line x1="2" y1="16" x2="18" y2="16"/>
+                                    </svg>
+                                    Cartesian
+                                </button>
+                                <button @click="config.plotType = 'polar'; saveAndRender()"
+                                        class="py-2 rounded-lg border text-xs font-bold transition-all flex flex-col items-center gap-1"
+                                        :class="config.plotType === 'polar'
+                                            ? 'bg-cyan-500 text-white border-cyan-500'
+                                            : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
+                                    <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.25">
+                                        <circle cx="10" cy="10" r="3"/>
+                                        <circle cx="10" cy="10" r="6"/>
+                                        <circle cx="10" cy="10" r="9"/>
+                                        <line x1="10" y1="1" x2="10" y2="19"/>
+                                        <line x1="1" y1="10" x2="19" y2="10"/>
+                                        <line x1="3.6" y1="3.6" x2="16.4" y2="16.4"/>
+                                        <line x1="16.4" y1="3.6" x2="3.6" y2="16.4"/>
+                                    </svg>
+                                    Polar
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- row 1 -->
                         <div class="grid grid-cols-2 gap-3 max-h-64">
                             <!-- gridlines -->
@@ -644,10 +682,11 @@
                 <button @click="shapesOpen = !shapesOpen"
                         class="sidebar-btn"
                         :class="{
-                'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50': shapesOpen,
-                'animate-pulse ring-2 ring-cyan-500/50 text-cyan-500 bg-cyan-50 dark:bg-slate-800': placementMode
+                'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50': shapesOpen && config.plotType !== 'polar',
+                'animate-pulse ring-2 ring-cyan-500/50 text-cyan-500 bg-cyan-50 dark:bg-slate-800': placementMode,
+                'opacity-30 cursor-not-allowed pointer-events-none': config.plotType === 'polar'
             }"
-                        title="Manage Shapes">
+                        :title="config.plotType === 'polar' ? 'Shapes not available in Polar mode' : 'Manage Shapes'">
 
                     <svg class="w-5 h-5"
                          fill="none"
