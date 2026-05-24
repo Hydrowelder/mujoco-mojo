@@ -1684,6 +1684,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       return this.filterSchemas.find((s) => s.type === filterType);
     },
 
+    get groupedFilterSchemas(): { category: string; schemas: FilterSchema[] }[] {
+      const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+      const groups: Record<string, FilterSchema[]> = {};
+      for (const s of this.filterSchemas) {
+        const cat = s.category ?? "Misc";
+        (groups[cat] ??= []).push(s);
+      }
+      return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
+    },
+
     evalMathExpr(expr: string): number | null {
       const s = String(expr ?? "").trim();
       if (!s) return null;

@@ -220,6 +220,8 @@ async def get_filter_schema():
     def _infer_type(prop: dict) -> str:
         if prop.get("ui_type") == "col":
             return "col"
+        if prop.get("ui_type") == "select":
+            return "select"
         if "anyOf" in prop:
             non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
             prop = non_null[0] if non_null else {}
@@ -256,6 +258,8 @@ async def get_filter_schema():
                 default = round(float(default), 8)
 
             p: dict = {"name": name, "type": _infer_type(prop), "default": default}
+            if p["type"] == "select" and "enum" in prop:
+                p["options"] = prop["enum"]
             if "minimum" in prop_clean:
                 p["min"] = prop_clean["minimum"]
             if "maximum" in prop_clean:
@@ -273,6 +277,7 @@ async def get_filter_schema():
             "type": type_val,
             "label": type_val.replace("_", " ").title(),
             "description": description,
+            "category": cls.category,
             "params": params,
         }
         if type_val == "unit":

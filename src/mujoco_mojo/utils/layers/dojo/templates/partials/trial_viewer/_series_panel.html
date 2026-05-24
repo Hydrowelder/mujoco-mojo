@@ -219,19 +219,26 @@
                                 <div x-show="addOpen"
                                      x-transition
                                      class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[700] max-h-72 overflow-y-auto custom-scrollbar">
-                                    <template x-for="schema in filterSchemas"
-                                              :key="schema.type">
-                                        <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addOpen = false; expandedIdx = (temp.filters ?? []).length - 1"
-                                                :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
-                                            <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
-                                                  x-text="schema.type.replace(/_/g, ' ')"></span>
-                                            <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
-                                                  x-text="schema.description"></span>
-                                            <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                  class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
-                                        </button>
+                                    <template x-for="group in groupedFilterSchemas"
+                                              :key="group.category">
+                                        <div>
+                                            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900/60 sticky top-0"
+                                                 x-text="group.category"></div>
+                                            <template x-for="schema in group.schemas"
+                                                      :key="schema.type">
+                                                <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addOpen = false; expandedIdx = (temp.filters ?? []).length - 1"
+                                                        :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
+                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
+                                                    <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                          x-text="schema.type.replace(/_/g, ' ')"></span>
+                                                    <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
+                                                          x-text="schema.description"></span>
+                                                    <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
+                                                          class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
+                                                </button>
+                                            </template>
+                                        </div>
                                     </template>
                                 </div>
                             </div>
@@ -429,6 +436,18 @@
                                                        :value="f[param.name]"
                                                        @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
                                                        class="input-field flex-1 px-2 py-1 text-xs" />
+                                            </template>
+                                            <template x-if="param.type === 'select'">
+                                                <select :value="f[param.name]"
+                                                        @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
+                                                        class="input-field flex-1 px-2 py-1 text-xs bg-white dark:bg-slate-800">
+                                                    <template x-for="opt in (param.options ?? [])"
+                                                              :key="opt">
+                                                        <option :value="opt"
+                                                                :selected="f[param.name] === opt"
+                                                                x-text="opt"></option>
+                                                    </template>
+                                                </select>
                                             </template>
                                             <template x-if="param.type === 'col'">
                                                 <div class="flex-1 relative"
@@ -1071,19 +1090,26 @@
                                                 <div x-show="addFilterOpen"
                                                      x-transition
                                                      class="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[700] max-h-72 overflow-y-auto custom-scrollbar">
-                                                    <template x-for="schema in filterSchemas"
-                                                              :key="schema.type">
-                                                        <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
-                                                                :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                                :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
-                                                            <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
-                                                                  x-text="schema.type.replace(/_/g, ' ')"></span>
-                                                            <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
-                                                                  x-text="schema.description"></span>
-                                                            <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                                  class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
-                                                        </button>
+                                                    <template x-for="group in groupedFilterSchemas"
+                                                              :key="group.category">
+                                                        <div>
+                                                            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900/60 sticky top-0"
+                                                                 x-text="group.category"></div>
+                                                            <template x-for="schema in group.schemas"
+                                                                      :key="schema.type">
+                                                                <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
+                                                                        :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
+                                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
+                                                                    <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                                          x-text="schema.type.replace(/_/g, ' ')"></span>
+                                                                    <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
+                                                                          x-text="schema.description"></span>
+                                                                    <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
+                                                                          class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
                                                     </template>
                                                 </div>
                                             </div>
@@ -1277,6 +1303,19 @@
                                                                            :value="f[param.name]"
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
                                                                            class="input-field flex-1 px-2 py-1 text-xs" />
+                                                                </template>
+                                                                <!-- select dropdown for enum params -->
+                                                                <template x-if="param.type === 'select'">
+                                                                    <select :value="f[param.name]"
+                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
+                                                                            class="input-field flex-1 px-2 py-1 text-xs bg-white dark:bg-slate-800">
+                                                                        <template x-for="opt in (param.options ?? [])"
+                                                                                  :key="opt">
+                                                                            <option :value="opt"
+                                                                                    :selected="f[param.name] === opt"
+                                                                                    x-text="opt"></option>
+                                                                        </template>
+                                                                    </select>
                                                                 </template>
                                                                 <!-- column reference dropdown -->
                                                                 <template x-if="param.type === 'col'">

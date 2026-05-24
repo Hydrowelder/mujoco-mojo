@@ -117,8 +117,8 @@ document.addEventListener("alpine:init", () => {
       if (connected === this._wasConnected) return;
       this._wasConnected = connected;
       const message = connected
-        ? "Server connection restored."
-        : "Server connection lost.";
+        ? "Server connection restored"
+        : "Server connection lost";
       const type = connected ? "success" : "error";
       this.toast(message, type);
       this.addNotification(message, type);

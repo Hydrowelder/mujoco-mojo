@@ -1417,6 +1417,15 @@
       getFilterSchema(filterType) {
         return this.filterSchemas.find((s) => s.type === filterType);
       },
+      get groupedFilterSchemas() {
+        const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+        const groups = {};
+        for (const s of this.filterSchemas) {
+          const cat = s.category ?? "Misc";
+          (groups[cat] ?? (groups[cat] = [])).push(s);
+        }
+        return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
+      },
       evalMathExpr(expr) {
         const s = String(expr ?? "").trim();
         if (!s) return null;

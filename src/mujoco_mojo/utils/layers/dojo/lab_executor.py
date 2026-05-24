@@ -19,15 +19,22 @@ import polars as pl
 from mujoco_mojo.utils.filters.filters import (
     AbsoluteValueFilter,
     ClipFilter,
+    ComparisonFilter,
     DeadbandFilter,
+    ExpFilter,
     HighPassFilter,
+    LogFilter,
     LowPassFilter,
     MedianFilter,
     NormalizeFilter,
+    PowerFilter,
     RollingMeanFilter,
+    RoundFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
+    SignFilter,
     TaringFilter,
+    TrigFilter,
     WrapFilter,
 )
 
@@ -45,6 +52,13 @@ _FILTER_MAP = {
     "taring": TaringFilter,
     "normalize": NormalizeFilter,
     "absolute_value": AbsoluteValueFilter,
+    "log": LogFilter,
+    "exp": ExpFilter,
+    "power": PowerFilter,
+    "round": RoundFilter,
+    "trig": TrigFilter,
+    "sign": SignFilter,
+    "comparison": ComparisonFilter,
 }
 
 
@@ -106,6 +120,12 @@ class LabExecutor:
                     else pl.Series(name=col, values=[0.0] * len(df))
                 )
                 slot_data[nid][0] = series
+
+            elif ntype == "constant":
+                value = float(props.get("value", 0.0))
+                slot_data[nid][0] = pl.Series(
+                    name="const", values=[value] * len(df), dtype=pl.Float64
+                )
 
             elif ntype == "signal_out":
                 signal = self._get_input(node, 0, slot_data)
@@ -172,6 +192,65 @@ class LabExecutor:
         wrt: pl.Series | None,
         df: pl.DataFrame,
     ) -> pl.Series:
+        # Individual trig nodes (one node per function, no combo widget)
+        _TRIG_FNS = {
+            "sin",
+            "cos",
+            "tan",
+            "asin",
+            "acos",
+            "atan",
+            "sinh",
+            "cosh",
+            "tanh",
+            "degrees",
+            "radians",
+        }
+        if ntype in _TRIG_FNS:
+            filt = TrigFilter(func=ntype)  # type: ignore[arg-type]
+            tmp = pl.DataFrame({"_s": signal.cast(pl.Float64)})
+            return tmp.with_columns(filt.apply(pl.col("_s")).alias("_s"))["_s"]
+
+        # Individual comparison nodes - signal vs signal, returns 1.0/0.0
+        _CMP_OPS = {"gt", "gte", "lt", "lte", "eq", "neq"}
+        if ntype in _CMP_OPS:
+            if wrt is None:
+                return signal
+            a = signal.cast(pl.Float64)
+            b = wrt.cast(pl.Float64)
+            if ntype == "gt":
+                return (a > b).cast(pl.Float64)
+            if ntype == "gte":
+                return (a >= b).cast(pl.Float64)
+            if ntype == "lt":
+                return (a < b).cast(pl.Float64)
+            if ntype == "lte":
+                return (a <= b).cast(pl.Float64)
+            if ntype == "eq":
+                return (a == b).cast(pl.Float64)
+            return (a != b).cast(pl.Float64)
+
+        # Two-input arithmetic (signal a op signal b)
+        if ntype in ("add", "subtract", "multiply", "divide"):
+            if wrt is None:
+                return signal
+            a = signal.cast(pl.Float64)
+            b = wrt.cast(pl.Float64)
+            if ntype == "add":
+                return a + b
+            if ntype == "subtract":
+                return a - b
+            if ntype == "multiply":
+                return a * b
+            # divide: propagate zero denominator as null (will become NaN in JSON)
+            tmp = pl.DataFrame({"_a": a, "_b": b})
+            return tmp.select(
+                pl.when(pl.col("_b") != 0)
+                .then(pl.col("_a") / pl.col("_b"))
+                .otherwise(None)
+                .cast(pl.Float64)
+            ).to_series()
+
         # Derivative and Integral handle wrt directly
         if ntype == "derivative":
             if wrt is not None:

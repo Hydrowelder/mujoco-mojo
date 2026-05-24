@@ -38,6 +38,9 @@
         const C_FILT = "#1e1b4b";   // indigo-950
         const C_CALC = "#3b0764";   // violet-950
         const C_UTIL = "#431407";   // orange-950
+        const C_MATH = "#0c4a6e";   // sky-950  (arithmetic: log, exp, power, +/-/×/÷)
+        const C_TRIG = "#14432a";   // green-950 (trigonometry)
+        const C_COMP = "#3d1515";   // red-950  (comparison, sign)
 
         // ── Signal In ─────────────────────────────────────────────────────────
         function SignalInNode() {
@@ -220,8 +223,25 @@
             ctx.restore();
         };
 
+        // ── Signal Constant ───────────────────────────────────────────────────
+        function ConstantNode() {
+            this.addOutput("signal", SER);
+            this.properties = { value: 0 };
+            this._valW = this.addWidget("number", "value", 0,
+                (v) => { this.properties.value = v; },
+                { step: 0.1 });
+            this.size = [180, 55];
+        }
+        ConstantNode.title = "Constant";
+        ConstantNode.color = C_MATH;
+        ConstantNode.bgcolor = BG;
+        ConstantNode.prototype.onConfigure = function () {
+            if (this._valW) this._valW.value = this.properties.value ?? 0;
+        };
+        LiteGraph.registerNodeType("Signal/constant", ConstantNode);
+
         // ── Generic 1-in 1-out filter factory ────────────────────────────────
-        function reg(typeName, title, params, color) {
+        function reg(typeName, title, params, color, category) {
             function Node() {
                 this.addInput("signal", SER);
                 this.addOutput("signal", SER);
@@ -231,10 +251,17 @@
                     if (p.widget === "toggle") {
                         this.addWidget("toggle", p.name, p.default,
                             (v) => { this.properties[p.name] = v; });
-                    } else {
-                        this.addWidget("number", p.name, p.default ?? 0,
+                    } else if (p.widget === "combo") {
+                        this.addWidget("combo", p.name, p.default,
                             (v) => { this.properties[p.name] = v; },
-                            p.opts || {});
+                            { values: p.values || [] });
+                    } else {
+                        // Use slider when both min and max are defined; otherwise plain number.
+                        const opts = p.opts || {};
+                        const wtype = (opts.min !== undefined && opts.max !== undefined) ? "slider" : "number";
+                        this.addWidget(wtype, p.name, p.default ?? 0,
+                            (v) => { this.properties[p.name] = v; },
+                            opts);
                     }
                 });
                 this.size = [200, Math.max(55, 32 + params.length * 24)];
@@ -242,66 +269,121 @@
             Node.title = title;
             Node.color = color || C_FILT;
             Node.bgcolor = BG;
-            LiteGraph.registerNodeType("Filter/" + typeName, Node);
+            // Sync widget display values from restored properties after graph load.
+            Node.prototype.onConfigure = function () {
+                params.forEach((p, idx) => {
+                    if (this.widgets && this.widgets[idx]) {
+                        const v = this.properties[p.name];
+                        if (v !== undefined && v !== null) this.widgets[idx].value = v;
+                    }
+                });
+            };
+            LiteGraph.registerNodeType((category || "Misc") + "/" + typeName, Node);
         }
 
-        reg("low_pass", "Low Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }]);
-        reg("high_pass", "High Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }]);
-        reg("scale", "Scale", [{ name: "factor", default: 1, opts: { step: 0.1 } },
-        { name: "offset", default: 0, opts: { step: 0.1 } }]);
+        // ── Smoothing ─────────────────────────────────────────────────────────
+        reg("low_pass", "Low Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }], C_FILT, "Smoothing");
+        reg("high_pass", "High Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }], C_FILT, "Smoothing");
         reg("rolling_mean", "Rolling Mean", [{ name: "window", default: 10, opts: { min: 1, step: 1, precision: 0 } },
-        { name: "center", default: true, widget: "toggle" }]);
-        reg("median", "Median", [{ name: "window", default: 10, opts: { min: 1, step: 1, precision: 0 } }]);
+        { name: "center", default: true, widget: "toggle" }], C_FILT, "Smoothing");
+        reg("median", "Median", [{ name: "window", default: 10, opts: { min: 1, step: 1, precision: 0 } }], C_FILT, "Smoothing");
         reg("savitzky_golay", "Savitzky-Golay", [{ name: "window", default: 11, opts: { min: 3, step: 2, precision: 0 } },
-        { name: "order", default: 2, opts: { min: 1, step: 1, precision: 0 } }]);
-        reg("clip", "Clip", [{ name: "min", default: null, opts: {} },
-        { name: "max", default: null, opts: {} }]);
-        reg("deadband", "Deadband", [{ name: "threshold", default: 0.01, opts: { min: 0, step: 0.001 } }]);
-        reg("wrap", "Wrap", [{ name: "lb", default: -3.14159, opts: { step: 0.1 } },
-        { name: "ub", default: 3.14159, opts: { step: 0.1 } }]);
-        reg("taring", "Taring", [], C_UTIL);
-        reg("normalize", "Normalize", [], C_UTIL);
-        reg("absolute_value", "Absolute Value", [], C_UTIL);
+        { name: "order", default: 2, opts: { min: 1, step: 1, precision: 0 } }], C_FILT, "Smoothing");
 
-        // ── Derivative (optional wrt input) ──────────────────────────────────
+        // ── Arithmetic ────────────────────────────────────────────────────────
+        reg("scale", "Scale", [{ name: "factor", default: 1, opts: { step: 0.1 } },
+        { name: "offset", default: 0, opts: { step: 0.1 } }], C_FILT, "Arithmetic");
+        reg("absolute_value", "Absolute Value", [], C_FILT, "Arithmetic");
+        reg("log", "Log", [{ name: "base", default: 2.718281828, opts: { min: 1e-9, step: 0.1 } }], C_MATH, "Arithmetic");
+        reg("exp", "Exp", [{ name: "base", default: 2.718281828, opts: { min: 1e-9, step: 0.1 } }], C_MATH, "Arithmetic");
+        reg("power", "Power", [{ name: "exponent", default: 2, opts: { step: 0.1 } }], C_MATH, "Arithmetic");
+
+        // ── Trigonometry: one node per function ───────────────────────────────
+        [["sin","Sin"],["cos","Cos"],["tan","Tan"],
+         ["asin","Arcsin"],["acos","Arccos"],["atan","Arctan"],
+         ["sinh","Sinh"],["cosh","Cosh"],["tanh","Tanh"],
+         ["degrees","Degrees (rad→°)"],["radians","Radians (°→rad)"]
+        ].forEach(([fn, label]) => reg(fn, label, [], C_TRIG, "Trigonometry"));
+
+        // ── Comparison: one node per operator (two-input, signal vs signal) ──
+        reg("sign", "Sign", [], C_COMP, "Comparison");
+        (function () {
+            function makeCmp(typeName, symbol) {
+                function Node() {
+                    this.addInput("a", SER);
+                    this.addInput("b", SER);
+                    this.addOutput("signal", SER);
+                    this.size = [180, 55];
+                }
+                Node.title = symbol;
+                Node.color = C_COMP;
+                Node.bgcolor = BG;
+                LiteGraph.registerNodeType("Comparison/" + typeName, Node);
+            }
+            makeCmp("gt",  "Greater Than  (a > b)");
+            makeCmp("gte", "Grt. or Equal  (a >= b)");
+            makeCmp("lt",  "Less Than  (a < b)");
+            makeCmp("lte", "Less or Equal  (a <= b)");
+            makeCmp("eq",  "Equal  (a == b)");
+            makeCmp("neq", "Not Equal  (a != b)");
+        })();
+
+        // ── Bounding ──────────────────────────────────────────────────────────
+        reg("clip", "Clip", [{ name: "min", default: null, opts: {} },
+        { name: "max", default: null, opts: {} }], C_FILT, "Bounding");
+        reg("deadband", "Deadband", [{ name: "threshold", default: 0.01, opts: { min: 0, step: 0.001 } }], C_FILT, "Bounding");
+        reg("wrap", "Wrap", [{ name: "lb", default: -3.14159, opts: { step: 0.1 } },
+        { name: "ub", default: 3.14159, opts: { step: 0.1 } }], C_FILT, "Bounding");
+        reg("taring", "Taring", [], C_UTIL, "Bounding");
+        reg("normalize", "Normalize", [], C_UTIL, "Bounding");
+        reg("round", "Round", [
+            { name: "method", default: "round", widget: "combo", values: ["round", "floor", "ceil"] },
+            { name: "decimals", default: 0, opts: { min: 0, step: 1, precision: 0 } }
+        ], C_UTIL, "Bounding");
+
+        // ── Arithmetic: two-input (Lab only) ─────────────────────────────────
+        (function () {
+            function makeArith(typeName, symbol) {
+                function Node() {
+                    this.addInput("a", SER);
+                    this.addInput("b", SER);
+                    this.addOutput("signal", SER);
+                    this.size = [140, 55];
+                }
+                Node.title = symbol;
+                Node.color = C_MATH;
+                Node.bgcolor = BG;
+                LiteGraph.registerNodeType("Arithmetic/" + typeName, Node);
+            }
+            makeArith("add", "Add  (a + b)");
+            makeArith("subtract", "Subtract  (a - b)");
+            makeArith("multiply", "Multiply  (a × b)");
+            makeArith("divide", "Divide  (a ÷ b)");
+        })();
+
+        // ── Derivative (signal / wrt) ─────────────────────────────────────────
         function DerivativeNode() {
             this.addInput("signal", SER);
-            this.addInput("wrt", "series,null");
+            this.addInput("wrt", SER);
             this.addOutput("signal", SER);
-            this.properties = { dt: 0.001 };
-            this._dtW = this.addWidget("number", "dt", 0.001,
-                (v) => { this.properties.dt = v; },
-                { min: 1e-9, step: 0.0001 });
-            this.size = [200, 78];
+            this.size = [160, 55];
         }
         DerivativeNode.title = "Derivative";
         DerivativeNode.color = C_CALC;
         DerivativeNode.bgcolor = BG;
-        DerivativeNode.prototype.onConnectionsChange = function () {
-            const wrtLinked = this.inputs[1] && this.inputs[1].link != null;
-            if (this._dtW) this._dtW.disabled = wrtLinked;
-        };
-        LiteGraph.registerNodeType("Filter/derivative", DerivativeNode);
+        LiteGraph.registerNodeType("Calculus/derivative", DerivativeNode);
 
-        // ── Integral (optional wrt input) ─────────────────────────────────────
+        // ── Integral (signal / wrt) ───────────────────────────────────────────
         function IntegralNode() {
             this.addInput("signal", SER);
-            this.addInput("wrt", "series,null");
+            this.addInput("wrt", SER);
             this.addOutput("signal", SER);
-            this.properties = { dt: 0.001 };
-            this._dtW = this.addWidget("number", "dt", 0.001,
-                (v) => { this.properties.dt = v; },
-                { min: 1e-9, step: 0.0001 });
-            this.size = [200, 78];
+            this.size = [160, 55];
         }
         IntegralNode.title = "Integral";
         IntegralNode.color = C_CALC;
         IntegralNode.bgcolor = BG;
-        IntegralNode.prototype.onConnectionsChange = function () {
-            const wrtLinked = this.inputs[1] && this.inputs[1].link != null;
-            if (this._dtW) this._dtW.disabled = wrtLinked;
-        };
-        LiteGraph.registerNodeType("Filter/integral", IntegralNode);
+        LiteGraph.registerNodeType("Calculus/integral", IntegralNode);
     }
 
     // ── Lab canvas management ─────────────────────────────────────────────────
@@ -364,6 +446,14 @@
         if (!_lab.canvas || _lab.canvas.canvas !== canvasEl) {
             if (_lab.canvas) _lab.canvas.stopRendering();
             _lab.canvas = new LGraphCanvas(canvasEl, _lab.graph);
+
+            // Remove the "Mode" entry from the node context menu - it controls
+            // LiteGraph execution modes that are irrelevant here and would confuse users.
+            const _origMenu = LGraphCanvas.prototype.getNodeMenuOptions;
+            LGraphCanvas.prototype.getNodeMenuOptions = function (node) {
+                return _origMenu.call(this, node).filter((o) => !o || o.content !== "Mode");
+            };
+
             _lab.canvas.render_shadows = false;
             _lab.canvas.render_canvas_border = false;
             _lab.canvas.render_curved_connections = true;
