@@ -1026,19 +1026,14 @@
                     <!-- Save new profile -->
                     <div class="mb-4"
                          x-data="{
-                             get _dirs() {
-                                 const s = new Set();
-                                 profiles.forEach(p => {
-                                     const parts = p.name.split('/');
-                                     for (let i = 1; i < parts.length; i++)
-                                         s.add(parts.slice(0, i).join('/') + '/');
-                                 });
-                                 return [...s].sort();
-                             },
                              get suggestion() {
                                  const v = profileNameDraft;
                                  if (!v) return '';
-                                 return this._dirs.find(d => d.startsWith(v) && d !== v) ?? '';
+                                 const m = profiles.find(p => p.name.startsWith(v) && p.name !== v);
+                                 if (!m) return '';
+                                 const rem = m.name.slice(v.length);
+                                 const sep = rem.indexOf('/');
+                                 return sep === -1 ? m.name : v + rem.slice(0, sep + 1);
                              },
                              accept() { if (this.suggestion) profileNameDraft = this.suggestion; }
                          }">
@@ -1056,9 +1051,9 @@
                                 Save
                             </button>
                         </div>
-                        <!-- directory suggestion hint -->
-                        <div x-show="suggestion"
-                             class="mt-1 flex items-center gap-1.5 text-xs font-mono">
+                        <!-- directory suggestion hint — space always reserved -->
+                        <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-xs font-mono"
+                             :class="suggestion ? 'visible' : 'invisible'">
                             <button @click="accept()"
                                     class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
                                     x-text="suggestion"></button>
@@ -1240,5 +1235,6 @@
                 </div>
             </div>
         </div>
+
     </div>
 </div>

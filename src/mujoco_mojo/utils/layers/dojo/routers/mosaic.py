@@ -395,6 +395,120 @@ async def delete_profile(name: str):
     return {"deleted": path.relative_to(d).with_suffix("").as_posix()}
 
 
+# ---------------------------------------------------------------------------
+# Lab  ·  filter graph configs stored under ~/.mujoco-mojo/lab/
+# ---------------------------------------------------------------------------
+
+_LAB_PREFIX = "Lab"  # Virtual column category shown in the Y-axis selector
+_LAB_MAX_BYTES = 1024 * 1024  # 1 MB
+
+
+def _get_lab_dir() -> Path:
+    d: Path = Path.home() / ".mujoco-mojo" / "lab"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _sanitize_lab_name(name: str) -> str:
+    """
+    Return a filesystem-safe relative path from the user-supplied lab name.
+
+    Supports folder separators, e.g. 'robotics/arm_reach/baseline'.
+    Each segment is sanitized independently; empty segments are dropped.
+    """
+    name = name.strip()[:256]
+    segments = [s.strip() for s in name.split("/") if s.strip()]
+    safe: list[str] = []
+    for seg in segments:
+        seg = re.sub(r"[^\w\s\-]", "", seg)
+        seg = re.sub(r"\s+", "_", seg)
+        seg = re.sub(r"_+", "_", seg).strip("_")
+        if seg:
+            safe.append(seg[:64])
+    return "/".join(safe) or "lab"
+
+
+def _resolve_lab_path(name: str) -> Path:
+    d = _get_lab_dir()
+    path = (d / f"{_sanitize_lab_name(name)}.json").resolve()
+    if not path.is_relative_to(d.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid lab name")
+    return path
+
+
+def _lab_meta(path: Path, d: Path) -> dict:
+    """Parse a saved lab file and return metadata for the API."""
+    from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
+
+    try:
+        graph = json.loads(path.read_text(encoding="utf-8"))
+        exc = LabExecutor(graph)
+        return {
+            "name": path.relative_to(d).with_suffix("").as_posix(),
+            "modified": int(path.stat().st_mtime * 1000),
+            "signal_in_columns": exc.signal_in_columns,
+            "outputs": exc.output_labels,
+        }
+    except Exception:
+        return {
+            "name": path.relative_to(d).with_suffix("").as_posix(),
+            "modified": int(path.stat().st_mtime * 1000),
+            "signal_in_columns": [],
+            "outputs": [],
+        }
+
+
+@router.get("/api/lab")
+async def list_labs():
+    """List all saved lab graphs with their input column requirements and output labels."""
+    d = _get_lab_dir()
+    return [
+        _lab_meta(f, d)
+        for f in sorted(
+            d.rglob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
+    ]
+
+
+@router.get("/api/lab/{name:path}")
+async def get_lab(name: str):
+    """Return the raw LiteGraph JSON for a saved lab."""
+    path = _resolve_lab_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Lab not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.post("/api/lab/{name:path}")
+async def save_lab(name: str, request: Request):
+    """Save a LiteGraph graph JSON as a named lab."""
+    cl = request.headers.get("content-length")
+    if cl and int(cl) > _LAB_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Lab payload too large")
+    body = await request.json()
+    path = _resolve_lab_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(body), encoding="utf-8")
+    d = _get_lab_dir()
+    return {"name": path.relative_to(d).with_suffix("").as_posix()}
+
+
+@router.delete("/api/lab/{name:path}")
+async def delete_lab(name: str):
+    """Delete a saved lab."""
+    path = _resolve_lab_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Lab not found")
+    path.unlink()
+    d = _get_lab_dir()
+    # Remove empty parent directories up to (but not including) the lab root.
+    parent = path.parent
+    while parent != d and parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+    return {"deleted": path.relative_to(d).with_suffix("").as_posix()}
+
+
 @lru_cache(maxsize=128)
 def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
@@ -498,8 +612,39 @@ async def get_trial_data(
                 logger.warning(f"Could not parse filters for {trial_id}: {e}")
                 filter_errors.append(_format_filter_error(e))
 
-        # build response data, applying per-column filters where present
         data: dict = {}
+
+        # ── Lab virtual columns ────────────────────────────────────────────────
+        # Columns named "Lab/{lab_name}/{output_label}" are computed by running
+        # the saved lab graph rather than reading from the parquet file.
+        lab_cols = [c for c in requested if c.startswith(f"{_LAB_PREFIX}/")]
+        if lab_cols:
+            from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
+
+            # Group by lab name to execute each graph once
+            from collections import defaultdict as _dd
+
+            by_lab: dict[str, list[tuple[str, str]]] = _dd(list)
+            for col in lab_cols:
+                parts = col.split("/", 2)
+                if len(parts) == 3:
+                    _, lab_name, output_label = parts
+                    by_lab[lab_name].append((col, output_label))
+
+            for lab_name, col_outputs in by_lab.items():
+                lab_path = _resolve_lab_path(lab_name)
+                if not lab_path.exists():
+                    continue
+                try:
+                    graph = json.loads(lab_path.read_text(encoding="utf-8"))
+                    outputs = LabExecutor(graph).execute(df)
+                    for full_col, output_label in col_outputs:
+                        if output_label in outputs:
+                            data[full_col] = outputs[output_label].to_list()
+                except Exception as exc:
+                    logger.warning(f"Lab '{lab_name}' execution failed: {exc}")
+
+        # ── build response data, applying per-column filters where present ────
         for col in requested:
             if col not in df.columns:
                 continue

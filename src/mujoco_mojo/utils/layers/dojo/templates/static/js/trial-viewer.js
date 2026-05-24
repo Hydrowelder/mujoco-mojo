@@ -197,6 +197,20 @@
       annotationsOpen: false,
       annDraft: null,
       annEditIndex: null,
+      // --- FILTER LAB ---
+      labOpen: localStorage.getItem("mojo:lab:open") === "1",
+      labGraph: (() => {
+        try {
+          const s = localStorage.getItem("mojo:lab:draft");
+          return s ? JSON.parse(s) : null;
+        } catch {
+          return null;
+        }
+      })(),
+      labName: localStorage.getItem("mojo:lab:name") ?? "",
+      nodePickingColumn: null,
+      nodeColSearch: "",
+      labSchemas: [],
       // --- SHAPES ---
       shapesOpen: false,
       placementMode: null,
@@ -583,6 +597,7 @@
           this.columns = response.columns.all.sort();
           this.rotateableVectors = response.columns.rotatable_vectors ?? [];
           this.data = response.data;
+          void this.loadLabSchemas();
           const params = new URLSearchParams(window.location.search);
           const shared = params.get("v");
           if (shared) {
@@ -701,7 +716,7 @@
             document.querySelector('input[type="number"]')?.focus();
           }
           if (e.key === "Escape") {
-            const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
+            const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
             if (["INPUT", "TEXTAREA"].includes(tag))
               e.target.blur();
             this.placementMode = null;
@@ -714,6 +729,7 @@
             this.settingsOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
+            this.labOpen = false;
             window.dispatchEvent(new CustomEvent("mojo:escape"));
             if (anyOpen) e.stopImmediatePropagation();
           }
@@ -726,12 +742,17 @@
           const cmdOrCtrl = e.metaKey || e.ctrlKey;
           if (cmdOrCtrl && isZ) {
             e.preventDefault();
-            if (e.shiftKey) this.redo();
-            else this.undo();
+            if (this.labOpen) {
+              e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
+            } else {
+              if (e.shiftKey) this.redo();
+              else this.undo();
+            }
           }
           if (cmdOrCtrl && isY) {
             e.preventDefault();
-            this.redo();
+            if (this.labOpen) window.mojoLabRedo?.();
+            else this.redo();
           }
         }, { capture: true });
         const resp = await fetch("/mosaic/api/trials");
@@ -916,7 +937,7 @@
       },
       getFilteredCols(field) {
         if (!this.columns || !Array.isArray(this.columns)) return [];
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         if (!search) return this.smartSort([...base]);
         try {
@@ -962,7 +983,7 @@
         self2[key] = (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
       },
       getSegmentsAtDepth(field, depth) {
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const pathSearch = search.split(":")[0] ?? "";
         const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -977,7 +998,7 @@
         return this.smartSort([.../* @__PURE__ */ new Set([...selected, ...segments])]);
       },
       getAvailableSuffixes(field) {
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const [pathPart = "", suffixPart = ""] = search.split(":");
         const selected = (suffixPart ?? "").replace(/[()]/g, "").split("|").filter(Boolean).map((s) => ":" + s);
@@ -1453,6 +1474,92 @@
       // in the URL (not 'project%2Fname'), matching the {name:path} FastAPI route.
       _profileUrl(name) {
         return `/mosaic/api/profiles/${name.split("/").map(encodeURIComponent).join("/")}`;
+      },
+      // ── Lab ──────────────────────────────────────────────────────────────────
+      relTime(ms) {
+        const diff = Date.now() - ms;
+        const min = Math.floor(diff / 6e4);
+        if (min < 1) return "just now";
+        if (min < 60) return `${min}m ago`;
+        const h = Math.floor(min / 60);
+        if (h < 24) return `${h}h ago`;
+        const d = Math.floor(h / 24);
+        return d === 1 ? "yesterday" : `${d}d ago`;
+      },
+      async loadLabSchemas() {
+        try {
+          const resp = await fetch("/mosaic/api/lab");
+          if (!resp.ok) return;
+          const all = await resp.json();
+          const schemas = all.map((lab) => ({
+            ...lab,
+            signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
+            outputs: [...new Set(lab.outputs)].sort()
+          }));
+          const baseColumns = this.columns.filter((c) => !c.startsWith("Lab/"));
+          const available = new Set(baseColumns);
+          const validLabs = /* @__PURE__ */ new Set();
+          let changed = true;
+          while (changed) {
+            changed = false;
+            for (const lab of schemas) {
+              if (validLabs.has(lab.name)) continue;
+              if (lab.signal_in_columns.every((c) => available.has(c))) {
+                validLabs.add(lab.name);
+                lab.outputs.forEach((o) => available.add(`Lab/${lab.name}/${o}`));
+                changed = true;
+              }
+            }
+          }
+          this.labSchemas = schemas.map((lab) => ({
+            ...lab,
+            missing: lab.signal_in_columns.filter((c) => !available.has(c)),
+            valid: validLabs.has(lab.name)
+          }));
+          this.columns = [...available].sort();
+        } catch {
+        }
+      },
+      async saveLabGraph(name, graph) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const exists = this.labSchemas.some((s) => s.name === trimmed);
+        if (exists && !confirm(`Overwrite "${trimmed}"?`)) return;
+        const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
+        try {
+          const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(graph)
+          });
+          if (!resp.ok) {
+            const detail = await resp.text().catch(() => resp.statusText);
+            this.notify(`Save failed: ${detail}`, "error");
+            return;
+          }
+          localStorage.setItem("mojo:lab:name", trimmed);
+          this.notify(`Lab "${trimmed}" saved`, "success");
+          await this.loadLabSchemas();
+        } catch (err) {
+          this.notify(`Save failed: ${String(err)}`, "error");
+        }
+      },
+      selectNodeColumn(col) {
+        if (this.nodePickingColumn !== null) {
+          if (typeof window.mojoLabSelectNodeColumn === "function") {
+            window.mojoLabSelectNodeColumn(this.nodePickingColumn, col);
+          }
+        }
+        this.nodePickingColumn = null;
+        this.nodeColSearch = "";
+      },
+      async deleteLabGraph(name) {
+        const safePath = name.split("/").map(encodeURIComponent).join("/");
+        await fetch(`/mosaic/api/lab/${safePath}`, {
+          method: "DELETE"
+        });
+        this.notify(`Lab "${name}" deleted`, "info");
+        await this.loadLabSchemas();
       },
       // -----------------------------------------------------------------------
       async loadProfiles() {

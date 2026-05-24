@@ -49,6 +49,10 @@ declare global {
     trialViewer(trialId: string, externalUrl: string): object;
     monitor(): object;
     mosaic(): object;
+    // Signal Lab — defined in _signal_lab.html, called from trial-viewer.ts
+    mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
+    mojoLabUndo?(): void;
+    mojoLabRedo?(): void;
   }
 }
 
