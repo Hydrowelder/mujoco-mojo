@@ -60,7 +60,9 @@ declare global {
   const CM: typeof import("codemirror") &
     typeof import("@codemirror/lang-json") &
     typeof import("@codemirror/theme-one-dark") &
-    typeof import("@codemirror/state");
+    typeof import("@codemirror/state") &
+    typeof import("@codemirror/lint") &
+    typeof import("@codemirror/language");
 
   // Globals exposed by the compiled bundles for Alpine x-data usage
   interface Window {

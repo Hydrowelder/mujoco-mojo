@@ -716,6 +716,143 @@
         }
     }
 
+    // Auto-arrange nodes using a layered DAG layout (Sugiyama-style).
+    //
+    // Step 1 - layer assignment: longest-path from sources (Kahn's BFS).
+    // Step 2 - crossing reduction: barycenter heuristic with 4 alternating
+    //          forward/backward sweeps. Each sweep re-orders a layer by the
+    //          average rank of its neighbors in the adjacent layer.
+    //          Source nodes (depth 0) are seeded by their current Y so
+    //          the user's rough vertical intent is preserved.
+    // Step 3 - coordinate assignment: columns left-to-right, nodes top-to-bottom.
+    window.mojoLabArrange = function () {
+        if (!_lab.graph) return;
+        const nodes = _lab.graph._nodes || [];
+        if (nodes.length === 0) return;
+
+        // ── Step 1: build adjacency + assign layers ───────────────────────────
+        const succs = new Map();   // id -> id[]
+        const preds = new Map();   // id -> id[]
+        nodes.forEach(n => { succs.set(n.id, []); preds.set(n.id, []); });
+        Object.values(_lab.graph.links || {}).forEach(link => {
+            if (succs.has(link.origin_id) && succs.has(link.target_id)) {
+                succs.get(link.origin_id).push(link.target_id);
+                preds.get(link.target_id).push(link.origin_id);
+            }
+        });
+
+        // Longest path from sources via Kahn's BFS.
+        const layerOf = new Map(nodes.map(n => [n.id, 0]));
+        const inDeg = new Map(nodes.map(n => [n.id, preds.get(n.id).length]));
+        const q = nodes.filter(n => inDeg.get(n.id) === 0).map(n => n.id);
+        while (q.length) {
+            const nid = q.shift();
+            for (const sid of succs.get(nid)) {
+                const d = layerOf.get(nid) + 1;
+                if (d > layerOf.get(sid)) layerOf.set(sid, d);
+                const deg = inDeg.get(sid) - 1;
+                inDeg.set(sid, deg);
+                if (deg === 0) q.push(sid);
+            }
+        }
+
+        // Group into ordered layers.
+        const layerMap = new Map();
+        nodes.forEach(n => {
+            const d = layerOf.get(n.id) ?? 0;
+            if (!layerMap.has(d)) layerMap.set(d, []);
+            layerMap.get(d).push(n);
+        });
+        const layers = [...layerMap.keys()].sort((a, b) => a - b).map(d => layerMap.get(d));
+
+        // ── Step 2: crossing reduction (barycenter heuristic) ────────────────
+        // Seed source layer by current Y to respect the user's rough ordering.
+        layers[0].sort((a, b) => a.pos[1] - b.pos[1]);
+
+        // rank[id] = fractional position within its layer (0-based index after sort).
+        const rank = new Map();
+        layers.forEach(layer => layer.forEach((n, i) => rank.set(n.id, i)));
+
+        for (let pass = 0; pass < 4; pass++) {
+            // Forward sweep: sort each layer by average rank of predecessors.
+            for (let li = 1; li < layers.length; li++) {
+                layers[li].forEach(n => {
+                    const ps = preds.get(n.id);
+                    rank.set(n.id, ps.length
+                        ? ps.reduce((s, pid) => s + rank.get(pid), 0) / ps.length
+                        : rank.get(n.id));
+                });
+                layers[li].sort((a, b) => rank.get(a.id) - rank.get(b.id));
+                layers[li].forEach((n, i) => rank.set(n.id, i));
+            }
+
+            // Backward sweep: sort each layer by average rank of successors.
+            for (let li = layers.length - 2; li >= 0; li--) {
+                layers[li].forEach(n => {
+                    const ss = succs.get(n.id);
+                    rank.set(n.id, ss.length
+                        ? ss.reduce((s, sid) => s + rank.get(sid), 0) / ss.length
+                        : rank.get(n.id));
+                });
+                layers[li].sort((a, b) => rank.get(a.id) - rank.get(b.id));
+                layers[li].forEach((n, i) => rank.set(n.id, i));
+            }
+        }
+
+        // ── Step 3: assign pixel coordinates ─────────────────────────────────
+        const COL_GAP = 60;
+        const ROW_GAP = 36;
+        const START_X = 60;
+        const START_Y = 60;
+
+        let x = START_X;
+        layers.forEach(layer => {
+            const maxW = Math.max(...layer.map(n => n.size[0]));
+            let y = START_Y;
+            layer.forEach(n => {
+                n.pos[0] = x;
+                n.pos[1] = y;
+                y += n.size[1] + ROW_GAP;
+            });
+            x += maxW + COL_GAP;
+        });
+
+        if (_lab.canvas) _lab.canvas.setDirty(true, true);
+        mojoLabDeferredSnapshot();
+    };
+
+    // Fit the canvas view to show all nodes, centered and scaled to fill the viewport.
+    // LiteGraph uses: canvas_pos = (graph_pos + offset) * scale, so:
+    //   offset = canvas_center / scale - graph_center
+    window.mojoLabFitView = function () {
+        if (!_lab.canvas) return;
+        const nodes = (_lab.graph && _lab.graph._nodes) || [];
+        if (nodes.length === 0) {
+            _lab.canvas.ds.scale = 1;
+            _lab.canvas.ds.offset = [0, 0];
+            _lab.canvas.setDirty(true, true);
+            return;
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(n => {
+            minX = Math.min(minX, n.pos[0]);
+            minY = Math.min(minY, n.pos[1]);
+            maxX = Math.max(maxX, n.pos[0] + n.size[0]);
+            maxY = Math.max(maxY, n.pos[1] + n.size[1]);
+        });
+        const PAD = 60;
+        const graphW = maxX - minX + PAD * 2;
+        const graphH = maxY - minY + PAD * 2;
+        const cw = _lab.canvas.canvas.width;
+        const ch = _lab.canvas.canvas.height;
+        const scale = Math.min(Math.max(Math.min(cw / graphW, ch / graphH), 0.2), 2.0);
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        _lab.canvas.ds.scale = scale;
+        _lab.canvas.ds.offset = [cw / (2 * scale) - cx, ch / (2 * scale) - cy];
+        _lab.canvas.setDirty(true, true);
+    };
+
     function mojoLabRefreshSiColors() {
         _computeAndStoreCyclicCols();
         if (!_lab.graph) return;
@@ -746,8 +883,9 @@
      style="display:none;">
 
     <!-- toolbar -->
-    <div class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center gap-3">
+    <div class="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-800 min-w-0">
+        <!-- left: branding (always visible, shrink-0) -->
+        <div class="shrink-0 flex items-center gap-2 sm:gap-3">
             <!-- icon -->
             <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400"
                  fill="none"
@@ -771,11 +909,12 @@
                         fill="currentColor"
                         stroke="none" />
             </svg>
-            <span class="text-base font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">Signal Lab</span>
-            <span class="text-sm font-mono text-slate-400 dark:text-slate-500">{{ trial_id }}</span>
+            <span class="hidden sm:inline text-base font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">Signal Lab</span>
+            <span class="hidden sm:inline text-sm font-mono text-slate-400 dark:text-slate-500">{{ trial_id }}</span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <!-- middle: action buttons -->
+        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 justify-end min-w-0">
             <!-- name + save (with tab-autocomplete for folder paths) -->
             <div x-data="{
                 focused: false,
@@ -794,13 +933,14 @@
                  class="relative flex items-center gap-1.5">
                 <input id="lab-name-input"
                        x-model="labName"
+                       @mousedown.stop
                        @focus="focused = true"
                        @blur="setTimeout(() => focused = false, 150)"
                        @keydown.tab.prevent="accept()"
                        @keydown.enter="labName && saveLabGraph(labName, mojoLabSerialize())"
                        @keydown.escape.stop="labName = ''"
                        placeholder="name or folder/name…"
-                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-44" />
+                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-28 sm:w-44" />
                 <button @click="labName && saveLabGraph(labName, mojoLabSerialize())"
                         :disabled="!labName"
                         class="btn btn-ghost text-sm font-bold text-cyan-600 dark:text-cyan-400 border-cyan-500/40 dark:border-cyan-500/30 hover:bg-cyan-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
@@ -813,7 +953,7 @@
                               stroke-linejoin="round"
                               d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                     </svg>
-                    Save
+                    <span class="hidden sm:inline">Save</span>
                 </button>
                 <!-- suggestion hint floats below toolbar, no effect on toolbar height -->
                 <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-10"
@@ -871,7 +1011,7 @@
                               stroke-linejoin="round"
                               d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                     </svg>
-                    Load
+                    <span class="hidden sm:inline">Load</span>
                     <svg class="w-3 h-3 transition-transform"
                          :class="open ? 'rotate-180' : ''"
                          fill="none"
@@ -1058,7 +1198,40 @@
                           stroke-linejoin="round"
                           d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Refresh
+                <span class="hidden sm:inline">Refresh</span>
+            </button>
+            <!-- fit view -->
+            <button @click="mojoLabFitView()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
+                    title="Fit view to all nodes (Ctrl+Shift+F)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <span class="hidden sm:inline">Fit</span>
+            </button>
+            <!-- auto-arrange -->
+            <button @click="mojoLabArrange()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
+                    title="Auto-arrange nodes (Ctrl+Shift+A)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M3 6h18M3 12h18M3 18h18" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M17 3l4 3-4 3" />
+                </svg>
+                <span class="hidden sm:inline">Arrange</span>
             </button>
             <!-- clear -->
             <button @click="if(confirm('Clear the graph?')) mojoLabClear()"
@@ -1072,23 +1245,24 @@
                           stroke-linejoin="round"
                           d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                 </svg>
-                Clear
-            </button>
-            <!-- close -->
-            <button @click="labOpen = false"
-                    class="btn-icon btn-ghost"
-                    title="Close (Esc)">
-                <svg class="w-5 h-5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <span class="hidden sm:inline">Clear</span>
             </button>
         </div>
+
+        <!-- close: always visible, pinned to the right (shrink-0) -->
+        <button @click="labOpen = false"
+                class="shrink-0 btn-icon btn-ghost"
+                title="Close (Esc)">
+            <svg class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
     </div>
 
     <!-- canvas area -->
@@ -1222,9 +1396,12 @@
     </div>
 
     <!-- status bar -->
-    <div class="h-8 shrink-0 flex items-center gap-6 px-4 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-500 select-none">
-        <span>Right-click → add node</span>
-        <span>Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Del remove selected</span>
-        <span>Scroll to zoom · drag to pan</span>
+    <div class="h-8 shrink-0 flex items-center px-4 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-500 select-none overflow-x-auto custom-scrollbar">
+        <div class="flex items-center gap-6 whitespace-nowrap">
+            <span>Right-click → add node</span>
+            <span>Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Del remove selected</span>
+            <span>Ctrl+Shift+A arrange · Ctrl+Shift+F fit view</span>
+            <span>Scroll to zoom · drag to pan</span>
+        </div>
     </div>
 </div>

@@ -11,9 +11,7 @@
              this.open = !this.open;
              try { localStorage.setItem('mojo:json-editor:open', this.open ? '1' : '0'); } catch {}
          },
-         init() {
-             this.$nextTick(() => this.initCodeMirror(this.$refs.cmHost));
-         }
+         init() { this.$nextTick(() => this.initCodeMirror(this.$refs.cmHost)); }
      }">
     <div class="flex items-center justify-between px-2">
         <button @click="toggle()"
@@ -67,15 +65,17 @@
          x-transition:leave-end="opacity-0"
          class="relative rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800 transition-all overflow-hidden focus-within:border-cyan-500/50">
 
-        <div x-ref="cmHost" class="min-h-[16rem]"></div>
+        <div x-ref="cmHost"
+             class="min-h-[16rem]"
+             style="overflow: hidden;"></div>
 
         <div class="absolute right-4 bottom-4 flex gap-2 z-10">
             <button @click="copyRawConfig()"
-                    class="px-3 py-1.5 bg-slate-900/80 text-slate-400 text-sm font-black uppercase rounded-lg border border-slate-700 hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm backdrop-blur-sm">
+                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
                 Copy
             </button>
             <button @click="configRaw = JSON.stringify(config, null, 4)"
-                    class="px-3 py-1.5 bg-slate-900/80 text-slate-400 text-sm font-black uppercase rounded-lg border border-slate-700 hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm backdrop-blur-sm">
+                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
                 Format
             </button>
         </div>

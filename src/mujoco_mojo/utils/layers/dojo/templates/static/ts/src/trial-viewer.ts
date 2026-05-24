@@ -66,7 +66,8 @@ const DEFAULT_CONFIG: PlotConfig = {
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
 // ---------------------------------------------------------------------------
-const _cm: { editor: { state: { doc: { toString(): string } }; dispatch(tr: object): void; destroy(): void } | null; updating: boolean; debounce: ReturnType<typeof setTimeout> | null } = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _cm: { editor: any; updating: boolean; debounce: ReturnType<typeof setTimeout> | null } = {
   editor: null,
   updating: false,
   debounce: null,
@@ -932,6 +933,15 @@ function trialViewer(trialId: string, externalUrl: string) {
             if (this.labOpen) window.mojoLabRedo?.();
             else this.redo();
           }
+          if (this.labOpen && cmdOrCtrl && e.shiftKey) {
+            if (e.key.toLowerCase() === "a") {
+              e.preventDefault();
+              window.mojoLabArrange?.();
+            } else if (e.key.toLowerCase() === "f") {
+              e.preventDefault();
+              window.mojoLabFitView?.();
+            }
+          }
         },
         { capture: true },
       );
@@ -1407,8 +1417,16 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.configErrors = this.validateConfig(parsed);
           this.isValidConfig = this.configErrors.length === 0;
           if (this.isValidConfig) {
+            const prevRefFrame = this.config.refFrame ?? null;
             this.isEditingRaw = true;
             this.config = { ...this.config, ...parsed };
+            // Apply rotation filters synchronously. $watch("config.refFrame") fires
+            // asynchronously after the whole config object is replaced, so filters
+            // would be wrong during the first render if we relied solely on the watch.
+            const nextRefFrame = (this.config.refFrame as string | null) ?? null;
+            if (nextRefFrame !== prevRefFrame) {
+              this.applyRefFrame(nextRefFrame);
+            }
             void this.$nextTick(() => {
               this.isEditingRaw = false;
             });
@@ -1502,20 +1520,74 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     initCodeMirror(hostEl: HTMLElement) {
       if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
-      const { EditorView, basicSetup, json, oneDark, EditorState } = CM;
+      const {
+        EditorView, basicSetup, json, jsonParseLinter,
+        oneDarkHighlightStyle, EditorState, Compartment,
+        linter, lintGutter, syntaxHighlighting, defaultHighlightStyle,
+      } = CM;
       const self = this;
+
+      // Restore persisted height before creating the editor so it sizes correctly.
+      const savedH = localStorage.getItem("mojo:json-editor:height");
+      if (savedH) hostEl.style.height = savedH;
+
+      // --- themes (base chrome only; highlight handled separately) ---
+      const darkTheme = EditorView.theme({
+        "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+        ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
+        ".cm-cursor": { borderLeftColor: "#06b6d4" },
+        ".cm-gutters": { backgroundColor: "#0f172a", color: "#475569", borderRight: "1px solid #1e293b" },
+        ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
+        ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
+        ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+        ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+        ".cm-tooltip": { backgroundColor: "#1e293b", border: "1px solid #334155", color: "#cbd5e1" },
+        ".cm-panels": { backgroundColor: "#0f172a", borderColor: "#1e293b", color: "#cbd5e1" },
+        ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(34,211,238,0.35)" },
+        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+      }, { dark: true });
+
+      const lightTheme = EditorView.theme({
+        "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+        ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
+        ".cm-cursor": { borderLeftColor: "#0891b2" },
+        ".cm-gutters": { backgroundColor: "#f8fafc", color: "#94a3b8", borderRight: "1px solid #e2e8f0" },
+        ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
+        ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
+        ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+        ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+        ".cm-tooltip": { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" },
+        ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+        ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(8,145,178,0.3)" },
+        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+      }, { dark: false });
+
+      const isDark = () => document.documentElement.classList.contains("dark");
+      const themeComp = new Compartment();
+      const highlightComp = new Compartment();
+      const makeTheme = (dark: boolean) => dark ? darkTheme : lightTheme;
+      const makeHighlight = (dark: boolean) =>
+        syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle);
+
       const startState = EditorState.create({
         doc: this.configRaw,
         extensions: [
           basicSetup,
           json(),
-          oneDark,
-          EditorView.theme({
-            "&": { height: "auto" },
-            ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
-            ".cm-content": { padding: "1rem" },
-            ".cm-gutters": { minHeight: "16rem" },
-          }),
+          lintGutter(),
+          linter(jsonParseLinter()),
+          themeComp.of(makeTheme(isDark())),
+          highlightComp.of(makeHighlight(isDark())),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !_cm.updating) {
               const text = update.state.doc.toString();
@@ -1531,10 +1603,67 @@ function trialViewer(trialId: string, externalUrl: string) {
           }),
         ],
       });
+
       _cm.editor = new EditorView({ state: startState, parent: hostEl });
+
+      // Custom resize handle
+      const handle = document.createElement("div");
+      handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      const grip = document.createElement("div");
+      grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+      handle.appendChild(grip);
+      handle.addEventListener("mouseenter", () => { grip.style.background = "#06b6d4"; grip.style.width = "52px"; });
+      handle.addEventListener("mouseleave", () => { grip.style.background = "#334155"; grip.style.width = "36px"; });
+      hostEl.insertAdjacentElement("afterend", handle);
+
+      handle.addEventListener("mousedown", (e) => {
+        const startY = e.clientY;
+        const startH = hostEl.offsetHeight;
+        let prevY = startY;
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "ns-resize";
+        const onMove = (ev: MouseEvent) => {
+          const dy = ev.clientY - prevY;
+          prevY = ev.clientY;
+          const newH = Math.max(128, startH + (ev.clientY - startY));
+          hostEl.style.height = newH + "px";
+          if (dy > 0) window.scrollBy(0, dy);
+        };
+        const onUp = () => {
+          document.body.style.userSelect = "";
+          document.body.style.cursor = "";
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        e.preventDefault();
+      });
+
+      handle.addEventListener("dblclick", () => {
+        const scroller = hostEl.querySelector(".cm-scroller") as HTMLElement | null;
+        if (scroller) {
+          hostEl.style.height = scroller.scrollHeight + "px";
+          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+        }
+      });
+
+      // Swap theme when dark mode toggles.
+      new MutationObserver(() => {
+        const dark = isDark();
+        _cm.editor?.dispatch({
+          effects: [
+            themeComp.reconfigure(makeTheme(dark)),
+            highlightComp.reconfigure(makeHighlight(dark)),
+          ],
+        });
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+      // Sync external configRaw changes into CM.
       this.$watch("configRaw", (val: string) => {
         if (!_cm.updating && _cm.editor) {
-          const current = _cm.editor.state.doc.toString();
+          const current = _cm.editor.state.doc.toString() as string;
           if (current !== val) {
             _cm.updating = true;
             _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
@@ -2185,10 +2314,24 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         this.config = { ...this.config, ...loaded };
         this.notify(`Profile "${name}" loaded`, "success");
+
+        // Fetch data for any columns the profile introduces that aren't cached yet.
+        const needed: string[] = [];
+        if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
+          needed.push(loaded.xAxis.col);
+        for (const col of Object.keys(loaded.yAxes ?? {})) {
+          if (!this.data?.[col]) needed.push(col);
+        }
+        if (needed.length > 0) {
+          const fetched = await this.fetchTrialData(this.trialId, needed);
+          this.data = { ...(this.data ?? {}), ...fetched.data };
+        }
+
         void this.$nextTick(() => {
           this.configErrors = this.validateConfig(this.config as PlotConfig);
           this.isValidConfig = this.configErrors.length === 0;
           this.isValidJson = true;
+          this.saveAndRender();
         });
       } catch (e) {
         this.notify(
