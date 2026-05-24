@@ -1,0 +1,1407 @@
+<!-- ══════════════════════════════════════════════════════════════════
+         SIGNAL LAB  ·  _signal_lab.html
+         LiteGraph-powered node editor for building filter graphs.
+         Opened via the "Lab" sidebar button; overlays the full viewport.
+         ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+    // ── Node registration ─────────────────────────────────────────────────────
+    // Called once with the current column list; guarded against double-registration.
+    function mojoLabRegisterNodes(columns) {
+        if (window.__mojoLabRegistered) {
+            // Refresh SignalIn combo values if columns changed
+            const NodeCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+            if (NodeCtor) NodeCtor._columns = columns;
+            return;
+        }
+        window.__mojoLabRegistered = true;
+
+        // ── Global style overrides ────────────────────────────────────────────
+        // Replace all four internal registries so built-in nodes don't appear in the menu.
+        // Using object replacement (not delete) keeps LiteGraph's internal references intact.
+        LiteGraph.registered_node_types = {};
+        LiteGraph.Nodes = {};
+        LiteGraph.nodes_titles = {};
+        LiteGraph.node_types_by_file_extension = {};
+        LiteGraph.node_types_by_category = {};
+
+        LiteGraph.LINK_COLOR = "#06b6d4";   // cyan-500
+        LiteGraph.CONNECTING_LINK_COLOR = "#22d3ee";   // cyan-400
+        LiteGraph.EVENT_LINK_COLOR = "#a78bfa";   // violet-400
+        LiteGraph.NODE_SELECTED_TITLE_COLOR = "#22d3ee";
+        LiteGraph.DEFAULT_LINK_TYPE_COLORS = { series: "#06b6d4", wrt: "#a78bfa" };
+
+        const SER = "series";
+        const BG = "#0f172a";   // slate-900
+        const C_SRC = "#14532d";   // green-900
+        const C_SINK = "#164e63";   // cyan-900
+        const C_FILT = "#1e1b4b";   // indigo-950
+        const C_CALC = "#3b0764";   // violet-950
+        const C_UTIL = "#431407";   // orange-950
+        const C_MATH = "#0c4a6e";   // sky-950  (arithmetic: log, exp, power, +/-/×/÷)
+        const C_TRIG = "#14432a";   // green-950 (trigonometry)
+        const C_COMP = "#3d1515";   // red-950  (comparison, sign)
+
+        // ── Signal In ─────────────────────────────────────────────────────────
+        function SignalInNode() {
+            this.addOutput("signal", SER);
+            this.properties = { column: "time" };
+            // Editable text - user can type or use the Browse button
+            this._displayWidget = this.addWidget(
+                "text", "", "time",
+                (v) => {
+                    this.properties.column = v;
+                    this.size[0] = Math.max(240, v.length * 7 + 80);
+                    mojoLabRefreshSiColors();
+                    if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                }
+            );
+            // Browse button - fires to Alpine which opens the hierarchical picker
+            this.addWidget("button", "pick", "Browse…", () => {
+                document.dispatchEvent(new CustomEvent("mojo:lab-pick-column", {
+                    detail: { nodeId: this.id }
+                }));
+            });
+            this.size = [240, 78];
+        }
+        SignalInNode.title = "Signal In";
+        SignalInNode.color = C_SRC;
+        SignalInNode.bgcolor = BG;
+        SignalInNode._columns = columns;
+        SignalInNode._cyclicCols = new Map();
+        LiteGraph.registerNodeType("Signal/signal_in", SignalInNode);
+
+        // Sync widget display, node width, and validation color from restored properties.
+        SignalInNode.prototype.onConfigure = function () {
+            const col = this.properties.column ?? "time";
+            if (this._displayWidget) this._displayWidget.value = col;
+            this.size[0] = Math.max(240, col.length * 7 + 80);
+            _siColor(this);
+        };
+
+        SignalInNode.prototype.onDrawForeground = function (ctx) {
+            const dw = this._displayWidget;
+            const nw = this.size[0];
+            const H = LiteGraph.NODE_WIDGET_HEIGHT || 20;
+            const col = this.properties.column || '';
+
+            // Override widget value: LiteGraph truncates at 30 chars; draw the full name.
+            if (dw && dw.last_y != null) {
+                const A = dw.last_y;
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(16, A + 1, nw - 32, H - 2);
+                ctx.clip();
+                ctx.fillStyle = "#222";
+                ctx.fillRect(16, A + 1, nw - 32, H - 2);
+                ctx.font = "12px Arial";
+                ctx.textBaseline = "alphabetic";
+                ctx.fillStyle = "#999";
+                ctx.textAlign = "left";
+                ctx.fillText("col", 18, A + H * 0.7);
+                ctx.fillStyle = "#DDD";
+                ctx.textAlign = "right";
+                ctx.fillText(col, nw - 30, A + H * 0.7);
+                ctx.restore();
+            }
+
+            // Warnings below widgets (size[1] expanded to make room)
+            if (!col) return;
+            const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+            if (!SiCtor) return;
+            const isCyclic = (SiCtor._cyclicCols || new Map()).has(col);
+            const notInTrial = !SiCtor._columns.includes(col);
+            if (!isCyclic && !notInTrial) return;
+            ctx.save();
+            ctx.font = "italic 10px monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            if (isCyclic) {
+                const src = SiCtor._cyclicCols.get(col) || '';
+                const srcDisplay = src.length > 26 ? src.slice(0, 24) + '…' : src;
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("circular dependency", nw / 2, this.size[1] - 19);
+                ctx.font = "10px monospace";
+                ctx.fillStyle = "#fbbf24";
+                ctx.fillText(srcDisplay, nw / 2, this.size[1] - 5);
+            } else {
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("not in this trial", nw / 2, this.size[1] - 4);
+            }
+            ctx.restore();
+        };
+
+        // Global callback - called by trial-viewer.ts when the user picks a column
+        window.mojoLabSelectNodeColumn = function (nodeId, col) {
+            if (!_lab.graph) return;
+            const node = _lab.graph.getNodeById(nodeId);
+            if (!node) return;
+            node.properties.column = col;
+            if (node._displayWidget) node._displayWidget.value = col;
+            node.size[0] = Math.max(240, col.length * 7 + 80);
+            mojoLabRefreshSiColors();
+            _lab.graph.setDirtyCanvas(true, true);
+        };
+
+        // ── Signal Out ────────────────────────────────────────────────────────
+        function SignalOutNode() {
+            this.addInput("signal", SER);
+            this.properties = { label: "" };
+            this.addWidget(
+                "text", "label", "",
+                (v) => {
+                    this.properties.label = v;
+                    this.size[0] = Math.max(200, v.length * 7 + 80);
+                    _soColor(this);
+                    if (_lab.graph) {
+                        // Recolor sibling Signal Out nodes (duplicate detection)
+                        (_lab.graph._nodes || []).forEach(n => {
+                            if (n !== this && (n.type || '').endsWith('signal_out')) _soColor(n);
+                        });
+                        // Refresh cyclic dep check (current outputs changed)
+                        mojoLabRefreshSiColors();
+                    }
+                }
+            );
+            this.size = [200, 55];
+        }
+        SignalOutNode.title = "Signal Out";
+        SignalOutNode.color = C_SINK;
+        SignalOutNode.bgcolor = BG;
+        SignalOutNode._existingNames = new Map();
+        SignalOutNode._cyclicOutputs = new Set();
+        LiteGraph.registerNodeType("Signal/signal_out", SignalOutNode);
+
+        // Sync widget display, node width, and validation color from restored properties.
+        SignalOutNode.prototype.onConfigure = function () {
+            const lbl = this.properties.label ?? "";
+            if (this.widgets && this.widgets[0]) this.widgets[0].value = lbl;
+            this.size[0] = Math.max(200, lbl.length * 7 + 80);
+            _soColor(this);
+        };
+
+        SignalOutNode.prototype.onConnectionsChange = function () {
+            _soColor(this);
+            if (_lab.graph) _lab.graph.setDirtyCanvas(true, false);
+        };
+
+        SignalOutNode.prototype.onDrawForeground = function (ctx) {
+            const lbl = this.properties.label ?? '';
+            const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"];
+            const nameMap = (SoCtor && SoCtor._existingNames) || new Map();
+            const cyclicOutputs = (SoCtor && SoCtor._cyclicOutputs) || new Set();
+            const connected = this.inputs[0] && this.inputs[0].link != null;
+            const collision = lbl && nameMap.has(lbl);
+            const duplicate = lbl && _lab.graph && (_lab.graph._nodes || []).some(
+                n => n !== this && (n.type || '').endsWith('signal_out') && (n.properties.label || '') === lbl
+            );
+            const isCyclic = lbl && cyclicOutputs.has(lbl);
+            if (!collision && !duplicate && !isCyclic && (connected || !lbl)) return;
+            const cx = this.size[0] / 2;
+            ctx.save();
+            ctx.font = "italic 10px monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            if (collision) {
+                const src = nameMap.get(lbl) || '';
+                const srcDisplay = src.length > 26 ? src.slice(0, 24) + '…' : src;
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("name already exists", cx, this.size[1] - 19);
+                ctx.font = "10px monospace";
+                ctx.fillStyle = "#fbbf24";
+                ctx.fillText(srcDisplay, cx, this.size[1] - 5);
+            } else if (duplicate) {
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("duplicate in this lab", cx, this.size[1] - 4);
+            } else if (isCyclic) {
+                ctx.fillStyle = "#f59e0b";
+                ctx.fillText("part of cycle", cx, this.size[1] - 4);
+            } else {
+                ctx.fillStyle = "#94a3b8";
+                ctx.fillText("no input connected", cx, this.size[1] - 4);
+            }
+            ctx.restore();
+        };
+
+        // ── Signal Constant ───────────────────────────────────────────────────
+        function ConstantNode() {
+            this.addOutput("signal", SER);
+            this.properties = { value: 0 };
+            this._valW = this.addWidget("number", "value", 0,
+                (v) => { this.properties.value = v; },
+                { step: 0.1 });
+            this.size = [180, 55];
+        }
+        ConstantNode.title = "Constant";
+        ConstantNode.color = C_MATH;
+        ConstantNode.bgcolor = BG;
+        ConstantNode.prototype.onConfigure = function () {
+            if (this._valW) this._valW.value = this.properties.value ?? 0;
+        };
+        LiteGraph.registerNodeType("Signal/constant", ConstantNode);
+
+        // ── Generic 1-in 1-out filter factory ────────────────────────────────
+        function reg(typeName, title, params, color, category) {
+            function Node() {
+                this.addInput("signal", SER);
+                this.addOutput("signal", SER);
+                this.properties = {};
+                params.forEach((p) => {
+                    this.properties[p.name] = p.default ?? null;
+                    if (p.widget === "toggle") {
+                        this.addWidget("toggle", p.name, p.default,
+                            (v) => { this.properties[p.name] = v; });
+                    } else if (p.widget === "combo") {
+                        this.addWidget("combo", p.name, p.default,
+                            (v) => { this.properties[p.name] = v; },
+                            { values: p.values || [] });
+                    } else {
+                        // Use slider when both min and max are defined; otherwise plain number.
+                        const opts = p.opts || {};
+                        const wtype = (opts.min !== undefined && opts.max !== undefined) ? "slider" : "number";
+                        this.addWidget(wtype, p.name, p.default ?? 0,
+                            (v) => { this.properties[p.name] = v; },
+                            opts);
+                    }
+                });
+                this.size = [200, Math.max(55, 32 + params.length * 24)];
+            }
+            Node.title = title;
+            Node.color = color || C_FILT;
+            Node.bgcolor = BG;
+            // Sync widget display values from restored properties after graph load.
+            Node.prototype.onConfigure = function () {
+                params.forEach((p, idx) => {
+                    if (this.widgets && this.widgets[idx]) {
+                        const v = this.properties[p.name];
+                        if (v !== undefined && v !== null) this.widgets[idx].value = v;
+                    }
+                });
+            };
+            LiteGraph.registerNodeType((category || "Misc") + "/" + typeName, Node);
+        }
+
+        // ── Smoothing ─────────────────────────────────────────────────────────
+        reg("low_pass", "Low Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }], C_FILT, "Smoothing");
+        reg("high_pass", "High Pass", [{ name: "alpha", default: 0.1, opts: { min: 0.001, max: 1, step: 0.01 } }], C_FILT, "Smoothing");
+        reg("rolling_mean", "Rolling Mean", [{ name: "window", default: 10, opts: { min: 1, step: 1, precision: 0 } },
+        { name: "center", default: true, widget: "toggle" }], C_FILT, "Smoothing");
+        reg("median", "Median", [{ name: "window", default: 10, opts: { min: 1, step: 1, precision: 0 } }], C_FILT, "Smoothing");
+        reg("savitzky_golay", "Savitzky-Golay", [{ name: "window", default: 11, opts: { min: 3, step: 2, precision: 0 } },
+        { name: "order", default: 2, opts: { min: 1, step: 1, precision: 0 } }], C_FILT, "Smoothing");
+
+        // ── Arithmetic ────────────────────────────────────────────────────────
+        reg("scale", "Scale", [{ name: "factor", default: 1, opts: { step: 0.1 } },
+        { name: "offset", default: 0, opts: { step: 0.1 } }], C_FILT, "Arithmetic");
+        reg("absolute_value", "Absolute Value", [], C_FILT, "Arithmetic");
+        reg("log", "Log", [{ name: "base", default: 2.718281828, opts: { min: 1e-9, step: 0.1 } }], C_MATH, "Arithmetic");
+        reg("exp", "Exp", [{ name: "base", default: 2.718281828, opts: { min: 1e-9, step: 0.1 } }], C_MATH, "Arithmetic");
+        reg("power", "Power", [{ name: "exponent", default: 2, opts: { step: 0.1 } }], C_MATH, "Arithmetic");
+
+        // ── Trigonometry: one node per function ───────────────────────────────
+        [["sin", "Sin"], ["cos", "Cos"], ["tan", "Tan"],
+        ["asin", "Arcsin"], ["acos", "Arccos"], ["atan", "Arctan"],
+        ["sinh", "Sinh"], ["cosh", "Cosh"], ["tanh", "Tanh"],
+        ["degrees", "Degrees (rad→°)"], ["radians", "Radians (°→rad)"]
+        ].forEach(([fn, label]) => reg(fn, label, [], C_TRIG, "Trigonometry"));
+
+        // ── Comparison: one node per operator (two-input, signal vs signal) ──
+        reg("sign", "Sign", [], C_COMP, "Comparison");
+        (function () {
+            function makeCmp(typeName, symbol) {
+                function Node() {
+                    this.addInput("a", SER);
+                    this.addInput("b", SER);
+                    this.addOutput("signal", SER);
+                    this.size = [180, 55];
+                }
+                Node.title = symbol;
+                Node.color = C_COMP;
+                Node.bgcolor = BG;
+                LiteGraph.registerNodeType("Comparison/" + typeName, Node);
+            }
+            makeCmp("gt", "Greater Than  (a > b)");
+            makeCmp("gte", "Grt. or Equal  (a >= b)");
+            makeCmp("lt", "Less Than  (a < b)");
+            makeCmp("lte", "Less or Equal  (a <= b)");
+            makeCmp("eq", "Equal  (a == b)");
+            makeCmp("neq", "Not Equal  (a != b)");
+        })();
+
+        // ── Bounding ──────────────────────────────────────────────────────────
+        reg("clip", "Clip", [{ name: "min", default: null, opts: {} },
+        { name: "max", default: null, opts: {} }], C_FILT, "Bounding");
+        reg("deadband", "Deadband", [{ name: "threshold", default: 0.01, opts: { min: 0, step: 0.001 } }], C_FILT, "Bounding");
+        reg("wrap", "Wrap", [{ name: "lb", default: -3.14159, opts: { step: 0.1 } },
+        { name: "ub", default: 3.14159, opts: { step: 0.1 } }], C_FILT, "Bounding");
+        reg("taring", "Taring", [], C_UTIL, "Bounding");
+        reg("normalize", "Normalize", [], C_UTIL, "Bounding");
+        reg("round", "Round", [
+            { name: "method", default: "round", widget: "combo", values: ["round", "floor", "ceil"] },
+            { name: "decimals", default: 0, opts: { min: 0, step: 1, precision: 0 } }
+        ], C_UTIL, "Bounding");
+
+        // ── Arithmetic: two-input (Lab only) ─────────────────────────────────
+        (function () {
+            function makeArith(typeName, symbol) {
+                function Node() {
+                    this.addInput("a", SER);
+                    this.addInput("b", SER);
+                    this.addOutput("signal", SER);
+                    this.size = [140, 55];
+                }
+                Node.title = symbol;
+                Node.color = C_MATH;
+                Node.bgcolor = BG;
+                LiteGraph.registerNodeType("Arithmetic/" + typeName, Node);
+            }
+            makeArith("add", "Add  (a + b)");
+            makeArith("subtract", "Subtract  (a - b)");
+            makeArith("multiply", "Multiply  (a × b)");
+            makeArith("divide", "Divide  (a ÷ b)");
+        })();
+
+        // ── Derivative (signal / wrt) ─────────────────────────────────────────
+        function DerivativeNode() {
+            this.addInput("signal", SER);
+            this.addInput("wrt", SER);
+            this.addOutput("signal", SER);
+            this.size = [160, 55];
+        }
+        DerivativeNode.title = "Derivative";
+        DerivativeNode.color = C_CALC;
+        DerivativeNode.bgcolor = BG;
+        LiteGraph.registerNodeType("Calculus/derivative", DerivativeNode);
+
+        // ── Integral (signal / wrt) ───────────────────────────────────────────
+        function IntegralNode() {
+            this.addInput("signal", SER);
+            this.addInput("wrt", SER);
+            this.addOutput("signal", SER);
+            this.size = [160, 55];
+        }
+        IntegralNode.title = "Integral";
+        IntegralNode.color = C_CALC;
+        IntegralNode.bgcolor = BG;
+        LiteGraph.registerNodeType("Calculus/integral", IntegralNode);
+    }
+
+    // ── Lab canvas management ─────────────────────────────────────────────────
+    // Stored outside Alpine so LiteGraph objects are never proxied.
+    const _lab = { graph: null, canvas: null, ro: null };
+
+    // Cached Alpine context - updated by mojoLabSetContext so helpers can re-read it.
+    let _labContext = { cols: [], schemas: [], currentName: '' };
+
+    // ── Undo / redo history ───────────────────────────────────────────────────
+    const _labHistory = { stack: [], index: -1 };
+    const _LAB_HIST_MAX = 50;
+    let _labSnapshotTimer = null;
+
+    function mojoLabSnapshot() {
+        if (!_lab.graph) return;
+        const state = JSON.stringify(_lab.graph.serialize());
+        if (_labHistory.stack[_labHistory.index] === state) return;
+        _labHistory.stack = _labHistory.stack.slice(0, _labHistory.index + 1);
+        _labHistory.stack.push(state);
+        if (_labHistory.stack.length > _LAB_HIST_MAX) _labHistory.stack.shift();
+        else _labHistory.index++;
+    }
+
+    function mojoLabDeferredSnapshot() {
+        clearTimeout(_labSnapshotTimer);
+        _labSnapshotTimer = setTimeout(mojoLabSnapshot, 400);
+    }
+
+    function mojoLabClearHistory() {
+        _labHistory.stack = [];
+        _labHistory.index = -1;
+    }
+
+    window.mojoLabUndo = function () {
+        if (!_lab.graph || _labHistory.index <= 0) return;
+        _labHistory.index--;
+        _lab.graph.configure(JSON.parse(_labHistory.stack[_labHistory.index]));
+        mojoLabRefreshSiColors();
+        if (_lab.canvas) _lab.canvas.setDirty(true, true);
+    };
+
+    window.mojoLabRedo = function () {
+        if (!_lab.graph || _labHistory.index >= _labHistory.stack.length - 1) return;
+        _labHistory.index++;
+        _lab.graph.configure(JSON.parse(_labHistory.stack[_labHistory.index]));
+        mojoLabRefreshSiColors();
+        if (_lab.canvas) _lab.canvas.setDirty(true, true);
+    };
+
+
+    function mojoLabInit(canvasEl, columns, savedGraph) {
+        mojoLabRegisterNodes(columns);
+
+        if (!_lab.graph) {
+            _lab.graph = new LGraph();
+        }
+
+        // Re-create canvas if the element changed (e.g. after DOM re-render)
+        if (!_lab.canvas || _lab.canvas.canvas !== canvasEl) {
+            if (_lab.canvas) _lab.canvas.stopRendering();
+            _lab.canvas = new LGraphCanvas(canvasEl, _lab.graph);
+
+            // Remove the "Mode" entry from the node context menu - it controls
+            // LiteGraph execution modes that are irrelevant here and would confuse users.
+            const _origMenu = LGraphCanvas.prototype.getNodeMenuOptions;
+            LGraphCanvas.prototype.getNodeMenuOptions = function (node) {
+                return _origMenu.call(this, node).filter((o) => !o || o.content !== "Mode");
+            };
+
+            _lab.canvas.render_shadows = false;
+            _lab.canvas.render_canvas_border = false;
+            _lab.canvas.render_curved_connections = true;
+            _lab.canvas.always_render_background = true;
+
+            // Draw empty-state hint directly on the canvas so it is always
+            // behind nodes (not a DOM overlay) and reflects actual graph state.
+            _lab.canvas.onDrawBackground = function (ctx) {
+                if (_lab.graph && _lab.graph._nodes && _lab.graph._nodes.length > 0) return;
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillStyle = "#475569"; // slate-600
+                ctx.font = "italic 13px 'Courier New', monospace";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("Right-click to add nodes", this.canvas.width / 2, this.canvas.height / 2);
+                ctx.restore();
+            };
+
+            if (_lab.ro) _lab.ro.disconnect();
+            _lab.ro = new ResizeObserver(() => mojoLabResize(canvasEl));
+            _lab.ro.observe(canvasEl.parentElement);
+
+            // Wire change detection for undo history.
+            // Node drags end on mouseup - snapshot immediately so Ctrl+Z works without delay.
+            if (_lab._mouseupHandler) canvasEl.removeEventListener('mouseup', _lab._mouseupHandler);
+            _lab._mouseupHandler = mojoLabSnapshot;
+            canvasEl.addEventListener('mouseup', _lab._mouseupHandler, { passive: true });
+        }
+
+
+        // Graph-level hooks (always re-assign in case graph was cleared/replaced)
+        const _onNodeChange = () => {
+            mojoLabDeferredSnapshot();
+            if (!_lab.graph) return;
+            (_lab.graph._nodes || []).forEach(n => {
+                const t = (n.type || '').split('/').pop();
+                if (t === 'signal_out') _soColor(n);
+            });
+            mojoLabRefreshSiColors();
+        };
+        _lab.graph.onNodeAdded = _onNodeChange;
+        _lab.graph.onNodeRemoved = _onNodeChange;
+        _lab.graph.onConnectionChange = () => { mojoLabDeferredSnapshot(); mojoLabRefreshSiColors(); };
+
+        mojoLabResize(canvasEl);
+        canvasEl.focus();
+
+        if (savedGraph) {
+            _lab.graph.configure(JSON.parse(
+                typeof savedGraph === "string" ? savedGraph : JSON.stringify(savedGraph)
+            ));
+        }
+
+        // Seed history with the initial state on first open (or after mojoLabClearHistory).
+        if (_labHistory.stack.length === 0) mojoLabSnapshot();
+    }
+
+    function mojoLabResize(canvasEl) {
+        const p = canvasEl.parentElement;
+        if (!p) return;
+        canvasEl.width = p.clientWidth;
+        canvasEl.height = p.clientHeight;
+        if (_lab.canvas) {
+            _lab.canvas.dirty_canvas = true;
+            _lab.canvas.dirty_bgcanvas = true;
+        }
+    }
+
+    function mojoLabSerialize() {
+        return _lab.graph ? _lab.graph.serialize() : null;
+    }
+
+    function mojoLabClear() {
+        if (!_lab.graph) return;
+        _lab.graph.clear();
+        mojoLabDeferredSnapshot();
+    }
+
+    // ── Per-node color helpers (module scope so mojoLabSetContext can call them) ──
+    function _siColor(node) {
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"] || {};
+        const cols = SiCtor._columns || [];
+        const cyclicCols = SiCtor._cyclicCols || new Map();
+        const col = node.properties && node.properties.column;
+        const isCyclic = col && cyclicCols.has(col);
+        const notInTrial = col && !cols.includes(col);
+        node.color = (isCyclic || notInTrial) ? "#78350f" : "#14532d";
+        // cyclic gets two warning lines (110), not-in-trial gets one (96), normal (78)
+        node.size[1] = isCyclic ? 110 : (notInTrial ? 96 : 78);
+    }
+
+    function _soColor(node) {
+        const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"] || {};
+        const nameMap = SoCtor._existingNames || new Map();
+        const cyclicOutputs = SoCtor._cyclicOutputs || new Set();
+        const lbl = (node.properties && node.properties.label) || '';
+        const connected = node.inputs && node.inputs[0] && node.inputs[0].link != null;
+        const collision = !!(lbl && nameMap.has(lbl));
+        const duplicate = !!(lbl && _lab.graph && (_lab.graph._nodes || []).some(
+            n => n !== node && (n.type || '').endsWith('signal_out') && (n.properties.label || '') === lbl
+        ));
+        const isCyclic = !!(lbl && cyclicOutputs.has(lbl));
+        node.color = (collision || duplicate || isCyclic) ? "#78350f" : "#164e63";
+        node.size[1] = collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55);
+    }
+
+    // Update validation context - called from Alpine when lab opens or labSchemas refreshes.
+    // cols: current trial columns; schemas: saved lab list; currentName: lab being edited (excluded).
+    function mojoLabSetContext(cols, schemas, currentName) {
+        _labContext = { cols: cols || [], schemas: schemas || [], currentName: currentName || '' };
+
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+        if (SiCtor) SiCtor._columns = cols;
+        const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"];
+        if (SoCtor) {
+            // Only flag raw trial-column conflicts. Other labs use namespaced paths
+            // (Lab/name/out) so their short output labels don't collide with ours.
+            const nameMap = new Map();
+            cols.filter(c => !c.startsWith('Lab/')).forEach(c => nameMap.set(c, "trial column"));
+            SoCtor._existingNames = nameMap;
+        }
+        _computeAndStoreCyclicCols();
+        if (_lab.graph) {
+            (_lab.graph._nodes || []).forEach(n => {
+                const t = (n.type || '').split('/').pop();
+                if (t === 'signal_in') _siColor(n);
+                else if (t === 'signal_out') _soColor(n);
+            });
+            _lab.graph.setDirtyCanvas(true, false);
+        }
+    }
+
+    // Reset all cycle-related visual state - called at each early-return path.
+    function _clearCycle() {
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+        const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"];
+        if (SiCtor) SiCtor._cyclicCols = new Map();
+        if (SoCtor) SoCtor._cyclicOutputs = new Set();
+        if (!_lab.graph) return;
+        Object.values(_lab.graph.links || {}).forEach(link => { delete link.color; });
+        (_lab.graph._nodes || []).forEach(n => {
+            const t = (n.type || '').split('/').pop();
+            if (t !== 'signal_in' && t !== 'signal_out') delete n.color;
+        });
+    }
+
+    // Recompute which Signal In columns would create a cross-lab cycle and recolor.
+    // Called whenever Signal Out labels or nodes change within the graph.
+    function _computeAndStoreCyclicCols() {
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+        if (!SiCtor) return;
+        const { schemas, currentName } = _labContext;
+        if (!currentName) { _clearCycle(); return; }
+
+        // Full-path outputs the current lab produces: Lab/<currentName>/<label>
+        const currentFullPaths = new Set();
+        (_lab.graph ? _lab.graph._nodes : []).forEach(n => {
+            if ((n.type || '').endsWith('signal_out') && n.properties && n.properties.label)
+                currentFullPaths.add(`Lab/${currentName}/${n.properties.label}`);
+        });
+        if (currentFullPaths.size === 0) { _clearCycle(); return; }
+
+        // Full-path → lab name (Signal In columns store the full path, e.g. Lab/name/out)
+        const outputToLab = new Map();
+        (schemas || []).forEach(s => {
+            if (s.name === currentName) return;
+            s.outputs.forEach(o => {
+                const fp = `Lab/${s.name}/${o}`;
+                if (!outputToLab.has(fp)) outputToLab.set(fp, s.name);
+            });
+        });
+
+        // Labs that directly consume any of the current lab's full-path outputs
+        const directDependents = new Set();
+        (schemas || []).forEach(s => {
+            if (s.name === currentName) return;
+            if (s.signal_in_columns.some(c => currentFullPaths.has(c))) directDependents.add(s.name);
+        });
+        if (directDependents.size === 0) { _clearCycle(); return; }
+
+        // BFS: expand to all labs that transitively consume current lab's outputs
+        const allDependents = new Set(directDependents);
+        let changed = true;
+        while (changed) {
+            changed = false;
+            (schemas || []).forEach(s => {
+                if (allDependents.has(s.name) || s.name === currentName) return;
+                if (s.signal_in_columns.some(c => {
+                    const p = outputToLab.get(c);
+                    return p && allDependents.has(p);
+                })) { allDependents.add(s.name); changed = true; }
+            });
+        }
+
+        // Pre-compute ALL columns from dependent labs that would create a cycle.
+        // Using the full outputToLab map (not just columns currently in use) means
+        // the picker and _siColor work correctly before the user has selected anything.
+        const cyclicCols = new Map();
+        outputToLab.forEach((labName, col) => {
+            if (allDependents.has(labName)) cyclicCols.set(col, labName);
+        });
+        SiCtor._cyclicCols = cyclicCols;
+
+        // Forward BFS from SI nodes that are actually using a cyclic column.
+        // Only nodes and links reachable from those SI nodes are part of this cycle -
+        // disconnected clean sub-graphs should not be colored amber.
+        const cyclicNodeIds = new Set();
+        const cyclicLinkIds = new Set();
+        if (_lab.graph) {
+            const queue = [];
+            (_lab.graph._nodes || []).forEach(n => {
+                if ((n.type || '').endsWith('signal_in')) {
+                    const col = n.properties && n.properties.column;
+                    if (col && cyclicCols.has(col)) queue.push(n.id);
+                }
+            });
+            const visited = new Set();
+            while (queue.length) {
+                const nid = queue.shift();
+                if (visited.has(nid)) continue;
+                visited.add(nid);
+                cyclicNodeIds.add(nid);
+                const node = _lab.graph.getNodeById(nid);
+                if (!node || !node.outputs) continue;
+                node.outputs.forEach(out => {
+                    (out.links || []).forEach(lid => {
+                        const link = _lab.graph.links[lid];
+                        if (!link) return;
+                        cyclicLinkIds.add(lid);
+                        if (!visited.has(link.target_id)) queue.push(link.target_id);
+                    });
+                });
+            }
+        }
+
+        const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"];
+        if (SoCtor) {
+            const cyclicOutputs = new Set();
+            if (_lab.graph) {
+                (_lab.graph._nodes || []).forEach(n => {
+                    if ((n.type || '').endsWith('signal_out') && cyclicNodeIds.has(n.id) && n.properties && n.properties.label)
+                        cyclicOutputs.add(n.properties.label);
+                });
+            }
+            SoCtor._cyclicOutputs = cyclicOutputs;
+        }
+        if (_lab.graph) {
+            Object.keys(_lab.graph.links || {}).forEach(lid => {
+                if (cyclicLinkIds.has(+lid)) _lab.graph.links[lid].color = "#d97706";
+                else delete _lab.graph.links[lid].color;
+            });
+            (_lab.graph._nodes || []).forEach(n => {
+                const t = (n.type || '').split('/').pop();
+                if (t !== 'signal_in' && t !== 'signal_out') {
+                    if (cyclicNodeIds.has(n.id)) n.color = "#78350f";
+                    else delete n.color;
+                }
+            });
+        }
+    }
+
+    // Auto-arrange nodes using a layered DAG layout (Sugiyama-style).
+    //
+    // Step 1 - layer assignment: longest-path from sources (Kahn's BFS).
+    // Step 2 - crossing reduction: barycenter heuristic with 4 alternating
+    //          forward/backward sweeps. Each sweep re-orders a layer by the
+    //          average rank of its neighbors in the adjacent layer.
+    //          Source nodes (depth 0) are seeded by their current Y so
+    //          the user's rough vertical intent is preserved.
+    // Step 3 - coordinate assignment: columns left-to-right, nodes top-to-bottom.
+    window.mojoLabArrange = function () {
+        if (!_lab.graph) return;
+        const nodes = _lab.graph._nodes || [];
+        if (nodes.length === 0) return;
+
+        // ── Step 1: build adjacency + assign layers ───────────────────────────
+        const succs = new Map();   // id -> id[]
+        const preds = new Map();   // id -> id[]
+        nodes.forEach(n => { succs.set(n.id, []); preds.set(n.id, []); });
+        Object.values(_lab.graph.links || {}).forEach(link => {
+            if (succs.has(link.origin_id) && succs.has(link.target_id)) {
+                succs.get(link.origin_id).push(link.target_id);
+                preds.get(link.target_id).push(link.origin_id);
+            }
+        });
+
+        // Longest path from sources via Kahn's BFS.
+        const layerOf = new Map(nodes.map(n => [n.id, 0]));
+        const inDeg = new Map(nodes.map(n => [n.id, preds.get(n.id).length]));
+        const q = nodes.filter(n => inDeg.get(n.id) === 0).map(n => n.id);
+        while (q.length) {
+            const nid = q.shift();
+            for (const sid of succs.get(nid)) {
+                const d = layerOf.get(nid) + 1;
+                if (d > layerOf.get(sid)) layerOf.set(sid, d);
+                const deg = inDeg.get(sid) - 1;
+                inDeg.set(sid, deg);
+                if (deg === 0) q.push(sid);
+            }
+        }
+
+        // Group into ordered layers.
+        const layerMap = new Map();
+        nodes.forEach(n => {
+            const d = layerOf.get(n.id) ?? 0;
+            if (!layerMap.has(d)) layerMap.set(d, []);
+            layerMap.get(d).push(n);
+        });
+        const layers = [...layerMap.keys()].sort((a, b) => a - b).map(d => layerMap.get(d));
+
+        // ── Step 2: crossing reduction (barycenter heuristic) ────────────────
+        // Seed source layer by current Y to respect the user's rough ordering.
+        layers[0].sort((a, b) => a.pos[1] - b.pos[1]);
+
+        // rank[id] = fractional position within its layer (0-based index after sort).
+        const rank = new Map();
+        layers.forEach(layer => layer.forEach((n, i) => rank.set(n.id, i)));
+
+        for (let pass = 0; pass < 4; pass++) {
+            // Forward sweep: sort each layer by average rank of predecessors.
+            for (let li = 1; li < layers.length; li++) {
+                layers[li].forEach(n => {
+                    const ps = preds.get(n.id);
+                    rank.set(n.id, ps.length
+                        ? ps.reduce((s, pid) => s + rank.get(pid), 0) / ps.length
+                        : rank.get(n.id));
+                });
+                layers[li].sort((a, b) => rank.get(a.id) - rank.get(b.id));
+                layers[li].forEach((n, i) => rank.set(n.id, i));
+            }
+
+            // Backward sweep: sort each layer by average rank of successors.
+            for (let li = layers.length - 2; li >= 0; li--) {
+                layers[li].forEach(n => {
+                    const ss = succs.get(n.id);
+                    rank.set(n.id, ss.length
+                        ? ss.reduce((s, sid) => s + rank.get(sid), 0) / ss.length
+                        : rank.get(n.id));
+                });
+                layers[li].sort((a, b) => rank.get(a.id) - rank.get(b.id));
+                layers[li].forEach((n, i) => rank.set(n.id, i));
+            }
+        }
+
+        // ── Step 3: assign pixel coordinates ─────────────────────────────────
+        const COL_GAP = 60;
+        const ROW_GAP = 36;
+        const START_X = 60;
+        const START_Y = 60;
+
+        let x = START_X;
+        layers.forEach(layer => {
+            const maxW = Math.max(...layer.map(n => n.size[0]));
+            let y = START_Y;
+            layer.forEach(n => {
+                n.pos[0] = x;
+                n.pos[1] = y;
+                y += n.size[1] + ROW_GAP;
+            });
+            x += maxW + COL_GAP;
+        });
+
+        if (_lab.canvas) _lab.canvas.setDirty(true, true);
+        mojoLabDeferredSnapshot();
+    };
+
+    // Fit the canvas view to show all nodes, centered and scaled to fill the viewport.
+    // LiteGraph uses: canvas_pos = (graph_pos + offset) * scale, so:
+    //   offset = canvas_center / scale - graph_center
+    window.mojoLabFitView = function () {
+        if (!_lab.canvas) return;
+        const nodes = (_lab.graph && _lab.graph._nodes) || [];
+        if (nodes.length === 0) {
+            _lab.canvas.ds.scale = 1;
+            _lab.canvas.ds.offset = [0, 0];
+            _lab.canvas.setDirty(true, true);
+            return;
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(n => {
+            minX = Math.min(minX, n.pos[0]);
+            minY = Math.min(minY, n.pos[1]);
+            maxX = Math.max(maxX, n.pos[0] + n.size[0]);
+            maxY = Math.max(maxY, n.pos[1] + n.size[1]);
+        });
+        const PAD = 60;
+        const graphW = maxX - minX + PAD * 2;
+        const graphH = maxY - minY + PAD * 2;
+        const cw = _lab.canvas.canvas.width;
+        const ch = _lab.canvas.canvas.height;
+        const scale = Math.min(Math.max(Math.min(cw / graphW, ch / graphH), 0.2), 2.0);
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        _lab.canvas.ds.scale = scale;
+        _lab.canvas.ds.offset = [cw / (2 * scale) - cx, ch / (2 * scale) - cy];
+        _lab.canvas.setDirty(true, true);
+    };
+
+    function mojoLabRefreshSiColors() {
+        _computeAndStoreCyclicCols();
+        if (!_lab.graph) return;
+        (_lab.graph._nodes || []).forEach(n => {
+            const t = (n.type || '').split('/').pop();
+            if (t === 'signal_in') _siColor(n);
+            else if (t === 'signal_out') _soColor(n);
+        });
+        _lab.graph.setDirtyCanvas(true, false);
+    }
+
+    // Exposed for the column picker to flag cyclic entries without Alpine reactivity.
+    window.mojoLabIsCyclicInput = function (col) {
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
+        return !!(SiCtor && SiCtor._cyclicCols && SiCtor._cyclicCols.has(col));
+    };
+</script>
+
+<!-- ── Overlay ──────────────────────────────────────────────────────────── -->
+<div x-show="labOpen"
+     x-transition:enter="transition-opacity duration-150"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition-opacity duration-150"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed !top-0 !right-0 !bottom-0 !left-0 !mt-0 z-[500] bg-slate-50 dark:bg-slate-950 flex flex-col"
+     style="display:none;">
+
+    <!-- toolbar -->
+    <div class="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-800 min-w-0">
+        <!-- left: branding (always visible, shrink-0) -->
+        <div class="shrink-0 flex items-center gap-2 sm:gap-3">
+            <!-- icon -->
+            <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.75"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9 3h6m-6 0v5L3 20h18L15 8V3" />
+                <path stroke-linecap="round"
+                      stroke-width="1.25"
+                      d="M5.5 16h13" />
+                <circle cx="10"
+                        cy="13"
+                        r="1"
+                        fill="currentColor"
+                        stroke="none" />
+                <circle cx="13.5"
+                        cy="11"
+                        r="0.85"
+                        fill="currentColor"
+                        stroke="none" />
+            </svg>
+            <span class="hidden sm:inline text-base font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">Signal Lab</span>
+            <span class="hidden sm:inline text-sm font-mono text-slate-400 dark:text-slate-500">{{ trial_id }}</span>
+        </div>
+
+        <!-- middle: action buttons -->
+        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 justify-end min-w-0">
+            <!-- name + save (with tab-autocomplete for folder paths) -->
+            <div x-data="{
+                focused: false,
+                get suggestion() {
+                    if (!this.focused) return '';
+                    const v = labName;
+                    if (!v) return '';
+                    const m = labSchemas.find(l => l.name.startsWith(v) && l.name !== v);
+                    if (!m) return '';
+                    const rem = m.name.slice(v.length);
+                    const sep = rem.indexOf('/');
+                    return sep === -1 ? m.name : v + rem.slice(0, sep + 1);
+                },
+                accept() { if (this.suggestion) labName = this.suggestion; }
+            }"
+                 class="relative flex items-center gap-1.5">
+                <input id="lab-name-input"
+                       x-model="labName"
+                       @mousedown.stop
+                       @focus="focused = true"
+                       @blur="setTimeout(() => focused = false, 150)"
+                       @keydown.tab.prevent="accept()"
+                       @keydown.enter="labName && saveLabGraph(labName, mojoLabSerialize())"
+                       @keydown.escape.stop="labName = ''"
+                       placeholder="name or folder/name…"
+                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-28 sm:w-44" />
+                <button @click="labName && saveLabGraph(labName, mojoLabSerialize())"
+                        :disabled="!labName"
+                        class="btn btn-ghost text-sm font-bold text-cyan-600 dark:text-cyan-400 border-cyan-500/40 dark:border-cyan-500/30 hover:bg-cyan-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <span class="hidden sm:inline">Save</span>
+                </button>
+                <!-- suggestion hint floats below toolbar, no effect on toolbar height -->
+                <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-10"
+                     :class="suggestion ? 'visible' : 'invisible'">
+                    <button @click="accept()"
+                            class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
+                            x-text="suggestion"></button>
+                    <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-[9px]">Tab</kbd>
+                </div>
+            </div>
+            <!-- load dropdown -->
+            <div class="relative"
+                 x-data="{
+                     open: false,
+                     labSearch: '',
+                     get _filtered() {
+                         const q = this.labSearch.toLowerCase();
+                         return labSchemas.filter(l => !q || l.name.toLowerCase().includes(q));
+                     },
+                     get _suggestion() {
+                         const v = this.labSearch;
+                         if (!v) return '';
+                         const m = labSchemas.find(l => l.name.toLowerCase().startsWith(v.toLowerCase()) && l.name !== v);
+                         if (!m) return '';
+                         const rem = m.name.slice(v.length);
+                         const sep = rem.indexOf('/');
+                         return sep === -1 ? m.name : m.name.slice(0, v.length + sep + 1);
+                     },
+                     acceptSearch() { if (this._suggestion) this.labSearch = this._suggestion; },
+                     loadSingle() {
+                         const r = this._filtered;
+                         if (r.length !== 1) return;
+                         const lab = r[0];
+                         fetch(`/mosaic/api/lab/${lab.name.split('/').map(encodeURIComponent).join('/')}`)
+                             .then(resp => resp.json())
+                             .then(g => {
+                                 labGraph = g; labName = lab.name;
+                                 try { localStorage.setItem('mojo:lab:draft', JSON.stringify(g)); localStorage.setItem('mojo:lab:name', lab.name); } catch {}
+                                 mojoLabClearHistory();
+                                 mojoLabInit(document.getElementById('lab-canvas'), columns, g);
+                                 mojoLabSetContext(columns, labSchemas, lab.name);
+                                 this.open = false; this.labSearch = '';
+                             });
+                     }
+                 }"
+                 @click.outside="open = false; labSearch = ''">
+                <button @click="open = !open; if(open) loadLabSchemas(); else labSearch = ''"
+                        class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    <span class="hidden sm:inline">Load</span>
+                    <svg class="w-3 h-3 transition-transform"
+                         :class="open ? 'rotate-180' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-width="3"
+                              d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div x-show="open"
+                     x-transition
+                     class="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-2xl z-[700] flex flex-col max-h-80"
+                     style="display:none;">
+                    <!-- search + tab-complete -->
+                    <div class="px-2 pt-2 pb-1.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                        <div class="relative">
+                            <input type="text"
+                                   x-model="labSearch"
+                                   @keydown.stop
+                                   @keydown.tab.prevent="acceptSearch()"
+                                   @keydown.enter="loadSingle()"
+                                   placeholder="Search labs…"
+                                   class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 pr-6 py-1 text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-cyan-500" />
+                            <button x-show="labSearch"
+                                    @click="labSearch = ''"
+                                    type="button"
+                                    class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                <svg class="w-3 h-3"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="3"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <!-- search suggestion hint - space always reserved -->
+                        <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-[10px] font-mono"
+                             :class="_suggestion ? 'visible' : 'invisible'">
+                            <button @click="acceptSearch()"
+                                    class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
+                                    x-text="_suggestion"></button>
+                            <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-[9px]">Tab</kbd>
+                        </div>
+                    </div>
+                    <!-- list -->
+                    <div class="overflow-y-auto custom-scrollbar flex-1">
+                        <template x-for="lab in _filtered"
+                                  :key="lab.name">
+                            <div class="border-b border-slate-100 dark:border-slate-800 last:border-none hover:bg-slate-50 dark:hover:bg-slate-800 group"
+                                 x-data="{ infoOpen: false }">
+                                <div class="flex items-center justify-between px-3 py-2"
+                                     :class="!lab.valid ? 'opacity-60' : ''">
+                                    <button @click="fetch(`/mosaic/api/lab/${lab.name.split('/').map(encodeURIComponent).join('/')}`).then(r=>r.json()).then(g=>{ labGraph=g; labName=lab.name; try{localStorage.setItem('mojo:lab:draft',JSON.stringify(g));localStorage.setItem('mojo:lab:name',lab.name);}catch{} mojoLabClearHistory(); mojoLabInit(document.getElementById('lab-canvas'), columns, g); mojoLabSetContext(columns, labSchemas, lab.name); open=false; labSearch=''; })"
+                                            class="flex-1 text-left text-xs font-mono min-w-0">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span :class="lab.valid ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
+                                                  class="truncate"
+                                                  x-text="lab.name"></span>
+                                            <!-- circular dependency -->
+                                            <span x-show="!lab.valid && lab.missing.some(c => c.startsWith('Lab/'))"
+                                                  title="Contains a circular lab dependency"
+                                                  class="shrink-0 flex items-center">
+                                                <svg class="w-3 h-3 text-amber-500"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </span>
+                                            <!-- signal not in trial -->
+                                            <span x-show="!lab.valid && lab.missing.some(c => !c.startsWith('Lab/'))"
+                                                  title="Contains signals not in this trial"
+                                                  class="shrink-0 flex items-center">
+                                                <svg class="w-3 h-3 text-amber-500"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2"
+                                                     viewBox="0 0 24 24">
+                                                    <circle cx="12"
+                                                            cy="12"
+                                                            r="9" />
+                                                    <path stroke-linecap="round"
+                                                          d="M4.929 4.929l14.142 14.142" />
+                                                </svg>
+                                            </span>
+                                        </div>
+                                        <div class="text-slate-400 dark:text-slate-600 text-[10px]"
+                                             x-text="relTime(lab.modified)"></div>
+                                    </button>
+                                    <!-- action icons -->
+                                    <div class="flex items-center gap-0.5 ml-2 shrink-0">
+                                        <button @click.stop="infoOpen = !infoOpen"
+                                                x-show="lab.signal_in_columns.length || lab.outputs.length"
+                                                :class="infoOpen ? 'text-cyan-500 opacity-100' : 'text-slate-400 opacity-0 group-hover:opacity-100'"
+                                                class="hover:text-cyan-500 transition-all p-0.5">
+                                            <svg class="w-3.5 h-3.5"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <circle cx="12"
+                                                        cy="12"
+                                                        r="9"
+                                                        stroke-width="1.5" />
+                                                <path stroke-linecap="round"
+                                                      stroke-width="1.75"
+                                                      d="M12 16v-4" />
+                                                <circle cx="12"
+                                                        cy="8.5"
+                                                        r="0.6"
+                                                        fill="currentColor"
+                                                        stroke="none" />
+                                            </svg>
+                                        </button>
+                                        <button @click.stop="if(confirm(`Delete '${lab.name}'?`)) deleteLabGraph(lab.name)"
+                                                class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-all p-0.5">
+                                            <svg class="w-3.5 h-3.5"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-width="3"
+                                                      stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- inline info panel - no z-order issues -->
+                                <div x-show="infoOpen"
+                                     class="px-3 pb-2.5 text-[10px] font-mono"
+                                     style="display:none;">
+                                    <template x-if="lab.signal_in_columns.length">
+                                        <div class="mb-1.5">
+                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Inputs</div>
+                                            <template x-for="col in lab.signal_in_columns"
+                                                      :key="col">
+                                                <div class="flex items-center gap-1 truncate"
+                                                     :class="lab.missing.includes(col) ? 'text-amber-500' : 'text-slate-600 dark:text-slate-300'">
+                                                    <span class="truncate"
+                                                          x-text="col"></span>
+                                                    <span x-show="lab.missing.includes(col)"
+                                                          class="shrink-0 text-[9px] font-sans"
+                                                          x-text="col.startsWith('Lab/') ? 'circular ref' : 'not in trial'"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="lab.outputs.length">
+                                        <div>
+                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Outputs</div>
+                                            <template x-for="out in lab.outputs"
+                                                      :key="out">
+                                                <div class="text-cyan-600 dark:text-cyan-400 truncate"
+                                                     x-text="out"></div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <p x-show="_filtered.length === 0"
+                           class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">
+                            <span x-text="labSchemas.length === 0 ? 'No saved labs yet' : 'No matching labs'"></span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <!-- refresh validation -->
+            <button @click="refreshLabValidation()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
+                    title="Refresh validation - recheck all lab dependencies against the current trial">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="hidden sm:inline">Refresh</span>
+            </button>
+            <!-- fit view -->
+            <button @click="mojoLabFitView()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
+                    title="Fit view to all nodes (Ctrl+Shift+F)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <span class="hidden sm:inline">Fit</span>
+            </button>
+            <!-- auto-arrange -->
+            <button @click="mojoLabArrange()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
+                    title="Auto-arrange nodes (Ctrl+Shift+A)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M3 6h18M3 12h18M3 18h18" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M17 3l4 3-4 3" />
+                </svg>
+                <span class="hidden sm:inline">Arrange</span>
+            </button>
+            <!-- clear -->
+            <button @click="if(confirm('Clear the graph?')) mojoLabClear()"
+                    class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                <span class="hidden sm:inline">Clear</span>
+            </button>
+        </div>
+
+        <!-- close: always visible, pinned to the right (shrink-0) -->
+        <button @click="labOpen = false"
+                class="shrink-0 btn-icon btn-ghost"
+                title="Close (Esc)">
+            <svg class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- canvas area -->
+    <div class="flex-1 relative overflow-hidden"
+         @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
+         x-init="
+             const _labInitCanvas = () => $nextTick(() => {
+                 const el = document.getElementById('lab-canvas');
+                 if (el) mojoLabInit(el, columns, labGraph);
+                 mojoLabSetContext(columns, labSchemas, labName);
+             });
+             $watch('labOpen', (open) => {
+                 try { localStorage.setItem('mojo:lab:open', open ? '1' : '0'); } catch {}
+                 if (!open) {
+                     labGraph = mojoLabSerialize();
+                     try {
+                         if (labGraph) localStorage.setItem('mojo:lab:draft', JSON.stringify(labGraph));
+                         if (labName) localStorage.setItem('mojo:lab:name', labName);
+                     } catch {}
+                 }
+                 if (open) _labInitCanvas();
+             });
+             if (labOpen) _labInitCanvas();
+             $watch('labSchemas', (s) => { if (labOpen) mojoLabSetContext(columns, s, labName); });
+             $watch('labName', (n) => { if (labOpen) mojoLabSetContext(columns, labSchemas, n); });
+         ">
+        <canvas id="lab-canvas"
+                tabindex="0"
+                class="absolute inset-0 outline-none"
+                @change="labGraph = mojoLabSerialize()">
+        </canvas>
+
+        <!-- ── Column picker (opens when Signal In "Browse…" is clicked) ─── -->
+        <div x-show="nodePickingColumn !== null"
+             @click.self="nodePickingColumn = null; nodeColSearch = ''"
+             class="absolute inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
+             style="display:none;">
+            <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
+
+                <!-- header -->
+                <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+                    <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Signal</p>
+                    <button @click="nodePickingColumn = null; nodeColSearch = ''"
+                            class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                        <svg class="w-4 h-4"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2.5"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- search -->
+                <div class="relative shrink-0">
+                    <input type="text"
+                           x-model="nodeColSearch"
+                           placeholder="Filter signals…"
+                           class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 pr-7 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+                    <button x-show="nodeColSearch"
+                            type="button"
+                            @click="nodeColSearch = ''"
+                            class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                        <svg class="w-3 h-3"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="3"
+                                  d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- hierarchical segment drills (same mechanism as x/y axis selectors) -->
+                <div class="flex flex-col gap-1.5 shrink-0">
+                    <template x-for="depth in getActiveLevels('nodeCol')"
+                              :key="depth">
+                        <div x-show="getSegmentsAtDepth('nodeCol', depth).length > 0"
+                             class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                            <template x-for="seg in getSegmentsAtDepth('nodeCol', depth)"
+                                      :key="seg">
+                                <button @click="toggleRegexSegment('nodeCol', seg, depth)"
+                                        :class="isSegmentActive('nodeCol', seg, depth)
+                                            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
+                                        class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
+                                        x-text="seg">
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+                    <!-- suffix quick filter -->
+                    <div x-show="getAvailableSuffixes('nodeCol').length > 0"
+                         class="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                        <template x-for="sfx in getAvailableSuffixes('nodeCol')"
+                                  :key="sfx">
+                            <button @click="toggleRegexSegment('nodeCol', sfx, 'suffix')"
+                                    :class="isSegmentActive('nodeCol', sfx, 'suffix')
+                                        ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
+                                    class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
+                                    x-text="sfx">
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- filtered column list -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 min-h-0">
+                    <template x-for="col in getFilteredCols('nodeCol')"
+                              :key="col">
+                        <button @click="selectNodeColumn(col)"
+                                :class="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col)
+                                    ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 line-through'
+                                    : 'text-slate-500 dark:text-slate-400 hover:bg-cyan-500/20 hover:text-cyan-700 dark:hover:text-cyan-200'"
+                                :title="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col) ? 'Would create a circular dependency' : ''"
+                                class="w-full text-left px-2 py-1 text-sm font-mono rounded truncate transition-colors"
+                                x-text="col">
+                        </button>
+                    </template>
+                    <p x-show="getFilteredCols('nodeCol').length === 0"
+                       class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">No matching signals</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- status bar -->
+    <div class="h-8 shrink-0 flex items-center px-4 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-500 select-none overflow-x-auto custom-scrollbar">
+        <div class="flex items-center gap-6 whitespace-nowrap">
+            <span>Right-click → add node</span>
+            <span>Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Del remove selected</span>
+            <span>Ctrl+Shift+A arrange · Ctrl+Shift+F fit view</span>
+            <span>Scroll to zoom · drag to pan</span>
+        </div>
+    </div>
+</div>

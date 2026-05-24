@@ -231,18 +231,22 @@ class MojoNamespace:
             self._df.select(pl.col(rf"^{SignalCategory.DEFORMABLES}/{name}/.*$"))
         )
 
-    def _get_base_map(self) -> dict[str, set[str]]:
+    def _get_base_map(
+        self, extra_columns: list[str] | None = None
+    ) -> dict[str, set[str]]:
         """
         Internal helper to group suffixes by their common prefixes.
 
         Example:
-            'Bodies/racket:xvelr:x', 'Bodies/racket:xvelr:y' -> {'Bodies/racket:xvelr': {'x', 'y'}}
+            'Bodies/racket/xvelr:x', 'Bodies/racket/xvelr:y' -> {'Bodies/racket/xvelr': {'x', 'y'}}
+
+        extra_columns are included in discovery but are not expected to exist in self._df.
 
         """
         base_map: dict[str, set[str]] = {}
-        for c in self._df.columns:
+        for c in list(self._df.columns) + (extra_columns or []):
             if ":" in c:
-                prefix, suffix = c.rsplit(":")  # we may have :ke_trans, or ke_rot, etc.
+                prefix, suffix = c.rsplit(":", 1)
                 base_map.setdefault(prefix, set()).add(suffix)
         return base_map
 
@@ -280,12 +284,17 @@ class MojoNamespace:
             expanded.extend([f"{base}:w", f"{base}:x", f"{base}:y", f"{base}:z"])
         return expanded
 
-    def get_manifest(self) -> ColumnManifest:
-        """Returns the structured manifest used by the frontend."""
+    def get_manifest(self, extra_columns: list[str] | None = None) -> ColumnManifest:
+        """Returns the structured manifest used by the frontend. extra_columns are appended to 'all' and included in rotatable/quat discovery."""
+        bm = self._get_base_map(extra_columns)
         return {
-            "all": self._df.columns,
-            "rotatable_vectors": sorted(list(self.rotatable_bases)),
-            "available_quats": sorted(list(self.quaternion_bases)),
+            "all": list(self._df.columns) + (extra_columns or []),
+            "rotatable_vectors": sorted(
+                b for b, s in bm.items() if {"x", "y", "z"}.issubset(s) and "w" not in s
+            ),
+            "available_quats": sorted(
+                b for b, s in bm.items() if {"w", "x", "y", "z"}.issubset(s)
+            ),
         }
 
     def with_rotation(self, quat_base: str, invert: bool = True) -> MojoDataFrame:

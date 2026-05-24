@@ -116,9 +116,14 @@
     annotations: [],
     shapes: []
   };
+  var _cm = {
+    editor: null,
+    updating: false,
+    debounce: null
+  };
   function trialViewer(trialId, externalUrl) {
     const self = {
-      // Alpine magic (injected at runtime — declared here for TS)
+      // Alpine magic (injected at runtime - declared here for TS)
       ...null,
       // --- BASE STATE ---
       trialId,
@@ -155,7 +160,7 @@
       ],
       // Toast (shared mixin)
       ...createToastMixin(),
-      // Options — exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
+      // Options - exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
       opts: OPTIONS,
       // --- PLOT CONFIGURATION ---
       config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
@@ -197,6 +202,20 @@
       annotationsOpen: false,
       annDraft: null,
       annEditIndex: null,
+      // --- FILTER LAB ---
+      labOpen: localStorage.getItem("mojo:lab:open") === "1",
+      labGraph: (() => {
+        try {
+          const s = localStorage.getItem("mojo:lab:draft");
+          return s ? JSON.parse(s) : null;
+        } catch {
+          return null;
+        }
+      })(),
+      labName: localStorage.getItem("mojo:lab:name") ?? "",
+      nodePickingColumn: null,
+      nodeColSearch: "",
+      labSchemas: [],
       // --- SHAPES ---
       shapesOpen: false,
       placementMode: null,
@@ -275,10 +294,12 @@
         const colParams = new URLSearchParams();
         if (requiredCols.length > 0)
           colParams.append("cols", requiredCols.join(","));
-        if (this.config.refFrame)
-          colParams.append("rotate_by", this.config.refFrame);
         const filtersPayload = {};
-        const toActiveFilters = (filters) => filters.filter((f) => f.enabled !== false).map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+        const toActiveFilters = (filters) => filters.filter((f) => f.enabled !== false).map(
+          (f) => Object.fromEntries(
+            Object.entries(f).filter(([k]) => k !== "enabled")
+          )
+        );
         for (const col of requiredCols) {
           const yConfig = this.config.yAxes[col];
           if (yConfig?.filters && yConfig.filters.length > 0) {
@@ -358,7 +379,10 @@
         if (currentId !== this.discoveryId) return;
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+        const activeCols = [
+          this.config.xAxis.col,
+          ...Object.keys(this.config.yAxes)
+        ];
         const draftIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
           return n >= start && n <= end && id !== this.trialId;
@@ -583,6 +607,7 @@
           this.columns = response.columns.all.sort();
           this.rotateableVectors = response.columns.rotatable_vectors ?? [];
           this.data = response.data;
+          void this.loadLabSchemas();
           const params = new URLSearchParams(window.location.search);
           const shared = params.get("v");
           if (shared) {
@@ -594,6 +619,12 @@
             this.loadConfig();
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
+          }
+          if (this.config.refFrame) {
+            const hasRotation = Object.values(this.config.yAxes).some(
+              (y) => y.filters.some((f) => f.type === "rotation")
+            );
+            if (!hasRotation) this.applyRefFrame(this.config.refFrame);
           }
           void this.$nextTick(() => {
             this.pushHistory();
@@ -693,47 +724,101 @@
           Alpine.store("dojo").startGlobalSync();
           Alpine.store("dojo").setPageReady(true);
         }
-        window.addEventListener("keydown", (e) => {
-          if (e.repeat) return;
-          const tag = e.target.tagName;
-          if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
-            e.preventDefault();
-            document.querySelector('input[type="number"]')?.focus();
-          }
-          if (e.key === "Escape") {
-            const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
-            if (["INPUT", "TEXTAREA"].includes(tag))
-              e.target.blur();
-            this.placementMode = null;
-            this.rectStart = null;
-            this.cancelAnnDraft();
-            this.cancelShapeDraft();
-            this.annotationsOpen = false;
-            this.shapesOpen = false;
-            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
-            this.profilesOpen = this.vsMenuOpen = false;
-            this.profileSearch = "";
-            window.dispatchEvent(new CustomEvent("mojo:escape"));
-            if (anyOpen) e.stopImmediatePropagation();
-          }
-          if (["INPUT", "TEXTAREA"].includes(tag)) return;
-          if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
-          if (e.key === "ArrowRight")
-            document.getElementById("nav-next")?.click();
-          const isZ = e.key.toLowerCase() === "z";
-          const isY = e.key.toLowerCase() === "y";
-          const cmdOrCtrl = e.metaKey || e.ctrlKey;
-          if (cmdOrCtrl && isZ) {
-            e.preventDefault();
-            if (e.shiftKey) this.redo();
-            else this.undo();
-          }
-          if (cmdOrCtrl && isY) {
-            e.preventDefault();
-            this.redo();
-          }
-        }, { capture: true });
+        window.addEventListener(
+          "keydown",
+          (e) => {
+            if (e.repeat) return;
+            const targetEl = e.target;
+            const tag = targetEl.tagName;
+            const isTextInput = ["INPUT", "TEXTAREA", "SELECT"].includes(tag) || targetEl.isContentEditable;
+            if (e.key === "/" && !isTextInput) {
+              e.preventDefault();
+              document.querySelector(
+                'input[type="number"]'
+              )?.focus();
+            }
+            if (e.key === "Escape") {
+              const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || isTextInput);
+              if (isTextInput) targetEl.blur();
+              this.placementMode = null;
+              this.rectStart = null;
+              this.cancelAnnDraft();
+              this.cancelShapeDraft();
+              this.annotationsOpen = false;
+              this.shapesOpen = false;
+              this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+              this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+              this.profilesOpen = this.vsMenuOpen = false;
+              this.profileSearch = "";
+              this.labOpen = false;
+              window.dispatchEvent(new CustomEvent("mojo:escape"));
+              if (anyOpen) e.stopImmediatePropagation();
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+              e.preventDefault();
+              if (!isTextInput) {
+                if (this.labOpen) {
+                  const el = document.getElementById(
+                    "lab-name-input"
+                  );
+                  if (el) {
+                    el.focus();
+                    el.setSelectionRange(el.value.length, el.value.length);
+                  }
+                } else {
+                  this.profilesOpen = true;
+                  void this.loadProfiles();
+                  void this.$nextTick(() => {
+                    const el = document.getElementById(
+                      "profile-name-input"
+                    );
+                    if (el) {
+                      el.focus();
+                      el.setSelectionRange(el.value.length, el.value.length);
+                    }
+                  });
+                }
+              }
+            }
+            if ((e.metaKey || e.ctrlKey) && !isTextInput) {
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                document.getElementById("nav-prev")?.click();
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                document.getElementById("nav-next")?.click();
+              }
+            }
+            if (isTextInput) return;
+            const isZ = e.key.toLowerCase() === "z";
+            const isY = e.key.toLowerCase() === "y";
+            const cmdOrCtrl = e.metaKey || e.ctrlKey;
+            if (cmdOrCtrl && isZ) {
+              e.preventDefault();
+              if (this.labOpen) {
+                e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
+              } else {
+                if (e.shiftKey) this.redo();
+                else this.undo();
+              }
+            }
+            if (cmdOrCtrl && isY) {
+              e.preventDefault();
+              if (this.labOpen) window.mojoLabRedo?.();
+              else this.redo();
+            }
+            if (this.labOpen && cmdOrCtrl && e.shiftKey) {
+              if (e.key.toLowerCase() === "a") {
+                e.preventDefault();
+                window.mojoLabArrange?.();
+              } else if (e.key.toLowerCase() === "f") {
+                e.preventDefault();
+                window.mojoLabFitView?.();
+              }
+            }
+          },
+          { capture: true }
+        );
         const resp = await fetch("/mosaic/api/trials");
         const data = await resp.json();
         this.allTrials = data.trials ?? [];
@@ -749,39 +834,23 @@
         this.$watch("vsDraft.range", () => {
           if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
           this.discoveryTimeout = setTimeout(() => {
-            if (this.vsDraft.enabled) {
-              console.debug(
-                "Predictive Sync: User adjusted range, starting hydration..."
-              );
-              void this.startBackgroundDiscovery();
-            }
+            if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
         });
-        this.$watch(
-          "config.refFrame",
-          async (newValue, oldValue) => {
-            console.debug(
-              `[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`
-            );
-            this.notify(`Frame: ${newValue || "world"}`, "info");
-            this.discoveryId++;
-            this.data = {};
-            this.vsDatasets = {};
-            const initialCols = [
-              this.config.xAxis.col,
-              ...Object.keys(this.config.yAxes)
-            ];
-            const response = await this.fetchTrialData(this.trialId, initialCols);
-            this.columns = response.columns.all.sort();
-            this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-            this.data = response.data;
-            void this.startBackgroundDiscovery();
-            if (this.config.vsEnabled) await this.syncVsRange();
-            this.saveAndRender();
-          }
-        );
+        this.$watch("config.refFrame", (newValue, oldValue) => {
+          if (newValue === oldValue) return;
+          this.notify(`Frame: ${newValue || "world"}`, "info");
+          this.discoveryId++;
+          this.applyRefFrame(newValue);
+        });
         this.$watch("config", async (value, oldValue) => {
-          if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
+          if (!this.isEditingRaw) {
+            this.configRaw = JSON.stringify(value, null, 4);
+            try {
+              localStorage.removeItem("mojo:config:raw-draft");
+            } catch {
+            }
+          }
           if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis.col !== oldValue?.xAxis?.col || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
             await this.syncVsRange();
           }
@@ -823,7 +892,8 @@
           this.saveAndRender();
         });
         void this.startBackgroundDiscovery();
-        this.configRaw = JSON.stringify(this.config, null, 4);
+        this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
+        this.updateFromRaw();
       },
       // -----------------------------------------------------------------------
       // VS (comparison) mode
@@ -845,7 +915,10 @@
         try {
           const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
           const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-          let activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+          let activeCols = [
+            this.config.xAxis.col,
+            ...Object.keys(this.config.yAxes)
+          ];
           if (this.config.refFrame) {
             const families = /* @__PURE__ */ new Set();
             Object.keys(this.config.yAxes).forEach((col) => {
@@ -899,8 +972,38 @@
       handleVsToggle() {
         if (!this.vsDraft.enabled) {
           this.config.vsEnabled = false;
+          this.vsDatasets = {};
           this.renderPlot();
         }
+      },
+      setVsPreset(delta) {
+        const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+        this.vsDraft.range = [cur - delta, cur + delta];
+      },
+      setVsAll() {
+        const nums = this.allTrials.map((t) => parseInt(t.split("_").pop() ?? "")).filter((n) => !isNaN(n));
+        if (!nums.length) return;
+        this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+      },
+      isVsPreset(delta) {
+        const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+        const [a, b] = this.vsDraft.range;
+        return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+      },
+      isVsAll() {
+        const nums = this.allTrials.map((t) => parseInt(t.split("_").pop() ?? "")).filter((n) => !isNaN(n));
+        if (!nums.length) return false;
+        const [a, b] = this.vsDraft.range;
+        return Math.min(a, b) === Math.min(...nums) && Math.max(a, b) === Math.max(...nums);
+      },
+      vsInRangeCount() {
+        const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const cur = parseInt(this.trialId.split("_").pop() ?? "");
+        return this.allTrials.filter((id) => {
+          const n = parseInt(id.split("_").pop() ?? "");
+          return n >= lo && n <= hi && n !== cur;
+        }).length;
       },
       // -----------------------------------------------------------------------
       // Column filtering & search
@@ -916,7 +1019,7 @@
       },
       getFilteredCols(field) {
         if (!this.columns || !Array.isArray(this.columns)) return [];
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         if (!search) return this.smartSort([...base]);
         try {
@@ -962,7 +1065,7 @@
         self2[key] = (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
       },
       getSegmentsAtDepth(field, depth) {
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const pathSearch = search.split(":")[0] ?? "";
         const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -977,7 +1080,7 @@
         return this.smartSort([.../* @__PURE__ */ new Set([...selected, ...segments])]);
       },
       getAvailableSuffixes(field) {
-        const base = field === "x" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const [pathPart = "", suffixPart = ""] = search.split(":");
         const selected = (suffixPart ?? "").replace(/[()]/g, "").split("|").filter(Boolean).map((s) => ":" + s);
@@ -1037,14 +1140,32 @@
       },
       validateConfig(cfg) {
         const errors = [];
-        if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col))
-          errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
+        const labsNoted = /* @__PURE__ */ new Set();
+        const schemasLoaded = this.labSchemas.length > 0;
+        const checkCol = (col, label) => {
+          if (col.startsWith("Lab/")) {
+            if (!schemasLoaded) return;
+            const labName = col.slice(4).split("/")[0];
+            if (labsNoted.has(labName)) return;
+            const lab = this.labSchemas.find((l) => l.name === labName);
+            if (!lab) {
+              labsNoted.add(labName);
+              errors.push(`Lab "${labName}" not found.`);
+            } else if (lab.missing.length > 0) {
+              labsNoted.add(labName);
+              errors.push(
+                `Lab "${labName}" requires: ${lab.signal_in_columns.join(", ")}; missing: ${lab.missing.join(", ")}.`
+              );
+            }
+          } else if (!this.columns.includes(col)) {
+            errors.push(`${label} "${col}" not found in telemetry.`);
+          }
+        };
+        if (cfg.xAxis?.col) checkCol(cfg.xAxis.col, "X-Axis");
         if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
           errors.push("yAxes must be a hashmap.");
         } else {
-          Object.keys(cfg.yAxes).forEach((y) => {
-            if (!this.columns.includes(y)) errors.push(`Y-Axis "${y}" missing.`);
-          });
+          Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
         }
         if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
           errors.push("Comparison range start cannot be greater than end.");
@@ -1052,14 +1173,23 @@
       },
       updateFromRaw() {
         try {
+          localStorage.setItem("mojo:config:raw-draft", this.configRaw);
+        } catch {
+        }
+        try {
           const parsed = JSON.parse(this.configRaw);
           this.isValidJson = true;
           if (parsed && typeof parsed === "object") {
             this.configErrors = this.validateConfig(parsed);
             this.isValidConfig = this.configErrors.length === 0;
             if (this.isValidConfig) {
+              const prevRefFrame = this.config.refFrame ?? null;
               this.isEditingRaw = true;
               this.config = { ...this.config, ...parsed };
+              const nextRefFrame = this.config.refFrame ?? null;
+              if (nextRefFrame !== prevRefFrame) {
+                this.applyRefFrame(nextRefFrame);
+              }
               void this.$nextTick(() => {
                 this.isEditingRaw = false;
               });
@@ -1140,6 +1270,163 @@
       },
       copyRawConfig() {
         void this.copyToClipboard(this.configRaw, "JSON Config copied!");
+      },
+      initCodeMirror(hostEl) {
+        if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
+        const {
+          EditorView,
+          basicSetup,
+          json,
+          jsonParseLinter,
+          oneDarkHighlightStyle,
+          EditorState,
+          Compartment,
+          linter,
+          lintGutter,
+          syntaxHighlighting,
+          defaultHighlightStyle
+        } = CM;
+        const self2 = this;
+        const savedH = localStorage.getItem("mojo:json-editor:height");
+        if (savedH) hostEl.style.height = savedH;
+        const darkTheme = EditorView.theme({
+          "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+          ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+          ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
+          ".cm-cursor": { borderLeftColor: "#06b6d4" },
+          ".cm-gutters": { backgroundColor: "#0f172a", color: "#475569", borderRight: "1px solid #1e293b" },
+          ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
+          ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
+          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          "&.cm-focused .cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+          ".cm-tooltip": { backgroundColor: "#1e293b", border: "1px solid #334155", color: "#cbd5e1" },
+          ".cm-panels": { backgroundColor: "#0f172a", borderColor: "#1e293b", color: "#cbd5e1" },
+          ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+          ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(34,211,238,0.35)" },
+          ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+          ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
+        }, { dark: true });
+        const lightTheme = EditorView.theme({
+          "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+          ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+          ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
+          ".cm-cursor": { borderLeftColor: "#0891b2" },
+          ".cm-gutters": { backgroundColor: "#f8fafc", color: "#94a3b8", borderRight: "1px solid #e2e8f0" },
+          ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
+          ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
+          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+          ".cm-tooltip": { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" },
+          ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+          ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+          ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(8,145,178,0.3)" },
+          ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+          ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
+        }, { dark: false });
+        const isDark = () => document.documentElement.classList.contains("dark");
+        const themeComp = new Compartment();
+        const highlightComp = new Compartment();
+        const makeTheme = (dark) => dark ? darkTheme : lightTheme;
+        const makeHighlight = (dark) => syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle);
+        const startState = EditorState.create({
+          doc: this.configRaw,
+          extensions: [
+            basicSetup,
+            json(),
+            lintGutter(),
+            linter(jsonParseLinter()),
+            themeComp.of(makeTheme(isDark())),
+            highlightComp.of(makeHighlight(isDark())),
+            EditorView.updateListener.of((update) => {
+              if (update.docChanged && !_cm.updating) {
+                const text = update.state.doc.toString();
+                _cm.updating = true;
+                self2.configRaw = text;
+                if (_cm.debounce !== null) clearTimeout(_cm.debounce);
+                _cm.debounce = setTimeout(() => {
+                  self2.updateFromRaw();
+                  _cm.debounce = null;
+                }, 500);
+                _cm.updating = false;
+              }
+            })
+          ]
+        });
+        _cm.editor = new EditorView({ state: startState, parent: hostEl });
+        const handle = document.createElement("div");
+        handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+        const grip = document.createElement("div");
+        grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+        handle.appendChild(grip);
+        handle.addEventListener("mouseenter", () => {
+          grip.style.background = "#06b6d4";
+          grip.style.width = "52px";
+        });
+        handle.addEventListener("mouseleave", () => {
+          grip.style.background = "#334155";
+          grip.style.width = "36px";
+        });
+        hostEl.insertAdjacentElement("afterend", handle);
+        handle.addEventListener("mousedown", (e) => {
+          const startY = e.clientY;
+          const startH = hostEl.offsetHeight;
+          let prevY = startY;
+          document.body.style.userSelect = "none";
+          document.body.style.cursor = "ns-resize";
+          const onMove = (ev) => {
+            const dy = ev.clientY - prevY;
+            prevY = ev.clientY;
+            const newH = Math.max(128, startH + (ev.clientY - startY));
+            hostEl.style.height = newH + "px";
+            if (dy > 0) window.scrollBy(0, dy);
+          };
+          const onUp = () => {
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            try {
+              localStorage.setItem("mojo:json-editor:height", hostEl.style.height);
+            } catch {
+            }
+          };
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+          e.preventDefault();
+        });
+        handle.addEventListener("dblclick", () => {
+          const scroller = hostEl.querySelector(".cm-scroller");
+          if (scroller) {
+            hostEl.style.height = scroller.scrollHeight + "px";
+            try {
+              localStorage.setItem("mojo:json-editor:height", hostEl.style.height);
+            } catch {
+            }
+          }
+        });
+        new MutationObserver(() => {
+          const dark = isDark();
+          _cm.editor?.dispatch({
+            effects: [
+              themeComp.reconfigure(makeTheme(dark)),
+              highlightComp.reconfigure(makeHighlight(dark))
+            ]
+          });
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+        this.$watch("configRaw", (val) => {
+          if (!_cm.updating && _cm.editor) {
+            const current = _cm.editor.state.doc.toString();
+            if (current !== val) {
+              _cm.updating = true;
+              _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
+              _cm.updating = false;
+            }
+          }
+        });
       },
       resetConfig() {
         if (confirm(
@@ -1225,7 +1512,10 @@
       },
       downloadCSV() {
         if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+        const activeCols = [
+          this.config.xAxis.col,
+          ...Object.keys(this.config.yAxes)
+        ];
         const rowCount = this.data[this.config.xAxis.col]?.length ?? 0;
         let csv = activeCols.join(",") + "\n";
         for (let i = 0; i < rowCount; i++) {
@@ -1286,12 +1576,13 @@
           this.config.yAxes = rest;
         } else {
           const nextIndex = Object.keys(this.config.yAxes).length;
+          const initFilters = this.config.refFrame ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }] : [];
           this.config.yAxes[col] = {
             color: this.getSignalColor(nextIndex),
             label: "",
             width: 3,
             opacity: 1,
-            filters: [],
+            filters: initFilters,
             dash: "solid",
             marker: "none"
           };
@@ -1304,6 +1595,38 @@
         this.saveAndRender();
         this.configRaw = JSON.stringify(this.config, null, 4);
         this.notify("Signals Cleared", "info");
+      },
+      applyRefFrame(frame) {
+        for (const col of Object.keys(this.config.yAxes)) {
+          const yConfig = this.config.yAxes[col];
+          if (!yConfig) continue;
+          if (frame) {
+            const newEntry = {
+              type: "rotation",
+              quat_col: frame,
+              invert: true,
+              enabled: true
+            };
+            const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+            if (idx >= 0) {
+              yConfig.filters = [
+                ...yConfig.filters.slice(0, idx),
+                newEntry,
+                ...yConfig.filters.slice(idx + 1)
+              ];
+            } else {
+              yConfig.filters = [newEntry, ...yConfig.filters];
+            }
+          } else {
+            const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+            if (idx >= 0) {
+              yConfig.filters = [
+                ...yConfig.filters.slice(0, idx),
+                ...yConfig.filters.slice(idx + 1)
+              ];
+            }
+          }
+        }
       },
       warpToTrial() {
         if (this.warpId === null || this.warpId === void 0 || this.warpId === "")
@@ -1331,6 +1654,15 @@
       // -----------------------------------------------------------------------
       getFilterSchema(filterType) {
         return this.filterSchemas.find((s) => s.type === filterType);
+      },
+      get groupedFilterSchemas() {
+        const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+        const groups = {};
+        for (const s of this.filterSchemas) {
+          const cat = s.category ?? "Misc";
+          (groups[cat] ?? (groups[cat] = [])).push(s);
+        }
+        return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
       },
       evalMathExpr(expr) {
         const s = String(expr ?? "").trim();
@@ -1419,6 +1751,8 @@
         const schema = this.filterSchemas.find((s) => s.type === filterType);
         if (!schema) return;
         if (!temp.filters) temp.filters = [];
+        if (filterType === "rotation" && temp.filters.some((f) => f.type === "rotation"))
+          return;
         const entry = { type: filterType, enabled: true };
         for (const p of schema.params) {
           entry[p.name] = p.default;
@@ -1453,6 +1787,116 @@
       // in the URL (not 'project%2Fname'), matching the {name:path} FastAPI route.
       _profileUrl(name) {
         return `/mosaic/api/profiles/${name.split("/").map(encodeURIComponent).join("/")}`;
+      },
+      // ── Lab ──────────────────────────────────────────────────────────────────
+      relTime(ms) {
+        const diff = Date.now() - ms;
+        const min = Math.floor(diff / 6e4);
+        if (min < 1) return "just now";
+        if (min < 60) return `${min}m ago`;
+        const h = Math.floor(min / 60);
+        if (h < 24) return `${h}h ago`;
+        const d = Math.floor(h / 24);
+        return d === 1 ? "yesterday" : `${d}d ago`;
+      },
+      async loadLabSchemas() {
+        try {
+          const resp = await fetch("/mosaic/api/lab");
+          if (!resp.ok) return;
+          const all = await resp.json();
+          const schemas = all.map((lab) => ({
+            ...lab,
+            signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
+            outputs: [...new Set(lab.outputs)].sort()
+          }));
+          const baseColumns = this.columns.filter((c) => !c.startsWith("Lab/"));
+          const available = new Set(baseColumns);
+          const validLabs = /* @__PURE__ */ new Set();
+          let changed = true;
+          while (changed) {
+            changed = false;
+            for (const lab of schemas) {
+              if (validLabs.has(lab.name)) continue;
+              if (lab.signal_in_columns.every((c) => available.has(c))) {
+                validLabs.add(lab.name);
+                lab.outputs.forEach((o) => available.add(`Lab/${lab.name}/${o}`));
+                changed = true;
+              }
+            }
+          }
+          this.labSchemas = schemas.map((lab) => ({
+            ...lab,
+            missing: lab.signal_in_columns.filter((c) => !available.has(c)),
+            valid: validLabs.has(lab.name)
+          }));
+          this.columns = [...available].sort();
+        } catch {
+        }
+      },
+      async refreshLabValidation() {
+        await this.loadLabSchemas();
+        void this.loadProfiles();
+      },
+      async saveLabGraph(name, graph) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const exists = this.labSchemas.some((s) => s.name === trimmed);
+        if (exists && !confirm(`Overwrite "${trimmed}"?`)) return;
+        const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
+        try {
+          const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(graph)
+          });
+          if (!resp.ok) {
+            const detail = await resp.text().catch(() => resp.statusText);
+            this.notify(`Save failed: ${detail}`, "error");
+            return;
+          }
+          localStorage.setItem("mojo:lab:name", trimmed);
+          this.notify(`Lab "${trimmed}" saved`, "success");
+          await this.refreshLabValidation();
+          const labPrefix = `Lab/${trimmed}/`;
+          const staleCols = Object.keys(this.data ?? {}).filter(
+            (c) => c.startsWith(labPrefix)
+          );
+          if (staleCols.length > 0) {
+            const fresh = { ...this.data ?? {} };
+            staleCols.forEach((c) => delete fresh[c]);
+            this.data = fresh;
+            const activeCols = staleCols.filter(
+              (c) => c in this.config.yAxes || c === this.config.xAxis?.col
+            );
+            if (activeCols.length > 0) {
+              try {
+                const refetch = await this.fetchTrialData(this.trialId, activeCols);
+                this.data = { ...this.data ?? {}, ...refetch.data };
+                this.saveAndRender();
+              } catch {
+              }
+            }
+          }
+        } catch (err) {
+          this.notify(`Save failed: ${String(err)}`, "error");
+        }
+      },
+      selectNodeColumn(col) {
+        if (this.nodePickingColumn !== null) {
+          if (typeof window.mojoLabSelectNodeColumn === "function") {
+            window.mojoLabSelectNodeColumn(this.nodePickingColumn, col);
+          }
+        }
+        this.nodePickingColumn = null;
+        this.nodeColSearch = "";
+      },
+      async deleteLabGraph(name) {
+        const safePath = name.split("/").map(encodeURIComponent).join("/");
+        await fetch(`/mosaic/api/lab/${safePath}`, {
+          method: "DELETE"
+        });
+        this.notify(`Lab "${name}" deleted`, "info");
+        await this.refreshLabValidation();
       },
       // -----------------------------------------------------------------------
       async loadProfiles() {
@@ -1541,6 +1985,22 @@
           }
           this.config = { ...this.config, ...loaded };
           this.notify(`Profile "${name}" loaded`, "success");
+          const needed = [];
+          if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
+            needed.push(loaded.xAxis.col);
+          for (const col of Object.keys(loaded.yAxes ?? {})) {
+            if (!this.data?.[col]) needed.push(col);
+          }
+          if (needed.length > 0) {
+            const fetched = await this.fetchTrialData(this.trialId, needed);
+            this.data = { ...this.data ?? {}, ...fetched.data };
+          }
+          void this.$nextTick(() => {
+            this.configErrors = this.validateConfig(this.config);
+            this.isValidConfig = this.configErrors.length === 0;
+            this.isValidJson = true;
+            this.saveAndRender();
+          });
         } catch (e) {
           this.notify(
             `Failed to load "${name}": ${e.message}`,

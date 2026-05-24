@@ -307,7 +307,7 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
 ---
 
 !!! tip "Tip: Scaffold a New Project"
-    Before diving into the generate script, run `mujoco-mojo init` in a new directory to get a working project skeleton — `simulation.py`, `run.sh`, and `reloaded.sh` — pre-wired and ready to edit.
+    Before diving into the generate script, run `mujoco-mojo init` in a new directory to get a working project skeleton (`simulation.py`, `run.sh`, and `reloaded.sh`) pre-wired and ready to edit.
 
     ```bash linenums="0"
     mujoco-mojo init

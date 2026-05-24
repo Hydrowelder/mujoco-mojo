@@ -1,32 +1,42 @@
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 import numpy as np
 import pint
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from scipy.signal import savgol_filter
+from scipy.spatial.transform import Rotation as R
 
 __all__ = [
     "UNIT_GROUPS",
     "AbsoluteValueFilter",
     "AnyFilter",
     "ClipFilter",
+    "ComparisonFilter",
     "DeadbandFilter",
     "DerivativeFilter",
+    "ExpFilter",
     "FilterType",
     "HighPassFilter",
     "IntegralFilter",
+    "LogFilter",
     "LowPassFilter",
     "MedianFilter",
     "NormalizeFilter",
+    "PowerFilter",
     "RollingMeanFilter",
+    "RotationFilter",
+    "RoundFilter",
     "SavitzkyGolayFilter",
     "ScaleFilter",
+    "SignFilter",
     "TaringFilter",
+    "TrigFilter",
     "UnitFilter",
     "WrapFilter",
     "filter_adapter",
@@ -49,12 +59,21 @@ class FilterType(StrEnum):
     NORMALIZE = "normalize"
     SAVITZKY_GOLAY = "savitzky_golay"
     UNIT = "unit"
+    ROTATION = "rotation"
+    LOG = "log"
+    EXP = "exp"
+    POWER = "power"
+    ROUND = "round"
+    TRIG = "trig"
+    SIGN = "sign"
+    COMPARISON = "comparison"
 
 
 class BaseFilter(ABC, BaseModel):
     """Base class for all data transformations."""
 
     model_config = ConfigDict(extra="forbid")
+    category: ClassVar[str] = "Misc"
 
     @abstractmethod
     def apply(self, expr: pl.Expr) -> pl.Expr:
@@ -74,6 +93,8 @@ class BaseFilter(ABC, BaseModel):
 class ScaleFilter(BaseFilter):
     """Applies a linear transformation: (value * factor) + offset."""
 
+    category: ClassVar[str] = "Arithmetic"
+
     type: Literal[FilterType.SCALE] = FilterType.SCALE
     """The discriminator type for Pydantic."""
 
@@ -90,6 +111,8 @@ class ScaleFilter(BaseFilter):
 class AbsoluteValueFilter(BaseFilter):
     """Rectifies the signal by taking the magnitude of every sample."""
 
+    category: ClassVar[str] = "Arithmetic"
+
     type: Literal[FilterType.ABSOLUTE_VALUE] = FilterType.ABSOLUTE_VALUE
     """The discriminator type for Pydantic."""
 
@@ -102,6 +125,8 @@ class DerivativeFilter(BaseFilter):
     Computes the numerical rate of change using backward difference.
     Useful for deriving velocity from position or acceleration from velocity.
     """
+
+    category: ClassVar[str] = "Calculus"
 
     type: Literal[FilterType.DERIVATIVE] = FilterType.DERIVATIVE
     """The discriminator type for Pydantic."""
@@ -133,6 +158,8 @@ class IntegralFilter(BaseFilter):
     Useful for deriving position from velocity or calculating energy.
     """
 
+    category: ClassVar[str] = "Calculus"
+
     type: Literal[FilterType.INTEGRAL] = FilterType.INTEGRAL
     """The discriminator type for Pydantic."""
 
@@ -162,6 +189,8 @@ class LowPassFilter(BaseFilter):
     Effective for removing high-frequency noise while introducing slight phase lag.
     """
 
+    category: ClassVar[str] = "Smoothing"
+
     type: Literal[FilterType.LOW_PASS] = FilterType.LOW_PASS
     """The discriminator type for Pydantic."""
 
@@ -178,6 +207,8 @@ class HighPassFilter(BaseFilter):
     Implemented as the complement of the Exponential Moving Average.
     """
 
+    category: ClassVar[str] = "Smoothing"
+
     type: Literal[FilterType.HIGH_PASS] = FilterType.HIGH_PASS
     """The discriminator type for Pydantic."""
 
@@ -191,6 +222,8 @@ class HighPassFilter(BaseFilter):
 
 class ClipFilter(BaseFilter):
     """Clamps the signal values within a specified range."""
+
+    category: ClassVar[str] = "Bounding"
 
     type: Literal[FilterType.CLIP] = FilterType.CLIP
     """The discriminator type for Pydantic."""
@@ -217,6 +250,8 @@ class ClipFilter(BaseFilter):
 class RollingMeanFilter(BaseFilter):
     """Applies a sliding window average to the signal."""
 
+    category: ClassVar[str] = "Smoothing"
+
     type: Literal[FilterType.ROLLING_MEAN] = FilterType.ROLLING_MEAN
     """The discriminator type for Pydantic."""
 
@@ -233,6 +268,8 @@ class RollingMeanFilter(BaseFilter):
 class TaringFilter(BaseFilter):
     """Offsets the entire signal so that the first sample is zero."""
 
+    category: ClassVar[str] = "Bounding"
+
     type: Literal[FilterType.TARING] = FilterType.TARING
     """The discriminator type for Pydantic."""
 
@@ -242,6 +279,8 @@ class TaringFilter(BaseFilter):
 
 class DeadbandFilter(BaseFilter):
     """Suppresses noise around zero by forcing values below a threshold to zero."""
+
+    category: ClassVar[str] = "Bounding"
 
     type: Literal[FilterType.DEADBAND] = FilterType.DEADBAND
     """The discriminator type for Pydantic."""
@@ -258,6 +297,8 @@ class WrapFilter(BaseFilter):
     Keeps circular data (like Euler angles or radians) within a specific range.
     Ensures continuity when a signal crosses the upper or lower boundary.
     """
+
+    category: ClassVar[str] = "Bounding"
 
     type: Literal[FilterType.WRAP] = FilterType.WRAP
     """The discriminator type for Pydantic."""
@@ -285,6 +326,8 @@ class MedianFilter(BaseFilter):
     Highly effective for removing impulse noise (spikes) without blurring edges.
     """
 
+    category: ClassVar[str] = "Smoothing"
+
     type: Literal[FilterType.MEDIAN] = FilterType.MEDIAN
     """The discriminator type for Pydantic."""
 
@@ -298,6 +341,8 @@ class MedianFilter(BaseFilter):
 class NormalizeFilter(BaseFilter):
     """Rescales the signal to the range [0, 1]."""
 
+    category: ClassVar[str] = "Bounding"
+
     type: Literal[FilterType.NORMALIZE] = FilterType.NORMALIZE
     """The discriminator type for Pydantic."""
 
@@ -310,6 +355,8 @@ class SavitzkyGolayFilter(BaseFilter):
     Applies a Savitzky-Golay smoothing filter by fitting a polynomial to the data.
     Preserves signal features (like peaks and transients) better than a simple moving average.
     """
+
+    category: ClassVar[str] = "Smoothing"
 
     type: Literal[FilterType.SAVITZKY_GOLAY] = FilterType.SAVITZKY_GOLAY
     """The discriminator type for Pydantic."""
@@ -346,7 +393,7 @@ except pint.errors.RedefinitionError:
     pass
 
 # ---------------------------------------------------------------------------
-# Unit groups — single source of truth for both the frontend smart dropdown
+# Unit groups - single source of truth for both the frontend smart dropdown
 # and the SignalUnit type annotation on UnitFilter.  To add a new unit,
 # add it here; SignalUnit is derived automatically.  Verify that pint can
 # parse any new string via `ureg.parse_units(...)` before committing.
@@ -377,7 +424,7 @@ UNIT_GROUPS: list[tuple[str, list[str]]] = [
     ("Misc.", ["dimensionless", "pct", "count", "bit"]),
 ]
 
-# Derived automatically — Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
+# Derived automatically - Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
 # in Python 3.9+ because x[a, b] and x[(a, b)] make the same __getitem__ call.
 _ALL_UNITS: tuple[str, ...] = tuple(u for _, us in UNIT_GROUPS for u in us)
 SignalUnit = Literal[_ALL_UNITS] | str
@@ -431,6 +478,232 @@ class UnitFilter(BaseFilter):
         return (expr * m) + b
 
 
+class RotationFilter(BaseFilter):
+    """Rotates a 3D vector component into a reference frame using a quaternion column."""
+
+    type: Literal[FilterType.ROTATION] = FilterType.ROTATION
+    """The discriminator type for Pydantic."""
+
+    quat_col: str = Field("", json_schema_extra={"ui_type": "col"})
+    """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat')."""
+
+    invert: bool = True
+    """If True, transforms world-to-local (invert the quaternion rotation)."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr
+
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        name = series.name
+        suffix = name.rsplit(":", 1)[-1] if ":" in name else ""
+        if suffix not in ("x", "y", "z") or not self.quat_col:
+            return None
+        base = name.rsplit(":", 1)[0]
+        x_col, y_col, z_col = f"{base}:x", f"{base}:y", f"{base}:z"
+        if not all(c in df.columns for c in (x_col, y_col, z_col)):
+            return None
+        # scipy expects (x, y, z, w) column order
+        q_cols = [f"{self.quat_col}:{k}" for k in ("x", "y", "z", "w")]
+        if not all(c in df.columns for c in q_cols):
+            return None
+        transformer = R.from_quat(df.select(q_cols).to_numpy())
+        if self.invert:
+            transformer = transformer.inv()
+        v_rot = transformer.apply(df.select([x_col, y_col, z_col]).to_numpy())
+        return pl.Series(name=name, values=v_rot[:, {"x": 0, "y": 1, "z": 2}[suffix]])
+
+
+class LogFilter(BaseFilter):
+    """Applies a logarithm to the signal. Defaults to natural log (base e)."""
+
+    category: ClassVar[str] = "Arithmetic"
+
+    type: Literal[FilterType.LOG] = FilterType.LOG
+    """The discriminator type for Pydantic."""
+
+    base: float = Field(default=math.e, gt=0)
+    """Logarithm base. Use e (2.718...) for natural log, 2 for log2, 10 for log10."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.log(base=self.base)
+
+
+class ExpFilter(BaseFilter):
+    """Raises a base to the power of each signal sample. Defaults to e^x."""
+
+    category: ClassVar[str] = "Arithmetic"
+
+    type: Literal[FilterType.EXP] = FilterType.EXP
+    """The discriminator type for Pydantic."""
+
+    base: float = Field(default=math.e, gt=0)
+    """The base to exponentiate. Use e (2.718...) for the natural exponential."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        if abs(self.base - math.e) < 1e-12:
+            return expr.exp()
+        return expr.map_batches(
+            lambda s: pl.Series(np.power(self.base, s.fill_null(0).to_numpy())),
+            return_dtype=pl.Float64,
+        )
+
+
+class PowerFilter(BaseFilter):
+    """Raises each signal sample to a fixed exponent. Supports fractional exponents (e.g. 0.5 for sqrt)."""
+
+    category: ClassVar[str] = "Arithmetic"
+
+    type: Literal[FilterType.POWER] = FilterType.POWER
+    """The discriminator type for Pydantic."""
+
+    exponent: float = Field(default=2.0)
+    """The power to raise each sample to. Use 0.5 for square root, 1/3 for cube root."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.pow(self.exponent)
+
+
+class RoundFilter(BaseFilter):
+    """Quantizes the signal to a fixed number of decimal places."""
+
+    category: ClassVar[str] = "Bounding"
+
+    type: Literal[FilterType.ROUND] = FilterType.ROUND
+    """The discriminator type for Pydantic."""
+
+    method: Literal["round", "floor", "ceil"] = Field(
+        default="round",
+        json_schema_extra={"ui_type": "select"},
+    )
+    """Rounding method: round (nearest), floor (toward -inf), or ceil (toward +inf)."""
+
+    decimals: int = Field(default=0, ge=0)
+    """Number of decimal places to round to (only used when method is 'round')."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        if self.method == "floor":
+            return expr.floor()
+        if self.method == "ceil":
+            return expr.ceil()
+        return expr.round(self.decimals)
+
+
+_TRIG_FUNCS = Literal[
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "sinh",
+    "cosh",
+    "tanh",
+    "degrees",
+    "radians",
+]
+
+
+class TrigFilter(BaseFilter):
+    """Applies a trigonometric or angle-conversion function to the signal."""
+
+    category: ClassVar[str] = "Trigonometry"
+
+    type: Literal[FilterType.TRIG] = FilterType.TRIG
+    """The discriminator type for Pydantic."""
+
+    func: _TRIG_FUNCS = Field(
+        default="sin",
+        json_schema_extra={"ui_type": "select"},
+    )
+    """The trig function to apply."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        match self.func:
+            case "sin":
+                return expr.sin()
+            case "cos":
+                return expr.cos()
+            case "tan":
+                return expr.tan()
+            case "asin":
+                return expr.arcsin()
+            case "acos":
+                return expr.arccos()
+            case "atan":
+                return expr.arctan()
+            case "sinh":
+                return expr.sinh()
+            case "cosh":
+                return expr.cosh()
+            case "tanh":
+                return expr.tanh()
+            case "degrees":
+                return expr * (180.0 / math.pi)
+            case "radians":
+                return expr * (math.pi / 180.0)
+            case _:
+                return expr
+
+
+class SignFilter(BaseFilter):
+    """Returns the sign of each sample: 1 for positive, -1 for negative, 0 for zero."""
+
+    category: ClassVar[str] = "Comparison"
+
+    type: Literal[FilterType.SIGN] = FilterType.SIGN
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return (
+            pl.when(expr > 0)
+            .then(pl.lit(1.0))
+            .when(expr < 0)
+            .then(pl.lit(-1.0))
+            .otherwise(pl.lit(0.0))
+        )
+
+
+_COMPARISON_OPS = Literal["gt", "gte", "lt", "lte", "eq", "neq"]
+
+
+class ComparisonFilter(BaseFilter):
+    """Compares each sample against a threshold, returning 1.0 (true) or 0.0 (false)."""
+
+    category: ClassVar[str] = "Comparison"
+
+    type: Literal[FilterType.COMPARISON] = FilterType.COMPARISON
+    """The discriminator type for Pydantic."""
+
+    operator: _COMPARISON_OPS = Field(
+        default="gt",
+        json_schema_extra={"ui_type": "select"},
+    )
+    """Comparison operator: gt (>), gte (>=), lt (<), lte (<=), eq (==), neq (!=)."""
+
+    threshold: float = 0.0
+    """The value to compare each sample against."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        match self.operator:
+            case "gt":
+                cond = expr > self.threshold
+            case "gte":
+                cond = expr >= self.threshold
+            case "lt":
+                cond = expr < self.threshold
+            case "lte":
+                cond = expr <= self.threshold
+            case "eq":
+                cond = expr == self.threshold
+            case "neq":
+                cond = expr != self.threshold
+            case _:
+                return expr
+        return pl.when(cond).then(pl.lit(1.0)).otherwise(pl.lit(0.0))
+
+
 AnyFilter = Annotated[
     ScaleFilter
     | AbsoluteValueFilter
@@ -446,7 +719,15 @@ AnyFilter = Annotated[
     | UnitFilter
     | MedianFilter
     | NormalizeFilter
-    | WrapFilter,
+    | WrapFilter
+    | RotationFilter
+    | LogFilter
+    | ExpFilter
+    | PowerFilter
+    | RoundFilter
+    | TrigFilter
+    | SignFilter
+    | ComparisonFilter,
     Field(discriminator="type"),
 ]
 

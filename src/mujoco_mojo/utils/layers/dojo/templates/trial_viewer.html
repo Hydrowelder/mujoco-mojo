@@ -5,6 +5,9 @@
 <script src="/mojo-static/vendored/plotly-3.4.0.min.js"></script>
 <script src="/mojo-static/vendored/lz-string.min.js"></script>
 <script src="/mojo-static/vendored/iro.min.js"></script>
+<link rel="stylesheet" href="/mojo-static/vendored/litegraph.min.css" />
+<script src="/mojo-static/vendored/litegraph.min.js"></script>
+<script src="/mojo-static/vendored/codemirror.bundle.js"></script>
 <script src="/mojo-static/js/trial-viewer.js"></script>
 <style>
     .custom-scrollbar {
@@ -23,6 +26,12 @@
 
     .dark .custom-scrollbar::-webkit-scrollbar-thumb {
         background-color: #334155;
+    }
+
+    /* LiteGraph context menus and dialogs must sit above the lab overlay (z-500) */
+    .litecontextmenu,
+    .litegraph.litecontextmenu {
+        z-index: 600 !important;
     }
 </style>
 {% endblock %}
@@ -43,13 +52,14 @@
      @dragleave.prevent="dragCounter--"
      @dragover.prevent
      @drop.prevent="dragCounter = 0; handleDrop($event)"
-     class="space-y-4 relative pb-10">
+     class="space-y-4 relative">
 
     {% include 'partials/trial_viewer/_overlays.html' %}
     {% include 'partials/trial_viewer/_header.html' %}
     {% include 'partials/trial_viewer/_series_panel.html' %}
     {% include 'partials/trial_viewer/_chart.html' %}
     {% include 'partials/trial_viewer/_json_editor.html' %}
+    {% include 'partials/trial_viewer/_signal_lab.html' %}
 
 </div>
 {% endblock %}

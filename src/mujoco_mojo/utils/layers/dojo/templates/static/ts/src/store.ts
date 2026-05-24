@@ -1,23 +1,27 @@
-import { formatTimeAgo, notifTimeAgo } from './lib/format';
-import type { DojoStore, NotificationEntry } from './models';
+import { formatTimeAgo, notifTimeAgo } from "./lib/format";
+import type { DojoStore, NotificationEntry } from "./models";
 
-// Expose time helpers as globals — HTML templates call them in x-text expressions.
+// Expose time helpers as globals - HTML templates call them in x-text expressions.
 window.formatTimeAgo = formatTimeAgo;
 window.notifTimeAgo = notifTimeAgo;
 
-document.addEventListener('alpine:init', () => {
-  Alpine.store('dojo', {
+document.addEventListener("alpine:init", () => {
+  Alpine.store("dojo", {
     isPageReady: false,
-    isFullscreen: localStorage.getItem('mojo_fullscreen') === 'true',
+    isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
     overlayCount: 0,
     loadStartTime: Date.now(),
     isComplete: false,
-    isMuted: localStorage.getItem('mojo_muted') !== 'false',
-    isAutoRefresh: localStorage.getItem('mojo_auto') !== 'false',
+    isMuted: localStorage.getItem("mojo_muted") !== "false",
+    isAutoRefresh: localStorage.getItem("mojo_auto") !== "false",
 
     isConnected: false,
     _wasConnected: null as boolean | null,
-    globalToast: { show: false, message: '', type: 'info' as 'success' | 'error' | 'info' },
+    globalToast: {
+      show: false,
+      message: "",
+      type: "info" as "success" | "error" | "info",
+    },
     isSyncing: false,
     syncProgress: 0,
     secondsSinceUpdate: 0,
@@ -28,85 +32,94 @@ document.addEventListener('alpine:init', () => {
     loadingIndex: 0,
     loadingInterval: null as ReturnType<typeof setInterval> | null,
     loadingPhrases: [
-      'Eliminating side fumbling in the kinematic tree...',
-      'Cooling off the physics engine...',
-      'Lubricating spurving bearings with phenylhydrobenzamine...',
-      'Was it (x, y, z, w) or (w, x, y, z)...?',
-      'Synchronizing cardinal grammeters with the warm-start...',
-      'Fromaging the bituminous spandrels for stability...',
-      'Reducing sinusoidal depleneration in the dingle arm...',
-      'Checking the prefabulated amulite for micro-cracks...',
-      'Recalculating Chomondeley\'s annual grillage coefficient...',
-      'Polishing the hydrocoptic marzelvanes...',
-      'Resolving contact constraints (it\'s complicated)...',
-      'Nubbing the regurgitative purwell to the wennel-sprocket...',
-      'Ensuring nofer trunnions are within tolerance...',
-      'Consulting the transcendental hopper dadoscope...',
-      'Minimizing side-fumbling in the ambifacient vaneshaft...',
-      'Aligning the lotus-o-delta stator windings...',
-      'Preparing for the inevitable...',
-      'Correcting the Lotus-o-delta offset in the kinematic tree...',
-      'Tightening the roffit bars on the spamshaft...',
-      'Re-aligning the hydrocoptic marzelvanes...',
-      'Calibrating the metapolar pilfrometer...',
-      'Evaluating the diathecial evolute of retrograde temperature...',
-      'De-nubbing the superaminative wennel-sprocket...',
-      'Buffering the anhydrous nagling pins...',
-      'Shimming the kyptonastic boiling tank...',
-      'Analyzing quasi-pietic stresses in the gremlin studs...',
-      'Applying drammock oil to the nivelsheave...',
-      'Synchronizing the barescent skor motion...',
-      'Filtering out reminative tetraiodohexamine...',
-      'Stabilizing the modial interaction of magneto-reluctance...',
-      'Compensating for capacitive directance...',
-      'Scrubbing the manestically placed grouting brushes...',
-      'Zeroing out the transcendental hopper dadoscope...',
-      'Wrangling the inertia tensor...',
-      'Converting Euler angles (and regretting it)...',
-      'Refining the convex hull of the collision geometry...',
-      'Validating the mass-proportional damping coefficients...',
-      'Buffering the unilateral phase detectors...',
-      'Extending the drawn reciprocating dingle arm...',
-      'Optimizing the panendermic semiboloid slots...',
-      'Bleeding air from the non-reversible tremie pipe...',
-      'Adjusting the differential girdlespring tension...',
+      "Eliminating side fumbling in the kinematic tree...",
+      "Cooling off the physics engine...",
+      "Lubricating spurving bearings with phenylhydrobenzamine...",
+      "Was it (x, y, z, w) or (w, x, y, z)...?",
+      "Synchronizing cardinal grammeters with the warm-start...",
+      "Fromaging the bituminous spandrels for stability...",
+      "Reducing sinusoidal depleneration in the dingle arm...",
+      "Checking the prefabulated amulite for micro-cracks...",
+      "Recalculating Chomondeley's annual grillage coefficient...",
+      "Polishing the hydrocoptic marzelvanes...",
+      "Resolving contact constraints (it's complicated)...",
+      "Nubbing the regurgitative purwell to the wennel-sprocket...",
+      "Ensuring nofer trunnions are within tolerance...",
+      "Consulting the transcendental hopper dadoscope...",
+      "Minimizing side-fumbling in the ambifacient vaneshaft...",
+      "Aligning the lotus-o-delta stator windings...",
+      "Preparing for the inevitable...",
+      "Correcting the Lotus-o-delta offset in the kinematic tree...",
+      "Tightening the roffit bars on the spamshaft...",
+      "Re-aligning the hydrocoptic marzelvanes...",
+      "Calibrating the metapolar pilfrometer...",
+      "Evaluating the diathecial evolute of retrograde temperature...",
+      "De-nubbing the superaminative wennel-sprocket...",
+      "Buffering the anhydrous nagling pins...",
+      "Shimming the kyptonastic boiling tank...",
+      "Analyzing quasi-pietic stresses in the gremlin studs...",
+      "Applying drammock oil to the nivelsheave...",
+      "Synchronizing the barescent skor motion...",
+      "Filtering out reminative tetraiodohexamine...",
+      "Stabilizing the modial interaction of magneto-reluctance...",
+      "Compensating for capacitive directance...",
+      "Scrubbing the manestically placed grouting brushes...",
+      "Zeroing out the transcendental hopper dadoscope...",
+      "Wrangling the inertia tensor...",
+      "Converting Euler angles (and regretting it)...",
+      "Refining the convex hull of the collision geometry...",
+      "Validating the mass-proportional damping coefficients...",
+      "Buffering the unilateral phase detectors...",
+      "Extending the drawn reciprocating dingle arm...",
+      "Optimizing the panendermic semiboloid slots...",
+      "Bleeding air from the non-reversible tremie pipe...",
+      "Adjusting the differential girdlespring tension...",
     ],
 
     init() {
       // Restore notification history persisted from a previous page/tab
       try {
-        const raw = localStorage.getItem('mojo_notif');
+        const raw = localStorage.getItem("mojo_notif");
         if (raw) {
-          const saved = JSON.parse(raw) as { n: NotificationEntry[]; u: number };
+          const saved = JSON.parse(raw) as {
+            n: NotificationEntry[];
+            u: number;
+          };
           this.notifications = saved.n ?? [];
           this.unreadCount = saved.u ?? 0;
         }
-      } catch { /* ignore corrupt data */ }
+      } catch {
+        /* ignore corrupt data */
+      }
 
       this.checkServerHealth();
       setInterval(() => this.checkServerHealth(), 5000);
       this.startGlobalSync();
-      document.addEventListener('visibilitychange', () => {
+      document.addEventListener("visibilitychange", () => {
         if (!document.hidden) this.checkServerHealth();
       });
     },
 
-    toast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    toast(message: string, type: "success" | "error" | "info" = "info") {
       this.globalToast = { show: true, message, type };
-      setTimeout(() => { this.globalToast = { ...this.globalToast, show: false }; }, 3500);
+      setTimeout(() => {
+        this.globalToast = { ...this.globalToast, show: false };
+      }, 3500);
     },
 
     _setConnected(connected: boolean) {
       this.isConnected = connected;
       if (this._wasConnected === null) {
-        // Initial connection — set baseline without notifying.
+        // Initial connection - set baseline without notifying.
         if (connected) this._wasConnected = true;
         return;
       }
       if (connected === this._wasConnected) return;
       this._wasConnected = connected;
-      const message = connected ? 'Server connection restored.' : 'Server connection lost.';
-      const type = connected ? 'success' : 'error';
+      const message = connected
+        ? "Server connection restored"
+        : "Server connection lost";
+      const type = connected ? "success" : "error";
       this.toast(message, type);
       this.addNotification(message, type);
     },
@@ -116,9 +129,9 @@ document.addEventListener('alpine:init', () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
       try {
-        const response = await fetch('/monitor/api/status', {
-          method: 'GET',
-          cache: 'no-store',
+        const response = await fetch("/monitor/api/status", {
+          method: "GET",
+          cache: "no-store",
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -148,7 +161,9 @@ document.addEventListener('alpine:init', () => {
 
     startLoadingMessages() {
       if (this.loadingInterval) return;
-      this.loadingIndex = Math.floor(Math.random() * this.loadingPhrases.length);
+      this.loadingIndex = Math.floor(
+        Math.random() * this.loadingPhrases.length,
+      );
       this.showPhrase = true;
       this.loadingInterval = setInterval(() => {
         this.showPhrase = false;
@@ -172,27 +187,27 @@ document.addEventListener('alpine:init', () => {
 
     toggleFullscreen() {
       this.isFullscreen = !this.isFullscreen;
-      localStorage.setItem('mojo_fullscreen', String(this.isFullscreen));
+      localStorage.setItem("mojo_fullscreen", String(this.isFullscreen));
     },
     exitFullscreen() {
       this.isFullscreen = false;
-      localStorage.setItem('mojo_fullscreen', 'false');
+      localStorage.setItem("mojo_fullscreen", "false");
     },
     toggleMute() {
       this.isMuted = !this.isMuted;
-      localStorage.setItem('mojo_muted', this.isMuted.toString());
+      localStorage.setItem("mojo_muted", this.isMuted.toString());
     },
 
     toggleAuto() {
       this.isAutoRefresh = !this.isAutoRefresh;
-      localStorage.setItem('mojo_auto', String(this.isAutoRefresh));
+      localStorage.setItem("mojo_auto", String(this.isAutoRefresh));
       if (this.isAutoRefresh) this.startGlobalSync();
       else this.stopGlobalSync();
     },
 
     startGlobalSync() {
       if (this.source || !this.isAutoRefresh || this.isComplete) return;
-      this.source = new EventSource('/monitor/api/status/stream');
+      this.source = new EventSource("/monitor/api/status/stream");
 
       this.source.onopen = () => {
         this._setConnected(true);
@@ -206,21 +221,25 @@ document.addEventListener('alpine:init', () => {
             value?: number;
             status?: { is_complete: boolean };
           };
-          if (data.type === 'start') this.startSync();
-          if (data.type === 'progress' && data.value !== undefined) this.setSyncProgress(data.value);
-          if (data.type === 'final') {
+          if (data.type === "start") this.startSync();
+          if (data.type === "progress" && data.value !== undefined)
+            this.setSyncProgress(data.value);
+          if (data.type === "final") {
             this.endSync(Date.now(), data.status?.is_complete ?? false);
             window.dispatchEvent(
-              new CustomEvent('mojo-data-updated', { detail: data.status }),
+              new CustomEvent("mojo-data-updated", { detail: data.status }),
             );
           }
         } catch (err) {
-          console.warn('[Mojo Sync] Received invalid payload.', { raw: event.data, error: err });
+          console.warn("[Mojo Sync] Received invalid payload.", {
+            raw: event.data,
+            error: err,
+          });
         }
       };
 
       this.source.onerror = () => {
-        console.error('[Mojo Sync] Connection lost. Attempting recovery...');
+        console.error("[Mojo Sync] Connection lost. Attempting recovery...");
         this.isSyncing = false;
         this.stopGlobalSync();
         this.checkServerHealth();
@@ -252,7 +271,9 @@ document.addEventListener('alpine:init', () => {
       this.isComplete = isComplete;
       this.isSyncing = false;
       if (isComplete) this.stopGlobalSync();
-      setTimeout(() => { this.syncProgress = 0; }, 700);
+      setTimeout(() => {
+        this.syncProgress = 0;
+      }, 700);
     },
 
     updateSync(timestamp: number, isComplete = false) {
@@ -270,18 +291,23 @@ document.addEventListener('alpine:init', () => {
 
     _saveNotifications() {
       try {
-        localStorage.setItem('mojo_notif', JSON.stringify({
-          n: this.notifications,
-          u: this.unreadCount,
-        }));
-      } catch { /* quota exceeded — ignore */ }
+        localStorage.setItem(
+          "mojo_notif",
+          JSON.stringify({
+            n: this.notifications,
+            u: this.unreadCount,
+          }),
+        );
+      } catch {
+        /* quota exceeded - ignore */
+      }
     },
 
     addNotification(message: string, type: string) {
       (this.notifications as NotificationEntry[]).unshift({
         id: Date.now() + Math.random(),
         message,
-        type: type as 'success' | 'error' | 'info',
+        type: type as "success" | "error" | "info",
         timestamp: Date.now(),
         read: !!(this.notifOpen as boolean),
       });
@@ -295,7 +321,9 @@ document.addEventListener('alpine:init', () => {
     openNotifications() {
       this.notifOpen = !this.notifOpen;
       if (this.notifOpen) {
-        (this.notifications as NotificationEntry[]).forEach((n) => { n.read = true; });
+        (this.notifications as NotificationEntry[]).forEach((n) => {
+          n.read = true;
+        });
         this.unreadCount = 0;
         this._saveNotifications();
       }
@@ -308,7 +336,7 @@ document.addEventListener('alpine:init', () => {
     },
   });
 
-  const store = Alpine.store('dojo') as DojoStore & {
+  const store = Alpine.store("dojo") as DojoStore & {
     lastUpdate: number | null;
     secondsSinceUpdate: number;
     loadStartTime: number;
@@ -318,12 +346,16 @@ document.addEventListener('alpine:init', () => {
 
   setInterval(() => {
     if (store.lastUpdate) {
-      store.secondsSinceUpdate = Math.floor((Date.now() - store.lastUpdate) / 1000);
+      store.secondsSinceUpdate = Math.floor(
+        (Date.now() - store.lastUpdate) / 1000,
+      );
     }
   }, 1000);
 
   // Tick every 30 s so notifTimeAgo expressions re-evaluate ("Just now" → "1m ago" etc.)
-  setInterval(() => { store.notifTick = Date.now(); }, 30_000);
+  setInterval(() => {
+    store.notifTick = Date.now();
+  }, 30_000);
 
   if (!store.isPageReady) {
     store.loadStartTime = Date.now();

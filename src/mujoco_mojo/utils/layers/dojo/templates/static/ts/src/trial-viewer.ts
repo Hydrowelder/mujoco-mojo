@@ -15,7 +15,7 @@ import type {
 } from "./models";
 
 // ---------------------------------------------------------------------------
-// Tailwind offline palette — hex values matching Tailwind CSS defaults
+// Tailwind offline palette - hex values matching Tailwind CSS defaults
 // ---------------------------------------------------------------------------
 const tw = {
   slate: {
@@ -64,11 +64,21 @@ const DEFAULT_CONFIG: PlotConfig = {
 };
 
 // ---------------------------------------------------------------------------
+// CodeMirror editor state (kept outside Alpine to avoid proxy issues)
+// ---------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _cm: { editor: any; updating: boolean; debounce: ReturnType<typeof setTimeout> | null } = {
+  editor: null,
+  updating: false,
+  debounce: null,
+};
+
+// ---------------------------------------------------------------------------
 // Component factory
 // ---------------------------------------------------------------------------
 function trialViewer(trialId: string, externalUrl: string) {
   const self = {
-    // Alpine magic (injected at runtime — declared here for TS)
+    // Alpine magic (injected at runtime - declared here for TS)
     ...(null as unknown as AlpineMagics),
 
     // --- BASE STATE ---
@@ -109,7 +119,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     // Toast (shared mixin)
     ...createToastMixin(),
 
-    // Options — exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
+    // Options - exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
     opts: OPTIONS,
 
     // --- PLOT CONFIGURATION ---
@@ -161,6 +171,28 @@ function trialViewer(trialId: string, externalUrl: string) {
     annotationsOpen: false,
     annDraft: null as Annotation | null,
     annEditIndex: null as number | null,
+
+    // --- FILTER LAB ---
+    labOpen: localStorage.getItem("mojo:lab:open") === "1",
+    labGraph: (() => {
+      try {
+        const s = localStorage.getItem("mojo:lab:draft");
+        return s ? (JSON.parse(s) as object) : null;
+      } catch {
+        return null;
+      }
+    })() as object | null,
+    labName: localStorage.getItem("mojo:lab:name") ?? "",
+    nodePickingColumn: null as number | null,
+    nodeColSearch: "" as string,
+    labSchemas: [] as Array<{
+      name: string;
+      signal_in_columns: string[];
+      outputs: string[];
+      modified: number;
+      valid: boolean;
+      missing: string[];
+    }>,
 
     // --- SHAPES ---
     shapesOpen: false,
@@ -249,15 +281,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       const colParams = new URLSearchParams();
       if (requiredCols.length > 0)
         colParams.append("cols", requiredCols.join(","));
-      if (this.config.refFrame)
-        colParams.append("rotate_by", this.config.refFrame);
 
       // include active filter stacks for requested columns (x-axis and y-axes)
       const filtersPayload: Record<string, object[]> = {};
-      const toActiveFilters = (filters: { enabled?: boolean; [k: string]: unknown }[]) =>
+      const toActiveFilters = (
+        filters: { enabled?: boolean; [k: string]: unknown }[],
+      ) =>
         filters
           .filter((f) => f.enabled !== false)
-          .map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+          .map((f) =>
+            Object.fromEntries(
+              Object.entries(f).filter(([k]) => k !== "enabled"),
+            ),
+          );
       for (const col of requiredCols) {
         const yConfig = this.config.yAxes[col];
         if (yConfig?.filters && yConfig.filters.length > 0) {
@@ -348,7 +384,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
       const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+      const activeCols = [
+        this.config.xAxis!.col!,
+        ...Object.keys(this.config.yAxes),
+      ];
 
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
@@ -627,6 +666,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
         this.data = response.data;
+        void this.loadLabSchemas();
 
         const params = new URLSearchParams(window.location.search);
         const shared = params.get("v");
@@ -639,6 +679,15 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.loadConfig();
           this.vsDraft.enabled = this.config.vsEnabled;
           this.vsDraft.range = [...this.config.vsRange];
+        }
+
+        // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
+        // inject it now (before watchers are registered so this is a silent migration).
+        if (this.config.refFrame) {
+          const hasRotation = Object.values(this.config.yAxes).some((y) =>
+            y.filters.some((f) => f.type === "rotation"),
+          );
+          if (!hasRotation) this.applyRefFrame(this.config.refFrame);
         }
 
         void this.$nextTick(() => {
@@ -778,59 +827,124 @@ function trialViewer(trialId: string, externalUrl: string) {
       // (e.g. @keydown.escape.window in base.html). stopImmediatePropagation()
       // in the Escape branch then prevents those listeners from firing when a
       // panel was open.
-      window.addEventListener("keydown", (e) => {
-        if (e.repeat) return;
-        const tag = (e.target as HTMLElement).tagName;
-        if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
-          e.preventDefault();
-          (
-            document.querySelector('input[type="number"]') as HTMLElement | null
-          )?.focus();
-        }
-        if (e.key === "Escape") {
-          const anyOpen = !!(
-            this.placementMode || this.annotationsOpen || this.shapesOpen ||
-            this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen ||
-            this.settingsOpen || this.downloadOpen || this.editorOpen ||
-            this.profilesOpen || this.vsMenuOpen ||
-            (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
-            ["INPUT", "TEXTAREA"].includes(tag)
-          );
-          if (["INPUT", "TEXTAREA"].includes(tag))
-            (e.target as HTMLElement).blur();
-          this.placementMode = null;
-          this.rectStart = null;
-          this.cancelAnnDraft();
-          this.cancelShapeDraft();
-          this.annotationsOpen = false;
-          this.shapesOpen = false;
-          this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-          this.settingsOpen = this.downloadOpen = this.editorOpen = false;
-          this.profilesOpen = this.vsMenuOpen = false;
-          this.profileSearch = "";
-          window.dispatchEvent(new CustomEvent("mojo:escape"));
-          // Stop immediate propagation when something was open so Alpine's
-          // bubble-phase @keydown.escape.window handler doesn't also fire.
-          if (anyOpen) e.stopImmediatePropagation();
-        }
-        if (["INPUT", "TEXTAREA"].includes(tag)) return;
-        if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
-        if (e.key === "ArrowRight")
-          document.getElementById("nav-next")?.click();
+      window.addEventListener(
+        "keydown",
+        (e) => {
+          if (e.repeat) return;
+          const targetEl = e.target as HTMLElement;
+          const tag = targetEl.tagName;
+          const isTextInput =
+            ["INPUT", "TEXTAREA", "SELECT"].includes(tag) ||
+            targetEl.isContentEditable;
+          if (e.key === "/" && !isTextInput) {
+            e.preventDefault();
+            (
+              document.querySelector(
+                'input[type="number"]',
+              ) as HTMLElement | null
+            )?.focus();
+          }
+          if (e.key === "Escape") {
+            const anyOpen = !!(
+              this.placementMode ||
+              this.annotationsOpen ||
+              this.shapesOpen ||
+              this.xMenuOpen ||
+              this.yMenuOpen ||
+              this.refFrameMenuOpen ||
+              this.settingsOpen ||
+              this.downloadOpen ||
+              this.editorOpen ||
+              this.profilesOpen ||
+              this.vsMenuOpen ||
+              this.labOpen ||
+              (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
+              isTextInput
+            );
+            if (isTextInput) targetEl.blur();
+            this.placementMode = null;
+            this.rectStart = null;
+            this.cancelAnnDraft();
+            this.cancelShapeDraft();
+            this.annotationsOpen = false;
+            this.shapesOpen = false;
+            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+            this.profilesOpen = this.vsMenuOpen = false;
+            this.profileSearch = "";
+            this.labOpen = false;
+            window.dispatchEvent(new CustomEvent("mojo:escape"));
+            // Stop immediate propagation when something was open so Alpine's
+            // bubble-phase @keydown.escape.window handler doesn't also fire.
+            // This prevents Escape from both closing the lab and exiting fullscreen.
+            if (anyOpen) e.stopImmediatePropagation();
+          }
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            if (!isTextInput) {
+              if (this.labOpen) {
+                const el = document.getElementById(
+                  "lab-name-input",
+                ) as HTMLInputElement | null;
+                if (el) {
+                  el.focus();
+                  el.setSelectionRange(el.value.length, el.value.length);
+                }
+              } else {
+                this.profilesOpen = true;
+                void this.loadProfiles();
+                void this.$nextTick(() => {
+                  const el = document.getElementById(
+                    "profile-name-input",
+                  ) as HTMLInputElement | null;
+                  if (el) {
+                    el.focus();
+                    el.setSelectionRange(el.value.length, el.value.length);
+                  }
+                });
+              }
+            }
+          }
+          if ((e.metaKey || e.ctrlKey) && !isTextInput) {
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              document.getElementById("nav-prev")?.click();
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              document.getElementById("nav-next")?.click();
+            }
+          }
+          if (isTextInput) return;
 
-        const isZ = e.key.toLowerCase() === "z";
-        const isY = e.key.toLowerCase() === "y";
-        const cmdOrCtrl = e.metaKey || e.ctrlKey;
-        if (cmdOrCtrl && isZ) {
-          e.preventDefault();
-          if (e.shiftKey) this.redo();
-          else this.undo();
-        }
-        if (cmdOrCtrl && isY) {
-          e.preventDefault();
-          this.redo();
-        }
-      }, { capture: true });
+          const isZ = e.key.toLowerCase() === "z";
+          const isY = e.key.toLowerCase() === "y";
+          const cmdOrCtrl = e.metaKey || e.ctrlKey;
+          if (cmdOrCtrl && isZ) {
+            e.preventDefault();
+            if (this.labOpen) {
+              e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
+            } else {
+              if (e.shiftKey) this.redo();
+              else this.undo();
+            }
+          }
+          if (cmdOrCtrl && isY) {
+            e.preventDefault();
+            if (this.labOpen) window.mojoLabRedo?.();
+            else this.redo();
+          }
+          if (this.labOpen && cmdOrCtrl && e.shiftKey) {
+            if (e.key.toLowerCase() === "a") {
+              e.preventDefault();
+              window.mojoLabArrange?.();
+            } else if (e.key.toLowerCase() === "f") {
+              e.preventDefault();
+              window.mojoLabFitView?.();
+            }
+          }
+        },
+        { capture: true },
+      );
 
       const resp = await fetch("/mosaic/api/trials");
       const data = (await resp.json()) as TrialManifest;
@@ -851,41 +965,23 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.$watch("vsDraft.range", () => {
         if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
         this.discoveryTimeout = setTimeout(() => {
-          if (this.vsDraft.enabled) {
-            console.debug(
-              "Predictive Sync: User adjusted range, starting hydration...",
-            );
-            void this.startBackgroundDiscovery();
-          }
+          if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
         }, 500);
       });
 
-      this.$watch(
-        "config.refFrame",
-        async (newValue: string | null, oldValue: string | null) => {
-          console.debug(
-            `[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`,
-          );
-          this.notify(`Frame: ${newValue || "world"}`, "info");
-          this.discoveryId++;
-          this.data = {};
-          this.vsDatasets = {};
-          const initialCols = [
-            this.config.xAxis!.col!,
-            ...Object.keys(this.config.yAxes),
-          ];
-          const response = await this.fetchTrialData(this.trialId, initialCols);
-          this.columns = response.columns.all.sort();
-          this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-          this.data = response.data;
-          void this.startBackgroundDiscovery();
-          if (this.config.vsEnabled) await this.syncVsRange();
-          this.saveAndRender();
-        },
-      );
+      this.$watch("config.refFrame", (newValue: string | null, oldValue: string | null) => {
+        if (newValue === oldValue) return;
+        this.notify(`Frame: ${newValue || "world"}`, "info");
+        this.discoveryId++;
+        this.applyRefFrame(newValue);
+        // config watcher handles re-fetch and re-render when yAxes.filters change
+      });
 
       this.$watch("config", async (value: PlotConfig, oldValue: PlotConfig) => {
-        if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
+        if (!this.isEditingRaw) {
+          this.configRaw = JSON.stringify(value, null, 4);
+          try { localStorage.removeItem("mojo:config:raw-draft"); } catch {}
+        }
         if (
           this.config.vsEnabled &&
           oldValue?.vsEnabled &&
@@ -899,7 +995,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         // detect filter changes by comparing against the last-fetched fingerprint rather
         // than oldValue, because Alpine.js $watch does not reliably deep-clone oldValue
-        // for nested reactive objects — both value and oldValue may point to the same data
+        // for nested reactive objects - both value and oldValue may point to the same data
         const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
           const current = JSON.stringify(
             (value.yAxes[col]?.filters ?? []).filter(
@@ -941,7 +1037,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
 
       void this.startBackgroundDiscovery();
-      this.configRaw = JSON.stringify(this.config, null, 4);
+      this.configRaw =
+        localStorage.getItem("mojo:config:raw-draft") ??
+        JSON.stringify(this.config, null, 4);
+      this.updateFromRaw();
     },
 
     // -----------------------------------------------------------------------
@@ -966,7 +1065,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+        let activeCols = [
+          this.config.xAxis!.col!,
+          ...Object.keys(this.config.yAxes),
+        ];
 
         if (this.config.refFrame) {
           const families = new Set<string>();
@@ -1028,8 +1130,47 @@ function trialViewer(trialId: string, externalUrl: string) {
     handleVsToggle() {
       if (!this.vsDraft.enabled) {
         this.config.vsEnabled = false;
+        this.vsDatasets = {};
         this.renderPlot();
       }
+    },
+
+    setVsPreset(delta: number) {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      this.vsDraft.range = [cur - delta, cur + delta];
+    },
+
+    setVsAll() {
+      const nums = this.allTrials
+        .map((t) => parseInt(t.split("_").pop() ?? ""))
+        .filter((n) => !isNaN(n));
+      if (!nums.length) return;
+      this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+    },
+
+    isVsPreset(delta: number): boolean {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const [a, b] = this.vsDraft.range;
+      return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+    },
+
+    isVsAll(): boolean {
+      const nums = this.allTrials
+        .map((t) => parseInt(t.split("_").pop() ?? ""))
+        .filter((n) => !isNaN(n));
+      if (!nums.length) return false;
+      const [a, b] = this.vsDraft.range;
+      return Math.min(a, b) === Math.min(...nums) && Math.max(a, b) === Math.max(...nums);
+    },
+
+    vsInRangeCount(): number {
+      const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const cur = parseInt(this.trialId.split("_").pop() ?? "");
+      return this.allTrials.filter((id) => {
+        const n = parseInt(id.split("_").pop() ?? "");
+        return n >= lo && n <= hi && n !== cur;
+      }).length;
     },
 
     // -----------------------------------------------------------------------
@@ -1047,7 +1188,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     getFilteredCols(field: string): string[] {
       if (!this.columns || !Array.isArray(this.columns)) return [];
-      const base = field === "x" ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       if (!search) return this.smartSort([...base]);
@@ -1112,7 +1256,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getSegmentsAtDepth(field: string, depth: number): string[] {
-      const base = field === "x" ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const pathSearch = search.split(":")[0] ?? "";
@@ -1135,7 +1282,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getAvailableSuffixes(field: string): string[] {
-      const base = field === "x" ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const [pathPart = "", suffixPart = ""] = search.split(":");
@@ -1224,14 +1374,34 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     validateConfig(cfg: PlotConfig): string[] {
       const errors: string[] = [];
-      if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col))
-        errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
+      const labsNoted = new Set<string>();
+      const schemasLoaded = this.labSchemas.length > 0;
+
+      const checkCol = (col: string, label: string) => {
+        if (col.startsWith("Lab/")) {
+          if (!schemasLoaded) return; // wait for schemas before reporting Lab issues
+          const labName = col.slice(4).split("/")[0];
+          if (labsNoted.has(labName)) return;
+          const lab = this.labSchemas.find((l) => l.name === labName);
+          if (!lab) {
+            labsNoted.add(labName);
+            errors.push(`Lab "${labName}" not found.`);
+          } else if (lab.missing.length > 0) {
+            labsNoted.add(labName);
+            errors.push(
+              `Lab "${labName}" requires: ${lab.signal_in_columns.join(", ")}; missing: ${lab.missing.join(", ")}.`,
+            );
+          }
+        } else if (!this.columns.includes(col)) {
+          errors.push(`${label} "${col}" not found in telemetry.`);
+        }
+      };
+
+      if (cfg.xAxis?.col) checkCol(cfg.xAxis.col, "X-Axis");
       if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
         errors.push("yAxes must be a hashmap.");
       } else {
-        Object.keys(cfg.yAxes).forEach((y) => {
-          if (!this.columns.includes(y)) errors.push(`Y-Axis "${y}" missing.`);
-        });
+        Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
       }
       if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
         errors.push("Comparison range start cannot be greater than end.");
@@ -1239,6 +1409,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     updateFromRaw() {
+      try { localStorage.setItem("mojo:config:raw-draft", this.configRaw); } catch {}
       try {
         const parsed = JSON.parse(this.configRaw) as PlotConfig;
         this.isValidJson = true;
@@ -1246,8 +1417,16 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.configErrors = this.validateConfig(parsed);
           this.isValidConfig = this.configErrors.length === 0;
           if (this.isValidConfig) {
+            const prevRefFrame = this.config.refFrame ?? null;
             this.isEditingRaw = true;
             this.config = { ...this.config, ...parsed };
+            // Apply rotation filters synchronously. $watch("config.refFrame") fires
+            // asynchronously after the whole config object is replaced, so filters
+            // would be wrong during the first render if we relied solely on the watch.
+            const nextRefFrame = (this.config.refFrame as string | null) ?? null;
+            if (nextRefFrame !== prevRefFrame) {
+              this.applyRefFrame(nextRefFrame);
+            }
             void this.$nextTick(() => {
               this.isEditingRaw = false;
             });
@@ -1337,6 +1516,161 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     copyRawConfig() {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
+    },
+
+    initCodeMirror(hostEl: HTMLElement) {
+      if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
+      const {
+        EditorView, basicSetup, json, jsonParseLinter,
+        oneDarkHighlightStyle, EditorState, Compartment,
+        linter, lintGutter, syntaxHighlighting, defaultHighlightStyle,
+      } = CM;
+      const self = this;
+
+      // Restore persisted height before creating the editor so it sizes correctly.
+      const savedH = localStorage.getItem("mojo:json-editor:height");
+      if (savedH) hostEl.style.height = savedH;
+
+      // --- themes (base chrome only; highlight handled separately) ---
+      const darkTheme = EditorView.theme({
+        "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+        ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
+        ".cm-cursor": { borderLeftColor: "#06b6d4" },
+        ".cm-gutters": { backgroundColor: "#0f172a", color: "#475569", borderRight: "1px solid #1e293b" },
+        ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
+        ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
+        ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+        ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+        ".cm-tooltip": { backgroundColor: "#1e293b", border: "1px solid #334155", color: "#cbd5e1" },
+        ".cm-panels": { backgroundColor: "#0f172a", borderColor: "#1e293b", color: "#cbd5e1" },
+        ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(34,211,238,0.35)" },
+        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+      }, { dark: true });
+
+      const lightTheme = EditorView.theme({
+        "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+        ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
+        ".cm-cursor": { borderLeftColor: "#0891b2" },
+        ".cm-gutters": { backgroundColor: "#f8fafc", color: "#94a3b8", borderRight: "1px solid #e2e8f0" },
+        ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
+        ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
+        ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+        ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+        ".cm-tooltip": { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" },
+        ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+        ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(8,145,178,0.3)" },
+        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
+        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
+        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+      }, { dark: false });
+
+      const isDark = () => document.documentElement.classList.contains("dark");
+      const themeComp = new Compartment();
+      const highlightComp = new Compartment();
+      const makeTheme = (dark: boolean) => dark ? darkTheme : lightTheme;
+      const makeHighlight = (dark: boolean) =>
+        syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle);
+
+      const startState = EditorState.create({
+        doc: this.configRaw,
+        extensions: [
+          basicSetup,
+          json(),
+          lintGutter(),
+          linter(jsonParseLinter()),
+          themeComp.of(makeTheme(isDark())),
+          highlightComp.of(makeHighlight(isDark())),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && !_cm.updating) {
+              const text = update.state.doc.toString();
+              _cm.updating = true;
+              self.configRaw = text;
+              if (_cm.debounce !== null) clearTimeout(_cm.debounce);
+              _cm.debounce = setTimeout(() => {
+                self.updateFromRaw();
+                _cm.debounce = null;
+              }, 500);
+              _cm.updating = false;
+            }
+          }),
+        ],
+      });
+
+      _cm.editor = new EditorView({ state: startState, parent: hostEl });
+
+      // Custom resize handle
+      const handle = document.createElement("div");
+      handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      const grip = document.createElement("div");
+      grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+      handle.appendChild(grip);
+      handle.addEventListener("mouseenter", () => { grip.style.background = "#06b6d4"; grip.style.width = "52px"; });
+      handle.addEventListener("mouseleave", () => { grip.style.background = "#334155"; grip.style.width = "36px"; });
+      hostEl.insertAdjacentElement("afterend", handle);
+
+      handle.addEventListener("mousedown", (e) => {
+        const startY = e.clientY;
+        const startH = hostEl.offsetHeight;
+        let prevY = startY;
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "ns-resize";
+        const onMove = (ev: MouseEvent) => {
+          const dy = ev.clientY - prevY;
+          prevY = ev.clientY;
+          const newH = Math.max(128, startH + (ev.clientY - startY));
+          hostEl.style.height = newH + "px";
+          if (dy > 0) window.scrollBy(0, dy);
+        };
+        const onUp = () => {
+          document.body.style.userSelect = "";
+          document.body.style.cursor = "";
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        e.preventDefault();
+      });
+
+      handle.addEventListener("dblclick", () => {
+        const scroller = hostEl.querySelector(".cm-scroller") as HTMLElement | null;
+        if (scroller) {
+          hostEl.style.height = scroller.scrollHeight + "px";
+          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+        }
+      });
+
+      // Swap theme when dark mode toggles.
+      new MutationObserver(() => {
+        const dark = isDark();
+        _cm.editor?.dispatch({
+          effects: [
+            themeComp.reconfigure(makeTheme(dark)),
+            highlightComp.reconfigure(makeHighlight(dark)),
+          ],
+        });
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+      // Sync external configRaw changes into CM.
+      this.$watch("configRaw", (val: string) => {
+        if (!_cm.updating && _cm.editor) {
+          const current = _cm.editor.state.doc.toString() as string;
+          if (current !== val) {
+            _cm.updating = true;
+            _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
+            _cm.updating = false;
+          }
+        }
+      });
     },
 
     resetConfig() {
@@ -1430,7 +1764,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     downloadCSV() {
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+      const activeCols = [
+        this.config.xAxis!.col!,
+        ...Object.keys(this.config.yAxes),
+      ];
       const rowCount = this.data[this.config.xAxis!.col!]?.length ?? 0;
       let csv = activeCols.join(",") + "\n";
       for (let i = 0; i < rowCount; i++) {
@@ -1498,12 +1835,15 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.config.yAxes = rest;
       } else {
         const nextIndex = Object.keys(this.config.yAxes).length;
+        const initFilters: FilterEntry[] = this.config.refFrame
+          ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }]
+          : [];
         this.config.yAxes[col] = {
           color: this.getSignalColor(nextIndex),
           label: "",
           width: 3,
           opacity: 1,
-          filters: [],
+          filters: initFilters,
           dash: "solid",
           marker: "none",
         };
@@ -1517,6 +1857,40 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.saveAndRender();
       this.configRaw = JSON.stringify(this.config, null, 4);
       this.notify("Signals Cleared", "info");
+    },
+
+    applyRefFrame(frame: string | null) {
+      for (const col of Object.keys(this.config.yAxes)) {
+        const yConfig = this.config.yAxes[col];
+        if (!yConfig) continue;
+        if (frame) {
+          const newEntry: FilterEntry = {
+            type: "rotation",
+            quat_col: frame,
+            invert: true,
+            enabled: true,
+          };
+          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+          if (idx >= 0) {
+            // Replace in-place to preserve the user's chosen position in the stack
+            yConfig.filters = [
+              ...yConfig.filters.slice(0, idx),
+              newEntry,
+              ...yConfig.filters.slice(idx + 1),
+            ];
+          } else {
+            yConfig.filters = [newEntry, ...yConfig.filters];
+          }
+        } else {
+          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+          if (idx >= 0) {
+            yConfig.filters = [
+              ...yConfig.filters.slice(0, idx),
+              ...yConfig.filters.slice(idx + 1),
+            ];
+          }
+        }
+      }
     },
 
     warpToTrial() {
@@ -1554,31 +1928,77 @@ function trialViewer(trialId: string, externalUrl: string) {
       return this.filterSchemas.find((s) => s.type === filterType);
     },
 
+    get groupedFilterSchemas(): { category: string; schemas: FilterSchema[] }[] {
+      const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+      const groups: Record<string, FilterSchema[]> = {};
+      for (const s of this.filterSchemas) {
+        const cat = s.category ?? "Misc";
+        (groups[cat] ??= []).push(s);
+      }
+      return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
+    },
+
     evalMathExpr(expr: string): number | null {
       const s = String(expr ?? "").trim();
       if (!s) return null;
       const n = Number(s);
       if (!isNaN(n)) return n;
       try {
-        // Expose a safe math context — no access to globals beyond these names.
+        // Expose a safe math context - no access to globals beyond these names.
         const fn = new Function(
-          "pi", "e",
-          "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-          "sqrt", "cbrt", "log", "log2", "log10",
-          "abs", "floor", "ceil", "round", "sign",
-          "pow", "exp", "max", "min",
+          "pi",
+          "e",
+          "sin",
+          "cos",
+          "tan",
+          "asin",
+          "acos",
+          "atan",
+          "atan2",
+          "sqrt",
+          "cbrt",
+          "log",
+          "log2",
+          "log10",
+          "abs",
+          "floor",
+          "ceil",
+          "round",
+          "sign",
+          "pow",
+          "exp",
+          "max",
+          "min",
           `"use strict"; return (${s})`,
         );
         const result = fn(
-          Math.PI, Math.E,
-          Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2,
-          Math.sqrt, Math.cbrt, Math.log, Math.log2, Math.log10,
-          Math.abs, Math.floor, Math.ceil, Math.round, Math.sign,
-          Math.pow, Math.exp, Math.max, Math.min,
+          Math.PI,
+          Math.E,
+          Math.sin,
+          Math.cos,
+          Math.tan,
+          Math.asin,
+          Math.acos,
+          Math.atan,
+          Math.atan2,
+          Math.sqrt,
+          Math.cbrt,
+          Math.log,
+          Math.log2,
+          Math.log10,
+          Math.abs,
+          Math.floor,
+          Math.ceil,
+          Math.round,
+          Math.sign,
+          Math.pow,
+          Math.exp,
+          Math.max,
+          Math.min,
         ) as unknown;
         if (typeof result === "number" && isFinite(result)) return result;
       } catch {
-        // invalid expression — fall through
+        // invalid expression - fall through
       }
       return null;
     },
@@ -1615,6 +2035,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
       if (!schema) return;
       if (!temp.filters) temp.filters = [];
+      if (filterType === "rotation" && temp.filters.some((f) => f.type === "rotation"))
+        return;
       const entry: FilterEntry = { type: filterType, enabled: true };
       for (const p of schema.params) {
         (entry as Record<string, unknown>)[p.name] = p.default;
@@ -1659,6 +2081,134 @@ function trialViewer(trialId: string, externalUrl: string) {
     // in the URL (not 'project%2Fname'), matching the {name:path} FastAPI route.
     _profileUrl(name: string): string {
       return `/mosaic/api/profiles/${name.split("/").map(encodeURIComponent).join("/")}`;
+    },
+
+    // ── Lab ──────────────────────────────────────────────────────────────────
+    relTime(ms: number): string {
+      const diff = Date.now() - ms;
+      const min = Math.floor(diff / 60000);
+      if (min < 1) return "just now";
+      if (min < 60) return `${min}m ago`;
+      const h = Math.floor(min / 60);
+      if (h < 24) return `${h}h ago`;
+      const d = Math.floor(h / 24);
+      return d === 1 ? "yesterday" : `${d}d ago`;
+    },
+
+    async loadLabSchemas() {
+      try {
+        const resp = await fetch("/mosaic/api/lab");
+        if (!resp.ok) return;
+        const all = (await resp.json()) as Omit<
+          (typeof this.labSchemas)[0],
+          "valid" | "missing"
+        >[];
+        // Deduplicate and sort inputs/outputs for each lab.
+        const schemas = all.map((lab) => ({
+          ...lab,
+          signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
+          outputs: [...new Set(lab.outputs)].sort(),
+        }));
+        // Iterative BFS: a lab is valid when all its inputs are already available.
+        // Labs that read from other valid labs' outputs need multiple passes to resolve.
+        const baseColumns = this.columns.filter((c) => !c.startsWith("Lab/"));
+        const available = new Set(baseColumns);
+        const validLabs = new Set<string>();
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const lab of schemas) {
+            if (validLabs.has(lab.name)) continue;
+            if (lab.signal_in_columns.every((c) => available.has(c))) {
+              validLabs.add(lab.name);
+              lab.outputs.forEach((o) => available.add(`Lab/${lab.name}/${o}`));
+              changed = true;
+            }
+          }
+        }
+        this.labSchemas = schemas.map((lab) => ({
+          ...lab,
+          missing: lab.signal_in_columns.filter((c) => !available.has(c)),
+          valid: validLabs.has(lab.name),
+        }));
+        // Rebuild virtual Lab columns from scratch - removes stale entries from deleted labs.
+        this.columns = [...available].sort();
+      } catch {
+        // Lab endpoint unavailable - silently ignore
+      }
+    },
+
+    async refreshLabValidation() {
+      await this.loadLabSchemas();
+      void this.loadProfiles();
+    },
+
+    async saveLabGraph(name: string, graph: object) {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const exists = this.labSchemas.some((s) => s.name === trimmed);
+      if (exists && !confirm(`Overwrite "${trimmed}"?`)) return;
+      const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
+      try {
+        const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(graph),
+        });
+        if (!resp.ok) {
+          const detail = await resp.text().catch(() => resp.statusText);
+          this.notify(`Save failed: ${detail}`, "error");
+          return;
+        }
+        localStorage.setItem("mojo:lab:name", trimmed);
+        this.notify(`Lab "${trimmed}" saved`, "success");
+        await this.refreshLabValidation();
+        // Evict stale computed data for this lab's outputs, then re-fetch anything
+        // currently plotted so the chart updates immediately.
+        const labPrefix = `Lab/${trimmed}/`;
+        const staleCols = Object.keys(this.data ?? {}).filter((c) =>
+          c.startsWith(labPrefix),
+        );
+        if (staleCols.length > 0) {
+          const fresh = { ...(this.data ?? {}) };
+          staleCols.forEach((c) => delete fresh[c]);
+          this.data = fresh;
+          const activeCols = staleCols.filter(
+            (c) => c in this.config.yAxes || c === this.config.xAxis?.col,
+          );
+          if (activeCols.length > 0) {
+            try {
+              const refetch = await this.fetchTrialData(this.trialId, activeCols);
+              this.data = { ...(this.data ?? {}), ...refetch.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical: plot drops the stale trace until background discovery refetches
+            }
+          }
+        }
+      } catch (err) {
+        this.notify(`Save failed: ${String(err)}`, "error");
+      }
+    },
+
+    selectNodeColumn(col: string) {
+      if (this.nodePickingColumn !== null) {
+        // Defined in _signal_lab.html - updates the LiteGraph node property
+        if (typeof window.mojoLabSelectNodeColumn === "function") {
+          window.mojoLabSelectNodeColumn(this.nodePickingColumn, col);
+        }
+      }
+      this.nodePickingColumn = null;
+      this.nodeColSearch = "";
+    },
+
+    async deleteLabGraph(name: string) {
+      const safePath = name.split("/").map(encodeURIComponent).join("/");
+      await fetch(`/mosaic/api/lab/${safePath}`, {
+        method: "DELETE",
+      });
+      this.notify(`Lab "${name}" deleted`, "info");
+      await this.refreshLabValidation();
     },
 
     // -----------------------------------------------------------------------
@@ -1764,6 +2314,25 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         this.config = { ...this.config, ...loaded };
         this.notify(`Profile "${name}" loaded`, "success");
+
+        // Fetch data for any columns the profile introduces that aren't cached yet.
+        const needed: string[] = [];
+        if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
+          needed.push(loaded.xAxis.col);
+        for (const col of Object.keys(loaded.yAxes ?? {})) {
+          if (!this.data?.[col]) needed.push(col);
+        }
+        if (needed.length > 0) {
+          const fetched = await this.fetchTrialData(this.trialId, needed);
+          this.data = { ...(this.data ?? {}), ...fetched.data };
+        }
+
+        void this.$nextTick(() => {
+          this.configErrors = this.validateConfig(this.config as PlotConfig);
+          this.isValidConfig = this.configErrors.length === 0;
+          this.isValidJson = true;
+          this.saveAndRender();
+        });
       } catch (e) {
         this.notify(
           `Failed to load "${name}": ${(e as Error).message}`,
@@ -2135,103 +2704,109 @@ function trialViewer(trialId: string, externalUrl: string) {
                 groupclick: "togglegroup",
               },
         ...polarLayout,
-        annotations: isPolar ? [] : [
-          ...(this.config.annotations ?? []).map((ann) => ({
-            x: ann.x,
-            y: ann.y,
-            text: ann.text,
-            showarrow: true,
-            arrowhead: 2,
-            ax: 0,
-            ay: -40,
-            font: {
-              family: "monospace",
-              size: 12,
-              color: isDark ? tw.slate[50] : tw.slate[900],
-            },
-            bgcolor: isDark ? tw.slate[800] : tw.slate[50],
-            bordercolor: tw.cyan[500],
-            borderwidth: 1,
-            borderpad: 4,
-          })),
-          ...(this.config.shapes ?? [])
-            .filter((s) => s.label)
-            .map((s) => {
-              let x = s.x0,
-                y = s.y0 ?? 0,
-                xanchor = "left",
-                yanchor = "bottom",
-                xref = "x",
-                yref = "y";
-              if (s.type === "vline") {
-                y = 1;
-                yref = "paper";
-              } else if (s.type === "hline") {
-                x = 1;
-                xref = "paper";
-                xanchor = "right";
-              } else if (s.type === "rect") {
-                x = s.x0;
-                y = s.y1 ?? 0;
-              }
-              return {
-                x,
-                y,
-                xref,
-                yref,
-                text: `<b>${s.label}</b>`,
-                showarrow: false,
-                xanchor,
-                yanchor,
+        annotations: isPolar
+          ? []
+          : [
+              ...(this.config.annotations ?? []).map((ann) => ({
+                x: ann.x,
+                y: ann.y,
+                text: ann.text,
+                showarrow: true,
+                arrowhead: 2,
+                ax: 0,
+                ay: -40,
                 font: {
-                  size: 10,
-                  color: s.color || tw.cyan[500],
                   family: "monospace",
+                  size: 12,
+                  color: isDark ? tw.slate[50] : tw.slate[900],
                 },
-                bgcolor: isDark ? tw.slate[900] + "B3" : tw.slate[50] + "B3",
-                borderpad: 2,
+                bgcolor: isDark ? tw.slate[800] : tw.slate[50],
+                bordercolor: tw.cyan[500],
+                borderwidth: 1,
+                borderpad: 4,
+              })),
+              ...(this.config.shapes ?? [])
+                .filter((s) => s.label)
+                .map((s) => {
+                  let x = s.x0,
+                    y = s.y0 ?? 0,
+                    xanchor = "left",
+                    yanchor = "bottom",
+                    xref = "x",
+                    yref = "y";
+                  if (s.type === "vline") {
+                    y = 1;
+                    yref = "paper";
+                  } else if (s.type === "hline") {
+                    x = 1;
+                    xref = "paper";
+                    xanchor = "right";
+                  } else if (s.type === "rect") {
+                    x = s.x0;
+                    y = s.y1 ?? 0;
+                  }
+                  return {
+                    x,
+                    y,
+                    xref,
+                    yref,
+                    text: `<b>${s.label}</b>`,
+                    showarrow: false,
+                    xanchor,
+                    yanchor,
+                    font: {
+                      size: 10,
+                      color: s.color || tw.cyan[500],
+                      family: "monospace",
+                    },
+                    bgcolor: isDark
+                      ? tw.slate[900] + "B3"
+                      : tw.slate[50] + "B3",
+                    borderpad: 2,
+                  };
+                }),
+            ],
+        shapes: isPolar
+          ? []
+          : (this.config.shapes ?? []).map((s) => {
+              const shapeColor = s.color || tw.cyan[500];
+              const base = {
+                line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
+                layer: "below",
               };
+              if (s.type === "vline")
+                return {
+                  ...base,
+                  type: "line",
+                  x0: s.x0,
+                  x1: s.x0,
+                  y0: 0,
+                  y1: 1,
+                  yref: "paper",
+                };
+              if (s.type === "hline")
+                return {
+                  ...base,
+                  type: "line",
+                  y0: s.y0,
+                  y1: s.y0,
+                  x0: 0,
+                  x1: 1,
+                  xref: "paper",
+                };
+              if (s.type === "rect")
+                return {
+                  ...base,
+                  type: "rect",
+                  x0: s.x0,
+                  x1: s.x1,
+                  y0: s.y0,
+                  y1: s.y1,
+                  fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
+                  line: { ...base.line, width: 1 },
+                };
+              return base;
             }),
-        ],
-        shapes: isPolar ? [] : (this.config.shapes ?? []).map((s) => {
-          const shapeColor = s.color || tw.cyan[500];
-          const base = {
-            line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
-            layer: "below",
-          };
-          if (s.type === "vline")
-            return {
-              ...base,
-              type: "line",
-              x0: s.x0,
-              x1: s.x0,
-              y0: 0,
-              y1: 1,
-              yref: "paper",
-            };
-          if (s.type === "hline")
-            return {
-              ...base,
-              type: "line",
-              y0: s.y0,
-              y1: s.y0,
-              x0: 0,
-              x1: 1,
-              xref: "paper",
-            };
-          if (s.type === "rect")
-            return {
-              ...base,
-              type: "rect",
-              x0: s.x0,
-              x1: s.x1,
-              y0: s.y0,
-              y1: s.y1,
-              fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
-              line: { ...base.line, width: 1 },
-            };
-          return base;
-        }),
       };
 
       const config = {

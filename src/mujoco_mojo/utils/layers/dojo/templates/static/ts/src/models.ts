@@ -59,8 +59,9 @@ export interface TrialDataResponse {
 
 export interface FilterParamSchema {
   name: string;
-  type: "float" | "int" | "bool" | "string";
+  type: "float" | "int" | "bool" | "string" | "col" | "select";
   default: number | boolean | string | null;
+  options?: string[];
   min?: number;
   max?: number;
   exclusive_min?: number;
@@ -76,11 +77,12 @@ export interface FilterSchema {
   type: string;
   label: string;
   description: string;
+  category?: string;
   params: FilterParamSchema[];
   unit_groups?: UnitGroup[];
 }
 
-// PlotConfig and related types are generated from plot_config.py — see the
+// PlotConfig and related types are generated from plot_config.py - see the
 // re-exports at the top of this file and lib/plot-config.generated.ts.
 
 // ---------------------------------------------------------------------------

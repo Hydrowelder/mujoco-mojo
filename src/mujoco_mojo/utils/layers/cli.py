@@ -1064,6 +1064,7 @@ def run_dojo(
         Panel(
             f"""[bold green]MuJoCo Mojo Dojo is Live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
             border_style="cyan",
+            expand=False,
             title="Mojo Dojo",
             subtitle=f"Workers: {n_proc}",
         )

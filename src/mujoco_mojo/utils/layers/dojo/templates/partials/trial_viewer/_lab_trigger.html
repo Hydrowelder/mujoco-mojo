@@ -1,0 +1,36 @@
+<!-- ══════════════════════════════════════════════════════════════════
+         LAB TRIGGER  ·  _lab_trigger.html
+         Flask button that opens the Signal Lab overlay.
+         Included in _header.html alongside the back button + trial ID,
+         so it stays on the same line at every viewport size.
+         Text label visible only at lg+ (desktop-first feature).
+         ══════════════════════════════════════════════════════════════════ -->
+
+<button @click="labOpen = true"
+        class="h-9 rounded-lg border shadow-sm flex items-center justify-center w-9 lg:w-auto lg:px-3 gap-1.5"
+        :class="labOpen ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-500' : 'btn-ghost'"
+        title="Open Signal Lab">
+      <svg class="w-5 h-5 shrink-0"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="1.75"
+           viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M9 3h6m-6 0v5L3 20h18L15 8V3" />
+            <path stroke-linecap="round"
+                  stroke-width="1.25"
+                  d="M5.5 16h13" />
+            <circle cx="10"
+                    cy="13"
+                    r="1"
+                    fill="currentColor"
+                    stroke="none" />
+            <circle cx="13.5"
+                    cy="11"
+                    r="0.85"
+                    fill="currentColor"
+                    stroke="none" />
+      </svg>
+      <span class="hidden lg:inline text-xs font-sans font-black uppercase tracking-widest">Lab</span>
+</button>
