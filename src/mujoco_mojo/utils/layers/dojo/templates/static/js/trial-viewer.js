@@ -116,6 +116,11 @@
     annotations: [],
     shapes: []
   };
+  var _cm = {
+    editor: null,
+    updating: false,
+    debounce: null
+  };
   function trialViewer(trialId, externalUrl) {
     const self = {
       // Alpine magic (injected at runtime - declared here for TS)
@@ -723,17 +728,18 @@
           "keydown",
           (e) => {
             if (e.repeat) return;
-            const tag = e.target.tagName;
-            if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
+            const targetEl = e.target;
+            const tag = targetEl.tagName;
+            const isTextInput = ["INPUT", "TEXTAREA", "SELECT"].includes(tag) || targetEl.isContentEditable;
+            if (e.key === "/" && !isTextInput) {
               e.preventDefault();
               document.querySelector(
                 'input[type="number"]'
               )?.focus();
             }
             if (e.key === "Escape") {
-              const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
-              if (["INPUT", "TEXTAREA"].includes(tag))
-                e.target.blur();
+              const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || isTextInput);
+              if (isTextInput) targetEl.blur();
               this.placementMode = null;
               this.rectStart = null;
               this.cancelAnnDraft();
@@ -750,7 +756,7 @@
             }
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
               e.preventDefault();
-              if (!["INPUT", "TEXTAREA"].includes(tag)) {
+              if (!isTextInput) {
                 if (this.labOpen) {
                   const el = document.getElementById(
                     "lab-name-input"
@@ -774,11 +780,16 @@
                 }
               }
             }
-            if (["INPUT", "TEXTAREA"].includes(tag)) return;
-            if (e.key === "ArrowLeft")
-              document.getElementById("nav-prev")?.click();
-            if (e.key === "ArrowRight")
-              document.getElementById("nav-next")?.click();
+            if ((e.metaKey || e.ctrlKey) && !isTextInput) {
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                document.getElementById("nav-prev")?.click();
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                document.getElementById("nav-next")?.click();
+              }
+            }
+            if (isTextInput) return;
             const isZ = e.key.toLowerCase() === "z";
             const isY = e.key.toLowerCase() === "y";
             const cmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -817,13 +828,20 @@
             if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
         });
-        this.$watch("config.refFrame", (newValue) => {
+        this.$watch("config.refFrame", (newValue, oldValue) => {
+          if (newValue === oldValue) return;
           this.notify(`Frame: ${newValue || "world"}`, "info");
           this.discoveryId++;
           this.applyRefFrame(newValue);
         });
         this.$watch("config", async (value, oldValue) => {
-          if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
+          if (!this.isEditingRaw) {
+            this.configRaw = JSON.stringify(value, null, 4);
+            try {
+              localStorage.removeItem("mojo:config:raw-draft");
+            } catch {
+            }
+          }
           if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis.col !== oldValue?.xAxis?.col || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
             await this.syncVsRange();
           }
@@ -1114,32 +1132,31 @@
       validateConfig(cfg) {
         const errors = [];
         const labsNoted = /* @__PURE__ */ new Set();
-        const noteLabManifest = (col) => {
-          if (!col.startsWith("Lab/")) return;
-          const afterLab = col.slice(4);
-          const lab = this.labSchemas.find(
-            (l) => afterLab.startsWith(l.name + "/")
-          );
-          if (lab && lab.missing.length > 0 && !labsNoted.has(lab.name)) {
-            labsNoted.add(lab.name);
-            errors.push(
-              `Lab "${lab.name}" requires: ${lab.signal_in_columns.join(", ")} \u2014 missing: ${lab.missing.join(", ")}.`
-            );
+        const schemasLoaded = this.labSchemas.length > 0;
+        const checkCol = (col, label) => {
+          if (col.startsWith("Lab/")) {
+            if (!schemasLoaded) return;
+            const labName = col.slice(4).split("/")[0];
+            if (labsNoted.has(labName)) return;
+            const lab = this.labSchemas.find((l) => l.name === labName);
+            if (!lab) {
+              labsNoted.add(labName);
+              errors.push(`Lab "${labName}" not found.`);
+            } else if (lab.missing.length > 0) {
+              labsNoted.add(labName);
+              errors.push(
+                `Lab "${labName}" requires: ${lab.signal_in_columns.join(", ")}; missing: ${lab.missing.join(", ")}.`
+              );
+            }
+          } else if (!this.columns.includes(col)) {
+            errors.push(`${label} "${col}" not found in telemetry.`);
           }
         };
-        if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col)) {
-          errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
-          noteLabManifest(cfg.xAxis.col);
-        }
+        if (cfg.xAxis?.col) checkCol(cfg.xAxis.col, "X-Axis");
         if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
           errors.push("yAxes must be a hashmap.");
         } else {
-          Object.keys(cfg.yAxes).forEach((y) => {
-            if (!this.columns.includes(y)) {
-              errors.push(`Y-Axis "${y}" missing.`);
-              noteLabManifest(y);
-            }
-          });
+          Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
         }
         if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
           errors.push("Comparison range start cannot be greater than end.");
@@ -1201,10 +1218,6 @@
       },
       saveAndRender() {
         localStorage.setItem("mojo_mosaic_config", JSON.stringify(this.config));
-        try {
-          localStorage.setItem("mojo:config:raw-draft", JSON.stringify(this.config, null, 4));
-        } catch {
-        }
         this.persistHistory();
         this.renderPlot();
         void this.$nextTick(() => {
@@ -1243,6 +1256,49 @@
       },
       copyRawConfig() {
         void this.copyToClipboard(this.configRaw, "JSON Config copied!");
+      },
+      initCodeMirror(hostEl) {
+        if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
+        const { EditorView, basicSetup, json, oneDark, EditorState } = CM;
+        const self2 = this;
+        const startState = EditorState.create({
+          doc: this.configRaw,
+          extensions: [
+            basicSetup,
+            json(),
+            oneDark,
+            EditorView.theme({
+              "&": { height: "auto" },
+              ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
+              ".cm-content": { padding: "1rem" },
+              ".cm-gutters": { minHeight: "16rem" }
+            }),
+            EditorView.updateListener.of((update) => {
+              if (update.docChanged && !_cm.updating) {
+                const text = update.state.doc.toString();
+                _cm.updating = true;
+                self2.configRaw = text;
+                if (_cm.debounce !== null) clearTimeout(_cm.debounce);
+                _cm.debounce = setTimeout(() => {
+                  self2.updateFromRaw();
+                  _cm.debounce = null;
+                }, 500);
+                _cm.updating = false;
+              }
+            })
+          ]
+        });
+        _cm.editor = new EditorView({ state: startState, parent: hostEl });
+        this.$watch("configRaw", (val) => {
+          if (!_cm.updating && _cm.editor) {
+            const current = _cm.editor.state.doc.toString();
+            if (current !== val) {
+              _cm.updating = true;
+              _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
+              _cm.updating = false;
+            }
+          }
+        });
       },
       resetConfig() {
         if (confirm(
@@ -1801,6 +1857,11 @@
           }
           this.config = { ...this.config, ...loaded };
           this.notify(`Profile "${name}" loaded`, "success");
+          void this.$nextTick(() => {
+            this.configErrors = this.validateConfig(this.config);
+            this.isValidConfig = this.configErrors.length === 0;
+            this.isValidJson = true;
+          });
         } catch (e) {
           this.notify(
             `Failed to load "${name}": ${e.message}`,

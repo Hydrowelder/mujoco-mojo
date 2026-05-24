@@ -56,6 +56,12 @@ declare global {
     }): unknown;
   };
 
+  // CodeMirror 6 bundle (window.CM)
+  const CM: typeof import("codemirror") &
+    typeof import("@codemirror/lang-json") &
+    typeof import("@codemirror/theme-one-dark") &
+    typeof import("@codemirror/state");
+
   // Globals exposed by the compiled bundles for Alpine x-data usage
   interface Window {
     formatTimeAgo(seconds: number): string;

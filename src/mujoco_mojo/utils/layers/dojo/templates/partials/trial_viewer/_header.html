@@ -49,8 +49,11 @@
                     Keyboard Shortcuts</p>
                 <div class="space-y-3 font-mono text-sm">
                     <div class="flex justify-between items-center">
-                        <span class="text-slate-500">Next / Prev</span>
-                        <span class="flex gap-1">
+                        <span class="text-slate-500">Warp to Next / Prev</span>
+                        <span class="flex gap-1 items-center">
+                            <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
+                            <span x-show="!isMac"
+                                  class="text-slate-500">+</span>
                             <kbd>←</kbd>
                             <span class="text-slate-500">/</span>
                             <kbd>→</kbd>
