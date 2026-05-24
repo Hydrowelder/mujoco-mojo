@@ -748,6 +748,32 @@
               window.dispatchEvent(new CustomEvent("mojo:escape"));
               if (anyOpen) e.stopImmediatePropagation();
             }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+              e.preventDefault();
+              if (!["INPUT", "TEXTAREA"].includes(tag)) {
+                if (this.labOpen) {
+                  const el = document.getElementById(
+                    "lab-name-input"
+                  );
+                  if (el) {
+                    el.focus();
+                    el.setSelectionRange(el.value.length, el.value.length);
+                  }
+                } else {
+                  this.profilesOpen = true;
+                  void this.loadProfiles();
+                  void this.$nextTick(() => {
+                    const el = document.getElementById(
+                      "profile-name-input"
+                    );
+                    if (el) {
+                      el.focus();
+                      el.setSelectionRange(el.value.length, el.value.length);
+                    }
+                  });
+                }
+              }
+            }
             if (["INPUT", "TEXTAREA"].includes(tag)) return;
             if (e.key === "ArrowLeft")
               document.getElementById("nav-prev")?.click();
@@ -839,7 +865,8 @@
           this.saveAndRender();
         });
         void this.startBackgroundDiscovery();
-        this.configRaw = JSON.stringify(this.config, null, 4);
+        this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
+        this.updateFromRaw();
       },
       // -----------------------------------------------------------------------
       // VS (comparison) mode
@@ -1086,13 +1113,32 @@
       },
       validateConfig(cfg) {
         const errors = [];
-        if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col))
+        const labsNoted = /* @__PURE__ */ new Set();
+        const noteLabManifest = (col) => {
+          if (!col.startsWith("Lab/")) return;
+          const afterLab = col.slice(4);
+          const lab = this.labSchemas.find(
+            (l) => afterLab.startsWith(l.name + "/")
+          );
+          if (lab && lab.missing.length > 0 && !labsNoted.has(lab.name)) {
+            labsNoted.add(lab.name);
+            errors.push(
+              `Lab "${lab.name}" requires: ${lab.signal_in_columns.join(", ")} \u2014 missing: ${lab.missing.join(", ")}.`
+            );
+          }
+        };
+        if (cfg.xAxis?.col && !this.columns.includes(cfg.xAxis.col)) {
           errors.push(`X-Axis "${cfg.xAxis.col}" not found in telemetry.`);
+          noteLabManifest(cfg.xAxis.col);
+        }
         if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
           errors.push("yAxes must be a hashmap.");
         } else {
           Object.keys(cfg.yAxes).forEach((y) => {
-            if (!this.columns.includes(y)) errors.push(`Y-Axis "${y}" missing.`);
+            if (!this.columns.includes(y)) {
+              errors.push(`Y-Axis "${y}" missing.`);
+              noteLabManifest(y);
+            }
           });
         }
         if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
@@ -1100,6 +1146,10 @@
         return errors;
       },
       updateFromRaw() {
+        try {
+          localStorage.setItem("mojo:config:raw-draft", this.configRaw);
+        } catch {
+        }
         try {
           const parsed = JSON.parse(this.configRaw);
           this.isValidJson = true;
@@ -1151,6 +1201,10 @@
       },
       saveAndRender() {
         localStorage.setItem("mojo_mosaic_config", JSON.stringify(this.config));
+        try {
+          localStorage.setItem("mojo:config:raw-draft", JSON.stringify(this.config, null, 4));
+        } catch {
+        }
         this.persistHistory();
         this.renderPlot();
         void this.$nextTick(() => {
@@ -1597,6 +1651,7 @@
       },
       async refreshLabValidation() {
         await this.loadLabSchemas();
+        void this.loadProfiles();
       },
       async saveLabGraph(name, graph) {
         const trimmed = name.trim();

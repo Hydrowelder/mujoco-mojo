@@ -1082,7 +1082,8 @@
                              accept() { if (this.suggestion) profileNameDraft = this.suggestion; }
                          }">
                         <div class="flex gap-2">
-                            <input type="text"
+                            <input id="profile-name-input"
+                                   type="text"
                                    x-model="profileNameDraft"
                                    @keydown.tab.prevent="accept()"
                                    @keydown.enter="saveProfile()"

@@ -299,10 +299,10 @@
         reg("power", "Power", [{ name: "exponent", default: 2, opts: { step: 0.1 } }], C_MATH, "Arithmetic");
 
         // ── Trigonometry: one node per function ───────────────────────────────
-        [["sin","Sin"],["cos","Cos"],["tan","Tan"],
-         ["asin","Arcsin"],["acos","Arccos"],["atan","Arctan"],
-         ["sinh","Sinh"],["cosh","Cosh"],["tanh","Tanh"],
-         ["degrees","Degrees (rad→°)"],["radians","Radians (°→rad)"]
+        [["sin", "Sin"], ["cos", "Cos"], ["tan", "Tan"],
+        ["asin", "Arcsin"], ["acos", "Arccos"], ["atan", "Arctan"],
+        ["sinh", "Sinh"], ["cosh", "Cosh"], ["tanh", "Tanh"],
+        ["degrees", "Degrees (rad→°)"], ["radians", "Radians (°→rad)"]
         ].forEach(([fn, label]) => reg(fn, label, [], C_TRIG, "Trigonometry"));
 
         // ── Comparison: one node per operator (two-input, signal vs signal) ──
@@ -320,11 +320,11 @@
                 Node.bgcolor = BG;
                 LiteGraph.registerNodeType("Comparison/" + typeName, Node);
             }
-            makeCmp("gt",  "Greater Than  (a > b)");
+            makeCmp("gt", "Greater Than  (a > b)");
             makeCmp("gte", "Grt. or Equal  (a >= b)");
-            makeCmp("lt",  "Less Than  (a < b)");
+            makeCmp("lt", "Less Than  (a < b)");
             makeCmp("lte", "Less or Equal  (a <= b)");
-            makeCmp("eq",  "Equal  (a == b)");
+            makeCmp("eq", "Equal  (a == b)");
             makeCmp("neq", "Not Equal  (a != b)");
         })();
 
@@ -792,7 +792,8 @@
                 accept() { if (this.suggestion) labName = this.suggestion; }
             }"
                  class="relative flex items-center gap-1.5">
-                <input x-model="labName"
+                <input id="lab-name-input"
+                       x-model="labName"
                        @focus="focused = true"
                        @blur="setTimeout(() => focused = false, 150)"
                        @keydown.tab.prevent="accept()"
@@ -932,9 +933,36 @@
                                             <span :class="lab.valid ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
                                                   class="truncate"
                                                   x-text="lab.name"></span>
-                                            <span x-show="!lab.valid"
-                                                  class="text-amber-500 shrink-0 text-[10px]"
-                                                  :title="lab.missing.some(c => c.startsWith('Lab/')) ? 'Contains a circular lab dependency' : 'Contains signals not in this trial'">⚠</span>
+                                            <!-- circular dependency -->
+                                            <span x-show="!lab.valid && lab.missing.some(c => c.startsWith('Lab/'))"
+                                                  title="Contains a circular lab dependency"
+                                                  class="shrink-0 flex items-center">
+                                                <svg class="w-3 h-3 text-amber-500"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </span>
+                                            <!-- signal not in trial -->
+                                            <span x-show="!lab.valid && lab.missing.some(c => !c.startsWith('Lab/'))"
+                                                  title="Contains signals not in this trial"
+                                                  class="shrink-0 flex items-center">
+                                                <svg class="w-3 h-3 text-amber-500"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2"
+                                                     viewBox="0 0 24 24">
+                                                    <circle cx="12"
+                                                            cy="12"
+                                                            r="9" />
+                                                    <path stroke-linecap="round"
+                                                          d="M4.929 4.929l14.142 14.142" />
+                                                </svg>
+                                            </span>
                                         </div>
                                         <div class="text-slate-400 dark:text-slate-600 text-[10px]"
                                              x-text="relTime(lab.modified)"></div>
@@ -1196,7 +1224,7 @@
     <!-- status bar -->
     <div class="h-8 shrink-0 flex items-center gap-6 px-4 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-500 select-none">
         <span>Right-click → add node</span>
-        <span>Ctrl+Z undo · Ctrl+Y redo · Del remove selected</span>
+        <span>Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Del remove selected</span>
         <span>Scroll to zoom · drag to pan</span>
     </div>
 </div>
