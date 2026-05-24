@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Option arrays — single source of truth for every select/dropdown in the UI.
+// Option arrays - single source of truth for every select/dropdown in the UI.
 // Each array is `as const` so element types narrow to their literal values.
 //
 // Named types (DashStyle, GridMode, …) are generated from plot_config.py
@@ -69,7 +69,7 @@ export const LEGEND_POS_OPTIONS: LegendPos[] = ["bottom", "right", "hidden"];
 export const SCALE_OPTIONS: ScaleType[] = ["linear", "log"];
 
 // ---------------------------------------------------------------------------
-// Label-lookup helpers — derive the display string for a current config value.
+// Label-lookup helpers - derive the display string for a current config value.
 // ---------------------------------------------------------------------------
 
 function labelOf<T extends { label: string; value: string }>(

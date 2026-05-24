@@ -30,7 +30,11 @@
       isAutoRefresh: localStorage.getItem("mojo_auto") !== "false",
       isConnected: false,
       _wasConnected: null,
-      globalToast: { show: false, message: "", type: "info" },
+      globalToast: {
+        show: false,
+        message: "",
+        type: "info"
+      },
       isSyncing: false,
       syncProgress: 0,
       secondsSinceUpdate: 0,
@@ -154,7 +158,9 @@
       },
       startLoadingMessages() {
         if (this.loadingInterval) return;
-        this.loadingIndex = Math.floor(Math.random() * this.loadingPhrases.length);
+        this.loadingIndex = Math.floor(
+          Math.random() * this.loadingPhrases.length
+        );
         this.showPhrase = true;
         this.loadingInterval = setInterval(() => {
           this.showPhrase = false;
@@ -203,7 +209,8 @@
           try {
             const data = JSON.parse(event.data);
             if (data.type === "start") this.startSync();
-            if (data.type === "progress" && data.value !== void 0) this.setSyncProgress(data.value);
+            if (data.type === "progress" && data.value !== void 0)
+              this.setSyncProgress(data.value);
             if (data.type === "final") {
               this.endSync(Date.now(), data.status?.is_complete ?? false);
               window.dispatchEvent(
@@ -211,7 +218,10 @@
               );
             }
           } catch (err) {
-            console.warn("[Mojo Sync] Received invalid payload.", { raw: event.data, error: err });
+            console.warn("[Mojo Sync] Received invalid payload.", {
+              raw: event.data,
+              error: err
+            });
           }
         };
         this.source.onerror = () => {
@@ -260,10 +270,13 @@
       notifTick: Date.now(),
       _saveNotifications() {
         try {
-          localStorage.setItem("mojo_notif", JSON.stringify({
-            n: this.notifications,
-            u: this.unreadCount
-          }));
+          localStorage.setItem(
+            "mojo_notif",
+            JSON.stringify({
+              n: this.notifications,
+              u: this.unreadCount
+            })
+          );
         } catch {
         }
       },
@@ -300,7 +313,9 @@
     const store = Alpine.store("dojo");
     setInterval(() => {
       if (store.lastUpdate) {
-        store.secondsSinceUpdate = Math.floor((Date.now() - store.lastUpdate) / 1e3);
+        store.secondsSinceUpdate = Math.floor(
+          (Date.now() - store.lastUpdate) / 1e3
+        );
       }
     }, 1e3);
     setInterval(() => {

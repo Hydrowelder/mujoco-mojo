@@ -49,7 +49,7 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
         ---
 
-        **6-DOF force and torque**. The "multi-tool" of loads—defines full spatial dynamics in either a relative frame or local to a site.
+        **6-DOF force and torque**. Defines full spatial dynamics in either a relative frame or local to a site.
 
         > Think of it as a `VectorForce` and `VectorTorque` combined into one robust plugin.
 

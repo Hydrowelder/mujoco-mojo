@@ -8,7 +8,7 @@
         const store = Alpine.store("dojo");
         if (store) {
             // Morph has its own fullscreen (the iframe fills the screen), so reset
-            // the shared state without writing to localStorage — navigating back to
+            // the shared state without writing to localStorage - navigating back to
             // Monitor/Mosaic/Trial Viewer will still restore their last fullscreen state.
             store.isFullscreen = false;
             store.setPageReady(true, true);

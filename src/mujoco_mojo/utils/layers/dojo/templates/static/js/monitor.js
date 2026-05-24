@@ -24,7 +24,10 @@
           const resp = await fetch("/monitor/api/status");
           const data = await resp.json();
           if (data && !data.error) {
-            Alpine.store("dojo").updateSync(Date.now(), data.is_complete);
+            Alpine.store("dojo").updateSync(
+              Date.now(),
+              data.is_complete
+            );
             this.handleDataUpdate(data);
           }
         } catch (e) {
@@ -32,13 +35,20 @@
         } finally {
           const store = Alpine.store("dojo");
           store.startGlobalSync();
-          store.setPageReady(true, this.status.is_complete);
+          store.setPageReady(
+            true,
+            this.status.is_complete
+          );
         }
       },
       handleDataUpdate(data) {
         const wasInit = this.hasInitialData;
         const prev = { ...this.prevStatus };
-        this.prevStatus = { n_done: data.n_done, n_success: data.n_success, n_failed: data.n_failed };
+        this.prevStatus = {
+          n_done: data.n_done,
+          n_success: data.n_success,
+          n_failed: data.n_failed
+        };
         this.status = data;
         this.hasInitialData = true;
         this.refreshStats();
@@ -52,10 +62,13 @@
             if (newDone === 1) {
               const failed = newFailed === 1;
               const trialId = failed ? data.failure_tns.at(-1) : data.success_tns.at(-1);
-              store.addNotification(`Trial ${trialId} ${failed ? "failed" : "succeeded"}`, failed ? "error" : "success");
+              store.addNotification(
+                `Trial ${trialId} ${failed ? "failed" : "succeeded"}`,
+                failed ? "error" : "success"
+              );
             } else {
               store.addNotification(
-                `${newDone} trials done \u2014 ${newDone - newFailed} ok, ${newFailed} failed`,
+                `${newDone} trials done - ${newDone - newFailed} ok, ${newFailed} failed`,
                 newFailed > 0 ? "error" : "success"
               );
             }
@@ -121,7 +134,7 @@
         this.hasCelebrated = true;
         const store = Alpine.store("dojo");
         store.addNotification(
-          `Job complete in ${this.status.elapsed} \u2014 ${this.status.n_success} succeeded, ${this.status.n_failed} failed`,
+          `Job complete in ${this.status.elapsed} - ${this.status.n_success} succeeded, ${this.status.n_failed} failed`,
           this.status.n_failed > 0 ? "error" : "success"
         );
         const theme = this.getHolidayTheme();
@@ -144,24 +157,47 @@
         const m = now.getMonth();
         const d = now.getDate();
         if (m === 11 && d === 31 || m === 0 && d <= 2) {
-          return { name: "New Year", emojis: ["\u{1F386}", "\u2728", "\u{1F942}"], colors: ["#ffcc00", "#ffffff"] };
+          return {
+            name: "New Year",
+            emojis: ["\u{1F386}", "\u2728", "\u{1F942}"],
+            colors: ["#ffcc00", "#ffffff"]
+          };
         }
         if (m === 2 && d === 14) {
           return { name: "Pi Day", emojis: ["\u03C0", "\u{1F967}"], colors: ["#ff9900"] };
         }
         if (m === 2 && d === 17) {
-          return { name: "St. Patrick's Day", emojis: ["\u{1F340}", "\u{1F308}"], colors: ["#22c55e", "#166534"] };
+          return {
+            name: "St. Patrick's Day",
+            emojis: ["\u{1F340}", "\u{1F308}"],
+            colors: ["#22c55e", "#166534"]
+          };
         }
         if (m === 4 && d === 4) {
-          return { name: "May the 4th", emojis: ["\u2694\uFE0F", "\u{1F30C}", "\u2728"], colors: ["#FFE81F", "#2dd4bf"] };
+          return {
+            name: "May the 4th",
+            emojis: ["\u2694\uFE0F", "\u{1F30C}", "\u2728"],
+            colors: ["#FFE81F", "#2dd4bf"]
+          };
         }
         if (m === 9 && d >= 25 || m === 10 && d === 1) {
-          return { name: "Halloween", emojis: ["\u{1F383}", "\u{1F47B}", "\u{1F987}"], colors: ["#ff6600", "#9437ff"] };
+          return {
+            name: "Halloween",
+            emojis: ["\u{1F383}", "\u{1F47B}", "\u{1F987}"],
+            colors: ["#ff6600", "#9437ff"]
+          };
         }
         if (m === 11 || m === 0 && d <= 15) {
-          return { name: "Winter Snow", emojis: ["\u2744\uFE0F", "\u26C4", "\u{1F328}\uFE0F"], isSnow: true };
+          return {
+            name: "Winter Snow",
+            emojis: ["\u2744\uFE0F", "\u26C4", "\u{1F328}\uFE0F"],
+            isSnow: true
+          };
         }
-        return { name: "Standard Mojo", colors: ["#06b6d4", "#3b82f6", "#22c55e"] };
+        return {
+          name: "Standard Mojo",
+          colors: ["#06b6d4", "#3b82f6", "#22c55e"]
+        };
       },
       fireConfetti(theme = { name: "Standard Mojo" }) {
         const themeName = theme.name ?? "Standard Mojo";
@@ -188,22 +224,37 @@
           scalar: isSpecial ? 5 : 1,
           gravity: isSnow ? 0.4 : isSpecial ? 0.4 : 1.2
         };
-        const interval = setInterval(() => {
-          const timeLeft = animationEnd - Date.now();
-          if (timeLeft <= 0) {
-            clearInterval(interval);
-            return;
-          }
-          if (isSnow) {
-            confetti({ ...defaults, particleCount: 1, startVelocity: 0, drift: (Math.random() - 0.5) * 1.5, origin: { x: Math.random(), y: -0.2 } });
-          } else {
-            const countMultiplier = isSpecial ? 40 : 150;
-            const particleCount = countMultiplier * (timeLeft / duration);
-            for (let i = 0; i < 3; i++) {
-              confetti({ ...defaults, particleCount: Math.ceil(particleCount / 3), spread: isSpecial ? 90 : 360, startVelocity: isSpecial ? 15 : 45, origin: { x: Math.random(), y: Math.random() - 0.2 } });
+        const interval = setInterval(
+          () => {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) {
+              clearInterval(interval);
+              return;
             }
-          }
-        }, isSpecial ? 400 : 250);
+            if (isSnow) {
+              confetti({
+                ...defaults,
+                particleCount: 1,
+                startVelocity: 0,
+                drift: (Math.random() - 0.5) * 1.5,
+                origin: { x: Math.random(), y: -0.2 }
+              });
+            } else {
+              const countMultiplier = isSpecial ? 40 : 150;
+              const particleCount = countMultiplier * (timeLeft / duration);
+              for (let i = 0; i < 3; i++) {
+                confetti({
+                  ...defaults,
+                  particleCount: Math.ceil(particleCount / 3),
+                  spread: isSpecial ? 90 : 360,
+                  startVelocity: isSpecial ? 15 : 45,
+                  origin: { x: Math.random(), y: Math.random() - 0.2 }
+                });
+              }
+            }
+          },
+          isSpecial ? 400 : 250
+        );
       }
     };
   }

@@ -118,7 +118,7 @@
   };
   function trialViewer(trialId, externalUrl) {
     const self = {
-      // Alpine magic (injected at runtime — declared here for TS)
+      // Alpine magic (injected at runtime - declared here for TS)
       ...null,
       // --- BASE STATE ---
       trialId,
@@ -155,7 +155,7 @@
       ],
       // Toast (shared mixin)
       ...createToastMixin(),
-      // Options — exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
+      // Options - exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
       opts: OPTIONS,
       // --- PLOT CONFIGURATION ---
       config: JSON.parse(JSON.stringify(DEFAULT_CONFIG)),
@@ -289,10 +289,12 @@
         const colParams = new URLSearchParams();
         if (requiredCols.length > 0)
           colParams.append("cols", requiredCols.join(","));
-        if (this.config.refFrame)
-          colParams.append("rotate_by", this.config.refFrame);
         const filtersPayload = {};
-        const toActiveFilters = (filters) => filters.filter((f) => f.enabled !== false).map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+        const toActiveFilters = (filters) => filters.filter((f) => f.enabled !== false).map(
+          (f) => Object.fromEntries(
+            Object.entries(f).filter(([k]) => k !== "enabled")
+          )
+        );
         for (const col of requiredCols) {
           const yConfig = this.config.yAxes[col];
           if (yConfig?.filters && yConfig.filters.length > 0) {
@@ -372,7 +374,10 @@
         if (currentId !== this.discoveryId) return;
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+        const activeCols = [
+          this.config.xAxis.col,
+          ...Object.keys(this.config.yAxes)
+        ];
         const draftIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
           return n >= start && n <= end && id !== this.trialId;
@@ -610,6 +615,12 @@
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
           }
+          if (this.config.refFrame) {
+            const hasRotation = Object.values(this.config.yAxes).some(
+              (y) => y.filters.some((f) => f.type === "rotation")
+            );
+            if (!hasRotation) this.applyRefFrame(this.config.refFrame);
+          }
           void this.$nextTick(() => {
             this.pushHistory();
           });
@@ -708,53 +719,60 @@
           Alpine.store("dojo").startGlobalSync();
           Alpine.store("dojo").setPageReady(true);
         }
-        window.addEventListener("keydown", (e) => {
-          if (e.repeat) return;
-          const tag = e.target.tagName;
-          if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
-            e.preventDefault();
-            document.querySelector('input[type="number"]')?.focus();
-          }
-          if (e.key === "Escape") {
-            const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
-            if (["INPUT", "TEXTAREA"].includes(tag))
-              e.target.blur();
-            this.placementMode = null;
-            this.rectStart = null;
-            this.cancelAnnDraft();
-            this.cancelShapeDraft();
-            this.annotationsOpen = false;
-            this.shapesOpen = false;
-            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
-            this.profilesOpen = this.vsMenuOpen = false;
-            this.profileSearch = "";
-            this.labOpen = false;
-            window.dispatchEvent(new CustomEvent("mojo:escape"));
-            if (anyOpen) e.stopImmediatePropagation();
-          }
-          if (["INPUT", "TEXTAREA"].includes(tag)) return;
-          if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
-          if (e.key === "ArrowRight")
-            document.getElementById("nav-next")?.click();
-          const isZ = e.key.toLowerCase() === "z";
-          const isY = e.key.toLowerCase() === "y";
-          const cmdOrCtrl = e.metaKey || e.ctrlKey;
-          if (cmdOrCtrl && isZ) {
-            e.preventDefault();
-            if (this.labOpen) {
-              e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
-            } else {
-              if (e.shiftKey) this.redo();
-              else this.undo();
+        window.addEventListener(
+          "keydown",
+          (e) => {
+            if (e.repeat) return;
+            const tag = e.target.tagName;
+            if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
+              e.preventDefault();
+              document.querySelector(
+                'input[type="number"]'
+              )?.focus();
             }
-          }
-          if (cmdOrCtrl && isY) {
-            e.preventDefault();
-            if (this.labOpen) window.mojoLabRedo?.();
-            else this.redo();
-          }
-        }, { capture: true });
+            if (e.key === "Escape") {
+              const anyOpen = !!(this.placementMode || this.annotationsOpen || this.shapesOpen || this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen || this.settingsOpen || this.downloadOpen || this.editorOpen || this.profilesOpen || this.vsMenuOpen || this.labOpen || Alpine.store("dojo").overlayCount > 0 || ["INPUT", "TEXTAREA"].includes(tag));
+              if (["INPUT", "TEXTAREA"].includes(tag))
+                e.target.blur();
+              this.placementMode = null;
+              this.rectStart = null;
+              this.cancelAnnDraft();
+              this.cancelShapeDraft();
+              this.annotationsOpen = false;
+              this.shapesOpen = false;
+              this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+              this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+              this.profilesOpen = this.vsMenuOpen = false;
+              this.profileSearch = "";
+              this.labOpen = false;
+              window.dispatchEvent(new CustomEvent("mojo:escape"));
+              if (anyOpen) e.stopImmediatePropagation();
+            }
+            if (["INPUT", "TEXTAREA"].includes(tag)) return;
+            if (e.key === "ArrowLeft")
+              document.getElementById("nav-prev")?.click();
+            if (e.key === "ArrowRight")
+              document.getElementById("nav-next")?.click();
+            const isZ = e.key.toLowerCase() === "z";
+            const isY = e.key.toLowerCase() === "y";
+            const cmdOrCtrl = e.metaKey || e.ctrlKey;
+            if (cmdOrCtrl && isZ) {
+              e.preventDefault();
+              if (this.labOpen) {
+                e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
+              } else {
+                if (e.shiftKey) this.redo();
+                else this.undo();
+              }
+            }
+            if (cmdOrCtrl && isY) {
+              e.preventDefault();
+              if (this.labOpen) window.mojoLabRedo?.();
+              else this.redo();
+            }
+          },
+          { capture: true }
+        );
         const resp = await fetch("/mosaic/api/trials");
         const data = await resp.json();
         this.allTrials = data.trials ?? [];
@@ -770,37 +788,14 @@
         this.$watch("vsDraft.range", () => {
           if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
           this.discoveryTimeout = setTimeout(() => {
-            if (this.vsDraft.enabled) {
-              console.debug(
-                "Predictive Sync: User adjusted range, starting hydration..."
-              );
-              void this.startBackgroundDiscovery();
-            }
+            if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
         });
-        this.$watch(
-          "config.refFrame",
-          async (newValue, oldValue) => {
-            console.debug(
-              `[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`
-            );
-            this.notify(`Frame: ${newValue || "world"}`, "info");
-            this.discoveryId++;
-            this.data = {};
-            this.vsDatasets = {};
-            const initialCols = [
-              this.config.xAxis.col,
-              ...Object.keys(this.config.yAxes)
-            ];
-            const response = await this.fetchTrialData(this.trialId, initialCols);
-            this.columns = response.columns.all.sort();
-            this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-            this.data = response.data;
-            void this.startBackgroundDiscovery();
-            if (this.config.vsEnabled) await this.syncVsRange();
-            this.saveAndRender();
-          }
-        );
+        this.$watch("config.refFrame", (newValue) => {
+          this.notify(`Frame: ${newValue || "world"}`, "info");
+          this.discoveryId++;
+          this.applyRefFrame(newValue);
+        });
         this.$watch("config", async (value, oldValue) => {
           if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
           if (this.config.vsEnabled && oldValue?.vsEnabled && (value.xAxis.col !== oldValue?.xAxis?.col || Object.keys(value.yAxes).length !== Object.keys(oldValue.yAxes ?? {}).length)) {
@@ -866,7 +861,10 @@
         try {
           const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
           const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-          let activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+          let activeCols = [
+            this.config.xAxis.col,
+            ...Object.keys(this.config.yAxes)
+          ];
           if (this.config.refFrame) {
             const families = /* @__PURE__ */ new Set();
             Object.keys(this.config.yAxes).forEach((col) => {
@@ -920,8 +918,38 @@
       handleVsToggle() {
         if (!this.vsDraft.enabled) {
           this.config.vsEnabled = false;
+          this.vsDatasets = {};
           this.renderPlot();
         }
+      },
+      setVsPreset(delta) {
+        const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+        this.vsDraft.range = [cur - delta, cur + delta];
+      },
+      setVsAll() {
+        const nums = this.allTrials.map((t) => parseInt(t.split("_").pop() ?? "")).filter((n) => !isNaN(n));
+        if (!nums.length) return;
+        this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+      },
+      isVsPreset(delta) {
+        const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+        const [a, b] = this.vsDraft.range;
+        return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+      },
+      isVsAll() {
+        const nums = this.allTrials.map((t) => parseInt(t.split("_").pop() ?? "")).filter((n) => !isNaN(n));
+        if (!nums.length) return false;
+        const [a, b] = this.vsDraft.range;
+        return Math.min(a, b) === Math.min(...nums) && Math.max(a, b) === Math.max(...nums);
+      },
+      vsInRangeCount() {
+        const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const cur = parseInt(this.trialId.split("_").pop() ?? "");
+        return this.allTrials.filter((id) => {
+          const n = parseInt(id.split("_").pop() ?? "");
+          return n >= lo && n <= hi && n !== cur;
+        }).length;
       },
       // -----------------------------------------------------------------------
       // Column filtering & search
@@ -1246,7 +1274,10 @@
       },
       downloadCSV() {
         if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-        const activeCols = [this.config.xAxis.col, ...Object.keys(this.config.yAxes)];
+        const activeCols = [
+          this.config.xAxis.col,
+          ...Object.keys(this.config.yAxes)
+        ];
         const rowCount = this.data[this.config.xAxis.col]?.length ?? 0;
         let csv = activeCols.join(",") + "\n";
         for (let i = 0; i < rowCount; i++) {
@@ -1307,12 +1338,13 @@
           this.config.yAxes = rest;
         } else {
           const nextIndex = Object.keys(this.config.yAxes).length;
+          const initFilters = this.config.refFrame ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }] : [];
           this.config.yAxes[col] = {
             color: this.getSignalColor(nextIndex),
             label: "",
             width: 3,
             opacity: 1,
-            filters: [],
+            filters: initFilters,
             dash: "solid",
             marker: "none"
           };
@@ -1325,6 +1357,38 @@
         this.saveAndRender();
         this.configRaw = JSON.stringify(this.config, null, 4);
         this.notify("Signals Cleared", "info");
+      },
+      applyRefFrame(frame) {
+        for (const col of Object.keys(this.config.yAxes)) {
+          const yConfig = this.config.yAxes[col];
+          if (!yConfig) continue;
+          if (frame) {
+            const newEntry = {
+              type: "rotation",
+              quat_col: frame,
+              invert: true,
+              enabled: true
+            };
+            const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+            if (idx >= 0) {
+              yConfig.filters = [
+                ...yConfig.filters.slice(0, idx),
+                newEntry,
+                ...yConfig.filters.slice(idx + 1)
+              ];
+            } else {
+              yConfig.filters = [newEntry, ...yConfig.filters];
+            }
+          } else {
+            const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+            if (idx >= 0) {
+              yConfig.filters = [
+                ...yConfig.filters.slice(0, idx),
+                ...yConfig.filters.slice(idx + 1)
+              ];
+            }
+          }
+        }
       },
       warpToTrial() {
         if (this.warpId === null || this.warpId === void 0 || this.warpId === "")
@@ -1440,6 +1504,8 @@
         const schema = this.filterSchemas.find((s) => s.type === filterType);
         if (!schema) return;
         if (!temp.filters) temp.filters = [];
+        if (filterType === "rotation" && temp.filters.some((f) => f.type === "rotation"))
+          return;
         const entry = { type: filterType, enabled: true };
         for (const p of schema.params) {
           entry[p.name] = p.default;
@@ -1520,6 +1586,9 @@
         } catch {
         }
       },
+      async refreshLabValidation() {
+        await this.loadLabSchemas();
+      },
       async saveLabGraph(name, graph) {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -1539,7 +1608,27 @@
           }
           localStorage.setItem("mojo:lab:name", trimmed);
           this.notify(`Lab "${trimmed}" saved`, "success");
-          await this.loadLabSchemas();
+          await this.refreshLabValidation();
+          const labPrefix = `Lab/${trimmed}/`;
+          const staleCols = Object.keys(this.data ?? {}).filter(
+            (c) => c.startsWith(labPrefix)
+          );
+          if (staleCols.length > 0) {
+            const fresh = { ...this.data ?? {} };
+            staleCols.forEach((c) => delete fresh[c]);
+            this.data = fresh;
+            const activeCols = staleCols.filter(
+              (c) => c in this.config.yAxes || c === this.config.xAxis?.col
+            );
+            if (activeCols.length > 0) {
+              try {
+                const refetch = await this.fetchTrialData(this.trialId, activeCols);
+                this.data = { ...this.data ?? {}, ...refetch.data };
+                this.saveAndRender();
+              } catch {
+              }
+            }
+          }
         } catch (err) {
           this.notify(`Save failed: ${String(err)}`, "error");
         }
@@ -1559,7 +1648,7 @@
           method: "DELETE"
         });
         this.notify(`Lab "${name}" deleted`, "info");
-        await this.loadLabSchemas();
+        await this.refreshLabValidation();
       },
       // -----------------------------------------------------------------------
       async loadProfiles() {

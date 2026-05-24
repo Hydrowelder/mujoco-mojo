@@ -80,7 +80,7 @@ export interface FilterSchema {
   unit_groups?: UnitGroup[];
 }
 
-// PlotConfig and related types are generated from plot_config.py — see the
+// PlotConfig and related types are generated from plot_config.py - see the
 // re-exports at the top of this file and lib/plot-config.generated.ts.
 
 // ---------------------------------------------------------------------------

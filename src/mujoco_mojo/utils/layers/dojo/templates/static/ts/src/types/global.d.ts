@@ -1,12 +1,22 @@
-import type { Alpine as AlpineType } from 'alpinejs';
+import type { Alpine as AlpineType } from "alpinejs";
 
 declare global {
   const Alpine: AlpineType;
 
   // Minimal Plotly surface used by trial-viewer
   const Plotly: {
-    react(el: string | HTMLElement, data: object[], layout: object, config?: object): Promise<void>;
-    newPlot(el: string | HTMLElement, data: object[], layout: object, config?: object): Promise<void>;
+    react(
+      el: string | HTMLElement,
+      data: object[],
+      layout: object,
+      config?: object,
+    ): Promise<void>;
+    newPlot(
+      el: string | HTMLElement,
+      data: object[],
+      layout: object,
+      config?: object,
+    ): Promise<void>;
     purge(el: string | HTMLElement): void;
     relayout(el: string | HTMLElement, update: object): Promise<void>;
     toImage(el: string | HTMLElement, opts: object): Promise<string>;
@@ -39,7 +49,11 @@ declare global {
   };
 
   const confetti: ((opts: object) => void) & {
-    shapeFromText(opts: { text: string; scalar?: number; color?: string }): unknown;
+    shapeFromText(opts: {
+      text: string;
+      scalar?: number;
+      color?: string;
+    }): unknown;
   };
 
   // Globals exposed by the compiled bundles for Alpine x-data usage
@@ -49,7 +63,7 @@ declare global {
     trialViewer(trialId: string, externalUrl: string): object;
     monitor(): object;
     mosaic(): object;
-    // Signal Lab — defined in _signal_lab.html, called from trial-viewer.ts
+    // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabUndo?(): void;
     mojoLabRedo?(): void;
@@ -59,6 +73,9 @@ declare global {
 // Alpine magic properties injected at runtime into component `this`
 export interface AlpineMagics {
   $nextTick(callback?: () => void): Promise<void>;
-  $watch<T>(expr: string, callback: (value: T, oldValue: T) => void): () => void;
+  $watch<T>(
+    expr: string,
+    callback: (value: T, oldValue: T) => void,
+  ): () => void;
   $refs: Readonly<Record<string, HTMLElement | undefined>>;
 }

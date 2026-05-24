@@ -15,7 +15,7 @@ import type {
 } from "./models";
 
 // ---------------------------------------------------------------------------
-// Tailwind offline palette — hex values matching Tailwind CSS defaults
+// Tailwind offline palette - hex values matching Tailwind CSS defaults
 // ---------------------------------------------------------------------------
 const tw = {
   slate: {
@@ -68,7 +68,7 @@ const DEFAULT_CONFIG: PlotConfig = {
 // ---------------------------------------------------------------------------
 function trialViewer(trialId: string, externalUrl: string) {
   const self = {
-    // Alpine magic (injected at runtime — declared here for TS)
+    // Alpine magic (injected at runtime - declared here for TS)
     ...(null as unknown as AlpineMagics),
 
     // --- BASE STATE ---
@@ -109,7 +109,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     // Toast (shared mixin)
     ...createToastMixin(),
 
-    // Options — exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
+    // Options - exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
     opts: OPTIONS,
 
     // --- PLOT CONFIGURATION ---
@@ -176,12 +176,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
     labSchemas: [] as Array<{
-        name: string;
-        signal_in_columns: string[];
-        outputs: string[];
-        modified: number;
-        valid: boolean;
-        missing: string[];
+      name: string;
+      signal_in_columns: string[];
+      outputs: string[];
+      modified: number;
+      valid: boolean;
+      missing: string[];
     }>,
 
     // --- SHAPES ---
@@ -271,15 +271,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       const colParams = new URLSearchParams();
       if (requiredCols.length > 0)
         colParams.append("cols", requiredCols.join(","));
-      if (this.config.refFrame)
-        colParams.append("rotate_by", this.config.refFrame);
 
       // include active filter stacks for requested columns (x-axis and y-axes)
       const filtersPayload: Record<string, object[]> = {};
-      const toActiveFilters = (filters: { enabled?: boolean; [k: string]: unknown }[]) =>
+      const toActiveFilters = (
+        filters: { enabled?: boolean; [k: string]: unknown }[],
+      ) =>
         filters
           .filter((f) => f.enabled !== false)
-          .map((f) => Object.fromEntries(Object.entries(f).filter(([k]) => k !== "enabled")));
+          .map((f) =>
+            Object.fromEntries(
+              Object.entries(f).filter(([k]) => k !== "enabled"),
+            ),
+          );
       for (const col of requiredCols) {
         const yConfig = this.config.yAxes[col];
         if (yConfig?.filters && yConfig.filters.length > 0) {
@@ -370,7 +374,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
       const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+      const activeCols = [
+        this.config.xAxis!.col!,
+        ...Object.keys(this.config.yAxes),
+      ];
 
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
@@ -664,6 +671,15 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.vsDraft.range = [...this.config.vsRange];
         }
 
+        // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
+        // inject it now (before watchers are registered so this is a silent migration).
+        if (this.config.refFrame) {
+          const hasRotation = Object.values(this.config.yAxes).some((y) =>
+            y.filters.some((f) => f.type === "rotation"),
+          );
+          if (!hasRotation) this.applyRefFrame(this.config.refFrame);
+        }
+
         void this.$nextTick(() => {
           this.pushHistory();
         });
@@ -801,66 +817,81 @@ function trialViewer(trialId: string, externalUrl: string) {
       // (e.g. @keydown.escape.window in base.html). stopImmediatePropagation()
       // in the Escape branch then prevents those listeners from firing when a
       // panel was open.
-      window.addEventListener("keydown", (e) => {
-        if (e.repeat) return;
-        const tag = (e.target as HTMLElement).tagName;
-        if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
-          e.preventDefault();
-          (
-            document.querySelector('input[type="number"]') as HTMLElement | null
-          )?.focus();
-        }
-        if (e.key === "Escape") {
-          const anyOpen = !!(
-            this.placementMode || this.annotationsOpen || this.shapesOpen ||
-            this.xMenuOpen || this.yMenuOpen || this.refFrameMenuOpen ||
-            this.settingsOpen || this.downloadOpen || this.editorOpen ||
-            this.profilesOpen || this.vsMenuOpen || this.labOpen ||
-            (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
-            ["INPUT", "TEXTAREA"].includes(tag)
-          );
-          if (["INPUT", "TEXTAREA"].includes(tag))
-            (e.target as HTMLElement).blur();
-          this.placementMode = null;
-          this.rectStart = null;
-          this.cancelAnnDraft();
-          this.cancelShapeDraft();
-          this.annotationsOpen = false;
-          this.shapesOpen = false;
-          this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-          this.settingsOpen = this.downloadOpen = this.editorOpen = false;
-          this.profilesOpen = this.vsMenuOpen = false;
-          this.profileSearch = "";
-          this.labOpen = false;
-          window.dispatchEvent(new CustomEvent("mojo:escape"));
-          // Stop immediate propagation when something was open so Alpine's
-          // bubble-phase @keydown.escape.window handler doesn't also fire.
-          // This prevents Escape from both closing the lab and exiting fullscreen.
-          if (anyOpen) e.stopImmediatePropagation();
-        }
-        if (["INPUT", "TEXTAREA"].includes(tag)) return;
-        if (e.key === "ArrowLeft") document.getElementById("nav-prev")?.click();
-        if (e.key === "ArrowRight")
-          document.getElementById("nav-next")?.click();
-
-        const isZ = e.key.toLowerCase() === "z";
-        const isY = e.key.toLowerCase() === "y";
-        const cmdOrCtrl = e.metaKey || e.ctrlKey;
-        if (cmdOrCtrl && isZ) {
-          e.preventDefault();
-          if (this.labOpen) {
-            e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
-          } else {
-            if (e.shiftKey) this.redo();
-            else this.undo();
+      window.addEventListener(
+        "keydown",
+        (e) => {
+          if (e.repeat) return;
+          const tag = (e.target as HTMLElement).tagName;
+          if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(tag)) {
+            e.preventDefault();
+            (
+              document.querySelector(
+                'input[type="number"]',
+              ) as HTMLElement | null
+            )?.focus();
           }
-        }
-        if (cmdOrCtrl && isY) {
-          e.preventDefault();
-          if (this.labOpen) window.mojoLabRedo?.();
-          else this.redo();
-        }
-      }, { capture: true });
+          if (e.key === "Escape") {
+            const anyOpen = !!(
+              this.placementMode ||
+              this.annotationsOpen ||
+              this.shapesOpen ||
+              this.xMenuOpen ||
+              this.yMenuOpen ||
+              this.refFrameMenuOpen ||
+              this.settingsOpen ||
+              this.downloadOpen ||
+              this.editorOpen ||
+              this.profilesOpen ||
+              this.vsMenuOpen ||
+              this.labOpen ||
+              (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
+              ["INPUT", "TEXTAREA"].includes(tag)
+            );
+            if (["INPUT", "TEXTAREA"].includes(tag))
+              (e.target as HTMLElement).blur();
+            this.placementMode = null;
+            this.rectStart = null;
+            this.cancelAnnDraft();
+            this.cancelShapeDraft();
+            this.annotationsOpen = false;
+            this.shapesOpen = false;
+            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+            this.profilesOpen = this.vsMenuOpen = false;
+            this.profileSearch = "";
+            this.labOpen = false;
+            window.dispatchEvent(new CustomEvent("mojo:escape"));
+            // Stop immediate propagation when something was open so Alpine's
+            // bubble-phase @keydown.escape.window handler doesn't also fire.
+            // This prevents Escape from both closing the lab and exiting fullscreen.
+            if (anyOpen) e.stopImmediatePropagation();
+          }
+          if (["INPUT", "TEXTAREA"].includes(tag)) return;
+          if (e.key === "ArrowLeft")
+            document.getElementById("nav-prev")?.click();
+          if (e.key === "ArrowRight")
+            document.getElementById("nav-next")?.click();
+
+          const isZ = e.key.toLowerCase() === "z";
+          const isY = e.key.toLowerCase() === "y";
+          const cmdOrCtrl = e.metaKey || e.ctrlKey;
+          if (cmdOrCtrl && isZ) {
+            e.preventDefault();
+            if (this.labOpen) {
+              e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
+            } else {
+              if (e.shiftKey) this.redo();
+              else this.undo();
+            }
+          }
+          if (cmdOrCtrl && isY) {
+            e.preventDefault();
+            if (this.labOpen) window.mojoLabRedo?.();
+            else this.redo();
+          }
+        },
+        { capture: true },
+      );
 
       const resp = await fetch("/mosaic/api/trials");
       const data = (await resp.json()) as TrialManifest;
@@ -881,38 +912,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.$watch("vsDraft.range", () => {
         if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
         this.discoveryTimeout = setTimeout(() => {
-          if (this.vsDraft.enabled) {
-            console.debug(
-              "Predictive Sync: User adjusted range, starting hydration...",
-            );
-            void this.startBackgroundDiscovery();
-          }
+          if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
         }, 500);
       });
 
-      this.$watch(
-        "config.refFrame",
-        async (newValue: string | null, oldValue: string | null) => {
-          console.debug(
-            `[Mojo] Frame Change: ${oldValue ?? "world"} -> ${newValue ?? "world"}`,
-          );
-          this.notify(`Frame: ${newValue || "world"}`, "info");
-          this.discoveryId++;
-          this.data = {};
-          this.vsDatasets = {};
-          const initialCols = [
-            this.config.xAxis!.col!,
-            ...Object.keys(this.config.yAxes),
-          ];
-          const response = await this.fetchTrialData(this.trialId, initialCols);
-          this.columns = response.columns.all.sort();
-          this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-          this.data = response.data;
-          void this.startBackgroundDiscovery();
-          if (this.config.vsEnabled) await this.syncVsRange();
-          this.saveAndRender();
-        },
-      );
+      this.$watch("config.refFrame", (newValue: string | null) => {
+        this.notify(`Frame: ${newValue || "world"}`, "info");
+        this.discoveryId++;
+        this.applyRefFrame(newValue);
+        // config watcher handles re-fetch and re-render when yAxes.filters change
+      });
 
       this.$watch("config", async (value: PlotConfig, oldValue: PlotConfig) => {
         if (!this.isEditingRaw) this.configRaw = JSON.stringify(value, null, 4);
@@ -929,7 +938,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         // detect filter changes by comparing against the last-fetched fingerprint rather
         // than oldValue, because Alpine.js $watch does not reliably deep-clone oldValue
-        // for nested reactive objects — both value and oldValue may point to the same data
+        // for nested reactive objects - both value and oldValue may point to the same data
         const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
           const current = JSON.stringify(
             (value.yAxes[col]?.filters ?? []).filter(
@@ -996,7 +1005,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
         const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+        let activeCols = [
+          this.config.xAxis!.col!,
+          ...Object.keys(this.config.yAxes),
+        ];
 
         if (this.config.refFrame) {
           const families = new Set<string>();
@@ -1058,8 +1070,47 @@ function trialViewer(trialId: string, externalUrl: string) {
     handleVsToggle() {
       if (!this.vsDraft.enabled) {
         this.config.vsEnabled = false;
+        this.vsDatasets = {};
         this.renderPlot();
       }
+    },
+
+    setVsPreset(delta: number) {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      this.vsDraft.range = [cur - delta, cur + delta];
+    },
+
+    setVsAll() {
+      const nums = this.allTrials
+        .map((t) => parseInt(t.split("_").pop() ?? ""))
+        .filter((n) => !isNaN(n));
+      if (!nums.length) return;
+      this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+    },
+
+    isVsPreset(delta: number): boolean {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const [a, b] = this.vsDraft.range;
+      return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+    },
+
+    isVsAll(): boolean {
+      const nums = this.allTrials
+        .map((t) => parseInt(t.split("_").pop() ?? ""))
+        .filter((n) => !isNaN(n));
+      if (!nums.length) return false;
+      const [a, b] = this.vsDraft.range;
+      return Math.min(a, b) === Math.min(...nums) && Math.max(a, b) === Math.max(...nums);
+    },
+
+    vsInRangeCount(): number {
+      const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const cur = parseInt(this.trialId.split("_").pop() ?? "");
+      return this.allTrials.filter((id) => {
+        const n = parseInt(id.split("_").pop() ?? "");
+        return n >= lo && n <= hi && n !== cur;
+      }).length;
     },
 
     // -----------------------------------------------------------------------
@@ -1077,7 +1128,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     getFilteredCols(field: string): string[] {
       if (!this.columns || !Array.isArray(this.columns)) return [];
-      const base = (field === "x" || field === "nodeCol") ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       if (!search) return this.smartSort([...base]);
@@ -1142,7 +1196,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getSegmentsAtDepth(field: string, depth: number): string[] {
-      const base = (field === "x" || field === "nodeCol") ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const pathSearch = search.split(":")[0] ?? "";
@@ -1165,7 +1222,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getAvailableSuffixes(field: string): string[] {
-      const base = (field === "x" || field === "nodeCol") ? this.columns : this.selectableYColumns;
+      const base =
+        field === "x" || field === "nodeCol"
+          ? this.columns
+          : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const [pathPart = "", suffixPart = ""] = search.split(":");
@@ -1460,7 +1520,10 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     downloadCSV() {
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-      const activeCols = [this.config.xAxis!.col!, ...Object.keys(this.config.yAxes)];
+      const activeCols = [
+        this.config.xAxis!.col!,
+        ...Object.keys(this.config.yAxes),
+      ];
       const rowCount = this.data[this.config.xAxis!.col!]?.length ?? 0;
       let csv = activeCols.join(",") + "\n";
       for (let i = 0; i < rowCount; i++) {
@@ -1528,12 +1591,15 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.config.yAxes = rest;
       } else {
         const nextIndex = Object.keys(this.config.yAxes).length;
+        const initFilters: FilterEntry[] = this.config.refFrame
+          ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }]
+          : [];
         this.config.yAxes[col] = {
           color: this.getSignalColor(nextIndex),
           label: "",
           width: 3,
           opacity: 1,
-          filters: [],
+          filters: initFilters,
           dash: "solid",
           marker: "none",
         };
@@ -1547,6 +1613,40 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.saveAndRender();
       this.configRaw = JSON.stringify(this.config, null, 4);
       this.notify("Signals Cleared", "info");
+    },
+
+    applyRefFrame(frame: string | null) {
+      for (const col of Object.keys(this.config.yAxes)) {
+        const yConfig = this.config.yAxes[col];
+        if (!yConfig) continue;
+        if (frame) {
+          const newEntry: FilterEntry = {
+            type: "rotation",
+            quat_col: frame,
+            invert: true,
+            enabled: true,
+          };
+          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+          if (idx >= 0) {
+            // Replace in-place to preserve the user's chosen position in the stack
+            yConfig.filters = [
+              ...yConfig.filters.slice(0, idx),
+              newEntry,
+              ...yConfig.filters.slice(idx + 1),
+            ];
+          } else {
+            yConfig.filters = [newEntry, ...yConfig.filters];
+          }
+        } else {
+          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
+          if (idx >= 0) {
+            yConfig.filters = [
+              ...yConfig.filters.slice(0, idx),
+              ...yConfig.filters.slice(idx + 1),
+            ];
+          }
+        }
+      }
     },
 
     warpToTrial() {
@@ -1590,25 +1690,61 @@ function trialViewer(trialId: string, externalUrl: string) {
       const n = Number(s);
       if (!isNaN(n)) return n;
       try {
-        // Expose a safe math context — no access to globals beyond these names.
+        // Expose a safe math context - no access to globals beyond these names.
         const fn = new Function(
-          "pi", "e",
-          "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-          "sqrt", "cbrt", "log", "log2", "log10",
-          "abs", "floor", "ceil", "round", "sign",
-          "pow", "exp", "max", "min",
+          "pi",
+          "e",
+          "sin",
+          "cos",
+          "tan",
+          "asin",
+          "acos",
+          "atan",
+          "atan2",
+          "sqrt",
+          "cbrt",
+          "log",
+          "log2",
+          "log10",
+          "abs",
+          "floor",
+          "ceil",
+          "round",
+          "sign",
+          "pow",
+          "exp",
+          "max",
+          "min",
           `"use strict"; return (${s})`,
         );
         const result = fn(
-          Math.PI, Math.E,
-          Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2,
-          Math.sqrt, Math.cbrt, Math.log, Math.log2, Math.log10,
-          Math.abs, Math.floor, Math.ceil, Math.round, Math.sign,
-          Math.pow, Math.exp, Math.max, Math.min,
+          Math.PI,
+          Math.E,
+          Math.sin,
+          Math.cos,
+          Math.tan,
+          Math.asin,
+          Math.acos,
+          Math.atan,
+          Math.atan2,
+          Math.sqrt,
+          Math.cbrt,
+          Math.log,
+          Math.log2,
+          Math.log10,
+          Math.abs,
+          Math.floor,
+          Math.ceil,
+          Math.round,
+          Math.sign,
+          Math.pow,
+          Math.exp,
+          Math.max,
+          Math.min,
         ) as unknown;
         if (typeof result === "number" && isFinite(result)) return result;
       } catch {
-        // invalid expression — fall through
+        // invalid expression - fall through
       }
       return null;
     },
@@ -1645,6 +1781,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
       if (!schema) return;
       if (!temp.filters) temp.filters = [];
+      if (filterType === "rotation" && temp.filters.some((f) => f.type === "rotation"))
+        return;
       const entry: FilterEntry = { type: filterType, enabled: true };
       for (const p of schema.params) {
         (entry as Record<string, unknown>)[p.name] = p.default;
@@ -1707,7 +1845,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const resp = await fetch("/mosaic/api/lab");
         if (!resp.ok) return;
-        const all = (await resp.json()) as Omit<(typeof this.labSchemas)[0], "valid" | "missing">[];
+        const all = (await resp.json()) as Omit<
+          (typeof this.labSchemas)[0],
+          "valid" | "missing"
+        >[];
         // Deduplicate and sort inputs/outputs for each lab.
         const schemas = all.map((lab) => ({
           ...lab,
@@ -1736,11 +1877,15 @@ function trialViewer(trialId: string, externalUrl: string) {
           missing: lab.signal_in_columns.filter((c) => !available.has(c)),
           valid: validLabs.has(lab.name),
         }));
-        // Rebuild virtual Lab columns from scratch — removes stale entries from deleted labs.
+        // Rebuild virtual Lab columns from scratch - removes stale entries from deleted labs.
         this.columns = [...available].sort();
       } catch {
-        // Lab endpoint unavailable — silently ignore
+        // Lab endpoint unavailable - silently ignore
       }
+    },
+
+    async refreshLabValidation() {
+      await this.loadLabSchemas();
     },
 
     async saveLabGraph(name: string, graph: object) {
@@ -1762,7 +1907,30 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
         localStorage.setItem("mojo:lab:name", trimmed);
         this.notify(`Lab "${trimmed}" saved`, "success");
-        await this.loadLabSchemas();
+        await this.refreshLabValidation();
+        // Evict stale computed data for this lab's outputs, then re-fetch anything
+        // currently plotted so the chart updates immediately.
+        const labPrefix = `Lab/${trimmed}/`;
+        const staleCols = Object.keys(this.data ?? {}).filter((c) =>
+          c.startsWith(labPrefix),
+        );
+        if (staleCols.length > 0) {
+          const fresh = { ...(this.data ?? {}) };
+          staleCols.forEach((c) => delete fresh[c]);
+          this.data = fresh;
+          const activeCols = staleCols.filter(
+            (c) => c in this.config.yAxes || c === this.config.xAxis?.col,
+          );
+          if (activeCols.length > 0) {
+            try {
+              const refetch = await this.fetchTrialData(this.trialId, activeCols);
+              this.data = { ...(this.data ?? {}), ...refetch.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical: plot drops the stale trace until background discovery refetches
+            }
+          }
+        }
       } catch (err) {
         this.notify(`Save failed: ${String(err)}`, "error");
       }
@@ -1770,7 +1938,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     selectNodeColumn(col: string) {
       if (this.nodePickingColumn !== null) {
-        // Defined in _signal_lab.html — updates the LiteGraph node property
+        // Defined in _signal_lab.html - updates the LiteGraph node property
         if (typeof window.mojoLabSelectNodeColumn === "function") {
           window.mojoLabSelectNodeColumn(this.nodePickingColumn, col);
         }
@@ -1785,7 +1953,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         method: "DELETE",
       });
       this.notify(`Lab "${name}" deleted`, "info");
-      await this.loadLabSchemas();
+      await this.refreshLabValidation();
     },
 
     // -----------------------------------------------------------------------
@@ -2262,103 +2430,109 @@ function trialViewer(trialId: string, externalUrl: string) {
                 groupclick: "togglegroup",
               },
         ...polarLayout,
-        annotations: isPolar ? [] : [
-          ...(this.config.annotations ?? []).map((ann) => ({
-            x: ann.x,
-            y: ann.y,
-            text: ann.text,
-            showarrow: true,
-            arrowhead: 2,
-            ax: 0,
-            ay: -40,
-            font: {
-              family: "monospace",
-              size: 12,
-              color: isDark ? tw.slate[50] : tw.slate[900],
-            },
-            bgcolor: isDark ? tw.slate[800] : tw.slate[50],
-            bordercolor: tw.cyan[500],
-            borderwidth: 1,
-            borderpad: 4,
-          })),
-          ...(this.config.shapes ?? [])
-            .filter((s) => s.label)
-            .map((s) => {
-              let x = s.x0,
-                y = s.y0 ?? 0,
-                xanchor = "left",
-                yanchor = "bottom",
-                xref = "x",
-                yref = "y";
-              if (s.type === "vline") {
-                y = 1;
-                yref = "paper";
-              } else if (s.type === "hline") {
-                x = 1;
-                xref = "paper";
-                xanchor = "right";
-              } else if (s.type === "rect") {
-                x = s.x0;
-                y = s.y1 ?? 0;
-              }
-              return {
-                x,
-                y,
-                xref,
-                yref,
-                text: `<b>${s.label}</b>`,
-                showarrow: false,
-                xanchor,
-                yanchor,
+        annotations: isPolar
+          ? []
+          : [
+              ...(this.config.annotations ?? []).map((ann) => ({
+                x: ann.x,
+                y: ann.y,
+                text: ann.text,
+                showarrow: true,
+                arrowhead: 2,
+                ax: 0,
+                ay: -40,
                 font: {
-                  size: 10,
-                  color: s.color || tw.cyan[500],
                   family: "monospace",
+                  size: 12,
+                  color: isDark ? tw.slate[50] : tw.slate[900],
                 },
-                bgcolor: isDark ? tw.slate[900] + "B3" : tw.slate[50] + "B3",
-                borderpad: 2,
+                bgcolor: isDark ? tw.slate[800] : tw.slate[50],
+                bordercolor: tw.cyan[500],
+                borderwidth: 1,
+                borderpad: 4,
+              })),
+              ...(this.config.shapes ?? [])
+                .filter((s) => s.label)
+                .map((s) => {
+                  let x = s.x0,
+                    y = s.y0 ?? 0,
+                    xanchor = "left",
+                    yanchor = "bottom",
+                    xref = "x",
+                    yref = "y";
+                  if (s.type === "vline") {
+                    y = 1;
+                    yref = "paper";
+                  } else if (s.type === "hline") {
+                    x = 1;
+                    xref = "paper";
+                    xanchor = "right";
+                  } else if (s.type === "rect") {
+                    x = s.x0;
+                    y = s.y1 ?? 0;
+                  }
+                  return {
+                    x,
+                    y,
+                    xref,
+                    yref,
+                    text: `<b>${s.label}</b>`,
+                    showarrow: false,
+                    xanchor,
+                    yanchor,
+                    font: {
+                      size: 10,
+                      color: s.color || tw.cyan[500],
+                      family: "monospace",
+                    },
+                    bgcolor: isDark
+                      ? tw.slate[900] + "B3"
+                      : tw.slate[50] + "B3",
+                    borderpad: 2,
+                  };
+                }),
+            ],
+        shapes: isPolar
+          ? []
+          : (this.config.shapes ?? []).map((s) => {
+              const shapeColor = s.color || tw.cyan[500];
+              const base = {
+                line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
+                layer: "below",
               };
+              if (s.type === "vline")
+                return {
+                  ...base,
+                  type: "line",
+                  x0: s.x0,
+                  x1: s.x0,
+                  y0: 0,
+                  y1: 1,
+                  yref: "paper",
+                };
+              if (s.type === "hline")
+                return {
+                  ...base,
+                  type: "line",
+                  y0: s.y0,
+                  y1: s.y0,
+                  x0: 0,
+                  x1: 1,
+                  xref: "paper",
+                };
+              if (s.type === "rect")
+                return {
+                  ...base,
+                  type: "rect",
+                  x0: s.x0,
+                  x1: s.x1,
+                  y0: s.y0,
+                  y1: s.y1,
+                  fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
+                  line: { ...base.line, width: 1 },
+                };
+              return base;
             }),
-        ],
-        shapes: isPolar ? [] : (this.config.shapes ?? []).map((s) => {
-          const shapeColor = s.color || tw.cyan[500];
-          const base = {
-            line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
-            layer: "below",
-          };
-          if (s.type === "vline")
-            return {
-              ...base,
-              type: "line",
-              x0: s.x0,
-              x1: s.x0,
-              y0: 0,
-              y1: 1,
-              yref: "paper",
-            };
-          if (s.type === "hline")
-            return {
-              ...base,
-              type: "line",
-              y0: s.y0,
-              y1: s.y0,
-              x0: 0,
-              x1: 1,
-              xref: "paper",
-            };
-          if (s.type === "rect")
-            return {
-              ...base,
-              type: "rect",
-              x0: s.x0,
-              x1: s.x1,
-              y0: s.y0,
-              y1: s.y1,
-              fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
-              line: { ...base.line, width: 1 },
-            };
-          return base;
-        }),
       };
 
       const config = {

@@ -84,13 +84,35 @@
                                         :class="config.plotType !== 'polar'
                                             ? 'bg-cyan-500 text-white border-cyan-500'
                                             : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
-                                    <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.25">
-                                        <line x1="4" y1="2" x2="4" y2="18"/>
-                                        <line x1="10" y1="2" x2="10" y2="18"/>
-                                        <line x1="16" y1="2" x2="16" y2="18"/>
-                                        <line x1="2" y1="4" x2="18" y2="4"/>
-                                        <line x1="2" y1="10" x2="18" y2="10"/>
-                                        <line x1="2" y1="16" x2="18" y2="16"/>
+                                    <svg class="w-5 h-5"
+                                         viewBox="0 0 20 20"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.25">
+                                        <line x1="4"
+                                              y1="2"
+                                              x2="4"
+                                              y2="18" />
+                                        <line x1="10"
+                                              y1="2"
+                                              x2="10"
+                                              y2="18" />
+                                        <line x1="16"
+                                              y1="2"
+                                              x2="16"
+                                              y2="18" />
+                                        <line x1="2"
+                                              y1="4"
+                                              x2="18"
+                                              y2="4" />
+                                        <line x1="2"
+                                              y1="10"
+                                              x2="18"
+                                              y2="10" />
+                                        <line x1="2"
+                                              y1="16"
+                                              x2="18"
+                                              y2="16" />
                                     </svg>
                                     Cartesian
                                 </button>
@@ -99,14 +121,36 @@
                                         :class="config.plotType === 'polar'
                                             ? 'bg-cyan-500 text-white border-cyan-500'
                                             : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
-                                    <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.25">
-                                        <circle cx="10" cy="10" r="3"/>
-                                        <circle cx="10" cy="10" r="6"/>
-                                        <circle cx="10" cy="10" r="9"/>
-                                        <line x1="10" y1="1" x2="10" y2="19"/>
-                                        <line x1="1" y1="10" x2="19" y2="10"/>
-                                        <line x1="3.6" y1="3.6" x2="16.4" y2="16.4"/>
-                                        <line x1="16.4" y1="3.6" x2="3.6" y2="16.4"/>
+                                    <svg class="w-5 h-5"
+                                         viewBox="0 0 20 20"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.25">
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="3" />
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="6" />
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="9" />
+                                        <line x1="10"
+                                              y1="1"
+                                              x2="10"
+                                              y2="19" />
+                                        <line x1="1"
+                                              y1="10"
+                                              x2="19"
+                                              y2="10" />
+                                        <line x1="3.6"
+                                              y1="3.6"
+                                              x2="16.4"
+                                              y2="16.4" />
+                                        <line x1="16.4"
+                                              y1="3.6"
+                                              x2="3.6"
+                                              y2="16.4" />
                                     </svg>
                                     Polar
                                 </button>
@@ -1051,7 +1095,7 @@
                                 Save
                             </button>
                         </div>
-                        <!-- directory suggestion hint — space always reserved -->
+                        <!-- directory suggestion hint - space always reserved -->
                         <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-xs font-mono"
                              :class="suggestion ? 'visible' : 'invisible'">
                             <button @click="accept()"

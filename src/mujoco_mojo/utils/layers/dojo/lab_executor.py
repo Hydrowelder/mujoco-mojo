@@ -72,7 +72,7 @@ class LabExecutor:
 
     @property
     def signal_in_columns(self) -> list[str]:
-        """Column names used by all Signal In nodes — used for validation."""
+        """Column names used by all Signal In nodes - used for validation."""
         return [
             n.get("properties", {}).get("column", "")
             for n in self.nodes.values()
@@ -122,7 +122,7 @@ class LabExecutor:
         # Collect Signal Out results
         outputs: dict[str, pl.Series] = {}
         for nid, node in self.nodes.items():
-            if node.get("type") == "signal_out":
+            if self._bare_type(node) == "signal_out":
                 series = slot_data.get(nid, {}).get(0)
                 if series is not None:
                     label = node.get("properties", {}).get("label") or f"out_{nid}"

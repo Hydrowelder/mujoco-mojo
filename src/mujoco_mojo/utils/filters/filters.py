@@ -9,6 +9,7 @@ import pint
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from scipy.signal import savgol_filter
+from scipy.spatial.transform import Rotation as R
 
 __all__ = [
     "UNIT_GROUPS",
@@ -24,6 +25,7 @@ __all__ = [
     "MedianFilter",
     "NormalizeFilter",
     "RollingMeanFilter",
+    "RotationFilter",
     "SavitzkyGolayFilter",
     "ScaleFilter",
     "TaringFilter",
@@ -49,6 +51,7 @@ class FilterType(StrEnum):
     NORMALIZE = "normalize"
     SAVITZKY_GOLAY = "savitzky_golay"
     UNIT = "unit"
+    ROTATION = "rotation"
 
 
 class BaseFilter(ABC, BaseModel):
@@ -346,7 +349,7 @@ except pint.errors.RedefinitionError:
     pass
 
 # ---------------------------------------------------------------------------
-# Unit groups — single source of truth for both the frontend smart dropdown
+# Unit groups - single source of truth for both the frontend smart dropdown
 # and the SignalUnit type annotation on UnitFilter.  To add a new unit,
 # add it here; SignalUnit is derived automatically.  Verify that pint can
 # parse any new string via `ureg.parse_units(...)` before committing.
@@ -377,7 +380,7 @@ UNIT_GROUPS: list[tuple[str, list[str]]] = [
     ("Misc.", ["dimensionless", "pct", "count", "bit"]),
 ]
 
-# Derived automatically — Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
+# Derived automatically - Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
 # in Python 3.9+ because x[a, b] and x[(a, b)] make the same __getitem__ call.
 _ALL_UNITS: tuple[str, ...] = tuple(u for _, us in UNIT_GROUPS for u in us)
 SignalUnit = Literal[_ALL_UNITS] | str
@@ -431,6 +434,43 @@ class UnitFilter(BaseFilter):
         return (expr * m) + b
 
 
+class RotationFilter(BaseFilter):
+    """Rotates a 3D vector component into a reference frame using a quaternion column."""
+
+    type: Literal[FilterType.ROTATION] = FilterType.ROTATION
+    """The discriminator type for Pydantic."""
+
+    quat_col: str = Field("", json_schema_extra={"ui_type": "col"})
+    """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat')."""
+
+    invert: bool = True
+    """If True, transforms world-to-local (invert the quaternion rotation)."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr
+
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        name = series.name
+        suffix = name.rsplit(":", 1)[-1] if ":" in name else ""
+        if suffix not in ("x", "y", "z") or not self.quat_col:
+            return None
+        base = name.rsplit(":", 1)[0]
+        x_col, y_col, z_col = f"{base}:x", f"{base}:y", f"{base}:z"
+        if not all(c in df.columns for c in (x_col, y_col, z_col)):
+            return None
+        # scipy expects (x, y, z, w) column order
+        q_cols = [f"{self.quat_col}:{k}" for k in ("x", "y", "z", "w")]
+        if not all(c in df.columns for c in q_cols):
+            return None
+        transformer = R.from_quat(df.select(q_cols).to_numpy())
+        if self.invert:
+            transformer = transformer.inv()
+        v_rot = transformer.apply(df.select([x_col, y_col, z_col]).to_numpy())
+        return pl.Series(name=name, values=v_rot[:, {"x": 0, "y": 1, "z": 2}[suffix]])
+
+
 AnyFilter = Annotated[
     ScaleFilter
     | AbsoluteValueFilter
@@ -446,7 +486,8 @@ AnyFilter = Annotated[
     | UnitFilter
     | MedianFilter
     | NormalizeFilter
-    | WrapFilter,
+    | WrapFilter
+    | RotationFilter,
     Field(discriminator="type"),
 ]
 
