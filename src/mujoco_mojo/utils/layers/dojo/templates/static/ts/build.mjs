@@ -11,6 +11,7 @@ const entries = [
   { in: 'monitor.ts',      out: 'monitor.js' },
   { in: 'mosaic.ts',       out: 'mosaic.js' },
   { in: 'trial-viewer.ts', out: 'trial-viewer.js' },
+  { in: 'sensai.ts',       out: 'sensai.js' },
 ];
 
 const vendorDir = join(__dirname, '..', 'vendored');
