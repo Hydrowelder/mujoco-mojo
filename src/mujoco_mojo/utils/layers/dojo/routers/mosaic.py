@@ -19,6 +19,7 @@ from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
 from mujoco_mojo.utils.filters.filters import RotationFilter as _RotationFilter
 from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
+from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -301,7 +302,7 @@ async def get_filter_schema():
 
 
 def _get_profiles_dir() -> Path:
-    d: Path = Path.home() / ".mujoco-mojo" / "profiles"
+    d: Path = MUJOCO_MOJO_DIR / "profiles"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -417,7 +418,7 @@ _LAB_MAX_BYTES = 1024 * 1024  # 1 MB
 
 
 def _get_lab_dir() -> Path:
-    d: Path = Path.home() / ".mujoco-mojo" / "lab"
+    d: Path = MUJOCO_MOJO_DIR / "lab"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

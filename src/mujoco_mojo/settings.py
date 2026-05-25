@@ -1,8 +1,6 @@
-"""Global user settings for mujoco_mojo, persisted to ~/.mujoco_mojo/settings.toml."""
+"""Global user settings for mujoco_mojo, persisted to ~/.mujoco-mojo/settings.toml."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import tomli_w
 from pydantic import BaseModel, Field, SecretStr, field_serializer
@@ -13,7 +11,9 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-SETTINGS_DIR = Path.home() / ".mujoco_mojo"
+from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+
+SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
 
 
@@ -39,7 +39,7 @@ class SensAISettings(BaseModel):
 
 class MujocoMojoSettings(BaseSettings):
     """
-    Global user-level settings persisted to ~/.mujoco_mojo/settings.toml.
+    Global user-level settings persisted to ~/.mujoco-mojo/settings.toml.
 
     Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > TOML file > defaults. Environment variables use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_SENSAI__MODEL_NAME=llama3.2:3b`.
     """
@@ -65,6 +65,6 @@ class MujocoMojoSettings(BaseSettings):
         return (init_settings, env_settings, TomlConfigSettingsSource(settings_cls))
 
     def save(self) -> None:
-        """Persist current settings to ~/.mujoco_mojo/settings.toml."""
+        """Persist current settings to ~/.mujoco-mojo/settings.toml."""
         SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_FILE.write_bytes(tomli_w.dumps(self.model_dump()).encode())
