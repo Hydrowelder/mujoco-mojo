@@ -75,6 +75,9 @@ class BaseFilter(ABC, BaseModel):
     model_config = ConfigDict(extra="forbid")
     category: ClassVar[str] = "Misc"
 
+    enabled: bool = True
+    """Whether this filter step is active."""
+
     @abstractmethod
     def apply(self, expr: pl.Expr) -> pl.Expr:
         """Applies the transformation to a Polars expression."""
