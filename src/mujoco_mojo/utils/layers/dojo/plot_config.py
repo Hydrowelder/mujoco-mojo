@@ -16,77 +16,87 @@ from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 # ---------------------------------------------------------------------------
 # String-enum types  (generate named TypeScript union types)
 # ---------------------------------------------------------------------------
 
+camel_case_dict = ConfigDict(
+    alias_generator=to_camel,
+    populate_by_name=True,
+    serialize_by_alias=True,
+)
+
+camel_case_dict_extra = camel_case_dict.copy()
+camel_case_dict_extra["extra"] = "allow"
+
 
 class DashStyle(StrEnum):
-    solid = "solid"
-    dash = "dash"
-    dot = "dot"
-    dashdot = "dashdot"
+    SOLID = "solid"
+    DASH = "dash"
+    DOT = "dot"
+    DASHDOT = "dashdot"
 
 
 class MarkerSymbol(StrEnum):
-    none = "none"
-    circle = "circle"
-    square = "square"
-    diamond = "diamond"
-    cross = "cross"
+    NONE = "none"
+    CIRCLE = "circle"
+    SQUARE = "square"
+    DIAMOND = "diamond"
+    CROSS = "cross"
 
 
 class GridMode(StrEnum):
-    none = "none"
-    major = "major"
-    all = "all"
+    NONE = "none"
+    MAJOR = "major"
+    ALL = "all"
 
 
 class LineMode(StrEnum):
-    lines = "lines"
-    markers = "markers"
-    lines_and_markers = "lines+markers"
+    LINES = "lines"
+    MARKERS = "markers"
+    LINES_AND_MARKERS = "lines+markers"
 
 
 class InterpMode(StrEnum):
-    linear = "linear"
-    spline = "spline"
-    hv = "hv"
-    vh = "vh"
-    hvh = "hvh"
-    vhv = "vhv"
+    LINEAR = "linear"
+    SPLINE = "spline"
+    HV = "hv"
+    VH = "vh"
+    HVH = "hvh"
+    VHV = "vhv"
 
 
 class HoverMode(StrEnum):
-    x_unified = "x unified"
-    y_unified = "y unified"
-    closest = "closest"
-    x = "x"
-    y = "y"
-    none = "none"
+    X_UNIFIED = "x unified"
+    Y_UNIFIED = "y unified"
+    CLOSEST = "closest"
+    X = "x"
+    Y = "y"
+    NONE = "none"
 
 
 class LegendPos(StrEnum):
-    bottom = "bottom"
-    right = "right"
-    hidden = "hidden"
+    BOTTOM = "bottom"
+    RIGHT = "right"
+    HIDDEN = "hidden"
 
 
 class ScaleType(StrEnum):
-    linear = "linear"
-    log = "log"
+    LINEAR = "linear"
+    LOG = "log"
 
 
 class ShapeType(StrEnum):
-    vline = "vline"
-    hline = "hline"
-    rect = "rect"
+    VLINE = "vline"
+    HLINE = "hline"
+    RECT = "rect"
 
 
 class PlotType(StrEnum):
-    cartesian = "cartesian"
-    polar = "polar"
+    CARTESIAN = "cartesian"
+    POLAR = "polar"
 
 
 # ---------------------------------------------------------------------------
@@ -97,18 +107,22 @@ class PlotType(StrEnum):
 class FilterEntry(BaseModel):
     """A single filter step applied to a signal.  Extra keys are preserved."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = camel_case_dict_extra
 
     type: str
     enabled: bool = True
 
 
 class XAxisConfig(BaseModel):
+    model_config = camel_case_dict
+
     col: str = "time"
     filters: list[FilterEntry] = []
 
 
 class YAxisConfig(BaseModel):
+    model_config = camel_case_dict
+
     label: str
     color: str
     width: float
@@ -119,12 +133,16 @@ class YAxisConfig(BaseModel):
 
 
 class Annotation(BaseModel):
+    model_config = camel_case_dict
+
     x: float
     y: float
     text: str
 
 
 class Shape(BaseModel):
+    model_config = camel_case_dict
+
     type: ShapeType
     x0: float
     x1: float | None = None
@@ -138,26 +156,28 @@ class Shape(BaseModel):
 class PlotConfig(BaseModel):
     """Complete serialisable state of a trial-viewer plot."""
 
-    xAxis: XAxisConfig = Field(default_factory=XAxisConfig)
-    yAxes: dict[str, YAxisConfig]
-    refFrame: str | None
+    model_config = camel_case_dict
+
+    x_axis: XAxisConfig = Field(default_factory=XAxisConfig)
+    y_axes: dict[str, YAxisConfig]
+    ref_frame: str | None
     grid: GridMode
-    linemode: LineMode
+    line_mode: LineMode
     interp: InterpMode
     hover: HoverMode
     title: str
-    xAxisTitle: str
-    yAxisTitle: str
-    showSpike: bool
-    legendPos: LegendPos
-    rangeX: Annotated[tuple[float, float], Field()] | None
-    rangeY: Annotated[tuple[float, float], Field()] | None
-    xScale: ScaleType
-    yScale: ScaleType
-    xLogBase: float | None = None
-    yLogBase: float | None = None
-    plotType: PlotType = PlotType.cartesian
-    vsEnabled: bool
-    vsRange: Annotated[tuple[float, float], Field()]
+    x_axis_title: str
+    y_axis_title: str
+    show_spike: bool
+    legend_pos: LegendPos
+    range_x: Annotated[tuple[float, float], Field()] | None
+    range_y: Annotated[tuple[float, float], Field()] | None
+    x_scale: ScaleType
+    y_scale: ScaleType
+    x_log_base: float | None = None
+    y_log_base: float | None = None
+    plot_type: PlotType = PlotType.CARTESIAN
+    vs_enabled: bool
+    vs_range: Annotated[tuple[float, float], Field()]
     annotations: list[Annotation]
     shapes: list[Shape]

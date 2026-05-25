@@ -68,7 +68,7 @@ export interface PlotConfig {
   yAxes: Record<string, YAxisConfig>;
   refFrame: string | null;
   grid: GridMode;
-  linemode: LineMode;
+  lineMode: LineMode;
   interp: InterpMode;
   hover: HoverMode;
   title: string;

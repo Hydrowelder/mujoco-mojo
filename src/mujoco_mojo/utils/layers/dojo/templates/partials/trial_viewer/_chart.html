@@ -206,7 +206,7 @@
                                         class="{{ dropdown_trigger }}">
 
                                     <span class="truncate"
-                                          x-text="opts.lineModeLabel(config.linemode)"></span>
+                                          x-text="opts.lineModeLabel(config.lineMode)"></span>
 
                                     <svg class="w-3.5 h-3.5 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
                                          :class="open ? 'rotate-180' : ''"
@@ -226,9 +226,9 @@
 
                                     <template x-for="opt in opts.lineMode"
                                               :key="opt.value">
-                                        <button @click="config.linemode = opt.value; saveAndRender(); open = false"
+                                        <button @click="config.lineMode = opt.value; saveAndRender(); open = false"
                                                 class="{{ dropdown_option }}"
-                                                :class="config.linemode === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'">
+                                                :class="config.lineMode === opt.value ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'">
                                             <span x-text="opt.label"></span>
                                         </button>
                                     </template>
@@ -241,13 +241,13 @@
                             <!-- interpolation -->
                             <div class="space-y-1 relative transition-opacity duration-300"
                                  x-data="{ open: false }"
-                                 :class="config.linemode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
+                                 :class="config.lineMode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
 
                                 <label class="text-xs font-bold text-slate-500 uppercase">Interpolation</label>
 
                                 <button @click="open = !open"
                                         @click.away="open = false"
-                                        :disabled="config.linemode === 'markers'"
+                                        :disabled="config.lineMode === 'markers'"
                                         class="{{ dropdown_trigger_disabled }}">
 
                                     <span class="truncate"
