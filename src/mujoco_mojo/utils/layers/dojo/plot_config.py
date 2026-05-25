@@ -1,9 +1,7 @@
 """
 Pydantic models for the Dojo trial-viewer PlotConfig.
 
-These are the single source of truth for both server-side validation
-(profile save/load) and the generated TypeScript types in
-``lib/plot-config.generated.ts``.
+These are the single source of truth for both server-side validation (profile save/load) and the generated TypeScript types in `lib/plot-config.generated.ts`.
 
 To regenerate TypeScript types after changing this file:
 

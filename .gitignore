@@ -17,6 +17,7 @@ docs/reference/
 mojo-models
 textures
 
+typings
 MUJOCO_LOG.TXT
 
 /*.mp4

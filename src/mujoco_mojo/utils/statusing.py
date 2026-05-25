@@ -246,6 +246,10 @@ class JobStatus(MojoBaseModel):
         """Wipes the internal trial cache to force a full disk re-scan."""
         self._cache.clear()
 
+    def get_trial_status(self, trial_num: int) -> TrialStatus | None:
+        """Returns the cached status for a trial, or None if not yet loaded."""
+        return self._cache.get(trial_num)
+
     def trial_num_to_path(self, trial_num: int) -> Path:
         return self.workdir / "trials" / f"trial_{trial_num:{self.padding_style}}"
 

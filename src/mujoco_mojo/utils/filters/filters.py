@@ -9,6 +9,7 @@ import numpy as np
 import pint
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic.alias_generators import to_camel
 from scipy.signal import savgol_filter
 from scipy.spatial.transform import Rotation as R
 
@@ -72,7 +73,12 @@ class FilterType(StrEnum):
 class BaseFilter(ABC, BaseModel):
     """Base class for all data transformations."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
     category: ClassVar[str] = "Misc"
 
     enabled: bool = True
