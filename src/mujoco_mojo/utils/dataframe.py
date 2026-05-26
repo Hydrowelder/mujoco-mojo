@@ -104,9 +104,16 @@ else:
 
 
 class ColumnManifest(TypedDict):
+    """Manifest of all columns available for plotting."""
+
     all: list[str]
+    """Manifest of all columns available for plotting."""
+
     rotatable_vectors: list[str]
+    """All columns in self.all which are available be rotated using self.available_quats."""
+
     available_quats: list[str]
+    """All quaternion names which have enough information to rotate self.rotateable_vectors."""
 
 
 class MojoNamespace:

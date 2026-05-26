@@ -7,7 +7,12 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 
-from .routers import monitor, morph, mosaic, sensai
+from .routers import monitor, morph, mosaic
+
+try:
+    from .routers import sensai as _sensai_router
+except ImportError:
+    _sensai_router = None
 
 security = HTTPBasic(auto_error=False)
 
@@ -93,4 +98,7 @@ dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
 dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies)
-dojo_app.include_router(sensai.router, prefix="/sensai", dependencies=dependencies)
+if _sensai_router is not None:
+    dojo_app.include_router(
+        _sensai_router.router, prefix="/sensai", dependencies=dependencies
+    )

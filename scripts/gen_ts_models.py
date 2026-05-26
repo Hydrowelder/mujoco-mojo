@@ -60,7 +60,11 @@ def _schema_to_ts(node: dict, defs: dict) -> str:
             items = [_schema_to_ts(s, defs) for s in node["prefixItems"]]
             return f"[{', '.join(items)}]"
         if "items" in node:
-            return f"{_schema_to_ts(node['items'], defs)}[]"
+            items_node = node["items"]
+            # discriminated union (oneOf + discriminator) → use the FilterEntry alias
+            if "oneOf" in items_node and "discriminator" in items_node:
+                return "FilterEntry[]"
+            return f"{_schema_to_ts(items_node, defs)}[]"
         return "unknown[]"
 
     if t == "object":
@@ -149,6 +153,13 @@ def main() -> None:
     defs: dict = schema.get("$defs", {})
 
     blocks: list[str] = []
+
+    # FilterEntry is the structural base for every discriminated filter object;
+    # emitted first so XAxisConfig/YAxisConfig can reference it.
+    blocks.append(
+        "/** a single filter in a filter stack — type-discriminated, open-ended properties. */\n"
+        "export type FilterEntry = { type: string; enabled?: boolean; [key: string]: unknown };\n"
+    )
 
     # Emit each $def in definition order
     for def_name, def_schema in defs.items():

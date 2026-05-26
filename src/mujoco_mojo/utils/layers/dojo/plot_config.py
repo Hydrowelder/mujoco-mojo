@@ -13,7 +13,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 from mujoco_mojo.utils.filters.filters import AnyFilter
@@ -298,7 +298,7 @@ class PlotConfig(BaseModel):
     """Reference frame used to transform signal coordinates. `None` for world frame."""
 
     grid: GridMode
-    """Grid line visibility."""
+    """Grid line visibility. Sets if the backing grid is visible with both major and minor ticks, major ticks only, or none at all."""
 
     line_mode: LineMode
     """Whether traces render as lines, markers, or both."""
@@ -356,6 +356,13 @@ class PlotConfig(BaseModel):
 
     shapes: list[Shape]
     """Geometric reference shapes drawn over the plot."""
+
+    @field_validator("ref_frame")
+    @classmethod
+    def validate_ref_frame(cls, v: str | None) -> str | None:
+        if isinstance(v, str) and v.lower() == "world":
+            return None
+        return v
 
     @model_validator(mode="after")
     def validate_ranges(self) -> PlotConfig:

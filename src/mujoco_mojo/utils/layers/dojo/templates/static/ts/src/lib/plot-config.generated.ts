@@ -4,6 +4,9 @@
 // Regenerate: python scripts/gen_ts_models.py
 // ============================================================
 
+/** a single filter in a filter stack — type-discriminated, open-ended properties. */
+export type FilterEntry = { type: string; enabled?: boolean; [key: string]: unknown };
+
 export interface AbsoluteValueFilter {
   enabled?: boolean;
   type?: string;
@@ -188,7 +191,7 @@ export interface WrapFilter {
 
 export interface XAxisConfig {
   col?: string;
-  filters?: unknown[];
+  filters?: FilterEntry[];
 }
 
 export interface YAxisConfig {
@@ -196,7 +199,7 @@ export interface YAxisConfig {
   color: string;
   width: number;
   opacity: number;
-  filters: unknown[];
+  filters: FilterEntry[];
   dash: DashStyle;
   marker: MarkerSymbol;
 }

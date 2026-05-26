@@ -72,15 +72,22 @@ declare global {
     monitor(): object;
     mosaic(): object;
     sensai(): object;
+    sensaiMsgData(role: string): object;
+    downloadSensAIHistory(): void;
+    renderMarkdown(text: string): string;
+    initSensAICodeBlocks(container: HTMLElement): void;
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabUndo?(): void;
     mojoLabRedo?(): void;
+    mojoLabArrange?(): void;
+    mojoLabFitView?(): void;
   }
 }
 
 // Alpine magic properties injected at runtime into component `this`
 export interface AlpineMagics {
+  $el: HTMLElement;
   $nextTick(callback?: () => void): Promise<void>;
   $watch<T>(
     expr: string,

@@ -1186,7 +1186,15 @@ def run_dojo(
     """
     _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
+    import warnings
+
     import uvicorn
+
+    # fastmcp (a transitive dependency of the sensai agent) pulls in key_value.aio,
+    # which calls beartype_this_package() on itself. beartype then trips over
+    # numpydantic's NDArray metaclass, which breaks isinstance() checks.
+    # this is purely a third-party incompatibility; suppress the noise.
+    warnings.filterwarnings("ignore", module=r"key_value\.")
 
     import mujoco_mojo.utils.layers.dojo.shared as shared
     from mujoco_mojo.utils.layers.dojo.main import dojo_app

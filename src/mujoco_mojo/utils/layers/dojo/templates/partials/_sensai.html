@@ -1,3 +1,25 @@
+<style>
+  .sensai-md p { margin-bottom: 0.5rem; line-height: 1.6; }
+  .sensai-md p:last-child { margin-bottom: 0; }
+  .sensai-md h1, .sensai-md h2 { font-size: 0.875rem; font-weight: 700; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+  .sensai-md h3, .sensai-md h4, .sensai-md h5, .sensai-md h6 { font-size: 0.875rem; font-weight: 600; margin-top: 0.5rem; margin-bottom: 0.25rem; }
+  .sensai-md :is(h1,h2,h3,h4,h5,h6):first-child { margin-top: 0; }
+  .sensai-md ul { list-style-type: disc; margin-left: 1rem; margin-bottom: 0.5rem; }
+  .sensai-md ol { list-style-type: decimal; margin-left: 1rem; margin-bottom: 0.5rem; }
+  .sensai-md li { line-height: 1.5; margin-bottom: 0.125rem; }
+  .sensai-md a { color: #06b6d4; text-decoration: underline; }
+  .sensai-md a:hover { color: #0891b2; }
+  .dark .sensai-md a { color: #22d3ee; }
+  .sensai-md blockquote { border-left: 3px solid #94a3b8; padding-left: 0.75rem; margin: 0.5rem 0; color: #64748b; }
+  .dark .sensai-md blockquote { border-left-color: #475569; color: #94a3b8; }
+  .sensai-md hr { border-top: 1px solid #e2e8f0; margin: 0.75rem 0; }
+  .dark .sensai-md hr { border-top-color: #334155; }
+  .sensai-md pre { margin: 0; }
+  .sensai-cm-block { background: #f1f5f9; border-radius: 0.375rem; overflow: hidden; font-size: 0.75rem; margin: 0.375rem 0; }
+  .dark .sensai-cm-block { background: #1e293b; }
+  .sensai-cm-block .cm-editor { max-height: 16rem; overflow-y: auto; }
+  .sensai-cm-block .cm-scroller { font-size: 0.75rem; }
+</style>
 <!-- SensAI FAB + compact chat panel - fixed bottom-right -->
 <div x-data="sensai()"
      @keydown.escape.window="if (open) close()"
@@ -27,11 +49,11 @@
                 stroke-width="1.75"
                 d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
         </svg>
-        <span class="font-black tracking-widest text-base text-slate-700 dark:text-slate-200">SensAI</span>
+        <span class="font-black uppercase tracking-widest text-base text-slate-700 dark:text-slate-200">SensAI</span>
       </div>
       <button @click="clear()"
               x-show="messages.length > 0"
-              class="text-small font-mono text-slate-400 hover:text-rose-500 transition-colors">
+              class="text-sm font-mono text-slate-400 hover:text-rose-500 transition-colors">
         Clear
       </button>
     </div>
@@ -49,60 +71,139 @@
               d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
       </svg>
       <div>
-        <p class="font-black uppercase tracking-widest text-sm text-slate-500 dark:text-slate-400 mb-1">SensAI disabled</p>
+        <p class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">The SensAI feature is currently disabled</p>
+        <p class="text-sm font-bold text-slate-500 uppercase mb-1">To enable run:</p>
         <code class="block mt-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-cyan-600 dark:text-cyan-400">
           mujoco-mojo settings set sensai.enabled True
         </code>
+        <p class="text-sm font-bold text-slate-500 uppercase mt-1">and refresh!</p>
       </div>
     </div>
 
     <!-- message list -->
     <div x-show="enabled !== false"
-         x-ref="messages"
-         class="flex-1 overflow-y-auto p-3 space-y-3">
+         class="relative flex-1 min-h-0">
+      <div x-ref="messages"
+           @scroll="onScroll($el)"
+           class="h-full overflow-y-auto p-3 space-y-3">
 
-      <!-- empty state -->
-      <div x-show="messages.length === 0 && !loading"
-           class="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
-        <svg class="w-7 h-7 text-slate-300 dark:text-slate-600"
+        <!-- empty state -->
+        <div x-show="messages.length === 0 && !loading"
+             class="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
+          <svg class="w-7 h-7 text-slate-300 dark:text-slate-600"
+               fill="none"
+               stroke="currentColor"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.5"
+                  d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+          </svg>
+          <p class="text-sm font-mono text-slate-400 dark:text-slate-500 italic">Ask about your simulation job,<br>trial results, or plot configuration.</p>
+        </div>
+
+        <!-- messages -->
+        <template x-for="(msg, i) in messages"
+                  :key="i">
+          <div x-data="sensaiMsgData(msg.role)"
+               x-init="$nextTick(() => { initSensAICodeBlocks($el); measure(); })"
+               @sensai-remeasure.window="$nextTick(() => { initSensAICodeBlocks($el); measure(); })"
+               class="flex flex-col gap-0.5"
+               :class="msg.role === 'user' ? 'items-end' : 'items-start'">
+
+            <!-- header: full row is toggle; chevron hidden for single-line messages -->
+            <button @mousedown.prevent="if (!single) open = !open"
+                    @keydown.enter.prevent="if (!single) open = !open"
+                    @keydown.space.prevent="if (!single) open = !open"
+                    class="flex items-center gap-1.5 text-xs font-mono text-slate-400 dark:text-slate-500 px-1 transition-colors"
+                    :class="!single ? 'hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer' : 'cursor-default'"
+                    :title="!single ? (open ? 'Collapse' : 'Expand') : ''">
+              <span x-text="msg.role === 'user' ? 'You' : 'SensAI'"></span>
+              <span>·</span>
+              <span x-text="notifTimeAgo(msg.ts, $store.dojo.notifTick)"></span>
+              <svg x-show="!single"
+                   class="w-2.5 h-2.5 ml-0.5 transition-transform duration-200"
+                   :class="open ? '' : '-rotate-90'"
+                   fill="none"
+                   stroke="currentColor"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.5"
+                      d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <!-- bubble: no constraints when single-line; grows/shrinks when multi-line -->
+            <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed overflow-hidden"
+                 :class="[
+                 msg.role === 'user' ? 'font-mono' : '',
+                 msg.role === 'user'
+                   ? 'bg-cyan-500 text-white'
+                   : msg.error
+                     ? 'bg-rose-50 dark:bg-rose-900/20 border border-rose-300 dark:border-rose-700/50 text-rose-700 dark:text-rose-300'
+                     : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200',
+                 !single ? 'transition-[max-height] duration-300 ease-out' : '',
+                 !single && open  ? 'max-h-[10000px]' : '',
+                 !single && !open ? 'max-h-[3.5rem] cursor-pointer' : ''
+               ]"
+                 :style="!single && !open ? '-webkit-mask-image: linear-gradient(to bottom, black 65%, transparent 100%); mask-image: linear-gradient(to bottom, black 65%, transparent 100%)' : ''"
+                 @click="if (!single && !open) open = true">
+              <template x-if="msg.role === 'user'">
+                <p class="whitespace-pre-wrap break-words" x-text="msg.content"></p>
+              </template>
+              <template x-if="msg.role !== 'user'">
+                <div class="sensai-md break-words"
+                     x-html="renderMarkdown(msg.content)"></div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- streaming bubble — shown while model is generating tokens -->
+        <div x-show="streaming"
+             x-cloak
+             class="flex flex-col gap-0.5 items-start">
+          <div class="text-xs font-mono text-slate-400 dark:text-slate-500 px-1">SensAI</div>
+          <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed
+                      bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600
+                      text-slate-700 dark:text-slate-200">
+            <p class="whitespace-pre-wrap break-words" x-text="streamingContent + '▍'"></p>
+          </div>
+        </div>
+
+        <!-- typing indicator — shown while waiting for first token -->
+        <div x-show="loading && !streaming"
+             class="flex justify-start">
+          <div class="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
+                  style="animation-delay: 0ms"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
+                  style="animation-delay: 150ms"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
+                  style="animation-delay: 300ms"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- scroll to bottom button -->
+      <button x-show="!atBottom"
+              x-cloak
+              @click="scrollToBottom()"
+              class="absolute bottom-2 right-2 w-7 h-7 rounded-full card flex items-center justify-center text-slate-400 hover:text-cyan-500 hover:border-cyan-500/50 shadow-md transition-all z-10"
+              title="Scroll to bottom">
+        <svg class="w-3.5 h-3.5"
              fill="none"
              stroke="currentColor"
              viewBox="0 0 24 24">
           <path stroke-linecap="round"
                 stroke-linejoin="round"
-                stroke-width="1.5"
-                d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                stroke-width="2.5"
+                d="M19 9l-7 7-7-7" />
         </svg>
-        <p class="text-sm font-mono text-slate-400 dark:text-slate-500 italic">Ask about your simulation job,<br>trial results, or plot configuration.</p>
-      </div>
-
-      <!-- messages -->
-      <template x-for="(msg, i) in messages"
-                :key="i">
-        <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
-          <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm font-mono leading-relaxed whitespace-pre-wrap break-words"
-               :class="msg.role === 'user'
-                 ? 'bg-cyan-500 text-white'
-                 : msg.error
-                   ? 'bg-rose-50 dark:bg-rose-900/20 border border-rose-300 dark:border-rose-700/50 text-rose-700 dark:text-rose-300'
-                   : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200'"
-               x-text="msg.content">
-          </div>
-        </div>
-      </template>
-
-      <!-- typing indicator -->
-      <div x-show="loading"
-           class="flex justify-start">
-        <div class="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-3 flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
-                style="animation-delay: 0ms"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
-                style="animation-delay: 150ms"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
-                style="animation-delay: 300ms"></span>
-        </div>
-      </div>
+        <span x-show="hasNewResponse"
+              class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-cyan-500"></span>
+      </button>
     </div>
 
     <!-- input area -->
@@ -115,8 +216,8 @@
                   @keydown.enter.prevent="if (!$event.shiftKey) send()"
                   :disabled="loading"
                   rows="1"
-                  placeholder="Ask about your simulation..."
-                  class="input-field flex-1 resize-none px-3 py-2 leading-snug text-sm"></textarea>
+                  placeholder="Ask about your sim..."
+                  class="input-field flex-1 resize-none px-3 py-2 leading-snug text-base"></textarea>
         <button @click="send()"
                 :disabled="loading || !input.trim()"
                 class="btn-icon shrink-0 transition-all"
@@ -141,8 +242,9 @@
           class="relative w-11 h-11 rounded-full card flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-lg"
           :class="open ? 'text-cyan-500 border-cyan-500/50' : ''"
           title="SensAI">
-    <svg class="w-5 h-5"
-         fill="none"
+    <svg class="w-5 h-5 transition-colors duration-200"
+         :fill="hasNewResponse && !open ? 'currentColor' : 'none'"
+         :class="hasNewResponse && !open ? 'text-cyan-500' : ''"
          stroke="currentColor"
          viewBox="0 0 24 24">
       <path stroke-linecap="round"
