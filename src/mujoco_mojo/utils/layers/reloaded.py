@@ -1,5 +1,7 @@
 import logging
+import queue
 import sys
+import threading
 import time
 from bdb import BdbQuit
 from dataclasses import dataclass
@@ -15,7 +17,7 @@ from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.stochas import NamedValueDict
+from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
@@ -143,6 +145,8 @@ class MojoReloaded:
     host: str
     port: int
 
+    watch: bool = False
+
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     _playback_speed: float = 1.0
     _last_command: str = "run"
@@ -154,6 +158,20 @@ class MojoReloaded:
             )
         elif not self.generator and not self.config_path:
             raise ValueError("A generator option or config option must be provided.")
+
+        paths = {
+            "generator": self.generator,
+            "runtime": self.runtime,
+        }
+        non_none = {k: v for k, v in paths.items() if v is not None}
+        seen: dict[str, str] = {}
+        for role, path in non_none.items():
+            if path in seen:
+                raise ValueError(
+                    f"'{path}' is assigned to both '{seen[path]}' and '{role}'. "
+                    "Each function must be unique."
+                )
+            seen[path] = role
 
         if self.config_path:
             self.config_path = self.config_path.resolve()
@@ -240,9 +258,14 @@ class MojoReloaded:
         start = time.time()
         if self.generator:
             assert gen_func
+            # explicitly reset all stochas registries, then reinsert overrides
+            mojo_model = MojoModel()
+            mojo_model.named = NamedValueDict[NDArray]()
+            mojo_model.dists = DistributionDict()
+            mojo_model.design = DesignValueDict()
+
             mojo_model = (
-                MojoModel()
-                .with_overrides(overrides=global_overrides)
+                mojo_model.with_overrides(overrides=global_overrides)
                 .with_seed(seed=self.seed)
                 .with_trial_num(self.trial_num)
             )
@@ -342,53 +365,191 @@ class MojoReloaded:
                 console.print(f"Invalid viewer option selected {self.ui}")
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
-    def _interactive_loop(
-        self, on_reload_callback: OnReloadCallback, is_running_check: IsRunningCheck
-    ):
-        if self.runtime:
-            runtime_cmd = "- [bold cyan]Any float[/]: Generate and use runtime. Playback speed set by float [dim](i.e., 1.0/run for real time, 0.5 for half speed, etc.)[/].\n"
-        else:
-            runtime_cmd = ""
+    def _print_help(self):
+        runtime_cmd = (
+            "- [bold cyan]Any float[/]: Generate and use runtime. Playback speed set by float [dim](i.e., 1.0 for real time, 0.5 for half speed)[/]\n"
+            if self.runtime
+            else ""
+        )
+        watch_status = "[bold blue]on[/bold blue]" if self.watch else "[dim]off[/dim]"
         console.print(
             Panel(
                 "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
                 "- [bold yellow]ENTER[/]: Repeat last command\n"
                 "- [bold magenta]gen[/]: Generate only\n"
                 f"{runtime_cmd}"
-                "- [bold red]exit[/]: to close",
+                "- [bold white]seed <N>[/]: Set seed to N\n"
+                "- [bold white]trial <N>[/]: Set trial number to N\n"
+                f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
+                "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
+                "- [bold red]exit[/] / [bold red]q[/]: Close",
                 title="Interactive Controls",
                 border_style="cyan",
+                expand=False,
             )
         )
-        while is_running_check():
+
+    def _interactive_loop(
+        self, on_reload_callback: OnReloadCallback, is_running_check: IsRunningCheck
+    ):
+        event_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+        stop_event = threading.Event()
+        watcher_stop_event: threading.Event | None = None
+
+        def start_watcher() -> threading.Event | None:
             try:
-                raw_input = (
-                    console.input(
-                        f"[bold green]Awaiting command[/bold green] [dim](last cmd: {self._last_command})[/dim][white] > [/white]"
-                    )
-                    .strip()
-                    .lower()
+                from watchfiles import PythonFilter
+                from watchfiles import watch as wf_watch
+            except ImportError:
+                console.print(
+                    "[bold yellow]Warning:[/bold yellow] watchfiles not installed. "
+                    "Install [bold]mujoco-mojo[reloaded][/bold] to use --watch."
                 )
+                return None
+            evt = threading.Event()
+            watch_path = Path.cwd()
 
-                # handle repeat last command
-                cmd = raw_input if raw_input else self._last_command
-                self._last_command = cmd
+            def _run():
+                try:
+                    for _ in wf_watch(
+                        watch_path, watch_filter=PythonFilter(), stop_event=evt
+                    ):
+                        event_queue.put(("reload", ""))
+                except Exception:
+                    pass
 
-                if raw_input in ["exit", "quit", "q"]:
+            threading.Thread(target=_run, daemon=True).start()
+            return evt
+
+        def stop_watcher():
+            nonlocal watcher_stop_event
+            if watcher_stop_event is not None:
+                watcher_stop_event.set()
+                watcher_stop_event = None
+
+        def stdin_reader():
+            while not stop_event.is_set():
+                try:
+                    line = sys.stdin.readline()
+                    if not line:
+                        event_queue.put(("input", "exit"))
+                        break
+                    event_queue.put(("input", line.strip()))
+                except (KeyboardInterrupt, EOFError):
+                    event_queue.put(("input", "exit"))
                     break
 
-                use_runtime = not cmd == "gen"
+        threading.Thread(target=stdin_reader, daemon=True).start()
 
+        if self.watch:
+            watcher_stop_event = start_watcher()
+
+        self._print_help()
+
+        def print_prompt():
+            watch_indicator = " [bold blue]W[/bold blue]" if self.watch else ""
+            console.print(
+                f"[bold green]Awaiting command[/bold green]"
+                f"[dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num})[/dim]"
+                f"{watch_indicator}[white] > [/white]",
+                end="",
+            )
+
+        print_prompt()
+
+        while is_running_check():
+            try:
+                event_type, data = event_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            except (KeyboardInterrupt, BdbQuit):
+                break
+
+            if event_type == "reload":
+                console.print(
+                    "\n[dim]File change detected, reloading with last command...[/dim]"
+                )
+                use_runtime = self._last_command != "gen"
                 try:
-                    self._playback_speed = float(cmd)
+                    start = time.time()
+                    new_mj_model, new_mj_data = self.generate_construct(
+                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
+                    )
+                    on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
+                    console.print(
+                        f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                    )
+                except Exception as e:
+                    logger.exception(e)
+                    console.print(
+                        f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                    )
+                print_prompt()
+                continue
+
+            raw = data.lower()
+
+            if raw in ("exit", "quit", "q"):
+                break
+
+            if raw in ("h", "help"):
+                self._print_help()
+                print_prompt()
+                continue
+
+            if raw == "watch":
+                self.watch = not self.watch
+                if self.watch:
+                    watcher_stop_event = start_watcher()
+                    if watcher_stop_event is None:
+                        self.watch = False
+                    else:
+                        console.print("[dim]Auto-watch enabled[/dim]")
+                else:
+                    stop_watcher()
+                    console.print("[dim]Auto-watch disabled[/dim]")
+                print_prompt()
+                continue
+
+            if raw.startswith("seed "):
+                try:
+                    self.seed = int(raw[5:].strip())
+                    console.print(f"[dim]Seed set to {self.seed}.[/dim]")
+                except ValueError:
+                    console.print(
+                        "[bold red]Invalid seed.[/bold red] Use: seed <integer>"
+                    )
+                print_prompt()
+                continue
+
+            if raw.startswith("trial "):
+                try:
+                    self.trial_num = int(raw[6:].strip())
+                    console.print(f"[dim]Trial number set to {self.trial_num}.[/dim]")
+                except ValueError:
+                    console.print(
+                        "[bold red]Invalid trial number.[/bold red] Use: trial <integer>"
+                    )
+                print_prompt()
+                continue
+
+            if raw:
+                try:
+                    self._playback_speed = float(raw)
                     console.print(
                         f"[dim]Playback speed set to {self._playback_speed}x[/]"
                     )
                 except ValueError:
-                    pass
+                    console.print(
+                        f"[bold red]Unknown command:[/bold red] '{raw}'. Type [bold cyan]h[/bold cyan] for help."
+                    )
+                    print_prompt()
+                    continue
 
-            except (BdbQuit, KeyboardInterrupt):
-                break
+            cmd = raw if raw else self._last_command
+            self._last_command = cmd
+
+            use_runtime = cmd != "gen"
 
             try:
                 start = time.time()
@@ -400,12 +561,16 @@ class MojoReloaded:
                 console.print(
                     f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
                 )
-
             except Exception as e:
                 logger.exception(e)
                 console.print(
                     f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
                 )
+
+            print_prompt()
+
+        stop_watcher()
+        stop_event.set()
 
     def run_opengl(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         import mujoco.viewer

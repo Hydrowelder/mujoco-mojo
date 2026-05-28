@@ -589,6 +589,21 @@ class MojoRunner:
         trial_nums: list[int] | None = None,
     ) -> bool:
         """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
+        funcs = {
+            "generator": self.generator,
+            "runtime": self.runtime,
+            "objective": self.objective,
+        }
+        non_none = {k: v for k, v in funcs.items() if v is not None}
+        seen: dict[int, str] = {}
+        for role, func in non_none.items():
+            fid = id(func)
+            if fid in seen:
+                msg = f"'{getattr(func, '__qualname__', func)}' is assigned to both '{seen[fid]}' and '{role}'. Each function must be unique."
+                logger.error(msg)
+                raise ValueError(msg)
+            seen[fid] = role
+
         if clean_workdir:
             if self.config.resume:
                 msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."

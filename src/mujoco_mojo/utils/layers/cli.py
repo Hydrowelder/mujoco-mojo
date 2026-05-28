@@ -400,6 +400,14 @@ if True:
         MJVISER = "mjviser"
         VISER = "viser"
 
+    WatchType = Annotated[
+        bool,
+        typer.Option(
+            "--watch/--no-watch",
+            help="Automatically reload when [dim]*.py[/dim] source files change.",
+        ),
+    ]
+
     UIType = Annotated[
         UserInterface,
         typer.Option(
@@ -1123,6 +1131,7 @@ def run_reloaded(
     config_path: ConfigPathFileType = None,
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
+    watch: WatchType = True,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -1159,6 +1168,7 @@ def run_reloaded(
         seed=seed,
         model_config_name=model_config_name,
         xml_name=xml_name,
+        watch=watch,
         gen_args=processed_gen_args,
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,
