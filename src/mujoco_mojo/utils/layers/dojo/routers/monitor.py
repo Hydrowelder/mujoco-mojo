@@ -1,11 +1,12 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.statusing import TRIAL_STATUS_FNAME, TrialStatus
 
 from .. import shared
 
@@ -92,9 +93,9 @@ async def get_monitor(request: Request):
     )
 
 
-@router.get("/api/status")
-async def get_status():
-    """The 'Pulse' endpoint for Alpine.js."""
+@router.get("/api/status/job")
+async def get_job_status():
+    """Returns aggregate job status for the monitor and trial viewer pages."""
     if not shared.CURRENT_JOB:
         return {"error": "No job loaded"}
 
@@ -105,6 +106,29 @@ async def get_status():
     )
 
     return shared.CURRENT_JOB.to_monitor_json()
+
+
+@router.get("/api/status/trial/{trial_num}")
+async def get_trial_status(trial_num: int) -> TrialStatus:
+    """Returns step-level execution details for a specific trial."""
+    if not shared.CURRENT_JOB:
+        raise HTTPException(status_code=503, detail="No job loaded")
+
+    status = shared.CURRENT_JOB.get_trial_status(trial_num)
+    if status is None:
+        path = shared.CURRENT_JOB.trial_num_to_path(trial_num) / TRIAL_STATUS_FNAME
+        if path.exists():
+            try:
+                loop = asyncio.get_running_loop()
+                text = await loop.run_in_executor(None, path.read_text)
+                status = TrialStatus.model_validate_json(text)
+            except Exception:
+                pass
+
+    if status is None:
+        raise HTTPException(status_code=404, detail=f"Trial {trial_num} not found")
+
+    return status
 
 
 @router.get("/api/status/stream")

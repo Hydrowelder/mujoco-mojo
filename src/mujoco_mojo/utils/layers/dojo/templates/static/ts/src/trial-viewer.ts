@@ -10,6 +10,7 @@ import type {
   Shape,
   TrialDataResponse,
   TrialManifest,
+  TrialStatus,
   UnitGroup,
   YAxisConfig,
 } from "./models";
@@ -201,6 +202,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     shapeDraft: null as Shape | null,
     shapeEditIndex: null as number | null,
 
+    // --- TRIAL STATUS ---
+    trialStatus: null as TrialStatus | null,
+    _trialStatusPoll: null as ReturnType<typeof setTimeout> | null,
+
     // -----------------------------------------------------------------------
     // History
     // -----------------------------------------------------------------------
@@ -363,6 +368,29 @@ function trialViewer(trialId: string, externalUrl: string) {
           );
         } catch (e) {
           console.warn(`Hydration failed for ${id}`, e);
+        }
+      }
+    },
+
+    async fetchTrialStatus() {
+      if (this.warpId === null) return;
+      try {
+        const resp = await fetch(`/monitor/api/status/trial/${this.warpId}`);
+        if (!resp.ok) return;
+        this.trialStatus = (await resp.json()) as TrialStatus;
+      } catch {
+        // dojo offline - leave existing status in place
+      }
+      if (this.trialStatus && this.trialStatus.completion === "incomplete") {
+        if (this._trialStatusPoll === null) {
+          this._trialStatusPoll = setInterval(() => {
+            void this.fetchTrialStatus();
+          }, 3000);
+        }
+      } else {
+        if (this._trialStatusPoll !== null) {
+          clearInterval(this._trialStatusPoll);
+          this._trialStatusPoll = null;
         }
       }
     },
@@ -619,6 +647,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         : "light";
       const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
       this.warpId = isNaN(currentNum) ? null : currentNum;
+      void this.fetchTrialStatus();
 
       const observer = new MutationObserver((mutations) => {
         if (mutations.some((m) => m.attributeName === "class")) {
@@ -639,7 +668,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
 
       try {
-        const statusResp = await fetch("/monitor/api/status");
+        const statusResp = await fetch("/monitor/api/status/job");
         const statusData = (await statusResp.json()) as {
           error?: boolean;
           is_complete: boolean;

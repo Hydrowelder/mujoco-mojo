@@ -7,7 +7,7 @@ function mosaic() {
 
     async init() {
       try {
-        const statusResp = await fetch('/monitor/api/status');
+        const statusResp = await fetch('/monitor/api/status/job');
         const statusData = (await statusResp.json()) as JobStatus;
         if (statusData && !statusData.error) {
           (Alpine.store('dojo') as DojoStore).updateSync(Date.now(), statusData.is_complete);

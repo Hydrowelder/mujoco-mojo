@@ -21,7 +21,7 @@
           this.handleDataUpdate(e.detail);
         });
         try {
-          const resp = await fetch("/monitor/api/status");
+          const resp = await fetch("/monitor/api/status/job");
           const data = await resp.json();
           if (data && !data.error) {
             Alpine.store("dojo").updateSync(

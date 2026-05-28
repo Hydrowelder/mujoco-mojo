@@ -1,0 +1,103 @@
+<!-- ══════════════════════════════════════════════════════════════════
+         TRIAL STATUS  ·  _trial_status.html
+         Execution step timing, shown when trialStatus is available.
+         ══════════════════════════════════════════════════════════════════ -->
+
+<div class="mt-8 space-y-2"
+     x-data="{
+         open: localStorage.getItem('mojo:trial-status:open') !== '0',
+         toggle() {
+             this.open = !this.open;
+             try { localStorage.setItem('mojo:trial-status:open', this.open ? '1' : '0'); } catch {}
+         }
+     }"
+     x-show="trialStatus !== null">
+
+    <!-- section header -->
+    <div class="flex items-center justify-between px-2">
+        <button @mousedown.prevent="toggle()"
+                @keydown.enter.prevent="toggle()"
+                @keydown.space.prevent="toggle()"
+                class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors active:scale-100">
+            <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
+                 :class="open ? '' : '-rotate-90'"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2.5"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M19 9l-7 7-7-7" />
+            </svg>
+            Trial Execution
+        </button>
+
+        <!-- completion badge -->
+        <template x-if="trialStatus">
+            <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full"
+                  :class="{
+                      'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400': trialStatus.completion === 'success',
+                      'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400': trialStatus.completion === 'failed',
+                      'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400': trialStatus.completion === 'incomplete'
+                  }"
+                  x-text="trialStatus.completion.toUpperCase()"></span>
+        </template>
+    </div>
+
+    <!-- collapsible body -->
+    <div x-show="open"
+         x-transition:enter="transition-opacity duration-150"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="overflow-hidden">
+        <template x-if="trialStatus">
+            <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 divide-y divide-slate-200 dark:divide-slate-700 text-sm font-mono overflow-hidden">
+
+                <!-- step rows -->
+                <template x-for="stepName in ['generating', 'solving']"
+                          :key="stepName">
+                    <div class="flex items-center gap-3 px-4 py-2.5">
+
+                        <!-- step indicator dot -->
+                        <span class="w-2 h-2 rounded-full flex-shrink-0"
+                              :class="{
+                                  'bg-emerald-500': trialStatus[stepName].elapsed !== null,
+                                  'bg-cyan-400 animate-pulse': trialStatus.step === stepName && trialStatus[stepName].elapsed === null,
+                                  'bg-slate-300 dark:bg-slate-600': trialStatus[stepName].started === null
+                              }">
+                        </span>
+
+                        <!-- step name -->
+                        <span class="w-24 text-slate-500 dark:text-slate-400 capitalize"
+                              x-text="stepName"></span>
+
+                        <!-- started time (local) -->
+                        <span class="flex-1 text-slate-600 dark:text-slate-300 text-sm"
+                              x-text="trialStatus[stepName].started
+                                  ? new Date(trialStatus[stepName].started).toLocaleTimeString()
+                                  : '—'">
+                        </span>
+
+                        <!-- elapsed or in-progress marker -->
+                        <span class="text-right text-sm"
+                              :class="{
+                                  'text-slate-500 dark:text-slate-400': trialStatus[stepName].elapsed !== null,
+                                  'text-cyan-500 dark:text-cyan-400': trialStatus.step === stepName && trialStatus[stepName].elapsed === null,
+                                  'text-slate-400 dark:text-slate-600': trialStatus[stepName].started === null
+                              }"
+                              x-text="trialStatus[stepName].elapsed !== null
+                                  ? trialStatus[stepName].elapsed.toFixed(2) + 's'
+                                  : trialStatus.step === stepName
+                                      ? 'running...'
+                                      : '—'">
+                        </span>
+                    </div>
+                </template>
+
+            </div>
+        </template>
+    </div>
+</div>

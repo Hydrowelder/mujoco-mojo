@@ -222,6 +222,9 @@
       rectStart: null,
       shapeDraft: null,
       shapeEditIndex: null,
+      // --- TRIAL STATUS ---
+      trialStatus: null,
+      _trialStatusPoll: null,
       // -----------------------------------------------------------------------
       // History
       // -----------------------------------------------------------------------
@@ -360,6 +363,27 @@
             );
           } catch (e) {
             console.warn(`Hydration failed for ${id}`, e);
+          }
+        }
+      },
+      async fetchTrialStatus() {
+        if (this.warpId === null) return;
+        try {
+          const resp = await fetch(`/monitor/api/status/trial/${this.warpId}`);
+          if (!resp.ok) return;
+          this.trialStatus = await resp.json();
+        } catch {
+        }
+        if (this.trialStatus && this.trialStatus.completion === "incomplete") {
+          if (this._trialStatusPoll === null) {
+            this._trialStatusPoll = setInterval(() => {
+              void this.fetchTrialStatus();
+            }, 3e3);
+          }
+        } else {
+          if (this._trialStatusPoll !== null) {
+            clearInterval(this._trialStatusPoll);
+            this._trialStatusPoll = null;
           }
         }
       },
@@ -570,6 +594,7 @@
         this.theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
         const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
         this.warpId = isNaN(currentNum) ? null : currentNum;
+        void this.fetchTrialStatus();
         const observer = new MutationObserver((mutations) => {
           if (mutations.some((m) => m.attributeName === "class")) {
             this.theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -585,7 +610,7 @@
           console.warn("Failed to load filter schemas", e);
         }
         try {
-          const statusResp = await fetch("/monitor/api/status");
+          const statusResp = await fetch("/monitor/api/status/job");
           const statusData = await statusResp.json();
           if (statusData && !statusData.error) {
             Alpine.store("dojo").updateSync(
