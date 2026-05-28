@@ -98,7 +98,7 @@
     yAxes: {},
     refFrame: null,
     grid: "all",
-    linemode: "lines",
+    lineMode: "lines",
     interp: "linear",
     hover: "closest",
     title: "",
@@ -894,6 +894,15 @@
         void this.startBackgroundDiscovery();
         this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
         this.updateFromRaw();
+        window.addEventListener("mojo-sensai-plot-config", (e) => {
+          const detail = e.detail;
+          if (detail && typeof detail === "object") {
+            this.config = { ...detail };
+          }
+        });
+        window.addEventListener("mojo-sensai-undo", () => {
+          this.undo();
+        });
       },
       // -----------------------------------------------------------------------
       // VS (comparison) mode
@@ -2093,7 +2102,7 @@
               r: this.data[p.name],
               theta: this.data[this.config.xAxis.col],
               name: p.label,
-              mode: this.config.linemode,
+              mode: this.config.lineMode,
               type: "scatterpolar",
               line: lineStyle,
               marker: { size: 6, symbol: p.marker },
@@ -2111,7 +2120,7 @@
             x: this.data[this.config.xAxis.col],
             y: this.data[p.name],
             name: p.label,
-            mode: this.config.linemode,
+            mode: this.config.lineMode,
             type: "scatter",
             line: lineStyle,
             marker: { size: 6, symbol: p.marker },
@@ -2152,7 +2161,7 @@
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
-                mode: this.config.linemode,
+                mode: this.config.lineMode,
                 type: "scatterpolar",
                 line: lineStyle,
                 opacity: 0.35,
@@ -2165,7 +2174,7 @@
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
-                mode: this.config.linemode,
+                mode: this.config.lineMode,
                 type: "scatter",
                 line: lineStyle,
                 opacity: 0.35,

@@ -15,6 +15,7 @@ from rich.panel import Panel
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
+from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import get_local_ip
@@ -497,6 +498,13 @@ run_app = typer.Typer(
 )
 cli_app.add_typer(run_app, name="run")
 
+# settings subcommand group
+settings_app = typer.Typer(
+    help=f"Manage global mujoco-mojo settings at [bold cyan]~/{MUJOCO_MOJO_DIR.relative_to(Path.home())}/settings.toml[/bold cyan].",
+    no_args_is_help=True,
+)
+cli_app.add_typer(settings_app, name="settings")
+
 
 @cli_app.callback(
     epilog="Check out the [link=https://hydrowelder.github.io/mujoco-mojo/]full documentation[/link] for more info."
@@ -921,6 +929,15 @@ def init_project(
             border_style="cyan",
         )
     )
+    from mujoco_mojo.settings import SETTINGS_FILE
+
+    if not SETTINGS_FILE.exists():
+        console.print("\n[bold yellow]Global Settings[/bold yellow]")
+        console.print(
+            "No user settings file found. Initialize it with:\n"
+            "    [bold cyan]mujoco-mojo settings init[/bold cyan]"
+        )
+
     if not Path("typings", "mujoco").exists():
         console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
         console.print(
@@ -940,6 +957,158 @@ def init_project(
             "[dim]Enum errors? Run: "
             "python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi[/dim]"
         )
+
+
+@settings_app.command(name="init")
+def settings_init(
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Overwrite an existing settings file."),
+    ] = False,
+) -> None:
+    """
+    [bold yellow]Initialize the global settings file with defaults.[/bold yellow]
+
+    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema.
+    """
+    import json
+
+    from mujoco_mojo.settings import SETTINGS_DIR, SETTINGS_FILE, MujocoMojoSettings
+
+    schema_file = SETTINGS_DIR / "settings.schema.json"
+    taplo_file = SETTINGS_DIR / ".taplo.toml"
+    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if SETTINGS_FILE.exists() and not force:
+        setting_msg = f"[yellow]Settings already exist:[/yellow] {SETTINGS_FILE} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
+    else:
+        MujocoMojoSettings().save()
+        setting_msg = f"[green]Settings written:[/green] {SETTINGS_FILE}"
+
+    schema = MujocoMojoSettings.model_json_schema()
+    schema_file.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+
+    # taplo requires a file:// URI for the schema url - a relative path is not supported
+    schema_uri = schema_file.as_uri()
+    taplo_file.write_text(
+        f'[[rule]]\ninclude = ["settings.toml"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
+        encoding="utf-8",
+    )
+
+    console.print(
+        Panel(
+            f"{setting_msg}",
+            # f"[green]Schema:[/green]      {schema_file}\n"
+            # f"[green]Taplo config:[/green] {taplo_file}\n\n"
+            # "[white]TOML intellisense is now active for any taplo-powered editor (VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
+            title="[cyan]Settings Initialized[/cyan]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
+
+@settings_app.command(name="show")
+def settings_show() -> None:
+    """
+    [bold yellow]Display the current effective settings.[/bold yellow]
+
+    Resolves values from all sources in priority order: environment variables, TOML file, then defaults. The API key is always masked.
+    """
+    import tomli_w
+    from rich.syntax import Syntax
+
+    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+
+    settings = MujocoMojoSettings()
+    d = settings.model_dump()
+    d["sensai"]["api_key"] = "***"
+
+    toml_str = tomli_w.dumps(d).rstrip("\n")
+
+    if SETTINGS_FILE.exists():
+        try:
+            source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()))
+        except ValueError:
+            source = str(SETTINGS_FILE)
+    else:
+        source = "defaults only"
+
+    console.print(
+        Panel(
+            Syntax(toml_str, "toml", theme="ansi_dark"),
+            title="[cyan]MuJoCo Mojo Settings[/cyan]",
+            subtitle=f"[dim]{source}[/dim]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
+
+
+@settings_app.command(name="set")
+def settings_set_cmd(
+    key: Annotated[
+        str,
+        typer.Argument(
+            help="Dotted key path (e.g. [bold cyan]sensai.model_name[/bold cyan])",
+            show_default=False,
+        ),
+    ],
+    value: Annotated[
+        str,
+        typer.Argument(
+            help="Value to assign. Integers, floats, and [bold]True[/bold]/[bold]False[/bold] are auto-parsed.",
+            show_default=False,
+        ),
+    ],
+) -> None:
+    """
+    [bold yellow]Update a setting in the global settings file.[/bold yellow]
+
+    Example: [bold cyan]mujoco-mojo settings set sensai.model_name llama3.1:8b[/bold cyan]
+    """
+    from pydantic import ValidationError
+
+    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+
+    if not SETTINGS_FILE.exists():
+        console.print(
+            "[bold red]Error:[/bold red] No settings file found. "
+            "Run [bold cyan]mujoco-mojo settings init[/bold cyan] first."
+        )
+        raise typer.Exit(code=1)
+
+    settings = MujocoMojoSettings()
+    data = settings.model_dump()
+
+    parts = key.split(".")
+    target: dict[str, Any] = data
+    for part in parts[:-1]:
+        if part not in target or not isinstance(target[part], dict):
+            console.print(
+                f"[bold red]Error:[/bold red] Unknown settings path: [bold cyan]{key}[/bold cyan]"
+            )
+            raise typer.Exit(code=1)
+        target = target[part]
+
+    leaf = parts[-1]
+    if leaf not in target:
+        console.print(
+            f"[bold red]Error:[/bold red] Unknown settings key: [bold cyan]{key}[/bold cyan]"
+        )
+        raise typer.Exit(code=1)
+
+    parsed = _smart_parse(value)
+    target[leaf] = parsed
+
+    try:
+        updated = MujocoMojoSettings.model_validate(data)
+    except ValidationError as e:
+        console.print(f"[bold red]Validation error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+    updated.save()
+    console.print(f"[green]Updated[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}")
 
 
 @cli_app.command(name="reloaded")
@@ -1017,7 +1186,15 @@ def run_dojo(
     """
     _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
 
+    import warnings
+
     import uvicorn
+
+    # fastmcp (a transitive dependency of the sensai agent) pulls in key_value.aio,
+    # which calls beartype_this_package() on itself. beartype then trips over
+    # numpydantic's NDArray metaclass, which breaks isinstance() checks.
+    # this is purely a third-party incompatibility; suppress the noise.
+    warnings.filterwarnings("ignore", module=r"key_value\.")
 
     import mujoco_mojo.utils.layers.dojo.shared as shared
     from mujoco_mojo.utils.layers.dojo.main import dojo_app

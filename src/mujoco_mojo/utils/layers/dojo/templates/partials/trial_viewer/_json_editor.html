@@ -14,7 +14,9 @@
          init() { this.$nextTick(() => this.initCodeMirror(this.$refs.cmHost)); }
      }">
     <div class="flex items-center justify-between px-2">
-        <button @click="toggle()"
+        <button @mousedown.prevent="toggle()"
+                @keydown.enter.prevent="toggle()"
+                @keydown.space.prevent="toggle()"
                 class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-300 transition-colors active:scale-100">
             <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
                  :class="open ? '' : '-rotate-90'"

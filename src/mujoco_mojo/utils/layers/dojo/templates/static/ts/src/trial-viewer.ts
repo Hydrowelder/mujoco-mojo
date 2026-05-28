@@ -44,7 +44,7 @@ const DEFAULT_CONFIG: PlotConfig = {
   yAxes: {},
   refFrame: null,
   grid: "all",
-  linemode: "lines",
+  lineMode: "lines",
   interp: "linear",
   hover: "closest",
   title: "",
@@ -1041,6 +1041,17 @@ function trialViewer(trialId: string, externalUrl: string) {
         localStorage.getItem("mojo:config:raw-draft") ??
         JSON.stringify(this.config, null, 4);
       this.updateFromRaw();
+
+      window.addEventListener("mojo-sensai-plot-config", (e) => {
+        const detail = (e as CustomEvent<PlotConfig>).detail;
+        if (detail && typeof detail === "object") {
+          this.config = { ...detail } as PlotConfig;
+        }
+      });
+
+      window.addEventListener("mojo-sensai-undo", () => {
+        this.undo();
+      });
     },
 
     // -----------------------------------------------------------------------
@@ -2464,7 +2475,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               r: this.data![p.name]!,
               theta: this.data![this.config.xAxis!.col!],
               name: p.label,
-              mode: this.config.linemode,
+              mode: this.config.lineMode,
               type: "scatterpolar",
               line: lineStyle,
               marker: { size: 6, symbol: p.marker },
@@ -2482,7 +2493,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
             name: p.label,
-            mode: this.config.linemode,
+            mode: this.config.lineMode,
             type: "scatter",
             line: lineStyle,
             marker: { size: 6, symbol: p.marker },
@@ -2529,7 +2540,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.linemode,
+                    mode: this.config.lineMode,
                     type: "scatterpolar",
                     line: lineStyle,
                     opacity: 0.35,
@@ -2543,7 +2554,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.linemode,
+                    mode: this.config.lineMode,
                     type: "scatter",
                     line: lineStyle,
                     opacity: 0.35,

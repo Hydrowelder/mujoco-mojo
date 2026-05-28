@@ -15,9 +15,11 @@ from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
 from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
+from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
 from mujoco_mojo.utils.filters.filters import RotationFilter as _RotationFilter
 from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
+from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -35,7 +37,7 @@ _FILTER_TYPE_NAMES: set[str] = {str(ft) for ft in _FilterType}
 # AnyFilter = Annotated[ScaleFilter | AbsoluteValueFilter | ..., Field(discriminator="type")]
 # get_args(AnyFilter)[0] is the bare union; get_args of that gives the individual classes.
 _annotated_args = get_args(_AnyFilter)
-_FILTER_CLASSES: list[type] = (
+_FILTER_CLASSES: list[type[_BaseFilter]] = (
     list(get_args(_annotated_args[0])) if _annotated_args else []
 )
 
@@ -242,9 +244,14 @@ async def get_filter_schema():
 
         params = []
         for name, field_info in cls.model_fields.items():
-            if name == "type":
+            if name in ("type", "enabled"):
                 continue
-            prop = props.get(name, {})
+            # model_json_schema() keys properties by alias when serialize_by_alias=True.
+            # alias_generator may be a plain callable (to_camel) or an AliasGenerator
+            # object; only call it when it's actually callable.
+            ag = cls.model_config.get("alias_generator")
+            alias: str = field_info.alias or (ag(name) if callable(ag) else name)
+            prop = props.get(alias, props.get(name, {}))
             if "anyOf" in prop:
                 non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
                 prop_clean = {**prop, **(non_null[0] if non_null else {})}
@@ -257,7 +264,7 @@ async def get_filter_schema():
             elif isinstance(default, float):
                 default = round(float(default), 8)
 
-            p: dict = {"name": name, "type": _infer_type(prop), "default": default}
+            p: dict = {"name": alias, "type": _infer_type(prop), "default": default}
             if p["type"] == "select" and "enum" in prop:
                 p["options"] = prop["enum"]
             if "minimum" in prop_clean:
@@ -295,7 +302,7 @@ async def get_filter_schema():
 
 
 def _get_profiles_dir() -> Path:
-    d: Path = Path.home() / ".mujoco-mojo" / "profiles"
+    d: Path = MUJOCO_MOJO_DIR / "profiles"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -411,7 +418,7 @@ _LAB_MAX_BYTES = 1024 * 1024  # 1 MB
 
 
 def _get_lab_dir() -> Path:
-    d: Path = Path.home() / ".mujoco-mojo" / "lab"
+    d: Path = MUJOCO_MOJO_DIR / "lab"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
