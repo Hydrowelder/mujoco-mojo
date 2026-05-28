@@ -1041,6 +1041,17 @@ function trialViewer(trialId: string, externalUrl: string) {
         localStorage.getItem("mojo:config:raw-draft") ??
         JSON.stringify(this.config, null, 4);
       this.updateFromRaw();
+
+      window.addEventListener("mojo-sensai-plot-config", (e) => {
+        const detail = (e as CustomEvent<PlotConfig>).detail;
+        if (detail && typeof detail === "object") {
+          this.config = { ...detail } as PlotConfig;
+        }
+      });
+
+      window.addEventListener("mojo-sensai-undo", () => {
+        this.undo();
+      });
     },
 
     // -----------------------------------------------------------------------

@@ -1,8 +1,17 @@
-from .agent import SensAIDeps, SensAIResult, build_model, sensai_agent
+from .agent import (
+    SensAIChatResult,
+    SensAIDeps,
+    build_model,
+    build_plot_model,
+    plot_agent,
+    sensai_agent,
+)
 
 __all__ = [
+    "SensAIChatResult",
     "SensAIDeps",
-    "SensAIResult",
     "build_model",
+    "build_plot_model",
+    "plot_agent",
     "sensai_agent",
 ]

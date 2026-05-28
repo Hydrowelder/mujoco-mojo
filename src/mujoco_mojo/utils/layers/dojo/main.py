@@ -9,10 +9,10 @@ import mujoco_mojo.utils.layers.dojo.shared as shared
 
 from .routers import monitor, morph, mosaic
 
-try:
-    from .routers import sensai as _sensai_router
-except ImportError:
-    _sensai_router = None
+# try:
+#     from .routers import sensai as _sensai_router
+# except ImportError:
+_sensai_router = None
 
 security = HTTPBasic(auto_error=False)
 

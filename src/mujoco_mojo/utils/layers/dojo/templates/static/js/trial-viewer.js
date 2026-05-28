@@ -894,6 +894,15 @@
         void this.startBackgroundDiscovery();
         this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
         this.updateFromRaw();
+        window.addEventListener("mojo-sensai-plot-config", (e) => {
+          const detail = e.detail;
+          if (detail && typeof detail === "object") {
+            this.config = { ...detail };
+          }
+        });
+        window.addEventListener("mojo-sensai-undo", () => {
+          this.undo();
+        });
       },
       // -----------------------------------------------------------------------
       // VS (comparison) mode

@@ -6,6 +6,7 @@ interface SensAIMessage {
   content: string;
   error?: boolean;
   plot_config_update?: object | null;
+  routed_to?: string;
   ts: number;
 }
 
@@ -16,6 +17,7 @@ interface SensAIConfig {
 interface SensAIResultPayload {
   message?: string;
   plot_config_update?: object | null;
+  routed_to?: string;
   detail?: string;
 }
 
@@ -158,12 +160,16 @@ function sensai() {
                 role: "assistant",
                 content,
                 plot_config_update: payload.plot_config_update ?? null,
+                routed_to: payload.routed_to,
                 ts: Date.now(),
               });
               if (payload.plot_config_update) {
                 window.dispatchEvent(new CustomEvent("mojo-sensai-plot-config", {
                   detail: payload.plot_config_update,
                 }));
+              }
+              if (payload.routed_to === "undo") {
+                window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
               }
               this.streaming = false;
               this.streamingContent = "";
@@ -280,6 +286,7 @@ function downloadSensAIHistory(): void {
         message: m.content,
       };
       if (m.error) entry["error"] = true;
+      if (m.routed_to) entry["routed_to"] = m.routed_to;
       if (m.plot_config_update !== undefined) entry["plot_config_update"] = m.plot_config_update;
       return entry;
     }),

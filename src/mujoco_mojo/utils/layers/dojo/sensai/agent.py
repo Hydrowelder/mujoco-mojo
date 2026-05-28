@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -46,25 +46,25 @@ class SensAIDeps:
 
 
 # ---------------------------------------------------------------------------
-# result - structured output returned by every agent run
+# result types
 # ---------------------------------------------------------------------------
 
 
-class SensAIResult(BaseModel):
-    """Structured response from the SensAI agent."""
+class SensAIChatResult(BaseModel):
+    """Output from the chat agent — conversational reply plus optional change intent."""
 
     message: str
     """The conversational reply to display in the chat panel."""
 
-    plot_config_update: PlotConfig | None = None
-    """A proposed replacement plot configuration. `None` if no change is suggested."""
+    plot_change_request: str | None = None
+    """Plain-English description of the plot change to apply, or None."""
 
 
 # ---------------------------------------------------------------------------
-# agent
+# agents
 # ---------------------------------------------------------------------------
 
-_BASE_SYSTEM_PROMPT = """\
+_CHAT_SYSTEM_PROMPT = """\
 You are SensAI, an AI assistant inside the MuJoCo Mojo Dojo dashboard.
 You help users understand simulation job status and configure trial viewer plots.
 
@@ -76,35 +76,54 @@ TOOLS — only call these when the state block does not have what you need:
 - get_job_summary / get_trial_breakdown / get_trial_details → detailed job or per-trial data
 - get_available_signals / get_rotatable_signals / get_quat_signals → available signal column names
 
-PLOT MODIFICATION — critical rules:
-1. When the user asks you to change the plot, do it immediately. Never ask for confirmation.
-2. The ONLY way to modify the plot is to populate `plot_config_update`. \
-Writing JSON or config details in `message` does absolutely nothing — the plot will not change.
-3. Copy the "Full plot config" JSON from the state block verbatim, apply only the requested \
-changes, and return the complete modified object in `plot_config_update`. \
-Do not omit any fields. Do not invent field names.
+PLOT MODIFICATION:
+When the user asks you to change the plot, set plot_change_request to a precise plain-English \
+description of the change using the exact field names and values from the current config. \
+A separate agent will apply the actual JSON edit — you do not produce any JSON yourself. \
+Execute immediately; never ask for confirmation.
+
+Good plot_change_request examples:
+- "set yAxes['Lab/box_acc:y'].color to '#ef4444'"
+- "set xAxis.col to 'Lab/time'"
+- "set grid to 'all'"
+- "remove the yAxes entry for 'Lab/box_acc:z'"
+
+If no plot change is needed, set plot_change_request to null.
 
 OUTPUT FORMAT — respond with exactly this JSON object and nothing else:
-{"message": "<your reply>", "plot_config_update": <full modified PlotConfig or null>}
+{"message": "<your reply>", "plot_change_request": "<description>" or null}
 
 RULES:
 - The outer response must be a single JSON object. No code fences around it, no text outside it.
-- `message` may use markdown (bold, lists). Keep it to 1-3 sentences. Be direct and specific.
-- Do NOT put JSON or config dumps inside `message` — that is what `plot_config_update` is for.
-- `plot_config_update` must be the complete config object when making a change, or null otherwise.
-- Never ask "shall I proceed?" or "would you like me to?". Execute the request directly.
+- message may use markdown (bold, lists). Keep it to 1-3 sentences. Be direct and specific.
+- Do NOT put JSON configs or code blocks in message.
+- Never ask "shall I proceed?" — execute immediately.
 - Never use JSON comments or placeholder values like "...".
 
-Good example: {"message": "Changed the :y line color to red.", "plot_config_update": {<full config>}}
-Bad example:  {"message": "I will now update the color. Shall I proceed?", "plot_config_update": null}
+Good: {"message": "Changed the :y line to red.", "plot_change_request": "set yAxes['Lab/box_acc:y'].color to '#ef4444'"}
+Bad:  {"message": "I will now update the color. Shall I proceed?", "plot_change_request": null}
 """
 
-sensai_agent: Agent[SensAIDeps, SensAIResult] = Agent(
+_PLOT_SYSTEM_PROMPT = """\
+You are a JSON transformation tool. You receive a current plot configuration as JSON and a \
+plain-English description of a change to apply.
+
+Output ONLY the complete modified configuration as valid JSON. \
+No explanation, no markdown, no code fences, no text before or after the JSON object.
+"""
+
+# chat agent — handles conversation, tool calls, and change intent detection
+sensai_agent: Agent[SensAIDeps, SensAIChatResult] = Agent(
     deps_type=SensAIDeps,
-    output_type=SensAIResult,
-    system_prompt=_BASE_SYSTEM_PROMPT,
-    # local models produce worse output on retry (they fixate on the error message);
-    # _LocalModelWrapper normalizes responses so retries are rarely needed anyway
+    output_type=SensAIChatResult,
+    system_prompt=_CHAT_SYSTEM_PROMPT,
+    retries={"output": 0},
+)
+
+# plot agent — pure JSON transformer, no tools, no deps
+plot_agent: Agent[None, str] = Agent(
+    output_type=str,
+    system_prompt=_PLOT_SYSTEM_PROMPT,
     retries={"output": 0},
 )
 
@@ -156,30 +175,26 @@ def _strip_json_comments(s: str) -> str:
 
 def _normalize_text_output(text: str) -> str:
     """
-    Coerce a local model's raw text into a JSON string that SensAIResult can validate.
+    Coerce a local model's raw text into a JSON string matching SensAIChatResult.
 
     Handles, in order:
-    - markdown code fences
+    - markdown code fences wrapping a JSON object
     - JSON comments (// and /* */)
-    - prose with an embedded JSON object (extract and parse the outermost {...})
-    - missing required SensAIResult fields (patched with safe defaults)
-    - pure prose with no valid JSON (wrapped as {"message": text, "plot_config_update": null})
+    - prose with an embedded JSON object (extracts the outermost {...})
+    - missing required fields (patched with safe defaults)
+    - pure prose with no valid JSON (wrapped as a message with null plot_change_request)
     """
     text = text.strip()
 
-    # strip markdown fences only when they wrap a JSON object — if the model
-    # responded with a code block as part of its markdown content (not as a
-    # JSON wrapper), stripping the opening fence corrupts the output
+    # strip markdown fences only when they wrap a JSON object
     if text.startswith("```"):
         candidate = re.sub(r"^```[a-z]*\n?", "", text)
         candidate = re.sub(r"\n?```\s*$", "", candidate).strip()
         if candidate.lstrip().startswith("{"):
             text = candidate
 
-    # strip JSON comments
     text = _strip_json_comments(text).strip()
 
-    # find the first top-level { ... } block by brace-matching, then try to parse it
     start = text.find("{")
     if start != -1:
         depth = 0
@@ -193,25 +208,53 @@ def _normalize_text_output(text: str) -> str:
                 try:
                     data = json.loads(candidate)
                     if isinstance(data, dict):
-                        # patch missing required fields rather than letting pydantic fail
                         data.setdefault("message", "")
-                        pcu = data.get("plot_config_update")
-                        if isinstance(pcu, dict):
-                            # discard malformed plot configs rather than letting pydantic fail
-                            try:
-                                PlotConfig.model_validate(pcu)
-                            except Exception:
-                                pcu = None
-                        elif not isinstance(pcu, type(None)):
-                            pcu = None
-                        data["plot_config_update"] = pcu
+                        pcr = data.get("plot_change_request")
+                        if not isinstance(pcr, (str, type(None))):
+                            pcr = None
+                        data["plot_change_request"] = pcr
                         return json.dumps(data)
                 except (json.JSONDecodeError, ValueError):
                     pass
-                break  # found closing brace but JSON is invalid — fall through
+                break
 
-    # no valid JSON found — wrap the prose as the message
-    return json.dumps({"message": text, "plot_config_update": None})
+    # fallback: model output labeled markdown instead of JSON
+    # e.g. "**plot_change_request:** set yAxes[...].color to '#ef4444'"
+    pcr_match = re.search(
+        r"(?i)(?:^|\n)\s*\*{0,2}plot[_\s-]change[_\s-]request\*{0,2}\s*:?\s*(.+?)(?:\n|$)",
+        text,
+    )
+    if pcr_match:
+        pcr: str | None = pcr_match.group(1).strip() or None
+        msg = text[: pcr_match.start()].strip()
+        # strip **Message:** label if the model added one
+        msg = re.sub(r"(?i)^\s*\*{0,2}message\*{0,2}\s*:?\s*", "", msg).strip()
+        return json.dumps({"message": msg or text.strip(), "plot_change_request": pcr})
+
+    return json.dumps({"message": text, "plot_change_request": None})
+
+
+def _normalize_plot_output(text: str) -> str:
+    """Extract the first valid JSON object from a local model's plot config response."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text).strip()
+    text = _strip_json_comments(text).strip()
+    start = text.find("{")
+    if start == -1:
+        return text
+    depth = 0
+    end = start
+    for i, c in enumerate(text[start:], start):
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        if depth == 0:
+            end = i
+            break
+    return _strip_json_comments(text[start : end + 1]).strip()
 
 
 class _LocalModelWrapper(Model[Any]):
@@ -222,8 +265,13 @@ class _LocalModelWrapper(Model[Any]):
 
     _provider = None  # type: ignore[assignment]
 
-    def __init__(self, inner: Model[Any]) -> None:
+    def __init__(
+        self,
+        inner: Model[Any],
+        normalize: Callable[[str], str] = _normalize_text_output,
+    ) -> None:
         self._inner = inner
+        self._normalize = normalize
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -246,7 +294,7 @@ class _LocalModelWrapper(Model[Any]):
             messages, model_settings, model_request_parameters
         )
         cleaned = [
-            dataclasses.replace(p, content=_normalize_text_output(p.content))
+            dataclasses.replace(p, content=self._normalize(p.content))
             if isinstance(p, TextPart)
             else p
             for p in response.parts
@@ -405,13 +453,23 @@ async def get_current_plot_config(ctx: RunContext[SensAIDeps]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_model(config: SensAISettings) -> _LocalModelWrapper:
-    """Construct a model pointed at the configured endpoint, wrapped to strip JSON comments."""
-    inner = OpenAIChatModel(
+def _make_openai_model(config: SensAISettings) -> OpenAIChatModel:
+    return OpenAIChatModel(
         config.model_name,
         provider=OpenAIProvider(
             base_url=config.base_url,
             api_key=config.api_key.get_secret_value(),
         ),
     )
-    return _LocalModelWrapper(inner)
+
+
+def build_model(config: SensAISettings) -> _LocalModelWrapper:
+    """Chat model wrapped to normalize text output from local models."""
+    return _LocalModelWrapper(_make_openai_model(config))
+
+
+def build_plot_model(config: SensAISettings) -> _LocalModelWrapper:
+    """Plot model wrapped to extract a bare JSON object from local model text output."""
+    return _LocalModelWrapper(
+        _make_openai_model(config), normalize=_normalize_plot_output
+    )

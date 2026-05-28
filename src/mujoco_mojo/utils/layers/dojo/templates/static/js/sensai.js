@@ -1364,12 +1364,16 @@ Please report this to https://github.com/markedjs/marked.`, e) {
                   role: "assistant",
                   content,
                   plot_config_update: payload.plot_config_update ?? null,
+                  routed_to: payload.routed_to,
                   ts: Date.now()
                 });
                 if (payload.plot_config_update) {
                   window.dispatchEvent(new CustomEvent("mojo-sensai-plot-config", {
                     detail: payload.plot_config_update
                   }));
+                }
+                if (payload.routed_to === "undo") {
+                  window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
                 }
                 this.streaming = false;
                 this.streamingContent = "";
@@ -1478,6 +1482,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
           message: m2.content
         };
         if (m2.error) entry["error"] = true;
+        if (m2.routed_to) entry["routed_to"] = m2.routed_to;
         if (m2.plot_config_update !== void 0) entry["plot_config_update"] = m2.plot_config_update;
         return entry;
       })
