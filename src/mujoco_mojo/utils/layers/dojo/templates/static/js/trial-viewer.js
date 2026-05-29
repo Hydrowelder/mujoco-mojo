@@ -225,6 +225,16 @@
       // --- TRIAL STATUS ---
       trialStatus: null,
       _trialStatusPoll: null,
+      // --- MEDIA PLAYER ---
+      mediaFiles: [],
+      selectedMedia: null,
+      mediaScrubMode: localStorage.getItem("mojo:media:mode") ?? "play",
+      mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
+      mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
+      mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+      _mediaRafId: null,
+      _mediaFpsMap: {},
+      _mediaFrameInterval: null,
       // -----------------------------------------------------------------------
       // History
       // -----------------------------------------------------------------------
@@ -386,6 +396,119 @@
             this._trialStatusPoll = null;
           }
         }
+      },
+      _syncOverlayVisibility() {
+        const overlay = document.getElementById("playback-line-overlay");
+        const lineEl = document.getElementById("playback-line-el");
+        const sel = this.selectedMedia?.toLowerCase() ?? "";
+        const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
+        const lineVisible = this.mediaShowLine && this.mediaScrubMode === "play" && isScrubbable;
+        const framesVisible = this.mediaShowFrames && !!this._mediaFrameInterval && this.config.xAxis?.col === "time";
+        if (overlay) overlay.style.display = lineVisible || framesVisible ? "block" : "none";
+        if (lineEl) lineEl.style.display = lineVisible ? "block" : "none";
+      },
+      _renderFrameMarkers() {
+        const framesPath = document.getElementById("playback-frames-path");
+        if (!framesPath) return;
+        this._syncOverlayVisibility();
+        if (!this.mediaShowFrames || !this._mediaFrameInterval || this.config.xAxis?.col !== "time") {
+          framesPath.setAttribute("d", "");
+          return;
+        }
+        const plotEl = document.getElementById("plot-area");
+        const fullLayout = plotEl?._fullLayout;
+        if (!plotEl || !fullLayout) return;
+        const video = document.getElementById("media-video-player");
+        const duration = video?.duration && isFinite(video.duration) ? video.duration : Infinity;
+        const interval = this._mediaFrameInterval;
+        const ph = plotEl.getBoundingClientRect().height;
+        const markerTop = ph - fullLayout.margin.b - 5;
+        const markerBot = ph - fullLayout.margin.b;
+        const [xMin, xMax] = fullLayout.xaxis.range;
+        const kStart = Math.max(0, Math.floor(xMin / interval));
+        const kEnd = Math.ceil(Math.min(isFinite(duration) ? duration : xMax, xMax) / interval);
+        let d = "";
+        for (let k = kStart; k <= kEnd; k++) {
+          const px = fullLayout.margin.l + fullLayout.xaxis.l2p(k * interval);
+          d += `M${px},${markerTop}L${px},${markerBot}`;
+        }
+        framesPath.setAttribute("d", d);
+      },
+      _updatePlaybackLine() {
+        const sel = this.selectedMedia?.toLowerCase() ?? "";
+        const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
+        const isTimeAxis = this.config.xAxis?.col === "time";
+        const shouldRun = this.mediaScrubMode === "play" && this.mediaFiles.length > 0 && isScrubbable && (this.mediaShowLine || isTimeAxis);
+        if (!shouldRun || this._mediaRafId !== null) return;
+        const tick = () => {
+          const curSel = this.selectedMedia?.toLowerCase() ?? "";
+          const curScrubbable = curSel.endsWith(".mp4") || curSel.endsWith(".webm");
+          const curTimeAxis = this.config.xAxis?.col === "time";
+          if (this.mediaScrubMode !== "play" || this.mediaFiles.length === 0 || !curScrubbable || !this.mediaShowLine && !curTimeAxis) {
+            this._mediaRafId = null;
+            this._syncOverlayVisibility();
+            return;
+          }
+          const video = document.getElementById("media-video-player");
+          const plotEl = document.getElementById("plot-area");
+          if (video && plotEl && video.duration > 0 && !isNaN(video.duration)) {
+            const fullLayout = plotEl._fullLayout;
+            if (fullLayout) {
+              if (curTimeAxis) {
+                const [xMin, xMax] = fullLayout.xaxis.range;
+                const safeMin = Math.max(0, xMin);
+                const safeMax = Math.min(video.duration, xMax);
+                if (safeMax > safeMin) {
+                  if (video.currentTime >= safeMax) video.currentTime = safeMin;
+                  else if (video.currentTime < safeMin) video.currentTime = safeMin;
+                }
+              }
+              this._syncOverlayVisibility();
+              if (this.mediaShowLine) {
+                const lineEl = document.getElementById("playback-line-el");
+                if (lineEl) {
+                  lineEl.style.top = fullLayout.margin.t + "px";
+                  lineEl.style.bottom = fullLayout.margin.b + "px";
+                  const t = this._mediaFrameInterval ? Math.round(video.currentTime / this._mediaFrameInterval) * this._mediaFrameInterval : video.currentTime;
+                  let x;
+                  if (curTimeAxis) {
+                    x = fullLayout.margin.l + fullLayout.xaxis.l2p(t);
+                  } else {
+                    const pw = plotEl.getBoundingClientRect().width - fullLayout.margin.l - fullLayout.margin.r;
+                    x = fullLayout.margin.l + Math.max(0, Math.min(1, t / video.duration)) * pw;
+                  }
+                  lineEl.style.left = x + "px";
+                }
+              }
+              if (this.mediaShowFrames && curTimeAxis) this._renderFrameMarkers();
+            }
+          }
+          this._mediaRafId = requestAnimationFrame(tick);
+        };
+        this._mediaRafId = requestAnimationFrame(tick);
+      },
+      async fetchMediaFiles() {
+        try {
+          const resp = await fetch(`/mosaic/${this.trialId}/media`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          this._mediaFpsMap = Object.fromEntries(
+            data.files.map((f) => [f.name, f.fps])
+          );
+          this.mediaFiles = data.files.map((f) => f.name);
+          if (this.mediaFiles.length > 0) {
+            const saved = localStorage.getItem("mojo:media:file");
+            this.selectedMedia = saved && this.mediaFiles.includes(saved) ? saved : this.mediaFiles[0];
+          }
+          this._applySelectedMediaFps();
+        } catch {
+        }
+        this._updatePlaybackLine();
+        this._renderFrameMarkers();
+      },
+      _applySelectedMediaFps() {
+        const fps = this.selectedMedia ? this._mediaFpsMap[this.selectedMedia] ?? null : null;
+        this._mediaFrameInterval = fps && fps > 0 ? 1 / fps : null;
       },
       async startBackgroundDiscovery() {
         const currentId = ++this.discoveryId;
@@ -595,6 +718,7 @@
         const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
         this.warpId = isNaN(currentNum) ? null : currentNum;
         void this.fetchTrialStatus();
+        void this.fetchMediaFiles();
         const observer = new MutationObserver((mutations) => {
           if (mutations.some((m) => m.attributeName === "class")) {
             this.theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -736,6 +860,23 @@
                 }
               }
             }).observe(document.body, { childList: true, subtree: true });
+            plotEl.addEventListener("mousemove", (e) => {
+              if (this.mediaScrubMode !== "scrub") return;
+              const video = document.getElementById("media-video-player");
+              if (!video || !video.duration || isNaN(video.duration)) return;
+              const fullLayout = plotEl._fullLayout;
+              if (!fullLayout) return;
+              const rect = plotEl.getBoundingClientRect();
+              const relX = e.clientX - rect.left - fullLayout.margin.l;
+              if (this.config.xAxis?.col === "time") {
+                const t = fullLayout.xaxis.p2l(relX);
+                video.currentTime = Math.max(0, Math.min(video.duration, t));
+              } else {
+                const plotAreaWidth = rect.width - fullLayout.margin.l - fullLayout.margin.r;
+                if (plotAreaWidth <= 0) return;
+                video.currentTime = video.duration * Math.max(0, Math.min(1, relX / plotAreaWidth));
+              }
+            });
             setTimeout(() => {
               if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
             }, 100);
@@ -861,6 +1002,53 @@
           this.discoveryTimeout = setTimeout(() => {
             if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
+        });
+        this.$watch("mediaScrubMode", (mode) => {
+          if (mode === "scrub") {
+            document.getElementById("media-video-player")?.pause();
+          }
+          try {
+            localStorage.setItem("mojo:media:mode", mode);
+          } catch {
+          }
+          this._syncOverlayVisibility();
+          this._updatePlaybackLine();
+        });
+        this.$watch("mediaShowLine", (val) => {
+          try {
+            localStorage.setItem("mojo:media:show-line", val ? "1" : "0");
+          } catch {
+          }
+          this._syncOverlayVisibility();
+          this._updatePlaybackLine();
+        });
+        this.$watch("mediaShowFrames", (val) => {
+          try {
+            localStorage.setItem("mojo:media:show-frames", val ? "1" : "0");
+          } catch {
+          }
+          this._renderFrameMarkers();
+          this._updatePlaybackLine();
+        });
+        this.$watch("mediaPlaybackRate", (rate) => {
+          try {
+            localStorage.setItem("mojo:media:rate", String(rate));
+          } catch {
+          }
+          const video = document.getElementById("media-video-player");
+          if (video) video.playbackRate = rate;
+        });
+        this.$watch("config.rangeX", () => {
+          this._renderFrameMarkers();
+        });
+        this.$watch("selectedMedia", (file) => {
+          if (file) try {
+            localStorage.setItem("mojo:media:file", file);
+          } catch {
+          }
+          this._applySelectedMediaFps();
+          this._renderFrameMarkers();
+          this._updatePlaybackLine();
         });
         this.$watch("config.refFrame", (newValue, oldValue) => {
           if (newValue === oldValue) return;

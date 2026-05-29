@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import socket
@@ -9,8 +10,9 @@ from typing import get_args
 
 import polars as pl
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
+from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
@@ -19,7 +21,6 @@ from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
 from mujoco_mojo.utils.filters.filters import RotationFilter as _RotationFilter
 from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
@@ -880,3 +881,66 @@ async def get_trial_data(
     except Exception as e:
         logger.error(f"Data retrieval failed for {trial_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+_MEDIA_EXTENSIONS: frozenset[str] = frozenset({".mp4", ".webm", ".gif"})
+
+
+def _read_file_fps(path: Path) -> float | None:
+    """Reads fps from a media file synchronously. Returns None on failure."""
+    try:
+        if path.suffix.lower() in {".mp4", ".webm"}:
+            import mediapy as media
+
+            with media.VideoReader(str(path)) as reader:
+                return float(reader.fps)
+        if path.suffix.lower() == ".gif":
+            from PIL import Image as _Image
+
+            img = _Image.open(str(path))
+            duration_ms = float(img.info.get("duration", 100))
+            return 1000.0 / max(duration_ms, 1.0)
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_trial_dir(trial_id: str) -> Path:
+    """Resolves and validates a trial directory path, guarding against path traversal."""
+    job = shared.CURRENT_JOB
+    if not job:
+        raise HTTPException(status_code=503, detail="No job active")
+    trials_root = (job.workdir / "trials").resolve()
+    trial_dir = (trials_root / trial_id).resolve()
+    if not str(trial_dir).startswith(str(trials_root) + "/"):
+        raise HTTPException(status_code=400, detail="Invalid trial ID")
+    return trial_dir
+
+
+@router.get("/{trial_id}/media")
+async def list_trial_media(trial_id: str) -> dict:
+    """Lists media files in the trial directory with their fps metadata."""
+    trial_dir = _resolve_trial_dir(trial_id)
+    if not trial_dir.is_dir():
+        return {"files": []}
+    loop = asyncio.get_running_loop()
+    paths = sorted(
+        p for p in trial_dir.iterdir() if p.suffix.lower() in _MEDIA_EXTENSIONS
+    )
+    files = []
+    for p in paths:
+        fps = await loop.run_in_executor(None, _read_file_fps, p)
+        files.append({"name": p.name, "fps": fps})
+    return {"files": files}
+
+
+@router.get("/{trial_id}/media/{filename}")
+async def get_trial_media_file(trial_id: str, filename: str) -> FileResponse:
+    """Serves a single media file from the trial directory."""
+    trial_dir = _resolve_trial_dir(trial_id)
+    file_path = (trial_dir / filename).resolve()
+    if not str(file_path).startswith(str(trial_dir) + "/") and file_path != trial_dir:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not file_path.is_file() or file_path.suffix.lower() not in _MEDIA_EXTENSIONS:
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)

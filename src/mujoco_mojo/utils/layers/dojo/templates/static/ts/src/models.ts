@@ -57,6 +57,15 @@ export interface TrialManifest {
   trials: string[];
 }
 
+export interface TrialMediaFile {
+  name: string;
+  fps: number | null;
+}
+
+export interface TrialMediaResponse {
+  files: TrialMediaFile[];
+}
+
 export interface TrialDataResponse {
   columns: {
     all: string[];

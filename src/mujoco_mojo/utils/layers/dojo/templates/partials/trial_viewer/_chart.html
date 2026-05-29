@@ -23,6 +23,18 @@
                 <div class="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
         </template>
+        <!-- playback line overlay — positioned over the plot area, offset to match card's p-2 -->
+        <div id="playback-line-overlay"
+             class="absolute inset-2 pointer-events-none overflow-hidden"
+             style="display:none;">
+            <div id="playback-line-el"
+                 style="position:absolute;top:0;bottom:0;left:0;width:1.5px;background:rgba(6,182,212,0.8);"></div>
+            <svg id="playback-frames-svg"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;"
+                 xmlns="http://www.w3.org/2000/svg">
+                <path id="playback-frames-path" fill="none" stroke="rgba(6,182,212,0.45)" stroke-width="1"/>
+            </svg>
+        </div>
     </div>
 
     <!-- ── SIDEBAR ──────────────────────────────────────────────────── -->
@@ -1277,14 +1289,14 @@
                             <span class="text-[8px] bg-violet-500/10 group-hover:bg-violet-500 group-hover:text-white px-1 rounded transition-colors">CONFIG</span>
                         </button>
 
-                        <div class="my-2 border-t border-slate-200 dark:border-slate-700"></div>
+                        <!-- <div class="my-2 border-t border-slate-200 dark:border-slate-700"></div> -->
 
-                        <p class="text-sm font-bold text-slate-500 uppercase px-2 mb-1">SensAI</p>
+                        <!-- <p class="text-sm font-bold text-slate-500 uppercase px-2 mb-1">SensAI</p>
                         <button @click="downloadSensAIHistory(); downloadOpen = false"
                                 class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-200 dark:hover:bg-cyan-900/30 rounded transition-all duration-200 flex items-center justify-between group">
                             Chat History
                             <span class="text-[8px] bg-cyan-500/10 group-hover:bg-cyan-500 group-hover:text-white px-1 rounded transition-colors">CHAT</span>
-                        </button>
+                        </button> -->
                     </div>
                 </div>
             </div>

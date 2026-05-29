@@ -81,7 +81,16 @@ class VideoRecorder:
         self._next_record_time += 1 / self.fps
 
     def save(self):
-        """Writes the captured frames to a video file."""
+        """
+        Writes the captured frames to a video file.
+
+        Supported formats:
+        - `.mp4` — H.264 via mediapy/ffmpeg; universally compatible.
+        - `.webm` — VP9 via mediapy/ffmpeg; smaller files and fully seekable.
+        - `.gif` — via PIL; no audio, loops automatically, large file size, not seekable.
+
+        The output format is determined by the extension of `path`.
+        """
         if not self._frames:
             return
         import mediapy as media
@@ -101,6 +110,7 @@ class VideoRecorder:
                 loop=0,  # loop forever
             )
         else:
+            # mediapy delegates to ffmpeg; both .mp4 and .webm are supported
             media.write_video(path=self.path, images=self._frames, fps=self.fps)
         logger.info(f"Video saved to {self.path}")
 

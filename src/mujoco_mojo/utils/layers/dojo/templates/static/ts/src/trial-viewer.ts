@@ -10,6 +10,8 @@ import type {
   Shape,
   TrialDataResponse,
   TrialManifest,
+  TrialMediaFile,
+  TrialMediaResponse,
   TrialStatus,
   UnitGroup,
   YAxisConfig,
@@ -206,6 +208,17 @@ function trialViewer(trialId: string, externalUrl: string) {
     trialStatus: null as TrialStatus | null,
     _trialStatusPoll: null as ReturnType<typeof setTimeout> | null,
 
+    // --- MEDIA PLAYER ---
+    mediaFiles: [] as string[],
+    selectedMedia: null as string | null,
+    mediaScrubMode: (localStorage.getItem("mojo:media:mode") ?? "play") as "play" | "scrub",
+    mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
+    mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
+    mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+    _mediaRafId: null as number | null,
+    _mediaFpsMap: {} as Record<string, number | null>,
+    _mediaFrameInterval: null as number | null,
+
     // -----------------------------------------------------------------------
     // History
     // -----------------------------------------------------------------------
@@ -393,6 +406,138 @@ function trialViewer(trialId: string, externalUrl: string) {
           this._trialStatusPoll = null;
         }
       }
+    },
+
+    _syncOverlayVisibility() {
+      const overlay = document.getElementById("playback-line-overlay") as HTMLElement | null;
+      const lineEl = document.getElementById("playback-line-el") as HTMLElement | null;
+      const sel = this.selectedMedia?.toLowerCase() ?? "";
+      const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
+      const lineVisible = this.mediaShowLine && this.mediaScrubMode === "play" && isScrubbable;
+      const framesVisible = this.mediaShowFrames && !!this._mediaFrameInterval && this.config.xAxis?.col === "time";
+      if (overlay) overlay.style.display = (lineVisible || framesVisible) ? "block" : "none";
+      if (lineEl) lineEl.style.display = lineVisible ? "block" : "none";
+    },
+
+    _renderFrameMarkers() {
+      const framesPath = document.getElementById("playback-frames-path") as SVGPathElement | null;
+      if (!framesPath) return;
+      this._syncOverlayVisibility();
+      if (!this.mediaShowFrames || !this._mediaFrameInterval || this.config.xAxis?.col !== "time") {
+        framesPath.setAttribute("d", "");
+        return;
+      }
+      type PlotEl = HTMLElement & {
+        _fullLayout?: { xaxis: { l2p(v: number): number; range: [number, number] }; margin: { l: number; r: number; t: number; b: number } };
+      };
+      const plotEl = document.getElementById("plot-area") as PlotEl | null;
+      const fullLayout = plotEl?._fullLayout;
+      if (!plotEl || !fullLayout) return;
+      const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+      const duration = video?.duration && isFinite(video.duration) ? video.duration : Infinity;
+      // use exact measured frame interval to avoid rounding drift (e.g. 29.97 vs 30)
+      const interval = this._mediaFrameInterval;
+      const ph = plotEl.getBoundingClientRect().height;
+      const markerTop = ph - fullLayout.margin.b - 5;
+      const markerBot = ph - fullLayout.margin.b;
+      const [xMin, xMax] = fullLayout.xaxis.range;
+      const kStart = Math.max(0, Math.floor(xMin / interval));
+      const kEnd = Math.ceil(Math.min(isFinite(duration) ? duration : xMax, xMax) / interval);
+      let d = "";
+      for (let k = kStart; k <= kEnd; k++) {
+        const px = fullLayout.margin.l + fullLayout.xaxis.l2p(k * interval);
+        d += `M${px},${markerTop}L${px},${markerBot}`;
+      }
+      framesPath.setAttribute("d", d);
+    },
+
+    _updatePlaybackLine() {
+      const sel = this.selectedMedia?.toLowerCase() ?? "";
+      const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
+      const isTimeAxis = this.config.xAxis?.col === "time";
+      const shouldRun = this.mediaScrubMode === "play" && this.mediaFiles.length > 0 && isScrubbable && (this.mediaShowLine || isTimeAxis);
+      if (!shouldRun || this._mediaRafId !== null) return;
+      const tick = () => {
+        const curSel = this.selectedMedia?.toLowerCase() ?? "";
+        const curScrubbable = curSel.endsWith(".mp4") || curSel.endsWith(".webm");
+        const curTimeAxis = this.config.xAxis?.col === "time";
+        if (this.mediaScrubMode !== "play" || this.mediaFiles.length === 0 || !curScrubbable || (!this.mediaShowLine && !curTimeAxis)) {
+          this._mediaRafId = null;
+          this._syncOverlayVisibility();
+          return;
+        }
+        const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+        const plotEl = document.getElementById("plot-area") as (HTMLElement & {
+          _fullLayout?: {
+            xaxis: { l2p(v: number): number; range: [number, number] };
+            margin: { l: number; r: number; t: number; b: number };
+          };
+        }) | null;
+        if (video && plotEl && video.duration > 0 && !isNaN(video.duration)) {
+          const fullLayout = plotEl._fullLayout;
+          if (fullLayout) {
+            if (curTimeAxis) {
+              const [xMin, xMax] = fullLayout.xaxis.range;
+              const safeMin = Math.max(0, xMin);
+              const safeMax = Math.min(video.duration, xMax);
+              if (safeMax > safeMin) {
+                if (video.currentTime >= safeMax) video.currentTime = safeMin;
+                else if (video.currentTime < safeMin) video.currentTime = safeMin;
+              }
+            }
+            this._syncOverlayVisibility();
+            if (this.mediaShowLine) {
+              const lineEl = document.getElementById("playback-line-el") as HTMLElement | null;
+              if (lineEl) {
+                lineEl.style.top = fullLayout.margin.t + "px";
+                lineEl.style.bottom = fullLayout.margin.b + "px";
+                // snap to nearest frame boundary so the spike jumps with the video frames
+                const t = this._mediaFrameInterval
+                  ? Math.round(video.currentTime / this._mediaFrameInterval) * this._mediaFrameInterval
+                  : video.currentTime;
+                let x: number;
+                if (curTimeAxis) {
+                  x = fullLayout.margin.l + fullLayout.xaxis.l2p(t);
+                } else {
+                  const pw = plotEl.getBoundingClientRect().width - fullLayout.margin.l - fullLayout.margin.r;
+                  x = fullLayout.margin.l + Math.max(0, Math.min(1, t / video.duration)) * pw;
+                }
+                lineEl.style.left = x + "px";
+              }
+            }
+            if (this.mediaShowFrames && curTimeAxis) this._renderFrameMarkers();
+          }
+        }
+        this._mediaRafId = requestAnimationFrame(tick);
+      };
+      this._mediaRafId = requestAnimationFrame(tick);
+    },
+
+
+    async fetchMediaFiles() {
+      try {
+        const resp = await fetch(`/mosaic/${this.trialId}/media`);
+        if (!resp.ok) return;
+        const data = (await resp.json()) as TrialMediaResponse;
+        this._mediaFpsMap = Object.fromEntries(
+          data.files.map((f: TrialMediaFile) => [f.name, f.fps]),
+        );
+        this.mediaFiles = data.files.map((f: TrialMediaFile) => f.name);
+        if (this.mediaFiles.length > 0) {
+          const saved = localStorage.getItem("mojo:media:file");
+          this.selectedMedia = saved && this.mediaFiles.includes(saved) ? saved : this.mediaFiles[0]!;
+        }
+        this._applySelectedMediaFps();
+      } catch {
+        // dojo offline - no media available
+      }
+      this._updatePlaybackLine();
+      this._renderFrameMarkers();
+    },
+
+    _applySelectedMediaFps() {
+      const fps = this.selectedMedia ? (this._mediaFpsMap[this.selectedMedia] ?? null) : null;
+      this._mediaFrameInterval = fps && fps > 0 ? 1 / fps : null;
     },
 
     async startBackgroundDiscovery() {
@@ -648,6 +793,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
       this.warpId = isNaN(currentNum) ? null : currentNum;
       void this.fetchTrialStatus();
+      void this.fetchMediaFiles();
 
       const observer = new MutationObserver((mutations) => {
         if (mutations.some((m) => m.attributeName === "class")) {
@@ -731,9 +877,9 @@ function trialViewer(trialId: string, externalUrl: string) {
               handler: (event: Record<string, unknown>) => void,
             ): void;
             _fullLayout?: {
-              xaxis: { p2l(v: number): number };
+              xaxis: { p2l(v: number): number; l2p(v: number): number; range: [number, number] };
               yaxis: { p2l(v: number): number };
-              margin: { l: number; t: number };
+              margin: { l: number; r: number; t: number; b: number };
             };
           };
 
@@ -837,6 +983,26 @@ function trialViewer(trialId: string, externalUrl: string) {
               }
             }
           }).observe(document.body, { childList: true, subtree: true });
+
+          // scrub video on mousemove: use axis time value when x-axis is "time",
+          // otherwise fall back to pixel fraction so phase-space plots still work.
+          plotEl.addEventListener("mousemove", (e: MouseEvent) => {
+            if (this.mediaScrubMode !== "scrub") return;
+            const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+            if (!video || !video.duration || isNaN(video.duration)) return;
+            const fullLayout = plotEl._fullLayout;
+            if (!fullLayout) return;
+            const rect = plotEl.getBoundingClientRect();
+            const relX = e.clientX - rect.left - fullLayout.margin.l;
+            if (this.config.xAxis?.col === "time") {
+              const t = fullLayout.xaxis.p2l(relX);
+              video.currentTime = Math.max(0, Math.min(video.duration, t));
+            } else {
+              const plotAreaWidth = rect.width - fullLayout.margin.l - fullLayout.margin.r;
+              if (plotAreaWidth <= 0) return;
+              video.currentTime = video.duration * Math.max(0, Math.min(1, relX / plotAreaWidth));
+            }
+          });
 
           setTimeout(() => {
             if (plotEl?.offsetParent !== null) Plotly.Plots.resize(plotEl);
@@ -996,6 +1162,44 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.discoveryTimeout = setTimeout(() => {
           if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
         }, 500);
+      });
+
+      this.$watch("mediaScrubMode", (mode: string) => {
+        if (mode === "scrub") {
+          (document.getElementById("media-video-player") as HTMLVideoElement | null)?.pause();
+        }
+        try { localStorage.setItem("mojo:media:mode", mode); } catch { /* ignore */ }
+        this._syncOverlayVisibility();
+        this._updatePlaybackLine();
+      });
+
+      this.$watch("mediaShowLine", (val: boolean) => {
+        try { localStorage.setItem("mojo:media:show-line", val ? "1" : "0"); } catch { /* ignore */ }
+        this._syncOverlayVisibility();
+        this._updatePlaybackLine();
+      });
+
+      this.$watch("mediaShowFrames", (val: boolean) => {
+        try { localStorage.setItem("mojo:media:show-frames", val ? "1" : "0"); } catch { /* ignore */ }
+        this._renderFrameMarkers();
+        this._updatePlaybackLine();
+      });
+
+      this.$watch("mediaPlaybackRate", (rate: number) => {
+        try { localStorage.setItem("mojo:media:rate", String(rate)); } catch { /* ignore */ }
+        const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+        if (video) video.playbackRate = rate;
+      });
+
+      this.$watch("config.rangeX", () => {
+        this._renderFrameMarkers();
+      });
+
+      this.$watch("selectedMedia", (file: string | null) => {
+        if (file) try { localStorage.setItem("mojo:media:file", file); } catch { /* ignore */ }
+        this._applySelectedMediaFps();
+        this._renderFrameMarkers();
+        this._updatePlaybackLine();
       });
 
       this.$watch("config.refFrame", (newValue: string | null, oldValue: string | null) => {
