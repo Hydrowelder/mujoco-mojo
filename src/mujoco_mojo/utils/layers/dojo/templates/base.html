@@ -46,6 +46,19 @@
         @apply panel absolute top-full mt-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300];
       }
 
+      /* ── Signal Lab keyboard-shortcut badge (appears below toolbar buttons) ── */
+      .lab-kbd-tip {
+        @apply pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1
+               rounded-md bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-mono
+               whitespace-nowrap invisible group-hover:visible opacity-0 group-hover:opacity-100
+               transition-opacity z-[800];
+      }
+      /* ── Signal Lab status bar inline kbd badges ──────────────────────────── */
+      .lab-status-kbd {
+        @apply inline-flex items-center px-1 py-px rounded border border-slate-300 dark:border-slate-600
+               text-slate-500 dark:text-slate-400 text-[9px] font-mono leading-none bg-slate-100 dark:bg-slate-800;
+      }
+
       /* ── Header toggle buttons ─────────────────────────────────────────── */
       .btn {
         @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;

@@ -1187,7 +1187,7 @@
             const [lid, fromId, fromSlot, toId, toSlot] = lnk;
             const fIn = selectedIds.has(fromId);
             const tIn = selectedIds.has(toId);
-            if (fIn && tIn)       internalLinkIds.add(lid);
+            if (fIn && tIn) internalLinkIds.add(lid);
             else if (!fIn && tIn) externalInputs.push(lnk);
             else if (fIn && !tIn) externalOutputs.push(lnk);
         });
@@ -1210,12 +1210,12 @@
         const minY = Math.min(...serialNodes.map(n => n.pos[1]));
 
         // allocate IDs above the graph's current high-water mark
-        let nextId  = (s.last_node_id  || 0) + 1;
-        let nextLid = (s.last_link_id  || 0) + 1;
+        let nextId = (s.last_node_id || 0) + 1;
+        let nextLid = (s.last_link_id || 0) + 1;
 
-        const tmplInNodes  = [];
+        const tmplInNodes = [];
         const tmplOutNodes = [];
-        const newLinks     = [];
+        const newLinks = [];
 
         // one Template In per unique (fromId, fromSlot) — avoids duplicate stubs
         const inputPortMap = new Map();
@@ -1230,18 +1230,18 @@
                     else if (srcNode.outputs && srcNode.outputs[fromSlot]) label = srcNode.outputs[fromSlot].name || label;
                 }
                 const tid = nextId++;
-                inputPortMap.set(key, {tid, label});
+                inputPortMap.set(key, { tid, label });
                 tmplInNodes.push({
                     id: tid, type: 'Template/template_in', title: 'Template In',
                     pos: [minX - 240, minY + tmplInNodes.length * 80],
                     size: [180, 55], flags: {}, mode: 0,
-                    properties: {label},
+                    properties: { label },
                     inputs: [],
-                    outputs: [{name: 'signal', type: 'series', links: []}],
+                    outputs: [{ name: 'signal', type: 'series', links: [] }],
                     widgets_values: [label]
                 });
             }
-            const {tid} = inputPortMap.get(key);
+            const { tid } = inputPortMap.get(key);
             const nlid = nextLid++;
             newLinks.push([nlid, tid, 0, toId, toSlot, 'series']);
             const toCopy = nodes.find(n => n.id === toId);
@@ -1264,8 +1264,8 @@
                 id: tid, type: 'Template/template_out', title: 'Template Out',
                 pos: [maxX + 40, minY + tmplOutNodes.length * 80],
                 size: [180, 55], flags: {}, mode: 0,
-                properties: {label},
-                inputs: [{name: 'signal', type: 'series', link: null}],
+                properties: { label },
+                inputs: [{ name: 'signal', type: 'series', link: null }],
                 outputs: [],
                 widgets_values: [label]
             });
@@ -1297,7 +1297,7 @@
         try {
             const r = await fetch('/mosaic/api/lab/' + safePath, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(graph)
             });
             if (r.ok) {
@@ -1370,26 +1370,27 @@
         </div>
 
         <!-- middle: action buttons (scrollable so adding more buttons doesn't crowd the bar) -->
-        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
+        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto custom-scrollbar min-w-0">
             <!-- new graph -->
-            <button @click="if (!window.mojoLabHasUnsavedChanges?.() || confirm('Discard unsaved changes?')) { labName = ''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
-                    title="New — clear graph and reset name">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M12 4v16m8-8H4" />
-                </svg>
-                <span class="hidden xl:inline">New</span>
-            </button>
+            <div class="group relative shrink-0">
+                <button @click="if (!window.mojoLabHasUnsavedChanges?.() || confirm('Discard unsaved changes?')) { labName = ''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
+                        class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span class="hidden xl:inline">New</span>
+                </button>
+            </div>
             <!-- refresh validation -->
             <button @click="refreshLabValidation()"
                     class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
-                    title="Refresh validation - recheck all lab dependencies against the current trial">
+                    title="Refresh validation">
                 <svg class="w-3.5 h-3.5"
                      fill="none"
                      stroke="currentColor"
@@ -1402,52 +1403,62 @@
                 <span class="hidden xl:inline">Refresh</span>
             </button>
             <!-- fit view -->
-            <button @click="mojoLabFitView()"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
-                    title="Fit view to all nodes (Ctrl+Shift+F)">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-                <span class="hidden xl:inline">Fit</span>
-            </button>
+            <div class="group relative shrink-0">
+                <button @click="mojoLabFitView()"
+                        class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                    <span class="hidden xl:inline">Fit</span>
+                </button>
+                <span class="lab-kbd-tip"
+                      x-text="isMac ? '⌘⇧F' : 'Ctrl+⇧F'"></span>
+            </div>
             <!-- auto-arrange -->
-            <button @click="mojoLabArrange()"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
-                    title="Auto-arrange nodes (Ctrl+Shift+A)">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M3 6h18M3 12h18M3 18h18" />
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M17 3l4 3-4 3" />
-                </svg>
-                <span class="hidden xl:inline">Arrange</span>
-            </button>
+            <div class="group relative shrink-0">
+                <button @click="mojoLabArrange()"
+                        class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M3 6h18M3 12h18M3 18h18" />
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M17 3l4 3-4 3" />
+                    </svg>
+                    <span class="hidden xl:inline">Arrange</span>
+                </button>
+                <span class="lab-kbd-tip"
+                      x-text="isMac ? '⌘⇧A' : 'Ctrl+⇧A'"></span>
+            </div>
             <!-- clear -->
-            <button @click="if(confirm('Clear the graph?')) mojoLabClear()"
-                    class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5 shrink-0">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                </svg>
-                <span class="hidden xl:inline">Clear</span>
-            </button>
+            <div class="group relative shrink-0">
+                <button @click="if(confirm('Clear the graph?')) { mojoLabClear(); window.mojoLabMarkSaved?.(); }"
+                        class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                    <span class="hidden xl:inline">Clear</span>
+                </button>
+                <span class="lab-kbd-tip"
+                      x-text="isMac ? '⌘C' : 'Ctrl+C'"></span>
+            </div>
         </div>
 
         <!-- right section: shrink-0 — name+save, load, close are all outside the overflow-hidden
@@ -1497,6 +1508,8 @@
                     </svg>
                     <span class="hidden xl:inline">Save</span>
                 </button>
+                <span class="lab-kbd-tip"
+                      x-text="isMac ? '⌘S' : 'Ctrl+S'"></span>
                 <!-- suggestion hint — rendered outside overflow-y-hidden so it's not clipped -->
                 <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-[700]"
                      :class="suggestion ? 'visible' : 'invisible'">
@@ -1773,6 +1786,8 @@
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
+         @mojo:lab-new.document="if (!window.mojoLabHasUnsavedChanges?.() || confirm('Discard unsaved changes?')) { labName = ''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
+         @mojo:lab-clear.document="if(confirm('Clear the graph?')) { mojoLabClear(); window.mojoLabMarkSaved?.(); }"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
                  const el = document.getElementById('lab-canvas');
@@ -1985,12 +2000,44 @@
     </div>
 
     <!-- status bar -->
-    <div class="h-8 shrink-0 flex items-center px-4 border-t border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-500 select-none overflow-x-auto custom-scrollbar">
-        <div class="flex items-center gap-6 whitespace-nowrap">
-            <span>Right-click → add node</span>
-            <span>Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · Del remove selected</span>
-            <span>Ctrl+Shift+A arrange · Ctrl+Shift+F fit view</span>
-            <span>Scroll to zoom · drag to pan</span>
-        </div>
+    <div class="h-8 shrink-0 flex items-center px-4 border-t border-slate-200 dark:border-slate-800 text-sm font-mono text-slate-500 dark:text-slate-500 select-none overflow-x-auto custom-scrollbar gap-5 whitespace-nowrap">
+        <span class="flex items-center gap-2">
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘Z' : 'Ctrl+Z'"></kbd>
+                <span>Undo</span>
+            </span>
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘Y' : 'Ctrl+Y'"></kbd>
+                <span>Redo</span>
+            </span>
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘S' : 'Ctrl+S'"></kbd>
+                <span>Save</span>
+            </span>
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘C' : 'Ctrl+C'"></kbd>
+                <span>Clear</span>
+            </span>
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd">Del</kbd>
+                <span>Remove</span>
+            </span>
+        </span>
+        <span class="flex items-center gap-2">
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘⇧A' : 'Ctrl+⇧A'"></kbd>
+                <span>Arrange</span>
+            </span>
+            <span class="group relative flex items-center gap-1">
+                <kbd class="lab-status-kbd"
+                     x-text="isMac ? '⌘⇧F' : 'Ctrl+⇧F'"></kbd>
+                <span>Fit</span>
+            </span>
+        </span>
     </div>
 </div>

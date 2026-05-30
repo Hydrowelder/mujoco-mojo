@@ -1362,6 +1362,12 @@ function trialViewer(trialId: string, externalUrl: string) {
             // This prevents Escape from both closing the lab and exiting fullscreen.
             if (anyOpen) e.stopImmediatePropagation();
           }
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !isTextInput) {
+            if (this.labOpen) {
+              e.preventDefault();
+              document.dispatchEvent(new CustomEvent("mojo:lab-clear"));
+            }
+          }
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
             e.preventDefault();
             if (this.labOpen) {
