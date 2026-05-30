@@ -78,10 +78,14 @@ declare global {
     initSensAICodeBlocks(container: HTMLElement): void;
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
+    mojoLabSelectNodeTemplate?(nodeId: number, name: string): void;
+    mojoLabMarkSaved?(): void;
+    mojoLabHasUnsavedChanges?(): boolean;
     mojoLabUndo?(): void;
     mojoLabRedo?(): void;
     mojoLabArrange?(): void;
     mojoLabFitView?(): void;
+    mojoLabSerialize?(): object | null;
   }
 }
 

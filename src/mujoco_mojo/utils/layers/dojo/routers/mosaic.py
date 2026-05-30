@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
@@ -416,7 +417,7 @@ async def delete_profile(name: str):
 # Lab  ·  filter graph configs stored under ~/.mujoco-mojo/lab/
 # ---------------------------------------------------------------------------
 
-_LAB_PREFIX = "Lab"  # Virtual column category shown in the Y-axis selector
+_LAB_PREFIX = SignalCategory.LAB  # Virtual column category shown in the Y-axis selector
 _LAB_MAX_BYTES = 1024 * 1024  # 1 MB
 
 
@@ -460,11 +461,16 @@ def _lab_meta(path: Path, d: Path) -> dict:
     try:
         graph = json.loads(path.read_text(encoding="utf-8"))
         exc = LabExecutor(graph)
+        ti = exc._template_in_labels
+        to = exc._template_out_labels
         return {
             "name": path.relative_to(d).with_suffix("").as_posix(),
             "modified": int(path.stat().st_mtime * 1000),
             "signal_in_columns": exc.signal_in_columns,
             "outputs": exc.output_labels,
+            "is_template": bool(ti or to),
+            "template_inputs": ti,
+            "template_outputs": to,
         }
     except Exception:
         return {
@@ -472,6 +478,9 @@ def _lab_meta(path: Path, d: Path) -> dict:
             "modified": int(path.stat().st_mtime * 1000),
             "signal_in_columns": [],
             "outputs": [],
+            "is_template": False,
+            "template_inputs": [],
+            "template_outputs": [],
         }
 
 

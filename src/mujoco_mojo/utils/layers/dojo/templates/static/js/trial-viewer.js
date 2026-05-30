@@ -216,6 +216,7 @@
       labName: localStorage.getItem("mojo:lab:name") ?? "",
       nodePickingColumn: null,
       nodeColSearch: "",
+      nodePickingTemplate: null,
       labSchemas: [],
       // --- SHAPES ---
       shapesOpen: false,
@@ -441,8 +442,9 @@
         const duration = video?.duration && isFinite(video.duration) ? video.duration : Infinity;
         const interval = this._mediaFrameInterval;
         const ph = rect.height;
-        const markerTop = ph - fullLayout.margin.b - 5;
-        const markerBot = ph - fullLayout.margin.b;
+        const markerHeight = 5;
+        const markerTop = ph - fullLayout.margin.b - 20;
+        const markerBot = markerTop - markerHeight;
         const [xMin, xMax] = fullLayout.xaxis.range;
         const kStart = Math.max(0, Math.floor(xMin / interval));
         const kEnd = Math.ceil(
@@ -1104,34 +1106,38 @@
               this.settingsOpen = this.downloadOpen = this.editorOpen = false;
               this.profilesOpen = this.vsMenuOpen = false;
               this.profileSearch = "";
-              this.labOpen = false;
+              if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.() || confirm("Discard unsaved changes?")) {
+                this.labOpen = false;
+              }
               window.dispatchEvent(new CustomEvent("mojo:escape"));
               if (anyOpen) e.stopImmediatePropagation();
             }
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
               e.preventDefault();
-              if (!isTextInput) {
-                if (this.labOpen) {
+              if (this.labOpen) {
+                const nameEl = document.getElementById(
+                  "lab-name-input"
+                );
+                const name = nameEl?.value.trim() ?? "";
+                if (name) {
+                  const graph = window.mojoLabSerialize?.();
+                  if (graph) void this.saveLabGraph(name, graph);
+                } else {
+                  nameEl?.focus();
+                  nameEl?.setSelectionRange(0, 0);
+                }
+              } else if (!isTextInput) {
+                this.profilesOpen = true;
+                void this.loadProfiles();
+                void this.$nextTick(() => {
                   const el = document.getElementById(
-                    "lab-name-input"
+                    "profile-name-input"
                   );
                   if (el) {
                     el.focus();
                     el.setSelectionRange(el.value.length, el.value.length);
                   }
-                } else {
-                  this.profilesOpen = true;
-                  void this.loadProfiles();
-                  void this.$nextTick(() => {
-                    const el = document.getElementById(
-                      "profile-name-input"
-                    );
-                    if (el) {
-                      el.focus();
-                      el.setSelectionRange(el.value.length, el.value.length);
-                    }
-                  });
-                }
+                });
               }
             }
             if ((e.metaKey || e.ctrlKey) && !isTextInput) {
@@ -1274,7 +1280,17 @@
           this._syncOverlayVisibility();
           this._updatePlaybackLine();
         });
-        this.$watch("config.xAxis.col", () => {
+        this.$watch("config.xAxis.col", (newCol) => {
+          if (newCol && !Object.prototype.hasOwnProperty.call(this.data ?? {}, newCol)) {
+            void (async () => {
+              try {
+                const resp2 = await this.fetchTrialData(this.trialId, [newCol]);
+                this.data = { ...this.data ?? {}, ...resp2.data };
+                this.saveAndRender();
+              } catch {
+              }
+            })();
+          }
           requestAnimationFrame(() => {
             this._syncOverlayVisibility();
             this._renderFrameMarkers();
@@ -2126,6 +2142,16 @@
             dash: "solid",
             marker: "none"
           };
+          if (!Object.prototype.hasOwnProperty.call(this.data ?? {}, col)) {
+            void (async () => {
+              try {
+                const resp = await this.fetchTrialData(this.trialId, [col]);
+                this.data = { ...this.data ?? {}, ...resp.data };
+                this.saveAndRender();
+              } catch {
+              }
+            })();
+          }
         }
         this.saveAndRender();
       },
@@ -2358,7 +2384,10 @@
           const schemas = all.map((lab) => ({
             ...lab,
             signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
-            outputs: [...new Set(lab.outputs)].sort()
+            outputs: [...new Set(lab.outputs)].sort(),
+            is_template: lab.is_template ?? false,
+            template_inputs: lab.template_inputs ?? [],
+            template_outputs: lab.template_outputs ?? []
           }));
           const baseColumns = this.columns.filter((c) => !c.startsWith("Lab/"));
           const available = new Set(baseColumns);
@@ -2407,28 +2436,59 @@
           }
           localStorage.setItem("mojo:lab:name", trimmed);
           this.notify(`Lab "${trimmed}" saved`, "success");
+          window.mojoLabMarkSaved?.();
           await this.refreshLabValidation();
-          const labPrefix = `Lab/${trimmed}/`;
-          const staleCols = Object.keys(this.data ?? {}).filter(
-            (c) => c.startsWith(labPrefix)
-          );
-          if (staleCols.length > 0) {
-            const fresh = { ...this.data ?? {} };
-            staleCols.forEach((c) => delete fresh[c]);
-            this.data = fresh;
-            const activeCols = staleCols.filter(
-              (c) => c in this.config.yAxes || c === this.config.xAxis?.col
-            );
-            if (activeCols.length > 0) {
-              try {
-                const refetch = await this.fetchTrialData(
-                  this.trialId,
-                  activeCols
-                );
-                this.data = { ...this.data ?? {}, ...refetch.data };
-                this.saveAndRender();
-              } catch {
+          const dependents = /* @__PURE__ */ new Map();
+          for (const lab of this.labSchemas) {
+            for (const col of lab.signal_in_columns) {
+              if (col.startsWith("Lab/")) {
+                const src = col.split("/")[1] ?? "";
+                if (src) {
+                  if (!dependents.has(src)) dependents.set(src, []);
+                  dependents.get(src).push(lab.name);
+                }
               }
+            }
+          }
+          const toInvalidate = /* @__PURE__ */ new Set([trimmed]);
+          const bfsQueue = [trimmed];
+          while (bfsQueue.length > 0) {
+            const cur = bfsQueue.shift();
+            for (const dep of dependents.get(cur) ?? []) {
+              if (!toInvalidate.has(dep)) {
+                toInvalidate.add(dep);
+                bfsQueue.push(dep);
+              }
+            }
+          }
+          const newData = { ...this.data ?? {} };
+          let evicted = false;
+          for (const labName of toInvalidate) {
+            const prefix = `Lab/${labName}/`;
+            for (const key of Object.keys(newData)) {
+              if (key.startsWith(prefix)) {
+                delete newData[key];
+                evicted = true;
+              }
+            }
+          }
+          if (evicted) this.data = newData;
+          const activeCols = [
+            ...Object.keys(this.config.yAxes),
+            this.config.xAxis?.col ?? ""
+          ].filter((c) => {
+            for (const labName of toInvalidate) {
+              if (c.startsWith(`Lab/${labName}/`) && !Object.prototype.hasOwnProperty.call(this.data ?? {}, c))
+                return true;
+            }
+            return false;
+          });
+          if (activeCols.length > 0) {
+            try {
+              const refetch = await this.fetchTrialData(this.trialId, activeCols);
+              this.data = { ...this.data ?? {}, ...refetch.data };
+              this.saveAndRender();
+            } catch {
             }
           }
         } catch (err) {
@@ -2443,6 +2503,14 @@
         }
         this.nodePickingColumn = null;
         this.nodeColSearch = "";
+      },
+      selectNodeTemplate(name) {
+        if (this.nodePickingTemplate !== null) {
+          if (typeof window.mojoLabSelectNodeTemplate === "function") {
+            window.mojoLabSelectNodeTemplate(this.nodePickingTemplate, name);
+          }
+        }
+        this.nodePickingTemplate = null;
       },
       async deleteLabGraph(name) {
         const safePath = name.split("/").map(encodeURIComponent).join("/");

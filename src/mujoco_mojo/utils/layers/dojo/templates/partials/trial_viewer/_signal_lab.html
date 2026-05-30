@@ -41,6 +41,8 @@
         const C_MATH = "#0c4a6e";   // sky-950  (arithmetic: log, exp, power, +/-/×/÷)
         const C_TRIG = "#14432a";   // green-950 (trigonometry)
         const C_COMP = "#3d1515";   // red-950  (comparison, sign)
+        const C_TMPL_IO = "#4a044e";   // fuchsia-950 (template in/out ports)
+        const C_TMPL_REF = "#4a044e";   // fuchsia-950 (template reference compound node)
 
         // ── Signal In ─────────────────────────────────────────────────────────
         function SignalInNode() {
@@ -361,6 +363,146 @@
             makeArith("divide", "Divide  (a ÷ b)");
         })();
 
+        // ── Norm (N inputs → ‖x‖₂) ───────────────────────────────────────────
+        (function () {
+            function NormNode() {
+                this.addInput("x0", SER);
+                this.addInput("x1", SER);
+                this.addOutput("signal", SER);
+                this.size = [180, 72];
+            }
+            NormNode.title = "Norm  ‖x‖₂";
+            NormNode.color = C_MATH;
+            NormNode.bgcolor = BG;
+            NormNode.prototype.onConnectionsChange = function (type, slot, connected) {
+                if (type !== LiteGraph.INPUT) return;
+                const n = (this.inputs || []).length;
+                // auto-add a new slot when the last one gets wired up
+                if (connected && slot === n - 1) {
+                    this.addInput("x" + n, SER);
+                }
+                // prune trailing empty slots; always keep at least 2
+                while (
+                    this.inputs.length > 2 &&
+                    this.inputs[this.inputs.length - 1].link == null &&
+                    this.inputs[this.inputs.length - 2].link == null
+                ) {
+                    this.removeInput(this.inputs.length - 1);
+                }
+                this.size[1] = Math.max(72, 32 + this.inputs.length * 20 + 14);
+            };
+            NormNode.prototype.onDrawForeground = function (ctx) {
+                // hint below the last (unconnected) input slot
+                if (!this.inputs || this.inputs.length === 0) return;
+                if (this.inputs[this.inputs.length - 1].link != null) return;
+                ctx.save();
+                ctx.font = "italic 12px monospace";
+                ctx.fillStyle = "#475569";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillText("wire to add inputs", this.size[0] / 2, this.size[1] - 3);
+                ctx.restore();
+            };
+            LiteGraph.registerNodeType("Arithmetic/norm", NormNode);
+        })();
+
+        // ── Template In / Template Out (interface ports inside a template) ────
+        (function () {
+            function makeTemplatePort(isInput) {
+                function Node() {
+                    this.properties = { label: "" };
+                    this._lw = this.addWidget(
+                        "text", "label", "",
+                        (v) => {
+                            this.properties.label = v;
+                            this.size[0] = Math.max(180, v.length * 7 + 80);
+                            if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                        }
+                    );
+                    if (isInput) {
+                        this.addOutput("signal", SER);
+                    } else {
+                        this.addInput("signal", SER);
+                    }
+                    this.size = [180, 55];
+                }
+                Node.title = isInput ? "Template In" : "Template Out";
+                Node.color = C_TMPL_IO;
+                Node.bgcolor = BG;
+                Node.prototype.onConfigure = function () {
+                    const lbl = this.properties.label ?? "";
+                    if (this._lw) this._lw.value = lbl;
+                    this.size[0] = Math.max(180, lbl.length * 7 + 80);
+                };
+                LiteGraph.registerNodeType(
+                    isInput ? "Template/template_in" : "Template/template_out",
+                    Node
+                );
+            }
+            makeTemplatePort(true);
+            makeTemplatePort(false);
+        })();
+
+        // ── Template Reference (compound node that runs a saved template) ─────
+        (function () {
+            function TemplateRefNode() {
+                this.properties = { name: "", graph: null };
+                this._nw = this.addWidget(
+                    "text", "template", "",
+                    (v) => {
+                        this.properties.name = v;
+                        this.size[0] = Math.max(200, v.length * 7 + 80);
+                        if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                    }
+                );
+                this.addWidget("button", "pick", "Pick", () => {
+                    document.dispatchEvent(new CustomEvent("mojo:lab-pick-template", {
+                        detail: { nodeId: this.id }
+                    }));
+                });
+                this.size = [200, 78];
+            }
+            TemplateRefNode.title = "Template";
+            TemplateRefNode.color = C_TMPL_REF;
+            TemplateRefNode.bgcolor = BG;
+            TemplateRefNode.prototype.onConfigure = function () {
+                // LiteGraph already restored inputs/outputs with their link IDs from the
+                // serialized graph — calling _tmplApplyPorts here would wipe those link
+                // references before they can be reconnected. Only sync the widget and size.
+                const name = this.properties.name ?? "";
+                if (this._nw) this._nw.value = name;
+                const nPorts = Math.max((this.inputs || []).length, (this.outputs || []).length, 1);
+                const allPortLabels = [
+                    ...(this.inputs || []).map(i => i.name || ''),
+                    ...(this.outputs || []).map(o => o.name || ''),
+                ];
+                this.size[0] = Math.max(200, name.length * 7 + 80, ...allPortLabels.map(l => l.length * 7 + 80));
+                this.size[1] = Math.max(78, 56 + nPorts * 20);
+            };
+            TemplateRefNode.prototype.onDrawForeground = function (ctx) {
+                const cx = this.size[0] / 2;
+                if (this._tmplStale) {
+                    ctx.save();
+                    ctx.font = "italic 9px monospace";
+                    ctx.fillStyle = "#f59e0b";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "bottom";
+                    ctx.fillText("ports changed — repick to update", cx, this.size[1] - 4);
+                    ctx.restore();
+                    return;
+                }
+                if (!this.properties.name || this.properties.graph) return;
+                ctx.save();
+                ctx.font = "italic 9px monospace";
+                ctx.fillStyle = "#64748b";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillText("click Pick to configure ports", cx, this.size[1] - 3);
+                ctx.restore();
+            };
+            LiteGraph.registerNodeType("Template/template_ref", TemplateRefNode);
+        })();
+
         // ── Derivative (signal / wrt) ─────────────────────────────────────────
         function DerivativeNode() {
             this.addInput("signal", SER);
@@ -392,6 +534,23 @@
 
     // Cached Alpine context - updated by mojoLabSetContext so helpers can re-read it.
     let _labContext = { cols: [], schemas: [], currentName: '' };
+
+    // ── Unsaved-changes tracking ──────────────────────────────────────────────
+    // JSON snapshot of the graph at the last save/load; null = never established.
+    let _labSavedState = null;
+
+    // Mark the current graph state as the clean baseline (call after save or load).
+    window.mojoLabMarkSaved = function () {
+        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
+    };
+
+    // Returns true when the graph differs from the last save/load baseline.
+    window.mojoLabHasUnsavedChanges = function () {
+        if (!_lab.graph) return false;
+        const nodes = _lab.graph._nodes || [];
+        if (_labSavedState === null) return nodes.length > 0;
+        return JSON.stringify(_lab.graph.serialize()) !== _labSavedState;
+    };
 
     // ── Undo / redo history ───────────────────────────────────────────────────
     const _labHistory = { stack: [], index: -1 };
@@ -510,6 +669,9 @@
 
         // Seed history with the initial state on first open (or after mojoLabClearHistory).
         if (_labHistory.stack.length === 0) mojoLabSnapshot();
+
+        // establish clean baseline so "unsaved changes" is relative to this state
+        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
     }
 
     function mojoLabResize(canvasEl) {
@@ -526,6 +688,7 @@
     function mojoLabSerialize() {
         return _lab.graph ? _lab.graph.serialize() : null;
     }
+    window.mojoLabSerialize = mojoLabSerialize;
 
     function mojoLabClear() {
         if (!_lab.graph) return;
@@ -561,6 +724,34 @@
         node.size[1] = collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55);
     }
 
+    function _tmplColor(node, schemas) {
+        const name = (node.properties && node.properties.name) || '';
+        const schema = name ? (schemas || []).find(s => s.name === name) : null;
+        const nPorts = Math.max((node.inputs || []).length, (node.outputs || []).length, 1);
+        const baseH = Math.max(78, 56 + nPorts * 20);
+        let stale = false;
+        if (name && node.inputs && node.inputs.length > 0) {
+            // a template has been picked — check whether its ports still match the saved schema
+            if (!schema || !schema.is_template) {
+                stale = true; // template lab was deleted or no longer a template
+            } else {
+                const curIn = (node.inputs || []).map(i => i.name);
+                const curOut = (node.outputs || []).map(o => o.name);
+                const expIn = schema.template_inputs || [];
+                const expOut = schema.template_outputs || [];
+                stale = !(
+                    curIn.length === expIn.length &&
+                    curOut.length === expOut.length &&
+                    expIn.every((l, i) => curIn[i] === l) &&
+                    expOut.every((l, i) => curOut[i] === l)
+                );
+            }
+        }
+        node._tmplStale = stale;
+        node.color = stale ? "#78350f" : "#4a044e";   // amber-900 stale / fuchsia-950 normal
+        node.size[1] = stale ? baseH + 14 : baseH;
+    }
+
     // Update validation context - called from Alpine when lab opens or labSchemas refreshes.
     // cols: current trial columns; schemas: saved lab list; currentName: lab being edited (excluded).
     function mojoLabSetContext(cols, schemas, currentName) {
@@ -582,6 +773,7 @@
                 const t = (n.type || '').split('/').pop();
                 if (t === 'signal_in') _siColor(n);
                 else if (t === 'signal_out') _soColor(n);
+                else if (t === 'template_ref') _tmplColor(n, schemas);
             });
             _lab.graph.setDirtyCanvas(true, false);
         }
@@ -860,9 +1052,74 @@
             const t = (n.type || '').split('/').pop();
             if (t === 'signal_in') _siColor(n);
             else if (t === 'signal_out') _soColor(n);
+            else if (t === 'template_ref') _tmplColor(n, _labContext.schemas);
         });
         _lab.graph.setDirtyCanvas(true, false);
     }
+
+    // ── Template helpers (module scope) ───────────────────────────────────────
+
+    function _tmplInLabels(graph) {
+        return (graph.nodes || [])
+            .filter(n => (n.type || '').split('/').pop() === 'template_in')
+            .map(n => (n.properties && n.properties.label) || 'in');
+    }
+
+    function _tmplOutLabels(graph) {
+        return (graph.nodes || [])
+            .filter(n => (n.type || '').split('/').pop() === 'template_out')
+            .map(n => (n.properties && n.properties.label) || 'out');
+    }
+
+    function _tmplApplyPorts(node, graph) {
+        const inLabels = _tmplInLabels(graph);
+        const outLabels = _tmplOutLabels(graph);
+        // only touch ports if they differ — removing and re-adding breaks existing connections
+        const curIn = (node.inputs || []).map(i => i.name);
+        const curOut = (node.outputs || []).map(o => o.name);
+        const same =
+            curIn.length === inLabels.length &&
+            curOut.length === outLabels.length &&
+            inLabels.every((l, i) => curIn[i] === l) &&
+            outLabels.every((l, i) => curOut[i] === l);
+        if (!same) {
+            while (node.inputs && node.inputs.length > 0) node.removeInput(0);
+            while (node.outputs && node.outputs.length > 0) node.removeOutput(0);
+            inLabels.forEach(l => node.addInput(l, "series"));
+            outLabels.forEach(l => node.addOutput(l, "series"));
+        }
+        const name = (node.properties && node.properties.name) || '';
+        const allLabels = inLabels.concat(outLabels);
+        node.size[0] = Math.max(200, name.length * 7 + 80, ...allLabels.map(l => l.length * 7 + 80));
+        node.size[1] = Math.max(78, 56 + Math.max(inLabels.length, outLabels.length, 1) * 20);
+    }
+
+    function _tmplLoad(node) {
+        const name = node.properties && node.properties.name;
+        if (!name) return;
+        const safePath = name.split('/').map(encodeURIComponent).join('/');
+        fetch(`/mosaic/api/lab/${safePath}`)
+            .then(r => {
+                if (!r.ok) throw new Error(`Lab "${name}" not found`);
+                return r.json();
+            })
+            .then(graph => {
+                node.properties.graph = graph;
+                _tmplApplyPorts(node, graph);
+                if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+            })
+            .catch(err => alert(String(err)));
+    }
+
+    // Called by Alpine selectNodeTemplate when the user picks a template from the dialog.
+    window.mojoLabSelectNodeTemplate = function (nodeId, name) {
+        if (!_lab.graph) return;
+        const node = _lab.graph.getNodeById(nodeId);
+        if (!node) return;
+        node.properties.name = name;
+        if (node._nw) node._nw.value = name;
+        _tmplLoad(node);
+    };
 
     // Exposed for the column picker to flag cyclic entries without Alpine reactivity.
     window.mojoLabIsCyclicInput = function (col) {
@@ -913,8 +1170,90 @@
             <span class="hidden sm:inline text-sm font-mono text-slate-400 dark:text-slate-500">{{ trial_id }}</span>
         </div>
 
-        <!-- middle: action buttons -->
-        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 justify-end min-w-0">
+        <!-- middle: action buttons (scrollable so adding more buttons doesn't crowd the bar) -->
+        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
+            <!-- new graph -->
+            <button @click="if (!window.mojoLabHasUnsavedChanges?.() || confirm('Discard unsaved changes?')) { labName = ''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    title="New — clear graph and reset name">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M12 4v16m8-8H4" />
+                </svg>
+                <span class="hidden xl:inline">New</span>
+            </button>
+            <!-- refresh validation -->
+            <button @click="refreshLabValidation()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    title="Refresh validation - recheck all lab dependencies against the current trial">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="hidden xl:inline">Refresh</span>
+            </button>
+            <!-- fit view -->
+            <button @click="mojoLabFitView()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    title="Fit view to all nodes (Ctrl+Shift+F)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <span class="hidden xl:inline">Fit</span>
+            </button>
+            <!-- auto-arrange -->
+            <button @click="mojoLabArrange()"
+                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    title="Auto-arrange nodes (Ctrl+Shift+A)">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M3 6h18M3 12h18M3 18h18" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M17 3l4 3-4 3" />
+                </svg>
+                <span class="hidden xl:inline">Arrange</span>
+            </button>
+            <!-- clear -->
+            <button @click="if(confirm('Clear the graph?')) mojoLabClear()"
+                    class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5 shrink-0">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                <span class="hidden xl:inline">Clear</span>
+            </button>
+        </div>
+
+        <!-- right section: shrink-0 — name+save, load, close are all outside the overflow-hidden
+             scroll area so their absolute-positioned panels (hints, dropdowns) aren't clipped -->
+        <div class="shrink-0 flex items-center gap-1.5">
             <!-- name + save (with tab-autocomplete for folder paths) -->
             <div x-data="{
                 focused: false,
@@ -940,7 +1279,7 @@
                        @keydown.enter="labName && saveLabGraph(labName, mojoLabSerialize())"
                        @keydown.escape.stop="labName = ''"
                        placeholder="name or folder/name…"
-                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-28 sm:w-44" />
+                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-20 md:w-28 xl:w-44" />
                 <button @click="labName && saveLabGraph(labName, mojoLabSerialize())"
                         :disabled="!labName"
                         class="btn btn-ghost text-sm font-bold text-cyan-600 dark:text-cyan-400 border-cyan-500/40 dark:border-cyan-500/30 hover:bg-cyan-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
@@ -951,12 +1290,16 @@
                          viewBox="0 0 24 24">
                         <path stroke-linecap="round"
                               stroke-linejoin="round"
-                              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                              d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7.414A2 2 0 0020.414 7L17 3.586A2 2 0 0015.586 3H5z" />
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M8 21v-5a2 2 0 012-2h4a2 2 0 012 2v5M8 7h8"></path>
                     </svg>
-                    <span class="hidden sm:inline">Save</span>
+                    <span class="hidden xl:inline">Save</span>
                 </button>
-                <!-- suggestion hint floats below toolbar, no effect on toolbar height -->
-                <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-10"
+                <!-- suggestion hint — rendered outside overflow-y-hidden so it's not clipped -->
+                <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-[700]"
                      :class="suggestion ? 'visible' : 'invisible'">
                     <button @click="accept()"
                             class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
@@ -1011,7 +1354,7 @@
                               stroke-linejoin="round"
                               d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                     </svg>
-                    <span class="hidden sm:inline">Load</span>
+                    <span class="hidden xl:inline">Load</span>
                     <svg class="w-3 h-3 transition-transform"
                          :class="open ? 'rotate-180' : ''"
                          fill="none"
@@ -1073,6 +1416,10 @@
                                             <span :class="lab.valid ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
                                                   class="truncate"
                                                   x-text="lab.name"></span>
+                                            <!-- template indicator -->
+                                            <span x-show="lab.is_template"
+                                                  title="Template — contains Template In/Out ports"
+                                                  class="shrink-0 text-[9px] font-sans font-semibold px-1 py-0.5 rounded bg-fuchsia-100 dark:bg-fuchsia-950 text-fuchsia-600 dark:text-fuchsia-400">tmpl</span>
                                             <!-- circular dependency -->
                                             <span x-show="!lab.valid && lab.missing.some(c => c.startsWith('Lab/'))"
                                                   title="Contains a circular lab dependency"
@@ -1175,6 +1522,25 @@
                                             </template>
                                         </div>
                                     </template>
+                                    <template x-if="lab.is_template && (lab.template_inputs.length || lab.template_outputs.length)">
+                                        <div class="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                                            <div class="text-fuchsia-500 dark:text-fuchsia-400 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Template ports</div>
+                                            <template x-if="lab.template_inputs.length">
+                                                <div class="mb-0.5">
+                                                    <span class="text-slate-400 dark:text-slate-500">in: </span>
+                                                    <span class="text-fuchsia-600 dark:text-fuchsia-400"
+                                                          x-text="lab.template_inputs.join(', ')"></span>
+                                                </div>
+                                            </template>
+                                            <template x-if="lab.template_outputs.length">
+                                                <div>
+                                                    <span class="text-slate-400 dark:text-slate-500">out: </span>
+                                                    <span class="text-fuchsia-600 dark:text-fuchsia-400"
+                                                          x-text="lab.template_outputs.join(', ')"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
                                 </div>
                             </div>
                         </template>
@@ -1185,72 +1551,10 @@
                     </div>
                 </div>
             </div>
-            <!-- refresh validation -->
-            <button @click="refreshLabValidation()"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
-                    title="Refresh validation - recheck all lab dependencies against the current trial">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span class="hidden sm:inline">Refresh</span>
-            </button>
-            <!-- fit view -->
-            <button @click="mojoLabFitView()"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
-                    title="Fit view to all nodes (Ctrl+Shift+F)">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-                <span class="hidden sm:inline">Fit</span>
-            </button>
-            <!-- auto-arrange -->
-            <button @click="mojoLabArrange()"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5"
-                    title="Auto-arrange nodes (Ctrl+Shift+A)">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M3 6h18M3 12h18M3 18h18" />
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M17 3l4 3-4 3" />
-                </svg>
-                <span class="hidden sm:inline">Arrange</span>
-            </button>
-            <!-- clear -->
-            <button @click="if(confirm('Clear the graph?')) mojoLabClear()"
-                    class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                </svg>
-                <span class="hidden sm:inline">Clear</span>
-            </button>
         </div>
 
         <!-- close: always visible, pinned to the right (shrink-0) -->
-        <button @click="labOpen = false"
+        <button @click="if (!window.mojoLabHasUnsavedChanges?.() || confirm('Discard unsaved changes?')) labOpen = false"
                 class="shrink-0 btn-icon btn-ghost"
                 title="Close (Esc)">
             <svg class="w-5 h-5"
@@ -1268,6 +1572,7 @@
     <!-- canvas area -->
     <div class="flex-1 relative overflow-hidden"
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
+         @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
                  const el = document.getElementById('lab-canvas');
@@ -1294,103 +1599,187 @@
                 class="absolute inset-0 outline-none"
                 @change="labGraph = mojoLabSerialize()">
         </canvas>
+    </div>
 
-        <!-- ── Column picker (opens when Signal In "Browse…" is clicked) ─── -->
-        <div x-show="nodePickingColumn !== null"
-             @click.self="nodePickingColumn = null; nodeColSearch = ''"
-             class="absolute inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
-             style="display:none;">
-            <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
+    <!-- ── Column picker — fixed so it escapes the overflow-hidden canvas container ── -->
+    <div x-show="nodePickingColumn !== null"
+         @click.self="nodePickingColumn = null; nodeColSearch = ''"
+         class="fixed inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
+         style="display:none;">
+        <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
 
-                <!-- header -->
-                <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
-                    <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Signal</p>
-                    <button @click="nodePickingColumn = null; nodeColSearch = ''"
-                            class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                        <svg class="w-4 h-4"
-                             fill="none"
-                             stroke="currentColor"
-                             stroke-width="2.5"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
+            <!-- header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+                <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Signal</p>
+                <button @click="nodePickingColumn = null; nodeColSearch = ''"
+                        class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    <svg class="w-4 h-4"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
 
-                <!-- search -->
-                <div class="relative shrink-0">
-                    <input type="text"
-                           x-model="nodeColSearch"
-                           placeholder="Filter signals…"
-                           class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 pr-7 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
-                    <button x-show="nodeColSearch"
-                            type="button"
-                            @click="nodeColSearch = ''"
-                            class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
-                        <svg class="w-3 h-3"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="3"
-                                  d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
+            <!-- search -->
+            <div class="relative shrink-0">
+                <input type="text"
+                       x-model="nodeColSearch"
+                       placeholder="Filter signals…"
+                       class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 pr-7 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+                <button x-show="nodeColSearch"
+                        type="button"
+                        @click="nodeColSearch = ''"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="3"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
 
-                <!-- hierarchical segment drills (same mechanism as x/y axis selectors) -->
-                <div class="flex flex-col gap-1.5 shrink-0">
-                    <template x-for="depth in getActiveLevels('nodeCol')"
-                              :key="depth">
-                        <div x-show="getSegmentsAtDepth('nodeCol', depth).length > 0"
-                             class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
-                            <template x-for="seg in getSegmentsAtDepth('nodeCol', depth)"
-                                      :key="seg">
-                                <button @click="toggleRegexSegment('nodeCol', seg, depth)"
-                                        :class="isSegmentActive('nodeCol', seg, depth)
-                                            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
-                                        class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
-                                        x-text="seg">
-                                </button>
-                            </template>
-                        </div>
-                    </template>
-                    <!-- suffix quick filter -->
-                    <div x-show="getAvailableSuffixes('nodeCol').length > 0"
-                         class="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
-                        <template x-for="sfx in getAvailableSuffixes('nodeCol')"
-                                  :key="sfx">
-                            <button @click="toggleRegexSegment('nodeCol', sfx, 'suffix')"
-                                    :class="isSegmentActive('nodeCol', sfx, 'suffix')
+            <!-- hierarchical segment drills -->
+            <div class="flex flex-col gap-1.5 shrink-0">
+                <template x-for="depth in getActiveLevels('nodeCol')"
+                          :key="depth">
+                    <div x-show="getSegmentsAtDepth('nodeCol', depth).length > 0"
+                         class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                        <template x-for="seg in getSegmentsAtDepth('nodeCol', depth)"
+                                  :key="seg">
+                            <button @click="toggleRegexSegment('nodeCol', seg, depth)"
+                                    :class="isSegmentActive('nodeCol', seg, depth)
                                         ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
                                         : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
                                     class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
-                                    x-text="sfx">
+                                    x-text="seg">
                             </button>
                         </template>
                     </div>
-                </div>
-
-                <!-- filtered column list -->
-                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 min-h-0">
-                    <template x-for="col in getFilteredCols('nodeCol')"
-                              :key="col">
-                        <button @click="selectNodeColumn(col)"
-                                :class="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col)
-                                    ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 line-through'
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-cyan-500/20 hover:text-cyan-700 dark:hover:text-cyan-200'"
-                                :title="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col) ? 'Would create a circular dependency' : ''"
-                                class="w-full text-left px-2 py-1 text-sm font-mono rounded truncate transition-colors"
-                                x-text="col">
+                </template>
+                <!-- suffix quick filter -->
+                <div x-show="getAvailableSuffixes('nodeCol').length > 0"
+                     class="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                    <template x-for="sfx in getAvailableSuffixes('nodeCol')"
+                              :key="sfx">
+                        <button @click="toggleRegexSegment('nodeCol', sfx, 'suffix')"
+                                :class="isSegmentActive('nodeCol', sfx, 'suffix')
+                                    ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
+                                class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
+                                x-text="sfx">
                         </button>
                     </template>
-                    <p x-show="getFilteredCols('nodeCol').length === 0"
-                       class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">No matching signals</p>
                 </div>
+            </div>
+
+            <!-- filtered column list -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 min-h-0">
+                <template x-for="col in getFilteredCols('nodeCol')"
+                          :key="col">
+                    <button @click="selectNodeColumn(col)"
+                            :class="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col)
+                                ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 line-through'
+                                : 'text-slate-500 dark:text-slate-400 hover:bg-cyan-500/20 hover:text-cyan-700 dark:hover:text-cyan-200'"
+                            :title="mojoLabIsCyclicInput && mojoLabIsCyclicInput(col) ? 'Would create a circular dependency' : ''"
+                            class="w-full text-left px-2 py-1 text-sm font-mono rounded truncate transition-colors"
+                            x-text="col">
+                    </button>
+                </template>
+                <p x-show="getFilteredCols('nodeCol').length === 0"
+                   class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">No matching signals</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Template picker — fixed so it escapes the overflow-hidden canvas container ── -->
+    <div x-show="nodePickingTemplate !== null"
+         x-data="{
+             schemas: [],
+             search: '',
+             async _load() {
+                 try {
+                     const r = await fetch('/mosaic/api/lab');
+                     const all = r.ok ? await r.json() : [];
+                     this.schemas = all.filter(l => l.is_template);
+                 } catch { this.schemas = []; }
+             }
+         }"
+         x-init="$watch('nodePickingTemplate', v => { if (v !== null) { search = ''; _load(); } })"
+         @click.self="nodePickingTemplate = null"
+         class="fixed inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
+         style="display:none;">
+        <div class="panel w-96 space-y-3 max-h-[70vh] flex flex-col">
+
+            <!-- header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+                <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Template</p>
+                <button @click="nodePickingTemplate = null"
+                        class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    <svg class="w-4 h-4"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- search -->
+            <div class="relative shrink-0">
+                <input type="text"
+                       x-model="search"
+                       placeholder="Filter templates…"
+                       class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 pr-7 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-fuchsia-500" />
+                <button x-show="search"
+                        type="button"
+                        @click="search = ''"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="3"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- template list -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 min-h-0">
+                <template x-for="t in schemas.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()))"
+                          :key="t.name">
+                    <button @click="selectNodeTemplate(t.name)"
+                            class="w-full text-left px-2 py-2 rounded hover:bg-fuchsia-500/10 transition-colors group">
+                        <div class="text-sm font-mono text-slate-600 dark:text-slate-300 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 truncate"
+                             x-text="t.name"></div>
+                        <div class="flex gap-3 mt-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                            <span x-show="t.template_inputs.length"
+                                  x-text="'in: ' + t.template_inputs.join(', ')"></span>
+                            <span x-show="t.template_outputs.length"
+                                  x-text="'out: ' + t.template_outputs.join(', ')"></span>
+                            <span x-show="!t.template_inputs.length && !t.template_outputs.length"
+                                  class="italic">no ports defined</span>
+                        </div>
+                    </button>
+                </template>
+                <p x-show="schemas.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase())).length === 0"
+                   class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">
+                    <span x-text="schemas.length === 0 ? 'No labs with Template In/Out nodes yet' : 'No matching templates'"></span>
+                </p>
             </div>
         </div>
     </div>

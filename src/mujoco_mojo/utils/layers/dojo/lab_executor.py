@@ -73,7 +73,8 @@ class LabExecutor:
     """
 
     def __init__(self, graph: dict[str, Any]) -> None:
-        self.nodes: dict[int, dict] = {n["id"]: n for n in graph.get("nodes", [])}
+        self._raw_nodes: list[dict] = graph.get("nodes", [])
+        self.nodes: dict[int, dict] = {n["id"]: n for n in self._raw_nodes}
         # links keyed by link_id → [link_id, from_node, from_slot, to_node, to_slot, type]
         self.links: dict[int, list] = {lnk[0]: lnk for lnk in graph.get("links", [])}
 
@@ -102,7 +103,29 @@ class LabExecutor:
             if self._bare_type(n) == "signal_out"
         ]
 
-    def execute(self, df: pl.DataFrame) -> dict[str, pl.Series]:
+    @property
+    def _template_in_labels(self) -> list[str]:
+        """Template In port labels in graph-definition order."""
+        return [
+            n.get("properties", {}).get("label") or f"in_{n['id']}"
+            for n in self._raw_nodes
+            if self._bare_type(n) == "template_in"
+        ]
+
+    @property
+    def _template_out_labels(self) -> list[str]:
+        """Template Out port labels in graph-definition order."""
+        return [
+            n.get("properties", {}).get("label") or f"out_{n['id']}"
+            for n in self._raw_nodes
+            if self._bare_type(n) == "template_out"
+        ]
+
+    def execute(
+        self,
+        df: pl.DataFrame,
+        template_inputs: dict[str, pl.Series] | None = None,
+    ) -> dict[str, pl.Series]:
         """Run the graph and return {output_label: series}."""
         # slot_data[node_id][slot_index] = computed series
         slot_data: dict[int, dict[int, pl.Series]] = defaultdict(dict)
@@ -121,16 +144,57 @@ class LabExecutor:
                 )
                 slot_data[nid][0] = series
 
+            elif ntype == "template_in":
+                label = props.get("label", "")
+                if template_inputs and label in template_inputs:
+                    slot_data[nid][0] = template_inputs[label]
+                else:
+                    slot_data[nid][0] = pl.Series(
+                        name=label or "_tmpl_in",
+                        values=[0.0] * len(df),
+                        dtype=pl.Float64,
+                    )
+
             elif ntype == "constant":
                 value = float(props.get("value", 0.0))
                 slot_data[nid][0] = pl.Series(
                     name="const", values=[value] * len(df), dtype=pl.Float64
                 )
 
-            elif ntype == "signal_out":
+            elif ntype in ("signal_out", "template_out"):
                 signal = self._get_input(node, 0, slot_data)
                 if signal is not None:
                     slot_data[nid][0] = signal
+
+            elif ntype == "template_ref":
+                template_graph = props.get("graph")
+                if not template_graph:
+                    continue
+                sub = LabExecutor(template_graph)
+                # map parent input slots to Template In labels by position
+                sub_inputs: dict[str, pl.Series] = {}
+                for i, label in enumerate(sub._template_in_labels):
+                    s = self._get_input(node, i, slot_data)
+                    if s is not None:
+                        sub_inputs[label] = s
+                sub_outputs = sub.execute(df, template_inputs=sub_inputs)
+                # map Template Out labels to parent output slots by position
+                for i, label in enumerate(sub._template_out_labels):
+                    if label in sub_outputs:
+                        slot_data[nid][i] = sub_outputs[label]
+
+            elif ntype == "norm":
+                inputs = [
+                    s.cast(pl.Float64)
+                    for i in range(len(node.get("inputs", [])))
+                    if (s := self._get_input(node, i, slot_data)) is not None
+                ]
+                if not inputs:
+                    continue
+                acc = inputs[0].pow(2)
+                for s in inputs[1:]:
+                    acc = acc + s.pow(2)
+                slot_data[nid][0] = acc.sqrt()
 
             else:
                 signal = self._get_input(node, 0, slot_data)
@@ -139,10 +203,12 @@ class LabExecutor:
                 wrt = self._get_input(node, 1, slot_data)
                 slot_data[nid][0] = self._apply(ntype, props, signal, wrt, df)
 
-        # Collect Signal Out results
+        # when called as a template sub-execution (template_inputs provided), collect
+        # template_out nodes; otherwise collect signal_out nodes for regular lab execution
+        terminal = "template_out" if template_inputs is not None else "signal_out"
         outputs: dict[str, pl.Series] = {}
         for nid, node in self.nodes.items():
-            if self._bare_type(node) == "signal_out":
+            if self._bare_type(node) == terminal:
                 series = slot_data.get(nid, {}).get(0)
                 if series is not None:
                     label = node.get("properties", {}).get("label") or f"out_{nid}"

@@ -195,6 +195,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     labName: localStorage.getItem("mojo:lab:name") ?? "",
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
+    nodePickingTemplate: null as number | null,
     labSchemas: [] as Array<{
       name: string;
       signal_in_columns: string[];
@@ -202,6 +203,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       modified: number;
       valid: boolean;
       missing: string[];
+      is_template: boolean;
+      template_inputs: string[];
+      template_outputs: string[];
     }>,
 
     // --- SHAPES ---
@@ -486,8 +490,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         video?.duration && isFinite(video.duration) ? video.duration : Infinity;
       const interval = this._mediaFrameInterval;
       const ph = rect!.height;
-      const markerTop = ph - fullLayout.margin.b - 5;
-      const markerBot = ph - fullLayout.margin.b;
+      const markerHeight = 5;
+      const markerTop = ph - fullLayout.margin.b - 20;
+      const markerBot = markerTop - markerHeight;
       const [xMin, xMax] = fullLayout.xaxis.range;
       const kStart = Math.max(0, Math.floor(xMin / interval));
       const kEnd = Math.ceil(
@@ -1344,7 +1349,13 @@ function trialViewer(trialId: string, externalUrl: string) {
             this.settingsOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
-            this.labOpen = false;
+            if (
+              !this.labOpen ||
+              !window.mojoLabHasUnsavedChanges?.() ||
+              confirm("Discard unsaved changes?")
+            ) {
+              this.labOpen = false;
+            }
             window.dispatchEvent(new CustomEvent("mojo:escape"));
             // Stop immediate propagation when something was open so Alpine's
             // bubble-phase @keydown.escape.window handler doesn't also fire.
@@ -1353,28 +1364,30 @@ function trialViewer(trialId: string, externalUrl: string) {
           }
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
             e.preventDefault();
-            if (!isTextInput) {
-              if (this.labOpen) {
+            if (this.labOpen) {
+              const nameEl = document.getElementById(
+                "lab-name-input",
+              ) as HTMLInputElement | null;
+              const name = nameEl?.value.trim() ?? "";
+              if (name) {
+                const graph = window.mojoLabSerialize?.();
+                if (graph) void this.saveLabGraph(name, graph);
+              } else {
+                nameEl?.focus();
+                nameEl?.setSelectionRange(0, 0);
+              }
+            } else if (!isTextInput) {
+              this.profilesOpen = true;
+              void this.loadProfiles();
+              void this.$nextTick(() => {
                 const el = document.getElementById(
-                  "lab-name-input",
+                  "profile-name-input",
                 ) as HTMLInputElement | null;
                 if (el) {
                   el.focus();
                   el.setSelectionRange(el.value.length, el.value.length);
                 }
-              } else {
-                this.profilesOpen = true;
-                void this.loadProfiles();
-                void this.$nextTick(() => {
-                  const el = document.getElementById(
-                    "profile-name-input",
-                  ) as HTMLInputElement | null;
-                  if (el) {
-                    el.focus();
-                    el.setSelectionRange(el.value.length, el.value.length);
-                  }
-                });
-              }
+              });
             }
           }
           if ((e.metaKey || e.ctrlKey) && !isTextInput) {
@@ -1541,7 +1554,21 @@ function trialViewer(trialId: string, externalUrl: string) {
         this._updatePlaybackLine();
       });
 
-      this.$watch("config.xAxis.col", () => {
+      this.$watch("config.xAxis.col", (newCol: string) => {
+        if (
+          newCol &&
+          !Object.prototype.hasOwnProperty.call(this.data ?? {}, newCol)
+        ) {
+          void (async () => {
+            try {
+              const resp = await this.fetchTrialData(this.trialId, [newCol]);
+              this.data = { ...(this.data ?? {}), ...resp.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical
+            }
+          })();
+        }
         requestAnimationFrame(() => {
           this._syncOverlayVisibility();
           this._renderFrameMarkers();
@@ -2557,6 +2584,18 @@ function trialViewer(trialId: string, externalUrl: string) {
           dash: "solid",
           marker: "none",
         };
+        // eagerly fetch if this column has no cached data yet
+        if (!Object.prototype.hasOwnProperty.call(this.data ?? {}, col)) {
+          void (async () => {
+            try {
+              const resp = await this.fetchTrialData(this.trialId, [col]);
+              this.data = { ...(this.data ?? {}), ...resp.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical - empty trace shown until data arrives
+            }
+          })();
+        }
       }
       this.saveAndRender();
     },
@@ -2835,6 +2874,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           ...lab,
           signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
           outputs: [...new Set(lab.outputs)].sort(),
+          is_template: lab.is_template ?? false,
+          template_inputs: lab.template_inputs ?? [],
+          template_outputs: lab.template_outputs ?? [],
         }));
         // Iterative BFS: a lab is valid when all its inputs are already available.
         // Labs that read from other valid labs' outputs need multiple passes to resolve.
@@ -2889,31 +2931,67 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
         localStorage.setItem("mojo:lab:name", trimmed);
         this.notify(`Lab "${trimmed}" saved`, "success");
+        window.mojoLabMarkSaved?.();
         await this.refreshLabValidation();
-        // Evict stale computed data for this lab's outputs, then re-fetch anything
-        // currently plotted so the chart updates immediately.
-        const labPrefix = `Lab/${trimmed}/`;
-        const staleCols = Object.keys(this.data ?? {}).filter((c) =>
-          c.startsWith(labPrefix),
-        );
-        if (staleCols.length > 0) {
-          const fresh = { ...(this.data ?? {}) };
-          staleCols.forEach((c) => delete fresh[c]);
-          this.data = fresh;
-          const activeCols = staleCols.filter(
-            (c) => c in this.config.yAxes || c === this.config.xAxis?.col,
-          );
-          if (activeCols.length > 0) {
-            try {
-              const refetch = await this.fetchTrialData(
-                this.trialId,
-                activeCols,
-              );
-              this.data = { ...(this.data ?? {}), ...refetch.data };
-              this.saveAndRender();
-            } catch {
-              // non-critical: plot drops the stale trace until background discovery refetches
+        // compute the transitive closure of labs whose outputs may now be stale:
+        // the saved lab itself, plus any lab that (directly or transitively) reads from it
+        const dependents = new Map<string, string[]>();
+        for (const lab of this.labSchemas) {
+          for (const col of lab.signal_in_columns) {
+            if (col.startsWith("Lab/")) {
+              const src = col.split("/")[1] ?? "";
+              if (src) {
+                if (!dependents.has(src)) dependents.set(src, []);
+                dependents.get(src)!.push(lab.name);
+              }
             }
+          }
+        }
+        const toInvalidate = new Set<string>([trimmed]);
+        const bfsQueue = [trimmed];
+        while (bfsQueue.length > 0) {
+          const cur = bfsQueue.shift()!;
+          for (const dep of dependents.get(cur) ?? []) {
+            if (!toInvalidate.has(dep)) {
+              toInvalidate.add(dep);
+              bfsQueue.push(dep);
+            }
+          }
+        }
+        // evict all stale entries from the client-side data cache
+        const newData = { ...(this.data ?? {}) };
+        let evicted = false;
+        for (const labName of toInvalidate) {
+          const prefix = `Lab/${labName}/`;
+          for (const key of Object.keys(newData)) {
+            if (key.startsWith(prefix)) {
+              delete newData[key];
+              evicted = true;
+            }
+          }
+        }
+        if (evicted) this.data = newData;
+        // re-fetch currently plotted cols that were just evicted
+        const activeCols = [
+          ...Object.keys(this.config.yAxes),
+          this.config.xAxis?.col ?? "",
+        ].filter((c) => {
+          for (const labName of toInvalidate) {
+            if (
+              c.startsWith(`Lab/${labName}/`) &&
+              !Object.prototype.hasOwnProperty.call(this.data ?? {}, c)
+            )
+              return true;
+          }
+          return false;
+        });
+        if (activeCols.length > 0) {
+          try {
+            const refetch = await this.fetchTrialData(this.trialId, activeCols);
+            this.data = { ...(this.data ?? {}), ...refetch.data };
+            this.saveAndRender();
+          } catch {
+            // non-critical: plot drops stale trace until background discovery refetches
           }
         }
       } catch (err) {
@@ -2930,6 +3008,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
       this.nodePickingColumn = null;
       this.nodeColSearch = "";
+    },
+
+    selectNodeTemplate(name: string) {
+      if (this.nodePickingTemplate !== null) {
+        if (typeof window.mojoLabSelectNodeTemplate === "function") {
+          window.mojoLabSelectNodeTemplate(this.nodePickingTemplate, name);
+        }
+      }
+      this.nodePickingTemplate = null;
     },
 
     async deleteLabGraph(name: string) {
