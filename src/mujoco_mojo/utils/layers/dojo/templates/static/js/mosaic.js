@@ -7,7 +7,7 @@
       loading: true,
       async init() {
         try {
-          const statusResp = await fetch("/monitor/api/status");
+          const statusResp = await fetch("/monitor/api/status/job");
           const statusData = await statusResp.json();
           if (statusData && !statusData.error) {
             Alpine.store("dojo").updateSync(Date.now(), statusData.is_complete);

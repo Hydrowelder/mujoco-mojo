@@ -39,8 +39,31 @@ export interface JobStatus {
   error?: string;
 }
 
+export interface StepStatus {
+  started: string | null;
+  elapsed: number | null;
+}
+
+export interface TrialStatus {
+  trial_num: number;
+  step: "pending" | "generating" | "solving" | "done";
+  completion: "incomplete" | "success" | "failed";
+  pending: StepStatus;
+  generating: StepStatus;
+  solving: StepStatus;
+}
+
 export interface TrialManifest {
   trials: string[];
+}
+
+export interface TrialMediaFile {
+  name: string;
+  fps: number | null;
+}
+
+export interface TrialMediaResponse {
+  files: TrialMediaFile[];
 }
 
 export interface TrialDataResponse {

@@ -381,6 +381,7 @@ class Trial:
                     .with_trial_num(self.trial_num)
                 )
                 mojo_model = generator(mojo_model, overrides, *gen_args, **gen_kwargs)
+                mojo_model._trial_dir = self.trial_dir
 
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
@@ -589,6 +590,21 @@ class MojoRunner:
         trial_nums: list[int] | None = None,
     ) -> bool:
         """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
+        funcs = {
+            "generator": self.generator,
+            "runtime": self.runtime,
+            "objective": self.objective,
+        }
+        non_none = {k: v for k, v in funcs.items() if v is not None}
+        seen: dict[int, str] = {}
+        for role, func in non_none.items():
+            fid = id(func)
+            if fid in seen:
+                msg = f"'{getattr(func, '__qualname__', func)}' is assigned to both '{seen[fid]}' and '{role}'. Each function must be unique."
+                logger.error(msg)
+                raise ValueError(msg)
+            seen[fid] = role
+
         if clean_workdir:
             if self.config.resume:
                 msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
