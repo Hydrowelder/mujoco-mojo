@@ -33,8 +33,43 @@ def validate_dojo_auth(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 
+def _cleanup_webm_cache(max_age_seconds: float = 86_400) -> None:
+    """
+    Removes stale GIF→WebM artefacts on startup.
+
+    Cleans two locations: the temp-dir cache (files older than `max_age_seconds`, default 24 h) and any legacy `.mojo_webm.webm` files left in trial directories from before the temp-dir migration.
+    """
+    import tempfile
+    import time
+    from pathlib import Path
+
+    # remove stale temp-dir cache entries
+    cache_dir = Path(tempfile.gettempdir()) / "mujoco_mojo_webm"
+    if cache_dir.is_dir():
+        now = time.time()
+        for f in cache_dir.iterdir():
+            try:
+                if now - f.stat().st_mtime > max_age_seconds:
+                    f.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # remove legacy in-tree cache files left by older versions of the code
+    job = shared.CURRENT_JOB
+    if job and (trials_root := job.workdir / "trials").is_dir():
+        for legacy in trials_root.rglob("*.mojo_webm.webm"):
+            try:
+                legacy.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # prune stale GIF→WebM cache files from previous sessions
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _cleanup_webm_cache)
+
     # start the monitor background broadcast task
     broadcast_task = asyncio.create_task(monitor.broadcast_updates())
     yield

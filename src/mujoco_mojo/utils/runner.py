@@ -381,6 +381,7 @@ class Trial:
                     .with_trial_num(self.trial_num)
                 )
                 mojo_model = generator(mojo_model, overrides, *gen_args, **gen_kwargs)
+                mojo_model._trial_dir = self.trial_dir
 
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")

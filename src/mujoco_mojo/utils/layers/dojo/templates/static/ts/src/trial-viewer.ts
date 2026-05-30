@@ -70,11 +70,18 @@ const DEFAULT_CONFIG: PlotConfig = {
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _cm: { editor: any; updating: boolean; debounce: ReturnType<typeof setTimeout> | null } = {
+const _cm: {
+  editor: any;
+  updating: boolean;
+  debounce: ReturnType<typeof setTimeout> | null;
+} = {
   editor: null,
   updating: false,
   debounce: null,
 };
+
+// miniplayer RAF state - kept outside Alpine to avoid proxy overhead
+const _mini: { rafId: number | null } = { rafId: null };
 
 // ---------------------------------------------------------------------------
 // Component factory
@@ -211,10 +218,15 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- MEDIA PLAYER ---
     mediaFiles: [] as string[],
     selectedMedia: null as string | null,
-    mediaScrubMode: (localStorage.getItem("mojo:media:mode") ?? "play") as "play" | "scrub",
+    mediaScrubMode: (localStorage.getItem("mojo:media:mode") ?? "play") as
+      | "play"
+      | "scrub",
     mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
     mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
     mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+    mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
+    mediaIsScrubbable: false,
+    _gifConvertStatus: "none" as "none" | "loading" | "ready" | "failed",
     _mediaRafId: null as number | null,
     _mediaFpsMap: {} as Record<string, number | null>,
     _mediaFrameInterval: null as number | null,
@@ -408,41 +420,79 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
     },
 
-    _syncOverlayVisibility() {
-      const overlay = document.getElementById("playback-line-overlay") as HTMLElement | null;
-      const lineEl = document.getElementById("playback-line-el") as HTMLElement | null;
+    _updateIsScrubbable() {
       const sel = this.selectedMedia?.toLowerCase() ?? "";
-      const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
-      const lineVisible = this.mediaShowLine && this.mediaScrubMode === "play" && isScrubbable;
-      const framesVisible = this.mediaShowFrames && !!this._mediaFrameInterval && this.config.xAxis?.col === "time";
-      if (overlay) overlay.style.display = (lineVisible || framesVisible) ? "block" : "none";
+      this.mediaIsScrubbable =
+        sel.endsWith(".mp4") ||
+        sel.endsWith(".webm") ||
+        (sel.endsWith(".gif") && this._gifConvertStatus === "ready");
+    },
+
+    _syncOverlayVisibility() {
+      const overlay = document.getElementById(
+        "playback-line-overlay",
+      ) as HTMLElement | null;
+      const lineEl = document.getElementById(
+        "playback-line-el",
+      ) as HTMLElement | null;
+      const isTimeAxis = this.config.xAxis?.col === "time";
+      const hasYAxes = Object.keys(this.config.yAxes).length > 0;
+      const lineVisible =
+        this.mediaShowLine &&
+        this.mediaScrubMode === "play" &&
+        this.mediaIsScrubbable &&
+        isTimeAxis &&
+        hasYAxes;
+      const framesVisible =
+        this.mediaShowFrames &&
+        !!this._mediaFrameInterval &&
+        isTimeAxis &&
+        hasYAxes;
+      if (overlay)
+        overlay.style.display = lineVisible || framesVisible ? "block" : "none";
       if (lineEl) lineEl.style.display = lineVisible ? "block" : "none";
     },
 
     _renderFrameMarkers() {
-      const framesPath = document.getElementById("playback-frames-path") as SVGPathElement | null;
+      const framesPath = document.getElementById(
+        "playback-frames-path",
+      ) as SVGPathElement | null;
       if (!framesPath) return;
       this._syncOverlayVisibility();
-      if (!this.mediaShowFrames || !this._mediaFrameInterval || this.config.xAxis?.col !== "time") {
+      const hasYAxes = Object.keys(this.config.yAxes).length > 0;
+      if (
+        !this.mediaShowFrames ||
+        !this._mediaFrameInterval ||
+        this.config.xAxis?.col !== "time" ||
+        !hasYAxes
+      ) {
         framesPath.setAttribute("d", "");
         return;
       }
       type PlotEl = HTMLElement & {
-        _fullLayout?: { xaxis: { l2p(v: number): number; range: [number, number] }; margin: { l: number; r: number; t: number; b: number } };
+        _fullLayout?: {
+          xaxis: { l2p(v: number): number; range: [number, number] };
+          margin: { l: number; r: number; t: number; b: number };
+        };
       };
       const plotEl = document.getElementById("plot-area") as PlotEl | null;
       const fullLayout = plotEl?._fullLayout;
+      const rect = plotEl?.getBoundingClientRect();
       if (!plotEl || !fullLayout) return;
-      const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
-      const duration = video?.duration && isFinite(video.duration) ? video.duration : Infinity;
-      // use exact measured frame interval to avoid rounding drift (e.g. 29.97 vs 30)
+      const video = document.getElementById(
+        "media-video-player",
+      ) as HTMLVideoElement | null;
+      const duration =
+        video?.duration && isFinite(video.duration) ? video.duration : Infinity;
       const interval = this._mediaFrameInterval;
-      const ph = plotEl.getBoundingClientRect().height;
+      const ph = rect!.height;
       const markerTop = ph - fullLayout.margin.b - 5;
       const markerBot = ph - fullLayout.margin.b;
       const [xMin, xMax] = fullLayout.xaxis.range;
       const kStart = Math.max(0, Math.floor(xMin / interval));
-      const kEnd = Math.ceil(Math.min(isFinite(duration) ? duration : xMax, xMax) / interval);
+      const kEnd = Math.ceil(
+        Math.min(isFinite(duration) ? duration : xMax, xMax) / interval,
+      );
       let d = "";
       for (let k = kStart; k <= kEnd; k++) {
         const px = fullLayout.margin.l + fullLayout.xaxis.l2p(k * interval);
@@ -452,67 +502,70 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     _updatePlaybackLine() {
-      const sel = this.selectedMedia?.toLowerCase() ?? "";
-      const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
       const isTimeAxis = this.config.xAxis?.col === "time";
-      const shouldRun = this.mediaScrubMode === "play" && this.mediaFiles.length > 0 && isScrubbable && (this.mediaShowLine || isTimeAxis);
+      // loop only runs on time axis: line, zoom-looping, and frame markers all require it
+      const shouldRun =
+        this.mediaScrubMode === "play" &&
+        this.mediaFiles.length > 0 &&
+        this.mediaIsScrubbable &&
+        isTimeAxis;
       if (!shouldRun || this._mediaRafId !== null) return;
       const tick = () => {
-        const curSel = this.selectedMedia?.toLowerCase() ?? "";
-        const curScrubbable = curSel.endsWith(".mp4") || curSel.endsWith(".webm");
         const curTimeAxis = this.config.xAxis?.col === "time";
-        if (this.mediaScrubMode !== "play" || this.mediaFiles.length === 0 || !curScrubbable || (!this.mediaShowLine && !curTimeAxis)) {
+        if (
+          this.mediaScrubMode !== "play" ||
+          this.mediaFiles.length === 0 ||
+          !this.mediaIsScrubbable ||
+          !curTimeAxis
+        ) {
           this._mediaRafId = null;
           this._syncOverlayVisibility();
           return;
         }
-        const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
-        const plotEl = document.getElementById("plot-area") as (HTMLElement & {
-          _fullLayout?: {
-            xaxis: { l2p(v: number): number; range: [number, number] };
-            margin: { l: number; r: number; t: number; b: number };
-          };
-        }) | null;
+        const video = document.getElementById(
+          "media-video-player",
+        ) as HTMLVideoElement | null;
+        const plotEl = document.getElementById("plot-area") as
+          | (HTMLElement & {
+              _fullLayout?: {
+                xaxis: { l2p(v: number): number; range: [number, number] };
+                margin: { l: number; r: number; t: number; b: number };
+              };
+            })
+          | null;
         if (video && plotEl && video.duration > 0 && !isNaN(video.duration)) {
           const fullLayout = plotEl._fullLayout;
           if (fullLayout) {
-            if (curTimeAxis) {
-              const [xMin, xMax] = fullLayout.xaxis.range;
-              const safeMin = Math.max(0, xMin);
-              const safeMax = Math.min(video.duration, xMax);
-              if (safeMax > safeMin) {
-                if (video.currentTime >= safeMax) video.currentTime = safeMin;
-                else if (video.currentTime < safeMin) video.currentTime = safeMin;
-              }
+            const [xMin, xMax] = fullLayout.xaxis.range;
+            const safeMin = Math.max(0, xMin);
+            const safeMax = Math.min(video.duration, xMax);
+            if (safeMax > safeMin) {
+              if (video.currentTime >= safeMax) video.currentTime = safeMin;
+              else if (video.currentTime < safeMin) video.currentTime = safeMin;
             }
             this._syncOverlayVisibility();
             if (this.mediaShowLine) {
-              const lineEl = document.getElementById("playback-line-el") as HTMLElement | null;
+              const lineEl = document.getElementById(
+                "playback-line-el",
+              ) as HTMLElement | null;
               if (lineEl) {
                 lineEl.style.top = fullLayout.margin.t + "px";
                 lineEl.style.bottom = fullLayout.margin.b + "px";
-                // snap to nearest frame boundary so the spike jumps with the video frames
                 const t = this._mediaFrameInterval
-                  ? Math.round(video.currentTime / this._mediaFrameInterval) * this._mediaFrameInterval
+                  ? Math.round(video.currentTime / this._mediaFrameInterval) *
+                    this._mediaFrameInterval
                   : video.currentTime;
-                let x: number;
-                if (curTimeAxis) {
-                  x = fullLayout.margin.l + fullLayout.xaxis.l2p(t);
-                } else {
-                  const pw = plotEl.getBoundingClientRect().width - fullLayout.margin.l - fullLayout.margin.r;
-                  x = fullLayout.margin.l + Math.max(0, Math.min(1, t / video.duration)) * pw;
-                }
-                lineEl.style.left = x + "px";
+                lineEl.style.left =
+                  fullLayout.margin.l + fullLayout.xaxis.l2p(t) + "px";
               }
             }
-            if (this.mediaShowFrames && curTimeAxis) this._renderFrameMarkers();
+            if (this.mediaShowFrames) this._renderFrameMarkers();
           }
         }
         this._mediaRafId = requestAnimationFrame(tick);
       };
       this._mediaRafId = requestAnimationFrame(tick);
     },
-
 
     async fetchMediaFiles() {
       try {
@@ -525,19 +578,199 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.mediaFiles = data.files.map((f: TrialMediaFile) => f.name);
         if (this.mediaFiles.length > 0) {
           const saved = localStorage.getItem("mojo:media:file");
-          this.selectedMedia = saved && this.mediaFiles.includes(saved) ? saved : this.mediaFiles[0]!;
+          this.selectedMedia =
+            saved && this.mediaFiles.includes(saved)
+              ? saved
+              : this.mediaFiles[0]!;
         }
         this._applySelectedMediaFps();
+        this._updateIsScrubbable();
       } catch {
         // dojo offline - no media available
       }
       this._updatePlaybackLine();
       this._renderFrameMarkers();
+      if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
+        this._startMiniplayer();
     },
 
     _applySelectedMediaFps() {
-      const fps = this.selectedMedia ? (this._mediaFpsMap[this.selectedMedia] ?? null) : null;
+      const fps = this.selectedMedia
+        ? (this._mediaFpsMap[this.selectedMedia] ?? null)
+        : null;
       this._mediaFrameInterval = fps && fps > 0 ? 1 / fps : null;
+    },
+
+    _onVideoLoaded() {
+      const video = document.getElementById(
+        "media-video-player",
+      ) as HTMLVideoElement | null;
+      if (video) video.playbackRate = this.mediaPlaybackRate;
+      if (this.selectedMedia?.toLowerCase().endsWith(".gif")) {
+        this._gifConvertStatus = "ready";
+        // mirror the img's auto-play behaviour now that the video element takes over
+        void video?.play();
+      }
+    },
+
+    _onVideoError() {
+      if (this.selectedMedia?.toLowerCase().endsWith(".gif")) {
+        this._gifConvertStatus = "failed";
+      }
+    },
+
+    _miniDragStart(e: MouseEvent) {
+      const wrapper = document.getElementById(
+        "mini-wrapper",
+      ) as HTMLElement | null;
+      const canvas = document.getElementById(
+        "mini-canvas",
+      ) as HTMLElement | null;
+      if (!wrapper) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseInt(wrapper.style.left) || 8;
+      const startTop = parseInt(wrapper.style.top) || 8;
+      const card = wrapper.parentElement;
+      if (canvas) canvas.style.cursor = "grabbing";
+      const onMove = (ev: MouseEvent) => {
+        const maxLeft = card
+          ? Math.max(0, card.offsetWidth - wrapper.offsetWidth - 4)
+          : 9999;
+        const maxTop = card
+          ? Math.max(0, card.offsetHeight - wrapper.offsetHeight - 4)
+          : 9999;
+        wrapper.style.left =
+          Math.max(4, Math.min(maxLeft, startLeft + ev.clientX - startX)) +
+          "px";
+        wrapper.style.top =
+          Math.max(4, Math.min(maxTop, startTop + (ev.clientY - startY))) +
+          "px";
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        if (canvas) canvas.style.cursor = "grab";
+        try {
+          localStorage.setItem("mojo:media:mini:left", wrapper.style.left);
+          localStorage.setItem("mojo:media:mini:top", wrapper.style.top);
+        } catch {
+          /* ignore */
+        }
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+
+    _miniResizeStart(e: MouseEvent) {
+      const wrapper = document.getElementById(
+        "mini-wrapper",
+      ) as HTMLElement | null;
+      if (!wrapper) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = wrapper.offsetWidth;
+      const startH = wrapper.offsetHeight;
+      // use the video's natural aspect ratio for Shift-snap; fall back to 16:9
+      const video = document.getElementById(
+        "media-video-player",
+      ) as HTMLVideoElement | null;
+      const aspectRatio =
+        video && video.videoWidth && video.videoHeight
+          ? video.videoWidth / video.videoHeight
+          : 16 / 9;
+      const onMove = (ev: MouseEvent) => {
+        const dw = ev.clientX - startX;
+        const dh = ev.clientY - startY;
+        let newW = Math.max(120, startW + dw);
+        let newH = Math.max(68, startH + dh);
+        if (ev.shiftKey) {
+          // constrain to aspect ratio — follow whichever axis moved more
+          if (Math.abs(dw) >= Math.abs(dh)) {
+            newH = Math.max(68, Math.round(newW / aspectRatio));
+          } else {
+            newW = Math.max(120, Math.round(newH * aspectRatio));
+          }
+        }
+        wrapper.style.width = newW + "px";
+        wrapper.style.height = newH + "px";
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        try {
+          localStorage.setItem("mojo:media:mini:w", wrapper.style.width);
+          localStorage.setItem("mojo:media:mini:h", wrapper.style.height);
+        } catch {
+          /* ignore */
+        }
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+
+    _startMiniplayer() {
+      const wrapper = document.getElementById(
+        "mini-wrapper",
+      ) as HTMLElement | null;
+      const canvas = document.getElementById(
+        "mini-canvas",
+      ) as HTMLCanvasElement | null;
+      if (!wrapper || !canvas || _mini.rafId !== null) return;
+      // restore saved position and size
+      try {
+        const sl = localStorage.getItem("mojo:media:mini:left");
+        const st = localStorage.getItem("mojo:media:mini:top");
+        const sw = localStorage.getItem("mojo:media:mini:w");
+        const sh = localStorage.getItem("mojo:media:mini:h");
+        if (sl) wrapper.style.left = sl;
+        if (st) wrapper.style.top = st;
+        if (sw) wrapper.style.width = sw;
+        if (sh) wrapper.style.height = sh;
+      } catch {
+        /* ignore */
+      }
+      wrapper.style.display = "block";
+      const paint = () => {
+        const isGif =
+          this.selectedMedia?.toLowerCase().endsWith(".gif") ?? false;
+        const useVideo = !isGif || this._gifConvertStatus === "ready";
+        const srcEl = useVideo
+          ? (document.getElementById(
+              "media-video-player",
+            ) as HTMLVideoElement | null)
+          : (document.getElementById(
+              "media-gif-player",
+            ) as HTMLImageElement | null);
+        if (srcEl) {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const vEl = srcEl as HTMLVideoElement;
+            if (isGif || vEl.readyState === undefined || vEl.readyState >= 2) {
+              ctx.drawImage(
+                srcEl as CanvasImageSource,
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+              );
+            }
+          }
+        }
+        _mini.rafId = requestAnimationFrame(paint);
+      };
+      _mini.rafId = requestAnimationFrame(paint);
+    },
+
+    _stopMiniplayer() {
+      if (_mini.rafId !== null) {
+        cancelAnimationFrame(_mini.rafId);
+        _mini.rafId = null;
+      }
+      const wrapper = document.getElementById(
+        "mini-wrapper",
+      ) as HTMLElement | null;
+      if (wrapper) wrapper.style.display = "none";
     },
 
     async startBackgroundDiscovery() {
@@ -795,6 +1028,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.fetchTrialStatus();
       void this.fetchMediaFiles();
 
+      // bind video element handlers programmatically so `this` resolves to the
+      // trialViewer component — template @event handlers in nested x-data scopes
+      // lose the correct `this` binding when calling parent methods
+      void this.$nextTick(() => {
+        const video = document.getElementById(
+          "media-video-player",
+        ) as HTMLVideoElement | null;
+        if (video) {
+          video.onloadedmetadata = () => this._onVideoLoaded();
+          video.onerror = () => this._onVideoError();
+        }
+      });
+
       const observer = new MutationObserver((mutations) => {
         if (mutations.some((m) => m.attributeName === "class")) {
           this.theme = document.documentElement.classList.contains("dark")
@@ -871,17 +1117,44 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         void this.$nextTick(async () => {
           await this.renderPlot();
+          // wait one layout pass before reading getBoundingClientRect for frame markers
+          requestAnimationFrame(() => {
+            const plotEl = document.getElementById("plot-area") as
+              | (HTMLElement & { _fullLayout?: unknown })
+              | null;
+            console.debug(
+              "[init RAF] _fullLayout present:",
+              !!plotEl?._fullLayout,
+              "rect:",
+              plotEl?.getBoundingClientRect(),
+            );
+            this._renderFrameMarkers();
+            this._syncOverlayVisibility();
+          });
           const plotEl = document.getElementById("plot-area") as HTMLElement & {
             on(
               event: string,
               handler: (event: Record<string, unknown>) => void,
             ): void;
             _fullLayout?: {
-              xaxis: { p2l(v: number): number; l2p(v: number): number; range: [number, number] };
+              xaxis: {
+                p2l(v: number): number;
+                l2p(v: number): number;
+                range: [number, number];
+              };
               yaxis: { p2l(v: number): number };
               margin: { l: number; r: number; t: number; b: number };
             };
           };
+
+          // re-render frame markers after every complete Plotly render so positions
+          // always reflect the final settled layout (range, margins, dimensions)
+          plotEl.on("plotly_afterplot", () => {
+            requestAnimationFrame(() => {
+              this._renderFrameMarkers();
+              this._syncOverlayVisibility();
+            });
+          });
 
           plotEl.on("plotly_doubleclick", () => {
             this.config.rangeX = null;
@@ -988,7 +1261,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           // otherwise fall back to pixel fraction so phase-space plots still work.
           plotEl.addEventListener("mousemove", (e: MouseEvent) => {
             if (this.mediaScrubMode !== "scrub") return;
-            const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+            const video = document.getElementById(
+              "media-video-player",
+            ) as HTMLVideoElement | null;
             if (!video || !video.duration || isNaN(video.duration)) return;
             const fullLayout = plotEl._fullLayout;
             if (!fullLayout) return;
@@ -998,9 +1273,11 @@ function trialViewer(trialId: string, externalUrl: string) {
               const t = fullLayout.xaxis.p2l(relX);
               video.currentTime = Math.max(0, Math.min(video.duration, t));
             } else {
-              const plotAreaWidth = rect.width - fullLayout.margin.l - fullLayout.margin.r;
+              const plotAreaWidth =
+                rect.width - fullLayout.margin.l - fullLayout.margin.r;
               if (plotAreaWidth <= 0) return;
-              video.currentTime = video.duration * Math.max(0, Math.min(1, relX / plotAreaWidth));
+              video.currentTime =
+                video.duration * Math.max(0, Math.min(1, relX / plotAreaWidth));
             }
           });
 
@@ -1166,54 +1443,129 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       this.$watch("mediaScrubMode", (mode: string) => {
         if (mode === "scrub") {
-          (document.getElementById("media-video-player") as HTMLVideoElement | null)?.pause();
+          (
+            document.getElementById(
+              "media-video-player",
+            ) as HTMLVideoElement | null
+          )?.pause();
         }
-        try { localStorage.setItem("mojo:media:mode", mode); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:media:mode", mode);
+        } catch {
+          /* ignore */
+        }
         this._syncOverlayVisibility();
         this._updatePlaybackLine();
       });
 
       this.$watch("mediaShowLine", (val: boolean) => {
-        try { localStorage.setItem("mojo:media:show-line", val ? "1" : "0"); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:media:show-line", val ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
         this._syncOverlayVisibility();
         this._updatePlaybackLine();
       });
 
       this.$watch("mediaShowFrames", (val: boolean) => {
-        try { localStorage.setItem("mojo:media:show-frames", val ? "1" : "0"); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:media:show-frames", val ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+        this._syncOverlayVisibility();
         this._renderFrameMarkers();
         this._updatePlaybackLine();
       });
 
       this.$watch("mediaPlaybackRate", (rate: number) => {
-        try { localStorage.setItem("mojo:media:rate", String(rate)); } catch { /* ignore */ }
-        const video = document.getElementById("media-video-player") as HTMLVideoElement | null;
+        try {
+          localStorage.setItem("mojo:media:rate", String(rate));
+        } catch {
+          /* ignore */
+        }
+        const video = document.getElementById(
+          "media-video-player",
+        ) as HTMLVideoElement | null;
         if (video) video.playbackRate = rate;
       });
 
       this.$watch("config.rangeX", () => {
-        this._renderFrameMarkers();
+        requestAnimationFrame(() => this._renderFrameMarkers());
       });
 
       this.$watch("selectedMedia", (file: string | null) => {
-        if (file) try { localStorage.setItem("mojo:media:file", file); } catch { /* ignore */ }
+        if (file)
+          try {
+            localStorage.setItem("mojo:media:file", file);
+          } catch {
+            /* ignore */
+          }
+        const sel = (file ?? "").toLowerCase();
+        this._gifConvertStatus = sel.endsWith(".gif") ? "loading" : "none";
         this._applySelectedMediaFps();
+        this._updateIsScrubbable();
         this._renderFrameMarkers();
+        this._updatePlaybackLine();
+        if (this.mediaMiniplayerOpen) {
+          this._stopMiniplayer();
+          void this.$nextTick(() => this._startMiniplayer());
+        }
+        // catch cache-hit: browser may have loaded metadata before @loadedmetadata bound
+        if (sel.endsWith(".gif")) {
+          void this.$nextTick(() => {
+            const video = document.getElementById(
+              "media-video-player",
+            ) as HTMLVideoElement | null;
+            if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+              this._onVideoLoaded();
+            }
+          });
+        }
+      });
+
+      this.$watch("mediaMiniplayerOpen", (open: boolean) => {
+        try {
+          localStorage.setItem("mojo:media:mini", open ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+        if (open && this.mediaFiles.length > 0) this._startMiniplayer();
+        else this._stopMiniplayer();
+      });
+
+      this.$watch("_gifConvertStatus", () => {
+        this._updateIsScrubbable();
+        this._syncOverlayVisibility();
         this._updatePlaybackLine();
       });
 
-      this.$watch("config.refFrame", (newValue: string | null, oldValue: string | null) => {
-        if (newValue === oldValue) return;
-        this.notify(`Frame: ${newValue || "world"}`, "info");
-        this.discoveryId++;
-        this.applyRefFrame(newValue);
-        // config watcher handles re-fetch and re-render when yAxes.filters change
+      this.$watch("config.xAxis.col", () => {
+        requestAnimationFrame(() => {
+          this._syncOverlayVisibility();
+          this._renderFrameMarkers();
+          this._updatePlaybackLine();
+        });
       });
+
+      this.$watch(
+        "config.refFrame",
+        (newValue: string | null, oldValue: string | null) => {
+          if (newValue === oldValue) return;
+          this.notify(`Frame: ${newValue || "world"}`, "info");
+          this.discoveryId++;
+          this.applyRefFrame(newValue);
+          // config watcher handles re-fetch and re-render when yAxes.filters change
+        },
+      );
 
       this.$watch("config", async (value: PlotConfig, oldValue: PlotConfig) => {
         if (!this.isEditingRaw) {
           this.configRaw = JSON.stringify(value, null, 4);
-          try { localStorage.removeItem("mojo:config:raw-draft"); } catch {}
+          try {
+            localStorage.removeItem("mojo:config:raw-draft");
+          } catch {}
         }
         if (
           this.config.vsEnabled &&
@@ -1267,6 +1619,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
 
         this.saveAndRender();
+        this._syncOverlayVisibility();
+        requestAnimationFrame(() => this._renderFrameMarkers());
       });
 
       void this.startBackgroundDiscovery();
@@ -1404,7 +1758,10 @@ function trialViewer(trialId: string, externalUrl: string) {
         .filter((n) => !isNaN(n));
       if (!nums.length) return false;
       const [a, b] = this.vsDraft.range;
-      return Math.min(a, b) === Math.min(...nums) && Math.max(a, b) === Math.max(...nums);
+      return (
+        Math.min(a, b) === Math.min(...nums) &&
+        Math.max(a, b) === Math.max(...nums)
+      );
     },
 
     vsInRangeCount(): number {
@@ -1653,7 +2010,9 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     updateFromRaw() {
-      try { localStorage.setItem("mojo:config:raw-draft", this.configRaw); } catch {}
+      try {
+        localStorage.setItem("mojo:config:raw-draft", this.configRaw);
+      } catch {}
       try {
         const parsed = JSON.parse(this.configRaw) as PlotConfig;
         this.isValidJson = true;
@@ -1667,7 +2026,8 @@ function trialViewer(trialId: string, externalUrl: string) {
             // Apply rotation filters synchronously. $watch("config.refFrame") fires
             // asynchronously after the whole config object is replaced, so filters
             // would be wrong during the first render if we relied solely on the watch.
-            const nextRefFrame = (this.config.refFrame as string | null) ?? null;
+            const nextRefFrame =
+              (this.config.refFrame as string | null) ?? null;
             if (nextRefFrame !== prevRefFrame) {
               this.applyRefFrame(nextRefFrame);
             }
@@ -1765,9 +2125,17 @@ function trialViewer(trialId: string, externalUrl: string) {
     initCodeMirror(hostEl: HTMLElement) {
       if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
       const {
-        EditorView, basicSetup, json, jsonParseLinter,
-        oneDarkHighlightStyle, EditorState, Compartment,
-        linter, lintGutter, syntaxHighlighting, defaultHighlightStyle,
+        EditorView,
+        basicSetup,
+        json,
+        jsonParseLinter,
+        oneDarkHighlightStyle,
+        EditorState,
+        Compartment,
+        linter,
+        lintGutter,
+        syntaxHighlighting,
+        defaultHighlightStyle,
       } = CM;
       const self = this;
 
@@ -1776,52 +2144,114 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (savedH) hostEl.style.height = savedH;
 
       // --- themes (base chrome only; highlight handled separately) ---
-      const darkTheme = EditorView.theme({
-        "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
-        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
-        ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
-        ".cm-cursor": { borderLeftColor: "#06b6d4" },
-        ".cm-gutters": { backgroundColor: "#0f172a", color: "#475569", borderRight: "1px solid #1e293b" },
-        ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
-        ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
-        ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
-        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#1e293b !important" },
-        ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
-        ".cm-tooltip": { backgroundColor: "#1e293b", border: "1px solid #334155", color: "#cbd5e1" },
-        ".cm-panels": { backgroundColor: "#0f172a", borderColor: "#1e293b", color: "#cbd5e1" },
-        ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
-        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(34,211,238,0.35)" },
-        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
-        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
-        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
-      }, { dark: true });
+      const darkTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+          ".cm-scroller": {
+            overflow: "auto",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.875rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
+          ".cm-cursor": { borderLeftColor: "#06b6d4" },
+          ".cm-gutters": {
+            backgroundColor: "#0f172a",
+            color: "#475569",
+            borderRight: "1px solid #1e293b",
+          },
+          ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
+          ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
+          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#1e293b !important",
+          },
+          ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+          ".cm-tooltip": {
+            backgroundColor: "#1e293b",
+            border: "1px solid #334155",
+            color: "#cbd5e1",
+          },
+          ".cm-panels": {
+            backgroundColor: "#0f172a",
+            borderColor: "#1e293b",
+            color: "#cbd5e1",
+          },
+          ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+          ".cm-searchMatch.cm-searchMatch-selected": {
+            backgroundColor: "rgba(34,211,238,0.35)",
+          },
+          ".cm-lintRange-error": {
+            backgroundImage: "none",
+            textDecoration: "underline wavy #ef4444 1.5px",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-lintRange-warning": {
+            backgroundImage: "none",
+            textDecoration: "underline wavy #f59e0b 1.5px",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+        },
+        { dark: true },
+      );
 
-      const lightTheme = EditorView.theme({
-        "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
-        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
-        ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
-        ".cm-cursor": { borderLeftColor: "#0891b2" },
-        ".cm-gutters": { backgroundColor: "#f8fafc", color: "#94a3b8", borderRight: "1px solid #e2e8f0" },
-        ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
-        ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
-        ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
-        "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
-        ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
-        ".cm-tooltip": { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" },
-        ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
-        ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
-        ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(8,145,178,0.3)" },
-        ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
-        ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
-        ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
-      }, { dark: false });
+      const lightTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+          ".cm-scroller": {
+            overflow: "auto",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.875rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
+          ".cm-cursor": { borderLeftColor: "#0891b2" },
+          ".cm-gutters": {
+            backgroundColor: "#f8fafc",
+            color: "#94a3b8",
+            borderRight: "1px solid #e2e8f0",
+          },
+          ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
+          ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
+          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#e2e8f0 !important",
+          },
+          ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+          ".cm-tooltip": {
+            backgroundColor: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            color: "#0f172a",
+          },
+          ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+          ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+          ".cm-searchMatch.cm-searchMatch-selected": {
+            backgroundColor: "rgba(8,145,178,0.3)",
+          },
+          ".cm-lintRange-error": {
+            backgroundImage: "none",
+            textDecoration: "underline wavy #ef4444 1.5px",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-lintRange-warning": {
+            backgroundImage: "none",
+            textDecoration: "underline wavy #f59e0b 1.5px",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+        },
+        { dark: false },
+      );
 
       const isDark = () => document.documentElement.classList.contains("dark");
       const themeComp = new Compartment();
       const highlightComp = new Compartment();
-      const makeTheme = (dark: boolean) => dark ? darkTheme : lightTheme;
+      const makeTheme = (dark: boolean) => (dark ? darkTheme : lightTheme);
       const makeHighlight = (dark: boolean) =>
-        syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle);
+        syntaxHighlighting(
+          dark ? oneDarkHighlightStyle : defaultHighlightStyle,
+        );
 
       const startState = EditorState.create({
         doc: this.configRaw,
@@ -1852,12 +2282,20 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       // Custom resize handle
       const handle = document.createElement("div");
-      handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      handle.style.cssText =
+        "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
       const grip = document.createElement("div");
-      grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+      grip.style.cssText =
+        "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
       handle.appendChild(grip);
-      handle.addEventListener("mouseenter", () => { grip.style.background = "#06b6d4"; grip.style.width = "52px"; });
-      handle.addEventListener("mouseleave", () => { grip.style.background = "#334155"; grip.style.width = "36px"; });
+      handle.addEventListener("mouseenter", () => {
+        grip.style.background = "#06b6d4";
+        grip.style.width = "52px";
+      });
+      handle.addEventListener("mouseleave", () => {
+        grip.style.background = "#334155";
+        grip.style.width = "36px";
+      });
       hostEl.insertAdjacentElement("afterend", handle);
 
       handle.addEventListener("mousedown", (e) => {
@@ -1878,7 +2316,14 @@ function trialViewer(trialId: string, externalUrl: string) {
           document.body.style.cursor = "";
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
-          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+          try {
+            localStorage.setItem(
+              "mojo:json-editor:height",
+              hostEl.style.height,
+            );
+          } catch {
+            /* */
+          }
         };
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
@@ -1886,10 +2331,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
 
       handle.addEventListener("dblclick", () => {
-        const scroller = hostEl.querySelector(".cm-scroller") as HTMLElement | null;
+        const scroller = hostEl.querySelector(
+          ".cm-scroller",
+        ) as HTMLElement | null;
         if (scroller) {
           hostEl.style.height = scroller.scrollHeight + "px";
-          try { localStorage.setItem("mojo:json-editor:height", hostEl.style.height); } catch { /* */ }
+          try {
+            localStorage.setItem(
+              "mojo:json-editor:height",
+              hostEl.style.height,
+            );
+          } catch {
+            /* */
+          }
         }
       });
 
@@ -1902,7 +2356,10 @@ function trialViewer(trialId: string, externalUrl: string) {
             highlightComp.reconfigure(makeHighlight(dark)),
           ],
         });
-      }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      }).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
 
       // Sync external configRaw changes into CM.
       this.$watch("configRaw", (val: string) => {
@@ -1910,7 +2367,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           const current = _cm.editor.state.doc.toString() as string;
           if (current !== val) {
             _cm.updating = true;
-            _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
+            _cm.editor.dispatch({
+              changes: { from: 0, to: current.length, insert: val },
+            });
             _cm.updating = false;
           }
         }
@@ -2080,7 +2539,14 @@ function trialViewer(trialId: string, externalUrl: string) {
       } else {
         const nextIndex = Object.keys(this.config.yAxes).length;
         const initFilters: FilterEntry[] = this.config.refFrame
-          ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }]
+          ? [
+              {
+                type: "rotation",
+                quat_col: this.config.refFrame,
+                invert: true,
+                enabled: true,
+              },
+            ]
           : [];
         this.config.yAxes[col] = {
           color: this.getSignalColor(nextIndex),
@@ -2172,14 +2638,28 @@ function trialViewer(trialId: string, externalUrl: string) {
       return this.filterSchemas.find((s) => s.type === filterType);
     },
 
-    get groupedFilterSchemas(): { category: string; schemas: FilterSchema[] }[] {
-      const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+    get groupedFilterSchemas(): {
+      category: string;
+      schemas: FilterSchema[];
+    }[] {
+      const ORDER = [
+        "Smoothing",
+        "Arithmetic",
+        "Trigonometry",
+        "Calculus",
+        "Comparison",
+        "Bounding",
+        "Misc",
+      ];
       const groups: Record<string, FilterSchema[]> = {};
       for (const s of this.filterSchemas) {
         const cat = s.category ?? "Misc";
         (groups[cat] ??= []).push(s);
       }
-      return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
+      return ORDER.filter((c) => groups[c]?.length).map((c) => ({
+        category: c,
+        schemas: groups[c],
+      }));
     },
 
     evalMathExpr(expr: string): number | null {
@@ -2279,7 +2759,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
       if (!schema) return;
       if (!temp.filters) temp.filters = [];
-      if (filterType === "rotation" && temp.filters.some((f) => f.type === "rotation"))
+      if (
+        filterType === "rotation" &&
+        temp.filters.some((f) => f.type === "rotation")
+      )
         return;
       const entry: FilterEntry = { type: filterType, enabled: true };
       for (const p of schema.params) {
@@ -2422,7 +2905,10 @@ function trialViewer(trialId: string, externalUrl: string) {
           );
           if (activeCols.length > 0) {
             try {
-              const refetch = await this.fetchTrialData(this.trialId, activeCols);
+              const refetch = await this.fetchTrialData(
+                this.trialId,
+                activeCols,
+              );
               this.data = { ...(this.data ?? {}), ...refetch.data };
               this.saveAndRender();
             } catch {

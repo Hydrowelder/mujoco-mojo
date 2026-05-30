@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, SerializeAsAny
 from stochas import StochasBase
 
 from mujoco_mojo.base import MojoBaseModel
@@ -31,6 +32,22 @@ class MojoModel(MojoBaseModel, StochasBase):
 
     user_data: SerializeAsAny[UserData] | None = None
     """User defined data for the model. This is used for transferring information from one function to another (generator to runtime or objective function)."""
+
+    _trial_dir: Path | None = PrivateAttr(default=None)
+
+    @property
+    def trial_dir(self) -> Path:
+        """
+        Absolute path to this trial's workspace directory.
+
+        Set automatically after the generator runs. Available in runtime and objective functions. Raises `RuntimeError` if accessed inside the generator, where the directory has not yet been created.
+        """
+        if self._trial_dir is None:
+            raise RuntimeError(
+                "trial_dir is not available inside the generator. "
+                "It is set after generation completes and the workspace is created."
+            )
+        return self._trial_dir
 
     def get_user_data(self, cls: type[T]) -> T:
         """Returns the user_data re-validated into the requested class."""

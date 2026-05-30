@@ -121,6 +121,7 @@
     updating: false,
     debounce: null
   };
+  var _mini = { rafId: null };
   function trialViewer(trialId, externalUrl) {
     const self = {
       // Alpine magic (injected at runtime - declared here for TS)
@@ -232,6 +233,9 @@
       mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
       mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
       mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+      mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
+      mediaIsScrubbable: false,
+      _gifConvertStatus: "none",
       _mediaRafId: null,
       _mediaFpsMap: {},
       _mediaFrameInterval: null,
@@ -397,36 +401,53 @@
           }
         }
       },
-      _syncOverlayVisibility() {
-        const overlay = document.getElementById("playback-line-overlay");
-        const lineEl = document.getElementById("playback-line-el");
+      _updateIsScrubbable() {
         const sel = this.selectedMedia?.toLowerCase() ?? "";
-        const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
-        const lineVisible = this.mediaShowLine && this.mediaScrubMode === "play" && isScrubbable;
-        const framesVisible = this.mediaShowFrames && !!this._mediaFrameInterval && this.config.xAxis?.col === "time";
-        if (overlay) overlay.style.display = lineVisible || framesVisible ? "block" : "none";
+        this.mediaIsScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm") || sel.endsWith(".gif") && this._gifConvertStatus === "ready";
+      },
+      _syncOverlayVisibility() {
+        const overlay = document.getElementById(
+          "playback-line-overlay"
+        );
+        const lineEl = document.getElementById(
+          "playback-line-el"
+        );
+        const isTimeAxis = this.config.xAxis?.col === "time";
+        const hasYAxes = Object.keys(this.config.yAxes).length > 0;
+        const lineVisible = this.mediaShowLine && this.mediaScrubMode === "play" && this.mediaIsScrubbable && isTimeAxis && hasYAxes;
+        const framesVisible = this.mediaShowFrames && !!this._mediaFrameInterval && isTimeAxis && hasYAxes;
+        if (overlay)
+          overlay.style.display = lineVisible || framesVisible ? "block" : "none";
         if (lineEl) lineEl.style.display = lineVisible ? "block" : "none";
       },
       _renderFrameMarkers() {
-        const framesPath = document.getElementById("playback-frames-path");
+        const framesPath = document.getElementById(
+          "playback-frames-path"
+        );
         if (!framesPath) return;
         this._syncOverlayVisibility();
-        if (!this.mediaShowFrames || !this._mediaFrameInterval || this.config.xAxis?.col !== "time") {
+        const hasYAxes = Object.keys(this.config.yAxes).length > 0;
+        if (!this.mediaShowFrames || !this._mediaFrameInterval || this.config.xAxis?.col !== "time" || !hasYAxes) {
           framesPath.setAttribute("d", "");
           return;
         }
         const plotEl = document.getElementById("plot-area");
         const fullLayout = plotEl?._fullLayout;
+        const rect = plotEl?.getBoundingClientRect();
         if (!plotEl || !fullLayout) return;
-        const video = document.getElementById("media-video-player");
+        const video = document.getElementById(
+          "media-video-player"
+        );
         const duration = video?.duration && isFinite(video.duration) ? video.duration : Infinity;
         const interval = this._mediaFrameInterval;
-        const ph = plotEl.getBoundingClientRect().height;
+        const ph = rect.height;
         const markerTop = ph - fullLayout.margin.b - 5;
         const markerBot = ph - fullLayout.margin.b;
         const [xMin, xMax] = fullLayout.xaxis.range;
         const kStart = Math.max(0, Math.floor(xMin / interval));
-        const kEnd = Math.ceil(Math.min(isFinite(duration) ? duration : xMax, xMax) / interval);
+        const kEnd = Math.ceil(
+          Math.min(isFinite(duration) ? duration : xMax, xMax) / interval
+        );
         let d = "";
         for (let k = kStart; k <= kEnd; k++) {
           const px = fullLayout.margin.l + fullLayout.xaxis.l2p(k * interval);
@@ -435,52 +456,43 @@
         framesPath.setAttribute("d", d);
       },
       _updatePlaybackLine() {
-        const sel = this.selectedMedia?.toLowerCase() ?? "";
-        const isScrubbable = sel.endsWith(".mp4") || sel.endsWith(".webm");
         const isTimeAxis = this.config.xAxis?.col === "time";
-        const shouldRun = this.mediaScrubMode === "play" && this.mediaFiles.length > 0 && isScrubbable && (this.mediaShowLine || isTimeAxis);
+        const shouldRun = this.mediaScrubMode === "play" && this.mediaFiles.length > 0 && this.mediaIsScrubbable && isTimeAxis;
         if (!shouldRun || this._mediaRafId !== null) return;
         const tick = () => {
-          const curSel = this.selectedMedia?.toLowerCase() ?? "";
-          const curScrubbable = curSel.endsWith(".mp4") || curSel.endsWith(".webm");
           const curTimeAxis = this.config.xAxis?.col === "time";
-          if (this.mediaScrubMode !== "play" || this.mediaFiles.length === 0 || !curScrubbable || !this.mediaShowLine && !curTimeAxis) {
+          if (this.mediaScrubMode !== "play" || this.mediaFiles.length === 0 || !this.mediaIsScrubbable || !curTimeAxis) {
             this._mediaRafId = null;
             this._syncOverlayVisibility();
             return;
           }
-          const video = document.getElementById("media-video-player");
+          const video = document.getElementById(
+            "media-video-player"
+          );
           const plotEl = document.getElementById("plot-area");
           if (video && plotEl && video.duration > 0 && !isNaN(video.duration)) {
             const fullLayout = plotEl._fullLayout;
             if (fullLayout) {
-              if (curTimeAxis) {
-                const [xMin, xMax] = fullLayout.xaxis.range;
-                const safeMin = Math.max(0, xMin);
-                const safeMax = Math.min(video.duration, xMax);
-                if (safeMax > safeMin) {
-                  if (video.currentTime >= safeMax) video.currentTime = safeMin;
-                  else if (video.currentTime < safeMin) video.currentTime = safeMin;
-                }
+              const [xMin, xMax] = fullLayout.xaxis.range;
+              const safeMin = Math.max(0, xMin);
+              const safeMax = Math.min(video.duration, xMax);
+              if (safeMax > safeMin) {
+                if (video.currentTime >= safeMax) video.currentTime = safeMin;
+                else if (video.currentTime < safeMin) video.currentTime = safeMin;
               }
               this._syncOverlayVisibility();
               if (this.mediaShowLine) {
-                const lineEl = document.getElementById("playback-line-el");
+                const lineEl = document.getElementById(
+                  "playback-line-el"
+                );
                 if (lineEl) {
                   lineEl.style.top = fullLayout.margin.t + "px";
                   lineEl.style.bottom = fullLayout.margin.b + "px";
                   const t = this._mediaFrameInterval ? Math.round(video.currentTime / this._mediaFrameInterval) * this._mediaFrameInterval : video.currentTime;
-                  let x;
-                  if (curTimeAxis) {
-                    x = fullLayout.margin.l + fullLayout.xaxis.l2p(t);
-                  } else {
-                    const pw = plotEl.getBoundingClientRect().width - fullLayout.margin.l - fullLayout.margin.r;
-                    x = fullLayout.margin.l + Math.max(0, Math.min(1, t / video.duration)) * pw;
-                  }
-                  lineEl.style.left = x + "px";
+                  lineEl.style.left = fullLayout.margin.l + fullLayout.xaxis.l2p(t) + "px";
                 }
               }
-              if (this.mediaShowFrames && curTimeAxis) this._renderFrameMarkers();
+              if (this.mediaShowFrames) this._renderFrameMarkers();
             }
           }
           this._mediaRafId = requestAnimationFrame(tick);
@@ -501,14 +513,162 @@
             this.selectedMedia = saved && this.mediaFiles.includes(saved) ? saved : this.mediaFiles[0];
           }
           this._applySelectedMediaFps();
+          this._updateIsScrubbable();
         } catch {
         }
         this._updatePlaybackLine();
         this._renderFrameMarkers();
+        if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
+          this._startMiniplayer();
       },
       _applySelectedMediaFps() {
         const fps = this.selectedMedia ? this._mediaFpsMap[this.selectedMedia] ?? null : null;
         this._mediaFrameInterval = fps && fps > 0 ? 1 / fps : null;
+      },
+      _onVideoLoaded() {
+        const video = document.getElementById(
+          "media-video-player"
+        );
+        if (video) video.playbackRate = this.mediaPlaybackRate;
+        if (this.selectedMedia?.toLowerCase().endsWith(".gif")) {
+          this._gifConvertStatus = "ready";
+          void video?.play();
+        }
+      },
+      _onVideoError() {
+        if (this.selectedMedia?.toLowerCase().endsWith(".gif")) {
+          this._gifConvertStatus = "failed";
+        }
+      },
+      _miniDragStart(e) {
+        const wrapper = document.getElementById(
+          "mini-wrapper"
+        );
+        const canvas = document.getElementById(
+          "mini-canvas"
+        );
+        if (!wrapper) return;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startLeft = parseInt(wrapper.style.left) || 8;
+        const startTop = parseInt(wrapper.style.top) || 8;
+        const card = wrapper.parentElement;
+        if (canvas) canvas.style.cursor = "grabbing";
+        const onMove = (ev) => {
+          const maxLeft = card ? Math.max(0, card.offsetWidth - wrapper.offsetWidth - 4) : 9999;
+          const maxTop = card ? Math.max(0, card.offsetHeight - wrapper.offsetHeight - 4) : 9999;
+          wrapper.style.left = Math.max(4, Math.min(maxLeft, startLeft + ev.clientX - startX)) + "px";
+          wrapper.style.top = Math.max(4, Math.min(maxTop, startTop + (ev.clientY - startY))) + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (canvas) canvas.style.cursor = "grab";
+          try {
+            localStorage.setItem("mojo:media:mini:left", wrapper.style.left);
+            localStorage.setItem("mojo:media:mini:top", wrapper.style.top);
+          } catch {
+          }
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      },
+      _miniResizeStart(e) {
+        const wrapper = document.getElementById(
+          "mini-wrapper"
+        );
+        if (!wrapper) return;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startW = wrapper.offsetWidth;
+        const startH = wrapper.offsetHeight;
+        const video = document.getElementById(
+          "media-video-player"
+        );
+        const aspectRatio = video && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+        const onMove = (ev) => {
+          const dw = ev.clientX - startX;
+          const dh = ev.clientY - startY;
+          let newW = Math.max(120, startW + dw);
+          let newH = Math.max(68, startH + dh);
+          if (ev.shiftKey) {
+            if (Math.abs(dw) >= Math.abs(dh)) {
+              newH = Math.max(68, Math.round(newW / aspectRatio));
+            } else {
+              newW = Math.max(120, Math.round(newH * aspectRatio));
+            }
+          }
+          wrapper.style.width = newW + "px";
+          wrapper.style.height = newH + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          try {
+            localStorage.setItem("mojo:media:mini:w", wrapper.style.width);
+            localStorage.setItem("mojo:media:mini:h", wrapper.style.height);
+          } catch {
+          }
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      },
+      _startMiniplayer() {
+        const wrapper = document.getElementById(
+          "mini-wrapper"
+        );
+        const canvas = document.getElementById(
+          "mini-canvas"
+        );
+        if (!wrapper || !canvas || _mini.rafId !== null) return;
+        try {
+          const sl = localStorage.getItem("mojo:media:mini:left");
+          const st = localStorage.getItem("mojo:media:mini:top");
+          const sw = localStorage.getItem("mojo:media:mini:w");
+          const sh = localStorage.getItem("mojo:media:mini:h");
+          if (sl) wrapper.style.left = sl;
+          if (st) wrapper.style.top = st;
+          if (sw) wrapper.style.width = sw;
+          if (sh) wrapper.style.height = sh;
+        } catch {
+        }
+        wrapper.style.display = "block";
+        const paint = () => {
+          const isGif = this.selectedMedia?.toLowerCase().endsWith(".gif") ?? false;
+          const useVideo = !isGif || this._gifConvertStatus === "ready";
+          const srcEl = useVideo ? document.getElementById(
+            "media-video-player"
+          ) : document.getElementById(
+            "media-gif-player"
+          );
+          if (srcEl) {
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              const vEl = srcEl;
+              if (isGif || vEl.readyState === void 0 || vEl.readyState >= 2) {
+                ctx.drawImage(
+                  srcEl,
+                  0,
+                  0,
+                  canvas.width,
+                  canvas.height
+                );
+              }
+            }
+          }
+          _mini.rafId = requestAnimationFrame(paint);
+        };
+        _mini.rafId = requestAnimationFrame(paint);
+      },
+      _stopMiniplayer() {
+        if (_mini.rafId !== null) {
+          cancelAnimationFrame(_mini.rafId);
+          _mini.rafId = null;
+        }
+        const wrapper = document.getElementById(
+          "mini-wrapper"
+        );
+        if (wrapper) wrapper.style.display = "none";
       },
       async startBackgroundDiscovery() {
         const currentId = ++this.discoveryId;
@@ -719,6 +879,15 @@
         this.warpId = isNaN(currentNum) ? null : currentNum;
         void this.fetchTrialStatus();
         void this.fetchMediaFiles();
+        void this.$nextTick(() => {
+          const video = document.getElementById(
+            "media-video-player"
+          );
+          if (video) {
+            video.onloadedmetadata = () => this._onVideoLoaded();
+            video.onerror = () => this._onVideoError();
+          }
+        });
         const observer = new MutationObserver((mutations) => {
           if (mutations.some((m) => m.attributeName === "class")) {
             this.theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -780,7 +949,24 @@
           });
           void this.$nextTick(async () => {
             await this.renderPlot();
+            requestAnimationFrame(() => {
+              const plotEl2 = document.getElementById("plot-area");
+              console.debug(
+                "[init RAF] _fullLayout present:",
+                !!plotEl2?._fullLayout,
+                "rect:",
+                plotEl2?.getBoundingClientRect()
+              );
+              this._renderFrameMarkers();
+              this._syncOverlayVisibility();
+            });
             const plotEl = document.getElementById("plot-area");
+            plotEl.on("plotly_afterplot", () => {
+              requestAnimationFrame(() => {
+                this._renderFrameMarkers();
+                this._syncOverlayVisibility();
+              });
+            });
             plotEl.on("plotly_doubleclick", () => {
               this.config.rangeX = null;
               this.config.rangeY = null;
@@ -862,7 +1048,9 @@
             }).observe(document.body, { childList: true, subtree: true });
             plotEl.addEventListener("mousemove", (e) => {
               if (this.mediaScrubMode !== "scrub") return;
-              const video = document.getElementById("media-video-player");
+              const video = document.getElementById(
+                "media-video-player"
+              );
               if (!video || !video.duration || isNaN(video.duration)) return;
               const fullLayout = plotEl._fullLayout;
               if (!fullLayout) return;
@@ -1005,7 +1193,9 @@
         });
         this.$watch("mediaScrubMode", (mode) => {
           if (mode === "scrub") {
-            document.getElementById("media-video-player")?.pause();
+            document.getElementById(
+              "media-video-player"
+            )?.pause();
           }
           try {
             localStorage.setItem("mojo:media:mode", mode);
@@ -1027,6 +1217,7 @@
             localStorage.setItem("mojo:media:show-frames", val ? "1" : "0");
           } catch {
           }
+          this._syncOverlayVisibility();
           this._renderFrameMarkers();
           this._updatePlaybackLine();
         });
@@ -1035,27 +1226,70 @@
             localStorage.setItem("mojo:media:rate", String(rate));
           } catch {
           }
-          const video = document.getElementById("media-video-player");
+          const video = document.getElementById(
+            "media-video-player"
+          );
           if (video) video.playbackRate = rate;
         });
         this.$watch("config.rangeX", () => {
-          this._renderFrameMarkers();
+          requestAnimationFrame(() => this._renderFrameMarkers());
         });
         this.$watch("selectedMedia", (file) => {
-          if (file) try {
-            localStorage.setItem("mojo:media:file", file);
-          } catch {
-          }
+          if (file)
+            try {
+              localStorage.setItem("mojo:media:file", file);
+            } catch {
+            }
+          const sel = (file ?? "").toLowerCase();
+          this._gifConvertStatus = sel.endsWith(".gif") ? "loading" : "none";
           this._applySelectedMediaFps();
+          this._updateIsScrubbable();
           this._renderFrameMarkers();
           this._updatePlaybackLine();
+          if (this.mediaMiniplayerOpen) {
+            this._stopMiniplayer();
+            void this.$nextTick(() => this._startMiniplayer());
+          }
+          if (sel.endsWith(".gif")) {
+            void this.$nextTick(() => {
+              const video = document.getElementById(
+                "media-video-player"
+              );
+              if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                this._onVideoLoaded();
+              }
+            });
+          }
         });
-        this.$watch("config.refFrame", (newValue, oldValue) => {
-          if (newValue === oldValue) return;
-          this.notify(`Frame: ${newValue || "world"}`, "info");
-          this.discoveryId++;
-          this.applyRefFrame(newValue);
+        this.$watch("mediaMiniplayerOpen", (open) => {
+          try {
+            localStorage.setItem("mojo:media:mini", open ? "1" : "0");
+          } catch {
+          }
+          if (open && this.mediaFiles.length > 0) this._startMiniplayer();
+          else this._stopMiniplayer();
         });
+        this.$watch("_gifConvertStatus", () => {
+          this._updateIsScrubbable();
+          this._syncOverlayVisibility();
+          this._updatePlaybackLine();
+        });
+        this.$watch("config.xAxis.col", () => {
+          requestAnimationFrame(() => {
+            this._syncOverlayVisibility();
+            this._renderFrameMarkers();
+            this._updatePlaybackLine();
+          });
+        });
+        this.$watch(
+          "config.refFrame",
+          (newValue, oldValue) => {
+            if (newValue === oldValue) return;
+            this.notify(`Frame: ${newValue || "world"}`, "info");
+            this.discoveryId++;
+            this.applyRefFrame(newValue);
+          }
+        );
         this.$watch("config", async (value, oldValue) => {
           if (!this.isEditingRaw) {
             this.configRaw = JSON.stringify(value, null, 4);
@@ -1103,6 +1337,8 @@
             if (this.config.vsEnabled) await this.syncVsRange();
           }
           this.saveAndRender();
+          this._syncOverlayVisibility();
+          requestAnimationFrame(() => this._renderFrameMarkers());
         });
         void this.startBackgroundDiscovery();
         this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
@@ -1511,49 +1747,111 @@
         const self2 = this;
         const savedH = localStorage.getItem("mojo:json-editor:height");
         if (savedH) hostEl.style.height = savedH;
-        const darkTheme = EditorView.theme({
-          "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
-          ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
-          ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
-          ".cm-cursor": { borderLeftColor: "#06b6d4" },
-          ".cm-gutters": { backgroundColor: "#0f172a", color: "#475569", borderRight: "1px solid #1e293b" },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
-          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
-          "&.cm-focused .cm-selectionBackground": { backgroundColor: "#1e293b !important" },
-          ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
-          ".cm-tooltip": { backgroundColor: "#1e293b", border: "1px solid #334155", color: "#cbd5e1" },
-          ".cm-panels": { backgroundColor: "#0f172a", borderColor: "#1e293b", color: "#cbd5e1" },
-          ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
-          ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(34,211,238,0.35)" },
-          ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
-          ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
-        }, { dark: true });
-        const lightTheme = EditorView.theme({
-          "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
-          ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.875rem", lineHeight: "1.625" },
-          ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
-          ".cm-cursor": { borderLeftColor: "#0891b2" },
-          ".cm-gutters": { backgroundColor: "#f8fafc", color: "#94a3b8", borderRight: "1px solid #e2e8f0" },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
-          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
-          "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
-          ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
-          ".cm-tooltip": { backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" },
-          ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
-          ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
-          ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(8,145,178,0.3)" },
-          ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy #ef4444 1.5px", textUnderlineOffset: "3px" },
-          ".cm-lintRange-warning": { backgroundImage: "none", textDecoration: "underline wavy #f59e0b 1.5px", textUnderlineOffset: "3px" },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
-        }, { dark: false });
+        const darkTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+            ".cm-scroller": {
+              overflow: "auto",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.875rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
+            ".cm-cursor": { borderLeftColor: "#06b6d4" },
+            ".cm-gutters": {
+              backgroundColor: "#0f172a",
+              color: "#475569",
+              borderRight: "1px solid #1e293b"
+            },
+            ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
+            ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
+            ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#1e293b !important"
+            },
+            ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+            ".cm-tooltip": {
+              backgroundColor: "#1e293b",
+              border: "1px solid #334155",
+              color: "#cbd5e1"
+            },
+            ".cm-panels": {
+              backgroundColor: "#0f172a",
+              borderColor: "#1e293b",
+              color: "#cbd5e1"
+            },
+            ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+            ".cm-searchMatch.cm-searchMatch-selected": {
+              backgroundColor: "rgba(34,211,238,0.35)"
+            },
+            ".cm-lintRange-error": {
+              backgroundImage: "none",
+              textDecoration: "underline wavy #ef4444 1.5px",
+              textUnderlineOffset: "3px"
+            },
+            ".cm-lintRange-warning": {
+              backgroundImage: "none",
+              textDecoration: "underline wavy #f59e0b 1.5px",
+              textUnderlineOffset: "3px"
+            },
+            ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
+          },
+          { dark: true }
+        );
+        const lightTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+            ".cm-scroller": {
+              overflow: "auto",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.875rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
+            ".cm-cursor": { borderLeftColor: "#0891b2" },
+            ".cm-gutters": {
+              backgroundColor: "#f8fafc",
+              color: "#94a3b8",
+              borderRight: "1px solid #e2e8f0"
+            },
+            ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
+            ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
+            ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#e2e8f0 !important"
+            },
+            ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+            ".cm-tooltip": {
+              backgroundColor: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              color: "#0f172a"
+            },
+            ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
+            ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+            ".cm-searchMatch.cm-searchMatch-selected": {
+              backgroundColor: "rgba(8,145,178,0.3)"
+            },
+            ".cm-lintRange-error": {
+              backgroundImage: "none",
+              textDecoration: "underline wavy #ef4444 1.5px",
+              textUnderlineOffset: "3px"
+            },
+            ".cm-lintRange-warning": {
+              backgroundImage: "none",
+              textDecoration: "underline wavy #f59e0b 1.5px",
+              textUnderlineOffset: "3px"
+            },
+            ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" }
+          },
+          { dark: false }
+        );
         const isDark = () => document.documentElement.classList.contains("dark");
         const themeComp = new Compartment();
         const highlightComp = new Compartment();
         const makeTheme = (dark) => dark ? darkTheme : lightTheme;
-        const makeHighlight = (dark) => syntaxHighlighting(dark ? oneDarkHighlightStyle : defaultHighlightStyle);
+        const makeHighlight = (dark) => syntaxHighlighting(
+          dark ? oneDarkHighlightStyle : defaultHighlightStyle
+        );
         const startState = EditorState.create({
           doc: this.configRaw,
           extensions: [
@@ -1612,7 +1910,10 @@
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
             try {
-              localStorage.setItem("mojo:json-editor:height", hostEl.style.height);
+              localStorage.setItem(
+                "mojo:json-editor:height",
+                hostEl.style.height
+              );
             } catch {
             }
           };
@@ -1621,11 +1922,16 @@
           e.preventDefault();
         });
         handle.addEventListener("dblclick", () => {
-          const scroller = hostEl.querySelector(".cm-scroller");
+          const scroller = hostEl.querySelector(
+            ".cm-scroller"
+          );
           if (scroller) {
             hostEl.style.height = scroller.scrollHeight + "px";
             try {
-              localStorage.setItem("mojo:json-editor:height", hostEl.style.height);
+              localStorage.setItem(
+                "mojo:json-editor:height",
+                hostEl.style.height
+              );
             } catch {
             }
           }
@@ -1638,13 +1944,18 @@
               highlightComp.reconfigure(makeHighlight(dark))
             ]
           });
-        }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+        }).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"]
+        });
         this.$watch("configRaw", (val) => {
           if (!_cm.updating && _cm.editor) {
             const current = _cm.editor.state.doc.toString();
             if (current !== val) {
               _cm.updating = true;
-              _cm.editor.dispatch({ changes: { from: 0, to: current.length, insert: val } });
+              _cm.editor.dispatch({
+                changes: { from: 0, to: current.length, insert: val }
+              });
               _cm.updating = false;
             }
           }
@@ -1798,7 +2109,14 @@
           this.config.yAxes = rest;
         } else {
           const nextIndex = Object.keys(this.config.yAxes).length;
-          const initFilters = this.config.refFrame ? [{ type: "rotation", quat_col: this.config.refFrame, invert: true, enabled: true }] : [];
+          const initFilters = this.config.refFrame ? [
+            {
+              type: "rotation",
+              quat_col: this.config.refFrame,
+              invert: true,
+              enabled: true
+            }
+          ] : [];
           this.config.yAxes[col] = {
             color: this.getSignalColor(nextIndex),
             label: "",
@@ -1878,13 +2196,24 @@
         return this.filterSchemas.find((s) => s.type === filterType);
       },
       get groupedFilterSchemas() {
-        const ORDER = ["Smoothing", "Arithmetic", "Trigonometry", "Calculus", "Comparison", "Bounding", "Misc"];
+        const ORDER = [
+          "Smoothing",
+          "Arithmetic",
+          "Trigonometry",
+          "Calculus",
+          "Comparison",
+          "Bounding",
+          "Misc"
+        ];
         const groups = {};
         for (const s of this.filterSchemas) {
           const cat = s.category ?? "Misc";
           (groups[cat] ?? (groups[cat] = [])).push(s);
         }
-        return ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, schemas: groups[c] }));
+        return ORDER.filter((c) => groups[c]?.length).map((c) => ({
+          category: c,
+          schemas: groups[c]
+        }));
       },
       evalMathExpr(expr) {
         const s = String(expr ?? "").trim();
@@ -2092,7 +2421,10 @@
             );
             if (activeCols.length > 0) {
               try {
-                const refetch = await this.fetchTrialData(this.trialId, activeCols);
+                const refetch = await this.fetchTrialData(
+                  this.trialId,
+                  activeCols
+                );
                 this.data = { ...this.data ?? {}, ...refetch.data };
                 this.saveAndRender();
               } catch {

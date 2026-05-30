@@ -305,24 +305,25 @@ def runtime(
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
-        if mojo_model.is_nominal:
+        if mojo_model.trial_num < 10:
             rt.VideoRecorder(
-                path=Path("fixed_camera.mp4"),
+                path=mojo_model.trial_dir / "fixed_camera.mp4",
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
                 show_net_force=True,
                 show_proximities=True,
             ).setup(mj_model).register_to_rm(rm)
 
+        if mojo_model.is_nominal:
             rt.VideoRecorder(
-                path=Path("tracking_camera.mp4"),
+                path=mojo_model.trial_dir / "tracking_camera.webm",
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
                 show_proximities=True,
             ).setup(mj_model).register_to_rm(rm)
 
             rt.VideoRecorder(
-                path=Path("box_camera.mp4"),
+                path=mojo_model.trial_dir / "box_camera.gif",
                 camera_name=BOX_CAMERA_NAME,
             ).setup(mj_model).register_to_rm(rm)
 

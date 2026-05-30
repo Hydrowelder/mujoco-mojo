@@ -275,6 +275,7 @@ class MojoReloaded:
                 *self.gen_args,
                 **self.gen_kwargs,
             )
+            mojo_model._trial_dir = self.workdir
             mojo_model.dump_to_path(self.workdir / self.model_config_name)
         else:
             assert self.config_path
@@ -282,6 +283,7 @@ class MojoReloaded:
                 mojo_model = MojoModel.model_validate_json(
                     self.config_path.read_text()
                 ).with_overrides(overrides=global_overrides)
+                mojo_model._trial_dir = self.workdir
                 logger.info(
                     f"Playback mode: Loaded frozen state from {self.config_path.name}"
                 )

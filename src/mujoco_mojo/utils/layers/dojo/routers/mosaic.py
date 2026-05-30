@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import socket
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import get_args
@@ -905,6 +907,48 @@ def _read_file_fps(path: Path) -> float | None:
     return None
 
 
+def _gif_webm_cache_path(gif_path: Path) -> Path:
+    """
+    Returns a stable path in the system temp directory for a GIF→WebM conversion.
+
+    The cache key is the resolved path plus mtime so a changed GIF produces a new entry. The OS temp directory is cleaned up on reboot, keeping trial directories free of video blobs.
+    """
+    key = f"{gif_path.resolve()}:{gif_path.stat().st_mtime}"
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    cache_dir = Path(tempfile.gettempdir()) / "mujoco_mojo_webm"
+    cache_dir.mkdir(exist_ok=True)
+    return cache_dir / f"{digest}.webm"
+
+
+def _convert_gif_to_webm_sync(gif_path: Path, webm_path: Path) -> None:
+    """Converts a GIF to WebM (VP9) using ffmpeg directly. Blocking — run in executor."""
+    import subprocess
+
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(gif_path),
+            # ensure even dimensions (required by most codecs)
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:v",
+            "libvpx-vp9",
+            "-b:v",
+            "0",
+            "-crf",
+            "33",
+            "-an",  # no audio
+            "-pix_fmt",
+            "yuv420p",
+            str(webm_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
 def _resolve_trial_dir(trial_id: str) -> Path:
     """Resolves and validates a trial directory path, guarding against path traversal."""
     job = shared.CURRENT_JOB
@@ -925,13 +969,31 @@ async def list_trial_media(trial_id: str) -> dict:
         return {"files": []}
     loop = asyncio.get_running_loop()
     paths = sorted(
-        p for p in trial_dir.iterdir() if p.suffix.lower() in _MEDIA_EXTENSIONS
+        p
+        for p in trial_dir.iterdir()
+        if p.suffix.lower() in _MEDIA_EXTENSIONS and not p.stem.endswith(".mojo_webm")
     )
     files = []
     for p in paths:
         fps = await loop.run_in_executor(None, _read_file_fps, p)
         files.append({"name": p.name, "fps": fps})
     return {"files": files}
+
+
+@router.get("/{trial_id}/media/{filename}/as-webm")
+async def get_gif_as_webm(trial_id: str, filename: str) -> FileResponse:
+    """Converts a GIF to WebM on-demand, cached in the system temp directory."""
+    trial_dir = _resolve_trial_dir(trial_id)
+    gif_path = (trial_dir / filename).resolve()
+    if not str(gif_path).startswith(str(trial_dir) + "/"):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not gif_path.is_file() or gif_path.suffix.lower() != ".gif":
+        raise HTTPException(status_code=404, detail="File not found or not a gif")
+    webm_path = _gif_webm_cache_path(gif_path)
+    if not webm_path.exists():
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _convert_gif_to_webm_sync, gif_path, webm_path)
+    return FileResponse(webm_path, media_type="video/webm")
 
 
 @router.get("/{trial_id}/media/{filename}")
@@ -943,4 +1005,12 @@ async def get_trial_media_file(trial_id: str, filename: str) -> FileResponse:
         raise HTTPException(status_code=400, detail="Invalid filename")
     if not file_path.is_file() or file_path.suffix.lower() not in _MEDIA_EXTENSIONS:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+    _mime: dict[str, str] = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".gif": "image/gif",
+    }
+    return FileResponse(
+        file_path,
+        media_type=_mime.get(file_path.suffix.lower(), "application/octet-stream"),
+    )
