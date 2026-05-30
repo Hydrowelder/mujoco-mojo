@@ -606,11 +606,26 @@
             if (_lab.canvas) _lab.canvas.stopRendering();
             _lab.canvas = new LGraphCanvas(canvasEl, _lab.graph);
 
-            // Remove the "Mode" entry from the node context menu - it controls
-            // LiteGraph execution modes that are irrelevant here and would confuse users.
+            // Remove "Mode" from node menu (irrelevant LiteGraph execution mode).
+            // Also inject "Save selection as Template" when 2+ nodes are selected.
             const _origMenu = LGraphCanvas.prototype.getNodeMenuOptions;
             LGraphCanvas.prototype.getNodeMenuOptions = function (node) {
-                return _origMenu.call(this, node).filter((o) => !o || o.content !== "Mode");
+                const opts = _origMenu.call(this, node).filter((o) => !o || o.content !== "Mode");
+                const sel = Object.values(this.selected_nodes || {});
+                if (sel.length >= 2) {
+                    opts.push(null);
+                    opts.push({
+                        content: "Extract selection as new Lab…",
+                        callback: () => {
+                            // capture IDs NOW — prompt() blocks and LiteGraph may clear
+                            // selected_nodes while the dialog is open
+                            const capturedIds = sel.map(n => n.id);
+                            const name = prompt("New lab name (or folder/name):");
+                            if (name && name.trim()) void _labSaveSelectionAsLab(name.trim(), capturedIds);
+                        }
+                    });
+                }
+                return opts;
             };
 
             _lab.canvas.render_shadows = false;
@@ -1009,6 +1024,42 @@
             x += maxW + COL_GAP;
         });
 
+        // refit group bounding boxes to encompass their nodes' new positions
+        // (group membership is geometric; we snapshot which nodes overlapped each
+        //  group before the arrange and then wrap them in their new positions)
+        const groups = _lab.graph._groups || [];
+        if (groups.length > 0) {
+            // build a set of node ids that were inside each group before arrange
+            // (we use the PRE-arrange positions which are now already updated above,
+            //  so we use a "close enough" heuristic: any node whose new center is
+            //  nearest to a group gets claimed by that group if it was in ANY group)
+            const PAD = 20;
+            groups.forEach(g => {
+                // find nodes whose center falls within this group's original bounds
+                const gMemberIds = new Set();
+                nodes.forEach(n => {
+                    const cx = n.pos[0] + n.size[0] / 2;
+                    const cy = n.pos[1] + n.size[1] / 2;
+                    // use the group's bounding box (pos is top-left, size is w×h)
+                    const gx = g.pos[0], gy = g.pos[1];
+                    const gw = (g.size && g.size[0]) || 200;
+                    const gh = (g.size && g.size[1]) || 100;
+                    if (cx >= gx && cx <= gx + gw && cy >= gy && cy <= gy + gh) {
+                        gMemberIds.add(n.id);
+                    }
+                });
+                if (gMemberIds.size === 0) return;
+                const members = nodes.filter(n => gMemberIds.has(n.id));
+                const x1 = Math.min(...members.map(n => n.pos[0])) - PAD;
+                const y1 = Math.min(...members.map(n => n.pos[1])) - PAD - 30; // title bar
+                const x2 = Math.max(...members.map(n => n.pos[0] + n.size[0])) + PAD;
+                const y2 = Math.max(...members.map(n => n.pos[1] + n.size[1])) + PAD;
+                g.pos[0] = x1;
+                g.pos[1] = y1;
+                if (g.size) { g.size[0] = x2 - x1; g.size[1] = y2 - y1; }
+            });
+        }
+
         if (_lab.canvas) _lab.canvas.setDirty(true, true);
         mojoLabDeferredSnapshot();
     };
@@ -1109,6 +1160,154 @@
                 if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
             })
             .catch(err => alert(String(err)));
+    }
+
+    // ── Selection → Lab extraction ────────────────────────────────────────────
+    // capturedIds must be passed in from the right-click callback BEFORE showing
+    // any dialog, because prompt() blocks and LiteGraph may clear selected_nodes.
+    // graph.serialize() is used so links are always [lid,from,fSlot,to,tSlot,type]
+    // arrays — the live graph.links stores Link class instances, not arrays.
+
+    function _labExtractSelection(capturedIds) {
+        if (!_lab.graph) return null;
+        const selectedIds = new Set(capturedIds || []);
+        if (selectedIds.size < 1) return null;
+
+        // use the serialized graph — correct wire format throughout
+        const s = _lab.graph.serialize();
+        const serialNodes = (s.nodes || []).filter(n => selectedIds.has(n.id));
+        if (serialNodes.length < 1) return null;
+
+        // partition serialized links (guaranteed arrays)
+        const internalLinkIds = new Set();
+        const externalInputs = [];
+        const externalOutputs = [];
+
+        (s.links || []).forEach(lnk => {
+            const [lid, fromId, fromSlot, toId, toSlot] = lnk;
+            const fIn = selectedIds.has(fromId);
+            const tIn = selectedIds.has(toId);
+            if (fIn && tIn)       internalLinkIds.add(lid);
+            else if (!fIn && tIn) externalInputs.push(lnk);
+            else if (fIn && !tIn) externalOutputs.push(lnk);
+        });
+
+        // deep-copy serialized nodes, clearing external link references
+        const nodes = serialNodes.map(n => {
+            const c = JSON.parse(JSON.stringify(n));
+            (c.inputs || []).forEach(inp => {
+                if (inp.link != null && !internalLinkIds.has(inp.link)) inp.link = null;
+            });
+            (c.outputs || []).forEach(out => {
+                if (out.links) out.links = out.links.filter(lid => internalLinkIds.has(lid));
+            });
+            return c;
+        });
+
+        // placement: Template In nodes to the left, Template Out to the right
+        const minX = Math.min(...serialNodes.map(n => n.pos[0]));
+        const maxX = Math.max(...serialNodes.map(n => n.pos[0] + (n.size ? n.size[0] : 200)));
+        const minY = Math.min(...serialNodes.map(n => n.pos[1]));
+
+        // allocate IDs above the graph's current high-water mark
+        let nextId  = (s.last_node_id  || 0) + 1;
+        let nextLid = (s.last_link_id  || 0) + 1;
+
+        const tmplInNodes  = [];
+        const tmplOutNodes = [];
+        const newLinks     = [];
+
+        // one Template In per unique (fromId, fromSlot) — avoids duplicate stubs
+        const inputPortMap = new Map();
+        externalInputs.forEach(([lid, fromId, fromSlot, toId, toSlot]) => {
+            const key = `${fromId}:${fromSlot}`;
+            if (!inputPortMap.has(key)) {
+                const srcNode = _lab.graph.getNodeById(fromId);
+                let label = `in_${tmplInNodes.length}`;
+                if (srcNode) {
+                    const t = (srcNode.type || '').split('/').pop();
+                    if (t === 'signal_in') label = (srcNode.properties && srcNode.properties.column) || label;
+                    else if (srcNode.outputs && srcNode.outputs[fromSlot]) label = srcNode.outputs[fromSlot].name || label;
+                }
+                const tid = nextId++;
+                inputPortMap.set(key, {tid, label});
+                tmplInNodes.push({
+                    id: tid, type: 'Template/template_in', title: 'Template In',
+                    pos: [minX - 240, minY + tmplInNodes.length * 80],
+                    size: [180, 55], flags: {}, mode: 0,
+                    properties: {label},
+                    inputs: [],
+                    outputs: [{name: 'signal', type: 'series', links: []}],
+                    widgets_values: [label]
+                });
+            }
+            const {tid} = inputPortMap.get(key);
+            const nlid = nextLid++;
+            newLinks.push([nlid, tid, 0, toId, toSlot, 'series']);
+            const toCopy = nodes.find(n => n.id === toId);
+            if (toCopy && toCopy.inputs && toCopy.inputs[toSlot] !== undefined) toCopy.inputs[toSlot].link = nlid;
+            const tmplIn = tmplInNodes.find(n => n.id === tid);
+            if (tmplIn) tmplIn.outputs[0].links.push(nlid);
+        });
+
+        // one Template Out per external output connection
+        externalOutputs.forEach(([lid, fromId, fromSlot, toId, toSlot]) => {
+            const tgtNode = _lab.graph.getNodeById(toId);
+            let label = `out_${tmplOutNodes.length}`;
+            if (tgtNode) {
+                const t = (tgtNode.type || '').split('/').pop();
+                if (t === 'signal_out') label = (tgtNode.properties && tgtNode.properties.label) || label;
+                else if (tgtNode.inputs && tgtNode.inputs[toSlot]) label = tgtNode.inputs[toSlot].name || label;
+            }
+            const tid = nextId++;
+            tmplOutNodes.push({
+                id: tid, type: 'Template/template_out', title: 'Template Out',
+                pos: [maxX + 40, minY + tmplOutNodes.length * 80],
+                size: [180, 55], flags: {}, mode: 0,
+                properties: {label},
+                inputs: [{name: 'signal', type: 'series', link: null}],
+                outputs: [],
+                widgets_values: [label]
+            });
+            const nlid = nextLid++;
+            newLinks.push([nlid, fromId, fromSlot, tid, 0, 'series']);
+            const fromCopy = nodes.find(n => n.id === fromId);
+            if (fromCopy && fromCopy.outputs && fromCopy.outputs[fromSlot])
+                fromCopy.outputs[fromSlot].links = [...(fromCopy.outputs[fromSlot].links || []), nlid];
+            const tmplOut = tmplOutNodes.find(n => n.id === tid);
+            if (tmplOut) tmplOut.inputs[0].link = nlid;
+        });
+
+        const internalLinks = (s.links || []).filter(lnk => internalLinkIds.has(lnk[0]));
+        return {
+            nodes: [...tmplInNodes, ...nodes, ...tmplOutNodes],
+            links: [...internalLinks, ...newLinks],
+            groups: [],
+            config: {},
+            version: 0.4,
+            last_node_id: nextId,
+            last_link_id: nextLid
+        };
+    }
+
+    async function _labSaveSelectionAsLab(name, capturedIds) {
+        const graph = _labExtractSelection(capturedIds);
+        if (!graph) { alert('No nodes found in selection.'); return; }
+        const safePath = name.split('/').map(encodeURIComponent).join('/');
+        try {
+            const r = await fetch('/mosaic/api/lab/' + safePath, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(graph)
+            });
+            if (r.ok) {
+                document.dispatchEvent(new CustomEvent('mojo:lab-refresh'));
+            } else {
+                alert('Save failed: ' + r.statusText);
+            }
+        } catch (err) {
+            alert('Save failed: ' + String(err));
+        }
     }
 
     // Called by Alpine selectNodeTemplate when the user picks a template from the dialog.
@@ -1573,6 +1772,7 @@
     <div class="flex-1 relative overflow-hidden"
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
+         @mojo:lab-refresh.document="refreshLabValidation()"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
                  const el = document.getElementById('lab-canvas');
