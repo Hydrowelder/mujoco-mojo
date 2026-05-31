@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tomli_w
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import BaseModel, Field, SecretStr, field_serializer, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -12,9 +12,53 @@ from pydantic_settings import (
 )
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.utils.color import Color
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
+
+_COLOR_FIELDS = (
+    "action_force",
+    "reaction_force",
+    "torque",
+    "contact",
+    "clearance_line",
+)
+
+
+class VisualizationSettings(BaseModel):
+    """Colors for force, torque, contact, and proximity overlays rendered during simulation."""
+
+    action_force: str | None = "EMERALD_500"
+    """Color of action-site force arrows. Set to null (or `""` in TOML) to hide."""
+
+    reaction_force: str | None = "ROSE_500"
+    """Color of reaction-site force arrows. Set to null (or `""` in TOML) to hide."""
+
+    torque: str | None = "AMBER_500"
+    """Color of torque arrows. Set to null (or `""` in TOML) to hide."""
+
+    contact: str | None = "CYAN_400"
+    """Color of contact force arrows. Set to null (or `""` in TOML) to hide."""
+
+    clearance_line: str | None = "WHITE"
+    """Color of proximity clearance lines. Set to null (or `""` in TOML) to hide."""
+
+    @field_validator(*_COLOR_FIELDS, mode="before")
+    @classmethod
+    def _parse_color(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.upper()
+        if v not in Color.__members__:
+            raise ValueError(
+                f"'{v}' is not a valid Color name (e.g. 'ROSE_500', 'EMERALD_500')."
+            )
+        return v
+
+    @field_serializer(*_COLOR_FIELDS)
+    def _serialize_color(self, v: str | None) -> str:
+        return v if v is not None else ""
 
 
 class SensAISettings(BaseModel):
@@ -52,6 +96,9 @@ class MujocoMojoSettings(BaseSettings):
 
     sensai: SensAISettings = Field(default_factory=SensAISettings)
     """Settings for the SensAI assistant."""
+
+    visualization: VisualizationSettings = Field(default_factory=VisualizationSettings)
+    """Colors and visibility for simulation visual overlays."""
 
     @classmethod
     def settings_customise_sources(

@@ -8,6 +8,7 @@ from pydantic import PrivateAttr, field_validator, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
+from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
@@ -43,6 +44,9 @@ class Proximity(MojoBaseModel):
     _last_t: float = PrivateAttr(default=np.nan)
     _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
     _last_p2: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
+
+    _vis: VisualizationSettings = PrivateAttr(default_factory=VisualizationSettings)
+    _vis_loaded: bool = PrivateAttr(default=False)
 
     @field_validator("geom_1", "geom_2")
     @classmethod
@@ -389,8 +393,12 @@ class Proximity(MojoBaseModel):
     def get_visuals(
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> LineConfig | None:
-        if not self.visualize:
-            return
+        if not self._vis_loaded:
+            self._vis = MujocoMojoSettings().visualization
+            self._vis_loaded = True
+
+        if not self.visualize or not self._vis.clearance_line:
+            return None
 
         is_stale = self._last_t != mj_data.time
         is_uninitialized = any(
@@ -401,11 +409,13 @@ class Proximity(MojoBaseModel):
             ]
         )
         if is_stale or is_uninitialized:
-            # run the solver
             self.get_proximity(mj_model, mj_data)
 
         return LineConfig(
-            pos1=self._last_p1, pos2=self._last_p2, color=Color.WHITE.rgba, width=0.005
+            pos1=self._last_p1,
+            pos2=self._last_p2,
+            color=Color[self._vis.clearance_line].rgba,
+            width=0.005,
         )
 
     def request(

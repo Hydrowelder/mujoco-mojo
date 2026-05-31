@@ -12,6 +12,7 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
@@ -63,14 +64,18 @@ class Load(MojoBaseModel, ABC):
     _last_t: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's torque values. Used for request management."""
 
+    _vis: VisualizationSettings = PrivateAttr(default_factory=VisualizationSettings)
+    """Visualization color settings, loaded from user settings on resolve."""
+
     def handle_inactive(self):
         # [3] is magnitude
-        if not np.isclose(0, self._last_f[3] + self._last_f[3]):
+        if not np.isclose(0, self._last_f[3] + self._last_t[3]):
             self._last_f = np.zeros(4)
             self._last_t = np.zeros(4)
 
     def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
         """Caches the integer IDs from the compiled MuJoCo model."""
+        self._vis = MujocoMojoSettings().visualization
         self.action_site.get_id(mj_model)
 
         if self.rel_to_site:
@@ -114,8 +119,10 @@ class Load(MojoBaseModel, ABC):
             return
 
         f_world, t_world = self.calculate(mj_model=mj_model, mj_data=mj_data)
-        self._last_f = np.append(f_world, np.linalg.norm(f_world))
-        self._last_t = np.append(t_world, np.linalg.norm(t_world))
+        self._last_f[:3] = f_world
+        self._last_f[3] = np.linalg.norm(f_world)
+        self._last_t[:3] = t_world
+        self._last_t[3] = np.linalg.norm(t_world)
 
         # apply to action site
         action_pos = self.action_site.rt_pos(mj_model, mj_data)
@@ -162,25 +169,22 @@ class Load(MojoBaseModel, ABC):
         visuals: list[ArrowConfig] = []
         action_pos = self.action_site.rt_pos(mj_model, mj_data)
 
-        # force arrow
-        f_vec = self._last_f[:3]
-        if np.linalg.norm(f_vec) > 1e-4:
+        if self._last_f[3] > 1e-4 and self._vis.action_force:
             visuals.append(
                 ArrowConfig(
                     pos=action_pos,
-                    vec=f_vec,
-                    color=Color.EMERALD_500.rgba,
+                    vec=self._last_f[:3],
+                    color=Color[self._vis.action_force].rgba,
                     is_torque=False,
                 )
             )
 
-        t_vec = self._last_t[:3]
-        if np.linalg.norm(t_vec) > 1e-4:
+        if self._last_t[3] > 1e-4 and self._vis.torque:
             visuals.append(
                 ArrowConfig(
                     pos=action_pos,
-                    vec=t_vec,
-                    color=Color.AMBER_500.rgba,
+                    vec=self._last_t[:3],
+                    color=Color[self._vis.torque].rgba,
                     is_torque=True,
                 )
             )
@@ -245,21 +249,18 @@ class PointToPointForce(Load):
         self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
     ) -> list[ArrowConfig]:
         """Returns a list of arrow configurations for the renderer."""
-        visuals = super().get_visuals(mj_model, mj_data)
-
         if not self.active:
             return []
 
-        # Add the reaction force arrow at the xtion site
-        xtion_pos = self.xtion_site.rt_pos(mj_model, mj_data)
-        f_vec = self._last_f[:3]
+        visuals = super().get_visuals(mj_model, mj_data)
 
-        if np.linalg.norm(f_vec) > 1e-4:
+        if self._last_f[3] > 1e-4 and self._vis.reaction_force:
+            xtion_pos = self.xtion_site.rt_pos(mj_model, mj_data)
             visuals.append(
                 ArrowConfig(
                     pos=xtion_pos,
-                    vec=-f_vec,  # opposite direction
-                    color=Color.ROSE_500.rgba,  # Red for Reaction
+                    vec=-self._last_f[:3],
+                    color=Color[self._vis.reaction_force].rgba,
                     is_torque=False,
                 )
             )
@@ -271,11 +272,8 @@ class PointToPointForce(Load):
         mj_model: mujoco.MjModel,
         mj_data: mujoco.MjData,
     ) -> tuple[np.ndarray, np.ndarray]:
-        # get euclidian distance
-        dist = self.action_site.rt_dm(self.xtion_site, mj_model, mj_data)
-
-        # get relative displacement vector in world frame
         dr_world = self.action_site.rt_displacements(self.xtion_site, mj_model, mj_data)
+        dist = float(np.linalg.norm(dr_world))
         unit_vec = dr_world / dist if dist > 1e-9 else np.zeros(3)
 
         # get relative velocity along line-of-action
