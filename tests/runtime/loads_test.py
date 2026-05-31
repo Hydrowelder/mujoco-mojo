@@ -189,7 +189,7 @@ def test_scalar_force_orientation_tracking(
 
     # Constant 50N thruster
     thruster = ScalarForce(
-        name="thruster", action_site=s1, scalar_func=lambda t, u, m, d: 50.0
+        name="thruster", action_site=s1, scalar_func=lambda ud, m, d: 50.0
     )
     thruster.resolve_ids(model, data)
 
@@ -266,7 +266,7 @@ def test_active_toggle_suppression(
         name="dead_force",
         action_site=s1,
         active=False,
-        scalar_func=lambda t, u, m, d: 100.0,
+        scalar_func=lambda ud, m, d: 100.0,
     )
     force.resolve_ids(model, data)
 
@@ -286,7 +286,7 @@ def test_scalar_torque_orientation_tracking(
 
     # Constant 10Nm torque along local X
     twister = ScalarTorque(
-        name="twister", action_site=s1, scalar_func=lambda t, u, m, d: 10.0
+        name="twister", action_site=s1, scalar_func=lambda ud, m, d: 10.0
     )
     twister.resolve_ids(model, data)
 
@@ -388,7 +388,7 @@ def test_point_to_point_validation_error():
             action_site=s1,
             xtion_site=s2,
             rel_to_site=s1,  # This triggers your _validate_frame method
-            magnitude_func=lambda d, v, r, m, data: 0.0,
+            magnitude_func=lambda ud, m, data: 0.0,
         )
 
 
@@ -423,7 +423,7 @@ def test_scalar_torque_math(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]
 
     # Apply 15Nm torque
     torque = ScalarTorque(
-        name="motor", action_site=s1, scalar_func=lambda t, u, m, d: 15.0
+        name="motor", action_site=s1, scalar_func=lambda ud, m, d: 15.0
     )
     torque.resolve_ids(model, data)
 
