@@ -552,6 +552,15 @@
         return JSON.stringify(_lab.graph.serialize()) !== _labSavedState;
     };
 
+    // Bridge for tab management: get/set saved state so tab switches can restore
+    // each tab's correct dirty baseline without re-saving.
+    window.mojoLabGetSavedState = function () { return _labSavedState; };
+    window.mojoLabSetSavedState = function (state) { _labSavedState = state; };
+
+    // Called by tab management whenever the graph snapshot changes so the tab
+    // dirty indicator can be updated reactively.
+    window.mojoLabOnDirtyChange = null;
+
     // ── Undo / redo history ───────────────────────────────────────────────────
     const _labHistory = { stack: [], index: -1 };
     const _LAB_HIST_MAX = 50;
@@ -565,6 +574,8 @@
         _labHistory.stack.push(state);
         if (_labHistory.stack.length > _LAB_HIST_MAX) _labHistory.stack.shift();
         else _labHistory.index++;
+        // notify tab manager of dirty state change
+        if (window.mojoLabOnDirtyChange) window.mojoLabOnDirtyChange(window.mojoLabHasUnsavedChanges());
     }
 
     function mojoLabDeferredSnapshot() {
@@ -673,6 +684,10 @@
         _lab.graph.onNodeRemoved = _onNodeChange;
         _lab.graph.onConnectionChange = () => { mojoLabDeferredSnapshot(); mojoLabRefreshSiColors(); };
 
+        // canvas-level hook: fires after each node drag completes (LiteGraph sets this on the
+        // canvas, not the graph, so it must be re-assigned here on every init/tab-switch)
+        _lab.canvas.onNodeMoved = mojoLabSnapshot;
+
         mojoLabResize(canvasEl);
         canvasEl.focus();
 
@@ -680,13 +695,18 @@
             _lab.graph.configure(JSON.parse(
                 typeof savedGraph === "string" ? savedGraph : JSON.stringify(savedGraph)
             ));
+        } else {
+            // blank tab or explicit clear — wipe any lingering nodes from the previous graph
+            _lab.graph.clear();
         }
+
+        // establish clean baseline BEFORE seeding history — mojoLabSnapshot fires
+        // mojoLabOnDirtyChange which reads _labSavedState, so the baseline must be
+        // set first or the loaded graph gets compared against the previous tab's state
+        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
 
         // Seed history with the initial state on first open (or after mojoLabClearHistory).
         if (_labHistory.stack.length === 0) mojoLabSnapshot();
-
-        // establish clean baseline so "unsaved changes" is relative to this state
-        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
     }
 
     function mojoLabResize(canvasEl) {
@@ -1372,51 +1392,68 @@
         <!-- middle: action buttons (scrollable so adding more buttons doesn't crowd the bar) -->
         <!-- overflow-y-hidden prevents vertical scroll: overflow-x:auto forces overflow-y to auto -->
         <div class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
-            <!-- new graph -->
-            <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Start a new graph and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if (!ok) return; } labName=''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
-                    class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
-                    title="New">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                <span class="hidden xl:inline">New</span>
-            </button>
             <!-- refresh validation -->
             <button @click="refreshLabValidation()"
                     class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
                     title="Refresh validation">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span class="hidden xl:inline">Refresh</span>
+                <span class="hidden sm:inline">Refresh</span>
             </button>
             <!-- fit view -->
             <button @click="mojoLabFitView()"
                     class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Fit (⌘⇧F)' : 'Fit (Ctrl+Shift+F)'">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                 </svg>
-                <span class="hidden xl:inline">Fit</span>
+                <span class="hidden sm:inline">Fit</span>
             </button>
             <!-- auto-arrange -->
             <button @click="mojoLabArrange()"
                     class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Arrange (⌘⇧A)' : 'Arrange (Ctrl+Shift+A)'">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 12h18M3 18h18" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 3l4 3-4 3" />
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M3 6h18M3 12h18M3 18h18" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M17 3l4 3-4 3" />
                 </svg>
-                <span class="hidden xl:inline">Arrange</span>
+                <span class="hidden sm:inline">Arrange</span>
             </button>
             <!-- clear -->
             <button @click="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabMarkSaved?.(); } }"
                     class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Clear (⌘C)' : 'Clear (Ctrl+C)'">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                 </svg>
-                <span class="hidden xl:inline">Clear</span>
+                <span class="hidden sm:inline">Clear</span>
             </button>
         </div>
 
@@ -1465,7 +1502,7 @@
                               stroke-width="2"
                               d="M8 21v-5a2 2 0 012-2h4a2 2 0 012 2v5M8 7h8"></path>
                     </svg>
-                    <span class="hidden xl:inline">Save</span>
+                    <span class="hidden sm:inline">Save</span>
                 </button>
                 <span class="lab-kbd-tip"
                       x-text="isMac ? '⌘S' : 'Ctrl+S'"></span>
@@ -1478,7 +1515,128 @@
                     <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-[9px]">Tab</kbd>
                 </div>
             </div>
-            <!-- load dropdown -->
+        </div>
+
+        <!-- close: always visible, pinned to the right (shrink-0) -->
+        <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Close the lab and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; } labOpen=false; }"
+                class="shrink-0 btn-icon btn-ghost"
+                title="Close (Esc)">
+            <svg class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- tab bar -->
+    <div class="shrink-0 flex items-stretch border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/60 min-h-[2.25rem]">
+        <!-- scrollable tab strip -->
+        <!-- x-init: single capture-phase listener handles both scroll-anchor prevention
+             (preventDefault) and middle-click-to-close in one place. Alpine @mousedown.middle
+             on x-for items is unreliable; data-tab-id lets us find the right tab from the
+             container listener instead. -->
+        <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
+             x-data="{ _dragId: null, _overIdx: null }"
+             x-init="
+                 const self = this;
+                 $el.addEventListener('mousedown', e => {
+                     if (e.button !== 1) return;
+                     e.preventDefault();
+                     const tabEl = e.target.closest('[data-tab-id]');
+                     if (tabEl && tabEl.dataset.tabId) void self.closeTab(tabEl.dataset.tabId);
+                 }, true);
+             ">
+            <template x-for="(tab, idx) in labTabs"
+                      :key="tab.id">
+                <div @click="switchTab(tab.id)"
+                     :data-tab-id="tab.id"
+                     role="button"
+                     tabindex="0"
+                     @keydown.enter="switchTab(tab.id)"
+                     draggable="true"
+                     @dragstart="
+                         _dragId = tab.id;
+                         $event.dataTransfer.effectAllowed = 'move';
+                         $event.dataTransfer.setData('text/plain', tab.id);
+                     "
+                     @dragover="
+                         if (_dragId && _dragId !== tab.id) {
+                             $event.preventDefault();
+                             _overIdx = idx;
+                             $event.dataTransfer.dropEffect = 'move';
+                         }
+                     "
+                     @dragleave="if (!$el.contains($event.relatedTarget)) _overIdx = null"
+                     @drop="
+                         if (_dragId && _dragId !== tab.id) {
+                             $event.preventDefault();
+                             const from = labTabs.findIndex(t => t.id === _dragId);
+                             const to = idx;
+                             if (from !== -1) {
+                                 const [moved] = labTabs.splice(from, 1);
+                                 labTabs.splice(to, 0, moved);
+                                 _saveTabs();
+                             }
+                         }
+                         _dragId = null; _overIdx = null;
+                     "
+                     @dragend="_dragId = null; _overIdx = null"
+                     class="relative shrink-0 flex items-center gap-1.5 px-3 h-[2.25rem] border-b-2 text-xs font-mono cursor-grab active:cursor-grabbing select-none group transition-colors max-w-[200px]"
+                     :class="[
+                         tab.id === labActiveTabId
+                             ? 'border-cyan-500 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 cursor-default'
+                             : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50',
+                         _overIdx === idx && _dragId !== tab.id ? 'ring-1 ring-inset ring-cyan-500' : ''
+                     ]">
+                    <!-- dirty dot -->
+                    <span x-show="tab.dirty"
+                          class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 flex-none"></span>
+                    <!-- lab name -->
+                    <span class="truncate min-w-[30px]"
+                          :class="tab.name ? '' : 'italic opacity-50'"
+                          x-text="tab.name || 'untitled'"></span>
+                    <!-- close button -->
+                    <button @click.stop="closeTab(tab.id)"
+                            title="Close tab"
+                            class="shrink-0 opacity-0 group-hover:opacity-100 -mr-1 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-slate-400 hover:text-rose-500">
+                        <svg class="w-3 h-3"
+                             fill="none"
+                             stroke="currentColor"
+                             viewBox="0 0 24 24">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="3"
+                                  d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+
+        <!-- tab action chips -->
+        <div class="shrink-0 flex items-center gap-1 px-2 border-l border-slate-200 dark:border-slate-700">
+            <!-- new tab -->
+            <button @click="newTab()"
+                    title="New tab"
+                    class="btn btn-ghost h-7 text-xs font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
+                <svg class="w-3 h-3"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2.5"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M12 4v16m8-8H4" />
+                </svg>
+                <span class="hidden sm:inline">New</span>
+            </button>
+
+            <!-- load into new tab dropdown -->
             <div class="relative"
                  x-data="{
                      open: false,
@@ -1500,23 +1658,14 @@
                      loadSingle() {
                          const r = this._filtered;
                          if (r.length !== 1) return;
-                         const lab = r[0];
-                         fetch(`/mosaic/api/lab/${lab.name.split('/').map(encodeURIComponent).join('/')}`)
-                             .then(resp => resp.json())
-                             .then(g => {
-                                 labGraph = g; labName = lab.name;
-                                 try { localStorage.setItem('mojo:lab:draft', JSON.stringify(g)); localStorage.setItem('mojo:lab:name', lab.name); } catch {}
-                                 mojoLabClearHistory();
-                                 mojoLabInit(document.getElementById('lab-canvas'), columns, g);
-                                 mojoLabSetContext(columns, labSchemas, lab.name);
-                                 this.open = false; this.labSearch = '';
-                             });
+                         loadLabInNewTab(r[0].name);
+                         this.open = false; this.labSearch = '';
                      }
                  }"
                  @click.outside="open = false; labSearch = ''">
                 <button @click="open = !open; if(open) loadLabSchemas(); else labSearch = ''"
-                        class="btn btn-ghost text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5"
+                        class="btn btn-ghost h-7 text-xs font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
+                    <svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
                          stroke-width="2"
@@ -1525,8 +1674,8 @@
                               stroke-linejoin="round"
                               d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                     </svg>
-                    <span class="hidden xl:inline">Load</span>
-                    <svg class="w-3 h-3 transition-transform"
+                    <span class="hidden sm:inline">Load</span>
+                    <svg class="w-2.5 h-2.5 transition-transform"
                          :class="open ? 'rotate-180' : ''"
                          fill="none"
                          stroke="currentColor"
@@ -1564,7 +1713,7 @@
                                 </svg>
                             </button>
                         </div>
-                        <!-- search suggestion hint - space always reserved -->
+                        <!-- search suggestion hint -->
                         <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-[10px] font-mono"
                              :class="_suggestion ? 'visible' : 'invisible'">
                             <button @click="acceptSearch()"
@@ -1581,7 +1730,7 @@
                                  x-data="{ infoOpen: false }">
                                 <div class="flex items-center justify-between px-3 py-2"
                                      :class="!lab.valid ? 'opacity-60' : ''">
-                                    <button @click="fetch(`/mosaic/api/lab/${lab.name.split('/').map(encodeURIComponent).join('/')}`).then(r=>r.json()).then(g=>{ labGraph=g; labName=lab.name; try{localStorage.setItem('mojo:lab:draft',JSON.stringify(g));localStorage.setItem('mojo:lab:name',lab.name);}catch{} mojoLabClearHistory(); mojoLabInit(document.getElementById('lab-canvas'), columns, g); mojoLabSetContext(columns, labSchemas, lab.name); open=false; labSearch=''; })"
+                                    <button @click="loadLabInNewTab(lab.name); open = false; labSearch = ''"
                                             class="flex-1 text-left text-xs font-mono min-w-0">
                                         <div class="flex items-center gap-1.5 min-w-0">
                                             <span :class="lab.valid ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
@@ -1663,7 +1812,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <!-- inline info panel - no z-order issues -->
+                                <!-- inline info panel -->
                                 <div x-show="infoOpen"
                                      class="px-3 pb-2.5 text-[10px] font-mono"
                                      style="display:none;">
@@ -1723,21 +1872,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- close: always visible, pinned to the right (shrink-0) -->
-        <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Close the lab and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; } labOpen=false; }"
-                class="shrink-0 btn-icon btn-ghost"
-                title="Close (Esc)">
-            <svg class="w-5 h-5"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="2"
-                 viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </button>
     </div>
 
     <!-- canvas area -->
@@ -1745,23 +1879,33 @@
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
-         @mojo:lab-new.document="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Start a new graph and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; } labName=''; try{localStorage.removeItem('mojo:lab:name');localStorage.removeItem('mojo:lab:draft');}catch{}; mojoLabClear(); window.mojoLabMarkSaved?.(); }"
+         @mojo:lab-new.document="newTab()"
          @mojo:lab-clear.document="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabMarkSaved?.(); } }"
+         @mojo:lab-activate-tab.document="$nextTick(() => {
+             const el = document.getElementById('lab-canvas');
+             if (el) {
+                 mojoLabClearHistory();
+                 mojoLabInit(el, columns, labGraph);
+                 // only override mojoLabInit's baseline when the tab has a known saved state;
+                 // null means 'freshly loaded or blank' and mojoLabInit already set the right baseline
+                 const tab = labTabs.find(t => t.id === labActiveTabId);
+                 if (tab && tab.savedState !== null) window.mojoLabSetSavedState?.(tab.savedState);
+             }
+             mojoLabSetContext(columns, labSchemas, labName);
+         })"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
                  const el = document.getElementById('lab-canvas');
-                 if (el) mojoLabInit(el, columns, labGraph);
+                 if (el) {
+                     mojoLabInit(el, columns, labGraph);
+                     const tab = labTabs.find(t => t.id === labActiveTabId);
+                     if (tab && tab.savedState !== null) window.mojoLabSetSavedState?.(tab.savedState);
+                 }
                  mojoLabSetContext(columns, labSchemas, labName);
              });
              $watch('labOpen', (open) => {
                  try { localStorage.setItem('mojo:lab:open', open ? '1' : '0'); } catch {}
-                 if (!open) {
-                     labGraph = mojoLabSerialize();
-                     try {
-                         if (labGraph) localStorage.setItem('mojo:lab:draft', JSON.stringify(labGraph));
-                         if (labName) localStorage.setItem('mojo:lab:name', labName);
-                     } catch {}
-                 }
+                 if (!open) _saveTabs();
                  if (open) _labInitCanvas();
              });
              if (labOpen) _labInitCanvas();
@@ -1966,7 +2110,8 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>Z</kbd>
                 </span>
                 <span>Undo</span>
@@ -1975,7 +2120,8 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd x-show="isMac">⇧</kbd>
                     <kbd x-text="isMac ? 'Z' : 'Y'"></kbd>
                 </span>
@@ -1985,7 +2131,8 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>S</kbd>
                 </span>
                 <span>Save</span>
@@ -1994,7 +2141,8 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>C</kbd>
                 </span>
                 <span>Clear</span>
@@ -2010,9 +2158,11 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>⇧</kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>A</kbd>
                 </span>
                 <span>Arrange</span>
@@ -2021,9 +2171,11 @@
             <span class="flex items-center gap-1">
                 <span class="flex items-center gap-0.5">
                     <kbd x-text="isMac ? '⌘' : 'Ctrl'"></kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>⇧</kbd>
-                    <span x-show="!isMac" class="text-slate-400">+</span>
+                    <span x-show="!isMac"
+                          class="text-slate-400">+</span>
                     <kbd>F</kbd>
                 </span>
                 <span>Fit</span>

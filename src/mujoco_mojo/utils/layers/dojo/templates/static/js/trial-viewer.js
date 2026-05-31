@@ -205,15 +205,10 @@
       annEditIndex: null,
       // --- FILTER LAB ---
       labOpen: localStorage.getItem("mojo:lab:open") === "1",
-      labGraph: (() => {
-        try {
-          const s = localStorage.getItem("mojo:lab:draft");
-          return s ? JSON.parse(s) : null;
-        } catch {
-          return null;
-        }
-      })(),
-      labName: localStorage.getItem("mojo:lab:name") ?? "",
+      labGraph: null,
+      labName: "",
+      labTabs: [],
+      labActiveTabId: null,
       nodePickingColumn: null,
       nodeColSearch: "",
       nodePickingTemplate: null,
@@ -881,6 +876,11 @@
         this.warpId = isNaN(currentNum) ? null : currentNum;
         void this.fetchTrialStatus();
         void this.fetchMediaFiles();
+        this._initTabs();
+        window.mojoLabOnDirtyChange = (dirty) => {
+          const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          if (tab) tab.dirty = dirty;
+        };
         void this.$nextTick(() => {
           const video = document.getElementById(
             "media-video-player"
@@ -2128,7 +2128,8 @@
       },
       handleDrop(e) {
         const file = e.dataTransfer?.files[0];
-        if (!file || file.type !== "application/json" && !file.name.endsWith(".json")) {
+        if (!file) return;
+        if (file.type !== "application/json" && !file.name.endsWith(".json")) {
           this.notify("Please drop a .json file", "error");
           return;
         }
@@ -2448,6 +2449,161 @@
         await this.loadLabSchemas();
         void this.loadProfiles();
       },
+      // ── tab helpers ──────────────────────────────────────────────────────────
+      _tabId() {
+        return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+      },
+      _initTabs() {
+        try {
+          const raw = localStorage.getItem("mojo:lab:tabs");
+          if (raw) {
+            const tabs = JSON.parse(raw);
+            if (Array.isArray(tabs) && tabs.length > 0) {
+              this.labTabs = tabs;
+              const activeId = localStorage.getItem("mojo:lab:activeTab") ?? "";
+              this.labActiveTabId = tabs.find((t) => t.id === activeId)?.id ?? tabs[0].id;
+              const active = this.labTabs.find(
+                (t) => t.id === this.labActiveTabId
+              );
+              this.labName = active.name;
+              this.labGraph = active.graph;
+              return;
+            }
+          }
+        } catch {
+        }
+        const name = localStorage.getItem("mojo:lab:name") ?? "";
+        const graph = (() => {
+          try {
+            const s = localStorage.getItem("mojo:lab:draft");
+            return s ? JSON.parse(s) : null;
+          } catch {
+            return null;
+          }
+        })();
+        const id = this._tabId();
+        this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+        this.labActiveTabId = id;
+        this.labName = name;
+        this.labGraph = graph;
+      },
+      _snapshotActiveTab() {
+        if (!this.labActiveTabId) return;
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (!tab) return;
+        tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
+        tab.name = this.labName;
+        tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
+      },
+      _persistTabs() {
+        try {
+          localStorage.setItem("mojo:lab:tabs", JSON.stringify(this.labTabs));
+          localStorage.setItem("mojo:lab:activeTab", this.labActiveTabId ?? "");
+        } catch {
+        }
+      },
+      _saveTabs() {
+        this._snapshotActiveTab();
+        this._persistTabs();
+      },
+      async _activateTab(tabId) {
+        this.labActiveTabId = tabId;
+        const tab = this.labTabs.find((t) => t.id === tabId);
+        if (!tab) return;
+        this.labName = tab.name;
+        this.labGraph = tab.graph;
+        if (this.labOpen) {
+          await this.$nextTick();
+          document.dispatchEvent(new CustomEvent("mojo:lab-activate-tab"));
+        }
+      },
+      async switchTab(tabId) {
+        if (tabId === this.labActiveTabId) return;
+        this._snapshotActiveTab();
+        await this._activateTab(tabId);
+        this._saveTabs();
+      },
+      async newTab() {
+        this._snapshotActiveTab();
+        const id = this._tabId();
+        this.labTabs.push({
+          id,
+          name: "",
+          graph: null,
+          savedState: null,
+          dirty: false
+        });
+        await this._activateTab(id);
+        this._persistTabs();
+      },
+      async closeTab(tabId) {
+        const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
+        if (tabIdx === -1) return;
+        const tab = this.labTabs[tabIdx];
+        if (tabId === this.labActiveTabId) this._snapshotActiveTab();
+        const isDirty = tabId === this.labActiveTabId ? window.mojoLabHasUnsavedChanges?.() ?? false : tab.dirty;
+        if (isDirty) {
+          const ok = await window.mojoConfirm?.({
+            title: "Unsaved changes",
+            message: tab.name ? `Close "${tab.name}" and discard unsaved changes?` : "Close this tab and discard unsaved changes?",
+            confirmLabel: "Close",
+            cancelLabel: "Keep editing",
+            variant: "warning"
+          });
+          if (!ok) return;
+        }
+        this.labTabs.splice(tabIdx, 1);
+        if (this.labTabs.length === 0) {
+          const newId = this._tabId();
+          this.labTabs.push({
+            id: newId,
+            name: "",
+            graph: null,
+            savedState: null,
+            dirty: false
+          });
+          await this._activateTab(newId);
+        } else if (tabId === this.labActiveTabId) {
+          const newActive = this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)];
+          await this._activateTab(newActive.id);
+        }
+        this._saveTabs();
+      },
+      async loadLabInNewTab(labName) {
+        const safePath = labName.split("/").map(encodeURIComponent).join("/");
+        try {
+          const resp = await fetch(`/mosaic/api/lab/${safePath}`);
+          if (!resp.ok) throw new Error(resp.statusText);
+          const graph = await resp.json();
+          const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          if (activeTab && !activeTab.name && !activeTab.dirty) {
+            activeTab.name = labName;
+            activeTab.graph = graph;
+            activeTab.savedState = null;
+            activeTab.dirty = false;
+            this.labName = labName;
+            this.labGraph = graph;
+            if (this.labOpen) {
+              await this.$nextTick();
+              document.dispatchEvent(new CustomEvent("mojo:lab-activate-tab"));
+            }
+          } else {
+            this._snapshotActiveTab();
+            const id = this._tabId();
+            this.labTabs.push({
+              id,
+              name: labName,
+              graph,
+              savedState: null,
+              dirty: false
+            });
+            await this._activateTab(id);
+          }
+          this._persistTabs();
+        } catch (err) {
+          this.notify(`Failed to load "${labName}": ${String(err)}`, "error");
+        }
+      },
       async saveLabGraph(name, graph) {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -2474,9 +2630,16 @@
             this.notify(`Save failed: ${detail}`, "error");
             return;
           }
-          localStorage.setItem("mojo:lab:name", trimmed);
           this.notify(`Lab "${trimmed}" saved`, "success");
           window.mojoLabMarkSaved?.();
+          this.labName = trimmed;
+          const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          if (activeTab) {
+            activeTab.name = trimmed;
+            activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
+            activeTab.dirty = false;
+          }
+          this._saveTabs();
           await this.refreshLabValidation();
           const dependents = /* @__PURE__ */ new Map();
           for (const lab of this.labSchemas) {

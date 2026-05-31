@@ -94,6 +94,10 @@ declare global {
       cancelLabel?: string;
       variant?: "danger" | "warning" | "info";
     }): Promise<boolean>;
+    // Saved-state bridge between _signal_lab.html and tab management in trial-viewer.ts
+    mojoLabGetSavedState?(): string | null;
+    mojoLabSetSavedState?(state: string | null): void;
+    mojoLabOnDirtyChange?: ((dirty: boolean) => void) | null;
   }
 }
 

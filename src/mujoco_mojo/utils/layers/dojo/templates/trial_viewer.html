@@ -49,8 +49,8 @@
 {# ─────────────────────────────────────────────────────────────────────────── #}
 
 <div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}')"
-     @dragenter.prevent="dragCounter++"
-     @dragleave.prevent="dragCounter--"
+     @dragenter.prevent="$event.dataTransfer?.types.includes('Files') && dragCounter++"
+     @dragleave.prevent="$event.dataTransfer?.types.includes('Files') && dragCounter--"
      @dragover.prevent
      @drop.prevent="dragCounter = 0; handleDrop($event)"
      class="space-y-4 relative">
