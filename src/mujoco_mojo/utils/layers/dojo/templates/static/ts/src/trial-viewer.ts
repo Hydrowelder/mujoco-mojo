@@ -84,6 +84,17 @@ const _cm: {
 const _mini: { rafId: number | null } = { rafId: null };
 
 // ---------------------------------------------------------------------------
+// Lab tab state
+// ---------------------------------------------------------------------------
+interface LabTab {
+  id: string;
+  name: string;
+  graph: object | null;
+  savedState: string | null; // JSON of the graph at last save/load; null = never saved
+  dirty: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Component factory
 // ---------------------------------------------------------------------------
 function trialViewer(trialId: string, externalUrl: string) {
@@ -184,17 +195,13 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     // --- FILTER LAB ---
     labOpen: localStorage.getItem("mojo:lab:open") === "1",
-    labGraph: (() => {
-      try {
-        const s = localStorage.getItem("mojo:lab:draft");
-        return s ? (JSON.parse(s) as object) : null;
-      } catch {
-        return null;
-      }
-    })() as object | null,
-    labName: localStorage.getItem("mojo:lab:name") ?? "",
+    labGraph: null as object | null,
+    labName: "" as string,
+    labTabs: [] as LabTab[],
+    labActiveTabId: null as string | null,
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
+    nodePickingTemplate: null as number | null,
     labSchemas: [] as Array<{
       name: string;
       signal_in_columns: string[];
@@ -202,6 +209,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       modified: number;
       valid: boolean;
       missing: string[];
+      is_template: boolean;
+      template_inputs: string[];
+      template_outputs: string[];
     }>,
 
     // --- SHAPES ---
@@ -486,8 +496,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         video?.duration && isFinite(video.duration) ? video.duration : Infinity;
       const interval = this._mediaFrameInterval;
       const ph = rect!.height;
-      const markerTop = ph - fullLayout.margin.b - 5;
-      const markerBot = ph - fullLayout.margin.b;
+      const markerHeight = 5;
+      const markerTop = ph - fullLayout.margin.b - 20;
+      const markerBot = markerTop - markerHeight;
       const [xMin, xMax] = fullLayout.xaxis.range;
       const kStart = Math.max(0, Math.floor(xMin / interval));
       const kEnd = Math.ceil(
@@ -1028,6 +1039,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.fetchTrialStatus();
       void this.fetchMediaFiles();
 
+      // initialize tab state (populates labTabs, labActiveTabId, labName, labGraph)
+      this._initTabs();
+      window.mojoLabOnDirtyChange = (dirty: boolean) => {
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (tab) tab.dirty = dirty;
+      };
+
       // bind video element handlers programmatically so `this` resolves to the
       // trialViewer component — template @event handlers in nested x-data scopes
       // lose the correct `this` binding when calling parent methods
@@ -1303,6 +1321,19 @@ function trialViewer(trialId: string, externalUrl: string) {
         "keydown",
         (e) => {
           if (e.repeat) return;
+
+          // dialog open → handle Escape/Enter exclusively, block all other shortcuts
+          const dojoStore = Alpine.store("dojo") as DojoStore;
+          if (dojoStore?.dialog?.show) {
+            if (e.key === "Escape" || e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.key === "Escape") dojoStore.dialog.cancel();
+              else dojoStore.dialog.confirm();
+            }
+            return;
+          }
+
           const targetEl = e.target as HTMLElement;
           const tag = targetEl.tagName;
           const isTextInput =
@@ -1344,37 +1375,57 @@ function trialViewer(trialId: string, externalUrl: string) {
             this.settingsOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
-            this.labOpen = false;
+            if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
+              this.labOpen = false;
+            } else {
+              void (window.mojoConfirm?.({
+                title: "Unsaved changes",
+                message: "Close the lab and discard unsaved changes?",
+                confirmLabel: "Discard",
+                cancelLabel: "Keep editing",
+                variant: "warning",
+              }) ?? Promise.resolve(false)).then((ok) => {
+                if (ok) this.labOpen = false;
+              });
+            }
             window.dispatchEvent(new CustomEvent("mojo:escape"));
             // Stop immediate propagation when something was open so Alpine's
             // bubble-phase @keydown.escape.window handler doesn't also fire.
             // This prevents Escape from both closing the lab and exiting fullscreen.
             if (anyOpen) e.stopImmediatePropagation();
           }
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !isTextInput) {
+            if (this.labOpen) {
+              e.preventDefault();
+              document.dispatchEvent(new CustomEvent("mojo:lab-clear"));
+            }
+          }
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
             e.preventDefault();
-            if (!isTextInput) {
-              if (this.labOpen) {
+            if (this.labOpen) {
+              const nameEl = document.getElementById(
+                "lab-name-input",
+              ) as HTMLInputElement | null;
+              const name = nameEl?.value.trim() ?? "";
+              if (name) {
+                const graph = window.mojoLabSerialize?.();
+                if (graph) void this.saveLabGraph(name, graph);
+              } else {
+                nameEl?.focus();
+                nameEl?.setSelectionRange(0, 0);
+              }
+            } else if (!isTextInput) {
+              this.profilesOpen = true;
+              void this.loadProfiles();
+              void this.$nextTick(() => {
                 const el = document.getElementById(
-                  "lab-name-input",
+                  "profile-name-input",
                 ) as HTMLInputElement | null;
                 if (el) {
                   el.focus();
                   el.setSelectionRange(el.value.length, el.value.length);
                 }
-              } else {
-                this.profilesOpen = true;
-                void this.loadProfiles();
-                void this.$nextTick(() => {
-                  const el = document.getElementById(
-                    "profile-name-input",
-                  ) as HTMLInputElement | null;
-                  if (el) {
-                    el.focus();
-                    el.setSelectionRange(el.value.length, el.value.length);
-                  }
-                });
-              }
+              });
             }
           }
           if ((e.metaKey || e.ctrlKey) && !isTextInput) {
@@ -1541,7 +1592,21 @@ function trialViewer(trialId: string, externalUrl: string) {
         this._updatePlaybackLine();
       });
 
-      this.$watch("config.xAxis.col", () => {
+      this.$watch("config.xAxis.col", (newCol: string) => {
+        if (
+          newCol &&
+          !Object.prototype.hasOwnProperty.call(this.data ?? {}, newCol)
+        ) {
+          void (async () => {
+            try {
+              const resp = await this.fetchTrialData(this.trialId, [newCol]);
+              this.data = { ...(this.data ?? {}), ...resp.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical
+            }
+          })();
+        }
         requestAnimationFrame(() => {
           this._syncOverlayVisibility();
           this._renderFrameMarkers();
@@ -2376,12 +2441,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
     },
 
-    resetConfig() {
-      if (
-        confirm(
-          "Reset plot to factory defaults? This will clear your current view.",
-        )
-      ) {
+    async resetConfig() {
+      const ok = await window.mojoConfirm?.({
+        title: "Reset settings",
+        message: "Reset plot to factory defaults? This will clear your current view.",
+        confirmLabel: "Reset",
+        cancelLabel: "Cancel",
+        variant: "info",
+      });
+      if (ok) {
         localStorage.removeItem("mojo_mosaic_config");
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
         if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
@@ -2506,10 +2574,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     handleDrop(e: DragEvent) {
       const file = e.dataTransfer?.files[0];
-      if (
-        !file ||
-        (file.type !== "application/json" && !file.name.endsWith(".json"))
-      ) {
+      if (!file) return; // not a file drop (e.g. internal tab reorder) — ignore silently
+      if (file.type !== "application/json" && !file.name.endsWith(".json")) {
         this.notify("Please drop a .json file", "error");
         return;
       }
@@ -2557,6 +2623,18 @@ function trialViewer(trialId: string, externalUrl: string) {
           dash: "solid",
           marker: "none",
         };
+        // eagerly fetch if this column has no cached data yet
+        if (!Object.prototype.hasOwnProperty.call(this.data ?? {}, col)) {
+          void (async () => {
+            try {
+              const resp = await this.fetchTrialData(this.trialId, [col]);
+              this.data = { ...(this.data ?? {}), ...resp.data };
+              this.saveAndRender();
+            } catch {
+              // non-critical - empty trace shown until data arrives
+            }
+          })();
+        }
       }
       this.saveAndRender();
     },
@@ -2835,6 +2913,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           ...lab,
           signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
           outputs: [...new Set(lab.outputs)].sort(),
+          is_template: lab.is_template ?? false,
+          template_inputs: lab.template_inputs ?? [],
+          template_outputs: lab.template_outputs ?? [],
         }));
         // Iterative BFS: a lab is valid when all its inputs are already available.
         // Labs that read from other valid labs' outputs need multiple passes to resolve.
@@ -2870,11 +2951,202 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.loadProfiles();
     },
 
+    // ── tab helpers ──────────────────────────────────────────────────────────
+
+    _tabId(): string {
+      return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    },
+
+    _initTabs() {
+      try {
+        const raw = localStorage.getItem("mojo:lab:tabs");
+        if (raw) {
+          const tabs = JSON.parse(raw) as LabTab[];
+          if (Array.isArray(tabs) && tabs.length > 0) {
+            this.labTabs = tabs;
+            const activeId = localStorage.getItem("mojo:lab:activeTab") ?? "";
+            this.labActiveTabId =
+              tabs.find((t) => t.id === activeId)?.id ?? tabs[0]!.id;
+            const active = this.labTabs.find(
+              (t) => t.id === this.labActiveTabId,
+            )!;
+            this.labName = active.name;
+            this.labGraph = active.graph;
+            return;
+          }
+        }
+      } catch {}
+      // fall back to old single-lab format
+      const name = localStorage.getItem("mojo:lab:name") ?? "";
+      const graph = (() => {
+        try {
+          const s = localStorage.getItem("mojo:lab:draft");
+          return s ? (JSON.parse(s) as object) : null;
+        } catch {
+          return null;
+        }
+      })();
+      const id = this._tabId();
+      this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+      this.labActiveTabId = id;
+      this.labName = name;
+      this.labGraph = graph;
+    },
+
+    _snapshotActiveTab() {
+      if (!this.labActiveTabId) return;
+      const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+      if (!tab) return;
+      tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
+      tab.name = this.labName;
+      tab.savedState =
+        window.mojoLabGetSavedState?.() ?? tab.savedState;
+    },
+
+    _persistTabs() {
+      // persist tab list to localStorage WITHOUT snapshotting the live canvas —
+      // safe to call immediately after _activateTab() before mojoLabInit fires
+      try {
+        localStorage.setItem("mojo:lab:tabs", JSON.stringify(this.labTabs));
+        localStorage.setItem("mojo:lab:activeTab", this.labActiveTabId ?? "");
+      } catch {}
+    },
+
+    _saveTabs() {
+      this._snapshotActiveTab();
+      this._persistTabs();
+    },
+
+    async _activateTab(tabId: string) {
+      this.labActiveTabId = tabId;
+      const tab = this.labTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      this.labName = tab.name;
+      this.labGraph = tab.graph;
+      if (this.labOpen) {
+        await this.$nextTick();
+        document.dispatchEvent(new CustomEvent("mojo:lab-activate-tab"));
+      }
+    },
+
+    async switchTab(tabId: string) {
+      if (tabId === this.labActiveTabId) return;
+      this._snapshotActiveTab();
+      await this._activateTab(tabId);
+      this._saveTabs();
+    },
+
+    async newTab() {
+      this._snapshotActiveTab();
+      const id = this._tabId();
+      this.labTabs.push({
+        id,
+        name: "",
+        graph: null,
+        savedState: null,
+        dirty: false,
+      });
+      await this._activateTab(id);
+      this._persistTabs();
+    },
+
+    async closeTab(tabId: string) {
+      const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      const tab = this.labTabs[tabIdx]!;
+      if (tabId === this.labActiveTabId) this._snapshotActiveTab();
+      const isDirty =
+        tabId === this.labActiveTabId
+          ? (window.mojoLabHasUnsavedChanges?.() ?? false)
+          : tab.dirty;
+      if (isDirty) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: tab.name
+            ? `Close "${tab.name}" and discard unsaved changes?`
+            : "Close this tab and discard unsaved changes?",
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      this.labTabs.splice(tabIdx, 1);
+      if (this.labTabs.length === 0) {
+        const newId = this._tabId();
+        this.labTabs.push({
+          id: newId,
+          name: "",
+          graph: null,
+          savedState: null,
+          dirty: false,
+        });
+        await this._activateTab(newId);
+      } else if (tabId === this.labActiveTabId) {
+        const newActive =
+          this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)]!;
+        await this._activateTab(newActive.id);
+      }
+      this._saveTabs();
+    },
+
+    async loadLabInNewTab(labName: string) {
+      const safePath = labName
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/");
+      try {
+        const resp = await fetch(`/mosaic/api/lab/${safePath}`);
+        if (!resp.ok) throw new Error(resp.statusText);
+        const graph = (await resp.json()) as object;
+
+        // reuse the current tab if it is blank (untitled + no unsaved changes)
+        const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (activeTab && !activeTab.name && !activeTab.dirty) {
+          activeTab.name = labName;
+          activeTab.graph = graph;
+          activeTab.savedState = null;
+          activeTab.dirty = false;
+          this.labName = labName;
+          this.labGraph = graph;
+          if (this.labOpen) {
+            await this.$nextTick();
+            document.dispatchEvent(new CustomEvent("mojo:lab-activate-tab"));
+          }
+        } else {
+          this._snapshotActiveTab();
+          const id = this._tabId();
+          this.labTabs.push({
+            id,
+            name: labName,
+            graph,
+            savedState: null,
+            dirty: false,
+          });
+          await this._activateTab(id);
+        }
+        // persist without snapshotting — mojoLabInit hasn't fired yet so
+        // _labSavedState still holds the previous tab's baseline
+        this._persistTabs();
+      } catch (err) {
+        this.notify(`Failed to load "${labName}": ${String(err)}`, "error");
+      }
+    },
+
     async saveLabGraph(name: string, graph: object) {
       const trimmed = name.trim();
       if (!trimmed) return;
       const exists = this.labSchemas.some((s) => s.name === trimmed);
-      if (exists && !confirm(`Overwrite "${trimmed}"?`)) return;
+      if (exists) {
+        const ok = await window.mojoConfirm?.({
+          title: "Overwrite lab",
+          message: `"${trimmed}" already exists. Replace it with the current graph?`,
+          confirmLabel: "Overwrite",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
       const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
       try {
         const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
@@ -2887,33 +3159,77 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.notify(`Save failed: ${detail}`, "error");
           return;
         }
-        localStorage.setItem("mojo:lab:name", trimmed);
         this.notify(`Lab "${trimmed}" saved`, "success");
+        window.mojoLabMarkSaved?.();
+        // sync active tab
+        this.labName = trimmed;
+        const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (activeTab) {
+          activeTab.name = trimmed;
+          activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
+          activeTab.dirty = false;
+        }
+        this._saveTabs();
         await this.refreshLabValidation();
-        // Evict stale computed data for this lab's outputs, then re-fetch anything
-        // currently plotted so the chart updates immediately.
-        const labPrefix = `Lab/${trimmed}/`;
-        const staleCols = Object.keys(this.data ?? {}).filter((c) =>
-          c.startsWith(labPrefix),
-        );
-        if (staleCols.length > 0) {
-          const fresh = { ...(this.data ?? {}) };
-          staleCols.forEach((c) => delete fresh[c]);
-          this.data = fresh;
-          const activeCols = staleCols.filter(
-            (c) => c in this.config.yAxes || c === this.config.xAxis?.col,
-          );
-          if (activeCols.length > 0) {
-            try {
-              const refetch = await this.fetchTrialData(
-                this.trialId,
-                activeCols,
-              );
-              this.data = { ...(this.data ?? {}), ...refetch.data };
-              this.saveAndRender();
-            } catch {
-              // non-critical: plot drops the stale trace until background discovery refetches
+        // compute the transitive closure of labs whose outputs may now be stale:
+        // the saved lab itself, plus any lab that (directly or transitively) reads from it
+        const dependents = new Map<string, string[]>();
+        for (const lab of this.labSchemas) {
+          for (const col of lab.signal_in_columns) {
+            if (col.startsWith("Lab/")) {
+              const src = col.split("/")[1] ?? "";
+              if (src) {
+                if (!dependents.has(src)) dependents.set(src, []);
+                dependents.get(src)!.push(lab.name);
+              }
             }
+          }
+        }
+        const toInvalidate = new Set<string>([trimmed]);
+        const bfsQueue = [trimmed];
+        while (bfsQueue.length > 0) {
+          const cur = bfsQueue.shift()!;
+          for (const dep of dependents.get(cur) ?? []) {
+            if (!toInvalidate.has(dep)) {
+              toInvalidate.add(dep);
+              bfsQueue.push(dep);
+            }
+          }
+        }
+        // evict all stale entries from the client-side data cache
+        const newData = { ...(this.data ?? {}) };
+        let evicted = false;
+        for (const labName of toInvalidate) {
+          const prefix = `Lab/${labName}/`;
+          for (const key of Object.keys(newData)) {
+            if (key.startsWith(prefix)) {
+              delete newData[key];
+              evicted = true;
+            }
+          }
+        }
+        if (evicted) this.data = newData;
+        // re-fetch currently plotted cols that were just evicted
+        const activeCols = [
+          ...Object.keys(this.config.yAxes),
+          this.config.xAxis?.col ?? "",
+        ].filter((c) => {
+          for (const labName of toInvalidate) {
+            if (
+              c.startsWith(`Lab/${labName}/`) &&
+              !Object.prototype.hasOwnProperty.call(this.data ?? {}, c)
+            )
+              return true;
+          }
+          return false;
+        });
+        if (activeCols.length > 0) {
+          try {
+            const refetch = await this.fetchTrialData(this.trialId, activeCols);
+            this.data = { ...(this.data ?? {}), ...refetch.data };
+            this.saveAndRender();
+          } catch {
+            // non-critical: plot drops stale trace until background discovery refetches
           }
         }
       } catch (err) {
@@ -2930,6 +3246,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
       this.nodePickingColumn = null;
       this.nodeColSearch = "";
+    },
+
+    selectNodeTemplate(name: string) {
+      if (this.nodePickingTemplate !== null) {
+        if (typeof window.mojoLabSelectNodeTemplate === "function") {
+          window.mojoLabSelectNodeTemplate(this.nodePickingTemplate, name);
+        }
+      }
+      this.nodePickingTemplate = null;
     },
 
     async deleteLabGraph(name: string) {
@@ -2993,7 +3318,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       const existing = this.profiles.find(
         (p) => normalise(p.name) === normalise(name),
       );
-      if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
+      if (existing) {
+        const ok = await window.mojoConfirm?.({
+          title: "Overwrite profile",
+          message: `"${existing.name}" already exists. Replace it with the current configuration?`,
+          confirmLabel: "Overwrite",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
       try {
         const resp = await fetch(this._profileUrl(name), {
           method: "POST",
@@ -3072,6 +3406,14 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     async deleteProfile(name: string) {
+      const ok = await window.mojoConfirm?.({
+        title: "Delete profile",
+        message: `Delete "${name}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+        variant: "danger",
+      });
+      if (!ok) return;
       try {
         const resp = await fetch(this._profileUrl(name), { method: "DELETE" });
         if (!resp.ok) throw new Error("Delete failed");

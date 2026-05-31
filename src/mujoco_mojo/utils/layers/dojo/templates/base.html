@@ -46,6 +46,14 @@
         @apply panel absolute top-full mt-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300];
       }
 
+      /* ── Signal Lab keyboard-shortcut badge (appears below toolbar buttons) ── */
+      .lab-kbd-tip {
+        @apply pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1
+               rounded-md bg-slate-900 dark:bg-slate-700 text-white text-sm font-mono
+               whitespace-nowrap invisible group-hover:visible opacity-0 group-hover:opacity-100
+               transition-opacity z-[800];
+      }
+
       /* ── Header toggle buttons ─────────────────────────────────────────── */
       .btn {
         @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;
@@ -582,9 +590,123 @@
   </div>
 
   {# {% include "partials/_sensai.html" %} #}
-  {# <script src="/mojo-static/js/sensai.js"></script> #}
+  {#
+  <script src="/mojo-static/js/sensai.js"></script> #}
 
   {% block scripts %}{% endblock %}
+
+  <!-- ── Generic confirm dialog ────────────────────────────────────────────
+       Triggered via window.mojoConfirm({ title, message, confirmLabel,
+       cancelLabel, variant }) which returns a Promise<boolean>.
+       State lives in $store.dojo.dialog.
+       ───────────────────────────────────────────────────────────────────── -->
+  <div x-data
+       x-show="$store.dojo.dialog.show"
+       x-transition:enter="transition duration-150 ease-out"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition duration-100 ease-in"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 z-[950] flex items-center justify-center p-4"
+       style="display:none;"
+       @keydown.escape.window="$store.dojo.dialog.cancel()"
+       @keydown.enter.window.prevent="if ($store.dojo.dialog.show) $store.dojo.dialog.confirm()">
+
+    <!-- backdrop -->
+    <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+         @click="$store.dojo.dialog.cancel()"></div>
+
+    <!-- card -->
+    <div class="relative w-full max-w-sm"
+         x-transition:enter="transition duration-150 ease-out"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition duration-100 ease-in"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl ring-2"
+           :class="{
+             'ring-rose-500':  $store.dojo.dialog.variant === 'danger',
+             'ring-amber-400': $store.dojo.dialog.variant === 'warning',
+             'ring-cyan-500':  $store.dojo.dialog.variant === 'info',
+           }">
+
+        <div class="px-6 py-5 space-y-3">
+
+          <!-- icon + title -->
+          <div class="flex items-start gap-3">
+            <!-- variant icon -->
+            <div class="shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center"
+                 :class="{
+                   'bg-rose-100  dark:bg-rose-900/30  text-rose-500':  $store.dojo.dialog.variant === 'danger',
+                   'bg-amber-100 dark:bg-amber-900/30 text-amber-500': $store.dojo.dialog.variant === 'warning',
+                   'bg-cyan-100  dark:bg-cyan-900/30  text-cyan-500':  $store.dojo.dialog.variant === 'info',
+                 }">
+              <!-- danger: X -->
+              <svg x-show="$store.dojo.dialog.variant === 'danger'"
+                   class="w-4 h-4"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2.5"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <!-- warning: ! -->
+              <svg x-show="$store.dojo.dialog.variant === 'warning'"
+                   class="w-4 h-4"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2.5"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <!-- info: i -->
+              <svg x-show="$store.dojo.dialog.variant === 'info'"
+                   class="w-4 h-4"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2.5"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+            </div>
+
+            <div class="min-w-0">
+              <p class="text-sm font-black uppercase tracking-widest text-slate-700 dark:text-slate-200"
+                 x-text="$store.dojo.dialog.title"></p>
+              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400 leading-relaxed"
+                 x-text="$store.dojo.dialog.message"></p>
+            </div>
+          </div>
+
+          <!-- buttons -->
+          <div class="flex justify-end gap-2 pt-1">
+            <button @click="$store.dojo.dialog.cancel()"
+                    class="btn btn-ghost text-sm text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-slate-400">
+              <span x-text="$store.dojo.dialog.cancelLabel"></span>
+            </button>
+            <button @click="$store.dojo.dialog.confirm()"
+                    class="btn text-sm text-white border-transparent"
+                    :class="{
+                      'bg-rose-500  hover:bg-rose-600':  $store.dojo.dialog.variant === 'danger',
+                      'bg-amber-500 hover:bg-amber-600': $store.dojo.dialog.variant === 'warning',
+                      'bg-cyan-500  hover:bg-cyan-600':  $store.dojo.dialog.variant === 'info',
+                    }">
+              <span x-text="$store.dojo.dialog.confirmLabel"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>

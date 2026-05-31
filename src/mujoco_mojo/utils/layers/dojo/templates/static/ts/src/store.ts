@@ -334,7 +334,56 @@ document.addEventListener("alpine:init", () => {
       this.unreadCount = 0;
       this._saveNotifications();
     },
+
+    // ── Generic confirm dialog ─────────────────────────────────────────────
+    dialog: {
+      show: false,
+      title: "",
+      message: "",
+      confirmLabel: "Confirm",
+      cancelLabel: "Cancel",
+      variant: "info" as "danger" | "warning" | "info",
+      _resolve: null as ((v: boolean) => void) | null,
+
+      open(opts: {
+        title: string;
+        message: string;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        variant?: "danger" | "warning" | "info";
+      }): Promise<boolean> {
+        this.title = opts.title;
+        this.message = opts.message;
+        this.confirmLabel = opts.confirmLabel ?? "Confirm";
+        this.cancelLabel = opts.cancelLabel ?? "Cancel";
+        this.variant = opts.variant ?? "info";
+        this.show = true;
+        return new Promise<boolean>((resolve) => {
+          this._resolve = resolve;
+        });
+      },
+
+      confirm() {
+        this.show = false;
+        this._resolve?.(true);
+        this._resolve = null;
+      },
+
+      cancel() {
+        this.show = false;
+        this._resolve?.(false);
+        this._resolve = null;
+      },
+    },
   });
+
+  // expose as a drop-in async alternative to the native confirm() dialog
+  window.mojoConfirm = (opts) =>
+    (
+      Alpine.store("dojo") as DojoStore & {
+        dialog: { open(opts: object): Promise<boolean> };
+      }
+    ).dialog.open(opts);
 
   const store = Alpine.store("dojo") as DojoStore & {
     lastUpdate: number | null;

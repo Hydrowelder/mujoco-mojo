@@ -308,8 +308,40 @@
         this.notifications = [];
         this.unreadCount = 0;
         this._saveNotifications();
+      },
+      // ── Generic confirm dialog ─────────────────────────────────────────────
+      dialog: {
+        show: false,
+        title: "",
+        message: "",
+        confirmLabel: "Confirm",
+        cancelLabel: "Cancel",
+        variant: "info",
+        _resolve: null,
+        open(opts) {
+          this.title = opts.title;
+          this.message = opts.message;
+          this.confirmLabel = opts.confirmLabel ?? "Confirm";
+          this.cancelLabel = opts.cancelLabel ?? "Cancel";
+          this.variant = opts.variant ?? "info";
+          this.show = true;
+          return new Promise((resolve) => {
+            this._resolve = resolve;
+          });
+        },
+        confirm() {
+          this.show = false;
+          this._resolve?.(true);
+          this._resolve = null;
+        },
+        cancel() {
+          this.show = false;
+          this._resolve?.(false);
+          this._resolve = null;
+        }
       }
     });
+    window.mojoConfirm = (opts) => Alpine.store("dojo").dialog.open(opts);
     const store = Alpine.store("dojo");
     setInterval(() => {
       if (store.lastUpdate) {

@@ -309,6 +309,7 @@ class SignalCategory(StrEnum):
     DEFORMABLES = "Deformables"
     PROXIMITIES = "Proximities"
     CUSTOM = "Custom"
+    LAB = "Lab"
 
 
 class EulerSeq(StrEnum):

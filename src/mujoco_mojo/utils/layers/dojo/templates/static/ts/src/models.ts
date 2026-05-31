@@ -156,4 +156,21 @@ export interface DojoStore {
   addNotification(message: string, type: "success" | "error" | "info"): void;
   openNotifications(): void;
   clearNotifications(): void;
+  dialog: {
+    show: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel: string;
+    variant: "danger" | "warning" | "info";
+    open(opts: {
+      title: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      variant?: "danger" | "warning" | "info";
+    }): Promise<boolean>;
+    confirm(): void;
+    cancel(): void;
+  };
 }
