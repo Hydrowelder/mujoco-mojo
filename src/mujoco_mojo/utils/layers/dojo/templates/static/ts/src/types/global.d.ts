@@ -86,6 +86,14 @@ declare global {
     mojoLabArrange?(): void;
     mojoLabFitView?(): void;
     mojoLabSerialize?(): object | null;
+    // Generic async confirm dialog (replaces native confirm())
+    mojoConfirm?(opts: {
+      title: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      variant?: "danger" | "warning" | "info";
+    }): Promise<boolean>;
   }
 }
 

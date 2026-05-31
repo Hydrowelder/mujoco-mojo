@@ -1308,6 +1308,19 @@ function trialViewer(trialId: string, externalUrl: string) {
         "keydown",
         (e) => {
           if (e.repeat) return;
+
+          // dialog open → handle Escape/Enter exclusively, block all other shortcuts
+          const dojoStore = Alpine.store("dojo") as DojoStore;
+          if (dojoStore?.dialog?.show) {
+            if (e.key === "Escape" || e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.key === "Escape") dojoStore.dialog.cancel();
+              else dojoStore.dialog.confirm();
+            }
+            return;
+          }
+
           const targetEl = e.target as HTMLElement;
           const tag = targetEl.tagName;
           const isTextInput =
@@ -1349,12 +1362,18 @@ function trialViewer(trialId: string, externalUrl: string) {
             this.settingsOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
-            if (
-              !this.labOpen ||
-              !window.mojoLabHasUnsavedChanges?.() ||
-              confirm("Discard unsaved changes?")
-            ) {
+            if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
               this.labOpen = false;
+            } else {
+              void (window.mojoConfirm?.({
+                title: "Unsaved changes",
+                message: "Close the lab and discard unsaved changes?",
+                confirmLabel: "Discard",
+                cancelLabel: "Keep editing",
+                variant: "warning",
+              }) ?? Promise.resolve(false)).then((ok) => {
+                if (ok) this.labOpen = false;
+              });
             }
             window.dispatchEvent(new CustomEvent("mojo:escape"));
             // Stop immediate propagation when something was open so Alpine's
@@ -2409,12 +2428,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
     },
 
-    resetConfig() {
-      if (
-        confirm(
-          "Reset plot to factory defaults? This will clear your current view.",
-        )
-      ) {
+    async resetConfig() {
+      const ok = await window.mojoConfirm?.({
+        title: "Reset settings",
+        message: "Reset plot to factory defaults? This will clear your current view.",
+        confirmLabel: "Reset",
+        cancelLabel: "Cancel",
+        variant: "info",
+      });
+      if (ok) {
         localStorage.removeItem("mojo_mosaic_config");
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
         if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
@@ -2922,7 +2944,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       const trimmed = name.trim();
       if (!trimmed) return;
       const exists = this.labSchemas.some((s) => s.name === trimmed);
-      if (exists && !confirm(`Overwrite "${trimmed}"?`)) return;
+      if (exists) {
+        const ok = await window.mojoConfirm?.({
+          title: "Overwrite lab",
+          message: `"${trimmed}" already exists. Replace it with the current graph?`,
+          confirmLabel: "Overwrite",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
       const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
       try {
         const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
@@ -3086,7 +3117,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       const existing = this.profiles.find(
         (p) => normalise(p.name) === normalise(name),
       );
-      if (existing && !confirm(`Overwrite profile "${existing.name}"?`)) return;
+      if (existing) {
+        const ok = await window.mojoConfirm?.({
+          title: "Overwrite profile",
+          message: `"${existing.name}" already exists. Replace it with the current configuration?`,
+          confirmLabel: "Overwrite",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
       try {
         const resp = await fetch(this._profileUrl(name), {
           method: "POST",
@@ -3165,6 +3205,14 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     async deleteProfile(name: string) {
+      const ok = await window.mojoConfirm?.({
+        title: "Delete profile",
+        message: `Delete "${name}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+        variant: "danger",
+      });
+      if (!ok) return;
       try {
         const resp = await fetch(this._profileUrl(name), { method: "DELETE" });
         if (!resp.ok) throw new Error("Delete failed");
