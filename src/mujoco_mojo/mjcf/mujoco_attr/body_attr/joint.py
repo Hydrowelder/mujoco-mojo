@@ -8,6 +8,7 @@ import numpy as np
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     ActuatorForceLimited,
     JointLimited,
@@ -136,15 +137,15 @@ class Joint(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            jid = self.get_id(mj_model)
+        def sample(state: MjState):
+            jid = self.get_id(state.model)
 
             # joints have different start addresses in the qpos and qvel/qfrc vectors
-            qpos_adr = mj_model.jnt_qposadr[jid]
-            dof_adr = mj_model.jnt_dofadr[jid]
+            qpos_adr = state.model.jnt_qposadr[jid]
+            dof_adr = state.model.jnt_dofadr[jid]
 
             # determine how many values to read based on joint type
-            jnt_type = mj_model.jnt_type[jid]
+            jnt_type = state.model.jnt_type[jid]
             match jnt_type:
                 case mujoco.mjtJoint.mjJNT_FREE:
                     nq, nv = 7, 6
@@ -160,15 +161,15 @@ class Joint(XMLModel):
             for attr in attrs:
                 match attr:
                     case "qpos":
-                        val = mj_data.qpos[qpos_adr : qpos_adr + nq]
+                        val = state.data.qpos[qpos_adr : qpos_adr + nq]
                     case "qvel":
-                        val = mj_data.qvel[dof_adr : dof_adr + nv]
+                        val = state.data.qvel[dof_adr : dof_adr + nv]
                     case "qfrc_actuator":
-                        val = mj_data.qfrc_actuator[dof_adr : dof_adr + nv]
+                        val = state.data.qfrc_actuator[dof_adr : dof_adr + nv]
                     case "qfrc_constraint":
-                        val = mj_data.qfrc_constraint[dof_adr : dof_adr + nv]
+                        val = state.data.qfrc_constraint[dof_adr : dof_adr + nv]
                     case "qfrc_passive":
-                        val = mj_data.qfrc_passive[dof_adr : dof_adr + nv]
+                        val = state.data.qfrc_passive[dof_adr : dof_adr + nv]
                     case _:
                         continue
 

@@ -26,3 +26,5 @@ MUJOCO_LOG.TXT
 # TypeScript build artifacts (node_modules is dev-only; compiled .js files ARE committed)
 node_modules/
 *.js.map
+
+.coverage

@@ -5,10 +5,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-import mujoco
 import numpy as np
 import polars as pl
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import SignalCategory, VecN
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
@@ -39,7 +39,7 @@ class SignalManager:
     _data_buffer: VecN = field(init=False)
     """2D NumPy array (batch_size, n_signals) for high-speed value insertion."""
 
-    _sample_tasks: list[Callable[[mujoco.MjModel, mujoco.MjData], Any]] = field(
+    _sample_tasks: list[Callable[[MjState], Any]] = field(
         default_factory=list, init=False
     )
     """Functions to be called to sample values to be recorded."""
@@ -83,7 +83,7 @@ class SignalManager:
             f"SignalManager initialized: Batch size={self.batch_size}, Path={self.export_path}"
         )
 
-    def register_sampler(self, task: Callable[[mujoco.MjModel, mujoco.MjData], Any]):
+    def register_sampler(self, task: Callable[[MjState], Any]):
         self._sample_tasks.append(task)
         logger.debug(
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
@@ -158,18 +158,18 @@ class SignalManager:
         # write value to buffer for next flush
         self._data_buffer[self._buffer_row_idx, idx] = value
 
-    def record(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def record(self, state: MjState):
         """Executes all samplers and advances the buffer index. Flushes if due."""
         self._step_count += 1
         if self._step_count % self.record_decimation != 0:
             return
 
         # record simulation time
-        self._data_buffer[self._buffer_row_idx, 0] = mj_data.time
+        self._data_buffer[self._buffer_row_idx, 0] = state.data.time
 
         # run samplers
         for task in self._sample_tasks:
-            task(mj_model, mj_data)
+            task(state)
 
         self._buffer_row_idx += 1
 

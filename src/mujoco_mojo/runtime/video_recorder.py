@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Self
 
 import mujoco
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import CameraName
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
@@ -74,11 +75,11 @@ class VideoRecorder:
     _vopt: mujoco.MjvOption = field(default_factory=mujoco.MjvOption, init=False)
     _next_record_time: float = field(default=0.0, init=False)
 
-    def setup(self, mj_model: mujoco.MjModel) -> Self:
+    def setup(self, state: MjState) -> Self:
         """Initializes the MuJoCo renderer for this model. Must be called before the simulation loop."""
         try:
             self._renderer = mujoco.Renderer(
-                model=mj_model, height=self.height, width=self.width
+                model=state.model, height=self.height, width=self.width
             )
         except Exception as e:
             msg = "Failed to initialize the MuJoCo Renderer. If on a server, try setting 'export MUJOCO_GL=egl' in your terminal."
@@ -95,25 +96,24 @@ class VideoRecorder:
 
     def capture_frame(
         self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
     ):
         """Captures the current state as a video frame."""
-        if mj_data.time < self._next_record_time:
+        if state.data.time < self._next_record_time:
             return
 
         # update standard mujoco objects in scene
         self._renderer.update_scene(
-            data=mj_data,
+            data=state.data,
             camera=self.camera_name,
             scene_option=self._vopt,
         )
 
         if custom_arrows and self.show_loads:
             for arrow in custom_arrows:
-                arrow.draw_in_scene(mj_model, self._renderer.scene)
+                arrow.draw_in_scene(state.model, self._renderer.scene)
 
         if custom_lines and self.show_proximities:
             for line in custom_lines:

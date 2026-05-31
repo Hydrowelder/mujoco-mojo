@@ -5,6 +5,7 @@ from typing import Any, Protocol, Self, runtime_checkable
 
 import mujoco
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
@@ -19,8 +20,7 @@ logger = get_logger(__name__)
 class SyncHook(Protocol):
     def __call__(
         self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         arrows: list[ArrowConfig],
         lines: list[LineConfig],
     ) -> Any: ...
@@ -63,10 +63,10 @@ class RuntimeManager:
 
         logger.info("All video encoding tasks complete.")
 
-    def resolve(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def resolve(self, state: MjState):
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.loads:
-            load.resolve_ids(mj_model, mj_data)
+            load.resolve_ids(state)
         self._resolved = True
 
     def add_load(self, load: Load):
@@ -93,35 +93,35 @@ class RuntimeManager:
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
 
-    def step(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def step(self, state: MjState):
         """
         Calculates forces, integratess physics, and handles telemetry.
         """
         # clear buffers for next timestep
-        mj_data.xfrc_applied.fill(0)  # external forces
-        mj_data.qfrc_applied.fill(0)  # user-defined forces
-        mj_data.ctrl.fill(0)  # actuator forces
+        state.data.xfrc_applied.fill(0)  # external forces
+        state.data.qfrc_applied.fill(0)  # user-defined forces
+        state.data.ctrl.fill(0)  # actuator forces
 
         # sync state variables and clear render buffer
-        mujoco.mj_forward(mj_model, mj_data)
+        mujoco.mj_forward(state.model, state.data)
 
-        if mj_data.time == 0.0 or self._start_sim_time == 0.0:
-            self._start_sim_time = mj_data.time
+        if state.data.time == 0.0 or self._start_sim_time == 0.0:
+            self._start_sim_time = state.data.time
             self._start_wall_time = time.time()
 
         # resolve IDs and initial distances
         # it is critical this is done after mj_forward to update site positions
         if not self._resolved:
-            self.resolve(mj_model, mj_data)
+            self.resolve(state)
 
         # apply user forcing functions
         for load in self.loads:
-            load.apply_load(mj_model, mj_data)
+            load.apply_load(state)
 
         # record data
         if self.signal_manager and not self._skip_recording:
-            mujoco.mj_forward(mj_model, mj_data)
-            self.signal_manager.record(mj_model, mj_data)
+            mujoco.mj_forward(state.model, state.data)
+            self.signal_manager.record(state)
 
         # record any frames which are due
         all_arrows = None
@@ -132,10 +132,10 @@ class RuntimeManager:
             all_lines: list[LineConfig] | None = []
 
             for load in self.loads:
-                all_arrows.extend(load.get_visuals(mj_model, mj_data))
+                all_arrows.extend(load.get_visuals(state))
 
             for proximity in self.proximities:
-                visual = proximity.get_visuals(mj_model, mj_data)
+                visual = proximity.get_visuals(state)
                 if visual is not None:
                     all_lines.append(visual)
 
@@ -143,21 +143,20 @@ class RuntimeManager:
             assert all_arrows is not None and all_lines is not None
             for recorder in self.video_recorders:
                 recorder.capture_frame(
-                    mj_model=mj_model,
-                    mj_data=mj_data,
+                    state=state,
                     custom_arrows=all_arrows,
                     custom_lines=all_lines,
                 )
 
         # integrate physics and advance the time
-        mujoco.mj_step(mj_model, mj_data)
+        mujoco.mj_step(state.model, state.data)
 
         if self._sync_hook:
             assert all_arrows is not None and all_lines is not None
-            self._sync_hook(mj_model, mj_data, all_arrows, all_lines)
+            self._sync_hook(state, all_arrows, all_lines)
 
         if self.playback_speed > 0:
-            sim_elapsed = mj_data.time - self._start_sim_time
+            sim_elapsed = state.data.time - self._start_sim_time
 
             # how much time we want to have passed
             target_wall_elapsed = sim_elapsed / self.playback_speed

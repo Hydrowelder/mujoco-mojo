@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Literal
 
-import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -220,8 +219,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
@@ -234,7 +232,7 @@ def runtime(
                 path=Path("runtime-anim.gif"),
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
         # Register forces from our handoff data
         handoff.add_spring_force("pz", rm)
@@ -249,8 +247,8 @@ def runtime(
                 )
             handoff.box1_rot.request(rm.signal_manager)
         # Step until 2.0 seconds
-        while mj_data.time < 2.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 2.0:
+            rm.step(state)
 
     return mojo_model
 

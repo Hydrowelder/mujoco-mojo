@@ -198,6 +198,7 @@ from .mjcf import (
     XYAxes,
     ZAxis,
 )
+from .mj_state import MjState
 from .mojo_model import MojoModel, UserData
 from .stochas import (
     NOMINAL_TRIAL_NUM,
@@ -467,6 +468,7 @@ __all__ = [
     "MeshSupersphere",
     "MeshTorus",
     "MeshWedge",
+    "MjState",
     "Model",
     "ModelName",
     "MojoModel",

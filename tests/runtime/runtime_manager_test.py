@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-import mujoco
 import numpy as np
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -11,7 +11,7 @@ from mujoco_mojo.runtime.signal_manager import SignalManager
 class MockLoad(Load):
     """Minimal implementation of the abstract Load class for testing."""
 
-    def calculate(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def calculate(self, state: MjState):
         # Apply a constant 10N force in world X
         return np.array([10.0, 0, 0]), np.zeros(3)
 
@@ -27,11 +27,10 @@ def test_runtime_manager_lifecycle(rm: SignalManager):
         mock_close.assert_called_once()
 
 
-def test_resolution_on_first_step(
-    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: SignalManager
-):
+def test_resolution_on_first_step(mj_setup, rm: SignalManager):
     """Verify that resolve() is automatically called during the first step."""
     model, data = mj_setup
+    state = MjState(model, data)
     mgr = RuntimeManager(signal_manager=rm)
 
     # Add a mock load
@@ -39,25 +38,24 @@ def test_resolution_on_first_step(
     mgr.add_load(load)
 
     # First step
-    mgr.step(model, data)
+    mgr.step(state)
 
     assert mgr._resolved is True
-    load.resolve_ids.assert_called_once_with(model, data)
+    load.resolve_ids.assert_called_once_with(state)
 
 
-def test_buffer_clearing_hygiene(
-    mj_setup: tuple[mujoco.MjModel, mujoco.MjData], rm: SignalManager
-):
+def test_buffer_clearing_hygiene(mj_setup):
     """CRITICAL: Verify that step() clears the applied force buffers."""
     model, data = mj_setup
-    mgr = RuntimeManager(signal_manager=rm)
+    state = MjState(model, data)
+    mgr = RuntimeManager(signal_manager=None)
 
     # Manually dirty the buffers
     data.qfrc_applied[0] = 50.0
     data.xfrc_applied[1, 0] = 50.0  # Index 1 is 'body1' (Index 0 is world)
     data.ctrl[0] = 1.0
 
-    mgr.step(model, data)
+    mgr.step(state)
 
     # Assertions
     assert np.all(data.qfrc_applied == 0), "qfrc_applied was not cleared"
@@ -65,9 +63,10 @@ def test_buffer_clearing_hygiene(
     assert np.all(data.ctrl == 0), "ctrl was not cleared"
 
 
-def test_video_capture_with_arrows(mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_video_capture_with_arrows(mj_setup):
     """Verify that recorder captures frames and requests visuals from loads."""
     model, data = mj_setup
+    state = MjState(model, data)
 
     # Mock a recorder and a load
     mock_recorder = MagicMock()
@@ -78,7 +77,7 @@ def test_video_capture_with_arrows(mj_setup: tuple[mujoco.MjModel, mujoco.MjData
     mgr.add_load(mock_load)
     mgr.add_video_recorder(mock_recorder)
 
-    mgr.step(model, data)
+    mgr.step(state)
 
     # Ensure capture_frame was called with the arrows from the load
     mock_recorder.capture_frame.assert_called_once()

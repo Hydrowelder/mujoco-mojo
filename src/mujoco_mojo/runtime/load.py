@@ -11,6 +11,7 @@ from pydantic import PrivateAttr, SerializeAsAny, model_validator
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import UserData
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
@@ -74,36 +75,28 @@ class Load(MojoBaseModel, ABC):
             self._last_f = np.zeros(4)
             self._last_t = np.zeros(4)
 
-    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def resolve_ids(self, state: MjState):
         """Caches the integer IDs from the compiled MuJoCo model."""
         self._vis = MujocoMojoSettings().visualization
-        self.action_site.get_id(mj_model)
+        self.action_site.get_id(state.model)
 
         if self.rel_to_site:
-            self.rel_to_site.get_id(mj_model)
+            self.rel_to_site.get_id(state.model)
 
-    def _get_world_vectors(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-        local: Vec3,
-    ) -> Vec3:
+    def _get_world_vectors(self, state: MjState, local: Vec3) -> Vec3:
         """Rotates local force/torque into world coordinates based on relative_to."""
         if self.rel_to_site is None:
             return local
 
-        return self.rel_to_site.rt_xmat(mj_model, mj_data) @ local
+        return self.rel_to_site.rt_xmat(state) @ local
 
     @abstractmethod
-    def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the force for the timestep.
 
         Args:
-            mj_model (mujoco.MjModel): _description_
-            mj_data (mujoco.MjData): _description_
+            state: The paired MuJoCo model and data instance.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: The force and toque vector output.
@@ -114,29 +107,29 @@ class Load(MojoBaseModel, ABC):
         runtime_manager.add_load(self)
         return self
 
-    def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def apply_load(self, state: MjState):
         if not self.active:
             self.handle_inactive()
             return
 
-        f_world, t_world = self.calculate(mj_model=mj_model, mj_data=mj_data)
+        f_world, t_world = self.calculate(state)
         self._last_f[:3] = f_world
         self._last_f[3] = np.linalg.norm(f_world)
         self._last_t[:3] = t_world
         self._last_t[3] = np.linalg.norm(t_world)
 
         # apply to action site
-        action_pos = self.action_site.rt_pos(mj_model, mj_data)
-        action_bid = self.action_site.rt_parent_body(mj_model)
+        action_pos = self.action_site.rt_pos(state)
+        action_bid = self.action_site.rt_parent_body(state)
         mujoco.mj_applyFT(
-            m=mj_model,
-            d=mj_data,
+            m=state.model,
+            d=state.data,
             force=f_world,
             torque=t_world,
             point=action_pos,
             body=action_bid,
             # target generalized force array
-            qfrc_target=mj_data.qfrc_applied,
+            qfrc_target=state.data.qfrc_applied,
         )
 
     def request(
@@ -144,7 +137,7 @@ class Load(MojoBaseModel, ABC):
         signal_manager: SignalManager,
         attrs: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(state: MjState):
             for attr in attrs:
                 source = self._last_f if attr == "force" else self._last_t
 
@@ -160,15 +153,13 @@ class Load(MojoBaseModel, ABC):
 
         signal_manager.register_sampler(sample)
 
-    def get_visuals(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> list[ArrowConfig]:
+    def get_visuals(self, state: MjState) -> list[ArrowConfig]:
         """Returns a list of arrow configurations for the renderer."""
         if not self.active:
             return []
 
         visuals: list[ArrowConfig] = []
-        action_pos = self.action_site.rt_pos(mj_model, mj_data)
+        action_pos = self.action_site.rt_pos(state)
 
         if self._last_f[3] > 1e-4 and self._vis.action_force:
             visuals.append(
@@ -201,17 +192,17 @@ class PointToPointForce(Load):
 
     This is called xtion to limit confusion between "reaction" and "relative"."""
 
-    magnitude_func: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float]
-    """Func(user_data, MjModel, MjData) -> scalar_force magnitude. Can be a regular function, lambda, etc."""
+    magnitude_func: Callable[[UserData | None, MjState], float]
+    """Func(user_data, MjState) -> scalar_force magnitude. Can be a regular function, lambda, etc."""
 
     _r0_mag: float = PrivateAttr(default=0.0)
     """Initial distance between action and reaction sites."""
 
-    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def resolve_ids(self, state: MjState):
         """Caches the integer IDs from the compiled MuJoCo model."""
-        super().resolve_ids(mj_model, mj_data)
-        self.xtion_site.get_id(mj_model)
-        self._r0_mag = self.action_site.rt_dm(self.xtion_site, mj_model, mj_data)
+        super().resolve_ids(state)
+        self.xtion_site.get_id(state.model)
+        self._r0_mag = self.action_site.rt_dm(self.xtion_site, state)
         on_resolve = getattr(self.magnitude_func, "on_resolve", None)
         if callable(on_resolve):
             on_resolve(self._r0_mag)
@@ -224,40 +215,38 @@ class PointToPointForce(Load):
             )
         return self
 
-    def apply_load(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def apply_load(self, state: MjState):
         if not self.active:
             self.handle_inactive()
             return
 
-        super().apply_load(mj_model, mj_data)
+        super().apply_load(state)
 
         f_world = self._last_f[:3]
         t_world = self._last_t[:3]
 
-        xtion_pos = self.xtion_site.rt_pos(mj_model, mj_data)
-        xtion_bid = self.xtion_site.rt_parent_body(mj_model)
+        xtion_pos = self.xtion_site.rt_pos(state)
+        xtion_bid = self.xtion_site.rt_parent_body(state)
 
         mujoco.mj_applyFT(
-            m=mj_model,
-            d=mj_data,
+            m=state.model,
+            d=state.data,
             force=-f_world,
             torque=-t_world,
             point=xtion_pos,
             body=xtion_bid,
-            qfrc_target=mj_data.qfrc_applied,
+            qfrc_target=state.data.qfrc_applied,
         )
 
-    def get_visuals(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> list[ArrowConfig]:
+    def get_visuals(self, state: MjState) -> list[ArrowConfig]:
         """Returns a list of arrow configurations for the renderer."""
         if not self.active:
             return []
 
-        visuals = super().get_visuals(mj_model, mj_data)
+        visuals = super().get_visuals(state)
 
         if self._last_f[3] > 1e-4 and self._vis.reaction_force:
-            xtion_pos = self.xtion_site.rt_pos(mj_model, mj_data)
+            xtion_pos = self.xtion_site.rt_pos(state)
             visuals.append(
                 ArrowConfig(
                     pos=xtion_pos,
@@ -269,16 +258,12 @@ class PointToPointForce(Load):
 
         return visuals
 
-    def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        dr_world = self.action_site.rt_displacements(self.xtion_site, mj_model, mj_data)
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
+        dr_world = self.action_site.rt_displacements(self.xtion_site, state)
         dist = float(np.linalg.norm(dr_world))
         unit_vec = dr_world / dist if dist > 1e-9 else np.zeros(3)
 
-        f_mag = self.magnitude_func(self.user_data, mj_model, mj_data)
+        f_mag = self.magnitude_func(self.user_data, state)
 
         return unit_vec * f_mag, np.zeros(3)
 
@@ -294,15 +279,13 @@ class PointToPointForce(Load):
     ) -> Self:
         """Standard linear spring-damper (works in both tension and compression)."""
 
-        def logic(
-            ud: UserData | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-        ) -> float:
-            dr = action_site.rt_displacements(xtion_site, mj_model, mj_data)
+        def logic(ud: UserData | None, state: MjState) -> float:
+            dr = action_site.rt_displacements(xtion_site, state)
             dist = float(np.linalg.norm(dr))
             unit_vec = dr / dist if dist > 1e-9 else np.zeros(3)
             vel = float(
                 np.dot(
-                    action_site.rt_velocities(xtion_site, mj_model, mj_data)[3:6],
+                    action_site.rt_velocities(xtion_site, state)[3:6],
                     unit_vec,
                 )
             )
@@ -335,18 +318,13 @@ class PointToPointForce(Load):
             def on_resolve(self, r0: float) -> None:
                 self._r0 = r0
 
-            def __call__(
-                self,
-                ud: UserData | None,
-                mj_model: mujoco.MjModel,
-                mj_data: mujoco.MjData,
-            ) -> float:
-                dr = action_site.rt_displacements(xtion_site, mj_model, mj_data)
+            def __call__(self, ud: UserData | None, state: MjState) -> float:
+                dr = action_site.rt_displacements(xtion_site, state)
                 dist = float(np.linalg.norm(dr))
                 unit_vec = dr / dist if dist > 1e-9 else np.zeros(3)
                 vel = float(
                     np.dot(
-                        action_site.rt_velocities(xtion_site, mj_model, mj_data)[3:6],
+                        action_site.rt_velocities(xtion_site, state)[3:6],
                         unit_vec,
                     )
                 )
@@ -389,15 +367,13 @@ class PointToPointForce(Load):
         Creates a spring-damper that only acts when compressed (dist < rest_length). Useful for bumpers, feet, push-off springs, or end-stops.
         """
 
-        def logic(
-            ud: UserData | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-        ) -> float:
-            dr = action_site.rt_displacements(xtion_site, mj_model, mj_data)
+        def logic(ud: UserData | None, state: MjState) -> float:
+            dr = action_site.rt_displacements(xtion_site, state)
             dist = float(np.linalg.norm(dr))
             unit_vec = dr / dist if dist > 1e-9 else np.zeros(3)
             vel = float(
                 np.dot(
-                    action_site.rt_velocities(xtion_site, mj_model, mj_data)[3:6],
+                    action_site.rt_velocities(xtion_site, state)[3:6],
                     unit_vec,
                 )
             )
@@ -426,15 +402,13 @@ class PointToPointForce(Load):
         Creates a spring-damper that only acts when extended (dist > rest_length). Useful for cables, bungees, or tendons.
         """
 
-        def logic(
-            ud: UserData | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-        ) -> float:
-            dr = action_site.rt_displacements(xtion_site, mj_model, mj_data)
+        def logic(ud: UserData | None, state: MjState) -> float:
+            dr = action_site.rt_displacements(xtion_site, state)
             dist = float(np.linalg.norm(dr))
             unit_vec = dr / dist if dist > 1e-9 else np.zeros(3)
             vel = float(
                 np.dot(
-                    action_site.rt_velocities(xtion_site, mj_model, mj_data)[3:6],
+                    action_site.rt_velocities(xtion_site, state)[3:6],
                     unit_vec,
                 )
             )
@@ -454,17 +428,17 @@ class BodyReactionForce(Load):
     xtion_body: Body | None = None
     """Body on which the load should be acted on. If None the world will be used."""
 
-    def resolve_ids(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-        super().resolve_ids(mj_model, mj_data)
+    def resolve_ids(self, state: MjState):
+        super().resolve_ids(state)
         if self.xtion_body:
-            self.xtion_body.get_id(mj_model)
+            self.xtion_body.get_id(state.model)
 
-    def apply_load(self, mj_model, mj_data):
+    def apply_load(self, state: MjState):
         if not self.active:
             self.handle_inactive()
             return
 
-        super().apply_load(mj_model, mj_data)
+        super().apply_load(state)
 
         if self.xtion_body is None:
             return
@@ -474,131 +448,93 @@ class BodyReactionForce(Load):
 
         # Reaction applied at the action_site position but to the reaction body
         mujoco.mj_applyFT(
-            mj_model,
-            mj_data,
+            state.model,
+            state.data,
             -f_world,
             -t_world,
-            self.action_site.rt_pos(mj_model, mj_data),
-            self.xtion_body.get_id(mj_model),
-            mj_data.qfrc_applied,
+            self.action_site.rt_pos(state),
+            self.xtion_body.get_id(state.model),
+            state.data.qfrc_applied,
         )
 
 
 class ScalarForce(BodyReactionForce):
     """Applies a scalar force along the local X-axis of the action_site."""
 
-    scalar_func: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    """Func(user_data, MjModel, MjData) -> scalar force magnitude."""
+    scalar_func: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    """Func(user_data, MjState) -> scalar force magnitude."""
 
-    def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[np.ndarray, np.ndarray]:
-        unit_vec = self.action_site.rt_xmat(mj_model, mj_data)[:, 0]
-        mag = self.scalar_func(self.user_data, mj_model, mj_data)
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
+        unit_vec = self.action_site.rt_xmat(state)[:, 0]
+        mag = self.scalar_func(self.user_data, state)
         return unit_vec * mag, np.zeros(3)
 
 
 class ScalarTorque(BodyReactionForce):
     """Applies a scalar torque along the local X-axis of the action_site."""
 
-    scalar_func: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    """Func(user_data, MjModel, MjData) -> scalar torque magnitude."""
+    scalar_func: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    """Func(user_data, MjState) -> scalar torque magnitude."""
 
-    def calculate(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> tuple[np.ndarray, np.ndarray]:
-        unit_vec = self.action_site.rt_xmat(mj_model, mj_data)[:, 0]
-        mag = self.scalar_func(self.user_data, mj_model, mj_data)
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
+        unit_vec = self.action_site.rt_xmat(state)[:, 0]
+        mag = self.scalar_func(self.user_data, state)
         return np.zeros(3), unit_vec * mag
 
 
 class VectorForce(BodyReactionForce):
-    fx: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    fy: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    fz: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
+    fx: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    fy: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    fz: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
 
-    def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
         ud = self.user_data
         f_raw = np.array(
             [
-                self.fx(ud, mj_model, mj_data),
-                self.fy(ud, mj_model, mj_data),
-                self.fz(ud, mj_model, mj_data),
+                self.fx(ud, state),
+                self.fy(ud, state),
+                self.fz(ud, state),
             ]
         )
-        return self._get_world_vectors(mj_model, mj_data, f_raw), np.zeros(3)
+        return self._get_world_vectors(state, f_raw), np.zeros(3)
 
 
 class VectorTorque(BodyReactionForce):
-    tx: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    ty: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
-    tz: Callable[[UserData | None, mujoco.MjModel, mujoco.MjData], float] = (
-        lambda ud, m, d: 0.0
-    )
+    tx: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    ty: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    tz: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
 
-    def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
         ud = self.user_data
         t_raw = np.array(
             [
-                self.tx(ud, mj_model, mj_data),
-                self.ty(ud, mj_model, mj_data),
-                self.tz(ud, mj_model, mj_data),
+                self.tx(ud, state),
+                self.ty(ud, state),
+                self.tz(ud, state),
             ]
         )
-        return np.zeros(3), self._get_world_vectors(mj_model, mj_data, t_raw)
+        return np.zeros(3), self._get_world_vectors(state, t_raw)
 
 
 class GeneralLoad(VectorForce, VectorTorque):
     """A 6-DOF force/torque applier."""
 
-    def calculate(
-        self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def calculate(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
         ud = self.user_data
         f_raw = np.array(
             [
-                self.fx(ud, mj_model, mj_data),
-                self.fy(ud, mj_model, mj_data),
-                self.fz(ud, mj_model, mj_data),
+                self.fx(ud, state),
+                self.fy(ud, state),
+                self.fz(ud, state),
             ]
         )
         t_raw = np.array(
             [
-                self.tx(ud, mj_model, mj_data),
-                self.ty(ud, mj_model, mj_data),
-                self.tz(ud, mj_model, mj_data),
+                self.tx(ud, state),
+                self.ty(ud, state),
+                self.tz(ud, state),
             ]
         )
-        return self._get_world_vectors(
-            mj_model,
-            mj_data,
-            f_raw,
-        ), self._get_world_vectors(
-            mj_model,
-            mj_data,
-            t_raw,
+        return self._get_world_vectors(state, f_raw), self._get_world_vectors(
+            state, t_raw
         )

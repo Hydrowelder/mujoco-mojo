@@ -43,14 +43,13 @@ Before writing code, it is helpful to understand the three pillars of a Mojo pro
         def runtime(
             mojo_model: mojo.MojoModel,
             runtime_manager: rt.RuntimeManager,
-            mj_model: mujoco.MjModel,
-            mj_data: mujoco.MjData,
+            state: mojo.MjState,
             *args,
             **kwargs,
         ):
             # Step the physics and apply logic here
-            while mj_data.time < 10.0:
-                runtime_manager.step(mj_model, mj_data)
+            while state.data.time < 10.0:
+                runtime_manager.step(state)
         ```
 
 - **Request-Based Telemetry:** You don't (*have to*) manually log data. Instead, you "Request" that specific geoms, sites, or custom forces be tracked by the `SignalManager`.

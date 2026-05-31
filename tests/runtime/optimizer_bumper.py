@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Literal
 
-import mujoco
 import numpy as np
 import optuna
 from pydantic import Field
@@ -274,8 +273,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
@@ -296,19 +294,19 @@ def runtime(
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
                 show_net_force=True,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("tracking_camera.mp4"),
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=Path("box_camera.mp4"),
                 camera_name=BOX_CAMERA_NAME,
                 show_net_force=False,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
         # Create compression springs
         handoff.add_spring_force("pz", rm)
@@ -320,8 +318,8 @@ def runtime(
         handoff.box1_rot.request(rm.signal_manager)
 
         # Run for 2 seconds
-        while mj_data.time < 2.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 2.0:
+            rm.step(state)
 
     return mojo_model
 
@@ -329,19 +327,18 @@ def runtime(
 def objective(
     mojo_model: mojo.MojoModel,
     telemetry: Path,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
 ) -> float:
     """Optimize the relative angular velocity to be low but the translational kinetic energy to be high."""
     assert isinstance(mojo_model.user_data, Handoff)
     handoff = mojo_model.user_data
 
-    w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
-    w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)
+    w1 = handoff.box1.rt_ang_vel(state)
+    w2 = handoff.box2.rt_ang_vel(state)
     omega_score = float(np.linalg.norm(w1 - w2))
 
-    ke1 = handoff.box1.rt_trans_ke(mj_model, mj_data)
-    ke2 = handoff.box2.rt_trans_ke(mj_model, mj_data)
+    ke1 = handoff.box1.rt_trans_ke(state)
+    ke2 = handoff.box2.rt_trans_ke(state)
     total_ke = ke1 + ke2
     ke_score = 1 / (total_ke + 1e-6)  # add to prevent divide by zero
 
