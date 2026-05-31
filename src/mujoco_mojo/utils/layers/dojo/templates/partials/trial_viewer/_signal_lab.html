@@ -1543,12 +1543,12 @@
         <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
              x-data="{ _dragId: null, _overIdx: null }"
              x-init="
-                 const self = this;
                  $el.addEventListener('mousedown', e => {
                      if (e.button !== 1) return;
                      e.preventDefault();
                      const tabEl = e.target.closest('[data-tab-id]');
-                     if (tabEl && tabEl.dataset.tabId) void self.closeTab(tabEl.dataset.tabId);
+                     if (tabEl && tabEl.dataset.tabId)
+                         document.dispatchEvent(new CustomEvent('mojo:lab-close-tab', { detail: { tabId: tabEl.dataset.tabId } }));
                  }, true);
              ">
             <template x-for="(tab, idx) in labTabs"
@@ -1876,6 +1876,7 @@
 
     <!-- canvas area -->
     <div class="flex-1 relative overflow-hidden"
+         @mojo:lab-close-tab.document="closeTab($event.detail.tabId)"
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
