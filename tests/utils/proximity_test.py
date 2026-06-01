@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import mujoco_mojo as mojo
+from mujoco_mojo.visualization import LineConfig
 
 # ============================================================================
 # Fixtures
@@ -560,6 +561,62 @@ def test_radius_caching(compiled_model: CompiledModel):
         compiled_model.state.model, mojo.ProximityType.CONVEX_HULL
     )
     assert compiled_model.bunny_in_cup_geom._rad == cached_rad
+
+
+# ============================================================================
+# Visualization Tests
+# ============================================================================
+
+
+def test_get_visuals_returns_line_config(compiled_model: CompiledModel):
+    """get_visuals() returns a LineConfig between the closest points on two geoms."""
+    proximity = mojo.utils.Proximity(
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=10.0,
+        visualize=True,
+    )
+
+    result = proximity.get_visuals(compiled_model.state)
+
+    assert result is not None
+    assert isinstance(result, LineConfig)
+    # both endpoints should be finite 3D positions
+    assert result.pos1.shape == (3,)
+    assert result.pos2.shape == (3,)
+    assert np.all(np.isfinite(result.pos1))
+    assert np.all(np.isfinite(result.pos2))
+
+
+def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel):
+    """get_visuals() returns None when visualize=False."""
+    proximity = mojo.utils.Proximity(
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=10.0,
+        visualize=False,
+    )
+
+    assert proximity.get_visuals(compiled_model.state) is None
+
+
+def test_get_visuals_uses_cached_result_on_same_timestep(compiled_model: CompiledModel):
+    """get_visuals() reuses the cached proximity result within the same timestep."""
+    proximity = mojo.utils.Proximity(
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=10.0,
+        visualize=True,
+    )
+
+    result1 = proximity.get_visuals(compiled_model.state)
+    result2 = proximity.get_visuals(compiled_model.state)
+
+    assert result1 is not None
+    assert result2 is not None
+    # pos1/pos2 should be identical since the same cached values are reused
+    assert np.allclose(result1.pos1, result2.pos1)
+    assert np.allclose(result1.pos2, result2.pos2)
 
 
 if __name__ == "__main__":

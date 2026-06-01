@@ -14,7 +14,9 @@ from mujoco_mojo.runtime.load import (
     VectorTorque,
 )
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import BodyName, SiteName
+from mujoco_mojo.visualization import ArrowConfig
 
 
 @pytest.fixture
@@ -465,3 +467,183 @@ def test_body_reaction_force_to_world(
     assert data.qfrc_applied[2] == -10.0
     # Body 2 (indices 6-11) should feel NOTHING (no reaction body)
     assert np.all(data.qfrc_applied[6:] == 0)
+
+
+def test_handle_inactive_clears_cached_force(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """handle_inactive() zeroes _last_f/_last_t when the load is toggled off with a cached force."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    force = ScalarForce(name="thruster", action_site=s1, scalar_func=lambda ud, s: 50.0)
+    force.resolve_ids(state)
+    force.apply_load(state)
+
+    # confirm a force was cached
+    assert force._last_f[3] > 0
+
+    # deactivate and step again - handle_inactive should fire
+    force.active = False
+    force.apply_load(state)
+
+    assert np.all(force._last_f == 0)
+    assert np.all(force._last_t == 0)
+
+
+def test_get_visuals_returns_action_arrow_after_force(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """get_visuals() returns an ArrowConfig for the action force after a non-zero force is applied."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    force = ScalarForce(name="thruster", action_site=s1, scalar_func=lambda ud, s: 50.0)
+    force.resolve_ids(state)
+    force.apply_load(state)
+
+    visuals = force.get_visuals(state)
+
+    assert len(visuals) == 1
+    arrow = visuals[0]
+    assert isinstance(arrow, ArrowConfig)
+    assert arrow.is_torque is False
+    assert np.allclose(arrow.vec, [50.0, 0, 0])
+
+
+def test_get_visuals_returns_torque_arrow(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """get_visuals() returns an ArrowConfig with is_torque=True when torque is non-zero."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    twister = ScalarTorque(
+        name="twister", action_site=s1, scalar_func=lambda ud, s: 10.0
+    )
+    twister.resolve_ids(state)
+    twister.apply_load(state)
+
+    visuals = twister.get_visuals(state)
+
+    assert len(visuals) == 1
+    arrow = visuals[0]
+    assert isinstance(arrow, ArrowConfig)
+    assert arrow.is_torque is True
+    assert np.allclose(arrow.vec, [10.0, 0, 0])
+
+
+def test_ptp_get_visuals_includes_reaction_arrow(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """PointToPointForce.get_visuals() includes a reaction arrow at xtion_site with negated direction."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"), size=1)
+    s2 = SiteSphere(name=SiteName("site2"), size=1)
+
+    spring = PointToPointForce.ideal_spring(
+        name="spring", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
+    )
+    spring.resolve_ids(state)
+    spring.apply_load(state)
+
+    visuals = spring.get_visuals(state)
+
+    # action arrow + reaction arrow = 2 visuals
+    assert len(visuals) == 2
+    reaction = visuals[1]
+    assert isinstance(reaction, ArrowConfig)
+    assert reaction.is_torque is False
+    # reaction arrow points opposite to the action force
+    assert np.dot(reaction.vec, visuals[0].vec) < 0
+
+
+def test_load_request_posts_xyzm_signals(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+    tmp_path,
+):
+    """request() registers a sampler that posts x/y/z/m for force and torque to signal_manager."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    force = ScalarForce(name="thruster", action_site=s1, scalar_func=lambda ud, s: 30.0)
+    force.resolve_ids(state)
+    force.apply_load(state)
+
+    # register the sampler
+    force.request(sm, attrs=["force"])
+
+    # trigger samplers
+    sm.record(state)
+
+    # the sampler should have posted 4 values (x, y, z, m) for force
+    assert "Loads/thruster/force:x" in sm._key_to_idx
+    assert "Loads/thruster/force:m" in sm._key_to_idx
+    # x-component should match the cached force
+    x_idx: int = sm._key_to_idx["Loads/thruster/force:x"]
+    assert sm._data_buffer[0, x_idx] == pytest.approx(30.0)
+
+
+def test_ptp_apply_load_inactive_does_not_apply_reaction(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """PointToPointForce.apply_load with active=False skips both action and reaction forces."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"), size=1)
+    s2 = SiteSphere(name=SiteName("site2"), size=1)
+
+    spring = PointToPointForce.ideal_spring(
+        name="spring", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
+    )
+    spring.active = False
+    spring.resolve_ids(state)
+
+    data.qfrc_applied.fill(0)
+    spring.apply_load(state)
+
+    assert np.all(data.qfrc_applied == 0)
+
+
+def test_ptp_get_visuals_inactive_returns_empty(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """PointToPointForce.get_visuals returns [] when active=False."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"), size=1)
+    s2 = SiteSphere(name=SiteName("site2"), size=1)
+
+    spring = PointToPointForce.ideal_spring(
+        name="spring", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
+    )
+    spring.active = False
+    spring.resolve_ids(state)
+
+    visuals: list[ArrowConfig] = spring.get_visuals(state)
+    assert visuals == []
+
+
+def test_tension_spring_produces_force_when_extended(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """tension_spring() returns a non-zero force when dist > rest_length."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"), size=1)
+    s2 = SiteSphere(name=SiteName("site2"), size=1)
+
+    # dist = 1.0, rest_length = 0.5 → extended → force active
+    cable = PointToPointForce.tension_spring(
+        name="cable", action_site=s1, xtion_site=s2, stiffness=100.0, rest_length=0.5
+    )
+    cable.resolve_ids(state)
+    force, _ = cable.calculate(state)
+
+    assert np.linalg.norm(force) == pytest.approx(50.0, abs=1e-4)
