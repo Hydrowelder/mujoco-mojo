@@ -1,5 +1,3 @@
-import mujoco
-
 import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
 
@@ -22,16 +20,15 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
     _user_data = mojo_model.get_user_data(UserData)
 
     with runtime_manager as rm:
-        while mj_data.time < 1.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 1.0:
+            rm.step(state)
 
     return mojo_model
 

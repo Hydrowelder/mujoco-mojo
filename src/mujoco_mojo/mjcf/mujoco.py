@@ -5,6 +5,8 @@ from pathlib import Path
 import mujoco
 from pydantic import Field
 
+from mujoco_mojo.mj_state import MjState
+
 import mujoco_mojo.utils.utils as utils
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.extension import Extension
@@ -242,16 +244,14 @@ class Mujoco(XMLModel):
             )
         )
 
-    def prep_for_sim(
-        self, save_path: Path | None = None
-    ) -> tuple[mujoco.MjModel, mujoco.MjData]:
-        """Creates a MuJoCo MjModel and MjData from the Mujoco instance."""
+    def prep_for_sim(self, save_path: Path | None = None) -> MjState:
+        """Creates an MjState (MjModel + MjData) from the Mujoco instance."""
         if save_path:
             self.write_xml(save_path)
-            mj_model = mujoco.MjModel.from_xml_path(str(save_path))
+            model = mujoco.MjModel.from_xml_path(str(save_path))
         else:
-            mj_model = self.to_mj_model()
+            model = self.to_mj_model()
 
-        mj_data = mujoco.MjData(mj_model)
-        mujoco.mj_forward(mj_model, mj_data)
-        return mj_model, mj_data
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        return MjState(model, data)

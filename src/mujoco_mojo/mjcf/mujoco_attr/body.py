@@ -8,6 +8,7 @@ from pydantic import Field
 
 from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
@@ -206,126 +207,117 @@ class Body(XMLModel):
 
         return bodies
 
-    def rt_mass(self, mj_model: mujoco.MjModel) -> float:
+    def rt_mass(self, state: MjState) -> float:
         """Mass of the body from a compiled MjModel."""
-        return mj_model.body_mass[self.get_id(mj_model)]
+        return state.model.body_mass[self.get_id(state.model)]
 
-    def rt_xmat(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
-    ) -> Mat3:
+    def rt_xmat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the body during runtime."""
         return (
-            mj_data.xmat[self.get_id(mj_model)]
+            state.data.xmat[self.get_id(state.model)]
             if flatten
-            else mj_data.xmat[self.get_id(mj_model)].reshape(3, 3)
+            else state.data.xmat[self.get_id(state.model)].reshape(3, 3)
         )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+    def rt_quat(self, state: MjState) -> Vec4:
         """
         Returns the (w, x, y, z) quaternion from the body's rotation matrix.
         Uses MuJoCo's internal C utility for speed.
         """
         quat = np.empty(4)
-        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(state, flatten=True))
         return quat
 
-    def rt_inertia_diag(self, mj_model: mujoco.MjModel) -> Vec3:
+    def rt_inertia_diag(self, state: MjState) -> Vec3:
         """Diagonalized inertia tensor of the body (body relative)."""
-        return mj_model.body_inertia[self.get_id(mj_model)]
+        return state.model.body_inertia[self.get_id(state.model)]
 
-    def rt_inertia_world(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> Mat3:
+    def rt_inertia_world(self, state: MjState) -> Mat3:
         """Inertia tensor of the body expressed in the world frame."""
-        R = self.rt_ximat(mj_model, mj_data)
-        I_diag = np.diag(self.rt_inertia_diag(mj_model))
+        R = self.rt_ximat(state)
+        I_diag = np.diag(self.rt_inertia_diag(state))
         return R @ I_diag @ R.T
 
-    def rt_parent_body_id(self, mj_model: mujoco.MjModel) -> int:
+    def rt_parent_body_id(self, state: MjState) -> int:
         """Parent ID of the body."""
-        return mj_model.body_parentid[self.get_id(mj_model)]
+        return state.model.body_parentid[self.get_id(state.model)]
 
-    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_pos(self, state: MjState) -> Vec3:
         """Position of the body during runtime."""
-        return mj_data.xpos[self.get_id(mj_model)]
+        return state.data.xpos[self.get_id(state.model)]
 
-    def rt_spatial_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+    def rt_spatial_vel(self, state: MjState) -> Vec6:
         """Returns the 6D spatial velocity (ang, lin) at the CoM in world frame."""
-        return mj_data.cvel[self.get_id(mj_model)]
+        return state.data.cvel[self.get_id(state.model)]
 
-    def rt_lin_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_lin_vel(self, state: MjState) -> Vec3:
         """Linear velocity of the body center of mass during runtime in the world frame."""
-        return self.rt_spatial_vel(mj_model, mj_data)[3:6]
+        return self.rt_spatial_vel(state)[3:6]
 
-    def rt_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_ang_vel(self, state: MjState) -> Vec3:
         """Angular velocity of the body center of mass during runtime  in the world frame."""
-        return self.rt_spatial_vel(mj_model, mj_data)[0:3]
+        return self.rt_spatial_vel(state)[0:3]
 
-    def rt_lin_mom(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_lin_mom(self, state: MjState) -> Vec3:
         """Linear momentum of the body during runtime."""
-        return self.rt_mass(mj_model) * self.rt_lin_vel(mj_model, mj_data)
+        return self.rt_mass(state) * self.rt_lin_vel(state)
 
-    def rt_ang_mom(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_ang_mom(self, state: MjState) -> Vec3:
         """Angular momentum of the body during runtime."""
-        return self.rt_inertia_world(mj_model, mj_data) @ self.rt_ang_vel(
-            mj_model, mj_data
-        )
+        return self.rt_inertia_world(state) @ self.rt_ang_vel(state)
 
     def rt_pe(
         self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         ref_point: Vec3 | Pos | AnyPose = np.array((0, 0, 0)),
     ) -> float:
-        g = mj_model.opt.gravity
+        g = state.model.opt.gravity
 
         # early exit if gravity is off
         if g.sum() == 0:
             return 0
 
-        mass = self.rt_mass(mj_model)
+        mass = self.rt_mass(state)
 
         # calculate datum to center of mass
-        h_rel = self.rt_xipos(mj_model, mj_data) - np.asarray(ref_point)
+        h_rel = self.rt_xipos(state) - np.asarray(ref_point)
         return -mass * np.dot(g, h_rel)
 
-    def rt_trans_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+    def rt_trans_ke(self, state: MjState) -> float:
         """Translational kinetic energy of the body during runtime."""
-        mass = self.rt_mass(mj_model)
-        v = self.rt_lin_vel(mj_model, mj_data)
+        mass = self.rt_mass(state)
+        v = self.rt_lin_vel(state)
         return 0.5 * mass * np.dot(v, v)
 
-    def rt_rot_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+    def rt_rot_ke(self, state: MjState) -> float:
         """Rotational kinetic energy of the body during runtime."""
-        omega = self.rt_ang_vel(mj_model, mj_data)
-        I_world = self.rt_inertia_world(mj_model, mj_data)
+        omega = self.rt_ang_vel(state)
+        I_world = self.rt_inertia_world(state)
         return 0.5 * np.dot(omega, I_world @ omega)
 
-    def rt_ke(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> float:
+    def rt_ke(self, state: MjState) -> float:
         """Total kinetic energy of the body during runtime."""
-        return self.rt_trans_ke(mj_model, mj_data) + self.rt_rot_ke(mj_model, mj_data)
+        return self.rt_trans_ke(state) + self.rt_rot_ke(state)
 
-    def rt_xipos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xipos(self, state: MjState) -> Vec3:
         """Position of the body inertial frame during runtime."""
-        return mj_data.xipos[self.get_id(mj_model)]
+        return state.data.xipos[self.get_id(state.model)]
 
-    def rt_ximat(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
-    ) -> Mat3:
+    def rt_ximat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the body during runtime."""
         return (
-            mj_data.ximat[self.get_id(mj_model)]
+            state.data.ximat[self.get_id(state.model)]
             if flatten
-            else mj_data.ximat[self.get_id(mj_model)].reshape(3, 3)
+            else state.data.ximat[self.get_id(state.model)].reshape(3, 3)
         )
 
-    def rt_xiquat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+    def rt_xiquat(self, state: MjState) -> Vec4:
         """
         Returns the (w, x, y, z) quaternion from the body's inertial rotation matrix.
         Uses MuJoCo's internal C utility for speed.
         """
         quat = np.empty(4)
-        mujoco.mju_mat2Quat(quat, self.rt_ximat(mj_model, mj_data, flatten=True))
+        mujoco.mju_mat2Quat(quat, self.rt_ximat(state, flatten=True))
         return quat
 
     def request(
@@ -368,17 +360,17 @@ class Body(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(state: MjState):
             for attr in attrs:
                 match attr:
                     case "xpos":
-                        val = self.rt_pos(mj_model, mj_data)
+                        val = self.rt_pos(state)
                     case "xmat" | "ximat":
                         match attr:
                             case "xmat":
-                                val = self.rt_xmat(mj_model, mj_data, flatten=True)
+                                val = self.rt_xmat(state, flatten=True)
                             case "ximat":
-                                val = self.rt_ximat(mj_model, mj_data, flatten=True)
+                                val = self.rt_ximat(state, flatten=True)
 
                         for i in range(len(val)):
                             signal_manager.post(
@@ -391,9 +383,9 @@ class Body(XMLModel):
                     case "quat" | "xiquat":
                         match attr:
                             case "quat":
-                                val = self.rt_quat(mj_model, mj_data)
+                                val = self.rt_quat(state)
                             case "xiquat":
-                                val = self.rt_xiquat(mj_model, mj_data)
+                                val = self.rt_xiquat(state)
 
                         for i, k in enumerate("wxyz"):
                             signal_manager.post(
@@ -404,27 +396,25 @@ class Body(XMLModel):
                             )
                         continue
                     case "xvelp":
-                        val = self.rt_lin_vel(mj_model, mj_data)
+                        val = self.rt_lin_vel(state)
                     case "xvelr":
-                        val = self.rt_ang_vel(mj_model, mj_data)
+                        val = self.rt_ang_vel(state)
                     case "xipos":
-                        val = self.rt_xipos(mj_model, mj_data)
+                        val = self.rt_xipos(state)
                     case "lin_mom":
-                        val = self.rt_lin_mom(mj_model, mj_data)
+                        val = self.rt_lin_mom(state)
                     case "ang_mom":
-                        val = self.rt_ang_mom(mj_model, mj_data)
+                        val = self.rt_ang_mom(state)
                     case "pe":
-                        val = self.rt_pe(mj_model, mj_data)
+                        val = self.rt_pe(state)
                     case "ke_trans":
-                        val = self.rt_trans_ke(mj_model, mj_data)
+                        val = self.rt_trans_ke(state)
                     case "ke_rot":
-                        val = self.rt_rot_ke(mj_model, mj_data)
+                        val = self.rt_rot_ke(state)
                     case "ke_total":
-                        val = self.rt_ke(mj_model, mj_data)
+                        val = self.rt_ke(state)
                     case "total_energy":
-                        val = self.rt_ke(mj_model, mj_data) + self.rt_pe(
-                            mj_model, mj_data
-                        )
+                        val = self.rt_ke(state) + self.rt_pe(state)
                     case _:
                         continue
 
@@ -453,8 +443,7 @@ class Body(XMLModel):
 
     def set_initial_velocity(
         self,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         linear_velocity: Vec3 = np.zeros(3),
         angular_velocity: Vec3 = np.zeros(3),
         angle: Angle = Angle.RADIAN,
@@ -473,8 +462,7 @@ class Body(XMLModel):
             >>> v_body = v_world + w_world x (r_body - r_ref)
 
         Args:
-            mj_model (mujoco.MjModel): The compiled MuJoCo model.
-            mj_data (mujoco.MjData): The MuJoCo data state to modify.
+            state: The paired MuJoCo model and data state to modify.
             linear_velocity (Vec3): Linear velocity vector [x, y, z]. Expressed in the reference frame. Defaults to np.zeros(3).
             angular_velocity (Vec3): Angular velocity vector [wx, wy, wz]. Defaults to np.zeros(3).
             angle (Angle, optional): Type of angle measurement angular_velocity is expressed in. Defaults to Angle.RADIAN.
@@ -500,18 +488,18 @@ class Body(XMLModel):
         w_world = r_mat @ w_input
 
         # translate the velocity to the body origin
-        r_body_world = self.rt_pos(mj_model, mj_data)
+        r_body_world = self.rt_pos(state)
         r_ref_world = reference.pos
 
         v_body_linear = v_ref_world + np.cross(w_world, (r_body_world - r_ref_world))
 
-        # apply to mj_data.qvel
-        bid = self.get_id(mj_model)
-        jnt_adr = mj_model.body_jntadr[bid]
-        qvel_adr = mj_model.jnt_dofadr[jnt_adr]
+        # apply to state.data.qvel
+        bid = self.get_id(state.model)
+        jnt_adr = state.model.body_jntadr[bid]
+        qvel_adr = state.model.jnt_dofadr[jnt_adr]
 
-        mj_data.qvel[qvel_adr : qvel_adr + 3] = v_body_linear
-        mj_data.qvel[qvel_adr + 3 : qvel_adr + 6] = w_world
+        state.data.qvel[qvel_adr : qvel_adr + 3] = v_body_linear
+        state.data.qvel[qvel_adr + 3 : qvel_adr + 6] = w_world
 
 
 _temp_list = list(_body_children)
@@ -530,8 +518,7 @@ class WorldBody(Body):
 
     @staticmethod
     def get_com(
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         bodies: list[Body],
     ) -> tuple[float, np.ndarray]:
         """Calculates the combined center of mass in world coordniates for multiple bodies."""
@@ -539,10 +526,10 @@ class WorldBody(Body):
         weighted_pos = np.zeros(3)
 
         for body in bodies:
-            bid = body.get_id(mj_model)
+            bid = body.get_id(state.model)
 
-            m = mj_model.body_mass[bid]
-            p = mj_data.xipos[bid]
+            m = state.model.body_mass[bid]
+            p = state.data.xipos[bid]
 
             total_mass += m
             weighted_pos += m * p

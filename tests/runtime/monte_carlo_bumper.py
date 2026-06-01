@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Literal
 
-import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -292,8 +291,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
@@ -312,7 +310,7 @@ def runtime(
                 show_loads=True,
                 show_net_force=True,
                 show_proximities=True,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
         if mojo_model.is_nominal:
             rt.VideoRecorder(
@@ -320,12 +318,12 @@ def runtime(
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
                 show_proximities=True,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
             rt.VideoRecorder(
                 path=mojo_model.trial_dir / "box_camera.gif",
                 camera_name=BOX_CAMERA_NAME,
-            ).setup(mj_model).register_to_rm(rm)
+            ).setup(state).register_to_rm(rm)
 
         # Create compression springs
         handoff.add_spring_force("pz", rm)
@@ -352,8 +350,8 @@ def runtime(
             handoff.box1_rot.request(rm.signal_manager)
 
         # Run for 2 seconds
-        while mj_data.time < 2.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 2.0:
+            rm.step(state)
 
     return mojo_model
 

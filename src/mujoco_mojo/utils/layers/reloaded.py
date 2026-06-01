@@ -16,6 +16,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
@@ -31,7 +32,7 @@ console = Console()
 
 @runtime_checkable
 class OnReloadCallback(Protocol):
-    def __call__(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Any: ...
+    def __call__(self, state: MjState) -> Any: ...
 
 
 @runtime_checkable
@@ -189,7 +190,7 @@ class MojoReloaded:
 
     def generate_construct(
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
-    ) -> tuple[mujoco.MjModel, mujoco.MjData]:
+    ) -> MjState:
         """Helper to run a generation."""
         from .cli import _load_func
 
@@ -293,9 +294,7 @@ class MojoReloaded:
                 raise ValueError(msg)
 
         try:
-            mj_model, mj_data = mojo_model.mjcf.prep_for_sim(
-                save_path=self.workdir / self.xml_name
-            )
+            state = mojo_model.mjcf.prep_for_sim(save_path=self.workdir / self.xml_name)
         except Exception as e:
             msg = f"Failed to compile with MuJoCo: {e}"
             logger.error(msg)
@@ -303,7 +302,7 @@ class MojoReloaded:
 
         # sync the viewer
         if on_reload_callback:
-            on_reload_callback(mj_model, mj_data)
+            on_reload_callback(state)
 
         console.print(
             f"[dim white]Model generated in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
@@ -323,8 +322,7 @@ class MojoReloaded:
             run_func(
                 mojo_model,
                 runtime_manager,
-                mj_model,
-                mj_data,
+                state,
                 *self.run_args,
                 **self.run_kwargs,
             )
@@ -332,9 +330,9 @@ class MojoReloaded:
                 f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
             )
         else:
-            mujoco.mj_forward(mj_model, mj_data)
+            mujoco.mj_forward(state.model, state.data)
 
-        return mj_model, mj_data
+        return state
 
     def run(self):
         self.validate()
@@ -348,7 +346,7 @@ class MojoReloaded:
             with console.status(
                 "[bold magenta]Performing initial generation...[/bold magenta]"
             ):
-                mj_model, mj_data = self.generate_construct(
+                initial_state = self.generate_construct(
                     use_runtime=False, on_reload_callback=None
                 )
             console.print(
@@ -357,12 +355,11 @@ class MojoReloaded:
         except Exception as e:
             console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
             raise typer.Exit(1)
-
         match self.ui:
             case UserInterface.OPENGL:
-                self.run_opengl(mj_model, mj_data)
+                self.run_opengl(initial_state)
             case UserInterface.MJVISER | UserInterface.VISER:
-                self.run_viser(mj_model, mj_data)
+                self.run_viser(initial_state)
             case _:
                 console.print(f"Invalid viewer option selected {self.ui}")
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
@@ -474,10 +471,10 @@ class MojoReloaded:
                 use_runtime = self._last_command != "gen"
                 try:
                     start = time.time()
-                    new_mj_model, new_mj_data = self.generate_construct(
+                    new_state = self.generate_construct(
                         use_runtime=use_runtime, on_reload_callback=on_reload_callback
                     )
-                    on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
+                    on_reload_callback(new_state)
                     console.print(
                         f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
                     )
@@ -556,10 +553,10 @@ class MojoReloaded:
             try:
                 start = time.time()
                 console.print("[bold]Processing...[/bold]")
-                new_mj_model, new_mj_data = self.generate_construct(
+                new_state = self.generate_construct(
                     use_runtime=use_runtime, on_reload_callback=on_reload_callback
                 )
-                on_reload_callback(mj_model=new_mj_model, mj_data=new_mj_data)
+                on_reload_callback(new_state)
                 console.print(
                     f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
                 )
@@ -574,14 +571,13 @@ class MojoReloaded:
         stop_watcher()
         stop_event.set()
 
-    def run_opengl(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def run_opengl(self, state: MjState):
         import mujoco.viewer
 
-        with mujoco.viewer.launch_passive(mj_model, mj_data) as viewer:
+        with mujoco.viewer.launch_passive(state.model, state.data) as viewer:
 
             def sync(
-                m: mujoco.MjModel,
-                d: mujoco.MjData,
+                s: MjState,
                 arrows: list[ArrowConfig],
                 lines: list[LineConfig],
             ):
@@ -589,33 +585,31 @@ class MojoReloaded:
                 viewer.user_scn.ngeom = 0
 
                 for arrow in arrows:
-                    arrow.draw_in_scene(mj_model=m, scene=viewer.user_scn)
+                    arrow.draw_in_scene(mj_model=s.model, scene=viewer.user_scn)
 
                 for line in lines:
                     line.draw_in_scene(scene=viewer.user_scn)
 
                 viewer.sync()
 
-            def reload_handler(m: mujoco.MjModel, d: mujoco.MjData):
+            def reload_handler(s: MjState):
                 sim = viewer._get_sim()
                 if sim:
-                    if viewer.user_scn and d.time == 0.0:
+                    if viewer.user_scn and s.data.time == 0.0:
                         # ensure the custom visual layer is wiped on every model reload
                         viewer.user_scn.ngeom = 0
-                    sim.load(m, d, str(self.workdir / self.xml_name))
+                    sim.load(s.model, s.data, str(self.workdir / self.xml_name))
                     viewer.sync()
 
-            reload_handler(mj_model, mj_data)
+            reload_handler(state)
 
-            self._sync_hook = lambda mj_model, mj_data, arrows, lines: sync(
-                mj_model, mj_data, arrows, lines
-            )
+            self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
             self._interactive_loop(
-                lambda mj_model, mj_data: reload_handler(mj_model, mj_data),
+                lambda state: reload_handler(state),
                 is_running_check=viewer.is_running,
             )
 
-    def run_viser(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def run_viser(self, state: MjState):
         try:
             import viser
             from mjviser import ViserMujocoScene
@@ -674,20 +668,19 @@ class MojoReloaded:
 
         server.scene.reset()
 
-        state: ViserState = {
-            "scene": ViserMujocoScene(server=server, mj_model=mj_model, num_envs=1),
+        viser_state: ViserState = {
+            "scene": ViserMujocoScene(server=server, mj_model=state.model, num_envs=1),
             "arrow_handle": None,
         }
-        state["scene"].create_visualization_gui()
-        state["scene"].create_scene_gui()
+        viser_state["scene"].create_visualization_gui()
+        viser_state["scene"].create_scene_gui()
 
         def sync(
-            m: mujoco.MjModel,
-            d: mujoco.MjData,
+            s: MjState,
             arrows: list[ArrowConfig],
             lines: list[LineConfig],
         ):
-            state["scene"].update_from_mjdata(d)
+            viser_state["scene"].update_from_mjdata(s.data)
             node_name = "mojo_arrows"
 
             if not arrows and not lines:
@@ -700,10 +693,10 @@ class MojoReloaded:
             line_width = 2.0
 
             for arrow in arrows:
-                start, end, w = arrow.resolve_arrow_coords(mj_model=m)
+                seg_start, seg_end, w = arrow.resolve_arrow_coords(mj_model=s.model)
 
                 line_width = w * 200.0
-                all_segments.append(np.stack([start, end]))
+                all_segments.append(np.stack([seg_start, seg_end]))
                 color_uint8 = tuple(int(x * 255) for x in arrow.color[:3])
                 all_colors.append([color_uint8, color_uint8])
 
@@ -723,19 +716,17 @@ class MojoReloaded:
                 line_width=line_width,
             )
 
-        def update_scene(m: mujoco.MjModel, d: mujoco.MjData):
-            state["scene"] = ViserMujocoScene(server=server, mj_model=m, num_envs=1)
-            state["scene"].update_from_mjdata(d)
-            return state["scene"]
+        def update_scene(s: MjState):
+            viser_state["scene"] = ViserMujocoScene(
+                server=server, mj_model=s.model, num_envs=1
+            )
+            viser_state["scene"].update_from_mjdata(s.data)
+            return viser_state["scene"]
 
         # initial render
-        update_scene(mj_model, mj_data)
+        update_scene(state)
         _print_connection_panel()
 
-        self._sync_hook = lambda mj_model, mj_data, arrows, lines: sync(
-            mj_model, mj_data, arrows, lines
-        )
-        self._interactive_loop(
-            lambda mj_model, mj_data: update_scene(mj_model, mj_data), lambda: True
-        )
+        self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
+        self._interactive_loop(lambda state: update_scene(state), lambda: True)
         server.stop()

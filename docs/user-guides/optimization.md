@@ -54,7 +54,7 @@ The **Objective Function** is the "grade" you give to a simulation. It is a stan
     --8<-- "docs/user-guides/optimization_example.py:score-handle"
     ```
 
-A valid objective function must accept the `MojoModel`, the `Path` to the telemetry outputs requested during runtime, and the MuJoCo `mj_model`/`mj_data` objects.
+A valid objective function must accept the `MojoModel`, the `Path` to the telemetry outputs requested during runtime, and an `MjState` object.
 
 ???+ example "Example: Scoring Performance"
 

@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Literal
 
-import mujoco
 import numpy as np
 from pydantic import Field
 
@@ -196,8 +195,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
@@ -215,8 +213,8 @@ def runtime(
                 b.request(rm.signal_manager)
             handoff.box1_rot.request(rm.signal_manager)
 
-        while mj_data.time < 2.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 2.0:
+            rm.step(state)
 
     return mojo_model
 
@@ -224,20 +222,19 @@ def runtime(
 def objective(
     mojo_model: mojo.MojoModel,
     telemetry: Path,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
 ) -> float:
     """
     Score the trial: Low relative angular velocity (stability) weighted against high translational kinetic energy.
     """
     handoff = mojo_model.get_user_data(Handoff)
 
-    w1 = handoff.box1.rt_ang_vel(mj_model, mj_data)
-    w2 = handoff.box2.rt_ang_vel(mj_model, mj_data)
+    w1 = handoff.box1.rt_ang_vel(state)
+    w2 = handoff.box2.rt_ang_vel(state)
     omega_score = float(np.linalg.norm(w1 - w2))
 
-    ke1 = handoff.box1.rt_trans_ke(mj_model, mj_data)
-    ke2 = handoff.box2.rt_trans_ke(mj_model, mj_data)
+    ke1 = handoff.box1.rt_trans_ke(state)
+    ke2 = handoff.box2.rt_trans_ke(state)
     total_ke = ke1 + ke2
     ke_score = 1 / (total_ke + 1e-6)
 

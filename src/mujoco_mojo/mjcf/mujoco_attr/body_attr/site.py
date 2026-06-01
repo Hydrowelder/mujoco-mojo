@@ -8,6 +8,7 @@ from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     GeomType,
     Mat3,
@@ -83,41 +84,38 @@ class SiteBase(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
-    def rt_xmat(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
-    ) -> Mat3:
+    def rt_xmat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the site during runtime."""
         return (
-            mj_data.site_xmat[self.get_id(mj_model)]
+            state.data.site_xmat[self.get_id(state.model)]
             if flatten
-            else mj_data.site_xmat[self.get_id(mj_model)].reshape(3, 3)
+            else state.data.site_xmat[self.get_id(state.model)].reshape(3, 3)
         )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+    def rt_quat(self, state: MjState) -> Vec4:
         """
         Returns the (w, x, y, z) quaternion from the site's rotation matrix.
         Uses MuJoCo's internal C utility for speed.
         """
         quat = np.empty(4)
-        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(state, flatten=True))
         return quat
 
-    def rt_parent_body(self, mj_model: mujoco.MjModel) -> int:
-        return mj_model.site_bodyid[self.get_id(mj_model)]
+    def rt_parent_body(self, state: MjState) -> int:
+        return state.model.site_bodyid[self.get_id(state.model)]
 
-    def rt_pos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
-        return mj_data.site_xpos[self.get_id(mj_model)]
+    def rt_pos(self, state: MjState) -> Vec3:
+        return state.data.site_xpos[self.get_id(state.model)]
 
     def rt_displacements(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> Vec3:
         """Returns the 3D displacement vector from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
-        p1 = self.rt_pos(mj_model, mj_data)
-        p2 = other.rt_pos(mj_model, mj_data) if other else np.zeros(3)
+        p1 = self.rt_pos(state)
+        p2 = other.rt_pos(state) if other else np.zeros(3)
 
         # world displacement
         dr_world = p1 - p2
@@ -126,14 +124,13 @@ class SiteBase(XMLModel):
             return dr_world
 
         # rotate into relative_to frame: R^T * dr_world
-        rot_t = relative_to.rt_xmat(mj_model, mj_data).T
+        rot_t = relative_to.rt_xmat(state).T
         return rot_t @ dr_world
 
     def rt_dx(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -144,8 +141,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_displacements(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[0]
         )
@@ -153,8 +149,7 @@ class SiteBase(XMLModel):
     def rt_dy(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -165,8 +160,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_displacements(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[1]
         )
@@ -174,8 +168,7 @@ class SiteBase(XMLModel):
     def rt_dz(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -186,52 +179,44 @@ class SiteBase(XMLModel):
         return float(
             self.rt_displacements(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[2]
         )
 
-    def rt_dm(
-        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> float:
+    def rt_dm(self, other: AnySite | None, state: MjState) -> float:
         """Returns the runtime distance magnitude between two sites. If `other` is None this will just be the position of self."""
-        return float(
-            np.linalg.norm(
-                self.rt_displacements(other=other, mj_model=mj_model, mj_data=mj_data)
-            )
-        )
+        return float(np.linalg.norm(self.rt_displacements(other=other, state=state)))
 
-    def rt_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+    def rt_vel(self, state: MjState) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear
         mujoco.mj_objectVelocity(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+            state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0
         )
         return res
 
-    def rt_lin_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_lin_vel(self, state: MjState) -> Vec3:
         """Returns the 3D linear velocity vector in the world frame."""
-        return self.rt_vel(mj_model, mj_data)[3:6]
+        return self.rt_vel(state)[3:6]
 
-    def rt_ang_vel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_ang_vel(self, state: MjState) -> Vec3:
         """Returns the 3D angular velocity vector in the world frame."""
-        return self.rt_vel(mj_model, mj_data)[0:3]
+        return self.rt_vel(state)[0:3]
 
     def rt_velocities(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
-        world_self = self.rt_vel(mj_model, mj_data)
+        world_self = self.rt_vel(state)
 
         if other:
-            world_other = other.rt_vel(mj_model, mj_data)
+            world_other = other.rt_vel(state)
         else:
             world_other = np.zeros(6)
 
@@ -243,7 +228,7 @@ class SiteBase(XMLModel):
             return world_rel
 
         # rotate into relative_to coordinate frame
-        rot_t = rot_t = relative_to.rt_xmat(mj_model, mj_data).T
+        rot_t = rot_t = relative_to.rt_xmat(state).T
         rel_local = np.zeros(6)
         rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
         rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
@@ -252,8 +237,7 @@ class SiteBase(XMLModel):
     def rt_lin_vx(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -264,8 +248,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[3]
         )
@@ -273,8 +256,7 @@ class SiteBase(XMLModel):
     def rt_lin_vy(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -285,8 +267,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[4]
         )
@@ -294,8 +275,7 @@ class SiteBase(XMLModel):
     def rt_lin_vz(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -306,27 +286,19 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[5]
         )
 
-    def rt_lin_vm(
-        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> float:
+    def rt_lin_vm(self, other: AnySite | None, state: MjState) -> float:
         """Returns the runtime linear velocity magnitude between two sites. If `other` is None this will just be the position of self."""
-        return float(
-            np.linalg.norm(
-                self.rt_velocities(other=other, mj_model=mj_model, mj_data=mj_data)[3:6]
-            )
-        )
+        return float(np.linalg.norm(self.rt_velocities(other=other, state=state)[3:6]))
 
     def rt_ang_vx(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -337,8 +309,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[0]
         )
@@ -346,8 +317,7 @@ class SiteBase(XMLModel):
     def rt_ang_vy(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -358,8 +328,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[1]
         )
@@ -367,8 +336,7 @@ class SiteBase(XMLModel):
     def rt_ang_vz(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -379,52 +347,44 @@ class SiteBase(XMLModel):
         return float(
             self.rt_velocities(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[2]
         )
 
-    def rt_ang_vm(
-        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> float:
+    def rt_ang_vm(self, other: AnySite | None, state: MjState) -> float:
         """Returns the runtime angular velocity magnitude between two sites. If `other` is None this will just be the position of self."""
-        return float(
-            np.linalg.norm(
-                self.rt_velocities(other=other, mj_model=mj_model, mj_data=mj_data)[0:3]
-            )
-        )
+        return float(np.linalg.norm(self.rt_velocities(other=other, state=state)[0:3]))
 
-    def rt_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+    def rt_acc(self, state: MjState) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)  # 6 element buffer for angular, linear
         mujoco.mj_objectAcceleration(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+            state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0
         )
         return res
 
-    def rt_lin_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_lin_acc(self, state: MjState) -> Vec3:
         """Returns the 3D linear acceleration vector in the world frame."""
-        return self.rt_acc(mj_model, mj_data)[3:6]
+        return self.rt_acc(state)[3:6]
 
-    def rt_ang_acc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_ang_acc(self, state: MjState) -> Vec3:
         """Returns the 3D angular acceleration vector in the world frame."""
-        return self.rt_acc(mj_model, mj_data)[0:3]
+        return self.rt_acc(state)[0:3]
 
     def rt_accelerations(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) from 'other' to 'self'. If 'relative_to' is provided the vector is rotated into that site's local frame."""
         # in world frame
-        world_self = self.rt_acc(mj_model, mj_data)
+        world_self = self.rt_acc(state)
 
         if other:
-            world_other = other.rt_acc(mj_model, mj_data)
+            world_other = other.rt_acc(state)
         else:
             world_other = np.zeros(6)
 
@@ -434,7 +394,7 @@ class SiteBase(XMLModel):
             return world_rel
 
         # rotate into relative_to coordinate frame
-        rot_t = relative_to.rt_xmat(mj_model, mj_data).T
+        rot_t = relative_to.rt_xmat(state).T
         rel_local = np.zeros(6)
         rel_local[0:3] = rot_t @ world_rel[0:3]  # angular
         rel_local[3:6] = rot_t @ world_rel[3:6]  # linear
@@ -443,8 +403,7 @@ class SiteBase(XMLModel):
     def rt_lin_ax(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -455,8 +414,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[3]
         )
@@ -464,8 +422,7 @@ class SiteBase(XMLModel):
     def rt_lin_ay(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -476,8 +433,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[4]
         )
@@ -485,8 +441,7 @@ class SiteBase(XMLModel):
     def rt_lin_az(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -497,29 +452,21 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[5]
         )
 
-    def rt_lin_am(
-        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> float:
+    def rt_lin_am(self, other: AnySite | None, state: MjState) -> float:
         """Returns the runtime linear acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
-            np.linalg.norm(
-                self.rt_accelerations(other=other, mj_model=mj_model, mj_data=mj_data)[
-                    3:6
-                ]
-            )
+            np.linalg.norm(self.rt_accelerations(other=other, state=state)[3:6])
         )
 
     def rt_ang_ax(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -530,8 +477,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[0]
         )
@@ -539,8 +485,7 @@ class SiteBase(XMLModel):
     def rt_ang_ay(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -551,8 +496,7 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[1]
         )
@@ -560,8 +504,7 @@ class SiteBase(XMLModel):
     def rt_ang_az(
         self,
         other: AnySite | None,
-        mj_model: mujoco.MjModel,
-        mj_data: mujoco.MjData,
+        state: MjState,
         relative_to: AnySite | None = None,
     ) -> float:
         """
@@ -572,22 +515,15 @@ class SiteBase(XMLModel):
         return float(
             self.rt_accelerations(
                 other=other,
-                mj_model=mj_model,
-                mj_data=mj_data,
+                state=state,
                 relative_to=relative_to,
             )[2]
         )
 
-    def rt_ang_am(
-        self, other: AnySite | None, mj_model: mujoco.MjModel, mj_data: mujoco.MjData
-    ) -> float:
+    def rt_ang_am(self, other: AnySite | None, state: MjState) -> float:
         """Returns the runtime angular acceleration magnitude between two sites. If `other` is None this will just be the position of self."""
         return float(
-            np.linalg.norm(
-                self.rt_accelerations(other=other, mj_model=mj_model, mj_data=mj_data)[
-                    0:3
-                ]
-            )
+            np.linalg.norm(self.rt_accelerations(other=other, state=state)[0:3])
         )
 
     def request(
@@ -606,20 +542,20 @@ class SiteBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(state: MjState):
             for attr in attrs:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match attr:
                     case "xpos":
-                        val = self.rt_pos(mj_model, mj_data)
+                        val = self.rt_pos(state)
                     case "xmat":
-                        val = self.rt_xmat(mj_model, mj_data)
+                        val = self.rt_xmat(state)
                     case "xvelp":
-                        val = self.rt_lin_vel(mj_model, mj_data)
+                        val = self.rt_lin_vel(state)
                     case "xvelr":
-                        val = self.rt_ang_vel(mj_model, mj_data)
+                        val = self.rt_ang_vel(state)
                     case "quat":
-                        val = self.rt_quat(mj_model, mj_data)
+                        val = self.rt_quat(state)
 
                         for i, k in enumerate("wxyz"):
                             signal_manager.post(

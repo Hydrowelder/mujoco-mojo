@@ -5,7 +5,6 @@ This file generates an example model of the [tennis racket theorem](https://en.w
 
 from pathlib import Path
 
-import mujoco
 import numpy as np
 
 import mujoco_mojo as mojo
@@ -138,8 +137,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
-    mj_model: mujoco.MjModel,
-    mj_data: mujoco.MjData,
+    state: mojo.MjState,
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
@@ -148,24 +146,23 @@ def runtime(
     handoff = mojo_model.get_user_data(Handoff)
 
     handoff.racket.set_initial_velocity(
-        mj_model,
-        mj_data,
+        state,
         angular_velocity=np.asarray([0.1, 4.0, 0.0]),
         angle=mojo.Angle.RADIAN,
     )
 
     # Define a custom signal sampler
-    def sample_nutation(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+    def sample_nutation(state: mojo.MjState):
         """Adds the [nutation angle](https://en.wikipedia.org/wiki/Nutation) as an output signal."""
         assert runtime_manager.signal_manager
 
         # Get the angular momentum vector and magnitude
-        L = handoff.racket.rt_ang_mom(mj_model, mj_data)
+        L = handoff.racket.rt_ang_mom(state)
         L_mag = np.linalg.norm(L)
 
         if L_mag > 1e-9:
             # Get the handle axis in the world frame
-            R = handoff.racket.rt_xmat(mj_model, mj_data)
+            R = handoff.racket.rt_xmat(state)
             handle_axis = R[:, 0]
 
             # Calculate the angle (theta) between L and the handle axis
@@ -191,8 +188,8 @@ def runtime(
                 b.request(rm.signal_manager)
 
         # Run to observe multiple flips
-        while mj_data.time < 10.0:
-            rm.step(mj_model, mj_data)
+        while state.data.time < 10.0:
+            rm.step(state)
 
     return mojo_model
 

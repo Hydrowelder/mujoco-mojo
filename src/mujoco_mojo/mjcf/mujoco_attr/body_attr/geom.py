@@ -11,6 +11,7 @@ from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     FluidShape,
     GeomName,
@@ -186,77 +187,75 @@ class GeomBase(XMLModel):
     plugin: Plugin | None = None
     """Associate this geom with an engine plugin. Either plugin or instance are required."""
 
-    def geom_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def geom_xpos(self, state: MjState) -> Vec3:
         """Returns the position of the center of the geom."""
-        return mj_data.geom_xpos[self.get_id(mj_model)]
+        return state.data.geom_xpos[self.get_id(state.model)]
 
-    def geom_size(self, mj_model: mujoco.MjModel) -> float:
-        return mj_model.geom_size[self.get_id(mj_model)]
+    def geom_size(self, state: MjState) -> float:
+        return state.model.geom_size[self.get_id(state.model)]
 
-    def geom_aabb_radius(self, mj_model: mujoco.MjModel) -> float:
+    def geom_aabb_radius(self, state: MjState) -> float:
         """Returns the radius of a bounding sphere of the geom wrapped to its AABB."""
-        return np.max(self.geom_size(mj_model))
+        return np.max(self.geom_size(state))
 
-    def rbound(self, mj_model: mujoco.MjModel) -> float:
+    def rbound(self, state: MjState) -> float:
         """Returns the radius of a bounding sphere of the geom."""
-        return mj_model.geom_rbound[self.get_id(mj_model)]
+        return state.model.geom_rbound[self.get_id(state.model)]
 
-    def rt_xpos(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xpos(self, state: MjState) -> Vec3:
         """Returns the world position of the center of the geom."""
-        return mj_data.geom_xpos[self.get_id(mj_model)]
+        return state.data.geom_xpos[self.get_id(state.model)]
 
-    def rt_xmat(
-        self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData, flatten: bool = False
-    ) -> Mat3:
+    def rt_xmat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the geom during runtime."""
         return (
-            mj_data.geom_xmat[self.get_id(mj_model)]
+            state.data.geom_xmat[self.get_id(state.model)]
             if flatten
-            else mj_data.geom_xmat[self.get_id(mj_model)].reshape(3, 3)
+            else state.data.geom_xmat[self.get_id(state.model)].reshape(3, 3)
         )
 
-    def rt_quat(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec4:
+    def rt_quat(self, state: MjState) -> Vec4:
         """
         Returns the (w, x, y, z) quaternion from the geom's rotation matrix.
         Uses MuJoCo's internal C utility for speed.
         """
         quat = np.empty(4)
-        mujoco.mju_mat2Quat(quat, self.rt_xmat(mj_model, mj_data, flatten=True))
+        mujoco.mju_mat2Quat(quat, self.rt_xmat(state, flatten=True))
         return quat
 
-    def rt_xvel(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+    def rt_xvel(self, state: MjState) -> Vec6:
         """Returns the 6D velocity vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)
         mujoco.mj_objectVelocity(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+            state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0
         )
         return res
 
-    def rt_xvelp(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xvelp(self, state: MjState) -> Vec3:
         """Returns 3D linear velocity in world frame."""
-        return self.rt_xvel(mj_model, mj_data)[3:6]
+        return self.rt_xvel(state)[3:6]
 
-    def rt_xvelr(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xvelr(self, state: MjState) -> Vec3:
         """Returns 3D angular velocity in world frame."""
-        return self.rt_xvel(mj_model, mj_data)[0:3]
+        return self.rt_xvel(state)[0:3]
 
-    def rt_xacc(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec6:
+    def rt_xacc(self, state: MjState) -> Vec6:
         """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
         assert self._mjt_obj is not None
         res = np.zeros(6)
         mujoco.mj_objectAcceleration(
-            mj_model, mj_data, self._mjt_obj, self.get_id(mj_model), res, 0
+            state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0
         )
         return res
 
-    def rt_xaccp(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xaccp(self, state: MjState) -> Vec3:
         """Returns 3D linear acceleration in world frame."""
-        return self.rt_xacc(mj_model, mj_data)[3:6]
+        return self.rt_xacc(state)[3:6]
 
-    def rt_xaccr(self, mj_model: mujoco.MjModel, mj_data: mujoco.MjData) -> Vec3:
+    def rt_xaccr(self, state: MjState) -> Vec3:
         """Returns 3D angular acceleration in world frame."""
-        return self.rt_xacc(mj_model, mj_data)[0:3]
+        return self.rt_xacc(state)[0:3]
 
     def request(
         self,
@@ -274,24 +273,24 @@ class GeomBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
+        def sample(state: MjState):
             for attr in attrs:
                 # Manual mapping to avoid getattr
                 match attr:
                     case "xpos":
-                        val = self.rt_xpos(mj_model, mj_data)
+                        val = self.rt_xpos(state)
                     case "xmat":
-                        val = self.rt_xmat(mj_model, mj_data)
+                        val = self.rt_xmat(state)
                     case "xvelp":
-                        val = self.rt_xvelp(mj_model, mj_data)
+                        val = self.rt_xvelp(state)
                     case "xvelr":
-                        val = self.rt_xvelr(mj_model, mj_data)
+                        val = self.rt_xvelr(state)
                     case "xaccp":
-                        val = self.rt_xaccp(mj_model, mj_data)
+                        val = self.rt_xaccp(state)
                     case "xaccr":
-                        val = self.rt_xaccr(mj_model, mj_data)
+                        val = self.rt_xaccr(state)
                     case "quat":
-                        val = self.rt_quat(mj_model, mj_data)
+                        val = self.rt_quat(state)
 
                         for i, k in enumerate("wxyz"):
                             signal_manager.post(

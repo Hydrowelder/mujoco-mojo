@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 import mujoco
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     SensorInterp,
     SensorName,
@@ -86,16 +87,16 @@ class SensorBase(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def sample(mj_model: mujoco.MjModel, mj_data: mujoco.MjData):
-            sid = self.get_id(mj_model)
+        def sample(state: MjState):
+            sid = self.get_id(state.model)
 
             # find where this sensor's data starts and how long it is
             # (e.g., dim=3 for an accelerometer, dim=6 for a force/torque sensor)
-            adr = mj_model.sensor_adr[sid]
-            dim = mj_model.sensor_dim[sid]
+            adr = state.model.sensor_adr[sid]
+            dim = state.model.sensor_dim[sid]
 
             # slice the flat sensordata array
-            val = mj_data.sensordata[adr : adr + dim]
+            val = state.data.sensordata[adr : adr + dim]
 
             # post to telemetry
             for i in range(dim):
