@@ -592,23 +592,23 @@ def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list
 
 
 @lru_cache(maxsize=128)
-def _get_mojo_df(path_str: str, mtime: float) -> MojoDataFrame:
+def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
     """Zero-row MojoDataFrame for schema queries, cached by path and mtime."""
-    return MojoDataFrame.from_metadata(path_str)
+    return MojoDataFrame.from_metadata(path)
 
 
 @lru_cache(maxsize=128)
-def _get_column_manifest(path_str: str, mtime: float) -> ColumnManifest:
+def _get_column_manifest(path: Path, mtime: float) -> ColumnManifest:
     """Retrieves all column names from the table schema."""
-    return _get_mojo_df(path_str, mtime).mojo.get_manifest()
+    return _get_mojo_df(path, mtime).mojo.get_manifest()
 
 
 @lru_cache(maxsize=2048)
-def _get_atomic_column(path_str: str, col_name: str, mtime: float):
+def _get_atomic_column(path: Path, col_name: str, mtime: float):
     """
     Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
     """
-    return pl.scan_parquet(path_str).select(col_name).collect().to_series().to_list()
+    return pl.scan_parquet(path).select(col_name).collect().to_series().to_list()
 
 
 @router.get("/{trial_id}/data")
@@ -653,16 +653,13 @@ async def get_trial_data(
 
     # use the files last modified time as a cache breaker
     mtime = db_path.stat().st_mtime
-    db_path_str = str(db_path)
 
     # Parquet-only manifest (cached), then augment with valid lab virtual columns.
-    parquet_manifest = _get_column_manifest(db_path_str, mtime)
+    parquet_manifest = _get_column_manifest(db_path, mtime)
     lab_mtime = _lab_dir_mtime()
     lab_extra = _valid_lab_columns_cached(frozenset(parquet_manifest["all"]), lab_mtime)
     column_manifest = (
-        _get_mojo_df(db_path_str, mtime).mojo.get_manifest(
-            extra_columns=list(lab_extra)
-        )
+        _get_mojo_df(db_path, mtime).mojo.get_manifest(extra_columns=list(lab_extra))
         if lab_extra
         else parquet_manifest
     )
@@ -775,7 +772,7 @@ async def get_trial_data(
 
         # assemble dataframe
         raw_data = {
-            col: _get_atomic_column(db_path_str, col, mtime) for col in fetch_targets
+            col: _get_atomic_column(db_path, col, mtime) for col in fetch_targets
         }
         df = MojoDataFrame.from_dict(raw_data)
 
@@ -903,12 +900,12 @@ def _read_file_fps(path: Path) -> float | None:
         if path.suffix.lower() in {".mp4", ".webm"}:
             import mediapy as media
 
-            with media.VideoReader(str(path)) as reader:
+            with media.VideoReader(path) as reader:
                 return float(reader.fps)
         if path.suffix.lower() == ".gif":
             from PIL import Image as _Image
 
-            img = _Image.open(str(path))
+            img = _Image.open(path)
             duration_ms = float(img.info.get("duration", 100))
             return 1000.0 / max(duration_ms, 1.0)
     except Exception:
@@ -938,7 +935,7 @@ def _convert_gif_to_webm_sync(gif_path: Path, webm_path: Path) -> None:
             "ffmpeg",
             "-y",
             "-i",
-            str(gif_path),
+            gif_path,
             # ensure even dimensions (required by most codecs)
             "-vf",
             "scale=trunc(iw/2)*2:trunc(ih/2)*2",
@@ -951,7 +948,7 @@ def _convert_gif_to_webm_sync(gif_path: Path, webm_path: Path) -> None:
             "-an",  # no audio
             "-pix_fmt",
             "yuv420p",
-            str(webm_path),
+            webm_path,
         ],
         check=True,
         capture_output=True,
@@ -965,7 +962,7 @@ def _resolve_trial_dir(trial_id: str) -> Path:
         raise HTTPException(status_code=503, detail="No job active")
     trials_root = (job.workdir / "trials").resolve()
     trial_dir = (trials_root / trial_id).resolve()
-    if not str(trial_dir).startswith(str(trials_root) + "/"):
+    if not trial_dir.is_relative_to(trials_root) or trial_dir == trials_root:
         raise HTTPException(status_code=400, detail="Invalid trial ID")
     return trial_dir
 
@@ -994,7 +991,7 @@ async def get_gif_as_webm(trial_id: str, filename: str) -> FileResponse:
     """Converts a GIF to WebM on-demand, cached in the system temp directory."""
     trial_dir = _resolve_trial_dir(trial_id)
     gif_path = (trial_dir / filename).resolve()
-    if not str(gif_path).startswith(str(trial_dir) + "/"):
+    if not gif_path.is_relative_to(trial_dir):
         raise HTTPException(status_code=400, detail="Invalid filename")
     if not gif_path.is_file() or gif_path.suffix.lower() != ".gif":
         raise HTTPException(status_code=404, detail="File not found or not a gif")
@@ -1010,7 +1007,7 @@ async def get_trial_media_file(trial_id: str, filename: str) -> FileResponse:
     """Serves a single media file from the trial directory."""
     trial_dir = _resolve_trial_dir(trial_id)
     file_path = (trial_dir / filename).resolve()
-    if not str(file_path).startswith(str(trial_dir) + "/") and file_path != trial_dir:
+    if not file_path.is_relative_to(trial_dir):
         raise HTTPException(status_code=400, detail="Invalid filename")
     if not file_path.is_file() or file_path.suffix.lower() not in _MEDIA_EXTENSIONS:
         raise HTTPException(status_code=404, detail="File not found")
