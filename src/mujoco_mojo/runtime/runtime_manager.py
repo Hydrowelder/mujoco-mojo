@@ -6,7 +6,7 @@ from typing import Any, Protocol, Self, runtime_checkable
 import mujoco
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.runtime.load import Load
+from mujoco_mojo.runtime.load import JointLoad, Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.utils.log import get_logger
@@ -31,6 +31,7 @@ class RuntimeManager:
     signal_manager: SignalManager | None = None
 
     loads: list[Load] = field(default_factory=list)
+    joint_loads: list[JointLoad] = field(default_factory=list)
     proximities: list[Proximity] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
@@ -67,14 +68,23 @@ class RuntimeManager:
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.loads:
             load.resolve_ids(state)
+        for jload in self.joint_loads:
+            jload.resolve_ids(state)
         self._resolved = True
 
     def add_load(self, load: Load):
-        # check if load name already registered
         for _l in self.loads:
             if load.name == _l.name:
                 logger.warning(f"Load with name {load.name} has already registed")
         self.loads.append(load)
+
+    def add_joint_load(self, load: JointLoad):
+        for _l in self.joint_loads:
+            if load.name == _l.name:
+                logger.warning(
+                    f"JointLoad with name {load.name} has already been registered"
+                )
+        self.joint_loads.append(load)
 
     def add_proximity(self, proximity: Proximity):
         # check if the pair is already being checked
@@ -117,6 +127,8 @@ class RuntimeManager:
         # apply user forcing functions
         for load in self.loads:
             load.apply_load(state)
+        for jload in self.joint_loads:
+            jload.apply_load(state)
 
         # record data
         if self.signal_manager and not self._skip_recording:

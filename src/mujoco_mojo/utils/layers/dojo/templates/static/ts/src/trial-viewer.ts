@@ -234,6 +234,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
     mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
     mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+    mediaSpeedPresets: [0.2, 0.5, 1.0, 2.0, 4.0] as number[],
     mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
     mediaIsScrubbable: false,
     _gifConvertStatus: "none" as "none" | "loading" | "ready" | "failed",
@@ -1378,13 +1379,15 @@ function trialViewer(trialId: string, externalUrl: string) {
             if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
               this.labOpen = false;
             } else {
-              void (window.mojoConfirm?.({
-                title: "Unsaved changes",
-                message: "Close the lab and discard unsaved changes?",
-                confirmLabel: "Discard",
-                cancelLabel: "Keep editing",
-                variant: "warning",
-              }) ?? Promise.resolve(false)).then((ok) => {
+              void (
+                window.mojoConfirm?.({
+                  title: "Unsaved changes",
+                  message: "Close the lab and discard unsaved changes?",
+                  confirmLabel: "Discard",
+                  cancelLabel: "Keep editing",
+                  variant: "warning",
+                }) ?? Promise.resolve(false)
+              ).then((ok) => {
                 if (ok) this.labOpen = false;
               });
             }
@@ -1394,7 +1397,11 @@ function trialViewer(trialId: string, externalUrl: string) {
             // This prevents Escape from both closing the lab and exiting fullscreen.
             if (anyOpen) e.stopImmediatePropagation();
           }
-          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !isTextInput) {
+          if (
+            (e.metaKey || e.ctrlKey) &&
+            e.key.toLowerCase() === "c" &&
+            !isTextInput
+          ) {
             if (this.labOpen) {
               e.preventDefault();
               document.dispatchEvent(new CustomEvent("mojo:lab-clear"));
@@ -1438,6 +1445,20 @@ function trialViewer(trialId: string, externalUrl: string) {
             }
           }
           if (isTextInput) return;
+
+          if (e.key === "<") {
+            e.preventDefault();
+            const prev = [...this.mediaSpeedPresets]
+              .reverse()
+              .find((p) => p < this.mediaPlaybackRate);
+            if (prev !== undefined) this.mediaPlaybackRate = prev;
+          } else if (e.key === ">") {
+            e.preventDefault();
+            const next = this.mediaSpeedPresets.find(
+              (p) => p > this.mediaPlaybackRate,
+            );
+            if (next !== undefined) this.mediaPlaybackRate = next;
+          }
 
           const isZ = e.key.toLowerCase() === "z";
           const isY = e.key.toLowerCase() === "y";
@@ -2444,7 +2465,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     async resetConfig() {
       const ok = await window.mojoConfirm?.({
         title: "Reset settings",
-        message: "Reset plot to factory defaults? This will clear your current view.",
+        message:
+          "Reset plot to factory defaults? This will clear your current view.",
         confirmLabel: "Reset",
         cancelLabel: "Cancel",
         variant: "info",
@@ -2999,8 +3021,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!tab) return;
       tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
       tab.name = this.labName;
-      tab.savedState =
-        window.mojoLabGetSavedState?.() ?? tab.savedState;
+      tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
     },
 
     _persistTabs() {
@@ -3091,17 +3112,16 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     async loadLabInNewTab(labName: string) {
-      const safePath = labName
-        .split("/")
-        .map(encodeURIComponent)
-        .join("/");
+      const safePath = labName.split("/").map(encodeURIComponent).join("/");
       try {
         const resp = await fetch(`/mosaic/api/lab/${safePath}`);
         if (!resp.ok) throw new Error(resp.statusText);
         const graph = (await resp.json()) as object;
 
         // reuse the current tab if it is blank (untitled + no unsaved changes)
-        const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        const activeTab = this.labTabs.find(
+          (t) => t.id === this.labActiveTabId,
+        );
         if (activeTab && !activeTab.name && !activeTab.dirty) {
           activeTab.name = labName;
           activeTab.graph = graph;
@@ -3163,7 +3183,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         window.mojoLabMarkSaved?.();
         // sync active tab
         this.labName = trimmed;
-        const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        const activeTab = this.labTabs.find(
+          (t) => t.id === this.labActiveTabId,
+        );
         if (activeTab) {
           activeTab.name = trimmed;
           activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;

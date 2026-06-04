@@ -229,6 +229,7 @@
       mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
       mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
       mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
+      mediaSpeedPresets: [0.25, 0.5, 1, 2, 4],
       mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
       mediaIsScrubbable: false,
       _gifConvertStatus: "none",
@@ -1176,6 +1177,17 @@
               }
             }
             if (isTextInput) return;
+            if (e.key === "<") {
+              e.preventDefault();
+              const prev = [...this.mediaSpeedPresets].reverse().find((p) => p < this.mediaPlaybackRate);
+              if (prev !== void 0) this.mediaPlaybackRate = prev;
+            } else if (e.key === ">") {
+              e.preventDefault();
+              const next = this.mediaSpeedPresets.find(
+                (p) => p > this.mediaPlaybackRate
+              );
+              if (next !== void 0) this.mediaPlaybackRate = next;
+            }
             const isZ = e.key.toLowerCase() === "z";
             const isY = e.key.toLowerCase() === "y";
             const cmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -2575,7 +2587,9 @@
           const resp = await fetch(`/mosaic/api/lab/${safePath}`);
           if (!resp.ok) throw new Error(resp.statusText);
           const graph = await resp.json();
-          const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          const activeTab = this.labTabs.find(
+            (t) => t.id === this.labActiveTabId
+          );
           if (activeTab && !activeTab.name && !activeTab.dirty) {
             activeTab.name = labName;
             activeTab.graph = graph;
@@ -2633,7 +2647,9 @@
           this.notify(`Lab "${trimmed}" saved`, "success");
           window.mojoLabMarkSaved?.();
           this.labName = trimmed;
-          const activeTab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          const activeTab = this.labTabs.find(
+            (t) => t.id === this.labActiveTabId
+          );
           if (activeTab) {
             activeTab.name = trimmed;
             activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;

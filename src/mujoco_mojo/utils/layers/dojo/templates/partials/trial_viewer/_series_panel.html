@@ -364,11 +364,12 @@
                                             <span class="text-xs font-mono text-slate-500 uppercase tracking-wide w-20 shrink-0"
                                                   x-text="param.name"></span>
                                             <template x-if="param.type === 'int'">
-                                                <input type="number"
+                                                <input type="text"
                                                        :value="f[param.name]"
-                                                       step="1"
+                                                       @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                                        @change="setFilterParamOnTemp(temp, fi, param.name, parseInt($event.target.value)); isDirty = true"
-                                                       class="input-field no-spin flex-1 min-w-0 px-2 py-1 text-xs text-right" />
+                                                       inputmode="numeric"
+                                                       class="input-field flex-1 min-w-0 px-2 py-1 text-xs text-right" />
                                             </template>
                                             <template x-if="param.type === 'float'">
                                                 <input type="text"
@@ -1235,11 +1236,12 @@
                                                                       x-text="param.name"></span>
                                                                 <!-- float / int -->
                                                                 <template x-if="param.type === 'int'">
-                                                                    <input type="number"
+                                                                    <input type="text"
                                                                            :value="f[param.name]"
-                                                                           step="1"
+                                                                           @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, parseInt($event.target.value)); isDirty = true"
-                                                                           class="input-field no-spin flex-1 px-2 py-1 text-xs text-right" />
+                                                                           inputmode="numeric"
+                                                                           class="input-field flex-1 px-2 py-1 text-xs text-right" />
                                                                 </template>
                                                                 <template x-if="param.type === 'float'">
                                                                     <input type="text"

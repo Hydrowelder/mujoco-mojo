@@ -167,11 +167,11 @@
 
             <!-- manual -->
             <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm">
-                <input type="number"
+                <input type="text"
                        x-model.number="warpId"
                        @keyup.enter="warpToTrial()"
+                       @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                        inputmode="numeric"
-                       pattern="[0-9]*"
                        placeholder="#"
                        class="number-input w-10 sm:w-12 h-6 text-sm sm:text-base" />
                 <button x-show="(warpId === 0 || warpId) && warpId != parseInt(trialId.split('_').pop())"
@@ -362,20 +362,20 @@
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-slate-500">START</label>
                         <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm">
-                            <input type="number"
+                            <input type="text"
                                    x-model.number="vsDraft.range[0]"
+                                   @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                    inputmode="numeric"
-                                   pattern="[0-9]*"
                                    class="number-input w-full py-1.5 text-sm" />
                         </div>
                     </div>
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-slate-500">END</label>
                         <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm">
-                            <input type="number"
+                            <input type="text"
                                    x-model.number="vsDraft.range[1]"
+                                   @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                    inputmode="numeric"
-                                   pattern="[0-9]*"
                                    class="number-input w-full py-1.5 text-sm" />
                         </div>
                     </div>

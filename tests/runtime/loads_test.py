@@ -5,8 +5,10 @@ import pytest
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.runtime.load import (
     GeneralLoad,
+    JointFriction,
     PointToPointForce,
     ScalarForce,
     ScalarTorque,
@@ -15,7 +17,8 @@ from mujoco_mojo.runtime.load import (
 )
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.typing import BodyName, SiteName
+from mujoco_mojo.stochas import NamedValue, ValueName
+from mujoco_mojo.typing import BodyName, JointName, SiteName
 from mujoco_mojo.visualization import ArrowConfig
 
 
@@ -647,3 +650,371 @@ def test_tension_spring_produces_force_when_extended(
     force, _ = cable.calculate(state)
 
     assert np.linalg.norm(force) == pytest.approx(50.0, abs=1e-4)
+
+
+# -- JointFriction fixtures and helpers --
+
+
+HINGE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="rotor">
+            <joint name="hinge" type="hinge" axis="0 0 1"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+SLIDE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="slider">
+            <joint name="slide" type="slide" axis="1 0 0"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def _hinge_state(vel: float = 0.0) -> MjState:
+    model = mujoco.MjModel.from_xml_string(HINGE_XML)
+    data = mujoco.MjData(model)
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def _slide_state(vel: float = 0.0) -> MjState:
+    model = mujoco.MjModel.from_xml_string(SLIDE_XML)
+    data = mujoco.MjData(model)
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def _hinge_joint() -> Joint:
+    return Joint(name=JointName("hinge"))
+
+
+def _slide_joint() -> Joint:
+    return Joint(name=JointName("slide"))
+
+
+# -- coulomb --
+
+
+def test_coulomb_opposes_positive_velocity():
+    state = _hinge_state(vel=2.0)
+    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-5.0)
+
+
+def test_coulomb_opposes_negative_velocity():
+    state = _hinge_state(vel=-3.0)
+    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(5.0)
+
+
+def test_coulomb_zero_at_standstill():
+    state = _hinge_state(vel=0.0)
+    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- viscous --
+
+
+def test_viscous_proportional_to_velocity():
+    state = _slide_state(vel=4.0)
+    fric = JointFriction.viscous(name="v", joint=_slide_joint(), damping=3.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    # -3.0 * 4.0 = -12.0
+    assert state.data.qfrc_applied[0] == pytest.approx(-12.0)
+
+
+def test_viscous_zero_at_standstill():
+    state = _slide_state(vel=0.0)
+    fric = JointFriction.viscous(name="v", joint=_slide_joint(), damping=10.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- coulomb_viscous --
+
+
+def test_coulomb_viscous_combined():
+    state = _hinge_state(vel=2.0)
+    fric = JointFriction.coulomb_viscous(
+        name="cv", joint=_hinge_joint(), coulomb=3.0, viscous=1.0
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    # coulomb term = -3.0, viscous term = -1.0 * 2.0 = -2.0 → total = -5.0
+    assert state.data.qfrc_applied[0] == pytest.approx(-5.0)
+
+
+def test_coulomb_viscous_zero_velocity_no_coulomb():
+    state = _hinge_state(vel=0.0)
+    fric = JointFriction.coulomb_viscous(
+        name="cv", joint=_hinge_joint(), coulomb=10.0, viscous=5.0
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    # below threshold: no coulomb; viscous = -5.0 * 0.0 = 0
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- stribeck --
+
+
+def test_stribeck_static_greater_than_kinetic():
+    """At low velocity the Stribeck curve produces more friction than the kinetic floor."""
+    coulomb, static, vs = 1.0, 5.0, 0.1
+    low_vel, high_vel = 1e-4, 10.0
+
+    low_vel_state = _hinge_state(vel=low_vel)
+    high_vel_state = _hinge_state(vel=high_vel)
+    joint = _hinge_joint()
+
+    fric_low = JointFriction.stribeck(
+        name="s", joint=joint, coulomb=coulomb, static=static, stribeck_velocity=vs
+    )
+    fric_high = JointFriction.stribeck(
+        name="s", joint=joint, coulomb=coulomb, static=static, stribeck_velocity=vs
+    )
+
+    fric_low.resolve_ids(low_vel_state)
+    fric_low.apply_load(low_vel_state)
+
+    fric_high.resolve_ids(high_vel_state)
+    fric_high.apply_load(high_vel_state)
+
+    expected_low = -(coulomb + (static - coulomb) * np.exp(-low_vel / vs))
+    expected_high = -(coulomb + (static - coulomb) * np.exp(-high_vel / vs))
+
+    assert low_vel_state.data.qfrc_applied[0] == pytest.approx(expected_low, rel=1e-6)
+    assert high_vel_state.data.qfrc_applied[0] == pytest.approx(expected_high, rel=1e-6)
+
+
+def test_stribeck_formula_exact():
+    """F = -(coulomb + (static-coulomb)*exp(-|v|/vs) + viscous*|v|)*sign(v)."""
+    vel = 1.0
+    coulomb, static, vs, viscous = 2.0, 5.0, 0.5, 0.3
+    state = _hinge_state(vel=vel)
+    fric = JointFriction.stribeck(
+        name="s",
+        joint=_hinge_joint(),
+        coulomb=coulomb,
+        static=static,
+        stribeck_velocity=vs,
+        viscous=viscous,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    expected = -(coulomb + (static - coulomb) * np.exp(-vel / vs) + viscous * vel)
+    assert state.data.qfrc_applied[0] == pytest.approx(expected, rel=1e-6)
+
+
+def test_stribeck_zero_at_standstill():
+    state = _hinge_state(vel=0.0)
+    fric = JointFriction.stribeck(
+        name="s", joint=_hinge_joint(), coulomb=3.0, static=6.0, stribeck_velocity=0.1
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- named value runtime mutation --
+
+
+def test_coulomb_named_value_runtime_mutation():
+    """Changing the NamedValue after construction affects the applied force."""
+    state = _hinge_state(vel=1.0)
+    mag = NamedValue(name=ValueName("mag"), stored_value=4.0)
+    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=mag)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-4.0)
+
+    mag.stored_value = 9.0
+    state.data.qfrc_applied.fill(0)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-9.0)
+
+
+# -- active flag --
+
+
+def test_joint_friction_inactive_produces_no_force():
+    state = _hinge_state(vel=5.0)
+    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=10.0)
+    fric.active = False
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- telemetry --
+
+
+def test_joint_friction_request_registers_sampler(tmp_path):
+    state = _hinge_state(vel=2.0)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    fric = JointFriction.coulomb(name="brake", joint=_hinge_joint(), magnitude=7.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    fric.request(sm)
+    sm.record(state)
+    # world-frame telemetry: x/y/z components + magnitude
+    assert "Loads/brake/friction:x" in sm._key_to_idx
+    assert "Loads/brake/friction:z" in sm._key_to_idx
+    assert "Loads/brake/friction:m" in sm._key_to_idx
+    # hinge axis is (0,0,1) so torque is along Z; x and y should be ~0
+    z_idx = sm._key_to_idx["Loads/brake/friction:z"]
+    assert sm._data_buffer[0, z_idx] == pytest.approx(-7.0)
+
+
+def test_joint_friction_request_raises_without_joint_name():
+    unnamed = Joint()  # no name
+    fric = JointFriction.coulomb(name="c", joint=unnamed, magnitude=1.0)
+    sm_mock = object()
+    with pytest.raises(ValueError, match="no name"):
+        fric.request(sm_mock)  # type: ignore[arg-type]
+
+
+BALL_XML = """
+<mujoco>
+    <worldbody>
+        <body name="b">
+            <joint name="ball" type="ball"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+FREE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="b">
+            <freejoint name="free"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def _ball_state(omega: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> MjState:
+    model = mujoco.MjModel.from_xml_string(BALL_XML)
+    data = mujoco.MjData(model)
+    data.qvel[0:3] = omega
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def _ball_joint() -> Joint:
+    return Joint(name=JointName("ball"))
+
+
+def test_joint_friction_rejects_free_joint():
+    """Free joints are not physical constraints; JointFriction rejects them."""
+    model = mujoco.MjModel.from_xml_string(FREE_XML)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    state = MjState(model, data)
+
+    fric = JointFriction.coulomb(
+        name="c", joint=Joint(name=JointName("free")), magnitude=1.0
+    )
+    with pytest.raises(ValueError, match="hinge, slide, or ball"):
+        fric.resolve_ids(state)
+
+
+# -- ball joint friction --
+
+
+def test_ball_coulomb_opposes_velocity_direction():
+    """Coulomb friction on a ball joint produces a torque exactly opposing omega."""
+    omega = (1.0, 2.0, 2.0)  # speed = 3.0
+    state = _ball_state(omega=omega)
+    magnitude = 6.0
+    fric = JointFriction.coulomb(name="b", joint=_ball_joint(), magnitude=magnitude)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    omega_arr = np.array(omega)
+    speed = float(np.linalg.norm(omega_arr))
+    expected = -magnitude * omega_arr / speed
+    assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
+
+
+def test_ball_viscous_proportional_to_velocity():
+    """Viscous friction on a ball joint produces torque proportional to each component."""
+    omega = (1.0, -2.0, 3.0)
+    damping = 4.0
+    state = _ball_state(omega=omega)
+    fric = JointFriction.viscous(name="b", joint=_ball_joint(), damping=damping)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    expected = -damping * np.array(omega)
+    assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
+
+
+def test_ball_stribeck_opposes_velocity_direction():
+    """Stribeck on a ball joint: friction magnitude from |omega|, direction from -omega_hat."""
+    omega = (3.0, 4.0, 0.0)  # speed = 5.0
+    coulomb, static, vs = 1.0, 4.0, 1.0
+    state = _ball_state(omega=omega)
+    fric = JointFriction.stribeck(
+        name="b",
+        joint=_ball_joint(),
+        coulomb=coulomb,
+        static=static,
+        stribeck_velocity=vs,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    speed = float(np.linalg.norm(omega))
+    mag = coulomb + (static - coulomb) * np.exp(-speed / vs)
+    expected = -mag * np.array(omega) / speed
+    assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
+
+
+# -- custom friction_func receives state --
+
+
+def test_friction_func_receives_state():
+    """friction_func signature is (vel, state) -> ndarray; state is the live MjState."""
+    captured: list[MjState] = []
+
+    def custom_func(vel: np.ndarray, state: MjState) -> np.ndarray:
+        captured.append(state)
+        return -vel
+
+    state = _hinge_state(vel=3.0)
+    fric = JointFriction(
+        name="custom",
+        joint=_hinge_joint(),
+        friction_func=custom_func,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    assert len(captured) == 1
+    assert captured[0] is state
+    assert state.data.qfrc_applied[0] == pytest.approx(-3.0)

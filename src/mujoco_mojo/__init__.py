@@ -31,6 +31,7 @@ compatibility patch that ships alongside the stubs:
 from mujoco_mojo.__about__ import __version__  # noqa: F401
 
 from . import utils
+from .mj_state import MjState
 from .mjcf import (
     Actuator,
     ActuatorAdhesion,
@@ -93,6 +94,7 @@ from .mjcf import (
     GeomPlane,
     GeomSDF,
     GeomSphere,
+    HasPose,
     HField,
     Inertial,
     Joint,
@@ -117,8 +119,10 @@ from .mjcf import (
     Plugin,
     Pos,
     PoseAxisAngle,
+    PoseContext,
     PoseEuler,
     PoseQuat,
+    PoseRef,
     PoseXYAxes,
     PoseZAxis,
     Quat,
@@ -198,7 +202,6 @@ from .mjcf import (
     XYAxes,
     ZAxis,
 )
-from .mj_state import MjState
 from .mojo_model import MojoModel, UserData
 from .stochas import (
     NOMINAL_TRIAL_NUM,
@@ -426,6 +429,7 @@ __all__ = [
     "GridLayoutStr",
     "HField",
     "HFieldName",
+    "HasPose",
     "Inertia",
     "InertiaFromGeom",
     "InertiaGroupRange",
@@ -485,8 +489,10 @@ __all__ = [
     "PoissonDistribution",
     "Pos",
     "PoseAxisAngle",
+    "PoseContext",
     "PoseEuler",
     "PoseQuat",
+    "PoseRef",
     "PoseXYAxes",
     "PoseZAxis",
     "ProximityType",

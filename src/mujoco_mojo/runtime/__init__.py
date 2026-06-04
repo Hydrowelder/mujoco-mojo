@@ -1,5 +1,7 @@
 from .load import (
     GeneralLoad,
+    JointFriction,
+    JointLoad,
     Load,
     PointToPointForce,
     ScalarForce,
@@ -13,6 +15,8 @@ from .video_recorder import VideoRecorder
 
 __all__ = [
     "GeneralLoad",
+    "JointFriction",
+    "JointLoad",
     "Load",
     "PointToPointForce",
     "RuntimeManager",
