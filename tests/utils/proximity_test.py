@@ -6,10 +6,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import mujoco
 import numpy as np
 import pytest
 
 import mujoco_mojo as mojo
+from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.visualization import LineConfig
 
 # ============================================================================
@@ -617,6 +620,174 @@ def test_get_visuals_uses_cached_result_on_same_timestep(compiled_model: Compile
     # pos1/pos2 should be identical since the same cached values are reused
     assert np.allclose(result1.pos1, result2.pos1)
     assert np.allclose(result1.pos2, result2.pos2)
+
+
+# ============================================================================
+# Contact Force Tests
+# ============================================================================
+
+# two unit-cube mesh geoms - place them 0.15 apart so they overlap by 0.05 in X
+# (each cube spans ±0.1 in X from its body origin)
+_CUBE_VERTS = "0.1 0.1 0.1  0.1 0.1 -0.1  0.1 -0.1 0.1  0.1 -0.1 -0.1  -0.1 0.1 0.1  -0.1 0.1 -0.1  -0.1 -0.1 0.1  -0.1 -0.1 -0.1"
+
+_CONTACT_XML = f"""
+<mujoco>
+    <option gravity="0 0 0"/>
+    <asset>
+        <mesh name="cube" vertex="{_CUBE_VERTS}"/>
+    </asset>
+    <worldbody>
+        <body name="b1" pos="0 0 0">
+            <freejoint/>
+            <geom name="g1" type="mesh" mesh="cube" mass="1"/>
+        </body>
+        <body name="b2" pos="0.15 0 0">
+            <freejoint/>
+            <geom name="g2" type="mesh" mesh="cube" mass="1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+_SEPARATED_XML = f"""
+<mujoco>
+    <option gravity="0 0 0"/>
+    <asset>
+        <mesh name="cube" vertex="{_CUBE_VERTS}"/>
+    </asset>
+    <worldbody>
+        <body name="b1" pos="0 0 0">
+            <freejoint/>
+            <geom name="g1" type="mesh" mesh="cube" mass="1"/>
+        </body>
+        <body name="b2" pos="1 0 0">
+            <freejoint/>
+            <geom name="g2" type="mesh" mesh="cube" mass="1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def _contact_state() -> MjState:
+    model = mujoco.MjModel.from_xml_string(_CONTACT_XML)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def _separated_state() -> MjState:
+    model = mujoco.MjModel.from_xml_string(_SEPARATED_XML)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def _cube_proximity(dist_max: float = 10.0) -> Proximity:
+    return Proximity(
+        geom_1=mojo.GeomMesh(name=mojo.GeomName("g1"), mesh=mojo.MeshName("cube")),
+        geom_2=mojo.GeomMesh(name=mojo.GeomName("g2"), mesh=mojo.MeshName("cube")),
+        dist_max=dist_max,
+    )
+
+
+def test_contact_force_nonzero_when_overlapping():
+    """Overlapping spheres produce a non-zero contact force."""
+    state = _contact_state()
+    assert state.data.ncon > 0, "expected at least one contact"
+    prox = _cube_proximity()
+    force, _ = prox.contact_force(state)
+    assert np.linalg.norm(force) > 0
+
+
+def test_contact_force_zero_when_separated():
+    """non-touching spheres produce no contact force."""
+    state = _separated_state()
+    prox = _cube_proximity()
+    force, torque = prox.contact_force(state)
+    assert np.allclose(force, 0)
+    assert np.allclose(torque, 0)
+
+
+def test_contact_force_opposes_penetration_along_normal():
+    """Contact force on g1 points away from g2 (along +X when g2 is at +X)."""
+    state = _contact_state()
+    prox = _cube_proximity()
+    force, _ = prox.contact_force(state)
+    # g2 is at +X relative to g1, so the force on g1 should push in -X
+    assert force[0] < 0, f"expected negative X force, got {force}"
+    assert abs(force[1]) < 1e-6
+    assert abs(force[2]) < 1e-6
+
+
+def test_contact_torque_zero_without_torsional_friction():
+    """By default MuJoCo does not enable torsional friction, so torque should be zero."""
+    state = _contact_state()
+    prox = _cube_proximity()
+    _, torque = prox.contact_force(state)
+    assert np.allclose(torque, 0, atol=1e-10)
+
+
+def test_request_contact_only_skips_proximity_calc(monkeypatch):
+    """Requesting only contact_force must not invoke get_proximity."""
+    from mujoco_mojo.runtime.signal_manager import SignalManager
+    from mujoco_mojo.typing import ProximityType
+
+    state = _contact_state()
+    prox = _cube_proximity()
+
+    called = []
+
+    def _spy(self, s):
+        called.append(1)
+        return 0.0, np.zeros(3), np.zeros(3), ProximityType.SPHERE_TO_SPHERE
+
+    monkeypatch.setattr(Proximity, "get_proximity", _spy)
+
+    import tempfile
+    from pathlib import Path as P
+
+    with tempfile.TemporaryDirectory() as td:
+        sm = SignalManager(export_path=P(td) / "t.parquet")
+        prox.request(sm, attrs=["contact_force"])
+        sm.record(state)
+
+    assert len(called) == 0, "get_proximity should not have been called"
+
+
+def test_request_contact_force_posts_xyzm(tmp_path):
+    """contact_force attr posts x, y, z, and m telemetry keys."""
+    from mujoco_mojo.runtime.signal_manager import SignalManager
+
+    state = _contact_state()
+    prox = _cube_proximity()
+    sm = SignalManager(export_path=tmp_path / "t.parquet")
+    prox.request(sm, attrs=["contact_force"])
+    sm.record(state)
+
+    pair = "g1_to_g2"
+    for label in ("x", "y", "z", "m"):
+        key = f"Proximities/{pair}/contact_force:{label}"
+        assert key in sm._key_to_idx, f"missing key {key!r}"
+
+    # x-component should be negative (force on g1 points away from g2 at +X)
+    x_idx = sm._key_to_idx[f"Proximities/{pair}/contact_force:x"]
+    assert sm._data_buffer[0, x_idx] < 0
+
+
+def test_request_proximity_and_contact_together(tmp_path):
+    """Requesting both dist and contact_force runs both computations."""
+    from mujoco_mojo.runtime.signal_manager import SignalManager
+
+    state = _contact_state()
+    prox = _cube_proximity()
+    sm = SignalManager(export_path=tmp_path / "t.parquet")
+    prox.request(sm, attrs=["dist", "contact_force"])
+    sm.record(state)
+
+    pair = "g1_to_g2"
+    assert f"Proximities/{pair}:dist" in sm._key_to_idx
+    assert f"Proximities/{pair}/contact_force:m" in sm._key_to_idx
 
 
 if __name__ == "__main__":
