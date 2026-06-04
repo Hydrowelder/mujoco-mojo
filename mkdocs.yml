@@ -14,20 +14,22 @@ watch:
 nav:
   - Home: index.md
   - User Guide:
-      # - user-guide.md
-      - Getting Started: user-guides/getting-started.md
-      - Initializing a Project: user-guides/init.md
-      - Generate Script: user-guides/generate-script.md
-      - Runtime Script: user-guides/runtime-script.md
-      - Running Jobs:
-          - user-guides/running-jobs.md
-          - Example Report: user-guides/MOJO_RUNTIME_REPORT.md
-      - Dojo Dashboard:
-          - user-guides/dojo.md
-          - Monitor: user-guides/monitor.md
-          - Mosaic: user-guides/mosaic.md
-      - Optimization: user-guides/optimization.md
-      - Reloaded: user-guides/reloaded.md
+      - Workflow:
+          - Getting Started: user-guides/getting-started.md
+          - Initializing a Project: user-guides/init.md
+          - Generate Script: user-guides/generate-script.md
+          - Runtime Script: user-guides/runtime-script.md
+          - Running Jobs:
+              - user-guides/running-jobs.md
+              - Example Report: user-guides/MOJO_RUNTIME_REPORT.md
+      - Features:
+          - Dojo Dashboard:
+              - user-guides/dojo.md
+              - Monitor: user-guides/monitor.md
+              - Mosaic: user-guides/mosaic.md
+          - Optimization: user-guides/optimization.md
+          - Reloaded: user-guides/reloaded.md
+          - Pose Context: user-guides/pose-context.md
   - Code Reference:
       - mujoco_mojo:
           - MojoModel: reference/mujoco_mojo/mojo_model.md

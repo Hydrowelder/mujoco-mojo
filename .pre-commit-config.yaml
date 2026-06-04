@@ -46,6 +46,12 @@ repos:
     rev: v1.1.408
     hooks:
       - id: pyright
+      - id: pyright
+        name: Pyright (docs examples)
+        args: [docs/user-guides]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
   - repo: local
     hooks:
       - id: act-test

@@ -5,9 +5,8 @@ from pathlib import Path
 import mujoco
 from pydantic import Field
 
-from mujoco_mojo.mj_state import MjState
-
 import mujoco_mojo.utils.utils as utils
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
@@ -24,6 +23,8 @@ from mujoco_mojo.mjcf.mujoco_attr.size import Size
 from mujoco_mojo.mjcf.mujoco_attr.statistic import Statistic
 from mujoco_mojo.mjcf.mujoco_attr.tendon import Tendon
 from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
+from mujoco_mojo.mjcf.pose import PoseQuat
+from mujoco_mojo.mjcf.pose_context import HasPose, PoseContext
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Angle, EulerSeq, ModelName
 from mujoco_mojo.utils.log import get_logger
@@ -243,6 +244,30 @@ class Mujoco(XMLModel):
                 )
             )
         )
+
+    @property
+    def pose_context(self) -> PoseContext:
+        """
+        Builds a PoseContext from the current worldbody tree.
+
+        Raises ValueError if worldbody is not set.
+        """
+        if self.worldbody is None:
+            raise ValueError("Cannot build pose graph: worldbody is not set.")
+        return PoseContext(self.worldbody)
+
+    def local_pose(
+        self,
+        frame: HasPose,
+        relative_to: HasPose,
+    ) -> PoseQuat:
+        """
+        Returns the pose of `frame` expressed in `relative_to`'s coordinate system.
+
+        Always walks the live worldbody tree, so the result reflects the current
+        state of the model regardless of any modifications since the last call.
+        """
+        return self.pose_context.local_pose(frame, relative_to)
 
     def prep_for_sim(self, save_path: Path | None = None) -> MjState:
         """Creates an MjState (MjModel + MjData) from the Mujoco instance."""

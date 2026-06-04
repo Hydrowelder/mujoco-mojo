@@ -457,11 +457,11 @@
                                         <span class="text-xs font-bold text-slate-400 uppercase">Base</span>
 
                                         <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto w-20">
-                                            <input type="number"
+                                            <input type="text"
                                                    x-model.number="config.xLogBase"
                                                    @change="saveAndRender()"
-                                                   inputmode="numeric"
-                                                   pattern="[0-9]*"
+                                                   @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                                   inputmode="decimal"
                                                    class="number-input w-full py-1 text-xs sm:text-sm" />
                                         </div>
                                     </div>
@@ -502,11 +502,11 @@
                                         <span class="text-xs font-bold text-slate-400 uppercase">Base</span>
 
                                         <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm ml-auto w-20">
-                                            <input type="number"
+                                            <input type="text"
                                                    x-model.number="config.yLogBase"
                                                    @change="saveAndRender()"
-                                                   inputmode="numeric"
-                                                   pattern="[0-9]*"
+                                                   @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                                   inputmode="decimal"
                                                    class="number-input w-full py-1 text-xs sm:text-sm" />
                                         </div>
                                     </div>

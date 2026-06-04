@@ -165,6 +165,7 @@ from .orientation import (
 )
 from .plugin import Plugin
 from .pose import AnyPose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
+from .pose_context import HasPose, PoseContext, PoseRef
 from .position import Pos
 
 __all__ = [
@@ -230,6 +231,7 @@ __all__ = [
     "GeomSDF",
     "GeomSphere",
     "HField",
+    "HasPose",
     "Inertial",
     "Joint",
     "Key",
@@ -253,8 +255,10 @@ __all__ = [
     "Plugin",
     "Pos",
     "PoseAxisAngle",
+    "PoseContext",
     "PoseEuler",
     "PoseQuat",
+    "PoseRef",
     "PoseXYAxes",
     "PoseZAxis",
     "Quat",
