@@ -60,6 +60,7 @@ export interface TrialManifest {
 export interface TrialMediaFile {
   name: string;
   fps: number | null;
+  mtime: number;
 }
 
 export interface TrialMediaResponse {

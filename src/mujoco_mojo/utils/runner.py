@@ -54,6 +54,7 @@ from mujoco_mojo.utils.defaults import (
     SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, worker_init
+from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -609,6 +610,7 @@ class MojoRunner:
         self.workdir.mkdir(parents=True, exist_ok=True)
         if not (self.workdir / ".gitignore").exists():
             (self.workdir / ".gitignore").write_text("*", encoding="utf-8")
+        write_dojo_script(self.workdir)
         self.capture_environment()
 
         match execution_mode:

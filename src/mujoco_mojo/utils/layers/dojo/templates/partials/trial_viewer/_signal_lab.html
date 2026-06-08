@@ -343,6 +343,14 @@
             { name: "decimals", default: 0, opts: { min: 0, step: 1, precision: 0 } }
         ], C_UTIL, "Bounding");
 
+        // ── Statistics: reduce the whole signal to one value, broadcast back ──
+        reg("stat_max", "Max", [], C_MATH, "Statistics");
+        reg("stat_min", "Min", [], C_MATH, "Statistics");
+        reg("stat_mean", "Mean", [], C_MATH, "Statistics");
+        reg("stat_median", "Median", [], C_MATH, "Statistics");
+        reg("stat_mode", "Mode", [], C_MATH, "Statistics");
+        reg("stat_standard_deviation", "Standard Deviation", [], C_MATH, "Statistics");
+
         // ── Arithmetic: two-input (Lab only) ─────────────────────────────────
         (function () {
             function makeArith(typeName, symbol) {

@@ -44,13 +44,33 @@ def _ideal_force_logic(
 
 
 class Load(MojoBaseModel, ABC):
-    """Abstract base for Cartesian-space forcing functions applied at a named site. Subclass and implement `calculate()` to return (force_world, torque_world); the base class handles `mj_applyFT`, telemetry, and visualization."""
+    """Abstract base for all load types. Subclass and implement `resolve_ids` and `apply_load`."""
 
     name: str
     """Unique label used for telemetry column naming and duplicate-registration warnings."""
 
     active: bool = True
-    """When False the load writes zeros and clears its last-frame cache."""
+    """When False the load is suppressed."""
+
+    @abstractmethod
+    def resolve_ids(self, state: MjState) -> None:
+        """Cache any integer IDs from the compiled MuJoCo model."""
+
+    @abstractmethod
+    def apply_load(self, state: MjState) -> None:
+        """Write the load contribution into the MuJoCo force buffers."""
+
+    def get_visuals(self, state: MjState) -> list[ArrowConfig]:
+        """Returns a list of arrow configurations for the renderer."""
+        return []
+
+    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
+        runtime_manager.add_load(self)
+        return self
+
+
+class SiteLoad(Load):
+    """Abstract base for Cartesian-space forcing functions applied at a named site. Subclass and implement `calculate()` to return (force_world, torque_world); the base class handles `mj_applyFT`, telemetry, and visualization."""
 
     action_site: AnySite
     """Site where the force is applied. Its parent body receives the generalized force."""
@@ -103,10 +123,6 @@ class Load(MojoBaseModel, ABC):
             tuple[np.ndarray, np.ndarray]: The force and toque vector output.
 
         """
-
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_load(self)
-        return self
 
     def apply_load(self, state: MjState):
         if not self.active:
@@ -185,7 +201,7 @@ class Load(MojoBaseModel, ABC):
         return visuals
 
 
-class PointToPointForce(Load):
+class PointToPointForce(SiteLoad):
     """Scalar force along the line-of-sight between two sites, with an equal and opposite reaction on `xtion_site`. Use the class-method factories for standard spring formulations, or supply a custom `magnitude_func`."""
 
     xtion_site: AnySite
@@ -423,7 +439,7 @@ class PointToPointForce(Load):
         )
 
 
-class BodyReactionForce(Load):
+class BodyReactionForce(SiteLoad):
     """Load that also applies an equal and opposite reaction to a second body. If `xtion_body` is None, only the action site receives the force."""
 
     xtion_body: Body | None = None
@@ -555,14 +571,8 @@ class GeneralLoad(VectorForce, VectorTorque):
         )
 
 
-class JointLoad(MojoBaseModel, ABC):
+class JointLoad(Load):
     """Abstract base for loads applied directly in generalized-coordinate (joint) space via `qfrc_applied`. Subclass and implement `apply_load()`."""
-
-    name: str
-    """Name used in telemetry output column naming."""
-
-    active: bool = True
-    """Whether this load is active."""
 
     joint: Joint
     """The MJCF joint this load acts on."""
@@ -595,14 +605,6 @@ class JointLoad(MojoBaseModel, ABC):
     @abstractmethod
     def apply_load(self, state: MjState) -> None:
         """Writes the load contribution into `state.data.qfrc_applied`."""
-
-    def get_visuals(self, state: MjState) -> list[ArrowConfig]:
-        """Joint loads have no Cartesian visualization."""
-        return []
-
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_joint_load(self)
-        return self
 
 
 class JointFriction(JointLoad):

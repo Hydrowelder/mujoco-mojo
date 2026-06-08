@@ -13,11 +13,17 @@ from mujoco_mojo.utils.filters import (
     HighPassFilter,
     IntegralFilter,
     LowPassFilter,
+    MaxFilter,
+    MeanFilter,
     MedianFilter,
+    MinFilter,
+    ModeFilter,
     NormalizeFilter,
     RollingMeanFilter,
+    RollingMedianFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
+    StandardDeviationFilter,
     TaringFilter,
     UnitFilter,
     WrapFilter,
@@ -211,10 +217,10 @@ def test_rolling_mean_filter(signal_df: MojoDataFrame):
     assert len(result) == 5
 
 
-def test_median_filter():
+def test_rolling_median_filter():
     # Median is great for removing "salt and pepper" noise
     df = pl.DataFrame({"x": [1.0, 1.0, 100.0, 1.0, 1.0]})
-    f = MedianFilter(window=3)
+    f = RollingMedianFilter(window=3)
     result = df.select(f.apply(pl.col("x")))["x"].to_list()
 
     # The 100.0 spike should be replaced by the median of [1, 100, 1] -> 1.0
@@ -345,3 +351,55 @@ def test_unit_filter_custom_string_fallback():
     result = df.select(f.apply(pl.col("x")))["x"][0]
 
     assert np.allclose(result, 1.0, rtol=1e-3)
+
+
+# --- Statistics Tests ---
+
+
+def test_max_filter():
+    # Statistics filters reduce the signal to one value, broadcast to the
+    # original length via with_columns (the same mechanism the router/lab
+    # executor use to apply filters in place).
+    df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
+    result = df.with_columns(MaxFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [5.0, 5.0, 5.0, 5.0]
+
+
+def test_min_filter():
+    df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
+    result = df.with_columns(MinFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [-2.0, -2.0, -2.0, -2.0]
+
+
+def test_mean_filter():
+    df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]})
+    result = df.with_columns(MeanFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [2.5, 2.5, 2.5, 2.5]
+
+
+def test_median_filter():
+    df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]})
+    result = df.with_columns(MedianFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [2.5, 2.5, 2.5, 2.5]
+
+
+def test_mode_filter():
+    df = pl.DataFrame({"x": [1.0, 2.0, 2.0, 3.0]})
+    result = df.with_columns(ModeFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [2.0, 2.0, 2.0, 2.0]
+
+
+def test_standard_deviation_filter():
+    # Polars uses the sample standard deviation (ddof=1) by default.
+    df = pl.DataFrame({"x": [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]})
+    result = df.with_columns(StandardDeviationFilter().apply(pl.col("x")))[
+        "x"
+    ].to_list()
+
+    expected = float(np.std(df["x"].to_numpy(), ddof=1))
+    assert np.allclose(result, [expected] * 8)

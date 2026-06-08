@@ -73,6 +73,14 @@ class SignalManager:
         # ensure directory exists and connect
         self.export_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # each SignalManager represents a brand new recording session: clear out
+        # any telemetry left over from a prior run at this path so that flush()'s
+        # diagonal-concat (meant to merge batches *within* this run) doesn't
+        # silently stitch stale rows from a previous, possibly longer, run onto
+        # the front of the new file.
+        if self.export_path.exists():
+            self.export_path.unlink()
+
         # pre-allocate some columns as a starting guess; grow as needed
         self._data_buffer = np.zeros((self.batch_size, 100), dtype=np.float64)
 

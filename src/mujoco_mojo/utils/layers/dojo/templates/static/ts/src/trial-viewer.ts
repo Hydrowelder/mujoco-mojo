@@ -240,6 +240,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     _gifConvertStatus: "none" as "none" | "loading" | "ready" | "failed",
     _mediaRafId: null as number | null,
     _mediaFpsMap: {} as Record<string, number | null>,
+    _mediaMtimeMap: {} as Record<string, number>,
     _mediaFrameInterval: null as number | null,
 
     // -----------------------------------------------------------------------
@@ -358,6 +359,21 @@ function trialViewer(trialId: string, externalUrl: string) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
+      const requestedLabCols = requiredCols.filter((c) => c.startsWith("Lab/"));
+      if (requestedLabCols.length > 0) {
+        // eslint-disable-next-line no-console
+        console.debug("[lab] requested Lab/ columns", requestedLabCols);
+        requestedLabCols.forEach((c) => {
+          const series = result.data?.[c];
+          // eslint-disable-next-line no-console
+          console.debug(
+            `[lab] response for "${c}":`,
+            series === undefined
+              ? "MISSING from response"
+              : `length=${series.length}, sample=${JSON.stringify(series.slice(0, 3))}`,
+          );
+        });
+      }
       if (result.filter_errors && result.filter_errors.length > 0) {
         result.filter_errors.forEach((msg) => {
           if (!(this._shownFilterErrors as Set<string>).has(msg)) {
@@ -587,6 +603,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         this._mediaFpsMap = Object.fromEntries(
           data.files.map((f: TrialMediaFile) => [f.name, f.fps]),
         );
+        this._mediaMtimeMap = Object.fromEntries(
+          data.files.map((f: TrialMediaFile) => [f.name, f.mtime]),
+        );
         this.mediaFiles = data.files.map((f: TrialMediaFile) => f.name);
         if (this.mediaFiles.length > 0) {
           const saved = localStorage.getItem("mojo:media:file");
@@ -604,6 +623,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       this._renderFrameMarkers();
       if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
         this._startMiniplayer();
+    },
+
+    // builds a media file URL with an mtime cache-buster, so a regenerated
+    // file with the same name forces the browser to reload it instead of
+    // reusing a stale cached video/image from before the rerun
+    _mediaFileUrl(filename: string, suffix = ""): string {
+      const base = `/mosaic/${this.trialId}/media/${filename}${suffix}`;
+      const mtime = this._mediaMtimeMap[filename];
+      return mtime !== undefined ? `${base}?t=${mtime}` : base;
     },
 
     _applySelectedMediaFps() {
@@ -2067,7 +2095,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       const checkCol = (col: string, label: string) => {
         if (col.startsWith("Lab/")) {
           if (!schemasLoaded) return; // wait for schemas before reporting Lab issues
-          const labName = col.slice(4).split("/")[0];
+          // lab names may contain '/' (nested folders); the output label is
+          // always the final segment, so split from the right
+          const labRest = col.slice(4);
+          const labSplitIdx = labRest.lastIndexOf("/");
+          const labName =
+            labSplitIdx >= 0 ? labRest.slice(0, labSplitIdx) : labRest;
           if (labsNoted.has(labName)) return;
           const lab = this.labSchemas.find((l) => l.name === labName);
           if (!lab) {
@@ -2961,6 +2994,16 @@ function trialViewer(trialId: string, externalUrl: string) {
           missing: lab.signal_in_columns.filter((c) => !available.has(c)),
           valid: validLabs.has(lab.name),
         }));
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[lab] schemas loaded:",
+          this.labSchemas.map((l) => ({
+            name: l.name,
+            valid: l.valid,
+            missing: l.missing,
+            outputs: l.outputs,
+          })),
+        );
         // Rebuild virtual Lab columns from scratch - removes stale entries from deleted labs.
         this.columns = [...available].sort();
       } catch {
@@ -3169,6 +3212,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
       const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
       try {
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[lab] saving "${trimmed}" - nodes:`,
+          (graph as { nodes?: { id: number; type: string }[] }).nodes?.map(
+            (n) => `${n.id}:${n.type}`,
+          ),
+        );
         const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3199,7 +3249,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         for (const lab of this.labSchemas) {
           for (const col of lab.signal_in_columns) {
             if (col.startsWith("Lab/")) {
-              const src = col.split("/")[1] ?? "";
+              // lab names may contain '/' (nested folders); the output label is
+              // always the final segment, so split from the right
+              const depRest = col.slice(4);
+              const depSplitIdx = depRest.lastIndexOf("/");
+              const src = depSplitIdx >= 0 ? depRest.slice(0, depSplitIdx) : "";
               if (src) {
                 if (!dependents.has(src)) dependents.set(src, []);
                 dependents.get(src)!.push(lab.name);
@@ -3546,7 +3600,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       let traces: object[] = yKeys
         .map((key, i) => {
           const p = this.getYProps(key, i);
-          if (!this.data![p.name]) return null;
+          if (!this.data![p.name]) {
+            if (key.startsWith("Lab/")) {
+              // eslint-disable-next-line no-console
+              console.debug(
+                `[lab] renderPlot: no data for y-axis "${key}" (resolved name "${p.name}") - trace skipped`,
+                "available keys:",
+                Object.keys(this.data ?? {}).filter((k) =>
+                  k.startsWith("Lab/"),
+                ),
+              );
+            }
+            return null;
+          }
           const lineStyle = {
             width: p.width,
             color: p.color,

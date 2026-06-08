@@ -221,9 +221,9 @@
                x-show="isVideo(selectedMedia) || (selectedMedia?.toLowerCase().endsWith('.gif') && _gifConvertStatus === 'ready')"
                preload="metadata"
                :src="isVideo(selectedMedia)
-                     ? `/mosaic/${trialId}/media/${selectedMedia}`
+                     ? _mediaFileUrl(selectedMedia)
                      : selectedMedia?.toLowerCase().endsWith('.gif')
-                         ? `/mosaic/${trialId}/media/${selectedMedia}/as-webm`
+                         ? _mediaFileUrl(selectedMedia, '/as-webm')
                          : ''"
                :controls="mediaScrubMode === 'play'"
                loop
@@ -237,7 +237,7 @@
         <!-- gif display: shown only while WebM conversion is not yet ready -->
         <img id="media-gif-player"
              x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus !== 'ready'"
-             :src="selectedMedia && !isVideo(selectedMedia) ? `/mosaic/${trialId}/media/${selectedMedia}` : ''"
+             :src="selectedMedia && !isVideo(selectedMedia) ? _mediaFileUrl(selectedMedia) : ''"
              alt=""
              class="w-full rounded-lg" />
 

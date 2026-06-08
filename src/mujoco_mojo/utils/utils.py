@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import random
 import socket
 import time
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 from xml.dom import minidom
@@ -11,7 +13,13 @@ from xml.etree.ElementTree import tostring
 
 from mujoco_mojo.utils.log import get_logger
 
-__all__ = ["get_checksum", "get_local_ip", "is_empty_list", "to_pretty_xml"]
+__all__ = [
+    "get_checksum",
+    "get_local_ip",
+    "is_empty_list",
+    "to_pretty_xml",
+    "write_dojo_script",
+]
 
 logger = get_logger(__name__)
 
@@ -44,6 +52,19 @@ def get_checksum(path: Path, retries: int = 5) -> str:
     msg = "I have no clue how you got here, I didnt think that was possible..."
     logger.error(msg)
     raise Exception(msg)
+
+
+def write_dojo_script(workdir: Path) -> None:
+    """Writes a `dojo.sh` launcher into a freshly-created workdir, so results can be browsed with `mujoco-mojo dojo`."""
+    dest = workdir / "dojo.sh"
+    if dest.exists():
+        return
+
+    tmpl = files("mujoco_mojo.templates")
+    dest.write_text(
+        tmpl.joinpath("dojo.sh").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    os.chmod(dest, 0o755)
 
 
 def get_local_ip():

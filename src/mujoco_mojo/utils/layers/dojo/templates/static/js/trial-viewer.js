@@ -229,12 +229,13 @@
       mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
       mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
       mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
-      mediaSpeedPresets: [0.25, 0.5, 1, 2, 4],
+      mediaSpeedPresets: [0.2, 0.5, 1, 2, 4],
       mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
       mediaIsScrubbable: false,
       _gifConvertStatus: "none",
       _mediaRafId: null,
       _mediaFpsMap: {},
+      _mediaMtimeMap: {},
       _mediaFrameInterval: null,
       // -----------------------------------------------------------------------
       // History
@@ -336,6 +337,17 @@
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
         const result = await resp.json();
+        const requestedLabCols = requiredCols.filter((c) => c.startsWith("Lab/"));
+        if (requestedLabCols.length > 0) {
+          console.debug("[lab] requested Lab/ columns", requestedLabCols);
+          requestedLabCols.forEach((c) => {
+            const series = result.data?.[c];
+            console.debug(
+              `[lab] response for "${c}":`,
+              series === void 0 ? "MISSING from response" : `length=${series.length}, sample=${JSON.stringify(series.slice(0, 3))}`
+            );
+          });
+        }
         if (result.filter_errors && result.filter_errors.length > 0) {
           result.filter_errors.forEach((msg) => {
             if (!this._shownFilterErrors.has(msg)) {
@@ -505,6 +517,9 @@
           this._mediaFpsMap = Object.fromEntries(
             data.files.map((f) => [f.name, f.fps])
           );
+          this._mediaMtimeMap = Object.fromEntries(
+            data.files.map((f) => [f.name, f.mtime])
+          );
           this.mediaFiles = data.files.map((f) => f.name);
           if (this.mediaFiles.length > 0) {
             const saved = localStorage.getItem("mojo:media:file");
@@ -518,6 +533,14 @@
         this._renderFrameMarkers();
         if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
           this._startMiniplayer();
+      },
+      // builds a media file URL with an mtime cache-buster, so a regenerated
+      // file with the same name forces the browser to reload it instead of
+      // reusing a stale cached video/image from before the rerun
+      _mediaFileUrl(filename, suffix = "") {
+        const base = `/mosaic/${this.trialId}/media/${filename}${suffix}`;
+        const mtime = this._mediaMtimeMap[filename];
+        return mtime !== void 0 ? `${base}?t=${mtime}` : base;
       },
       _applySelectedMediaFps() {
         const fps = this.selectedMedia ? this._mediaFpsMap[this.selectedMedia] ?? null : null;
@@ -1657,7 +1680,9 @@
         const checkCol = (col, label) => {
           if (col.startsWith("Lab/")) {
             if (!schemasLoaded) return;
-            const labName = col.slice(4).split("/")[0];
+            const labRest = col.slice(4);
+            const labSplitIdx = labRest.lastIndexOf("/");
+            const labName = labSplitIdx >= 0 ? labRest.slice(0, labSplitIdx) : labRest;
             if (labsNoted.has(labName)) return;
             const lab = this.labSchemas.find((l) => l.name === labName);
             if (!lab) {
@@ -2453,6 +2478,15 @@
             missing: lab.signal_in_columns.filter((c) => !available.has(c)),
             valid: validLabs.has(lab.name)
           }));
+          console.debug(
+            "[lab] schemas loaded:",
+            this.labSchemas.map((l) => ({
+              name: l.name,
+              valid: l.valid,
+              missing: l.missing,
+              outputs: l.outputs
+            }))
+          );
           this.columns = [...available].sort();
         } catch {
         }
@@ -2634,6 +2668,12 @@
         }
         const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
         try {
+          console.debug(
+            `[lab] saving "${trimmed}" - nodes:`,
+            graph.nodes?.map(
+              (n) => `${n.id}:${n.type}`
+            )
+          );
           const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2661,7 +2701,9 @@
           for (const lab of this.labSchemas) {
             for (const col of lab.signal_in_columns) {
               if (col.startsWith("Lab/")) {
-                const src = col.split("/")[1] ?? "";
+                const depRest = col.slice(4);
+                const depSplitIdx = depRest.lastIndexOf("/");
+                const src = depSplitIdx >= 0 ? depRest.slice(0, depSplitIdx) : "";
                 if (src) {
                   if (!dependents.has(src)) dependents.set(src, []);
                   dependents.get(src).push(lab.name);
@@ -2939,7 +2981,18 @@
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
-          if (!this.data[p.name]) return null;
+          if (!this.data[p.name]) {
+            if (key.startsWith("Lab/")) {
+              console.debug(
+                `[lab] renderPlot: no data for y-axis "${key}" (resolved name "${p.name}") - trace skipped`,
+                "available keys:",
+                Object.keys(this.data ?? {}).filter(
+                  (k) => k.startsWith("Lab/")
+                )
+              );
+            }
+            return null;
+          }
           const lineStyle = {
             width: p.width,
             color: p.color,
