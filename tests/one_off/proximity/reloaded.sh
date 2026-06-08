@@ -1,11 +1,10 @@
 #!/bin/bash
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-mujoco-mojo run monte-carlo \
+mujoco-mojo reloaded \
     -g simulation.generate \
     -r simulation.runtime \
-    -nt 100 \
-    --no-resume \
-    -cw \
-    -np 4 \
-    --seed 42
+    -ui viser \
+    -h 0.0.0.0 \
+    -p 5001 \
+    --record

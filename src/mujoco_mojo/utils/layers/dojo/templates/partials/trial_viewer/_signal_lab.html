@@ -343,6 +343,14 @@
             { name: "decimals", default: 0, opts: { min: 0, step: 1, precision: 0 } }
         ], C_UTIL, "Bounding");
 
+        // ── Statistics: reduce the whole signal to one value, broadcast back ──
+        reg("stat_max", "Max", [], C_MATH, "Statistics");
+        reg("stat_min", "Min", [], C_MATH, "Statistics");
+        reg("stat_mean", "Mean", [], C_MATH, "Statistics");
+        reg("stat_median", "Median", [], C_MATH, "Statistics");
+        reg("stat_mode", "Mode", [], C_MATH, "Statistics");
+        reg("stat_standard_deviation", "Standard Deviation", [], C_MATH, "Statistics");
+
         // ── Arithmetic: two-input (Lab only) ─────────────────────────────────
         (function () {
             function makeArith(typeName, symbol) {
@@ -536,46 +544,122 @@
     let _labContext = { cols: [], schemas: [], currentName: '' };
 
     // ── Unsaved-changes tracking ──────────────────────────────────────────────
-    // JSON snapshot of the graph at the last save/load; null = never established.
-    let _labSavedState = null;
+    // There is deliberately NO local copy of the "clean baseline" here. Each
+    // tab owns its own baseline (LabTab.savedState in trial-viewer.ts) - that
+    // is the single source of truth, queried live via window.mojoLabGetBaseline.
+    // A local copy was the root cause of a whole class of bugs (forgotten
+    // syncs, stale baselines surviving a tab switch, baseline-vs-history
+    // ordering footguns) because it had to be kept in lockstep with whichever
+    // tab happened to be active. Querying it fresh every time makes that
+    // entire bug class structurally impossible.
 
-    // Mark the current graph state as the clean baseline (call after save or load).
-    window.mojoLabMarkSaved = function () {
-        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
-    };
+    // Comparison key for dirty/undo purposes: a serialized-graph string with
+    // UI-only / incidental fields stripped out so two graphs that "look the
+    // same" to the user always produce the same key, regardless of how their
+    // live LiteGraph instances got there. Two things get stripped:
+    //
+    // 1. node.color/bgcolor/boxcolor - _soColor/mojoLabRefreshSiColors set
+    //    these from live validation status (cyclic links, duplicate labels,
+    //    unknown columns, ...) and LiteGraph's serializer includes them
+    //    whenever present. Nothing is lost by stripping: configure() always
+    //    re-triggers the recoloring hooks, so this only affects comparison.
+    //
+    // 2. extra.viewport - mojoLabSerialize() (used to persist tab.graph on
+    //    every tab switch) stamps the *current* pan/zoom into extra.viewport
+    //    on its returned copy. mojoLabInit then configure()s that data back
+    //    onto the live graph on switch-back, which copies that whole `extra`
+    //    object - viewport included - onto _lab.graph.extra. From then on the
+    //    live graph's serialized extra carries whatever pan/zoom was active at
+    //    the moment of the *last* switch-out, while the baseline's extra was
+    //    captured at a (generally different) pan/zoom - so panning and
+    //    switching tabs alone made the comparison spuriously mismatch.
+    function _labNormalizedSnapshot() {
+        if (!_lab.graph) return null;
+        const data = _lab.graph.serialize();
+        (data.nodes || []).forEach((n) => {
+            delete n.color;
+            delete n.bgcolor;
+            delete n.boxcolor;
+        });
+        if (data.extra) {
+            // serialize() hands back graph.extra by reference - clone before
+            // deleting so we never mutate the live graph's extra as a side effect
+            data.extra = Object.assign({}, data.extra);
+            delete data.extra.viewport;
+        }
+        return JSON.stringify(data);
+    }
 
-    // Returns true when the graph differs from the last save/load baseline.
+    // Returns true when the graph differs from the active tab's clean baseline.
+    // baseline === null means "never established" (brand new blank tab) -
+    // in that case any node at all counts as unsaved content.
     window.mojoLabHasUnsavedChanges = function () {
         if (!_lab.graph) return false;
-        const nodes = _lab.graph._nodes || [];
-        if (_labSavedState === null) return nodes.length > 0;
-        return JSON.stringify(_lab.graph.serialize()) !== _labSavedState;
+        const baseline = window.mojoLabGetBaseline ? window.mojoLabGetBaseline() : null;
+        if (baseline === null) return (_lab.graph._nodes || []).length > 0;
+        return _labNormalizedSnapshot() !== baseline;
     };
 
-    // Bridge for tab management: get/set saved state so tab switches can restore
-    // each tab's correct dirty baseline without re-saving.
-    window.mojoLabGetSavedState = function () { return _labSavedState; };
-    window.mojoLabSetSavedState = function (state) { _labSavedState = state; };
+    // Replace the active tab's baseline with the current live graph state -
+    // i.e. "treat what's on screen right now as clean going forward". Used
+    // after a successful save, after clearing the graph, and (from mojoLabInit)
+    // the first time a tab's content is configured so it starts out clean.
+    window.mojoLabRebaseline = function () {
+        if (!_lab.graph || !window.mojoLabSetBaseline) return;
+        window.mojoLabSetBaseline(_labNormalizedSnapshot());
+    };
+
+    // Bridge for tab management: read the canvas's current pan/zoom so it can be
+    // stashed on the tab and restored on switch-back. Kept off graph.extra (see
+    // mojoLabSerialize) so panning alone never affects the dirty/undo baselines.
+    window.mojoLabGetViewport = function () {
+        if (!_lab.canvas) return null;
+        return {
+            scale: _lab.canvas.ds.scale,
+            offset: [_lab.canvas.ds.offset[0], _lab.canvas.ds.offset[1]],
+        };
+    };
 
     // Called by tab management whenever the graph snapshot changes so the tab
     // dirty indicator can be updated reactively.
     window.mojoLabOnDirtyChange = null;
 
-    // ── Undo / redo history ───────────────────────────────────────────────────
-    const _labHistory = { stack: [], index: -1 };
+    // ── Undo / redo history (one stack per tab) ───────────────────────────────
     const _LAB_HIST_MAX = 50;
+    const _labHistories = new Map(); // tabId -> { stack: string[], index: number }
+    let _labHistory = { stack: [], index: -1 }; // active tab's history (swapped on tab switch)
     let _labSnapshotTimer = null;
+
+    function _labHistoryFor(tabId) {
+        let h = _labHistories.get(tabId);
+        if (!h) {
+            h = { stack: [], index: -1 };
+            _labHistories.set(tabId, h);
+        }
+        return h;
+    }
+
+    // Point the active history reference at the given tab's stack, creating one
+    // on first visit. Must be called BEFORE mojoLabInit loads the tab's graph so
+    // that the seed snapshot (and any subsequent edits) land in the right stack.
+    function mojoLabSetActiveHistoryTab(tabId) {
+        _labHistory = tabId ? _labHistoryFor(tabId) : { stack: [], index: -1 };
+    }
+
+    // Drop a closed tab's history so it doesn't linger in memory.
+    window.mojoLabDiscardHistory = function (tabId) {
+        _labHistories.delete(tabId);
+    };
 
     function mojoLabSnapshot() {
         if (!_lab.graph) return;
-        const state = JSON.stringify(_lab.graph.serialize());
+        const state = _labNormalizedSnapshot();
         if (_labHistory.stack[_labHistory.index] === state) return;
         _labHistory.stack = _labHistory.stack.slice(0, _labHistory.index + 1);
         _labHistory.stack.push(state);
         if (_labHistory.stack.length > _LAB_HIST_MAX) _labHistory.stack.shift();
         else _labHistory.index++;
-        // notify tab manager of dirty state change
-        if (window.mojoLabOnDirtyChange) window.mojoLabOnDirtyChange(window.mojoLabHasUnsavedChanges());
+        _labNotifyDirtyChange();
     }
 
     function mojoLabDeferredSnapshot() {
@@ -583,9 +667,31 @@
         _labSnapshotTimer = setTimeout(mojoLabSnapshot, 400);
     }
 
+    // Run any pending deferred snapshot immediately - used before reading the
+    // graph for persistence (e.g. switching tabs) so the undo stack's top entry
+    // matches exactly what gets stored on the tab.
+    function mojoLabFlushSnapshot() {
+        if (_labSnapshotTimer) {
+            clearTimeout(_labSnapshotTimer);
+            _labSnapshotTimer = null;
+            mojoLabSnapshot();
+        }
+    }
+    window.mojoLabFlushSnapshot = mojoLabFlushSnapshot;
+
     function mojoLabClearHistory() {
         _labHistory.stack = [];
         _labHistory.index = -1;
+    }
+
+    // mojoLabSnapshot is the only other place that notifies the dirty callback,
+    // and undo/redo don't go through it (they jump directly to a stack entry
+    // via configure()) - without this, tab.dirty stays stuck at whatever it was
+    // the instant before the undo/redo, even when the restored graph now matches
+    // (or no longer matches) the baseline. e.g. move a node, undo back to the
+    // original position - the dot would keep showing dirty forever.
+    function _labNotifyDirtyChange() {
+        if (window.mojoLabOnDirtyChange) window.mojoLabOnDirtyChange(window.mojoLabHasUnsavedChanges());
     }
 
     window.mojoLabUndo = function () {
@@ -594,6 +700,7 @@
         _lab.graph.configure(JSON.parse(_labHistory.stack[_labHistory.index]));
         mojoLabRefreshSiColors();
         if (_lab.canvas) _lab.canvas.setDirty(true, true);
+        _labNotifyDirtyChange();
     };
 
     window.mojoLabRedo = function () {
@@ -602,10 +709,30 @@
         _lab.graph.configure(JSON.parse(_labHistory.stack[_labHistory.index]));
         mojoLabRefreshSiColors();
         if (_lab.canvas) _lab.canvas.setDirty(true, true);
+        _labNotifyDirtyChange();
+    };
+
+    // Discard in-progress edits: restore the live graph to the last saved/loaded
+    // baseline so that closing the lab doesn't snapshot the dirty state into the tab.
+    window.mojoLabRevertToSaved = function () {
+        const baseline = window.mojoLabGetBaseline ? window.mojoLabGetBaseline() : null;
+        if (!_lab.graph || baseline === null) return;
+        _lab.graph.configure(JSON.parse(baseline));
+        mojoLabRefreshSiColors();
+        if (_lab.canvas) _lab.canvas.setDirty(true, true);
+        mojoLabClearHistory();
+        mojoLabSnapshot();
     };
 
 
-    function mojoLabInit(canvasEl, columns, savedGraph) {
+    // savedViewport: the tab's remembered pan/zoom ({scale, offset}), restored onto the
+    // canvas after the graph loads. Falls back to graph.extra.viewport (e.g. a lab freshly
+    // loaded from its saved schema file, before any tab has cached a viewport for it).
+    //
+    // Note there is no "savedBaseline" parameter: the active tab's baseline lives only
+    // in trial-viewer.ts (LabTab.savedState) and is always read live via
+    // window.mojoLabGetBaseline - see the "Unsaved-changes tracking" comment above.
+    function mojoLabInit(canvasEl, columns, savedGraph, savedViewport) {
         mojoLabRegisterNodes(columns);
 
         if (!_lab.graph) {
@@ -628,11 +755,17 @@
                     opts.push({
                         content: "Extract selection as new Lab…",
                         callback: () => {
-                            // capture IDs NOW — prompt() blocks and LiteGraph may clear
-                            // selected_nodes while the dialog is open
+                            // capture IDs NOW — the dialog is async and LiteGraph may
+                            // clear selected_nodes while it is open
                             const capturedIds = sel.map(n => n.id);
-                            const name = prompt("New lab name (or folder/name):");
-                            if (name && name.trim()) void _labSaveSelectionAsLab(name.trim(), capturedIds);
+                            window.mojoPrompt?.({
+                                title: "Extract selection as new Lab",
+                                message: "New lab name (or folder/name):",
+                                placeholder: "name or folder/name",
+                                confirmLabel: "Create"
+                            }).then(name => {
+                                if (name) void _labSaveSelectionAsLab(name, capturedIds);
+                            });
                         }
                     });
                 }
@@ -692,18 +825,35 @@
         canvasEl.focus();
 
         if (savedGraph) {
-            _lab.graph.configure(JSON.parse(
+            const parsed = JSON.parse(
                 typeof savedGraph === "string" ? savedGraph : JSON.stringify(savedGraph)
-            ));
+            );
+            _lab.graph.configure(parsed);
+            // Restore the remembered pan/zoom: prefer the tab's own cached viewport
+            // (kept off graph.extra - see mojoLabGetViewport), falling back to the
+            // viewport embedded in the loaded graph itself (e.g. on first load from
+            // the saved schema file, before any tab has cached one).
+            const vp = savedViewport || (parsed.extra && parsed.extra.viewport);
+            if (vp && _lab.canvas) {
+                _lab.canvas.ds.scale = vp.scale;
+                _lab.canvas.ds.offset = [vp.offset[0], vp.offset[1]];
+                _lab.canvas.setDirty(true, true);
+            }
         } else {
             // blank tab or explicit clear — wipe any lingering nodes from the previous graph
             _lab.graph.clear();
         }
 
-        // establish clean baseline BEFORE seeding history — mojoLabSnapshot fires
-        // mojoLabOnDirtyChange which reads _labSavedState, so the baseline must be
-        // set first or the loaded graph gets compared against the previous tab's state
-        _labSavedState = _lab.graph ? JSON.stringify(_lab.graph.serialize()) : '';
+        // First time this tab's content has been configured (no baseline yet,
+        // e.g. a brand new blank tab or a lab loaded for the first time): the
+        // just-configured graph becomes the clean baseline. A tab that already
+        // has a baseline (returning to a previously-visited tab, or a
+        // previously-saved/edited lab) keeps it untouched - mojoLabGetBaseline
+        // always reflects the active tab's true baseline, so there's no
+        // "establish it before X" ordering to get wrong here.
+        if (window.mojoLabGetBaseline && window.mojoLabGetBaseline() === null) {
+            window.mojoLabRebaseline();
+        }
 
         // Seed history with the initial state on first open (or after mojoLabClearHistory).
         if (_labHistory.stack.length === 0) mojoLabSnapshot();
@@ -720,8 +870,25 @@
         }
     }
 
+    // Serialize the graph for persistence (tab switches + saving to the schema
+    // file), stamping the current pan/zoom into extra.viewport on the *returned
+    // copy* only - graph.extra itself is left untouched so that merely panning
+    // or zooming the canvas can never make the live graph differ from the undo
+    // history / dirty-check baseline (both of which serialize the live graph
+    // directly). The viewport still round-trips correctly because configure()
+    // restores graph.extra wholesale from whatever was loaded/persisted.
     function mojoLabSerialize() {
-        return _lab.graph ? _lab.graph.serialize() : null;
+        if (!_lab.graph) return null;
+        const data = _lab.graph.serialize();
+        if (_lab.canvas) {
+            data.extra = Object.assign({}, data.extra, {
+                viewport: {
+                    scale: _lab.canvas.ds.scale,
+                    offset: [_lab.canvas.ds.offset[0], _lab.canvas.ds.offset[1]],
+                },
+            });
+        }
+        return data;
     }
     window.mojoLabSerialize = mojoLabSerialize;
 
@@ -1184,7 +1351,8 @@
 
     // ── Selection → Lab extraction ────────────────────────────────────────────
     // capturedIds must be passed in from the right-click callback BEFORE showing
-    // any dialog, because prompt() blocks and LiteGraph may clear selected_nodes.
+    // any dialog, because the dialog is async and LiteGraph may clear selected_nodes
+    // while it is open.
     // graph.serialize() is used so links are always [lid,from,fSlot,to,tSlot,type]
     // arrays — the live graph.links stores Link class instances, not arrays.
 
@@ -1313,6 +1481,17 @@
     async function _labSaveSelectionAsLab(name, capturedIds) {
         const graph = _labExtractSelection(capturedIds);
         if (!graph) { alert('No nodes found in selection.'); return; }
+        const exists = (_labContext.schemas || []).some(s => s.name === name);
+        if (exists) {
+            const ok = await window.mojoConfirm?.({
+                title: 'Overwrite lab',
+                message: `"${name}" already exists. Replace it with the selected nodes?`,
+                confirmLabel: 'Overwrite',
+                cancelLabel: 'Cancel',
+                variant: 'warning'
+            });
+            if (!ok) return;
+        }
         const safePath = name.split('/').map(encodeURIComponent).join('/');
         try {
             const r = await fetch('/mosaic/api/lab/' + safePath, {
@@ -1441,7 +1620,7 @@
                 <span class="hidden sm:inline">Arrange</span>
             </button>
             <!-- clear -->
-            <button @click="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabMarkSaved?.(); } }"
+            <button @click="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabRebaseline?.(); } }"
                     class="btn btn-ghost text-sm font-bold text-rose-600 dark:text-rose-400 border-rose-500/40 dark:border-rose-500/30 hover:bg-rose-500/10 uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Clear (⌘C)' : 'Clear (Ctrl+C)'">
                 <svg class="w-3.5 h-3.5"
@@ -1485,7 +1664,7 @@
                        @keydown.enter="labName && saveLabGraph(labName, mojoLabSerialize())"
                        @keydown.escape.stop="labName = ''"
                        placeholder="name or folder/name…"
-                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-20 md:w-28 xl:w-44" />
+                       class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-20 md:w-28 xl:w-44" />
                 <button @click="labName && saveLabGraph(labName, mojoLabSerialize())"
                         :disabled="!labName"
                         class="btn btn-ghost text-sm font-bold text-cyan-600 dark:text-cyan-400 border-cyan-500/40 dark:border-cyan-500/30 hover:bg-cyan-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
@@ -1507,18 +1686,18 @@
                 <span class="lab-kbd-tip"
                       x-text="isMac ? '⌘S' : 'Ctrl+S'"></span>
                 <!-- suggestion hint — rendered outside overflow-y-hidden so it's not clipped -->
-                <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-[700]"
+                <div class="absolute top-full left-0 mt-0.5 flex items-center gap-1.5 text-sm font-mono px-2 py-0.5 rounded-b bg-slate-50/95 dark:bg-slate-950/95 border border-t-0 border-slate-200 dark:border-slate-800 shadow-sm z-[700]"
                      :class="suggestion ? 'visible' : 'invisible'">
                     <button @click="accept()"
                             class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
                             x-text="suggestion"></button>
-                    <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-[9px]">Tab</kbd>
+                    <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-sm">Tab</kbd>
                 </div>
             </div>
         </div>
 
         <!-- close: always visible, pinned to the right (shrink-0) -->
-        <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Close the lab and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; } labOpen=false; }"
+        <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Close the lab and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; window.mojoLabRevertToSaved?.(); } labOpen=false; }"
                 class="shrink-0 btn-icon btn-ghost"
                 title="Close (Esc)">
             <svg class="w-5 h-5"
@@ -1586,7 +1765,7 @@
                          _dragId = null; _overIdx = null;
                      "
                      @dragend="_dragId = null; _overIdx = null"
-                     class="relative shrink-0 flex items-center gap-1.5 px-3 h-[2.25rem] border-b-2 text-xs font-mono cursor-grab active:cursor-grabbing select-none group transition-colors max-w-[200px]"
+                     class="relative shrink-0 flex items-center gap-1.5 px-3 h-[2.25rem] border-b-2 text-sm font-mono cursor-grab active:cursor-grabbing select-none group transition-colors"
                      :class="[
                          tab.id === labActiveTabId
                              ? 'border-cyan-500 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 cursor-default'
@@ -1597,7 +1776,7 @@
                     <span x-show="tab.dirty"
                           class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 flex-none"></span>
                     <!-- lab name -->
-                    <span class="truncate min-w-[30px]"
+                    <span class="whitespace-nowrap"
                           :class="tab.name ? '' : 'italic opacity-50'"
                           x-text="tab.name || 'untitled'"></span>
                     <!-- close button -->
@@ -1623,7 +1802,7 @@
             <!-- new tab -->
             <button @click="newTab()"
                     title="New tab"
-                    class="btn btn-ghost h-7 text-xs font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
+                    class="btn btn-ghost h-7 text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
                 <svg class="w-3 h-3"
                      fill="none"
                      stroke="currentColor"
@@ -1664,7 +1843,7 @@
                  }"
                  @click.outside="open = false; labSearch = ''">
                 <button @click="open = !open; if(open) loadLabSchemas(); else labSearch = ''"
-                        class="btn btn-ghost h-7 text-xs font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
+                        class="btn btn-ghost h-7 text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
                     <svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -1697,7 +1876,7 @@
                                    @keydown.tab.prevent="acceptSearch()"
                                    @keydown.enter="loadSingle()"
                                    placeholder="Search labs…"
-                                   class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 pr-6 py-1 text-xs font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-cyan-500" />
+                                   class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 pr-6 py-1 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-cyan-500" />
                             <button x-show="labSearch"
                                     @click="labSearch = ''"
                                     type="button"
@@ -1714,12 +1893,12 @@
                             </button>
                         </div>
                         <!-- search suggestion hint -->
-                        <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-[10px] font-mono"
+                        <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-sm font-mono"
                              :class="_suggestion ? 'visible' : 'invisible'">
                             <button @click="acceptSearch()"
                                     class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
                                     x-text="_suggestion"></button>
-                            <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-[9px]">Tab</kbd>
+                            <kbd class="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-sm">Tab</kbd>
                         </div>
                     </div>
                     <!-- list -->
@@ -1731,7 +1910,7 @@
                                 <div class="flex items-center justify-between px-3 py-2"
                                      :class="!lab.valid ? 'opacity-60' : ''">
                                     <button @click="loadLabInNewTab(lab.name); open = false; labSearch = ''"
-                                            class="flex-1 text-left text-xs font-mono min-w-0">
+                                            class="flex-1 text-left text-sm font-mono min-w-0">
                                         <div class="flex items-center gap-1.5 min-w-0">
                                             <span :class="lab.valid ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'"
                                                   class="truncate"
@@ -1739,7 +1918,7 @@
                                             <!-- template indicator -->
                                             <span x-show="lab.is_template"
                                                   title="Template — contains Template In/Out ports"
-                                                  class="shrink-0 text-[9px] font-sans font-semibold px-1 py-0.5 rounded bg-fuchsia-100 dark:bg-fuchsia-950 text-fuchsia-600 dark:text-fuchsia-400">tmpl</span>
+                                                  class="shrink-0 text-sm font-sans font-semibold px-1 py-0.5 rounded bg-fuchsia-100 dark:bg-fuchsia-950 text-fuchsia-600 dark:text-fuchsia-400">tmpl</span>
                                             <!-- circular dependency -->
                                             <span x-show="!lab.valid && lab.missing.some(c => c.startsWith('Lab/'))"
                                                   title="Contains a circular lab dependency"
@@ -1771,7 +1950,7 @@
                                                 </svg>
                                             </span>
                                         </div>
-                                        <div class="text-slate-400 dark:text-slate-600 text-[10px]"
+                                        <div class="text-slate-400 dark:text-slate-600 text-sm"
                                              x-text="relTime(lab.modified)"></div>
                                     </button>
                                     <!-- action icons -->
@@ -1814,11 +1993,11 @@
                                 </div>
                                 <!-- inline info panel -->
                                 <div x-show="infoOpen"
-                                     class="px-3 pb-2.5 text-[10px] font-mono"
+                                     class="px-3 pb-2.5 text-sm font-mono"
                                      style="display:none;">
                                     <template x-if="lab.signal_in_columns.length">
                                         <div class="mb-1.5">
-                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Inputs</div>
+                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-sm mb-1 font-sans font-semibold">Inputs</div>
                                             <template x-for="col in lab.signal_in_columns"
                                                       :key="col">
                                                 <div class="flex items-center gap-1 truncate"
@@ -1826,7 +2005,7 @@
                                                     <span class="truncate"
                                                           x-text="col"></span>
                                                     <span x-show="lab.missing.includes(col)"
-                                                          class="shrink-0 text-[9px] font-sans"
+                                                          class="shrink-0 text-sm font-sans"
                                                           x-text="col.startsWith('Lab/') ? 'circular ref' : 'not in trial'"></span>
                                                 </div>
                                             </template>
@@ -1834,7 +2013,7 @@
                                     </template>
                                     <template x-if="lab.outputs.length">
                                         <div>
-                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Outputs</div>
+                                            <div class="text-slate-400 dark:text-slate-500 uppercase tracking-wider text-sm mb-1 font-sans font-semibold">Outputs</div>
                                             <template x-for="out in lab.outputs"
                                                       :key="out">
                                                 <div class="text-cyan-600 dark:text-cyan-400 truncate"
@@ -1844,7 +2023,7 @@
                                     </template>
                                     <template x-if="lab.is_template && (lab.template_inputs.length || lab.template_outputs.length)">
                                         <div class="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                                            <div class="text-fuchsia-500 dark:text-fuchsia-400 uppercase tracking-wider text-[9px] mb-1 font-sans font-semibold">Template ports</div>
+                                            <div class="text-fuchsia-500 dark:text-fuchsia-400 uppercase tracking-wider text-sm mb-1 font-sans font-semibold">Template ports</div>
                                             <template x-if="lab.template_inputs.length">
                                                 <div class="mb-0.5">
                                                     <span class="text-slate-400 dark:text-slate-500">in: </span>
@@ -1865,7 +2044,7 @@
                             </div>
                         </template>
                         <p x-show="_filtered.length === 0"
-                           class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">
+                           class="px-3 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">
                             <span x-text="labSchemas.length === 0 ? 'No saved labs yet' : 'No matching labs'"></span>
                         </p>
                     </div>
@@ -1881,26 +2060,23 @@
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
          @mojo:lab-new.document="newTab()"
-         @mojo:lab-clear.document="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabMarkSaved?.(); } }"
+         @mojo:lab-clear.document="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabRebaseline?.(); } }"
          @mojo:lab-activate-tab.document="$nextTick(() => {
              const el = document.getElementById('lab-canvas');
+             const tab = labTabs.find(t => t.id === labActiveTabId);
+             mojoLabSetActiveHistoryTab(tab ? tab.id : labActiveTabId);
              if (el) {
-                 mojoLabClearHistory();
-                 mojoLabInit(el, columns, labGraph);
-                 // only override mojoLabInit's baseline when the tab has a known saved state;
-                 // null means 'freshly loaded or blank' and mojoLabInit already set the right baseline
-                 const tab = labTabs.find(t => t.id === labActiveTabId);
-                 if (tab && tab.savedState !== null) window.mojoLabSetSavedState?.(tab.savedState);
+                 mojoLabInit(el, columns, labGraph, tab ? tab.viewport : null);
              }
              mojoLabSetContext(columns, labSchemas, labName);
          })"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
                  const el = document.getElementById('lab-canvas');
+                 const tab = labTabs.find(t => t.id === labActiveTabId);
+                 mojoLabSetActiveHistoryTab(tab ? tab.id : labActiveTabId);
                  if (el) {
-                     mojoLabInit(el, columns, labGraph);
-                     const tab = labTabs.find(t => t.id === labActiveTabId);
-                     if (tab && tab.savedState !== null) window.mojoLabSetSavedState?.(tab.savedState);
+                     mojoLabInit(el, columns, labGraph, tab ? tab.viewport : null);
                  }
                  mojoLabSetContext(columns, labSchemas, labName);
              });
@@ -1978,7 +2154,7 @@
                                     :class="isSegmentActive('nodeCol', seg, depth)
                                         ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
                                         : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
-                                    class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
+                                    class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
                                     x-text="seg">
                             </button>
                         </template>
@@ -1993,7 +2169,7 @@
                                 :class="isSegmentActive('nodeCol', sfx, 'suffix')
                                     ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
                                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
-                                class="shrink-0 px-2 py-0.5 rounded border text-xs font-mono transition-all"
+                                class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
                                 x-text="sfx">
                         </button>
                     </template>
@@ -2085,7 +2261,7 @@
                             class="w-full text-left px-2 py-2 rounded hover:bg-fuchsia-500/10 transition-colors group">
                         <div class="text-sm font-mono text-slate-600 dark:text-slate-300 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 truncate"
                              x-text="t.name"></div>
-                        <div class="flex gap-3 mt-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                        <div class="flex gap-3 mt-0.5 text-sm font-mono text-slate-400 dark:text-slate-500">
                             <span x-show="t.template_inputs.length"
                                   x-text="'in: ' + t.template_inputs.join(', ')"></span>
                             <span x-show="t.template_outputs.length"
@@ -2106,6 +2282,7 @@
     <!-- status bar -->
     <div class="h-8 shrink-0 flex items-center px-4 border-t border-slate-200 dark:border-slate-800 text-sm font-mono text-slate-500 dark:text-slate-500 select-none overflow-x-auto custom-scrollbar gap-5 whitespace-nowrap">
         <span>Right-click → add node</span>
+        <span>Scroll to zoom · drag to pan</span>
         <span class="flex items-center gap-3">
             <!-- Undo: ⌘Z / Ctrl+Z -->
             <span class="flex items-center gap-1">
@@ -2182,6 +2359,5 @@
                 <span>Fit</span>
             </span>
         </span>
-        <span>Scroll to zoom · drag to pan</span>
     </div>
 </div>

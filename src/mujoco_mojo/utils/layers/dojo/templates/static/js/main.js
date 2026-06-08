@@ -309,7 +309,10 @@
         this.unreadCount = 0;
         this._saveNotifications();
       },
-      // ── Generic confirm dialog ─────────────────────────────────────────────
+      // ── Generic confirm / prompt dialog ────────────────────────────────────
+      // Doubles as a text-input prompt when `showInput` is set: confirm()
+      // resolves with the trimmed input string (or null if blank), cancel()
+      // resolves with null. Plain confirm dialogs resolve with booleans.
       dialog: {
         show: false,
         title: "",
@@ -317,6 +320,9 @@
         confirmLabel: "Confirm",
         cancelLabel: "Cancel",
         variant: "info",
+        showInput: false,
+        inputValue: "",
+        inputPlaceholder: "",
         _resolve: null,
         open(opts) {
           this.title = opts.title;
@@ -324,6 +330,21 @@
           this.confirmLabel = opts.confirmLabel ?? "Confirm";
           this.cancelLabel = opts.cancelLabel ?? "Cancel";
           this.variant = opts.variant ?? "info";
+          this.showInput = false;
+          this.show = true;
+          return new Promise((resolve) => {
+            this._resolve = resolve;
+          });
+        },
+        prompt(opts) {
+          this.title = opts.title;
+          this.message = opts.message ?? "";
+          this.confirmLabel = opts.confirmLabel ?? "Save";
+          this.cancelLabel = opts.cancelLabel ?? "Cancel";
+          this.variant = opts.variant ?? "info";
+          this.showInput = true;
+          this.inputValue = opts.value ?? "";
+          this.inputPlaceholder = opts.placeholder ?? "";
           this.show = true;
           return new Promise((resolve) => {
             this._resolve = resolve;
@@ -331,17 +352,22 @@
         },
         confirm() {
           this.show = false;
-          this._resolve?.(true);
+          const result = this.showInput ? this.inputValue.trim() || null : true;
+          this.showInput = false;
+          this._resolve?.(result);
           this._resolve = null;
         },
         cancel() {
           this.show = false;
-          this._resolve?.(false);
+          const result = this.showInput ? null : false;
+          this.showInput = false;
+          this._resolve?.(result);
           this._resolve = null;
         }
       }
     });
     window.mojoConfirm = (opts) => Alpine.store("dojo").dialog.open(opts);
+    window.mojoPrompt = (opts) => Alpine.store("dojo").dialog.prompt(opts);
     const store = Alpine.store("dojo");
     setInterval(() => {
       if (store.lastUpdate) {

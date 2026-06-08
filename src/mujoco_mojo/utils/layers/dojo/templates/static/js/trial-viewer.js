@@ -229,12 +229,13 @@
       mediaShowLine: localStorage.getItem("mojo:media:show-line") === "1",
       mediaShowFrames: localStorage.getItem("mojo:media:show-frames") === "1",
       mediaPlaybackRate: Number(localStorage.getItem("mojo:media:rate")) || 1,
-      mediaSpeedPresets: [0.25, 0.5, 1, 2, 4],
+      mediaSpeedPresets: [0.2, 0.5, 1, 2, 4],
       mediaMiniplayerOpen: localStorage.getItem("mojo:media:mini") === "1",
       mediaIsScrubbable: false,
       _gifConvertStatus: "none",
       _mediaRafId: null,
       _mediaFpsMap: {},
+      _mediaMtimeMap: {},
       _mediaFrameInterval: null,
       // -----------------------------------------------------------------------
       // History
@@ -505,6 +506,9 @@
           this._mediaFpsMap = Object.fromEntries(
             data.files.map((f) => [f.name, f.fps])
           );
+          this._mediaMtimeMap = Object.fromEntries(
+            data.files.map((f) => [f.name, f.mtime])
+          );
           this.mediaFiles = data.files.map((f) => f.name);
           if (this.mediaFiles.length > 0) {
             const saved = localStorage.getItem("mojo:media:file");
@@ -518,6 +522,14 @@
         this._renderFrameMarkers();
         if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
           this._startMiniplayer();
+      },
+      // builds a media file URL with an mtime cache-buster, so a regenerated
+      // file with the same name forces the browser to reload it instead of
+      // reusing a stale cached video/image from before the rerun
+      _mediaFileUrl(filename, suffix = "") {
+        const base = `/mosaic/${this.trialId}/media/${filename}${suffix}`;
+        const mtime = this._mediaMtimeMap[filename];
+        return mtime !== void 0 ? `${base}?t=${mtime}` : base;
       },
       _applySelectedMediaFps() {
         const fps = this.selectedMedia ? this._mediaFpsMap[this.selectedMedia] ?? null : null;
@@ -882,6 +894,14 @@
           const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
           if (tab) tab.dirty = dirty;
         };
+        window.mojoLabGetBaseline = () => {
+          const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          return tab?.savedState ?? null;
+        };
+        window.mojoLabSetBaseline = (state) => {
+          const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          if (tab) tab.savedState = state;
+        };
         void this.$nextTick(() => {
           const video = document.getElementById(
             "media-video-player"
@@ -1127,7 +1147,10 @@
                   cancelLabel: "Keep editing",
                   variant: "warning"
                 }) ?? Promise.resolve(false)).then((ok) => {
-                  if (ok) this.labOpen = false;
+                  if (ok) {
+                    window.mojoLabRevertToSaved?.();
+                    this.labOpen = false;
+                  }
                 });
               }
               window.dispatchEvent(new CustomEvent("mojo:escape"));
@@ -1657,7 +1680,9 @@
         const checkCol = (col, label) => {
           if (col.startsWith("Lab/")) {
             if (!schemasLoaded) return;
-            const labName = col.slice(4).split("/")[0];
+            const labRest = col.slice(4);
+            const labSplitIdx = labRest.lastIndexOf("/");
+            const labName = labSplitIdx >= 0 ? labRest.slice(0, labSplitIdx) : labRest;
             if (labsNoted.has(labName)) return;
             const lab = this.labSchemas.find((l) => l.name === labName);
             if (!lab) {
@@ -2494,7 +2519,7 @@
           }
         })();
         const id = this._tabId();
-        this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+        this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
         this.labActiveTabId = id;
         this.labName = name;
         this.labGraph = graph;
@@ -2503,9 +2528,11 @@
         if (!this.labActiveTabId) return;
         const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
         if (!tab) return;
+        window.mojoLabFlushSnapshot?.();
         tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
         tab.name = this.labName;
-        tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
+        tab.viewport = window.mojoLabGetViewport?.() ?? tab.viewport;
+        this.labGraph = tab.graph;
       },
       _persistTabs() {
         try {
@@ -2533,7 +2560,7 @@
         if (tabId === this.labActiveTabId) return;
         this._snapshotActiveTab();
         await this._activateTab(tabId);
-        this._saveTabs();
+        this._persistTabs();
       },
       async newTab() {
         this._snapshotActiveTab();
@@ -2543,6 +2570,7 @@
           name: "",
           graph: null,
           savedState: null,
+          viewport: null,
           dirty: false
         });
         await this._activateTab(id);
@@ -2565,6 +2593,7 @@
           if (!ok) return;
         }
         this.labTabs.splice(tabIdx, 1);
+        window.mojoLabDiscardHistory?.(tabId);
         if (this.labTabs.length === 0) {
           const newId = this._tabId();
           this.labTabs.push({
@@ -2572,6 +2601,7 @@
             name: "",
             graph: null,
             savedState: null,
+            viewport: null,
             dirty: false
           });
           await this._activateTab(newId);
@@ -2579,9 +2609,18 @@
           const newActive = this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)];
           await this._activateTab(newActive.id);
         }
-        this._saveTabs();
+        this._persistTabs();
       },
       async loadLabInNewTab(labName) {
+        const existing = this.labTabs.find((t) => t.name === labName);
+        if (existing) {
+          if (existing.id !== this.labActiveTabId) {
+            this._snapshotActiveTab();
+            await this._activateTab(existing.id);
+            this._persistTabs();
+          }
+          return;
+        }
         const safePath = labName.split("/").map(encodeURIComponent).join("/");
         try {
           const resp = await fetch(`/mosaic/api/lab/${safePath}`);
@@ -2609,6 +2648,7 @@
               name: labName,
               graph,
               savedState: null,
+              viewport: null,
               dirty: false
             });
             await this._activateTab(id);
@@ -2645,14 +2685,13 @@
             return;
           }
           this.notify(`Lab "${trimmed}" saved`, "success");
-          window.mojoLabMarkSaved?.();
+          window.mojoLabRebaseline?.();
           this.labName = trimmed;
           const activeTab = this.labTabs.find(
             (t) => t.id === this.labActiveTabId
           );
           if (activeTab) {
             activeTab.name = trimmed;
-            activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
             activeTab.dirty = false;
           }
           this._saveTabs();
@@ -2661,7 +2700,9 @@
           for (const lab of this.labSchemas) {
             for (const col of lab.signal_in_columns) {
               if (col.startsWith("Lab/")) {
-                const src = col.split("/")[1] ?? "";
+                const depRest = col.slice(4);
+                const depSplitIdx = depRest.lastIndexOf("/");
+                const src = depSplitIdx >= 0 ? depRest.slice(0, depSplitIdx) : "";
                 if (src) {
                   if (!dependents.has(src)) dependents.set(src, []);
                   dependents.get(src).push(lab.name);
@@ -2939,7 +2980,9 @@
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
-          if (!this.data[p.name]) return null;
+          if (!this.data[p.name]) {
+            return null;
+          }
           const lineStyle = {
             width: p.width,
             color: p.color,

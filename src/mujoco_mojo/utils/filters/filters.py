@@ -27,15 +27,21 @@ __all__ = [
     "IntegralFilter",
     "LogFilter",
     "LowPassFilter",
+    "MaxFilter",
+    "MeanFilter",
     "MedianFilter",
+    "MinFilter",
+    "ModeFilter",
     "NormalizeFilter",
     "PowerFilter",
     "RollingMeanFilter",
+    "RollingMedianFilter",
     "RotationFilter",
     "RoundFilter",
     "SavitzkyGolayFilter",
     "ScaleFilter",
     "SignFilter",
+    "StandardDeviationFilter",
     "TaringFilter",
     "TrigFilter",
     "UnitFilter",
@@ -68,6 +74,12 @@ class FilterType(StrEnum):
     TRIG = "trig"
     SIGN = "sign"
     COMPARISON = "comparison"
+    STAT_MAX = "stat_max"
+    STAT_MIN = "stat_min"
+    STAT_MEAN = "stat_mean"
+    STAT_MEDIAN = "stat_median"
+    STAT_MODE = "stat_mode"
+    STAT_STANDARD_DEVIATION = "stat_standard_deviation"
 
 
 class BaseFilter(ABC, BaseModel):
@@ -329,7 +341,7 @@ class WrapFilter(BaseFilter):
         return ((expr - self.lb) % range_val) + self.lb
 
 
-class MedianFilter(BaseFilter):
+class RollingMedianFilter(BaseFilter):
     """
     Applies a sliding window median filter.
     Highly effective for removing impulse noise (spikes) without blurring edges.
@@ -713,6 +725,82 @@ class ComparisonFilter(BaseFilter):
         return pl.when(cond).then(pl.lit(1.0)).otherwise(pl.lit(0.0))
 
 
+class MaxFilter(BaseFilter):
+    """Reduces the signal to its maximum value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_MAX] = FilterType.STAT_MAX
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.max()
+
+
+class MinFilter(BaseFilter):
+    """Reduces the signal to its minimum value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_MIN] = FilterType.STAT_MIN
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.min()
+
+
+class MeanFilter(BaseFilter):
+    """Reduces the signal to its mean value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_MEAN] = FilterType.STAT_MEAN
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.mean()
+
+
+class MedianFilter(BaseFilter):
+    """Reduces the signal to its median value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_MEDIAN] = FilterType.STAT_MEDIAN
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.median()
+
+
+class ModeFilter(BaseFilter):
+    """Reduces the signal to its most frequent value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_MODE] = FilterType.STAT_MODE
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        # mode() can return multiple values when several samples are tied for
+        # the highest frequency; first() collapses it to a single broadcastable value.
+        return expr.mode().first()
+
+
+class StandardDeviationFilter(BaseFilter):
+    """Reduces the signal to its standard deviation, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_STANDARD_DEVIATION] = (
+        FilterType.STAT_STANDARD_DEVIATION
+    )
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.std()
+
+
 AnyFilter = Annotated[
     ScaleFilter
     | AbsoluteValueFilter
@@ -726,7 +814,7 @@ AnyFilter = Annotated[
     | DeadbandFilter
     | TaringFilter
     | UnitFilter
-    | MedianFilter
+    | RollingMedianFilter
     | NormalizeFilter
     | WrapFilter
     | RotationFilter
@@ -736,7 +824,13 @@ AnyFilter = Annotated[
     | RoundFilter
     | TrigFilter
     | SignFilter
-    | ComparisonFilter,
+    | ComparisonFilter
+    | MaxFilter
+    | MinFilter
+    | MeanFilter
+    | MedianFilter
+    | ModeFilter
+    | StandardDeviationFilter,
     Field(discriminator="type"),
 ]
 

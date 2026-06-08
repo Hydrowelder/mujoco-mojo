@@ -92,6 +92,7 @@ interface LabTab {
   graph: object | null;
   savedState: string | null; // JSON of the graph at last save/load; null = never saved
   dirty: boolean;
+  viewport: { scale: number; offset: [number, number] } | null; // remembered pan/zoom
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +241,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     _gifConvertStatus: "none" as "none" | "loading" | "ready" | "failed",
     _mediaRafId: null as number | null,
     _mediaFpsMap: {} as Record<string, number | null>,
+    _mediaMtimeMap: {} as Record<string, number>,
     _mediaFrameInterval: null as number | null,
 
     // -----------------------------------------------------------------------
@@ -587,6 +589,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         this._mediaFpsMap = Object.fromEntries(
           data.files.map((f: TrialMediaFile) => [f.name, f.fps]),
         );
+        this._mediaMtimeMap = Object.fromEntries(
+          data.files.map((f: TrialMediaFile) => [f.name, f.mtime]),
+        );
         this.mediaFiles = data.files.map((f: TrialMediaFile) => f.name);
         if (this.mediaFiles.length > 0) {
           const saved = localStorage.getItem("mojo:media:file");
@@ -604,6 +609,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       this._renderFrameMarkers();
       if (this.mediaMiniplayerOpen && this.mediaFiles.length > 0)
         this._startMiniplayer();
+    },
+
+    // builds a media file URL with an mtime cache-buster, so a regenerated
+    // file with the same name forces the browser to reload it instead of
+    // reusing a stale cached video/image from before the rerun
+    _mediaFileUrl(filename: string, suffix = ""): string {
+      const base = `/mosaic/${this.trialId}/media/${filename}${suffix}`;
+      const mtime = this._mediaMtimeMap[filename];
+      return mtime !== undefined ? `${base}?t=${mtime}` : base;
     },
 
     _applySelectedMediaFps() {
@@ -1046,6 +1060,20 @@ function trialViewer(trialId: string, externalUrl: string) {
         const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
         if (tab) tab.dirty = dirty;
       };
+      // LabTab.savedState is the single source of truth for "what does clean
+      // look like for this tab" - _signal_lab.html never keeps its own copy,
+      // it always asks for the active tab's baseline through these two bridges.
+      // That structurally rules out the stale-copy bugs a locally-cached
+      // baseline used to cause (forgotten syncs, baselines surviving a tab
+      // switch, ordering footguns around when the cache had to be refreshed).
+      window.mojoLabGetBaseline = () => {
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        return tab?.savedState ?? null;
+      };
+      window.mojoLabSetBaseline = (state: string | null) => {
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (tab) tab.savedState = state;
+      };
 
       // bind video element handlers programmatically so `this` resolves to the
       // trialViewer component — template @event handlers in nested x-data scopes
@@ -1388,7 +1416,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                   variant: "warning",
                 }) ?? Promise.resolve(false)
               ).then((ok) => {
-                if (ok) this.labOpen = false;
+                if (ok) {
+                  window.mojoLabRevertToSaved?.();
+                  this.labOpen = false;
+                }
               });
             }
             window.dispatchEvent(new CustomEvent("mojo:escape"));
@@ -2067,7 +2098,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       const checkCol = (col: string, label: string) => {
         if (col.startsWith("Lab/")) {
           if (!schemasLoaded) return; // wait for schemas before reporting Lab issues
-          const labName = col.slice(4).split("/")[0];
+          // lab names may contain '/' (nested folders); the output label is
+          // always the final segment, so split from the right
+          const labRest = col.slice(4);
+          const labSplitIdx = labRest.lastIndexOf("/");
+          const labName =
+            labSplitIdx >= 0 ? labRest.slice(0, labSplitIdx) : labRest;
           if (labsNoted.has(labName)) return;
           const lab = this.labSchemas.find((l) => l.name === labName);
           if (!lab) {
@@ -3009,7 +3045,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       })();
       const id = this._tabId();
-      this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+      this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
       this.labActiveTabId = id;
       this.labName = name;
       this.labGraph = graph;
@@ -3019,9 +3055,18 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!this.labActiveTabId) return;
       const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
       if (!tab) return;
+      // run any pending debounced undo-history snapshot first so the stack's
+      // top entry matches exactly what we persist onto the tab
+      window.mojoLabFlushSnapshot?.();
       tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
       tab.name = this.labName;
-      tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
+      // tab.savedState is NOT touched here - it's the tab's own baseline,
+      // owned exclusively by this LabTab object (see mojoLabGetBaseline /
+      // mojoLabSetBaseline) and never derived from a transient local copy.
+      tab.viewport = window.mojoLabGetViewport?.() ?? tab.viewport;
+      // keep labGraph (the value mojoLabInit reloads from on reopen) in sync,
+      // otherwise closing and reopening the lab restores the pre-edit graph
+      this.labGraph = tab.graph;
     },
 
     _persistTabs() {
@@ -3054,7 +3099,11 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (tabId === this.labActiveTabId) return;
       this._snapshotActiveTab();
       await this._activateTab(tabId);
-      this._saveTabs();
+      // persist only - the canvas hasn't reloaded the new tab's graph yet
+      // (mojoLabInit fires async via the mojo:lab-activate-tab event), so
+      // re-snapshotting here would serialize the still-displayed old graph
+      // onto the newly active tab and clobber it
+      this._persistTabs();
     },
 
     async newTab() {
@@ -3065,6 +3114,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         name: "",
         graph: null,
         savedState: null,
+        viewport: null,
         dirty: false,
       });
       await this._activateTab(id);
@@ -3093,6 +3143,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (!ok) return;
       }
       this.labTabs.splice(tabIdx, 1);
+      window.mojoLabDiscardHistory?.(tabId);
       if (this.labTabs.length === 0) {
         const newId = this._tabId();
         this.labTabs.push({
@@ -3100,6 +3151,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           name: "",
           graph: null,
           savedState: null,
+          viewport: null,
           dirty: false,
         });
         await this._activateTab(newId);
@@ -3108,10 +3160,22 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)]!;
         await this._activateTab(newActive.id);
       }
-      this._saveTabs();
+      // persist only - see switchTab for why we must not re-snapshot here
+      this._persistTabs();
     },
 
     async loadLabInNewTab(labName: string) {
+      // if this lab is already open in a tab, switch to it rather than
+      // duplicating it (and preserve any unsaved edits already in that tab)
+      const existing = this.labTabs.find((t) => t.name === labName);
+      if (existing) {
+        if (existing.id !== this.labActiveTabId) {
+          this._snapshotActiveTab();
+          await this._activateTab(existing.id);
+          this._persistTabs();
+        }
+        return;
+      }
       const safePath = labName.split("/").map(encodeURIComponent).join("/");
       try {
         const resp = await fetch(`/mosaic/api/lab/${safePath}`);
@@ -3141,12 +3205,14 @@ function trialViewer(trialId: string, externalUrl: string) {
             name: labName,
             graph,
             savedState: null,
+            viewport: null,
             dirty: false,
           });
           await this._activateTab(id);
         }
-        // persist without snapshotting — mojoLabInit hasn't fired yet so
-        // _labSavedState still holds the previous tab's baseline
+        // persist without snapshotting — mojoLabInit hasn't fired yet, so the
+        // canvas is still showing the previous tab's graph; re-snapshotting
+        // here would serialize that stale content onto the new tab
         this._persistTabs();
       } catch (err) {
         this.notify(`Failed to load "${labName}": ${String(err)}`, "error");
@@ -3180,15 +3246,14 @@ function trialViewer(trialId: string, externalUrl: string) {
           return;
         }
         this.notify(`Lab "${trimmed}" saved`, "success");
-        window.mojoLabMarkSaved?.();
-        // sync active tab
+        // the just-saved content is the new clean baseline for the active tab
+        window.mojoLabRebaseline?.();
         this.labName = trimmed;
         const activeTab = this.labTabs.find(
           (t) => t.id === this.labActiveTabId,
         );
         if (activeTab) {
           activeTab.name = trimmed;
-          activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
           activeTab.dirty = false;
         }
         this._saveTabs();
@@ -3199,7 +3264,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         for (const lab of this.labSchemas) {
           for (const col of lab.signal_in_columns) {
             if (col.startsWith("Lab/")) {
-              const src = col.split("/")[1] ?? "";
+              // lab names may contain '/' (nested folders); the output label is
+              // always the final segment, so split from the right
+              const depRest = col.slice(4);
+              const depSplitIdx = depRest.lastIndexOf("/");
+              const src = depSplitIdx >= 0 ? depRest.slice(0, depSplitIdx) : "";
               if (src) {
                 if (!dependents.has(src)) dependents.set(src, []);
                 dependents.get(src)!.push(lab.name);
@@ -3546,7 +3615,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       let traces: object[] = yKeys
         .map((key, i) => {
           const p = this.getYProps(key, i);
-          if (!this.data![p.name]) return null;
+          if (!this.data![p.name]) {
+            return null;
+          }
           const lineStyle = {
             width: p.width,
             color: p.color,

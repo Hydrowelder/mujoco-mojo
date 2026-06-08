@@ -408,6 +408,14 @@ if True:
         ),
     ]
 
+    RecordType = Annotated[
+        bool,
+        typer.Option(
+            "--record/--no-record",
+            help="Record telemetry to a per-trial 'telemetry.parquet' so the run can be inspected with [dim]mujoco-mojo dojo[/dim]. Off by default since interactive sessions can run indefinitely.",
+        ),
+    ]
+
     UIType = Annotated[
         UserInterface,
         typer.Option(
@@ -1132,6 +1140,7 @@ def run_reloaded(
     model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     watch: WatchType = True,
+    record: RecordType = True,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -1169,6 +1178,7 @@ def run_reloaded(
         model_config_name=model_config_name,
         xml_name=xml_name,
         watch=watch,
+        record=record,
         gen_args=processed_gen_args,
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,

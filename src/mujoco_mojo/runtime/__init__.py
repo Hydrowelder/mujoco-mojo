@@ -6,6 +6,7 @@ from .load import (
     PointToPointForce,
     ScalarForce,
     ScalarTorque,
+    SiteLoad,
     VectorForce,
     VectorTorque,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "ScalarForce",
     "ScalarTorque",
     "SignalManager",
+    "SiteLoad",
     "VectorForce",
     "VectorTorque",
     "VideoRecorder",

@@ -7,11 +7,11 @@ import numpy as np
 import trimesh
 from pydantic import ConfigDict, Field
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     FluidShape,
     GeomName,
@@ -262,7 +262,7 @@ class GeomBase(XMLModel):
         signal_manager: SignalManager,
         attrs: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
-        ] = ["xpos", "quat"],
+        ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
     ):
         """
         Registers specific geom attributes for logging.

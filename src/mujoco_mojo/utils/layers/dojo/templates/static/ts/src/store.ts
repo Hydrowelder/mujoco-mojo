@@ -335,7 +335,10 @@ document.addEventListener("alpine:init", () => {
       this._saveNotifications();
     },
 
-    // ── Generic confirm dialog ─────────────────────────────────────────────
+    // ── Generic confirm / prompt dialog ────────────────────────────────────
+    // Doubles as a text-input prompt when `showInput` is set: confirm()
+    // resolves with the trimmed input string (or null if blank), cancel()
+    // resolves with null. Plain confirm dialogs resolve with booleans.
     dialog: {
       show: false,
       title: "",
@@ -343,7 +346,10 @@ document.addEventListener("alpine:init", () => {
       confirmLabel: "Confirm",
       cancelLabel: "Cancel",
       variant: "info" as "danger" | "warning" | "info",
-      _resolve: null as ((v: boolean) => void) | null,
+      showInput: false,
+      inputValue: "",
+      inputPlaceholder: "",
+      _resolve: null as ((v: unknown) => void) | null,
 
       open(opts: {
         title: string;
@@ -357,21 +363,51 @@ document.addEventListener("alpine:init", () => {
         this.confirmLabel = opts.confirmLabel ?? "Confirm";
         this.cancelLabel = opts.cancelLabel ?? "Cancel";
         this.variant = opts.variant ?? "info";
+        this.showInput = false;
         this.show = true;
         return new Promise<boolean>((resolve) => {
-          this._resolve = resolve;
+          this._resolve = resolve as (v: unknown) => void;
+        });
+      },
+
+      prompt(opts: {
+        title: string;
+        message?: string;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        variant?: "danger" | "warning" | "info";
+        placeholder?: string;
+        value?: string;
+      }): Promise<string | null> {
+        this.title = opts.title;
+        this.message = opts.message ?? "";
+        this.confirmLabel = opts.confirmLabel ?? "Save";
+        this.cancelLabel = opts.cancelLabel ?? "Cancel";
+        this.variant = opts.variant ?? "info";
+        this.showInput = true;
+        this.inputValue = opts.value ?? "";
+        this.inputPlaceholder = opts.placeholder ?? "";
+        this.show = true;
+        return new Promise<string | null>((resolve) => {
+          this._resolve = resolve as (v: unknown) => void;
         });
       },
 
       confirm() {
         this.show = false;
-        this._resolve?.(true);
+        const result: unknown = this.showInput
+          ? this.inputValue.trim() || null
+          : true;
+        this.showInput = false;
+        this._resolve?.(result);
         this._resolve = null;
       },
 
       cancel() {
         this.show = false;
-        this._resolve?.(false);
+        const result: unknown = this.showInput ? null : false;
+        this.showInput = false;
+        this._resolve?.(result);
         this._resolve = null;
       },
     },
@@ -384,6 +420,14 @@ document.addEventListener("alpine:init", () => {
         dialog: { open(opts: object): Promise<boolean> };
       }
     ).dialog.open(opts);
+
+  // expose as a drop-in async alternative to the native prompt() dialog
+  window.mojoPrompt = (opts) =>
+    (
+      Alpine.store("dojo") as DojoStore & {
+        dialog: { prompt(opts: object): Promise<string | null> };
+      }
+    ).dialog.prompt(opts);
 
   const store = Alpine.store("dojo") as DojoStore & {
     lastUpdate: number | null;

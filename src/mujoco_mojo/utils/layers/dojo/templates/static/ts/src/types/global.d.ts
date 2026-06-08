@@ -79,10 +79,18 @@ declare global {
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabSelectNodeTemplate?(nodeId: number, name: string): void;
-    mojoLabMarkSaved?(): void;
+    // Replaces the active tab's clean baseline with its current live state
+    // (e.g. after a successful save, or clearing the graph)
+    mojoLabRebaseline?(): void;
     mojoLabHasUnsavedChanges?(): boolean;
     mojoLabUndo?(): void;
     mojoLabRedo?(): void;
+    // Immediately runs any pending debounced undo-history snapshot
+    mojoLabFlushSnapshot?(): void;
+    // Drops a closed tab's undo/redo history stack
+    mojoLabDiscardHistory?(tabId: string): void;
+    // Discards in-progress edits, restoring the graph to the last saved/loaded baseline
+    mojoLabRevertToSaved?(): void;
     mojoLabArrange?(): void;
     mojoLabFitView?(): void;
     mojoLabSerialize?(): object | null;
@@ -94,9 +102,24 @@ declare global {
       cancelLabel?: string;
       variant?: "danger" | "warning" | "info";
     }): Promise<boolean>;
-    // Saved-state bridge between _signal_lab.html and tab management in trial-viewer.ts
-    mojoLabGetSavedState?(): string | null;
-    mojoLabSetSavedState?(state: string | null): void;
+    // Generic async text-input dialog (replaces native prompt()) - resolves to
+    // the trimmed input string, or null if cancelled / left blank.
+    mojoPrompt?(opts: {
+      title: string;
+      message?: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      variant?: "danger" | "warning" | "info";
+      placeholder?: string;
+      value?: string;
+    }): Promise<string | null>;
+    // Baseline bridge: _signal_lab.html never caches its own copy of "what does
+    // clean look like" - it always reads/writes the active tab's LabTab.savedState
+    // (the single source of truth, owned by trial-viewer.ts) through these.
+    mojoLabGetBaseline?(): string | null;
+    mojoLabSetBaseline?(state: string | null): void;
+    // Returns the canvas's current pan/zoom so it can be cached per tab
+    mojoLabGetViewport?(): { scale: number; offset: [number, number] } | null;
     mojoLabOnDirtyChange?: ((dirty: boolean) => void) | null;
   }
 }

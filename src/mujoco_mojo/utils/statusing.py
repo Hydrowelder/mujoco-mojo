@@ -35,6 +35,7 @@ JOB_STATUS_FNAME = "job_status.json"
 class JobType(StrEnum):
     MONTE_CARLO = "monte_carlo"
     OPTIMIZE = "optimize"
+    RELOADED = "reloaded"
 
 
 class ExecutionMode(StrEnum):

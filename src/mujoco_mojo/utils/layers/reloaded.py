@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 from bdb import BdbQuit
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, runtime_checkable
@@ -21,7 +22,18 @@ from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.runner import MojoGenerator, MojoRuntime
+from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
+from mujoco_mojo.utils.utils import write_dojo_script
+from mujoco_mojo.utils.statusing import (
+    JOB_STATUS_FNAME,
+    TRIAL_STATUS_FNAME,
+    Completion,
+    ExecutionMode,
+    JobStatus,
+    JobType,
+    Step,
+    TrialStatus,
+)
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .cli import UserInterface
@@ -147,10 +159,70 @@ class MojoReloaded:
     port: int
 
     watch: bool = False
+    record: bool = False
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     _playback_speed: float = 1.0
     _last_command: str = "run"
+    _current_trial_dir: Path | None = None
+    _job_status: JobStatus | None = None
+
+    _trial_padding_style = "03d"
+
+    def trial_dir_for(self, trial_num: int) -> Path:
+        """
+        Per-trial output directory, mirroring the layout `Trial`/`MojoRunner` use.
+
+        Keeping this layout lets `mujoco-mojo dojo` discover and plot reloaded runs the same way it discovers Monte Carlo / Optimize trials.
+        """
+        return (
+            self.workdir / "trials" / f"trial_{trial_num:{self._trial_padding_style}}"
+        ).resolve()
+
+    def _ensure_job_status(
+        self, gen_func: MojoGenerator | None, run_func: MojoRuntime | None
+    ) -> JobStatus:
+        """
+        Lazily builds the `JobStatus` tracker for this session, the same way `MojoRunner` does for a job.
+
+        Seeds `trial_nums` from any `trial_*` folders already on disk and refreshes the cache from their `trial_status.json` files, so relaunching reloaded against an existing workdir picks up prior trials instead of starting from a blank slate.
+        """
+        if self._job_status is not None:
+            return self._job_status
+
+        on_disk: set[int] = set()
+        for p in (self.workdir / "trials").glob("trial_*"):
+            suffix = p.name.removeprefix("trial_")
+            if p.is_dir() and suffix.isdigit():
+                on_disk.add(int(suffix))
+
+        job_status = JobStatus(
+            workdir=self.workdir,
+            job_type=JobType.RELOADED,
+            execution_mode=ExecutionMode.LOCAL,
+            n_proc=1,
+            seed=self.seed,
+            padding_style=self._trial_padding_style,
+            generator=MojoRunner.inspect_protocol(gen_func),
+            runtime=MojoRunner.inspect_protocol(run_func),
+            objective=("none defined", None, None),
+            gen_args_used=bool(self.gen_args),
+            gen_kwargs_used=bool(self.gen_kwargs),
+            run_args_used=bool(self.run_args),
+            run_kwargs_used=bool(self.run_kwargs),
+            trial_nums=sorted(on_disk | {self.trial_num}),
+        )
+        job_status.refresh_from_disk()
+        job_status.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+        self._job_status = job_status
+        return job_status
+
+    @staticmethod
+    def _record_step(trial_status: TrialStatus | None, step_name: Step):
+        """Wraps `TrialStatus.record_step` when recording is enabled, otherwise a no-op context manager."""
+        if trial_status is None:
+            return nullcontext()
+        return trial_status.record_step(step_name=step_name)
 
     def validate(self):
         if self.generator and self.config_path:
@@ -255,82 +327,125 @@ class MojoReloaded:
                     f"Global NamedValue overrides had {len(global_overrides)} entries."
                 )
 
-        # execute generation
-        start = time.time()
-        if self.generator:
-            assert gen_func
-            # explicitly reset all stochas registries, then reinsert overrides
-            mojo_model = MojoModel()
-            mojo_model.named = NamedValueDict[NDArray]()
-            mojo_model.dists = DistributionDict()
-            mojo_model.design = DesignValueDict()
+        # each trial number gets its own output folder, mirroring the Runner's layout
+        trial_dir = self.trial_dir_for(self.trial_num)
+        trial_dir.mkdir(parents=True, exist_ok=True)
+        self._current_trial_dir = trial_dir
 
-            mojo_model = (
-                mojo_model.with_overrides(overrides=global_overrides)
-                .with_seed(seed=self.seed)
-                .with_trial_num(self.trial_num)
-            )
-            mojo_model = gen_func(
-                mojo_model,
-                global_overrides,
-                *self.gen_args,
-                **self.gen_kwargs,
-            )
-            mojo_model._trial_dir = self.workdir
-            mojo_model.dump_to_path(self.workdir / self.model_config_name)
-        else:
-            assert self.config_path
-            try:
-                mojo_model = MojoModel.model_validate_json(
-                    self.config_path.read_text()
-                ).with_overrides(overrides=global_overrides)
-                mojo_model._trial_dir = self.workdir
-                logger.info(
-                    f"Playback mode: Loaded frozen state from {self.config_path.name}"
-                )
-            except Exception as e:
-                msg = f"Failed to load model config: {e}"
-                logger.error(msg)
-                raise ValueError(msg)
+        # only worth tracking via TrialStatus/JobStatus if telemetry will actually be recorded
+        trial_status: TrialStatus | None = None
+        trial_status_path: Path | None = None
+        if self.record:
+            trial_status_path = trial_dir / TRIAL_STATUS_FNAME
+            trial_status = TrialStatus(trial_num=self.trial_num)
+            trial_status._path = trial_status_path
+            with trial_status.record_step(step_name="pending"):
+                pass
 
         try:
-            state = mojo_model.mjcf.prep_for_sim(save_path=self.workdir / self.xml_name)
-        except Exception as e:
-            msg = f"Failed to compile with MuJoCo: {e}"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        # sync the viewer
-        if on_reload_callback:
-            on_reload_callback(state)
-
-        console.print(
-            f"[dim white]Model generated in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
-        )
-
-        # execute runtime
-        if run_func and use_runtime:
-            runtime_manager = rt.RuntimeManager(
-                signal_manager=rt.SignalManager(
-                    export_path=self.workdir / rt.SignalManager.default_output_name()
-                ),
-                _sync_hook=self._sync_hook,
-                _skip_recording=True,
-                playback_speed=self._playback_speed,
-            )
+            # execute generation
             start = time.time()
-            run_func(
-                mojo_model,
-                runtime_manager,
-                state,
-                *self.run_args,
-                **self.run_kwargs,
-            )
+            with self._record_step(trial_status, "generating"):
+                if self.generator:
+                    assert gen_func
+                    # explicitly reset all stochas registries, then reinsert overrides
+                    mojo_model = MojoModel()
+                    mojo_model.named = NamedValueDict[NDArray]()
+                    mojo_model.dists = DistributionDict()
+                    mojo_model.design = DesignValueDict()
+
+                    mojo_model = (
+                        mojo_model.with_overrides(overrides=global_overrides)
+                        .with_seed(seed=self.seed)
+                        .with_trial_num(self.trial_num)
+                    )
+                    mojo_model = gen_func(
+                        mojo_model,
+                        global_overrides,
+                        *self.gen_args,
+                        **self.gen_kwargs,
+                    )
+                    mojo_model._trial_dir = trial_dir
+                    mojo_model.dump_to_path(trial_dir / self.model_config_name)
+                else:
+                    assert self.config_path
+                    try:
+                        mojo_model = MojoModel.model_validate_json(
+                            self.config_path.read_text()
+                        ).with_overrides(overrides=global_overrides)
+                        mojo_model._trial_dir = trial_dir
+                        logger.info(
+                            f"Playback mode: Loaded frozen state from {self.config_path.name}"
+                        )
+                    except Exception as e:
+                        msg = f"Failed to load model config: {e}"
+                        logger.error(msg)
+                        raise ValueError(msg)
+
+                try:
+                    state = mojo_model.mjcf.prep_for_sim(
+                        save_path=trial_dir / self.xml_name
+                    )
+                except Exception as e:
+                    msg = f"Failed to compile with MuJoCo: {e}"
+                    logger.error(msg)
+                    raise ValueError(msg)
+
+            # sync the viewer
+            if on_reload_callback:
+                on_reload_callback(state)
+
             console.print(
-                f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                f"[dim white]Model generated in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
             )
+
+            # execute runtime
+            with self._record_step(trial_status, "solving"):
+                if run_func and use_runtime:
+                    runtime_manager = rt.RuntimeManager(
+                        signal_manager=rt.SignalManager(
+                            export_path=trial_dir
+                            / rt.SignalManager.default_output_name()
+                        ),
+                        _sync_hook=self._sync_hook,
+                        _skip_recording=not self.record,
+                        playback_speed=self._playback_speed,
+                    )
+                    start = time.time()
+                    run_func(
+                        mojo_model,
+                        runtime_manager,
+                        state,
+                        *self.run_args,
+                        **self.run_kwargs,
+                    )
+                    console.print(
+                        f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                    )
+                else:
+                    mujoco.mj_forward(state.model, state.data)
+        except (BdbQuit, KeyboardInterrupt):
+            raise
+        except Exception:
+            if trial_status is not None:
+                trial_status.step = "done"
+                trial_status.completion = Completion.FAILED
+            raise
         else:
-            mujoco.mj_forward(state.model, state.data)
+            if trial_status is not None:
+                trial_status.step = "done"
+                trial_status.completion = Completion.SUCCESS
+        finally:
+            # persist the final trial status and fold it into the job-level tracker,
+            # the same way `MojoRunner` calls `update_trial` after each trial completes
+            if trial_status is not None and trial_status_path is not None:
+                trial_status.dump_to_path(trial_status_path)
+                job_status = self._ensure_job_status(gen_func, run_func)
+                if self.trial_num not in job_status.trial_nums:
+                    job_status.trial_nums = sorted(
+                        {*job_status.trial_nums, self.trial_num}
+                    )
+                job_status.update_trial(status=trial_status)
 
         return state
 
@@ -340,6 +455,7 @@ class MojoReloaded:
         self.workdir = self.workdir.resolve()
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
+        write_dojo_script(self.workdir)
 
         try:
             start = time.time()
@@ -371,6 +487,7 @@ class MojoReloaded:
             else ""
         )
         watch_status = "[bold blue]on[/bold blue]" if self.watch else "[dim]off[/dim]"
+        record_status = "[bold blue]on[/bold blue]" if self.record else "[dim]off[/dim]"
         console.print(
             Panel(
                 "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
@@ -380,6 +497,7 @@ class MojoReloaded:
                 "- [bold white]seed <N>[/]: Set seed to N\n"
                 "- [bold white]trial <N>[/]: Set trial number to N\n"
                 f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
+                f"- [bold blue]record[/bold blue]: Toggle telemetry recording for [dim]mujoco-mojo dojo[/dim] (currently {record_status})\n"
                 "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
                 "- [bold red]exit[/] / [bold red]q[/]: Close",
                 title="Interactive Controls",
@@ -510,6 +628,18 @@ class MojoReloaded:
                 print_prompt()
                 continue
 
+            if raw == "record":
+                self.record = not self.record
+                if self.record:
+                    console.print(
+                        "[dim]Telemetry recording enabled - "
+                        "the next reload will be visible in `mujoco-mojo dojo`.[/dim]"
+                    )
+                else:
+                    console.print("[dim]Telemetry recording disabled[/dim]")
+                print_prompt()
+                continue
+
             if raw.startswith("seed "):
                 try:
                     self.seed = int(raw[5:].strip())
@@ -532,7 +662,7 @@ class MojoReloaded:
                 print_prompt()
                 continue
 
-            if raw:
+            if raw and raw != "gen":
                 try:
                     self._playback_speed = float(raw)
                     console.print(
@@ -595,10 +725,15 @@ class MojoReloaded:
             def reload_handler(s: MjState):
                 sim = viewer._get_sim()
                 if sim:
+                    assert self._current_trial_dir is not None
                     if viewer.user_scn and s.data.time == 0.0:
                         # ensure the custom visual layer is wiped on every model reload
                         viewer.user_scn.ngeom = 0
-                    sim.load(s.model, s.data, str(self.workdir / self.xml_name))
+                    sim.load(
+                        s.model,
+                        s.data,
+                        str(self._current_trial_dir / self.xml_name),
+                    )
                     viewer.sync()
 
             reload_handler(state)

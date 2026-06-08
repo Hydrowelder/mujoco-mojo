@@ -13,11 +13,13 @@ from mujoco_mojo.utils.proximity import Proximity
 
 
 class MockLoad(Load):
-    """Minimal implementation of the abstract Load class for testing."""
+    """Minimal concrete Load for testing the abstract base."""
 
-    def calculate(self, state: MjState):
-        # Apply a constant 10N force in world X
-        return np.array([10.0, 0, 0]), np.zeros(3)
+    def resolve_ids(self, state: MjState) -> None:
+        pass
+
+    def apply_load(self, state: MjState) -> None:
+        pass
 
 
 def test_runtime_manager_lifecycle(rm: SignalManager):

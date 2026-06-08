@@ -696,9 +696,11 @@ async def get_trial_data(
             from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
 
             for col in lab_cols:
-                parts = col.split("/", 2)
-                if len(parts) == 3:
-                    _, lab_name, output_label = parts
+                # Lab names may themselves contain '/' (nested folders), so split
+                # from the right - the output label is always the final segment.
+                rest = col[len(_LAB_PREFIX) + 1 :]
+                if "/" in rest:
+                    lab_name, output_label = rest.rsplit("/", 1)
                     by_lab[lab_name].append((col, output_label))
 
             # Load executors transitively so chained labs have their deps available.
@@ -715,12 +717,11 @@ async def get_trial_data(
                     lab_executors[name] = LabExecutor(g)
                     for si_col in lab_executors[name].signal_in_columns:
                         if si_col.startswith(f"{_LAB_PREFIX}/"):
-                            dep_parts = si_col.split("/", 2)
-                            if (
-                                len(dep_parts) == 3
-                                and dep_parts[1] not in lab_executors
-                            ):
-                                to_load.append(dep_parts[1])
+                            dep_rest = si_col[len(_LAB_PREFIX) + 1 :]
+                            if "/" in dep_rest:
+                                dep_lab_name = dep_rest.rsplit("/", 1)[0]
+                                if dep_lab_name not in lab_executors:
+                                    to_load.append(dep_lab_name)
                 except Exception:
                     pass
 
@@ -982,7 +983,7 @@ async def list_trial_media(trial_id: str) -> dict:
     files = []
     for p in paths:
         fps = await loop.run_in_executor(None, _read_file_fps, p)
-        files.append({"name": p.name, "fps": fps})
+        files.append({"name": p.name, "fps": fps, "mtime": p.stat().st_mtime})
     return {"files": files}
 
 
