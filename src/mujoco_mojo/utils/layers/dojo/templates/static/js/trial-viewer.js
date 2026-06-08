@@ -337,17 +337,6 @@
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
         const result = await resp.json();
-        const requestedLabCols = requiredCols.filter((c) => c.startsWith("Lab/"));
-        if (requestedLabCols.length > 0) {
-          console.debug("[lab] requested Lab/ columns", requestedLabCols);
-          requestedLabCols.forEach((c) => {
-            const series = result.data?.[c];
-            console.debug(
-              `[lab] response for "${c}":`,
-              series === void 0 ? "MISSING from response" : `length=${series.length}, sample=${JSON.stringify(series.slice(0, 3))}`
-            );
-          });
-        }
         if (result.filter_errors && result.filter_errors.length > 0) {
           result.filter_errors.forEach((msg) => {
             if (!this._shownFilterErrors.has(msg)) {
@@ -905,6 +894,14 @@
           const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
           if (tab) tab.dirty = dirty;
         };
+        window.mojoLabGetBaseline = () => {
+          const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          return tab?.savedState ?? null;
+        };
+        window.mojoLabSetBaseline = (state) => {
+          const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+          if (tab) tab.savedState = state;
+        };
         void this.$nextTick(() => {
           const video = document.getElementById(
             "media-video-player"
@@ -1150,7 +1147,10 @@
                   cancelLabel: "Keep editing",
                   variant: "warning"
                 }) ?? Promise.resolve(false)).then((ok) => {
-                  if (ok) this.labOpen = false;
+                  if (ok) {
+                    window.mojoLabRevertToSaved?.();
+                    this.labOpen = false;
+                  }
                 });
               }
               window.dispatchEvent(new CustomEvent("mojo:escape"));
@@ -2478,15 +2478,6 @@
             missing: lab.signal_in_columns.filter((c) => !available.has(c)),
             valid: validLabs.has(lab.name)
           }));
-          console.debug(
-            "[lab] schemas loaded:",
-            this.labSchemas.map((l) => ({
-              name: l.name,
-              valid: l.valid,
-              missing: l.missing,
-              outputs: l.outputs
-            }))
-          );
           this.columns = [...available].sort();
         } catch {
         }
@@ -2528,7 +2519,7 @@
           }
         })();
         const id = this._tabId();
-        this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+        this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
         this.labActiveTabId = id;
         this.labName = name;
         this.labGraph = graph;
@@ -2537,9 +2528,11 @@
         if (!this.labActiveTabId) return;
         const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
         if (!tab) return;
+        window.mojoLabFlushSnapshot?.();
         tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
         tab.name = this.labName;
-        tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
+        tab.viewport = window.mojoLabGetViewport?.() ?? tab.viewport;
+        this.labGraph = tab.graph;
       },
       _persistTabs() {
         try {
@@ -2567,7 +2560,7 @@
         if (tabId === this.labActiveTabId) return;
         this._snapshotActiveTab();
         await this._activateTab(tabId);
-        this._saveTabs();
+        this._persistTabs();
       },
       async newTab() {
         this._snapshotActiveTab();
@@ -2577,6 +2570,7 @@
           name: "",
           graph: null,
           savedState: null,
+          viewport: null,
           dirty: false
         });
         await this._activateTab(id);
@@ -2599,6 +2593,7 @@
           if (!ok) return;
         }
         this.labTabs.splice(tabIdx, 1);
+        window.mojoLabDiscardHistory?.(tabId);
         if (this.labTabs.length === 0) {
           const newId = this._tabId();
           this.labTabs.push({
@@ -2606,6 +2601,7 @@
             name: "",
             graph: null,
             savedState: null,
+            viewport: null,
             dirty: false
           });
           await this._activateTab(newId);
@@ -2613,9 +2609,18 @@
           const newActive = this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)];
           await this._activateTab(newActive.id);
         }
-        this._saveTabs();
+        this._persistTabs();
       },
       async loadLabInNewTab(labName) {
+        const existing = this.labTabs.find((t) => t.name === labName);
+        if (existing) {
+          if (existing.id !== this.labActiveTabId) {
+            this._snapshotActiveTab();
+            await this._activateTab(existing.id);
+            this._persistTabs();
+          }
+          return;
+        }
         const safePath = labName.split("/").map(encodeURIComponent).join("/");
         try {
           const resp = await fetch(`/mosaic/api/lab/${safePath}`);
@@ -2643,6 +2648,7 @@
               name: labName,
               graph,
               savedState: null,
+              viewport: null,
               dirty: false
             });
             await this._activateTab(id);
@@ -2668,12 +2674,6 @@
         }
         const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
         try {
-          console.debug(
-            `[lab] saving "${trimmed}" - nodes:`,
-            graph.nodes?.map(
-              (n) => `${n.id}:${n.type}`
-            )
-          );
           const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2685,14 +2685,13 @@
             return;
           }
           this.notify(`Lab "${trimmed}" saved`, "success");
-          window.mojoLabMarkSaved?.();
+          window.mojoLabRebaseline?.();
           this.labName = trimmed;
           const activeTab = this.labTabs.find(
             (t) => t.id === this.labActiveTabId
           );
           if (activeTab) {
             activeTab.name = trimmed;
-            activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
             activeTab.dirty = false;
           }
           this._saveTabs();
@@ -2982,15 +2981,6 @@
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
           if (!this.data[p.name]) {
-            if (key.startsWith("Lab/")) {
-              console.debug(
-                `[lab] renderPlot: no data for y-axis "${key}" (resolved name "${p.name}") - trace skipped`,
-                "available keys:",
-                Object.keys(this.data ?? {}).filter(
-                  (k) => k.startsWith("Lab/")
-                )
-              );
-            }
             return null;
           }
           const lineStyle = {

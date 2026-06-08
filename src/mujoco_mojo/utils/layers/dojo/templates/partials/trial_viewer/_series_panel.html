@@ -222,7 +222,7 @@
                                     <template x-for="group in groupedFilterSchemas"
                                               :key="group.category">
                                         <div>
-                                            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
                                                  x-text="group.category"></div>
                                             <template x-for="schema in group.schemas"
                                                       :key="schema.type">
@@ -416,7 +416,7 @@
                                                             <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
                                                                       :key="group.label">
                                                                 <div>
-                                                                    <div class="px-2 pt-1.5 pb-0.5 text-[9px] font-black uppercase text-slate-500 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
+                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
                                                                          x-text="group.label"></div>
                                                                     <template x-for="unit in group.units"
                                                                               :key="unit">
@@ -1094,7 +1094,7 @@
                                                     <template x-for="group in groupedFilterSchemas"
                                                               :key="group.category">
                                                         <div>
-                                                            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
                                                                  x-text="group.category"></div>
                                                             <template x-for="schema in group.schemas"
                                                                       :key="schema.type">
@@ -1284,7 +1284,7 @@
                                                                             <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
                                                                                       :key="group.label">
                                                                                 <div>
-                                                                                    <div class="px-2 pt-1.5 pb-0.5 text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
+                                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
                                                                                          x-text="group.label"></div>
                                                                                     <template x-for="unit in group.units"
                                                                                               :key="unit">

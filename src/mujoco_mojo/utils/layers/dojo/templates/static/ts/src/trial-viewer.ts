@@ -92,6 +92,7 @@ interface LabTab {
   graph: object | null;
   savedState: string | null; // JSON of the graph at last save/load; null = never saved
   dirty: boolean;
+  viewport: { scale: number; offset: [number, number] } | null; // remembered pan/zoom
 }
 
 // ---------------------------------------------------------------------------
@@ -359,21 +360,6 @@ function trialViewer(trialId: string, externalUrl: string) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
-      const requestedLabCols = requiredCols.filter((c) => c.startsWith("Lab/"));
-      if (requestedLabCols.length > 0) {
-        // eslint-disable-next-line no-console
-        console.debug("[lab] requested Lab/ columns", requestedLabCols);
-        requestedLabCols.forEach((c) => {
-          const series = result.data?.[c];
-          // eslint-disable-next-line no-console
-          console.debug(
-            `[lab] response for "${c}":`,
-            series === undefined
-              ? "MISSING from response"
-              : `length=${series.length}, sample=${JSON.stringify(series.slice(0, 3))}`,
-          );
-        });
-      }
       if (result.filter_errors && result.filter_errors.length > 0) {
         result.filter_errors.forEach((msg) => {
           if (!(this._shownFilterErrors as Set<string>).has(msg)) {
@@ -1074,6 +1060,20 @@ function trialViewer(trialId: string, externalUrl: string) {
         const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
         if (tab) tab.dirty = dirty;
       };
+      // LabTab.savedState is the single source of truth for "what does clean
+      // look like for this tab" - _signal_lab.html never keeps its own copy,
+      // it always asks for the active tab's baseline through these two bridges.
+      // That structurally rules out the stale-copy bugs a locally-cached
+      // baseline used to cause (forgotten syncs, baselines surviving a tab
+      // switch, ordering footguns around when the cache had to be refreshed).
+      window.mojoLabGetBaseline = () => {
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        return tab?.savedState ?? null;
+      };
+      window.mojoLabSetBaseline = (state: string | null) => {
+        const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
+        if (tab) tab.savedState = state;
+      };
 
       // bind video element handlers programmatically so `this` resolves to the
       // trialViewer component — template @event handlers in nested x-data scopes
@@ -1416,7 +1416,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                   variant: "warning",
                 }) ?? Promise.resolve(false)
               ).then((ok) => {
-                if (ok) this.labOpen = false;
+                if (ok) {
+                  window.mojoLabRevertToSaved?.();
+                  this.labOpen = false;
+                }
               });
             }
             window.dispatchEvent(new CustomEvent("mojo:escape"));
@@ -2994,16 +2997,6 @@ function trialViewer(trialId: string, externalUrl: string) {
           missing: lab.signal_in_columns.filter((c) => !available.has(c)),
           valid: validLabs.has(lab.name),
         }));
-        // eslint-disable-next-line no-console
-        console.debug(
-          "[lab] schemas loaded:",
-          this.labSchemas.map((l) => ({
-            name: l.name,
-            valid: l.valid,
-            missing: l.missing,
-            outputs: l.outputs,
-          })),
-        );
         // Rebuild virtual Lab columns from scratch - removes stale entries from deleted labs.
         this.columns = [...available].sort();
       } catch {
@@ -3052,7 +3045,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       })();
       const id = this._tabId();
-      this.labTabs = [{ id, name, graph, savedState: null, dirty: false }];
+      this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
       this.labActiveTabId = id;
       this.labName = name;
       this.labGraph = graph;
@@ -3062,9 +3055,18 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!this.labActiveTabId) return;
       const tab = this.labTabs.find((t) => t.id === this.labActiveTabId);
       if (!tab) return;
+      // run any pending debounced undo-history snapshot first so the stack's
+      // top entry matches exactly what we persist onto the tab
+      window.mojoLabFlushSnapshot?.();
       tab.graph = window.mojoLabSerialize?.() ?? tab.graph;
       tab.name = this.labName;
-      tab.savedState = window.mojoLabGetSavedState?.() ?? tab.savedState;
+      // tab.savedState is NOT touched here - it's the tab's own baseline,
+      // owned exclusively by this LabTab object (see mojoLabGetBaseline /
+      // mojoLabSetBaseline) and never derived from a transient local copy.
+      tab.viewport = window.mojoLabGetViewport?.() ?? tab.viewport;
+      // keep labGraph (the value mojoLabInit reloads from on reopen) in sync,
+      // otherwise closing and reopening the lab restores the pre-edit graph
+      this.labGraph = tab.graph;
     },
 
     _persistTabs() {
@@ -3097,7 +3099,11 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (tabId === this.labActiveTabId) return;
       this._snapshotActiveTab();
       await this._activateTab(tabId);
-      this._saveTabs();
+      // persist only - the canvas hasn't reloaded the new tab's graph yet
+      // (mojoLabInit fires async via the mojo:lab-activate-tab event), so
+      // re-snapshotting here would serialize the still-displayed old graph
+      // onto the newly active tab and clobber it
+      this._persistTabs();
     },
 
     async newTab() {
@@ -3108,6 +3114,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         name: "",
         graph: null,
         savedState: null,
+        viewport: null,
         dirty: false,
       });
       await this._activateTab(id);
@@ -3136,6 +3143,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (!ok) return;
       }
       this.labTabs.splice(tabIdx, 1);
+      window.mojoLabDiscardHistory?.(tabId);
       if (this.labTabs.length === 0) {
         const newId = this._tabId();
         this.labTabs.push({
@@ -3143,6 +3151,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           name: "",
           graph: null,
           savedState: null,
+          viewport: null,
           dirty: false,
         });
         await this._activateTab(newId);
@@ -3151,10 +3160,22 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)]!;
         await this._activateTab(newActive.id);
       }
-      this._saveTabs();
+      // persist only - see switchTab for why we must not re-snapshot here
+      this._persistTabs();
     },
 
     async loadLabInNewTab(labName: string) {
+      // if this lab is already open in a tab, switch to it rather than
+      // duplicating it (and preserve any unsaved edits already in that tab)
+      const existing = this.labTabs.find((t) => t.name === labName);
+      if (existing) {
+        if (existing.id !== this.labActiveTabId) {
+          this._snapshotActiveTab();
+          await this._activateTab(existing.id);
+          this._persistTabs();
+        }
+        return;
+      }
       const safePath = labName.split("/").map(encodeURIComponent).join("/");
       try {
         const resp = await fetch(`/mosaic/api/lab/${safePath}`);
@@ -3184,12 +3205,14 @@ function trialViewer(trialId: string, externalUrl: string) {
             name: labName,
             graph,
             savedState: null,
+            viewport: null,
             dirty: false,
           });
           await this._activateTab(id);
         }
-        // persist without snapshotting — mojoLabInit hasn't fired yet so
-        // _labSavedState still holds the previous tab's baseline
+        // persist without snapshotting — mojoLabInit hasn't fired yet, so the
+        // canvas is still showing the previous tab's graph; re-snapshotting
+        // here would serialize that stale content onto the new tab
         this._persistTabs();
       } catch (err) {
         this.notify(`Failed to load "${labName}": ${String(err)}`, "error");
@@ -3212,13 +3235,6 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
       const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
       try {
-        // eslint-disable-next-line no-console
-        console.debug(
-          `[lab] saving "${trimmed}" - nodes:`,
-          (graph as { nodes?: { id: number; type: string }[] }).nodes?.map(
-            (n) => `${n.id}:${n.type}`,
-          ),
-        );
         const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3230,15 +3246,14 @@ function trialViewer(trialId: string, externalUrl: string) {
           return;
         }
         this.notify(`Lab "${trimmed}" saved`, "success");
-        window.mojoLabMarkSaved?.();
-        // sync active tab
+        // the just-saved content is the new clean baseline for the active tab
+        window.mojoLabRebaseline?.();
         this.labName = trimmed;
         const activeTab = this.labTabs.find(
           (t) => t.id === this.labActiveTabId,
         );
         if (activeTab) {
           activeTab.name = trimmed;
-          activeTab.savedState = window.mojoLabGetSavedState?.() ?? null;
           activeTab.dirty = false;
         }
         this._saveTabs();
@@ -3601,16 +3616,6 @@ function trialViewer(trialId: string, externalUrl: string) {
         .map((key, i) => {
           const p = this.getYProps(key, i);
           if (!this.data![p.name]) {
-            if (key.startsWith("Lab/")) {
-              // eslint-disable-next-line no-console
-              console.debug(
-                `[lab] renderPlot: no data for y-axis "${key}" (resolved name "${p.name}") - trace skipped`,
-                "available keys:",
-                Object.keys(this.data ?? {}).filter((k) =>
-                  k.startsWith("Lab/"),
-                ),
-              );
-            }
             return null;
           }
           const lineStyle = {
