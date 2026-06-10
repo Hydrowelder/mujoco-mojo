@@ -12,8 +12,10 @@ from types import ModuleType
 from typing import Annotated, Any, Literal, overload
 
 import typer
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
@@ -47,22 +49,37 @@ console = Console()
 VERSION = version("mujoco-mojo")
 
 
+# "MUJOCO" and "MOJO" in the ANSI Shadow figlet font
+_LOGO_LINES = [
+    "███╗   ███╗██╗   ██╗     ██╗ ██████╗  ██████╗ ██████╗       ███╗   ███╗ ██████╗      ██╗ ██████╗ ",
+    "████╗ ████║██║   ██║     ██║██╔═══██╗██╔════╝██╔═══██╗      ████╗ ████║██╔═══██╗     ██║██╔═══██╗",
+    "██╔████╔██║██║   ██║     ██║██║   ██║██║     ██║   ██║      ██╔████╔██║██║   ██║     ██║██║   ██║",
+    "██║╚██╔╝██║██║   ██║██   ██║██║   ██║██║     ██║   ██║      ██║╚██╔╝██║██║   ██║██   ██║██║   ██║",
+    "██║ ╚═╝ ██║╚██████╔╝╚█████╔╝╚██████╔╝╚██████╗╚██████╔╝      ██║ ╚═╝ ██║╚██████╔╝╚█████╔╝╚██████╔╝",
+    "╚═╝     ╚═╝ ╚═════╝  ╚════╝  ╚═════╝  ╚═════╝ ╚═════╝       ╚═╝     ╚═╝ ╚═════╝  ╚════╝  ╚═════╝ ",
+]
+
+_SHADES = [
+    "#67e8f9",
+    "#22d3ee",
+    "#06b6d4",
+    "#0891b2",
+    "#0e7490",
+    "#155e75",
+]
+
+
 def print_logo():
-    logo = """
-M   M  U  U  J   OOO    CCCC   OOO      M   M   OOO   J   OOO
-MM MM  U  U  J  OO OO  CC     OO OO     MM MM  OO OO  J  OO OO
-MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
-MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
-M M M  U  U  J  OO OO  CC  C  OO OO     M M M  OO OO  J  OO OO
-M M M  UUUU  J   OOO    CCCC   OOO      M M M   OOO   J   OOO
-             J                                        J
-           JJ                                       JJ
-"""
+    body = Text(justify="center")
+    for i, (line, shade) in enumerate(zip(_LOGO_LINES, _SHADES)):
+        body.append(line, style=f"bold {shade}")
+        if i != len(_LOGO_LINES) - 1:
+            body.append("\n")
+
     console.print(
         Panel(
-            logo,
+            Align.center(body),
             expand=False,
-            style="bold cyan",
             border_style="cyan",
             subtitle=f"[dim]v{VERSION}[/dim]",
         )

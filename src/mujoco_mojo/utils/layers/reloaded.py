@@ -89,6 +89,44 @@ def is_dark_mode() -> bool:
     return False
 
 
+def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
+    """Plays a brief Matrix-style digital rain animation, e.g. on exit."""
+    import random
+
+    from rich.live import Live
+    from rich.text import Text
+
+    width, height = console.size
+    if width <= 0 or height <= 0:
+        return
+
+    drops = [random.randint(-height, 0) for _ in range(width)]
+    trail_length = 8
+
+    with Live(console=console, refresh_per_second=fps, screen=True) as live:
+        for _ in range(int(duration * fps)):
+            frame = Text()
+            for row in range(height):
+                for col in range(width):
+                    head = drops[col]
+                    if row == head:
+                        frame.append(random.choice("01"), style="bold white")
+                    elif 0 <= head - row <= trail_length:
+                        frame.append(random.choice("01"), style="green")
+                    else:
+                        frame.append(" ")
+                if row < height - 1:
+                    frame.append("\n")
+
+            for col in range(width):
+                drops[col] += 1
+                if drops[col] - height > random.randint(0, height):
+                    drops[col] = random.randint(-height, 0)
+
+            live.update(frame)
+            time.sleep(1 / fps)
+
+
 def recursive_reload(module, project_root: Path, visited: set | None = None):
     """Recursively reloads modules, but only if they live inside project_root."""
     import importlib
@@ -480,6 +518,7 @@ class MojoReloaded:
                 self.run_viser(initial_state)
             case _:
                 console.print(f"Invalid viewer option selected {self.ui}")
+        _matrix_rain()
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
     def _print_help(self):
