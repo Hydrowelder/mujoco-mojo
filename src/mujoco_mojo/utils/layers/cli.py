@@ -4,14 +4,18 @@ import ast
 import importlib
 import logging
 import sys
+from collections.abc import Callable
 from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from types import ModuleType
+from typing import Annotated, Any, Literal, overload
 
 import typer
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
@@ -45,22 +49,37 @@ console = Console()
 VERSION = version("mujoco-mojo")
 
 
+# "MUJOCO" and "MOJO" in the ANSI Shadow figlet font
+_LOGO_LINES = [
+    "███╗   ███╗██╗   ██╗     ██╗ ██████╗  ██████╗ ██████╗       ███╗   ███╗ ██████╗      ██╗ ██████╗ ",
+    "████╗ ████║██║   ██║     ██║██╔═══██╗██╔════╝██╔═══██╗      ████╗ ████║██╔═══██╗     ██║██╔═══██╗",
+    "██╔████╔██║██║   ██║     ██║██║   ██║██║     ██║   ██║      ██╔████╔██║██║   ██║     ██║██║   ██║",
+    "██║╚██╔╝██║██║   ██║██   ██║██║   ██║██║     ██║   ██║      ██║╚██╔╝██║██║   ██║██   ██║██║   ██║",
+    "██║ ╚═╝ ██║╚██████╔╝╚█████╔╝╚██████╔╝╚██████╗╚██████╔╝      ██║ ╚═╝ ██║╚██████╔╝╚█████╔╝╚██████╔╝",
+    "╚═╝     ╚═╝ ╚═════╝  ╚════╝  ╚═════╝  ╚═════╝ ╚═════╝       ╚═╝     ╚═╝ ╚═════╝  ╚════╝  ╚═════╝ ",
+]
+
+_SHADES = [
+    "#67e8f9",
+    "#22d3ee",
+    "#06b6d4",
+    "#0891b2",
+    "#0e7490",
+    "#155e75",
+]
+
+
 def print_logo():
-    logo = """
-M   M  U  U  J   OOO    CCCC   OOO      M   M   OOO   J   OOO
-MM MM  U  U  J  OO OO  CC     OO OO     MM MM  OO OO  J  OO OO
-MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
-MM MM  U  U  J  O   O  C      O   O     MM MM  O   O  J  O   O
-M M M  U  U  J  OO OO  CC  C  OO OO     M M M  OO OO  J  OO OO
-M M M  UUUU  J   OOO    CCCC   OOO      M M M   OOO   J   OOO
-             J                                        J
-           JJ                                       JJ
-"""
+    body = Text(justify="center")
+    for i, (line, shade) in enumerate(zip(_LOGO_LINES, _SHADES)):
+        body.append(line, style=f"bold {shade}")
+        if i != len(_LOGO_LINES) - 1:
+            body.append("\n")
+
     console.print(
         Panel(
-            logo,
+            Align.center(body),
             expand=False,
-            style="bold cyan",
             border_style="cyan",
             subtitle=f"[dim]v{VERSION}[/dim]",
         )
@@ -72,8 +91,22 @@ def _setup_cli_logging(verbose: int, quiet: int) -> logging.Logger:
     return setup_logger(level=level)
 
 
-def _load_func(path: str) -> Any:
-    """Helper to dynamically import user logic, supporting classes and methods."""
+@overload
+def _load_func(
+    path: str, _return_module: Literal[False] = False
+) -> Callable[..., Any]: ...
+@overload
+def _load_func(
+    path: str, _return_module: Literal[True]
+) -> tuple[Callable[..., Any], ModuleType]: ...
+def _load_func(
+    path: str, _return_module: bool = False
+) -> Callable[..., Any] | tuple[Callable[..., Any], ModuleType]:
+    """
+    Helper to dynamically import user logic, supporting classes and methods.
+
+    If `_return_module` is set, returns a `(obj, module)` tuple, where `module` is the importable module the dotted path resolved against (e.g. a package `__init__` re-exporting a class), as opposed to the module the attribute is actually defined in. Reloading that module is what's needed to pick up re-exported names after an edit.
+    """
     if "." not in sys.path:
         sys.path.insert(0, ".")
 
@@ -104,7 +137,6 @@ def _load_func(path: str) -> Any:
         obj = mod
         for part in attr_parts:
             obj = getattr(obj, part)
-        return obj
     except AttributeError as e:
         logger = get_logger(__name__)
         console.print(
@@ -112,6 +144,22 @@ def _load_func(path: str) -> Any:
         )
         logger.exception(f"`{path}`not found: {e}", extra={"file_only": True})
         raise typer.Exit(code=1)
+
+    if not callable(obj):
+        logger = get_logger(__name__)
+        console.print(
+            f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] resolved to a "
+            f"[bold]{type(obj).__name__}[/bold], which is not callable."
+        )
+        logger.error(
+            f"`{path}` resolved to a non-callable {type(obj).__name__}",
+            extra={"file_only": True},
+        )
+        raise typer.Exit(code=1)
+
+    if _return_module:
+        return obj, mod
+    return obj
 
 
 def _smart_parse(value: str) -> Any:

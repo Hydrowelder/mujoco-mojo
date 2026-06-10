@@ -23,7 +23,6 @@ from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDic
 from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
-from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -34,6 +33,7 @@ from mujoco_mojo.utils.statusing import (
     Step,
     TrialStatus,
 )
+from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .cli import UserInterface
@@ -87,6 +87,44 @@ def is_dark_mode() -> bool:
         return False
 
     return False
+
+
+def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
+    """Plays a brief Matrix-style digital rain animation, e.g. on exit."""
+    import random
+
+    from rich.live import Live
+    from rich.text import Text
+
+    width, height = console.size
+    if width <= 0 or height <= 0:
+        return
+
+    drops = [random.randint(-height, 0) for _ in range(width)]
+    trail_length = 8
+
+    with Live(console=console, refresh_per_second=fps, screen=True) as live:
+        for _ in range(int(duration * fps)):
+            frame = Text()
+            for row in range(height):
+                for col in range(width):
+                    head = drops[col]
+                    if row == head:
+                        frame.append(random.choice("01"), style="bold white")
+                    elif 0 <= head - row <= trail_length:
+                        frame.append(random.choice("01"), style="green")
+                    else:
+                        frame.append(" ")
+                if row < height - 1:
+                    frame.append("\n")
+
+            for col in range(width):
+                drops[col] += 1
+                if drops[col] - height > random.randint(0, height):
+                    drops[col] = random.randint(-height, 0)
+
+            live.update(frame)
+            time.sleep(1 / fps)
 
 
 def recursive_reload(module, project_root: Path, visited: set | None = None):
@@ -271,9 +309,9 @@ class MojoReloaded:
         def reload_with_check(path_str: str, label: str):
             """Internal helper to validate file existance before reloading."""
             try:
-                # attempt to find
-                func = _load_func(path_str)
-                mod = sys.modules.get(func.__module__)
+                # attempt to find the module the dotted path resolves against, which may be a
+                # package `__init__` re-exporting a class/function defined in a submodule
+                _, mod = _load_func(path_str, _return_module=True)
 
                 if mod and hasattr(mod, "__file__") and mod.__file__:
                     source_file = Path(mod.__file__).resolve()
@@ -289,6 +327,8 @@ class MojoReloaded:
                             f"Unable to find source file for {path_str}. Did you rename or move it?"
                         )
 
+                    # reloading the entry module re-resolves any re-exported names (e.g.
+                    # `from .robot import RobotGenerator`) after their source modules reload
                     recursive_reload(module=mod, project_root=project_root)
 
                 # reload to get the reference
@@ -478,6 +518,7 @@ class MojoReloaded:
                 self.run_viser(initial_state)
             case _:
                 console.print(f"Invalid viewer option selected {self.ui}")
+        _matrix_rain()
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
     def _print_help(self):
@@ -523,15 +564,18 @@ class MojoReloaded:
                     "Install [bold]mujoco-mojo[reloaded][/bold] to use --watch."
                 )
                 return None
+            # silence watchfiles' own "N changes detected" log; we print our own below
+            logging.getLogger("watchfiles").setLevel(logging.WARNING)
+
             evt = threading.Event()
             watch_path = Path.cwd()
 
             def _run():
                 try:
-                    for _ in wf_watch(
+                    for changes in wf_watch(
                         watch_path, watch_filter=PythonFilter(), stop_event=evt
                     ):
-                        event_queue.put(("reload", ""))
+                        event_queue.put(("reload", str(len(changes))))
                 except Exception:
                     pass
 
@@ -566,9 +610,7 @@ class MojoReloaded:
         def print_prompt():
             watch_indicator = " [bold blue]W[/bold blue]" if self.watch else ""
             console.print(
-                f"[bold green]Awaiting command[/bold green]"
-                f"[dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num})[/dim]"
-                f"{watch_indicator}[white] > [/white]",
+                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num})[/dim] {watch_indicator}[white] > [/white]",
                 end="",
             )
 
@@ -583,8 +625,10 @@ class MojoReloaded:
                 break
 
             if event_type == "reload":
+                count = int(data) if data.isdigit() else 0
+                plural = "s" if count != 1 else ""
                 console.print(
-                    "\n[dim]File change detected, reloading with last command...[/dim]"
+                    f"\n[dim]{count} change{plural} detected, reloading with last command...[/dim]"
                 )
                 use_runtime = self._last_command != "gen"
                 try:
@@ -682,7 +726,7 @@ class MojoReloaded:
 
             try:
                 start = time.time()
-                console.print("[bold]Processing...[/bold]")
+                console.print("[dim]Processing...[/dim]")
                 new_state = self.generate_construct(
                     use_runtime=use_runtime, on_reload_callback=on_reload_callback
                 )
