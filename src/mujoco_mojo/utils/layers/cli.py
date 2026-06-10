@@ -4,10 +4,12 @@ import ast
 import importlib
 import logging
 import sys
+from collections.abc import Callable
 from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from types import ModuleType
+from typing import Annotated, Any, Literal, overload
 
 import typer
 from rich.console import Console
@@ -72,8 +74,22 @@ def _setup_cli_logging(verbose: int, quiet: int) -> logging.Logger:
     return setup_logger(level=level)
 
 
-def _load_func(path: str) -> Any:
-    """Helper to dynamically import user logic, supporting classes and methods."""
+@overload
+def _load_func(
+    path: str, _return_module: Literal[False] = False
+) -> Callable[..., Any]: ...
+@overload
+def _load_func(
+    path: str, _return_module: Literal[True]
+) -> tuple[Callable[..., Any], ModuleType]: ...
+def _load_func(
+    path: str, _return_module: bool = False
+) -> Callable[..., Any] | tuple[Callable[..., Any], ModuleType]:
+    """
+    Helper to dynamically import user logic, supporting classes and methods.
+
+    If `_return_module` is set, returns a `(obj, module)` tuple, where `module` is the importable module the dotted path resolved against (e.g. a package `__init__` re-exporting a class), as opposed to the module the attribute is actually defined in. Reloading that module is what's needed to pick up re-exported names after an edit.
+    """
     if "." not in sys.path:
         sys.path.insert(0, ".")
 
@@ -104,7 +120,6 @@ def _load_func(path: str) -> Any:
         obj = mod
         for part in attr_parts:
             obj = getattr(obj, part)
-        return obj
     except AttributeError as e:
         logger = get_logger(__name__)
         console.print(
@@ -112,6 +127,22 @@ def _load_func(path: str) -> Any:
         )
         logger.exception(f"`{path}`not found: {e}", extra={"file_only": True})
         raise typer.Exit(code=1)
+
+    if not callable(obj):
+        logger = get_logger(__name__)
+        console.print(
+            f"[bold red]Error:[/bold red] [bold green]`{path}`[/bold green] resolved to a "
+            f"[bold]{type(obj).__name__}[/bold], which is not callable."
+        )
+        logger.error(
+            f"`{path}` resolved to a non-callable {type(obj).__name__}",
+            extra={"file_only": True},
+        )
+        raise typer.Exit(code=1)
+
+    if _return_module:
+        return obj, mod
+    return obj
 
 
 def _smart_parse(value: str) -> Any:
