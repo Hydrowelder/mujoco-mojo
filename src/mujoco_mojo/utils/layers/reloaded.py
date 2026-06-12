@@ -145,6 +145,29 @@ def recursive_reload(module, project_root: Path, visited: set | None = None):
     if getattr(module, "__name__", "") in BLOCKLIST:
         return
 
+    # collect all submodules of the package
+    submoduels_to_reload = []
+    if hasattr(module, "__path__"):
+        module_name = module.__name__
+        # find all submodules in sys modules that belong to this package
+        for name, mod in list(sys.modules.items()):
+            if mod is not None and name.startswith(module_name + "."):
+                mod_file = getattr(mod, "__file__", None)
+                if mod_file:
+                    mod_path = Path(mod_file).resolve()
+                    is_local = mod_path.is_relative_to(project_root)
+                    is_library = (
+                        "site-packages" in mod_path.parts
+                        or "dist-packages" in mod_path.parts
+                    )
+                    if is_local and not is_library and mod not in visited:
+                        submoduels_to_reload.append(mod)
+
+    # recursively reload discovered submodules first
+    for submod in submoduels_to_reload:
+        recursive_reload(submod, project_root, visited)
+
+    # check objects in module dict for cross-moduel references
     for name in list(module.__dict__.keys()):
         obj = module.__dict__[name]
         if hasattr(obj, "__module__"):

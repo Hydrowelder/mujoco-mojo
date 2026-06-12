@@ -139,7 +139,11 @@ class MeshBase(XMLModel):
     @model_validator(mode="after")
     def validate_file(self) -> Self:
         # make the file extension lowercase
-        if self.file is not None and self.file.suffix not in [".stl", ".msh", ".obj"]:
+        if self.file is not None and self.file.suffix.lower() not in [
+            ".stl",
+            ".msh",
+            ".obj",
+        ]:
             msg = f'Mesh {self.name}: Invalid file suffix ({self.file.suffix}). Must be ".stl", ".msh", or ".obj".'
             logger.error(msg)
             raise ValueError(msg)
