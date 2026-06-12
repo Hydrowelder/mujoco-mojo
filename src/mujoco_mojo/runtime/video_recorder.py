@@ -1,8 +1,10 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 import mujoco
+import numpy as np
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import CameraName
@@ -41,6 +43,16 @@ class VideoRecorder:
     - `.gif`: via PIL; no audio, loops automatically; large file size, not seekable.
 
     Visual overlays (contact forces, net forces, custom arrows/lines) are controlled by the `show_*` flags and the `show_loads` flag passed to `capture_frame`.
+
+    `playback_speed` scales the frame rate of the saved video relative to `fps`: 0.5 plays back in slow motion, 1 is real time, and 2 plays back at double speed. It does not change how many frames are captured per second of simulation time, only how quickly they are played back.
+
+    `recording_trigger` is a function of the current `MjState` that gates whether a due frame is actually captured, e.g. `lambda state: 5.0 <= state.data.time <= 10.0` to only record a window of the simulation.
+
+    `frame_label`, if set, is called with the current `MjState` and the returned string is burned into the top-left corner of each captured frame.
+
+    `max_frames` caps the number of frames held in memory; once reached, further `capture_frame` calls are silently ignored (with a one-time warning).
+
+    Call `close` once `save` has finished to release the renderer's GL context.
     """
 
     path: Path
@@ -64,16 +76,34 @@ class VideoRecorder:
     fps: int = 30
     """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
 
+    playback_speed: float = 1.0
+    """Target for playback speed. If using 0.5 the video will record in "slow motion", 2 will record as occurring twice as fast."""
+
     width: int = 640
     """Render width in pixels."""
 
     height: int = 480
     """Render height in pixels."""
 
+    recording_trigger: Callable[[MjState], bool] = lambda state: True
+    """Function evaluated against the current `MjState` on every step. Frames are only captured while it returns `True`."""
+
+    frame_label: Callable[[MjState], str] | None = None
+    """Optional function returning a text label to burn into the top-left corner of each captured frame, e.g. `lambda state: f"t={state.data.time:.2f}s"`."""
+
+    max_frames: int | None = None
+    """Optional cap on the number of frames held in memory. Once reached, further `capture_frame` calls are ignored."""
+
     _frames: list = field(default_factory=list)
     _renderer: mujoco.Renderer = field(init=False)
     _vopt: mujoco.MjvOption = field(default_factory=mujoco.MjvOption, init=False)
     _next_record_time: float = field(default=0.0, init=False)
+    _max_frames_warned: bool = field(default=False, init=False)
+
+    @property
+    def _output_fps(self) -> float:
+        """Frame rate of the saved video, after applying `playback_speed` to `fps`."""
+        return self.fps * self.playback_speed
 
     def setup(self, state: MjState) -> Self:
         """Initializes the MuJoCo renderer for this model. Must be called before the simulation loop."""
@@ -94,17 +124,13 @@ class VideoRecorder:
         self._vopt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = int(self.show_contacts)
         return self
 
-    def capture_frame(
+    def _render_frame(
         self,
         state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
     ):
-        """Captures the current state as a video frame."""
-        if state.data.time < self._next_record_time:
-            return
-
-        # update standard mujoco objects in scene
+        """Updates the scene for the current state and renders it to an image array."""
         self._renderer.update_scene(
             data=state.data,
             camera=self.camera_name,
@@ -119,9 +145,60 @@ class VideoRecorder:
             for line in custom_lines:
                 line.draw_in_scene(self._renderer.scene)
 
+        frame = self._renderer.render()
+
+        if self.frame_label is not None:
+            frame = self._draw_label(frame, self.frame_label(state))
+
+        return frame
+
+    def _draw_label(self, frame: np.ndarray, label: str) -> np.ndarray:
+        """Burns `label` into the top-left corner of `frame`."""
+        from PIL import Image, ImageDraw
+
+        image = Image.fromarray(frame)
+        ImageDraw.Draw(image).text((10, 10), label, fill=(255, 255, 255))
+        return np.asarray(image)
+
+    def capture_frame(
+        self,
+        state: MjState,
+        custom_arrows: list[ArrowConfig],
+        custom_lines: list[LineConfig],
+    ):
+        """Captures the current state as a video frame."""
+        if state.data.time < self._next_record_time:
+            return
+
+        if not self.recording_trigger(state):
+            return
+
+        if self.max_frames is not None and len(self._frames) >= self.max_frames:
+            if not self._max_frames_warned:
+                logger.warning(
+                    f"VideoRecorder for {self.path} reached max_frames={self.max_frames}; "
+                    "no further frames will be captured."
+                )
+                self._max_frames_warned = True
+            return
+
         # capture and increment the clock for the next frame
-        self._frames.append(self._renderer.render())
+        self._frames.append(self._render_frame(state, custom_arrows, custom_lines))
         self._next_record_time += 1 / self.fps
+
+    def snapshot(
+        self,
+        state: MjState,
+        path: Path,
+        custom_arrows: list[ArrowConfig] | None = None,
+        custom_lines: list[LineConfig] | None = None,
+    ):
+        """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `fps` timing."""
+        from PIL import Image
+
+        frame = self._render_frame(state, custom_arrows or [], custom_lines or [])
+        Image.fromarray(frame).save(path)
+        logger.info(f"Snapshot saved to {path}")
 
     def save(self):
         """
@@ -149,13 +226,13 @@ class VideoRecorder:
                 self.path,
                 save_all=True,
                 append_images=pil_images[1:],
-                duration=int(1000 / self.fps),  # ms per frame
+                duration=int(1000 / self._output_fps),  # ms per frame
                 loop=0,  # loop forever
             )
         elif self.path.suffix.lower() == ".webm":
             self._save_webm()
         else:
-            media.write_video(path=self.path, images=self._frames, fps=self.fps)
+            media.write_video(path=self.path, images=self._frames, fps=self._output_fps)
         logger.info(f"Video saved to {self.path}")
 
     def _save_webm(self) -> None:
@@ -180,7 +257,7 @@ class VideoRecorder:
                 "-pix_fmt",
                 "rgb24",
                 "-r",
-                str(self.fps),
+                str(self._output_fps),
                 "-i",
                 "pipe:0",
                 "-c:v",
@@ -215,6 +292,10 @@ class VideoRecorder:
         except Exception:
             proc.kill()
             raise
+
+    def close(self) -> None:
+        """Releases the GL context held by the underlying MuJoCo renderer. Call once recording is finished and `save` has been called."""
+        self._renderer.close()
 
     def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
         runtime_manager.add_video_recorder(self)
