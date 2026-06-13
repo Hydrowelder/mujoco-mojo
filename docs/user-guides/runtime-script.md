@@ -5,8 +5,8 @@
 
     The beauty of Mojo is that you don't need to manage the low-level MuJoCo physics state manually; the `RuntimeManager` handles the heavy lifting, ensuring your simulation is stable and your telemetry is perfectly synchronized.
 
-    <figure align="center" class="fade-in">
-        <img src="../../assets/user-guides/runtime-anim.gif" alt="Runtime final result" style="width: 50%; height: auto;">
+    <figure markdown="span">
+        ![Runtime final result](../../assets/user-guides/runtime-anim.gif){ width="50%" height="auto" }
         <figcaption>The visual result of the completed runtime script: Two spring forces act between the sphere site pairs defined in the generate step. The action-reaction forces are displayed. The boxes translate away from one another while rotating due to mismatched the unequal spring force.</figcaption>
     </figure>
 
