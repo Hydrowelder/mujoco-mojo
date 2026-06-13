@@ -64,3 +64,20 @@ class MojoModel(MojoBaseModel, StochasBase):
             self.user_data = cls.model_validate(data)
 
         return self.user_data
+
+    def clear_unpickleable_data(self) -> None:
+        """
+        Clear unpickleable objects from the model tree before serialization.
+
+        This walks through all geoms in the MJCF tree and clears cached collision managers and proximity queries that contain Cython objects which cannot be pickled for multiprocessing.
+        """
+        from mujoco_mojo.utils.proximity_mixin import ProximityMixin
+
+        if self.mjcf.worldbody is None:
+            return
+
+        bodies = self.mjcf.worldbody.walk_bodies(include_self=True)
+        for body in bodies:
+            for geom in body.geoms:
+                if isinstance(geom, ProximityMixin):
+                    geom.clear_unpickleable()

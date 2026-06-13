@@ -7,7 +7,7 @@ from bdb import BdbQuit
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, TypedDict, cast, runtime_checkable
 
 import mujoco
 import numpy as np
@@ -20,7 +20,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
-from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR
+from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR, NAMED_VALUES_FNAME
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
 from mujoco_mojo.utils.statusing import (
@@ -366,11 +366,13 @@ class MojoReloaded:
 
         gen_func: MojoGenerator | None = None
         if self.generator:
-            gen_func = reload_with_check(self.generator, "Generator")
+            gen_func = cast(
+                MojoGenerator, reload_with_check(self.generator, "Generator")
+            )
 
         run_func: MojoRuntime | None = None
         if self.runtime:
-            run_func = reload_with_check(self.runtime, "Runtime")
+            run_func = cast(MojoRuntime, reload_with_check(self.runtime, "Runtime"))
 
         global_overrides = NamedValueDict[NDArray]()
         if self.overrides_path and self.overrides_path.exists():
@@ -430,6 +432,9 @@ class MojoReloaded:
                     )
                     mojo_model._trial_dir = trial_dir
                     mojo_model.dump_to_path(trial_dir / self.model_config_name)
+                    (trial_dir / NAMED_VALUES_FNAME).write_text(
+                        mojo_model.named.model_dump_json()
+                    )
                 else:
                     assert self.config_path
                     try:
