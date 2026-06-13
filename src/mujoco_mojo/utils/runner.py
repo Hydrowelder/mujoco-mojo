@@ -51,10 +51,10 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
+    NAMED_VALUES_FNAME,
     SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, worker_init
-from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -64,6 +64,7 @@ from mujoco_mojo.utils.statusing import (
     JobType,
     TrialStatus,
 )
+from mujoco_mojo.utils.utils import write_dojo_script
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
@@ -323,7 +324,7 @@ class Trial:
     @property
     def named_value_path(self) -> Path:
         """The full path to the JSON NamedValue file for this trial."""
-        return self.trial_dir / "named_values.json"
+        return self.trial_dir / NAMED_VALUES_FNAME
 
     def run(
         self,
@@ -427,6 +428,10 @@ class Trial:
             # serialize again in case new named values were added during the run
             mojo_model.dump_to_path(self.model_config_path)
             self.named_value_path.write_text(mojo_model.named.model_dump_json())
+
+            # clear unpicklable collision managers before returing to avoid multiprocessing serialization erros
+            mojo_model.clear_unpickleable_data()
+
             status.step = "done"
             status.completion = Completion.SUCCESS
 

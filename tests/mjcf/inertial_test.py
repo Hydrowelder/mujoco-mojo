@@ -162,11 +162,11 @@ def test_missing_inertia_definition():
 
 def test_fullinertia_matrix_reconstruction():
     """Verify the Vec6 symmetry mapping into a 3x3 matrix."""
-    # M11=1, M22=2, M33=3, M12=0.1, M13=0.2, M23=0.3
-    f_vec = np.array([1, 2, 3, 0.1, 0.2, 0.3])
+    # M11=2, M22=2, M33=2, M12=0.1, M13=0.2, M23=0.3
+    f_vec = np.array([2, 2, 2, 0.1, 0.2, 0.3])
     item = Inertial(mass=1.0, pos=Pos(pos=np.array([0, 0, 0])), fullinertia=f_vec)
 
-    expected = np.array([[1, 0.1, 0.2], [0.1, 2, 0.3], [0.2, 0.3, 3]])
+    expected = np.array([[2, 0.1, 0.2], [0.1, 2, 0.3], [0.2, 0.3, 2]])
     assert np.allclose(item.inertia_matrix, expected)
 
 
@@ -219,6 +219,34 @@ def test_non_positive_definite_failure():
     bad_full = np.array([1.0, 1.0, 1.0, 2.0, 0.0, 0.0])
 
     with pytest.raises(ValueError, match="Inertia matrix must be positive definite"):
+        Inertial(
+            mass=1.0,
+            pos=Pos(pos=np.array([0, 0, 0])),
+            fullinertia=bad_full,
+        )
+
+
+def test_triangle_inequality_failure_diaginertia():
+    """Ensure a positive-definite diaginertia that violates the triangle inequality raises ValueError."""
+    # Eigenvalues are (1, 1, 3); positive definite, but 1 + 1 < 3.
+    with pytest.raises(
+        ValueError, match="Inertia tensor violates the triangle inequality"
+    ):
+        Inertial(
+            mass=1.0,
+            pos=Pos(pos=np.array([0, 0, 0])),
+            diaginertia=np.array([1.0, 1.0, 3.0]),
+        )
+
+
+def test_triangle_inequality_failure_fullinertia():
+    """Ensure a positive-definite fullinertia that violates the triangle inequality raises ValueError."""
+    # Same eigenvalues as the diaginertia case (1, 1, 3), specified via a diagonal fullinertia.
+    bad_full = np.array([1.0, 1.0, 3.0, 0.0, 0.0, 0.0])
+
+    with pytest.raises(
+        ValueError, match="Inertia tensor violates the triangle inequality"
+    ):
         Inertial(
             mass=1.0,
             pos=Pos(pos=np.array([0, 0, 0])),

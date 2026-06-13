@@ -87,6 +87,13 @@ Install `mujoco-mojo` in your project using the following:
 - **Object Enumerations:** Embedded MuJoCo object mappings to simplify retrieving `mjOBJ` IDs.
 - **Asset Sharing:** Specialized handling of dependency by remapping assets to become shared allows for space efficient execution of complex models
 
+### Runtime Toolkit
+
+- **Forcing Functions:** A library of typed `Load` definitions (spring-dampers, point-to-point forces, friction, and more) that apply themselves including reaction forces.
+- **Proximity Sensing:** Built-in distance and closest-point tracking between sites and bodies, exposed as both telemetry signals and live overlays with no extra instrumentation. Works on concave geometry meshes.
+- **Structured Telemetry:** A single `post`/`track` call records any value into a hierarchical namespace during simulations. This include prebuilt `request` calls for commonly desired values.
+- **Video Recording:** Multi-camera MP4/WebM/GIF capture synced to simulation time, with playback-speed control, force/proximity overlays, on-frame labels, and single-frame snapshots.
+
 ### Job Utilities
 
 #### Campaign Orchestration
@@ -164,7 +171,9 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 
 - **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
 - **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
-- **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, or trigger "generation-only" mode for rapid MJCF debugging.
+- **Multiple Viewer Backends:** Drive the same reload/sync pipeline through either the native MuJoCo OpenGL viewer or a Viser web viewer.
+- **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
+- **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
 - **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
 
 ??? example

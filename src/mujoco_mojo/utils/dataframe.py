@@ -157,10 +157,23 @@ class MojoNamespace:
     def select_attribute(self, attr: str) -> MojoDataFrame:
         """
         Selects a specific attribute across all categories and objects.
-        Matches exact scalars (':nutation_deg') or vector groups (':x').
+        Matches columns ending in ':attr' (e.g. attr='x' matches 'Bodies/racket/xpos:x' and 'Sensors/gyro/data:x').
         """
-        # Matches ':attr' at the end of a string OR ':attr' followed by anything
-        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*/{attr}(:.*)?$")))
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*:{attr}$")))
+
+    def select_path_part(self, part: str) -> MojoDataFrame:
+        """
+        Selects any column whose full path contains `part` as a substring, anywhere.
+
+        Unlike the other `select_*` methods, this does not anchor to a specific position in the path (category, name, channel, or attribute) - it matches `part` wherever it appears.
+
+        Example:
+            `select_path_part("racket")` matches `Bodies/racket/xpos:x`, `Custom/MyGroup:racket`, and `Bodies/racket_arm/xpos:x`.
+
+        """
+        return _MojoFrame.from_pl(
+            self._df.select([c for c in self._df.columns if part in c])
+        )
 
     def select_custom(self, name: str) -> MojoDataFrame:
         return _MojoFrame.from_pl(

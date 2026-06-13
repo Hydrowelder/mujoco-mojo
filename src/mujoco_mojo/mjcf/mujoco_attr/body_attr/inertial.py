@@ -211,7 +211,16 @@ class Inertial(XMLModel):
         eigvals = np.linalg.eigvalsh(M)
 
         if np.any(eigvals <= 0):
-            msg = (f"Inertia matrix must be positive definite. Eigenvalues: {eigvals}",)
+            msg = f"Inertia matrix must be positive definite. Eigenvalues: {eigvals}"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        # triangle inequality check
+        # eigvalsh returns eigenvalues in ascending order, so e1 + e3 >= e2 and
+        # e2 + e3 >= e1 always hold; only the largest-vs-sum-of-others case can fail
+        e1, e2, e3 = eigvals
+        if e1 + e2 < e3:
+            msg = f"Inertia tensor violates the triangle inequality: the largest principal moment of inertia ({e3:.6e}) exceeds the sum of the other two ({e1:.6e} + {e2:.6e} = {e1 + e2:.6e})."
             logger.error(msg)
             raise ValueError(msg)
 
@@ -429,6 +438,28 @@ class Inertial(XMLModel):
             logger.exception(msg)
             raise ValueError(msg)
 
+        def _seed_dist(input_val: Any) -> None:
+            """Update the seed and trial number for the distribution."""
+            if isinstance(input_val, (list, tuple)):
+                for item in input_val:
+                    if isinstance(item, Distribution):
+                        item.with_seed(mojo_model.seed).with_trial_num(
+                            mojo_model.trial_num
+                        )
+            elif isinstance(input_val, Distribution):
+                input_val.with_seed(mojo_model.seed).with_trial_num(
+                    mojo_model.trial_num
+                )
+
+        _seed_dist(mass)
+        _seed_dist(pos)
+        if diaginertia is not None:
+            _seed_dist(diaginertia)
+        if fullinertia is not None:
+            _seed_dist(fullinertia)
+        if isinstance(orientation, tuple):
+            _seed_dist(orientation[1])
+
         def _resolve_and_track(input_val: Any) -> tuple[np.ndarray, list[NamedValue]]:
             """Samples distributions and prepares NamedValues for registration."""
             resolved_values = []
@@ -439,9 +470,6 @@ class Inertial(XMLModel):
                 for item in input_val:
                     if isinstance(item, Distribution):
                         # sample raw, but create the NamedValue container
-                        item.with_seed(mojo_model.seed).with_trial_num(
-                            mojo_model.trial_num
-                        )
                         nv = item.sample_to_named_value()
                         resolved_values.append(nv.squeeze())
                         pending_named_values.append(nv)
@@ -451,9 +479,6 @@ class Inertial(XMLModel):
 
             # case 2: single vector-level distribution
             if isinstance(input_val, Distribution):
-                input_val.with_seed(mojo_model.seed).with_trial_num(
-                    mojo_model.trial_num
-                )
                 nv = input_val.sample_to_named_value()
                 return nv.value.squeeze(), [nv]
 

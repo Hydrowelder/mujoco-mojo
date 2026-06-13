@@ -90,10 +90,29 @@ export interface LowPassFilter {
 
 export type MarkerSymbol = "none" | "circle" | "square" | "diamond" | "cross";
 
+export interface MaxFilter {
+  enabled?: boolean;
+  type?: string;
+}
+
+export interface MeanFilter {
+  enabled?: boolean;
+  type?: string;
+}
+
 export interface MedianFilter {
   enabled?: boolean;
   type?: string;
-  window?: number;
+}
+
+export interface MinFilter {
+  enabled?: boolean;
+  type?: string;
+}
+
+export interface ModeFilter {
+  enabled?: boolean;
+  type?: string;
 }
 
 export interface NormalizeFilter {
@@ -114,6 +133,12 @@ export interface RollingMeanFilter {
   type?: string;
   window?: number;
   center?: boolean;
+}
+
+export interface RollingMedianFilter {
+  enabled?: boolean;
+  type?: string;
+  window?: number;
 }
 
 export interface RotationFilter {
@@ -160,6 +185,11 @@ export interface Shape {
 export type ShapeType = "vline" | "hline" | "rect";
 
 export interface SignFilter {
+  enabled?: boolean;
+  type?: string;
+}
+
+export interface StandardDeviationFilter {
   enabled?: boolean;
   type?: string;
 }
@@ -218,8 +248,8 @@ export interface PlotConfig {
   yAxisTitle: string;
   showSpike: boolean;
   legendPos: LegendPos;
-  rangeX: [number, number] | null;
-  rangeY: [number, number] | null;
+  rangeX: [number | null, number | null] | null;
+  rangeY: [number | null, number | null] | null;
   xScale: ScaleType;
   yScale: ScaleType;
   xLogBase?: number | null;

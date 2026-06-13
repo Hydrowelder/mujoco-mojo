@@ -15,6 +15,7 @@ __all__ = [
     "DEFAULT_RUNTIME",
     "DEFAULT_SEED",
     "DEFAULT_XML_NAME",
+    "NAMED_VALUES_FNAME",
     "TIME_COLUMN_NAME",
 ]
 
@@ -26,6 +27,7 @@ DEFAULT_RUNTIME = None
 DEFAULT_WORKDIR = Path("./mojo-models")
 DEFAULT_MODEL_CONFIG_NAME = "model_config.json"
 DEFAULT_XML_NAME = "model.xml"
+NAMED_VALUES_FNAME = "named_values.json"
 DEFAULT_SEED = None
 DEFAULT_N_PROC = 1
 

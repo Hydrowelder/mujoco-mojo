@@ -77,6 +77,19 @@ h1,
     text-transform: uppercase;
 }
 
+/* Figure captions are often wrapped in a glightbox <a> link and would otherwise
+   inherit the cyan link color and underline, which is hard to read at caption size.
+   text-decoration is drawn by the anchor itself, so it must be cleared there too. */
+.md-typeset figure > a {
+    text-decoration: none;
+}
+
+.md-typeset figure figcaption {
+    color: var(--md-default-fg-color);
+    font-style: normal;
+    text-decoration: none;
+}
+
 code,
 kbd,
 pre {

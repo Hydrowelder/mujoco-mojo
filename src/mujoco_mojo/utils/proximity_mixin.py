@@ -101,3 +101,13 @@ class ProximityMixin(MojoBaseModel, ABC):
         logger.debug(
             f"Baked proximity mesh for {geom_self.name} ({len(self._local_faces)} faces)"
         )
+
+    def clear_unpickleable(self):
+        """
+        Clear the collision managers and other unpicklable objects.
+
+        This should be called before serializing/pickling the self for multiprocessing.
+        """
+        self._baked_manager = None
+        self._baked_query = None
+        self._baked_mesh = None

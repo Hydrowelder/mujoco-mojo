@@ -35,6 +35,9 @@ async def broadcast_updates():
                 await asyncio.sleep(AUTOREFRESH_PERIOD)
                 continue
 
+            if new_job := await loop.run_in_executor(None, job.reload_if_new_run):
+                shared.CURRENT_JOB = job = new_job
+
             new_listeners = ACTIVE_CONNECTIONS - synced_connections
 
             # If there is work to do OR new people need a catch-up packet
@@ -100,6 +103,12 @@ async def get_job_status():
         return {"error": "No job loaded"}
 
     loop = asyncio.get_running_loop()
+
+    if new_job := await loop.run_in_executor(
+        None, shared.CURRENT_JOB.reload_if_new_run
+    ):
+        shared.CURRENT_JOB = new_job
+
     await loop.run_in_executor(
         None,
         lambda: shared.CURRENT_JOB.refresh_from_disk(force_refetch=True),  # pyright: ignore[reportOptionalMemberAccess]

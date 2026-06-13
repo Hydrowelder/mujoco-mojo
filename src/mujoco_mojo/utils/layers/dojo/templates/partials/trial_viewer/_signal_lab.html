@@ -1661,7 +1661,7 @@
                        @focus="focused = true"
                        @blur="setTimeout(() => focused = false, 150)"
                        @keydown.tab.prevent="accept()"
-                       @keydown.enter="labName && saveLabGraph(labName, mojoLabSerialize())"
+                       @keydown.enter.stop="labName && saveLabGraph(labName, mojoLabSerialize())"
                        @keydown.escape.stop="labName = ''"
                        placeholder="name or folder/name…"
                        class="h-8 px-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-20 md:w-28 xl:w-44" />
@@ -1819,7 +1819,7 @@
             <div class="relative"
                  x-data="{
                      open: false,
-                     labSearch: '',
+                     labSearch: localStorage.getItem('mojo:lab:search') ?? '',
                      get _filtered() {
                          const q = this.labSearch.toLowerCase();
                          return labSchemas.filter(l => !q || l.name.toLowerCase().includes(q));
@@ -1841,8 +1841,9 @@
                          this.open = false; this.labSearch = '';
                      }
                  }"
-                 @click.outside="open = false; labSearch = ''">
-                <button @click="open = !open; if(open) loadLabSchemas(); else labSearch = ''"
+                 x-init="$watch('labSearch', v => { try { localStorage.setItem('mojo:lab:search', v) } catch {} })"
+                 @click.outside="open = false">
+                <button @click="open = !open; if(open) loadLabSchemas()"
                         class="btn btn-ghost h-7 text-sm font-bold text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 uppercase flex items-center gap-1 shrink-0">
                     <svg class="w-3 h-3"
                          fill="none"

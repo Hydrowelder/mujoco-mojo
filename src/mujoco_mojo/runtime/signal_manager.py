@@ -97,6 +97,37 @@ class SignalManager:
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
         )
 
+    def track(
+        self,
+        getter: Callable[[], float],
+        category: SignalCategory | str,
+        subgroups: tuple[str, ...] = (),
+        *,
+        attr: str | None = None,
+    ):
+        """
+        Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
+
+        `getter` is called fresh on every recorded step, so it should look up a value that changes over the course of the simulation (e.g. a variable updated each step, an attribute, or an indexing operation) rather than a constant computed once. If the underlying value never changes after registration, `track` will simply keep posting that same value every step.
+
+        Examples:
+            >>> # Becomes "Custom/MyGroup:value", re-read from `obj.value` every step
+            >>> manager.track(lambda: obj.value, "Custom", ("MyGroup",), attr="value")
+
+            >>> # Also works: `level` is a variable reassigned each step in the same scope
+            >>> level = 0.0
+            >>> manager.track(lambda: level, "Custom", ("MyGroup",), attr="level")
+            >>> for _ in range(n_steps):
+            ...     level = compute_level(state)
+            ...     rm.step(state)
+
+        """
+
+        def _sample(_: MjState):
+            self.post(getter(), category, subgroups, attr=attr)
+
+        self.register_sampler(_sample)
+
     def post(
         self,
         value: float,

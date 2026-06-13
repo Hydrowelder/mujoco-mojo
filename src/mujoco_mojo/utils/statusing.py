@@ -2,6 +2,7 @@ import getpass
 import math
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -166,6 +167,13 @@ class JobStatus(MojoBaseModel):
     This class acts as a cache and aggregator for the individual TrialStatus files on disk. It provides high-level metrics needed for dashboards and job resumption.
     """
 
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    """
+    Unique identifier generated each time a job is created.
+
+    Lets the Dojo detect that `job_status.json` now belongs to a different run than the one it has cached in memory (e.g. the user deleted the workdir and reran their analysis), so it can discard its stale `JobStatus` instead of overwriting the new file with old data.
+    """
+
     started_by: str = Field(default_factory=getpass.getuser)
     """Who owns the job."""
 
@@ -246,6 +254,27 @@ class JobStatus(MojoBaseModel):
     def clear_cache(self) -> None:
         """Wipes the internal trial cache to force a full disk re-scan."""
         self._cache.clear()
+
+    def reload_if_new_run(self) -> "JobStatus | None":
+        """
+        Checks `workdir/JOB_STATUS_FNAME` for a `run_id` different from this instance's.
+
+        If the user reran their analysis (e.g. after deleting the workdir), the file on disk now belongs to a different run and this instance's cached state (trial cache, trial_nums, generator, etc.) is stale. Returns a freshly-loaded `JobStatus` for the new run if so, or `None` if the file is missing, unreadable, or still belongs to this run.
+        """
+        path = self.workdir / JOB_STATUS_FNAME
+        if not path.exists():
+            return None
+
+        try:
+            on_disk = JobStatus.model_validate_json(path.read_text())
+        except Exception:
+            return None
+
+        if on_disk.id == self.id:
+            return None
+
+        logger.info(f"Detected a new job run at {path} (run_id changed). Reloading.")
+        return on_disk
 
     def get_trial_status(self, trial_num: int) -> TrialStatus | None:
         """Returns the cached status for a trial, or None if not yet loaded."""

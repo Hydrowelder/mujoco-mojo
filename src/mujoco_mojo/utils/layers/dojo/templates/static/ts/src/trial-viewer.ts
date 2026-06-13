@@ -157,7 +157,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- PROFILES ---
     profiles: [] as Array<{ name: string; modified: number }>,
     profileWarnings: {} as Record<string, string[]>,
-    profileSearch: "",
+    profileSearch: localStorage.getItem("mojo:profile:search") ?? "",
     profilesOpen: false,
     profileNameDraft: "",
 
@@ -1196,39 +1196,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
           // re-render frame markers after every complete Plotly render so positions
           // always reflect the final settled layout (range, margins, dimensions)
-          plotEl.on("plotly_afterplot", () => {
-            requestAnimationFrame(() => {
-              this._renderFrameMarkers();
-              this._syncOverlayVisibility();
-            });
-          });
-
-          plotEl.on("plotly_doubleclick", () => {
-            this.config.rangeX = null;
-            this.config.rangeY = null;
-            void this.renderPlot();
-          });
-
-          plotEl.on("plotly_relayout", (event) => {
-            if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
-              this.config.rangeX = null;
-              this.config.rangeY = null;
-              void this.renderPlot();
-              return;
-            }
-            if (event["xaxis.range[0]"] !== undefined) {
-              this.config.rangeX = [
-                event["xaxis.range[0]"] as number,
-                event["xaxis.range[1]"] as number,
-              ];
-            }
-            if (event["yaxis.range[0]"] !== undefined) {
-              this.config.rangeY = [
-                event["yaxis.range[0]"] as number,
-                event["yaxis.range[1]"] as number,
-              ];
-            }
-          });
+          this._attachPlotEventHandlers();
 
           // placementMode uses normal click
           plotEl.addEventListener("click", (e) => {
@@ -1542,6 +1510,14 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.discoveryTimeout = setTimeout(() => {
           if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
         }, 500);
+      });
+
+      this.$watch("profileSearch", (val: string) => {
+        try {
+          localStorage.setItem("mojo:profile:search", val);
+        } catch {
+          /* ignore */
+        }
       });
 
       this.$watch("mediaScrubMode", (mode: string) => {
@@ -3452,23 +3428,33 @@ function trialViewer(trialId: string, externalUrl: string) {
             .filter((c) => c.endsWith(":w"))
             .map((c) => c.replace(":w", "")),
         );
+        // columns not present in this trial are tolerated: the profile still loads
+        // (so it can be used as a starting point), but those signals won't plot
+        // until matching columns exist.
         const missing: string[] = [];
-        if (loaded.xAxis?.col && !colSet.has(loaded.xAxis.col))
+        if (
+          loaded.xAxis?.col &&
+          !loaded.xAxis.col.startsWith("Lab/") &&
+          !colSet.has(loaded.xAxis.col)
+        )
           missing.push(`x-axis "${loaded.xAxis!.col!}"`);
         for (const key of Object.keys(loaded.yAxes ?? {})) {
-          if (!colSet.has(key)) missing.push(`signal "${key}"`);
+          if (!key.startsWith("Lab/") && !colSet.has(key))
+            missing.push(`signal "${key}"`);
         }
         if (loaded.refFrame && !frames.has(loaded.refFrame))
           missing.push(`frame "${loaded.refFrame}"`);
 
-        if (missing.length) {
-          throw new Error(
-            `references columns not in this trial: ${missing.join(", ")}`,
-          );
-        }
-
         this.config = { ...this.config, ...loaded };
-        this.notify(`Profile "${name}" loaded`, "success");
+
+        if (missing.length) {
+          this.notify(
+            `Profile "${name}" loaded, but won't plot until added to this trial: ${missing.join(", ")}`,
+            "info",
+          );
+        } else {
+          this.notify(`Profile "${name}" loaded`, "success");
+        }
 
         // Fetch data for any columns the profile introduces that aren't cached yet.
         const needed: string[] = [];
@@ -3583,6 +3569,96 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
       const pad = padding ? (globalMax - globalMin) / 16 : 0;
       return [globalMin - pad, globalMax + pad];
+    },
+
+    // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
+    rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {
+      const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
+      if (!range) return "";
+      const val = bound === "min" ? range[0] : range[1];
+      return val === null ? "" : String(val);
+    },
+
+    // sets a single x/y axis min/max field; an empty value reverts that side to autoscale
+    setRangeBound(axis: "x" | "y", bound: "min" | "max", value: string) {
+      const trimmed = value.trim();
+      const num = trimmed === "" ? null : this.evalMathExpr(trimmed);
+      if (trimmed !== "" && num === null) return;
+
+      const current =
+        (axis === "x" ? this.config.rangeX : this.config.rangeY) ??
+        ([null, null] as [number | null, number | null]);
+      const next: [number | null, number | null] =
+        bound === "min" ? [num, current[1]] : [current[0], num];
+
+      const resolved = next[0] === null && next[1] === null ? null : next;
+      if (axis === "x") this.config.rangeX = resolved;
+      else this.config.rangeY = resolved;
+      void this.saveAndRender();
+    },
+
+    // resolves a possibly-partial axis range into a concrete [min, max], falling back
+    // to the padded data range for whichever side is unset
+    resolveAxisRange(
+      configRange: [number | null, number | null] | null,
+      keys: string[],
+    ): [number, number] | null {
+      if (!configRange || (configRange[0] === null && configRange[1] === null))
+        return null;
+      const [min, max] = configRange;
+      if (min !== null && max !== null) return [min, max];
+      const auto = this.calculatePaddedRange(keys);
+      return [min ?? auto[0], max ?? auto[1]];
+    },
+
+    // (re)attaches the Plotly event handlers that drive zoom/pan range tracking,
+    // double-click-to-reset, and frame-marker syncing. Plotly.purge clears the plot
+    // element's internal event emitter, so this must be called again after every
+    // Plotly.newPlot (not just once during init).
+    _attachPlotEventHandlers() {
+      const plotEl = document.getElementById("plot-area") as
+        | (HTMLElement & {
+            on(
+              event: string,
+              handler: (event: Record<string, unknown>) => void,
+            ): void;
+          })
+        | null;
+      if (!plotEl) return;
+
+      plotEl.on("plotly_afterplot", () => {
+        requestAnimationFrame(() => {
+          this._renderFrameMarkers();
+          this._syncOverlayVisibility();
+        });
+      });
+
+      plotEl.on("plotly_doubleclick", () => {
+        this.config.rangeX = null;
+        this.config.rangeY = null;
+        void this.renderPlot();
+      });
+
+      plotEl.on("plotly_relayout", (event) => {
+        if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
+          this.config.rangeX = null;
+          this.config.rangeY = null;
+          void this.renderPlot();
+          return;
+        }
+        if (event["xaxis.range[0]"] !== undefined) {
+          this.config.rangeX = [
+            event["xaxis.range[0]"] as number,
+            event["xaxis.range[1]"] as number,
+          ];
+        }
+        if (event["yaxis.range[0]"] !== undefined) {
+          this.config.rangeY = [
+            event["yaxis.range[0]"] as number,
+            event["yaxis.range[1]"] as number,
+          ];
+        }
+      });
     },
 
     // -----------------------------------------------------------------------
@@ -3724,18 +3800,22 @@ function trialViewer(trialId: string, externalUrl: string) {
         });
       }
 
+      const resolvedRangeX = this.resolveAxisRange(this.config.rangeX, [
+        this.config.xAxis!.col!,
+      ]);
+
       const xAxisObj = {
         type: this.config.xScale ?? "linear",
-        ...(this.config.rangeX
+        ...(resolvedRangeX
           ? {
               autorange: false as const,
               range:
                 this.config.xScale === "log"
                   ? [
-                      Math.log10(Math.max(1e-6, this.config.rangeX[0])),
-                      Math.log10(Math.max(1e-6, this.config.rangeX[1])),
+                      Math.log10(Math.max(1e-6, resolvedRangeX[0])),
+                      Math.log10(Math.max(1e-6, resolvedRangeX[1])),
                     ]
-                  : this.config.rangeX,
+                  : resolvedRangeX,
             }
           : { autorange: true as const }),
         dtick:
@@ -3761,18 +3841,23 @@ function trialViewer(trialId: string, externalUrl: string) {
         ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
         : "";
 
+      const resolvedRangeY = this.resolveAxisRange(
+        this.config.rangeY,
+        Object.keys(this.config.yAxes),
+      );
+
       const yAxisObj = {
         type: this.config.yScale ?? "linear",
-        ...(this.config.rangeY
+        ...(resolvedRangeY
           ? {
               autorange: false as const,
               range:
                 this.config.yScale === "log"
                   ? [
-                      Math.log10(Math.max(1e-6, this.config.rangeY[0])),
-                      Math.log10(Math.max(1e-6, this.config.rangeY[1])),
+                      Math.log10(Math.max(1e-6, resolvedRangeY[0])),
+                      Math.log10(Math.max(1e-6, resolvedRangeY[1])),
                     ]
-                  : this.config.rangeY,
+                  : resolvedRangeY,
             }
           : { autorange: true as const }),
         dtick:
@@ -3985,7 +4070,11 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (plotEl && this._renderedPlotType !== this.config.plotType) {
         Plotly.purge(plotEl);
         this._renderedPlotType = this.config.plotType ?? null;
-        return Plotly.newPlot("plot-area", traces, layout, config);
+        // Plotly.purge clears the plot element's event emitter, so the
+        // zoom/relayout/doubleclick handlers must be re-attached after recreating it.
+        return Plotly.newPlot("plot-area", traces, layout, config).then(() =>
+          this._attachPlotEventHandlers(),
+        );
       }
       return Plotly.react("plot-area", traces, layout, config);
     },

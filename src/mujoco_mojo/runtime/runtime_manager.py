@@ -57,9 +57,14 @@ class RuntimeManager:
 
     def save_recordings(self):
         logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")
+
+        def _save_and_close(recorder: VideoRecorder):
+            recorder.save()
+            recorder.close()
+
         with ThreadPoolExecutor() as executor:
             for recorder in self.video_recorders:
-                executor.submit(recorder.save)  # TODO add playback speed argument
+                executor.submit(_save_and_close, recorder)
 
         logger.info("All video encoding tasks complete.")
 
