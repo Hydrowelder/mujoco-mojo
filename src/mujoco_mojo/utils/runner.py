@@ -54,7 +54,7 @@ from mujoco_mojo.utils.defaults import (
     NAMED_VALUES_FNAME,
     SamplerOptions,
 )
-from mujoco_mojo.utils.log import get_logger, worker_init
+from mujoco_mojo.utils.log import get_logger, get_trial_log_handler, worker_init
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -362,6 +362,12 @@ class Trial:
         status = TrialStatus(trial_num=self.trial_num)
         status._path = self.trial_dir / TRIAL_STATUS_FNAME
 
+        # set up a per-trial log file capturing everything logged during this trial
+        self.trial_dir.mkdir(parents=True, exist_ok=True)
+        trial_log_handler = get_trial_log_handler(self.trial_dir / "mojo.log")
+        root_logger = logging.getLogger()
+        root_logger.addHandler(trial_log_handler)
+
         with status.record_step(step_name="pending"):
             pass
 
@@ -382,7 +388,6 @@ class Trial:
 
                 # 2. Setup Workspace & Save Metadata
                 logger.info(f"Saving trial_num={self.trial_num} to {self.trial_dir}")
-                self.trial_dir.mkdir(parents=True, exist_ok=True)
 
                 # bundle assets, this remaps DepPath attributes to point to the shared asset dir
                 rel_to_xml = Path(
@@ -446,6 +451,8 @@ class Trial:
             )
         finally:
             status.dump_to_path(status._path)
+            root_logger.removeHandler(trial_log_handler)
+            trial_log_handler.close()
 
         return result, status, state
 

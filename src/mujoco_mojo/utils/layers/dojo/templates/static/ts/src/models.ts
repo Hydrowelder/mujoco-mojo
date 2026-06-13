@@ -67,6 +67,19 @@ export interface TrialMediaResponse {
   files: TrialMediaFile[];
 }
 
+export interface LogEntry {
+  timestamp: number; // ms epoch
+  level: string;
+  pathname: string;
+  lineno: number | null;
+  message: string;
+}
+
+export interface TrialLogsResponse {
+  filename: string | null;
+  entries: LogEntry[];
+}
+
 export interface TrialDataResponse {
   columns: {
     all: string[];

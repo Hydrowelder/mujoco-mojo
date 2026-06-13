@@ -102,6 +102,11 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
     MESHES_DIR = mojo.DepPath(__file__).parent.parent / "meshes"
 
+    logger.debug(f"This is a log for {mojo_model.trial_num}")
+    logger.info(f"This is a log for {mojo_model.trial_num}")
+    logger.warning(f"This is a log for {mojo_model.trial_num}")
+    logger.error(f"This is a log for {mojo_model.trial_num}")
+    logger.critical(f"This is a log for {mojo_model.trial_num}")
     # configure simulation
     mojo_model.mjcf.assets = [
         # add a checkerboard
