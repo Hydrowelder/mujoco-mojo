@@ -38,13 +38,14 @@ A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered 
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 
-* **Model:** Build MJCFs via **validated Python objects** allowing for programatic generation.
-* **Scale:** Execute **multi-threaded Monte Carlo trials** with built-in resume logic.
-* **Monitor:** Track progress via a **zero-dependency web dashboard** and persistent logs.
-* **Assess:** Quickly view **interactive results** of a trial in context of others.
-* **Reproduce:** Automatic **environment snapshotting** (`requirements.txt`) for every job.
+- **Model:** Build MJCFs via **validated Python objects** allowing for programatic generation.
+- **Scale:** Execute **multi-threaded Monte Carlo trials** with built-in resume logic.
+- **Monitor:** Track progress via a **zero-dependency web dashboard** and persistent logs.
+- **Assess:** Quickly view **interactive results** of a trial in context of others.
+- **Reproduce:** Automatic **environment snapshotting** (`requirements.txt`) for every job.
 
 ## Installation
+
 Install using `uv` (recommended):
 
 ```bash
@@ -59,34 +60,41 @@ pip install mujoco-mojo
 
 ---
 
-
 ## Features
 
 ### MJCF Tools
 
-* **Strongly-Typed Elements:** MJCF components backed by Pydantic v2 for immediate validation.
-* **Semantic Validation:** Early detection of structural errors and attribute mismatches before the engine starts.
-* **MuJoCo Alignment:** Designed to mirror MuJoCo’s XML schema closely (no magic abstractions)
-* **Object Enumerations:** Embedded MuJoCo object mappings to simplify retrieving `mjOBJ` IDs.
-* **Asset Sharing:** Specialized handling of dependency by remapping assets to become shared allows for space efficient execution of complex models
+- **Strongly-Typed Elements:** MJCF components backed by Pydantic v2 for immediate validation.
+- **Semantic Validation:** Early detection of structural errors and attribute mismatches before the engine starts.
+- **MuJoCo Alignment:** Designed to mirror MuJoCo’s XML schema closely (no magic abstractions)
+- **Object Enumerations:** Embedded MuJoCo object mappings to simplify retrieving `mjOBJ` IDs.
+- **Asset Sharing:** Specialized handling of dependency by remapping assets to become shared allows for space efficient execution of complex models
+
+### Runtime Toolkit
+
+- **Forcing Functions:** A library of typed `Load` definitions (spring-dampers, point-to-point forces, friction, and more) that apply themselves including reaction forces.
+- **Proximity Sensing:** Built-in distance and closest-point tracking between sites and bodies, exposed as both telemetry signals and live overlays with no extra instrumentation. Works on concave geometry meshes.
+- **Structured Telemetry:** A single `post`/`track` call records any value into a hierarchical namespace during simulations. This include prebuilt `request` calls for commonly desired values.
+- **Video Recording:** Multi-camera MP4/WebM/GIF capture synced to simulation time, with playback-speed control, force/proximity overlays, on-frame labels, and single-frame snapshots.
 
 ### Job Utilities
 
 #### Campaign Orchestration
 
-* **Multi-Threaded Execution:** Single or multi-threaded trial execution
-* **Environment Snapshotting:** Automatically record installed Python packages to `requirements.txt` for job recreation (works with `uv` or `pip`)
-* **Resume Logic:** Resume a previously started job without rerunning previous cases
-* **Robust Logging:** Built in Rich logging for terminal and a rotating file handler for persistent logs and status files for insight on trial progress
-* **Global Overrides:** Force specific values onto distributions via CLI or JSON overrides to test "golden" cases.
+- **Multi-Threaded Execution:** Single or multi-threaded trial execution
+- **Environment Snapshotting:** Automatically record installed Python packages to `requirements.txt` for job recreation (works with `uv` or `pip`)
+- **Resume Logic:** Resume a previously started job without rerunning previous cases
+- **Robust Logging:** Built in Rich logging for terminal and a rotating file handler for persistent logs and status files for insight on trial progress
+- **Global Overrides:** Force specific values onto distributions via CLI or JSON overrides to test "golden" cases.
 
 #### Monte Carlo
 
-* **Reproducible Sampling:** Random draw tools for Monte Carlo or rerun with global variable override
-* End of run summary with metric to help perform a state of health check
-* Support for running jobs with SLURM for distributed compute
+- **Reproducible Sampling:** Random draw tools for Monte Carlo or rerun with global variable override
+- End of run summary with metric to help perform a state of health check
+- Support for running jobs with SLURM for distributed compute
 
 > [!TIP]
+>
 > ```bash
 > mujoco-mojo run monte-carlo \
 >     --generator monte_carlo_test.Experiment.generate \
@@ -101,12 +109,13 @@ pip install mujoco-mojo
 
 #### Optimization
 
-* **Bayesian Search:** Intelligent design space navigation powered by Optuna integration.
-* **Design Variables:** Continuous (`DesignFloat`) and discrete (`DesignCategorical`) parameters evolved by the solver.
-* **Adaptive Refinement:** "Zoom" into promising neighborhoods by aggressively shrinking search bounds on resume.
-* **Stochastic Robustness:** Multi-evaluation trials that average scores over different seeds to filter out noisy physics outliers.
+- **Bayesian Search:** Intelligent design space navigation powered by Optuna integration.
+- **Design Variables:** Continuous (`DesignFloat`) and discrete (`DesignCategorical`) parameters evolved by the solver.
+- **Adaptive Refinement:** "Zoom" into promising neighborhoods by aggressively shrinking search bounds on resume.
+- **Stochastic Robustness:** Multi-evaluation trials that average scores over different seeds to filter out noisy physics outliers.
 
 > [!TIP]
+>
 > ```bash
 > mujoco-mojo run optimiztion \
 >     -g sim.generate \
@@ -125,30 +134,33 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 
 #### Monitor: Real-Time Oversight
 
-* **Live Progress Tracking:** Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.
-* **Success/Failure Analytics:** Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.
-* **Sensory Feedback:** Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.
-* **Deep-Linked Navigation:** Jump straight from the monitor to any individual trial in the viewer with one click.
+- **Live Progress Tracking:** Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.
+- **Success/Failure Analytics:** Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.
+- **Sensory Feedback:** Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.
+- **Deep-Linked Navigation:** Jump straight from the monitor to any individual trial in the viewer with one click.
 
 #### Mosaic: Advanced Telemetry Analysis
 
-* **High-Fidelity Plotting:** Hardware-accelerated visualization using Plotly.js for seamless zooming and panning through millions of data points.
-* **Dynamic Versus Mode:** Overlay current telemetry against previous trials using an intuitive range-selection slider for instant regression testing.
-* **Regex-Powered Filtering:** Navigate high-dimensional datasets using a "folder-style" signal selector with suffix and regex support.
-* **State Persistence & Sharing:** Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
-* **Pro-Grade Tooling:** Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
-* **Keyboard-First Design:** Full hotkey support for warping between trials and managing views without leaving the home row.
+- **High-Fidelity Plotting:** Hardware-accelerated visualization using Plotly.js for seamless zooming and panning through millions of data points.
+- **Dynamic Versus Mode:** Overlay current telemetry against previous trials using an intuitive range-selection slider for instant regression testing.
+- **Regex-Powered Filtering:** Navigate high-dimensional datasets using a "folder-style" signal selector with suffix and regex support.
+- **State Persistence & Sharing:** Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
+- **Pro-Grade Tooling:** Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
+- **Keyboard-First Design:** Full hotkey support for warping between trials and managing views without leaving the home row.
 
 ### Reloaded
 
 A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
 
-* **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
-* **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
-* **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, or trigger "generation-only" mode for rapid MJCF debugging.
-* **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
+- **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
+- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
+- **Multiple Viewer Backends:** Drive the same reload/sync pipeline through either the native MuJoCo OpenGL viewer or a Viser web viewer.
+- **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
+- **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
+- **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
 
 > [!TIP]
+>
 > ```bash
 > mujoco-mojo reloaded \
 >     --generator monte_carlo_test.Experiment.generate \

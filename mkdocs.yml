@@ -145,7 +145,6 @@ plugins:
             - https://mkdocstrings.github.io/griffe/objects.inv
             - https://docs.pydantic.dev/latest/objects.inv
             - https://numpy.org/doc/stable/objects.inv
-  - glightbox
 
 markdown_extensions:
   - abbr
@@ -187,10 +186,15 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.mark
   - pymdownx.tilde
+  - zensical.extensions.glightbox:
+      auto_themed: true
 
 extra:
   generator: false
   social:
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/mujoco-mojo/
+      name: PyPI
     - icon: fontawesome/brands/github
       link: https://github.com/Hydrowelder
       name: My GitHub

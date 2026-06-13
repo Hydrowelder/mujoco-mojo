@@ -15,7 +15,7 @@ In a standard Monte Carlo script, you use `mojo_model.sample_dist()` to represen
 Mojo supports two primary types of design variables within your generate script:
 
 - `DesignFloat`: For continuous parameters like spring stiffness, mass, or damping ratios.
-- `DesignCategorical`: For discrete choices like material types (['steel', 'aluminum']) or solver methods.
+- `DesignCategorical`: For discrete choices like material types (`['steel', 'aluminum']`) or solver methods.
 
 ???+ example "Example: Defining Design Variables"
 
