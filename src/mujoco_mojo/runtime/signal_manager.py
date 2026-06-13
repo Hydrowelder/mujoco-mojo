@@ -108,11 +108,18 @@ class SignalManager:
         """
         Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
 
-        `getter` must be a closure over something mutable (e.g. `lambda: obj.value` or `lambda: my_list[0]`), since recording every step requires re-reading the value each time, and a plain Python float can't be captured by reference.
+        `getter` is called fresh on every recorded step, so it should look up a value that changes over the course of the simulation (e.g. a variable updated each step, an attribute, or an indexing operation) rather than a constant computed once. If the underlying value never changes after registration, `track` will simply keep posting that same value every step.
 
         Examples:
             >>> # Becomes "Custom/MyGroup:value", re-read from `obj.value` every step
             >>> manager.track(lambda: obj.value, "Custom", ("MyGroup",), attr="value")
+
+            >>> # Also works: `level` is a variable reassigned each step in the same scope
+            >>> level = 0.0
+            >>> manager.track(lambda: level, "Custom", ("MyGroup",), attr="level")
+            >>> for _ in range(n_steps):
+            ...     level = compute_level(state)
+            ...     rm.step(state)
 
         """
 

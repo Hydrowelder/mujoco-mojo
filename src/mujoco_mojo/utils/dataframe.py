@@ -157,10 +157,9 @@ class MojoNamespace:
     def select_attribute(self, attr: str) -> MojoDataFrame:
         """
         Selects a specific attribute across all categories and objects.
-        Matches exact scalars (':nutation_deg') or vector groups (':x').
+        Matches columns ending in ':attr' (e.g. attr='x' matches 'Bodies/racket/xpos:x' and 'Sensors/gyro/data:x').
         """
-        # Matches ':attr' at the end of a string OR ':attr' followed by anything
-        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*/{attr}(:.*)?$")))
+        return _MojoFrame.from_pl(self._df.select(pl.col(rf"^.*:{attr}$")))
 
     def select_custom(self, name: str) -> MojoDataFrame:
         return _MojoFrame.from_pl(

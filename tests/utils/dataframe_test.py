@@ -77,18 +77,17 @@ def test_select_name(sample_data: MojoDataFrame):
 
 
 def test_select_attribute(sample_data: MojoDataFrame):
-    """Tests selecting a specific attribute (scalar or vector)."""
-    # Test vector attribute
-    xpos = sample_data.mojo.select_attribute("xpos")
-    assert xpos.columns == [
+    """Tests selecting a specific attribute (vector component) across channels."""
+    x_attr = sample_data.mojo.select_attribute("x")
+    assert x_attr.columns == [
         "Bodies/racket/xpos:x",
-        "Bodies/racket/xpos:y",
-        "Bodies/racket/xpos:z",
+        "Bodies/racket/xiquat:x",
+        "Sensors/gyro/data:x",
     ]
 
-    # Test scalar attribute
+    # columns with no ':attr' suffix are not matched
     nutation = sample_data.mojo.select_attribute("nutation_deg")
-    assert nutation.columns == ["Bodies/racket/nutation_deg"]
+    assert nutation.columns == []
 
 
 def test_select_body(sample_data: MojoDataFrame):
