@@ -97,6 +97,30 @@ class SignalManager:
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
         )
 
+    def track(
+        self,
+        getter: Callable[[], float],
+        category: SignalCategory | str,
+        subgroups: tuple[str, ...] = (),
+        *,
+        attr: str | None = None,
+    ):
+        """
+        Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
+
+        `getter` must be a closure over something mutable (e.g. `lambda: obj.value` or `lambda: my_list[0]`), since recording every step requires re-reading the value each time, and a plain Python float can't be captured by reference.
+
+        Examples:
+            >>> # Becomes "Custom/MyGroup:value", re-read from `obj.value` every step
+            >>> manager.track(lambda: obj.value, "Custom", ("MyGroup",), attr="value")
+
+        """
+
+        def _sample(_: MjState):
+            self.post(getter(), category, subgroups, attr=attr)
+
+        self.register_sampler(_sample)
+
     def post(
         self,
         value: float,
