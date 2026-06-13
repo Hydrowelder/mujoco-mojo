@@ -186,8 +186,8 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.mark
   - pymdownx.tilde
-  - zensical.extensions.glightbox:
-      auto_themed: true
+  # - zensical.extensions.glightbox:
+  #     auto_themed: true
 
 extra:
   generator: false
