@@ -6,9 +6,11 @@ import type {
   DojoStore,
   FilterEntry,
   FilterSchema,
+  LogEntry,
   PlotConfig,
   Shape,
   TrialDataResponse,
+  TrialLogsResponse,
   TrialManifest,
   TrialMediaFile,
   TrialMediaResponse,
@@ -41,6 +43,15 @@ const tw = {
   amber: { 500: "#f59e0b" },
   rose: { 500: "#ef4444" },
 } as const;
+
+// matches Python's logging severity ordering
+const LOG_LEVEL_SEVERITY: Record<string, number> = {
+  DEBUG: 10,
+  INFO: 20,
+  WARNING: 30,
+  ERROR: 40,
+  CRITICAL: 50,
+};
 
 const DEFAULT_CONFIG: PlotConfig = {
   xAxis: { col: "time", filters: [] },
@@ -225,6 +236,27 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- TRIAL STATUS ---
     trialStatus: null as TrialStatus | null,
     _trialStatusPoll: null as ReturnType<typeof setTimeout> | null,
+
+    // --- TRIAL LOGS ---
+    logFilename: null as string | null,
+    logEntries: [] as LogEntry[],
+    logSortKey: "timestamp" as "timestamp" | "level",
+    logSortAsc: true,
+    logFilterLevels: [] as string[], // empty = all levels
+    logLevelMenuOpen: false,
+    logFilterMessage: "" as string,
+    logFilterRegex: false,
+    logColWidths: ((): Record<"time" | "level" | "source", number> => {
+      try {
+        const saved = localStorage.getItem("mojo:trial-logs:col-widths");
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore malformed storage
+      }
+      return { time: 176, level: 96, source: 160 };
+    })(),
+    _logColResize: null as { col: "time" | "level" | "source" } | null,
+    _logMeasureCanvas: null as HTMLCanvasElement | null,
 
     // --- MEDIA PLAYER ---
     mediaFiles: [] as string[],
@@ -423,6 +455,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (this._trialStatusPoll === null) {
           this._trialStatusPoll = setInterval(() => {
             void this.fetchTrialStatus();
+            void this.fetchTrialLogs();
           }, 3000);
         }
       } else {
@@ -431,6 +464,193 @@ function trialViewer(trialId: string, externalUrl: string) {
           this._trialStatusPoll = null;
         }
       }
+    },
+
+    async fetchTrialLogs() {
+      try {
+        const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
+          cache: "no-store",
+        });
+        if (!resp.ok) return;
+        const result = (await resp.json()) as TrialLogsResponse;
+        this.logFilename = result.filename;
+        this.logEntries = result.entries;
+      } catch {
+        // dojo offline - leave existing logs in place
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // Logs: sorting, filtering & styling
+    // -----------------------------------------------------------------------
+    get filteredLogEntries(): LogEntry[] {
+      const text = this.logFilterMessage.trim();
+      let regex: RegExp | null = null;
+      if (text && this.logFilterRegex) {
+        try {
+          regex = new RegExp(text, "i");
+        } catch {
+          regex = null;
+        }
+      }
+
+      const filtered = this.logEntries.filter((e) => {
+        if (
+          this.logFilterLevels.length > 0 &&
+          !this.logFilterLevels.includes(e.level)
+        )
+          return false;
+        if (text) {
+          if (regex) {
+            if (!regex.test(e.message)) return false;
+          } else if (!e.message.toLowerCase().includes(text.toLowerCase())) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      const dir = this.logSortAsc ? 1 : -1;
+      return filtered.slice().sort((a, b) => {
+        if (this.logSortKey === "level") {
+          const av = LOG_LEVEL_SEVERITY[a.level] ?? 0;
+          const bv = LOG_LEVEL_SEVERITY[b.level] ?? 0;
+          return av === bv ? a.timestamp - b.timestamp : (av - bv) * dir;
+        }
+        return (a.timestamp - b.timestamp) * dir;
+      });
+    },
+
+    get logLevels(): string[] {
+      return Array.from(new Set(this.logEntries.map((e) => e.level))).sort(
+        (a, b) => (LOG_LEVEL_SEVERITY[a] ?? 0) - (LOG_LEVEL_SEVERITY[b] ?? 0),
+      );
+    },
+
+    toggleLogSort(key: "timestamp" | "level") {
+      if (this.logSortKey === key) {
+        this.logSortAsc = !this.logSortAsc;
+      } else {
+        this.logSortKey = key;
+        this.logSortAsc = true;
+      }
+    },
+
+    toggleLogLevelFilter(level: string) {
+      const idx = this.logFilterLevels.indexOf(level);
+      if (idx === -1) this.logFilterLevels.push(level);
+      else this.logFilterLevels.splice(idx, 1);
+    },
+
+    _persistLogColWidths() {
+      try {
+        localStorage.setItem(
+          "mojo:trial-logs:col-widths",
+          JSON.stringify(this.logColWidths),
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+
+    startLogColResize(e: MouseEvent, col: "time" | "level" | "source") {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = this.logColWidths[col];
+      const onMove = (ev: MouseEvent) => {
+        this.logColWidths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        this._persistLogColWidths();
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+
+    _measureTextWidth(text: string, refEl: HTMLElement): number {
+      const canvas = (this._logMeasureCanvas ??= document.createElement("canvas"));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return 0;
+      ctx.font = getComputedStyle(refEl).font;
+      return ctx.measureText(text).width;
+    },
+
+    autoFitLogColumn(col: "time" | "level" | "source") {
+      const container = this.$refs.logTable as HTMLElement | undefined;
+      if (!container) return;
+
+      // text-overflow:ellipsis cells report their box size (not content size)
+      // via scrollWidth, so measure the actual text with a canvas instead.
+      const headerEl = container.querySelector<HTMLElement>(
+        `[data-logcol-header="${col}"]`,
+      );
+      if (!headerEl) return;
+      const contentEl = container.querySelector<HTMLElement>(
+        `[data-logcol-content="${col}"]`,
+      );
+
+      const HEADER_ICON_ALLOWANCE = 20; // sort chevron + gap
+      const CELL_PADDING = 16; // px-2 on the cell (8px each side)
+      const BADGE_PADDING = 16; // px-2 on the level badge (8px each side)
+
+      let width =
+        this._measureTextWidth(headerEl.textContent?.trim() ?? "", headerEl) +
+        HEADER_ICON_ALLOWANCE;
+
+      if (contentEl) {
+        for (const entry of this.filteredLogEntries) {
+          let text: string;
+          switch (col) {
+            case "time":
+              text = this.formatLogTime(entry.timestamp);
+              break;
+            case "level":
+              text = entry.level;
+              break;
+            case "source":
+              text = this.logSourceShort(entry);
+              break;
+          }
+          width = Math.max(width, this._measureTextWidth(text, contentEl));
+        }
+      }
+
+      const padding = col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
+      this.logColWidths[col] = Math.ceil(width) + padding;
+      this._persistLogColWidths();
+    },
+
+    logSourceShort(entry: LogEntry): string {
+      const file = entry.pathname.split("/").pop() ?? "";
+      return entry.lineno != null ? `${file}:${entry.lineno}` : file;
+    },
+
+    logSourceFull(entry: LogEntry): string {
+      return entry.lineno != null ? `${entry.pathname}:${entry.lineno}` : entry.pathname;
+    },
+
+    logLevelClass(level: string): string {
+      switch (level) {
+        case "CRITICAL":
+        case "ERROR":
+          return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
+        case "WARNING":
+          return "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400";
+        case "INFO":
+          return "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400";
+        case "DEBUG":
+          return "bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400";
+        default:
+          return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+      }
+    },
+
+    formatLogTime(timestamp: number, _tick?: number): string {
+      const diff = Date.now() - timestamp;
+      if (diff < 24 * 60 * 60 * 1000) return window.notifTimeAgo(timestamp, _tick);
+      return new Date(timestamp).toLocaleString();
     },
 
     _updateIsScrubbable() {
@@ -1052,6 +1272,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
       this.warpId = isNaN(currentNum) ? null : currentNum;
       void this.fetchTrialStatus();
+      void this.fetchTrialLogs();
       void this.fetchMediaFiles();
 
       // initialize tab state (populates labTabs, labActiveTabId, labName, labGraph)

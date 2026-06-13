@@ -93,6 +93,13 @@
     amber: { 500: "#f59e0b" },
     rose: { 500: "#ef4444" }
   };
+  var LOG_LEVEL_SEVERITY = {
+    DEBUG: 10,
+    INFO: 20,
+    WARNING: 30,
+    ERROR: 40,
+    CRITICAL: 50
+  };
   var DEFAULT_CONFIG = {
     xAxis: { col: "time", filters: [] },
     yAxes: {},
@@ -222,6 +229,26 @@
       // --- TRIAL STATUS ---
       trialStatus: null,
       _trialStatusPoll: null,
+      // --- TRIAL LOGS ---
+      logFilename: null,
+      logEntries: [],
+      logSortKey: "timestamp",
+      logSortAsc: true,
+      logFilterLevels: [],
+      // empty = all levels
+      logLevelMenuOpen: false,
+      logFilterMessage: "",
+      logFilterRegex: false,
+      logColWidths: (() => {
+        try {
+          const saved = localStorage.getItem("mojo:trial-logs:col-widths");
+          if (saved) return JSON.parse(saved);
+        } catch {
+        }
+        return { time: 176, level: 96, source: 160 };
+      })(),
+      _logColResize: null,
+      _logMeasureCanvas: null,
       // --- MEDIA PLAYER ---
       mediaFiles: [],
       selectedMedia: null,
@@ -390,6 +417,7 @@
           if (this._trialStatusPoll === null) {
             this._trialStatusPoll = setInterval(() => {
               void this.fetchTrialStatus();
+              void this.fetchTrialLogs();
             }, 3e3);
           }
         } else {
@@ -398,6 +426,164 @@
             this._trialStatusPoll = null;
           }
         }
+      },
+      async fetchTrialLogs() {
+        try {
+          const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
+            cache: "no-store"
+          });
+          if (!resp.ok) return;
+          const result = await resp.json();
+          this.logFilename = result.filename;
+          this.logEntries = result.entries;
+        } catch {
+        }
+      },
+      // -----------------------------------------------------------------------
+      // Logs: sorting, filtering & styling
+      // -----------------------------------------------------------------------
+      get filteredLogEntries() {
+        const text = this.logFilterMessage.trim();
+        let regex = null;
+        if (text && this.logFilterRegex) {
+          try {
+            regex = new RegExp(text, "i");
+          } catch {
+            regex = null;
+          }
+        }
+        const filtered = this.logEntries.filter((e) => {
+          if (this.logFilterLevels.length > 0 && !this.logFilterLevels.includes(e.level))
+            return false;
+          if (text) {
+            if (regex) {
+              if (!regex.test(e.message)) return false;
+            } else if (!e.message.toLowerCase().includes(text.toLowerCase())) {
+              return false;
+            }
+          }
+          return true;
+        });
+        const dir = this.logSortAsc ? 1 : -1;
+        return filtered.slice().sort((a, b) => {
+          if (this.logSortKey === "level") {
+            const av = LOG_LEVEL_SEVERITY[a.level] ?? 0;
+            const bv = LOG_LEVEL_SEVERITY[b.level] ?? 0;
+            return av === bv ? a.timestamp - b.timestamp : (av - bv) * dir;
+          }
+          return (a.timestamp - b.timestamp) * dir;
+        });
+      },
+      get logLevels() {
+        return Array.from(new Set(this.logEntries.map((e) => e.level))).sort(
+          (a, b) => (LOG_LEVEL_SEVERITY[a] ?? 0) - (LOG_LEVEL_SEVERITY[b] ?? 0)
+        );
+      },
+      toggleLogSort(key) {
+        if (this.logSortKey === key) {
+          this.logSortAsc = !this.logSortAsc;
+        } else {
+          this.logSortKey = key;
+          this.logSortAsc = true;
+        }
+      },
+      toggleLogLevelFilter(level) {
+        const idx = this.logFilterLevels.indexOf(level);
+        if (idx === -1) this.logFilterLevels.push(level);
+        else this.logFilterLevels.splice(idx, 1);
+      },
+      _persistLogColWidths() {
+        try {
+          localStorage.setItem(
+            "mojo:trial-logs:col-widths",
+            JSON.stringify(this.logColWidths)
+          );
+        } catch {
+        }
+      },
+      startLogColResize(e, col) {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = this.logColWidths[col];
+        const onMove = (ev) => {
+          this.logColWidths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+          this._persistLogColWidths();
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      },
+      _measureTextWidth(text, refEl) {
+        const canvas = this._logMeasureCanvas ?? (this._logMeasureCanvas = document.createElement("canvas"));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return 0;
+        ctx.font = getComputedStyle(refEl).font;
+        return ctx.measureText(text).width;
+      },
+      autoFitLogColumn(col) {
+        const container = this.$refs.logTable;
+        if (!container) return;
+        const headerEl = container.querySelector(
+          `[data-logcol-header="${col}"]`
+        );
+        if (!headerEl) return;
+        const contentEl = container.querySelector(
+          `[data-logcol-content="${col}"]`
+        );
+        const HEADER_ICON_ALLOWANCE = 20;
+        const CELL_PADDING = 16;
+        const BADGE_PADDING = 16;
+        let width = this._measureTextWidth(headerEl.textContent?.trim() ?? "", headerEl) + HEADER_ICON_ALLOWANCE;
+        if (contentEl) {
+          for (const entry of this.filteredLogEntries) {
+            let text;
+            switch (col) {
+              case "time":
+                text = this.formatLogTime(entry.timestamp);
+                break;
+              case "level":
+                text = entry.level;
+                break;
+              case "source":
+                text = this.logSourceShort(entry);
+                break;
+            }
+            width = Math.max(width, this._measureTextWidth(text, contentEl));
+          }
+        }
+        const padding = col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
+        this.logColWidths[col] = Math.ceil(width) + padding;
+        this._persistLogColWidths();
+      },
+      logSourceShort(entry) {
+        const file = entry.pathname.split("/").pop() ?? "";
+        return entry.lineno != null ? `${file}:${entry.lineno}` : file;
+      },
+      logSourceFull(entry) {
+        return entry.lineno != null ? `${entry.pathname}:${entry.lineno}` : entry.pathname;
+      },
+      logLevelClass(level) {
+        switch (level) {
+          case "CRITICAL":
+          case "ERROR":
+            return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
+          case "WARNING":
+            return "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400";
+          case "INFO":
+            return "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400";
+          case "DEBUG":
+            return "bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400";
+          default:
+            return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+        }
+      },
+      formatLogTime(timestamp, _tick) {
+        const diff = Date.now() - timestamp;
+        if (diff < 24 * 60 * 60 * 1e3) return window.notifTimeAgo(timestamp, _tick);
+        return new Date(timestamp).toLocaleString();
       },
       _updateIsScrubbable() {
         const sel = this.selectedMedia?.toLowerCase() ?? "";
@@ -888,6 +1074,7 @@
         const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
         this.warpId = isNaN(currentNum) ? null : currentNum;
         void this.fetchTrialStatus();
+        void this.fetchTrialLogs();
         void this.fetchMediaFiles();
         this._initTabs();
         window.mojoLabOnDirtyChange = (dirty) => {

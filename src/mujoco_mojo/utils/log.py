@@ -1,3 +1,4 @@
+import json
 import logging
 from logging.handlers import QueueHandler, RotatingFileHandler
 from pathlib import Path
@@ -7,7 +8,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.theme import Theme
 
-__all__ = ["get_logger", "setup_logger"]
+__all__ = ["get_logger", "get_trial_log_handler", "setup_logger"]
 
 mojo_theme = Theme(
     {
@@ -36,6 +37,27 @@ class FileFilter(logging.Filter):
     def filter(self, record: logging.LogRecord):
         # Block if 'terminal_only' is True
         return not getattr(record, "terminal_only", False)
+
+
+class JsonLogFormatter(logging.Formatter):
+    """Formats each record as a single line of JSON for easy machine parsing."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = record.getMessage()
+        if record.exc_info:
+            message += "\n" + self.formatException(record.exc_info)
+        if record.stack_info:
+            message += "\n" + self.formatStack(record.stack_info)
+
+        return json.dumps(
+            {
+                "timestamp": record.created * 1000,
+                "level": record.levelname,
+                "pathname": record.pathname,
+                "lineno": record.lineno,
+                "message": message,
+            }
+        )
 
 
 def get_logger(name: str):
@@ -99,6 +121,26 @@ def setup_logger(
         logger.addHandler(file_handler)
 
     return logger
+
+
+def get_trial_log_handler(
+    log_file: Path | str, level: int | None = None
+) -> logging.FileHandler:
+    """
+    Creates a file handler using the standard mojo log format for per-trial logging.
+
+    The returned handler is not attached to any logger. Attach it to the root
+    logger (and remove/close it afterwards) to capture logs for a single trial.
+    """
+    log_file = Path(log_file)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    handler = logging.FileHandler(log_file)
+    handler.setFormatter(JsonLogFormatter())
+    handler.addFilter(FileFilter())
+    if level is not None:
+        handler.setLevel(level)
+    return handler
 
 
 def worker_init(queue: Any, level: int):
