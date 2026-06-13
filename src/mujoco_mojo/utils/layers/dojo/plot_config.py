@@ -324,11 +324,11 @@ class PlotConfig(BaseModel):
     legend_pos: LegendPos
     """Legend placement relative to the plot area."""
 
-    range_x: Annotated[tuple[float, float], Field()] | None
-    """Fixed x-axis range as `(min, max)`. `None` enables auto-range."""
+    range_x: Annotated[tuple[float | None, float | None], Field()] | None
+    """Fixed x-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
 
-    range_y: Annotated[tuple[float, float], Field()] | None
-    """Fixed y-axis range as `(min, max)`. `None` enables auto-range."""
+    range_y: Annotated[tuple[float | None, float | None], Field()] | None
+    """Fixed y-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
 
     x_scale: ScaleType
     """Scale type for the x-axis."""
@@ -366,9 +366,19 @@ class PlotConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_ranges(self) -> PlotConfig:
-        if self.range_x is not None and self.range_x[0] >= self.range_x[1]:
+        if (
+            self.range_x is not None
+            and self.range_x[0] is not None
+            and self.range_x[1] is not None
+            and self.range_x[0] >= self.range_x[1]
+        ):
             raise ValueError("range_x min must be less than max")
-        if self.range_y is not None and self.range_y[0] >= self.range_y[1]:
+        if (
+            self.range_y is not None
+            and self.range_y[0] is not None
+            and self.range_y[1] is not None
+            and self.range_y[0] >= self.range_y[1]
+        ):
             raise ValueError("range_y min must be less than max")
         if self.vs_range[0] > self.vs_range[1]:
             raise ValueError("vs_range first must be <= last")

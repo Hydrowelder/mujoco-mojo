@@ -107,88 +107,6 @@
                     </p>
 
                     <div class="space-y-4">
-                        <!-- plot type toggle -->
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-slate-500 uppercase">Plot Type</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button @click="config.plotType = 'cartesian'; saveAndRender()"
-                                        class="py-2 rounded-lg border text-xs font-bold transition-all flex flex-col items-center gap-1"
-                                        :class="config.plotType !== 'polar'
-                                            ? 'bg-cyan-500 text-white border-cyan-500'
-                                            : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
-                                    <svg class="w-5 h-5"
-                                         viewBox="0 0 20 20"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="1.25">
-                                        <line x1="4"
-                                              y1="2"
-                                              x2="4"
-                                              y2="18" />
-                                        <line x1="10"
-                                              y1="2"
-                                              x2="10"
-                                              y2="18" />
-                                        <line x1="16"
-                                              y1="2"
-                                              x2="16"
-                                              y2="18" />
-                                        <line x1="2"
-                                              y1="4"
-                                              x2="18"
-                                              y2="4" />
-                                        <line x1="2"
-                                              y1="10"
-                                              x2="18"
-                                              y2="10" />
-                                        <line x1="2"
-                                              y1="16"
-                                              x2="18"
-                                              y2="16" />
-                                    </svg>
-                                    Cartesian
-                                </button>
-                                <button @click="config.plotType = 'polar'; saveAndRender()"
-                                        class="py-2 rounded-lg border text-xs font-bold transition-all flex flex-col items-center gap-1"
-                                        :class="config.plotType === 'polar'
-                                            ? 'bg-cyan-500 text-white border-cyan-500'
-                                            : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 hover:border-cyan-500/50'">
-                                    <svg class="w-5 h-5"
-                                         viewBox="0 0 20 20"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="1.25">
-                                        <circle cx="10"
-                                                cy="10"
-                                                r="3" />
-                                        <circle cx="10"
-                                                cy="10"
-                                                r="6" />
-                                        <circle cx="10"
-                                                cy="10"
-                                                r="9" />
-                                        <line x1="10"
-                                              y1="1"
-                                              x2="10"
-                                              y2="19" />
-                                        <line x1="1"
-                                              y1="10"
-                                              x2="19"
-                                              y2="10" />
-                                        <line x1="3.6"
-                                              y1="3.6"
-                                              x2="16.4"
-                                              y2="16.4" />
-                                        <line x1="16.4"
-                                              y1="3.6"
-                                              x2="3.6"
-                                              y2="16.4" />
-                                    </svg>
-                                    Polar
-                                </button>
-                            </div>
-                        </div>
-
                         <!-- row 1 -->
                         <div class="grid grid-cols-2 gap-3 max-h-64">
                             <!-- gridlines -->
@@ -418,6 +336,91 @@
                             </label>
                         </div>
 
+                        <!-- plot type toggle -->
+                        <div class="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg gap-2">
+                            <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                                Plot Type
+                            </span>
+
+                            <div class="flex rounded-md border border-slate-300 dark:border-slate-700 overflow-hidden">
+                                <button @click="config.plotType = 'cartesian'; saveAndRender()"
+                                        title="Cartesian"
+                                        class="p-1.5 transition-colors"
+                                        :class="config.plotType !== 'polar'
+                                            ? 'bg-cyan-500 text-white'
+                                            : 'text-slate-400 hover:text-cyan-500'">
+                                    <svg class="w-4 h-4"
+                                         viewBox="0 0 20 20"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.5">
+                                        <line x1="4"
+                                              y1="2"
+                                              x2="4"
+                                              y2="18" />
+                                        <line x1="10"
+                                              y1="2"
+                                              x2="10"
+                                              y2="18" />
+                                        <line x1="16"
+                                              y1="2"
+                                              x2="16"
+                                              y2="18" />
+                                        <line x1="2"
+                                              y1="4"
+                                              x2="18"
+                                              y2="4" />
+                                        <line x1="2"
+                                              y1="10"
+                                              x2="18"
+                                              y2="10" />
+                                        <line x1="2"
+                                              y1="16"
+                                              x2="18"
+                                              y2="16" />
+                                    </svg>
+                                </button>
+                                <button @click="config.plotType = 'polar'; saveAndRender()"
+                                        title="Polar"
+                                        class="p-1.5 border-l border-slate-300 dark:border-slate-700 transition-colors"
+                                        :class="config.plotType === 'polar'
+                                            ? 'bg-cyan-500 text-white'
+                                            : 'text-slate-400 hover:text-cyan-500'">
+                                    <svg class="w-4 h-4"
+                                         viewBox="0 0 20 20"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.5">
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="3" />
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="6" />
+                                        <circle cx="10"
+                                                cy="10"
+                                                r="9" />
+                                        <line x1="10"
+                                              y1="1"
+                                              x2="10"
+                                              y2="19" />
+                                        <line x1="1"
+                                              y1="10"
+                                              x2="19"
+                                              y2="10" />
+                                        <line x1="3.6"
+                                              y1="3.6"
+                                              x2="16.4"
+                                              y2="16.4" />
+                                        <line x1="16.4"
+                                              y1="3.6"
+                                              x2="3.6"
+                                              y2="16.4" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- axis base -->
                         <div class="space-y-3">
 
@@ -507,6 +510,55 @@
                                                    @change="saveAndRender()"
                                                    @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                                    inputmode="decimal"
+                                                   class="number-input w-full py-1 text-xs sm:text-sm" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- x/y range -->
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">X-Range</label>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm flex-1">
+                                            <input type="text"
+                                                   placeholder="Auto"
+                                                   title="Supports arithmetic: e.g. -pi, sqrt(2)"
+                                                   :value="rangeBoundValue('x', 'min')"
+                                                   @change="setRangeBound('x', 'min', $event.target.value)"
+                                                   class="number-input w-full py-1 text-xs sm:text-sm" />
+                                        </div>
+                                        <span class="text-slate-400 dark:text-slate-500 text-xs">-</span>
+                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm flex-1">
+                                            <input type="text"
+                                                   placeholder="Auto"
+                                                   title="Supports arithmetic: e.g. pi, sqrt(2)"
+                                                   :value="rangeBoundValue('x', 'max')"
+                                                   @change="setRangeBound('x', 'max', $event.target.value)"
+                                                   class="number-input w-full py-1 text-xs sm:text-sm" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-slate-500 uppercase">Y-Range</label>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm flex-1">
+                                            <input type="text"
+                                                   placeholder="Auto"
+                                                   title="Supports arithmetic: e.g. -pi, sqrt(2)"
+                                                   :value="rangeBoundValue('y', 'min')"
+                                                   @change="setRangeBound('y', 'min', $event.target.value)"
+                                                   class="number-input w-full py-1 text-xs sm:text-sm" />
+                                        </div>
+                                        <span class="text-slate-400 dark:text-slate-500 text-xs">-</span>
+                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm flex-1">
+                                            <input type="text"
+                                                   placeholder="Auto"
+                                                   title="Supports arithmetic: e.g. pi, sqrt(2)"
+                                                   :value="rangeBoundValue('y', 'max')"
+                                                   @change="setRangeBound('y', 'max', $event.target.value)"
                                                    class="number-input w-full py-1 text-xs sm:text-sm" />
                                         </div>
                                     </div>
@@ -1032,8 +1084,8 @@
         <!-- ── PROFILES ───────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.away="profilesOpen = false; profileSearch = ''">
-                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles(); else profileSearch = ''"
+                 @click.away="profilesOpen = false">
+                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
                         class="sidebar-btn"
                         :class="profilesOpen ? 'text-cyan-500 bg-cyan-100/50 dark:bg-slate-700/50' : 'text-slate-400 hover:text-cyan-500'"
                         title="Saved Profiles">
@@ -1118,7 +1170,7 @@
                                    type="text"
                                    x-model="profileNameDraft"
                                    @keydown.tab.prevent="accept()"
-                                   @keydown.enter="saveProfile()"
+                                   @keydown.enter.stop="saveProfile()"
                                    @keydown.escape.stop="profileNameDraft = ''"
                                    placeholder="name or folder/name"
                                    class="input-field flex-1 px-2 py-1.5" />
@@ -1140,34 +1192,59 @@
 
                     <!-- Search -->
                     <div x-show="profiles.length > 0"
-                         class="relative mb-2">
-                        <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                        </svg>
-                        <input type="text"
-                               x-model="profileSearch"
-                               @keydown.escape.stop="profileSearch = ''"
-                               placeholder="Filter profiles..."
-                               class="input-field w-full pl-7 pr-7 py-1.5 text-sm" />
-                        <button x-show="profileSearch"
-                                @click="profileSearch = ''"
-                                class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors">
-                            <svg class="w-3.5 h-3.5"
+                         class="mb-2"
+                         x-data="{
+                             get searchSuggestion() {
+                                 const v = profileSearch;
+                                 if (!v) return '';
+                                 const m = profiles.find(p => p.name.toLowerCase().startsWith(v.toLowerCase()) && p.name !== v);
+                                 if (!m) return '';
+                                 const rem = m.name.slice(v.length);
+                                 const sep = rem.indexOf('/');
+                                 return sep === -1 ? m.name : v + rem.slice(0, sep + 1);
+                             },
+                             acceptSearch() { if (this.searchSuggestion) profileSearch = this.searchSuggestion; }
+                         }">
+                        <div class="relative">
+                            <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
                                  fill="none"
                                  stroke="currentColor"
                                  viewBox="0 0 24 24">
                                 <path stroke-linecap="round"
                                       stroke-linejoin="round"
-                                      stroke-width="2.5"
-                                      d="M6 18L18 6M6 6l12 12" />
+                                      stroke-width="2"
+                                      d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
                             </svg>
-                        </button>
+                            <input type="text"
+                                   x-model="profileSearch"
+                                   @keydown.tab.prevent="acceptSearch()"
+                                   @keydown.escape.stop="profileSearch = ''"
+                                   placeholder="Filter profiles..."
+                                   class="input-field w-full pl-7 pr-7 py-1.5 text-sm" />
+                            <button x-show="profileSearch"
+                                    type="button"
+                                    @click="profileSearch = ''"
+                                    class="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-rose-500 transition-colors">
+                                <svg class="w-3.5 h-3.5"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="2.5"
+                                          d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <!-- filter suggestion hint - space always reserved -->
+                        <div class="mt-1 h-[1.125rem] flex items-center gap-1.5 text-xs font-mono"
+                             :class="searchSuggestion ? 'visible' : 'invisible'">
+                            <button type="button"
+                                    @click="acceptSearch()"
+                                    class="text-slate-400 hover:text-cyan-500 truncate transition-colors"
+                                    x-text="searchSuggestion"></button>
+                            <kbd>Tab</kbd>
+                        </div>
                     </div>
 
                     <!-- Profile list -->
@@ -1177,12 +1254,13 @@
                             <div class="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 group">
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center gap-1.5">
-                                        <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 flex items-baseline min-w-0 overflow-hidden">
+                                        <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 flex items-baseline min-w-0 overflow-hidden"
+                                           :title="p.name">
                                             <template x-if="p.name.includes('/')">
-                                                <span class="font-normal text-slate-400 dark:text-slate-500 shrink-0"
+                                                <span class="font-normal text-slate-400 dark:text-slate-500 truncate"
                                                       x-text="p.name.substring(0, p.name.lastIndexOf('/') + 1)"></span>
                                             </template>
-                                            <span class="truncate"
+                                            <span class="flex-1 min-w-0 truncate"
                                                   x-text="p.name.includes('/') ? p.name.substring(p.name.lastIndexOf('/') + 1) : p.name"></span>
                                         </p>
                                         <template x-if="profileWarnings[p.name]">

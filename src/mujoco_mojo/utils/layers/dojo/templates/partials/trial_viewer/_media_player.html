@@ -162,7 +162,10 @@
                        class="flex items-center gap-1.5 ml-2 text-sm select-none"
                        :class="mediaIsScrubbable && config.xAxis?.col === 'time'
                            ? 'text-slate-500 dark:text-slate-400 cursor-pointer'
-                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'">
+                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'"
+                       :title="config.xAxis?.col !== 'time'
+                           ? 'Requires the x-axis to be \'time\''
+                           : (!mediaIsScrubbable ? 'Scrubbing is unavailable for this media' : '')">
                     <input type="checkbox"
                            :checked="mediaShowLine"
                            @change="(mediaIsScrubbable && config.xAxis?.col === 'time') && (mediaShowLine = $event.target.checked)"
@@ -176,7 +179,8 @@
                 <label class="flex items-center gap-1.5 text-sm select-none"
                        :class="config.xAxis?.col === 'time'
                            ? 'text-slate-500 dark:text-slate-400 cursor-pointer'
-                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'">
+                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'"
+                       :title="config.xAxis?.col !== 'time' ? 'Requires the x-axis to be \'time\'' : ''">
                     <input type="checkbox"
                            :checked="mediaShowFrames"
                            @change="config.xAxis?.col === 'time' && (mediaShowFrames = $event.target.checked)"

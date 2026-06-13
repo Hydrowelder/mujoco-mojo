@@ -174,7 +174,7 @@
       // --- PROFILES ---
       profiles: [],
       profileWarnings: {},
-      profileSearch: "",
+      profileSearch: localStorage.getItem("mojo:profile:search") ?? "",
       profilesOpen: false,
       profileNameDraft: "",
       // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
@@ -984,37 +984,7 @@
               this._syncOverlayVisibility();
             });
             const plotEl = document.getElementById("plot-area");
-            plotEl.on("plotly_afterplot", () => {
-              requestAnimationFrame(() => {
-                this._renderFrameMarkers();
-                this._syncOverlayVisibility();
-              });
-            });
-            plotEl.on("plotly_doubleclick", () => {
-              this.config.rangeX = null;
-              this.config.rangeY = null;
-              void this.renderPlot();
-            });
-            plotEl.on("plotly_relayout", (event) => {
-              if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
-                this.config.rangeX = null;
-                this.config.rangeY = null;
-                void this.renderPlot();
-                return;
-              }
-              if (event["xaxis.range[0]"] !== void 0) {
-                this.config.rangeX = [
-                  event["xaxis.range[0]"],
-                  event["xaxis.range[1]"]
-                ];
-              }
-              if (event["yaxis.range[0]"] !== void 0) {
-                this.config.rangeY = [
-                  event["yaxis.range[0]"],
-                  event["yaxis.range[1]"]
-                ];
-              }
-            });
+            this._attachPlotEventHandlers();
             plotEl.addEventListener("click", (e) => {
               if (!this.placementMode) return;
               const target = e.target;
@@ -1257,6 +1227,12 @@
           this.discoveryTimeout = setTimeout(() => {
             if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
+        });
+        this.$watch("profileSearch", (val) => {
+          try {
+            localStorage.setItem("mojo:profile:search", val);
+          } catch {
+          }
         });
         this.$watch("mediaScrubMode", (mode) => {
           if (mode === "scrub") {
@@ -2862,20 +2838,23 @@
             this.columns.filter((c) => c.endsWith(":w")).map((c) => c.replace(":w", ""))
           );
           const missing = [];
-          if (loaded.xAxis?.col && !colSet.has(loaded.xAxis.col))
+          if (loaded.xAxis?.col && !loaded.xAxis.col.startsWith("Lab/") && !colSet.has(loaded.xAxis.col))
             missing.push(`x-axis "${loaded.xAxis.col}"`);
           for (const key of Object.keys(loaded.yAxes ?? {})) {
-            if (!colSet.has(key)) missing.push(`signal "${key}"`);
+            if (!key.startsWith("Lab/") && !colSet.has(key))
+              missing.push(`signal "${key}"`);
           }
           if (loaded.refFrame && !frames.has(loaded.refFrame))
             missing.push(`frame "${loaded.refFrame}"`);
-          if (missing.length) {
-            throw new Error(
-              `references columns not in this trial: ${missing.join(", ")}`
-            );
-          }
           this.config = { ...this.config, ...loaded };
-          this.notify(`Profile "${name}" loaded`, "success");
+          if (missing.length) {
+            this.notify(
+              `Profile "${name}" loaded, but won't plot until added to this trial: ${missing.join(", ")}`,
+              "info"
+            );
+          } else {
+            this.notify(`Profile "${name}" loaded`, "success");
+          }
           const needed = [];
           if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
             needed.push(loaded.xAxis.col);
@@ -2959,6 +2938,74 @@
         if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
         const pad = padding ? (globalMax - globalMin) / 16 : 0;
         return [globalMin - pad, globalMax + pad];
+      },
+      // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
+      rangeBoundValue(axis, bound) {
+        const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
+        if (!range) return "";
+        const val = bound === "min" ? range[0] : range[1];
+        return val === null ? "" : String(val);
+      },
+      // sets a single x/y axis min/max field; an empty value reverts that side to autoscale
+      setRangeBound(axis, bound, value) {
+        const trimmed = value.trim();
+        const num = trimmed === "" ? null : this.evalMathExpr(trimmed);
+        if (trimmed !== "" && num === null) return;
+        const current = (axis === "x" ? this.config.rangeX : this.config.rangeY) ?? [null, null];
+        const next = bound === "min" ? [num, current[1]] : [current[0], num];
+        const resolved = next[0] === null && next[1] === null ? null : next;
+        if (axis === "x") this.config.rangeX = resolved;
+        else this.config.rangeY = resolved;
+        void this.saveAndRender();
+      },
+      // resolves a possibly-partial axis range into a concrete [min, max], falling back
+      // to the padded data range for whichever side is unset
+      resolveAxisRange(configRange, keys) {
+        if (!configRange || configRange[0] === null && configRange[1] === null)
+          return null;
+        const [min, max] = configRange;
+        if (min !== null && max !== null) return [min, max];
+        const auto = this.calculatePaddedRange(keys);
+        return [min ?? auto[0], max ?? auto[1]];
+      },
+      // (re)attaches the Plotly event handlers that drive zoom/pan range tracking,
+      // double-click-to-reset, and frame-marker syncing. Plotly.purge clears the plot
+      // element's internal event emitter, so this must be called again after every
+      // Plotly.newPlot (not just once during init).
+      _attachPlotEventHandlers() {
+        const plotEl = document.getElementById("plot-area");
+        if (!plotEl) return;
+        plotEl.on("plotly_afterplot", () => {
+          requestAnimationFrame(() => {
+            this._renderFrameMarkers();
+            this._syncOverlayVisibility();
+          });
+        });
+        plotEl.on("plotly_doubleclick", () => {
+          this.config.rangeX = null;
+          this.config.rangeY = null;
+          void this.renderPlot();
+        });
+        plotEl.on("plotly_relayout", (event) => {
+          if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
+            this.config.rangeX = null;
+            this.config.rangeY = null;
+            void this.renderPlot();
+            return;
+          }
+          if (event["xaxis.range[0]"] !== void 0) {
+            this.config.rangeX = [
+              event["xaxis.range[0]"],
+              event["xaxis.range[1]"]
+            ];
+          }
+          if (event["yaxis.range[0]"] !== void 0) {
+            this.config.rangeY = [
+              event["yaxis.range[0]"],
+              event["yaxis.range[1]"]
+            ];
+          }
+        });
       },
       // -----------------------------------------------------------------------
       // Plotly render
@@ -3080,14 +3127,17 @@
             traces = [...traces, ...vsTraces];
           });
         }
+        const resolvedRangeX = this.resolveAxisRange(this.config.rangeX, [
+          this.config.xAxis.col
+        ]);
         const xAxisObj = {
           type: this.config.xScale ?? "linear",
-          ...this.config.rangeX ? {
+          ...resolvedRangeX ? {
             autorange: false,
             range: this.config.xScale === "log" ? [
-              Math.log10(Math.max(1e-6, this.config.rangeX[0])),
-              Math.log10(Math.max(1e-6, this.config.rangeX[1]))
-            ] : this.config.rangeX
+              Math.log10(Math.max(1e-6, resolvedRangeX[0])),
+              Math.log10(Math.max(1e-6, resolvedRangeX[1]))
+            ] : resolvedRangeX
           } : { autorange: true },
           dtick: this.config.xScale === "log" && this.config.xLogBase ? Math.log10(this.config.xLogBase) : void 0,
           gridcolor: majorGrid,
@@ -3105,14 +3155,18 @@
           spikethickness: -2
         };
         const frameLabel = this.config.refFrame ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>` : "";
+        const resolvedRangeY = this.resolveAxisRange(
+          this.config.rangeY,
+          Object.keys(this.config.yAxes)
+        );
         const yAxisObj = {
           type: this.config.yScale ?? "linear",
-          ...this.config.rangeY ? {
+          ...resolvedRangeY ? {
             autorange: false,
             range: this.config.yScale === "log" ? [
-              Math.log10(Math.max(1e-6, this.config.rangeY[0])),
-              Math.log10(Math.max(1e-6, this.config.rangeY[1]))
-            ] : this.config.rangeY
+              Math.log10(Math.max(1e-6, resolvedRangeY[0])),
+              Math.log10(Math.max(1e-6, resolvedRangeY[1]))
+            ] : resolvedRangeY
           } : { autorange: true },
           dtick: this.config.yScale === "log" && this.config.yLogBase ? Math.log10(this.config.yLogBase) : void 0,
           gridcolor: majorGrid,
@@ -3298,7 +3352,9 @@
         if (plotEl && this._renderedPlotType !== this.config.plotType) {
           Plotly.purge(plotEl);
           this._renderedPlotType = this.config.plotType ?? null;
-          return Plotly.newPlot("plot-area", traces, layout, config);
+          return Plotly.newPlot("plot-area", traces, layout, config).then(
+            () => this._attachPlotEventHandlers()
+          );
         }
         return Plotly.react("plot-area", traces, layout, config);
       }
