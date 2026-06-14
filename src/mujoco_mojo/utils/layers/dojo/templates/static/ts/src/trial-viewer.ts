@@ -1,4 +1,7 @@
+import { formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
+import { PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
+import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
@@ -58,7 +61,7 @@ const DEFAULT_CONFIG: PlotConfig = {
   yAxes: {},
   refFrame: null,
   grid: "all",
-  lineMode: "lines",
+  lineMode: "lines+markers",
   interp: "linear",
   hover: "closest",
   title: "",
@@ -562,7 +565,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       const startX = e.clientX;
       const startWidth = this.logColWidths[col];
       const onMove = (ev: MouseEvent) => {
-        this.logColWidths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+        this.logColWidths[col] = Math.max(
+          40,
+          startWidth + (ev.clientX - startX),
+        );
       };
       const onUp = () => {
         window.removeEventListener("mousemove", onMove);
@@ -574,7 +580,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     _measureTextWidth(text: string, refEl: HTMLElement): number {
-      const canvas = (this._logMeasureCanvas ??= document.createElement("canvas"));
+      const canvas = (this._logMeasureCanvas ??=
+        document.createElement("canvas"));
       const ctx = canvas.getContext("2d");
       if (!ctx) return 0;
       ctx.font = getComputedStyle(refEl).font;
@@ -621,7 +628,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       }
 
-      const padding = col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
+      const padding =
+        col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
       this.logColWidths[col] = Math.ceil(width) + padding;
       this._persistLogColWidths();
     },
@@ -632,7 +640,9 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     logSourceFull(entry: LogEntry): string {
-      return entry.lineno != null ? `${entry.pathname}:${entry.lineno}` : entry.pathname;
+      return entry.lineno != null
+        ? `${entry.pathname}:${entry.lineno}`
+        : entry.pathname;
     },
 
     logLevelClass(level: string): string {
@@ -653,7 +663,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     formatLogTime(timestamp: number, _tick?: number): string {
       const diff = Date.now() - timestamp;
-      if (diff < 24 * 60 * 60 * 1000) return window.notifTimeAgo(timestamp, _tick);
+      if (diff < 24 * 60 * 60 * 1000)
+        return window.notifTimeAgo(timestamp, _tick);
       return new Date(timestamp).toLocaleString();
     },
 
@@ -1101,7 +1112,6 @@ function trialViewer(trialId: string, externalUrl: string) {
       } else if (this.placementMode === "hline") {
         newShape = {
           type: "hline",
-          x0: pt.x,
           y0: pt.y,
           color: defaultColor,
           label: "",
@@ -1565,7 +1575,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             e.preventDefault();
             (
               document.querySelector(
-                'input[type="number"]',
+                "input[data-warp-input]",
               ) as HTMLElement | null
             )?.focus();
           }
@@ -2298,7 +2308,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     validateConfig(cfg: PlotConfig): string[] {
-      const errors: string[] = [];
+      // schema-level checks (types, required fields, enums, discriminated unions, ...)
+      const errors: string[] = validateAgainstSchema(cfg, PLOT_CONFIG_SCHEMA);
       const labsNoted = new Set<string>();
       const schemasLoaded = this.labSchemas.length > 0;
 
@@ -3091,8 +3102,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           const val = (entry as Record<string, unknown>)[p.name];
           if (typeof val === "boolean")
             return `${p.name}=${val ? "on" : "off"}`;
-          if (typeof val === "number")
-            return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          if (typeof val === "number") return `${p.name}=${formatNum(val)}`;
           return `${p.name}=${val as string}`;
         });
       return parts.slice(0, 3).join(", ");
@@ -3252,7 +3262,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       })();
       const id = this._tabId();
-      this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
+      this.labTabs = [
+        { id, name, graph, savedState: null, dirty: false, viewport: null },
+      ];
       this.labActiveTabId = id;
       this.labName = name;
       this.labGraph = graph;
@@ -3813,6 +3825,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       return [globalMin - pad, globalMax + pad];
     },
 
+    formatNum,
+
     // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
     rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {
       const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
@@ -3929,6 +3943,15 @@ function trialViewer(trialId: string, externalUrl: string) {
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
       const isPolar = this.config.plotType === "polar";
+
+      // a marker symbol of "none" hides per-point markers regardless of lineMode
+      const traceMode = (marker: string): string => {
+        if (marker !== "none") return this.config.lineMode;
+        if (this.config.lineMode === "lines+markers") return "lines";
+        if (this.config.lineMode === "markers") return "none";
+        return this.config.lineMode;
+      };
+
       const yKeys = Object.keys(this.config.yAxes);
       let traces: object[] = yKeys
         .map((key, i) => {
@@ -3947,7 +3970,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               r: this.data![p.name]!,
               theta: this.data![this.config.xAxis!.col!],
               name: p.label,
-              mode: this.config.lineMode,
+              mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
               marker: { size: 6, symbol: p.marker },
@@ -3965,7 +3988,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
             name: p.label,
-            mode: this.config.lineMode,
+            mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
             marker: { size: 6, symbol: p.marker },
@@ -4012,7 +4035,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.lineMode,
+                    mode: traceMode(p.marker),
                     type: "scatterpolar",
                     line: lineStyle,
                     opacity: 0.35,
@@ -4026,7 +4049,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.lineMode,
+                    mode: traceMode(p.marker),
                     type: "scatter",
                     line: lineStyle,
                     opacity: 0.35,
@@ -4220,22 +4243,24 @@ function trialViewer(trialId: string, externalUrl: string) {
               ...(this.config.shapes ?? [])
                 .filter((s) => s.label)
                 .map((s) => {
-                  let x = s.x0,
-                    y = s.y0 ?? 0,
+                  let x = 0,
+                    y = 0,
                     xanchor = "left",
                     yanchor = "bottom",
                     xref = "x",
                     yref = "y";
                   if (s.type === "vline") {
+                    x = s.x0;
                     y = 1;
                     yref = "paper";
                   } else if (s.type === "hline") {
                     x = 1;
+                    y = s.y0;
                     xref = "paper";
                     xanchor = "right";
                   } else if (s.type === "rect") {
                     x = s.x0;
-                    y = s.y1 ?? 0;
+                    y = s.y1;
                   }
                   return {
                     x,
