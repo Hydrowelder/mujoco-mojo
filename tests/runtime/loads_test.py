@@ -580,7 +580,7 @@ def test_load_request_posts_xyzm_signals(
     force.apply_load(state)
 
     # register the sampler
-    force.request(sm, attrs=["force"])
+    force.request(sm, channels=["force"])
 
     # trigger samplers
     sm.record(state)

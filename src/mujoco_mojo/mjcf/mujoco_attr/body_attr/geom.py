@@ -260,13 +260,28 @@ class GeomBase(XMLModel):
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[
+        channels: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
         ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
     ):
         """
-        Registers specific geom attributes for logging.
+        Registers specific channels for logging.
 
+        | Channel | Description                          | Type |
+        |:--------|:-------------------------------------|:-----|
+        | `xpos`  | world position of the geom's center  | xyzm |
+        | `xmat`  | world rotation matrix                | mat9 |
+        | `xvelp` | linear velocity in world frame       | xyzm |
+        | `xvelr` | angular velocity in world frame      | xyzm |
+        | `xaccp` | linear acceleration in world frame   | xyzm |
+        | `xaccr` | angular acceleration in world frame  | xyzm |
+        | `quat`  | world orientation quaternion         | quat |
+
+        Each channel is posted under `subgroups=(geom_name, channel)`.
+
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+        * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
+        * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
         """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
@@ -274,9 +289,9 @@ class GeomBase(XMLModel):
             raise ValueError(msg)
 
         def sample(state: MjState):
-            for attr in attrs:
+            for channel in channels:
                 # Manual mapping to avoid getattr
-                match attr:
+                match channel:
                     case "xpos":
                         val = self.rt_xpos(state)
                     case "xmat":
@@ -292,12 +307,12 @@ class GeomBase(XMLModel):
                     case "quat":
                         val = self.rt_quat(state)
 
-                        for i, k in enumerate("wxyz"):
+                        for i, attr in enumerate("wxyz"):
                             signal_manager.post(
                                 value=float(val[i]),
                                 category=SignalCategory.GEOMS,
-                                subgroups=(f"{self.name}", attr),
-                                attr=k,
+                                subgroups=(f"{self.name}", channel),
+                                attr=attr,
                             )
                         continue
                     case _:
@@ -309,12 +324,12 @@ class GeomBase(XMLModel):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, k in enumerate("xyzm"):
+                    for i, attr in enumerate("xyzm"):
                         signal_manager.post(
                             value=float(full_vec[i]),
                             category=SignalCategory.GEOMS,
-                            subgroups=(f"{self.name}", attr),
-                            attr=k,
+                            subgroups=(f"{self.name}", channel),
+                            attr=attr,
                         )
                 else:
                     # Handle flattened matrices (xmat)
@@ -323,7 +338,7 @@ class GeomBase(XMLModel):
                         signal_manager.post(
                             value=float(val_flat[i]),
                             category=SignalCategory.GEOMS,
-                            subgroups=(f"{self.name}", attr),
+                            subgroups=(f"{self.name}", channel),
                             attr=str(i),
                         )
 

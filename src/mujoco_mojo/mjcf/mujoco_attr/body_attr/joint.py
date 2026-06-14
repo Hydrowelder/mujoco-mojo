@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 import mujoco
 import numpy as np
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     ActuatorForceLimited,
     JointLimited,
@@ -127,15 +127,59 @@ class Joint(XMLModel):
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[
+        channels: list[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"]
         ] = ["qpos", "qvel"],
     ):
-        """Registers specific joint attributes for logging."""
+        """
+        Registers specific channels for logging.
+
+        | Channel           | Description                                                                                  | Hinge / Slide | Ball | Free        |
+        |:------------------|:---------------------------------------------------------------------------------------------|:--------------|:-----|:------------|
+        | `qpos`            | the joint's position                                                                         | scalar        | quat | xyzm + quat |
+        | `qvel`            | the joint's velocity                                                                         | scalar        | xyzm | xyzm + xyzm |
+        | `qfrc_actuator`   | force/torque applied by actuators                                                            | scalar        | xyzm | xyzm + xyzm |
+        | `qfrc_constraint` | force/torque applied by constraints,<br> e.g. joint limits or contacts                       | scalar        | xyzm | xyzm + xyzm |
+        | `qfrc_passive`    | force/torque applied by passive elements,<br> e.g. springs, dampers, or gravity compensation | scalar        | xyzm | xyzm + xyzm |
+
+        * A `scalar` is posted as a single value with `attr=channel` under `subgroups=(joint_name,)`.
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`) under `subgroups=(joint_name, channel)`.
+        * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(joint_name, channel)`.
+        * For free joints, `qpos` is split into an `xyzm` posted under `pos_qpos` and a `quat` posted under `quat_qpos`; the remaining channels are split into an `xyzm` posted under `lin_<channel>` (linear) and another `xyzm` posted under `ang_<channel>` (angular).
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The joint data channels to log.
+
+        Raises:
+            ValueError: If the joint has no name.
+
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
             raise ValueError(msg)
+
+        def post_vec3(vec3: np.ndarray, channel: str):
+            """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
+            full_vec = np.append(vec3, np.linalg.norm(vec3))
+            for v, attr in zip(full_vec, "xyzm", strict=True):
+                signal_manager.post(
+                    value=float(v),
+                    category=SignalCategory.JOINTS,
+                    subgroups=(f"{self.name}", channel),
+                    attr=attr,
+                )
+
+        def post_quat(quat: np.ndarray, channel: str):
+            """Posts an orientation quaternion under w/x/y/z attrs."""
+            for v, attr in zip(quat, "wxyz", strict=True):
+                signal_manager.post(
+                    value=float(v),
+                    category=SignalCategory.JOINTS,
+                    subgroups=(f"{self.name}", channel),
+                    attr=attr,
+                )
 
         def sample(state: MjState):
             jid = self.get_id(state.model)
@@ -158,8 +202,8 @@ class Joint(XMLModel):
                     logger.exception(msg)
                     raise NotImplementedError(msg)
 
-            for attr in attrs:
-                match attr:
+            for channel in channels:
+                match channel:
                     case "qpos":
                         val = state.data.qpos[qpos_adr : qpos_adr + nq]
                     case "qvel":
@@ -173,14 +217,22 @@ class Joint(XMLModel):
                     case _:
                         continue
 
-                # post the results
-                for i, v in enumerate(val):
+                if len(val) == 1:
                     signal_manager.post(
-                        value=v,
+                        value=float(val[0]),
                         category=SignalCategory.JOINTS,
-                        subgroups=(f"{self.name}", attr),
-                        # If it's a scalar (Hinge/Slide), we can omit the index suffix
-                        attr=str(i) if len(val) > 1 else None,
+                        subgroups=(f"{self.name}",),
+                        attr=channel,  # scalar values are considered an attr of the parent
                     )
+                elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_FREE:
+                    post_vec3(val[:3], channel=f"pos_{channel}")
+                    post_quat(val[3:], channel=f"quat_{channel}")
+                elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
+                    post_quat(val, channel=channel)
+                elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
+                    post_vec3(val[:3], channel=f"lin_{channel}")
+                    post_vec3(val[3:], channel=f"ang_{channel}")
+                else:
+                    post_vec3(val, channel=channel)
 
         signal_manager.register_sampler(sample)

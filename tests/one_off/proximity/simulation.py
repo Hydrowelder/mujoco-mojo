@@ -136,7 +136,7 @@ def runtime(
         ).setup(state).register_to_rm(rm)
 
         if rm.signal_manager:
-            prox.request(rm.signal_manager, attrs=["dist", "prox_type"])
+            prox.request(rm.signal_manager, channels=["dist", "prox_type"])
             handoff.ball_geom.request(rm.signal_manager)
 
         while state.data.time < SIM_DURATION:

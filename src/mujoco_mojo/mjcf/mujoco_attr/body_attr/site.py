@@ -6,9 +6,9 @@ import mujoco
 import numpy as np
 from pydantic import ConfigDict, Field
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import (
     GeomType,
     Mat3,
@@ -529,23 +529,39 @@ class SiteBase(XMLModel):
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[Literal["xpos", "xmat", "xvelp", "xvelr", "quat"]] = [
+        channels: list[Literal["xpos", "xmat", "xvelp", "xvelr", "quat"]] = [
             "xpos",
             "quat",
             "xvelp",
             "xvelr",
         ],
     ):
-        """Registers specific site attributes for logging. Requires a named site."""
+        """
+        Registers specific channels for logging. Requires a named site.
+
+        | Channel | Description                            | Type |
+        |:--------|:---------------------------------------|:-----|
+        | `xpos`  | world position of the site             | xyzm |
+        | `xmat`  | world rotation matrix                  | mat9 |
+        | `xvelp` | linear velocity in world frame         | xyzm |
+        | `xvelr` | angular velocity in world frame        | xyzm |
+        | `quat`  | world orientation quaternion           | quat |
+
+        Each channel is posted under `subgroups=(site_name, channel)`.
+
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+        * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
+        * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}. Please assign a 'name' to the site before requesting outputs."
             logger.error(msg)
             raise ValueError(msg)
 
         def sample(state: MjState):
-            for attr in attrs:
+            for channel in channels:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
-                match attr:
+                match channel:
                     case "xpos":
                         val = self.rt_pos(state)
                     case "xmat":
@@ -557,12 +573,12 @@ class SiteBase(XMLModel):
                     case "quat":
                         val = self.rt_quat(state)
 
-                        for i, k in enumerate("wxyz"):
+                        for i, attr in enumerate("wxyz"):
                             signal_manager.post(
                                 value=float(val[i]),
                                 category=SignalCategory.SITES,
-                                subgroups=(f"{self.name}", attr),
-                                attr=k,
+                                subgroups=(f"{self.name}", channel),
+                                attr=attr,
                             )
                         continue
                     case _:
@@ -573,12 +589,12 @@ class SiteBase(XMLModel):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, k in enumerate("xyzm"):
+                    for i, attr in enumerate("xyzm"):
                         signal_manager.post(
                             value=float(full_vec[i]),
                             category=SignalCategory.SITES,
-                            subgroups=(f"{self.name}", attr),
-                            attr=k,
+                            subgroups=(f"{self.name}", channel),
+                            attr=attr,
                         )
                 else:
                     # longer arrays (or matrices like xmat), use flattened indices
@@ -587,7 +603,7 @@ class SiteBase(XMLModel):
                         signal_manager.post(
                             value=float(val_flat[i]),
                             category=SignalCategory.SITES,
-                            subgroups=(f"{self.name}", attr),
+                            subgroups=(f"{self.name}", channel),
                             attr=str(i),
                         )
 

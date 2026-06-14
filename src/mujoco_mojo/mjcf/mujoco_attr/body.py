@@ -6,9 +6,9 @@ import mujoco
 import numpy as np
 from pydantic import Field
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
-from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
@@ -323,17 +323,17 @@ class Body(XMLModel):
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[
+        channels: list[
             Literal[
                 "xpos",
                 "quat",
                 "xmat",
                 "xvelp",
                 "xvelr",
-                "lin_mom",
                 "xipos",
                 "xiquat",
                 "ximat",
+                "lin_mom",
                 "ang_mom",
                 "ke_trans",
                 "ke_rot",
@@ -342,6 +342,8 @@ class Body(XMLModel):
                 "total_energy",
             ]
         ] = [
+            "xpos",
+            "quat",
             "xvelp",
             "xvelr",
             "xipos",
@@ -354,19 +356,46 @@ class Body(XMLModel):
             "ke_total",
         ],
     ):
-        """Registers specific site attributes for logging. Requires a named site."""
+        """
+        Registers specific channels for logging.
+
+        | Channel        | Description                                         | Type   |
+        |:---------------|:----------------------------------------------------|:-------|
+        | `xpos`         | world position of the body                          | xyzm   |
+        | `quat`         | world orientation quaternion                        | quat   |
+        | `xmat`         | world rotation matrix                               | mat9   |
+        | `xvelp`        | linear velocity in world frame                      | xyzm   |
+        | `xvelr`        | angular velocity in world frame                     | xyzm   |
+        | `xipos`        | world position of the center of mass                | xyzm   |
+        | `xiquat`       | world orientation quaternion of the inertial frame  | quat   |
+        | `ximat`        | world rotation matrix of the inertial frame         | mat9   |
+        | `lin_mom`      | linear momentum                                     | xyzm   |
+        | `ang_mom`      | angular momentum                                    | xyzm   |
+        | `ke_trans`     | translational kinetic energy                        | scalar |
+        | `ke_rot`       | rotational kinetic energy                           | scalar |
+        | `pe`           | potential energy                                    | scalar |
+        | `ke_total`     | total kinetic energy                                | scalar |
+        | `total_energy` | total kinetic and potential energy                  | scalar |
+
+        Each channel is posted under `subgroups=(body_name, channel)`.
+
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+        * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
+        * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
+        * A `scalar` is posted as a single value with `attr=channel` under `subgroups=(body_name,)`.
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}. Please assign a 'name' to the site before requesting outputs."
             logger.error(msg)
             raise ValueError(msg)
 
         def sample(state: MjState):
-            for attr in attrs:
-                match attr:
+            for channel in channels:
+                match channel:
                     case "xpos":
                         val = self.rt_pos(state)
                     case "xmat" | "ximat":
-                        match attr:
+                        match channel:
                             case "xmat":
                                 val = self.rt_xmat(state, flatten=True)
                             case "ximat":
@@ -376,23 +405,23 @@ class Body(XMLModel):
                             signal_manager.post(
                                 value=float(val[i]),
                                 category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", attr),
+                                subgroups=(f"{self.name}", channel),
                                 attr=str(i),
                             )
                         continue
                     case "quat" | "xiquat":
-                        match attr:
+                        match channel:
                             case "quat":
                                 val = self.rt_quat(state)
                             case "xiquat":
                                 val = self.rt_xiquat(state)
 
-                        for i, k in enumerate("wxyz"):
+                        for i, attr in enumerate("wxyz"):
                             signal_manager.post(
                                 value=float(val[i]),
                                 category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", attr),
-                                attr=k,
+                                subgroups=(f"{self.name}", channel),
+                                attr=attr,
                             )
                         continue
                     case "xvelp":
@@ -423,20 +452,20 @@ class Body(XMLModel):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, k in enumerate("xyzm"):
+                    for i, attr in enumerate("xyzm"):
                         signal_manager.post(
                             value=full_vec[i],
                             category=SignalCategory.BODIES,
-                            subgroups=(f"{self.name}", attr),
-                            attr=k,
+                            subgroups=(f"{self.name}", channel),
+                            attr=attr,
                         )
                 else:
                     # scalar output
                     signal_manager.post(
                         value=float(val),
                         category=SignalCategory.BODIES,
-                        subgroups=(f"{self.name}", attr),
-                        attr=attr,
+                        subgroups=(f"{self.name}",),
+                        attr=channel,
                     )
 
         signal_manager.register_sampler(sample)

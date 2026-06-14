@@ -366,32 +366,6 @@ class Proximity(MojoBaseModel):
                 logger.error(msg)
                 raise NotImplementedError(msg)
 
-    def contact_force(self, state: MjState) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the total contact force and torque between geom_1 and geom_2 expressed in the world frame, summed over all active contacts between the pair. Inactive contacts (efc_address < 0, i.e. within the gap buffer but generating no force) are excluded."""
-        g1_id = self.geom_1.get_id(state.model)
-        g2_id = self.geom_2.get_id(state.model)
-
-        force_world = np.zeros(3)
-        torque_world = np.zeros(3)
-        result = np.zeros(6)
-
-        for i in range(state.data.ncon):
-            contact = state.data.contact[i]
-            if contact.efc_address < 0:
-                continue
-            if {contact.geom1, contact.geom2} != {g1_id, g2_id}:
-                continue
-            mujoco.mj_contactForce(state.model, state.data, i, result)
-            frame = contact.frame.reshape(3, 3)
-            # mj_contactForce returns the force on contact.geom2's body in the contact frame.
-            # flip when geom_1 is stored as contact.geom1 so the result is always
-            # the force on geom_1.
-            sign = 1.0 if contact.geom2 == g1_id else -1.0
-            force_world += sign * (frame.T @ result[:3])
-            torque_world += sign * (frame.T @ result[3:])
-
-        return force_world, torque_world
-
     def get_visuals(self, state: MjState) -> LineConfig | None:
         if not self._vis_loaded:
             self._vis = MujocoMojoSettings().visualization
@@ -418,92 +392,76 @@ class Proximity(MojoBaseModel):
             width=0.005,
         )
 
+    @property
+    def pair_name(self) -> str:
+        return f"{self.geom_1.name}_to_{self.geom_2.name}"
+
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[
-            Literal["dist", "fromto", "prox_type", "contact_force", "contact_torque"]
-        ] = ["dist", "prox_type"],
+        channels: list[Literal["dist", "fromto", "prox_type"]] = ["dist", "prox_type"],
     ):
         """
-        Registers specific geom proximity and contact attributes for logging.
+        Registers specific channels for logging.
 
-        Available Requests:
-            `dist`: Minimum distance as calculated by the specified algorithm. Tagged with `Proximities/{pair_name}:dist`.
-            `fromto`: World coordinates for where the minimum distance is estimated to occur at. Two sets of coordinates will be returned for geom_1 and geom_2. Tagged with `Proximities/{pair_name}/fromto/{(geom_1 | geom_2).name}:(x | y | z)`.
-            `prox_type`: What type of proximity calculation the previous values are from. Using `dist_max`, `get_proximity` can return a broadphase estimate (bounding sphere to sphere) if the two geometries are distant (greater than `dist_max`). The values returned will be integer values associated with their specific ProximityType. Tagged with `Proximities/{pair_name}:prox_type`.
-            `contact_force`: Total contact force between the geom pair in the world frame, summed across all active contacts. Posts x, y, z components and magnitude. Tagged with `Proximities/{pair_name}/contact_force:(x | y | z | m)`.
-            `contact_torque`: Total contact torque between the geom pair in the world frame, summed across all active contacts. Posts x, y, z components and magnitude. Tagged with `Proximities/{pair_name}/contact_torque:(x | y | z | m)`.
+        | Channel     | Description                                                            | Type   |
+        |:------------|:-----------------------------------------------------------------------|:-------|
+        | `dist`      | minimum distance between the geom pair, per the proximity algorithm    | scalar |
+        | `fromto`    | world coordinates of the nearest point on each geom                    | xyz    |
+        | `prox_type` | the `ProximityType` used to compute `dist` and `fromto`, as an integer | scalar |
 
-        Only the computations required by the requested attrs are performed each timestep. Requesting only `contact_force` or `contact_torque` does not trigger any geometric distance calculations.
+        Each channel is posted under `subgroups=(pair_name,)`, where `pair_name` is `f"{geom_1.name}_to_{geom_2.name}"`.
+
+        * A `scalar` is posted as a single value with `attr=channel`.
+        * An `xyz` is a cartesian vector without a magnitude component, posted as 3 values (`x`, `y`, `z`). `fromto` posts one `xyz` for each geom in the pair, under `subgroups=(pair_name, "fromto", geom_name)`.
+
+        Only the computations required by the requested channels are performed each timestep.
 
         """
-        pair_name = f"{self.geom_1.name}_to_{self.geom_2.name}"
+        pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
-        _contact_attrs = {"contact_force", "contact_torque"}
-        needs_proximity = bool(set(attrs) & _prox_attrs)
-        needs_contact = bool(set(attrs) & _contact_attrs)
+        needs_proximity = bool(set(channels) & _prox_attrs)
 
         def sample(state: MjState):
             dist: float = np.nan
             p1: Vec3 = np.zeros(3)
             p2: Vec3 = np.zeros(3)
             prox_type = ProximityType.SPHERE_TO_SPHERE
-            cf = np.zeros(3)
-            ct = np.zeros(3)
 
             if needs_proximity:
                 dist, p1, p2, prox_type = self.get_proximity(state)
-            if needs_contact:
-                cf, ct = self.contact_force(state)
 
-            for attr in attrs:
-                match attr:
+            for channel in channels:
+                match channel:
                     case "dist":
                         signal_manager.post(
                             value=dist,
                             category=SignalCategory.PROXIMITIES,
                             subgroups=(pair_name,),
-                            attr=attr,
+                            attr=channel,
                         )
                     case "fromto":
-                        for i, k in enumerate("xyz"):
+                        for i, attr in enumerate("xyz"):
                             signal_manager.post(
                                 value=float(p1[i]),
                                 category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, attr, str(self.geom_1.name)),
-                                attr=k,
+                                subgroups=(pair_name, channel, str(self.geom_1.name)),
+                                attr=attr,
                             )
-                        for i, k in enumerate("xyz"):
+                        for i, attr in enumerate("xyz"):
                             signal_manager.post(
                                 value=float(p2[i]),
                                 category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, attr, str(self.geom_2.name)),
-                                attr=k,
+                                subgroups=(pair_name, channel, str(self.geom_2.name)),
+                                attr=attr,
                             )
                     case "prox_type":
                         signal_manager.post(
                             value=float(prox_type.value),
                             category=SignalCategory.PROXIMITIES,
                             subgroups=(pair_name,),
-                            attr=attr,
+                            attr=channel,
                         )
-                    case "contact_force":
-                        for v, k in zip([*cf, float(np.linalg.norm(cf))], "xyzm"):
-                            signal_manager.post(
-                                value=float(v),
-                                category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, "contact_force"),
-                                attr=k,
-                            )
-                    case "contact_torque":
-                        for v, k in zip([*ct, float(np.linalg.norm(ct))], "xyzm"):
-                            signal_manager.post(
-                                value=float(v),
-                                category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, "contact_torque"),
-                                attr=k,
-                            )
                     case _:
                         continue
 

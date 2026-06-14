@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
+import numpy as np
 
-from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     SensorInterp,
     SensorName,
@@ -81,7 +82,23 @@ class SensorBase(XMLModel):
     """See User parameters."""
 
     def request(self, signal_manager: SignalManager):
-        """Registers the sensor's output for logging."""
+        """
+        Registers the sensor's output for logging.
+
+        | Dim                       | Description                                                          | Type    |
+        |:--------------------------|:---------------------------------------------------------------------|:--------|
+        | 1                         | scalar sensors, e.g. touch, rangefinder, jointpos, jointvel          | scalar  |
+        | 3                         | cartesian vector sensors, e.g. accelerometer, gyro, force, framepos  | xyzm    |
+        | 4, `tag` ends with `quat` | orientation quaternion sensor, e.g. framequat, ballquat              | quat    |
+        | other                     | any other sensor, e.g. tactile, user, geomfromto                     | indexed |
+
+        `tactile` and `user` sensors are always `indexed`, even when `dim` is 3 or 4, since their outputs are not cartesian or quaternion by convention.
+
+        * A `scalar` is posted as a single value under `subgroups=(sensor_name,)` with `attr=tag`.
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`) under `subgroups=(sensor_name, tag)`.
+        * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(sensor_name, tag)`.
+        * An `indexed` output posts `dim` values under `subgroups=(sensor_name, tag)` with `attr` set to `0`-`dim - 1`.
+        """
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
@@ -91,23 +108,44 @@ class SensorBase(XMLModel):
             sid = self.get_id(state.model)
 
             # find where this sensor's data starts and how long it is
-            # (e.g., dim=3 for an accelerometer, dim=6 for a force/torque sensor)
+            # (e.g., dim=3 for an accelerometer, dim=4 for a framequat sensor)
             adr = state.model.sensor_adr[sid]
             dim = state.model.sensor_dim[sid]
 
             # slice the flat sensordata array
             val = state.data.sensordata[adr : adr + dim]
 
-            # post to telemetry
-            for i in range(dim):
+            if dim == 1:
                 signal_manager.post(
-                    value=val[i],
+                    value=float(val[0]),
                     category=SignalCategory.SENSORS,
-                    # sensor name serves as the subgroup
                     subgroups=(str(self.name),),
-                    # vector sensor (IMU/FT) components are indexed
-                    # scalars (Touch/Range) are not
-                    attr=str(i) if dim > 1 else None,
+                    attr=self.tag,  # scalar values are considered an attr of the parent
                 )
+            elif dim == 4 and self.tag.endswith("quat"):
+                for v, attr in zip(val, "wxyz", strict=True):
+                    signal_manager.post(
+                        value=float(v),
+                        category=SignalCategory.SENSORS,
+                        subgroups=(str(self.name), self.tag),
+                        attr=attr,
+                    )
+            elif dim == 3 and self.tag not in ("tactile", "user"):
+                full_vec = np.append(val, np.linalg.norm(val))
+                for v, attr in zip(full_vec, "xyzm", strict=True):
+                    signal_manager.post(
+                        value=float(v),
+                        category=SignalCategory.SENSORS,
+                        subgroups=(str(self.name), self.tag),
+                        attr=attr,
+                    )
+            else:
+                for i, v in enumerate(val):
+                    signal_manager.post(
+                        value=float(v),
+                        category=SignalCategory.SENSORS,
+                        subgroups=(str(self.name), self.tag),
+                        attr=str(i),
+                    )
 
         signal_manager.register_sampler(sample)
