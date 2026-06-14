@@ -21,11 +21,11 @@ repos:
         entry: python scripts/copy_docs_examples_to_examples.py
         language: python
         files: ^docs/user-guides/.*\.py$
-        additional_dependencies: [ruff==0.14.14]
+        additional_dependencies: [ruff==0.15.17]
         stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.14.14
+    rev: v0.15.17
     hooks:
       # Run the linter.
       - id: ruff-check
@@ -34,16 +34,16 @@ repos:
       - id: ruff-format
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
-    rev: 0.9.27
+    rev: 0.11.21
     hooks:
       - id: uv-lock
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
-    rev: 0.9.27
+    rev: 0.11.21
     hooks:
       - id: uv-export
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.408
+    rev: v1.1.410
     hooks:
       - id: pyright
       - id: pyright
