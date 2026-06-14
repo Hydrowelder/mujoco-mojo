@@ -626,14 +626,14 @@ class MojoReloaded:
             if busy_event.is_set():
                 console.print(
                     "[bold yellow]Running trial...[/bold yellow] "
-                    "[dim](type stop/halt to abort)[/dim] ",
+                    "[dim](type stop/halt to abort)[/dim][white] > [/white]",
                     end="",
                 )
                 return
 
             watch_indicator = " | [bold blue]W[/bold blue]" if self.watch else ""
             console.print(
-                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num}{watch_indicator})[/dim] [white] > [/white]",
+                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num}{watch_indicator})[/dim][white] > [/white]",
                 end="",
             )
 

@@ -49,6 +49,9 @@ class Proximity(MojoBaseModel):
     _vis: VisualizationSettings = PrivateAttr(default_factory=VisualizationSettings)
     _vis_loaded: bool = PrivateAttr(default=False)
 
+    _requested: bool = PrivateAttr(default=False)
+    _warned_unrequested: bool = PrivateAttr(default=False)
+
     @field_validator("geom_1", "geom_2")
     @classmethod
     def validate_geom_named(cls, v: Proximityable) -> Proximityable:
@@ -366,13 +369,28 @@ class Proximity(MojoBaseModel):
                 logger.error(msg)
                 raise NotImplementedError(msg)
 
-    def get_visuals(self, state: MjState) -> LineConfig | None:
+    def get_visuals(
+        self, state: MjState, signal_manager: SignalManager | None = None
+    ) -> LineConfig | None:
         if not self._vis_loaded:
             self._vis = MujocoMojoSettings().visualization
             self._vis_loaded = True
 
         if not self.visualize or not self._vis.clearance_line:
             return None
+
+        if (
+            signal_manager is not None
+            and not self._requested
+            and not self._warned_unrequested
+        ):
+            logger.warning(
+                f"Proximity {self.pair_name} is being visualized (clearance line) every "
+                "step, which runs the same expensive distance calculation as request(), "
+                "but request() was never called so nothing is being logged. Call "
+                "request() to log it, or set visualize=False to skip the calculation."
+            )
+            self._warned_unrequested = True
 
         is_stale = self._last_t != state.data.time
         is_uninitialized = any(
@@ -421,6 +439,9 @@ class Proximity(MojoBaseModel):
         pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
         needs_proximity = bool(set(channels) & _prox_attrs)
+
+        if needs_proximity:
+            self._requested = True
 
         def sample(state: MjState):
             dist: float = np.nan

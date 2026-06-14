@@ -150,7 +150,7 @@ class RuntimeManager:
                 all_arrows.extend(load.get_visuals(state))
 
             for proximity in self.proximities:
-                visual = proximity.get_visuals(state)
+                visual = proximity.get_visuals(state, self.signal_manager)
                 if visual is not None:
                     all_lines.append(visual)
 
