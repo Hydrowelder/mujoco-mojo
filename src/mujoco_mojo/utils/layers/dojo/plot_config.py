@@ -168,7 +168,7 @@ class MarkerSymbol(StrEnum):
     ARROW_LEFT = "arrow-left"
     """Arrow-left marker."""
 
-    ARROW_RIGHT = "arrow-right "
+    ARROW_RIGHT = "arrow-right"
     """Arrow-right  marker."""
 
 

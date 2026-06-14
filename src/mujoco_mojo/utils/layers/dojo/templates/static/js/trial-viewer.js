@@ -16,7 +16,7 @@
   var DASH_STYLE_VALUES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
   var GRID_MODE_VALUES = ["none", "major", "all"];
   var LEGEND_POS_VALUES = ["bottom", "right", "hidden"];
-  var MARKER_SYMBOL_VALUES = ["none", "circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down", "triangle-left", "triangle-right", "triangle-ne", "triangle-se", "triangle-sw", "triangle-nw", "pentagon", "hexagon", "hexagon2", "octagon", "star", "hexagram", "starsquare", "diamond-cross", "diamond-x", "hourglass", "bowtie", "asterisk", "hash", "y-up", "y-down", "y-left", "y-right", "line-ew", "line-ns", "line-ne", "line-nw", "arrow-up", "arrow-down", "arrow-left", "arrow-right "];
+  var MARKER_SYMBOL_VALUES = ["none", "circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down", "triangle-left", "triangle-right", "triangle-ne", "triangle-se", "triangle-sw", "triangle-nw", "pentagon", "hexagon", "hexagon2", "octagon", "star", "hexagram", "starsquare", "diamond-cross", "diamond-x", "hourglass", "bowtie", "asterisk", "hash", "y-up", "y-down", "y-left", "y-right", "line-ew", "line-ns", "line-ne", "line-nw", "arrow-up", "arrow-down", "arrow-left", "arrow-right"];
   var SCALE_TYPE_VALUES = ["linear", "log"];
   var PLOT_CONFIG_SCHEMA = {
     "$defs": {
@@ -536,7 +536,7 @@
           "arrow-up",
           "arrow-down",
           "arrow-left",
-          "arrow-right "
+          "arrow-right"
         ],
         "title": "MarkerSymbol",
         "type": "string"

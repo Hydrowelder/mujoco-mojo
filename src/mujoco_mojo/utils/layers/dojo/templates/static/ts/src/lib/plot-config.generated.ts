@@ -114,8 +114,8 @@ export interface LowPassFilter {
   alpha?: number;
 }
 
-export type MarkerSymbol = "none" | "circle" | "square" | "diamond" | "cross" | "x" | "triangle-up" | "triangle-down" | "triangle-left" | "triangle-right" | "triangle-ne" | "triangle-se" | "triangle-sw" | "triangle-nw" | "pentagon" | "hexagon" | "hexagon2" | "octagon" | "star" | "hexagram" | "starsquare" | "diamond-cross" | "diamond-x" | "hourglass" | "bowtie" | "asterisk" | "hash" | "y-up" | "y-down" | "y-left" | "y-right" | "line-ew" | "line-ns" | "line-ne" | "line-nw" | "arrow-up" | "arrow-down" | "arrow-left" | "arrow-right ";
-export const MARKER_SYMBOL_VALUES: MarkerSymbol[] = ["none", "circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down", "triangle-left", "triangle-right", "triangle-ne", "triangle-se", "triangle-sw", "triangle-nw", "pentagon", "hexagon", "hexagon2", "octagon", "star", "hexagram", "starsquare", "diamond-cross", "diamond-x", "hourglass", "bowtie", "asterisk", "hash", "y-up", "y-down", "y-left", "y-right", "line-ew", "line-ns", "line-ne", "line-nw", "arrow-up", "arrow-down", "arrow-left", "arrow-right "];
+export type MarkerSymbol = "none" | "circle" | "square" | "diamond" | "cross" | "x" | "triangle-up" | "triangle-down" | "triangle-left" | "triangle-right" | "triangle-ne" | "triangle-se" | "triangle-sw" | "triangle-nw" | "pentagon" | "hexagon" | "hexagon2" | "octagon" | "star" | "hexagram" | "starsquare" | "diamond-cross" | "diamond-x" | "hourglass" | "bowtie" | "asterisk" | "hash" | "y-up" | "y-down" | "y-left" | "y-right" | "line-ew" | "line-ns" | "line-ne" | "line-nw" | "arrow-up" | "arrow-down" | "arrow-left" | "arrow-right";
+export const MARKER_SYMBOL_VALUES: MarkerSymbol[] = ["none", "circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down", "triangle-left", "triangle-right", "triangle-ne", "triangle-se", "triangle-sw", "triangle-nw", "pentagon", "hexagon", "hexagon2", "octagon", "star", "hexagram", "starsquare", "diamond-cross", "diamond-x", "hourglass", "bowtie", "asterisk", "hash", "y-up", "y-down", "y-left", "y-right", "line-ew", "line-ns", "line-ne", "line-nw", "arrow-up", "arrow-down", "arrow-left", "arrow-right"];
 
 export interface MaxFilter {
   enabled?: boolean;
@@ -828,7 +828,7 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
         "arrow-up",
         "arrow-down",
         "arrow-left",
-        "arrow-right "
+        "arrow-right"
       ],
       "title": "MarkerSymbol",
       "type": "string"

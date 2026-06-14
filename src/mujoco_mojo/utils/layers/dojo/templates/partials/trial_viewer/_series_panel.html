@@ -413,7 +413,11 @@
                                                              :style="`position:absolute;top:${uCoords.top}px;left:${uCoords.left}px;width:10rem;`"
                                                              class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-52 overflow-y-auto custom-scrollbar"
                                                              style="display:none;">
-                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
+                                                            <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
+                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                - select -
+                                                            </button>
+                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'])"
                                                                       :key="group.label">
                                                                 <div>
                                                                     <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
@@ -1107,7 +1111,7 @@
                                             </button>
                                             <div x-show="mOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-[310]">
+                                                 class="{{ dropdown_panel }} z-[310] max-h-52 overflow-y-auto custom-scrollbar">
                                                 <template x-for="opt in opts.marker">
                                                     <button @click="temp.marker = opt; isDirty = true; mOpen = false"
                                                             class="{{ dropdown_option }}"
@@ -1308,7 +1312,7 @@
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.checked); isDirty = true"
                                                                            class="rounded accent-cyan-500 w-4 h-4" />
                                                                 </template>
-                                                                <!-- UnitFilter dropdowns for from_unit / to_unit -->
+                                                                <!-- UnitFilter dropdowns for fromUnit / toUnit -->
                                                                 <template x-if="param.type === 'string' && f.type === 'unit'">
                                                                     <div class="flex-1 relative"
                                                                          x-data="{ uOpen: false }"
@@ -1331,7 +1335,11 @@
                                                                         <div x-show="uOpen"
                                                                              x-transition
                                                                              class="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-52 overflow-y-auto custom-scrollbar">
-                                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
+                                                                            <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
+                                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                                - select -
+                                                                            </button>
+                                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'])"
                                                                                       :key="group.label">
                                                                                 <div>
                                                                                     <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
