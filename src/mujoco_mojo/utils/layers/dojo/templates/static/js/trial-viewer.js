@@ -218,6 +218,8 @@
       labActiveTabId: null,
       nodePickingColumn: null,
       nodeColSearch: "",
+      nodePickingQuat: null,
+      nodeQuatSearch: "",
       nodePickingTemplate: null,
       labSchemas: [],
       // --- SHAPES ---
@@ -361,7 +363,7 @@
         }
         const queryStr = colParams.toString();
         if (queryStr) url += `?${queryStr}`;
-        const resp = await fetch(url);
+        const resp = await fetch(url, { cache: "no-store" });
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
         const result = await resp.json();
         if (result.filter_errors && result.filter_errors.length > 0) {
@@ -1717,7 +1719,7 @@
       },
       getFilteredCols(field) {
         if (!this.columns || !Array.isArray(this.columns)) return [];
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         if (!search) return this.smartSort([...base]);
         try {
@@ -1763,7 +1765,7 @@
         self2[key] = (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
       },
       getSegmentsAtDepth(field, depth) {
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const pathSearch = search.split(":")[0] ?? "";
         const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -1778,7 +1780,7 @@
         return this.smartSort([.../* @__PURE__ */ new Set([...selected, ...segments])]);
       },
       getAvailableSuffixes(field) {
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const [pathPart = "", suffixPart = ""] = search.split(":");
         const selected = (suffixPart ?? "").replace(/[()]/g, "").split("|").filter(Boolean).map((s) => ":" + s);
@@ -2360,7 +2362,7 @@
           const initFilters = this.config.refFrame ? [
             {
               type: "rotation",
-              quat_col: this.config.refFrame,
+              quatCol: this.config.refFrame,
               invert: true,
               enabled: true
             }
@@ -2401,7 +2403,7 @@
           if (frame) {
             const newEntry = {
               type: "rotation",
-              quat_col: frame,
+              quatCol: frame,
               invert: true,
               enabled: true
             };
@@ -2926,6 +2928,15 @@
         }
         this.nodePickingColumn = null;
         this.nodeColSearch = "";
+      },
+      selectNodeQuat(base) {
+        if (this.nodePickingQuat !== null) {
+          if (typeof window.mojoLabSelectNodeQuat === "function") {
+            window.mojoLabSelectNodeQuat(this.nodePickingQuat, base);
+          }
+        }
+        this.nodePickingQuat = null;
+        this.nodeQuatSearch = "";
       },
       selectNodeTemplate(name) {
         if (this.nodePickingTemplate !== null) {

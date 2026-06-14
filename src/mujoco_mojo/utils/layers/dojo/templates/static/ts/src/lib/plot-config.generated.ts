@@ -53,6 +53,11 @@ export interface ExpFilter {
   base?: number;
 }
 
+export interface FirstFilter {
+  enabled?: boolean;
+  type?: string;
+}
+
 export type GridMode = "none" | "major" | "all";
 
 export interface HighPassFilter {
@@ -71,6 +76,11 @@ export interface IntegralFilter {
 }
 
 export type InterpMode = "linear" | "spline" | "hv" | "vh" | "hvh" | "vhv";
+
+export interface LastFilter {
+  enabled?: boolean;
+  type?: string;
+}
 
 export type LegendPos = "bottom" | "right" | "hidden";
 
@@ -187,6 +197,12 @@ export type ShapeType = "vline" | "hline" | "rect";
 export interface SignFilter {
   enabled?: boolean;
   type?: string;
+}
+
+export interface SortFilter {
+  enabled?: boolean;
+  type?: string;
+  descending?: boolean;
 }
 
 export interface StandardDeviationFilter {

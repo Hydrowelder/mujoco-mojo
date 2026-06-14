@@ -213,6 +213,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     labActiveTabId: null as string | null,
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
+    nodePickingQuat: null as number | null,
+    nodeQuatSearch: "" as string,
     nodePickingTemplate: null as number | null,
     labSchemas: [] as Array<{
       name: string;
@@ -389,7 +391,9 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const queryStr = colParams.toString();
       if (queryStr) url += `?${queryStr}`;
-      const resp = await fetch(url);
+      // lab-virtual columns can change value for the same URL after an
+      // in-place edit + save, so always bypass the browser HTTP cache
+      const resp = await fetch(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
@@ -2106,7 +2110,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       if (!search) return this.smartSort([...base]);
@@ -2174,7 +2180,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const pathSearch = search.split(":")[0] ?? "";
@@ -2200,7 +2208,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const [pathPart = "", suffixPart = ""] = search.split(":");
@@ -2863,7 +2873,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           ? [
               {
                 type: "rotation",
-                quat_col: this.config.refFrame,
+                quatCol: this.config.refFrame,
                 invert: true,
                 enabled: true,
               },
@@ -2909,7 +2919,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (frame) {
           const newEntry: FilterEntry = {
             type: "rotation",
-            quat_col: frame,
+            quatCol: frame,
             invert: true,
             enabled: true,
           };
@@ -3534,6 +3544,17 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
       this.nodePickingColumn = null;
       this.nodeColSearch = "";
+    },
+
+    selectNodeQuat(base: string) {
+      if (this.nodePickingQuat !== null) {
+        // Defined in _signal_lab.html - updates the LiteGraph node property
+        if (typeof window.mojoLabSelectNodeQuat === "function") {
+          window.mojoLabSelectNodeQuat(this.nodePickingQuat, base);
+        }
+      }
+      this.nodePickingQuat = null;
+      this.nodeQuatSearch = "";
     },
 
     selectNodeTemplate(name: string) {
