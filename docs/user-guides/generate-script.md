@@ -4,7 +4,7 @@
     The **Generate Script** is the heartbeat of your simulation pipeline. Its job is to programmatically assemble the MuJoCo MJCF model and perform all stochastic (random) draws. By the time this function returns, the simulation should be "frozen" in its initial state, ready for the physics engine to take over.
 
     <figure markdown="span">
-        ![Mosaic dashboard view](../../assets/user-guides/generate-result.jpg){ width="50%" height="auto" }
+        ![Mosaic dashboard view](../assets/user-guides/generate-result.jpg){ width="50%" height="auto" }
         <figcaption>The visual result of the completed generator script: two translucent boxes with freejoints, spring attachment sites (red and blue spheres), and a central tracking site (fuchsia sphere), all set against a starry skybox.</figcaption>
     </figure>
 

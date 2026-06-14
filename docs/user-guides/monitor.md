@@ -6,8 +6,8 @@
 ---
 
 <figure markdown="span">
-    ![Monitor dashboard view](../../assets/user-guides/light-monitor-view.jpg#only-light){ width="85%" height="auto" }
-    ![Monitor dashboard view](../../assets/user-guides/dark-monitor-view.jpg#only-dark){ width="85%" height="auto" }
+    ![Monitor dashboard view](../assets/user-guides/light-monitor-view.jpg#only-light){ width="85%" height="auto" }
+    ![Monitor dashboard view](../assets/user-guides/dark-monitor-view.jpg#only-dark){ width="85%" height="auto" }
     <figcaption>A preview of the <b>Monitor</b> page showing a completed progress bar, job statistics, and links to <b>Mosaic</b> to assess individual trials.</figcaption>
 </figure>
 
