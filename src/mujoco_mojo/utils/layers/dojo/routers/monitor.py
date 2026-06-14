@@ -57,7 +57,9 @@ async def broadcast_updates():
 
                 await loop.run_in_executor(
                     None,
-                    lambda: job.refresh_from_disk(progress_callback=sync_reporter),  # pyright: ignore[reportOptionalMemberAccess]
+                    lambda: job.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
+                        progress_callback=sync_reporter, persist=False
+                    ),
                 )
 
                 # 3. Always send the "final" state to everyone
@@ -111,7 +113,9 @@ async def get_job_status():
 
     await loop.run_in_executor(
         None,
-        lambda: shared.CURRENT_JOB.refresh_from_disk(force_refetch=True),  # pyright: ignore[reportOptionalMemberAccess]
+        lambda: shared.CURRENT_JOB.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
+            force_refetch=True, persist=False
+        ),
     )
 
     return shared.CURRENT_JOB.to_monitor_json()

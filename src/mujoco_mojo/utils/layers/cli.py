@@ -1277,7 +1277,7 @@ def run_dojo(
 
     # read job status file for monitoring and inject
     job = JobStatus.model_validate_json(status_file.read_text())
-    job.refresh_from_disk(n_proc=n_proc)
+    job.refresh_from_disk(n_proc=n_proc, persist=False)
 
     shared.CURRENT_JOB = job
     shared.AUTH_PASSWORD = password
