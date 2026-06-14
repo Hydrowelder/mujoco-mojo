@@ -1,6 +1,7 @@
 import { formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
 import { PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
+import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
 import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
@@ -2462,6 +2463,46 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
     },
 
+    initChartResize(hostEl: HTMLElement | undefined) {
+      if (!hostEl || hostEl.dataset.resizeAttached) return;
+      hostEl.dataset.resizeAttached = "true";
+
+      restorePersistedHeight(hostEl, "mojo:chart:height");
+
+      // Plotly.Plots.resize() can take longer than a single frame, so a
+      // simple rAF throttle would drop requests that arrive mid-resize and
+      // leave the plot visibly lagging behind the cursor. Instead, queue at
+      // most one follow-up resize so it keeps catching up to the latest size.
+      let resizeRaf: number | null = null;
+      let resizeQueued = false;
+      const doResize = () => {
+        resizeRaf = null;
+        const plotEl = document.getElementById("plot-area");
+        if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+        if (resizeQueued) {
+          resizeQueued = false;
+          resizeRaf = requestAnimationFrame(doResize);
+        }
+      };
+      const resizePlot = () => {
+        if (resizeRaf !== null) {
+          resizeQueued = true;
+          return;
+        }
+        resizeRaf = requestAnimationFrame(doResize);
+      };
+
+      attachVerticalResizeHandle(hostEl, {
+        storageKey: "mojo:chart:height",
+        minHeight: 300,
+        onResize: resizePlot,
+        getResetHeight: () => "600px",
+      });
+
+      // Fill (or shrink to) the restored height once the plot has rendered.
+      resizePlot();
+    },
+
     initCodeMirror(hostEl: HTMLElement) {
       if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
       const {
@@ -2480,8 +2521,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const self = this;
 
       // Restore persisted height before creating the editor so it sizes correctly.
-      const savedH = localStorage.getItem("mojo:json-editor:height");
-      if (savedH) hostEl.style.height = savedH;
+      restorePersistedHeight(hostEl, "mojo:json-editor:height");
 
       // --- themes (base chrome only; highlight handled separately) ---
       const darkTheme = EditorView.theme(
@@ -2621,70 +2661,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       _cm.editor = new EditorView({ state: startState, parent: hostEl });
 
       // Custom resize handle
-      const handle = document.createElement("div");
-      handle.style.cssText =
-        "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
-      const grip = document.createElement("div");
-      grip.style.cssText =
-        "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
-      handle.appendChild(grip);
-      handle.addEventListener("mouseenter", () => {
-        grip.style.background = "#06b6d4";
-        grip.style.width = "52px";
-      });
-      handle.addEventListener("mouseleave", () => {
-        grip.style.background = "#334155";
-        grip.style.width = "36px";
-      });
-      hostEl.insertAdjacentElement("afterend", handle);
-
-      handle.addEventListener("mousedown", (e) => {
-        const startY = e.clientY;
-        const startH = hostEl.offsetHeight;
-        let prevY = startY;
-        document.body.style.userSelect = "none";
-        document.body.style.cursor = "ns-resize";
-        const onMove = (ev: MouseEvent) => {
-          const dy = ev.clientY - prevY;
-          prevY = ev.clientY;
-          const newH = Math.max(128, startH + (ev.clientY - startY));
-          hostEl.style.height = newH + "px";
-          if (dy > 0) window.scrollBy(0, dy);
-        };
-        const onUp = () => {
-          document.body.style.userSelect = "";
-          document.body.style.cursor = "";
-          document.removeEventListener("mousemove", onMove);
-          document.removeEventListener("mouseup", onUp);
-          try {
-            localStorage.setItem(
-              "mojo:json-editor:height",
-              hostEl.style.height,
-            );
-          } catch {
-            /* */
-          }
-        };
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
-        e.preventDefault();
-      });
-
-      handle.addEventListener("dblclick", () => {
-        const scroller = hostEl.querySelector(
-          ".cm-scroller",
-        ) as HTMLElement | null;
-        if (scroller) {
-          hostEl.style.height = scroller.scrollHeight + "px";
-          try {
-            localStorage.setItem(
-              "mojo:json-editor:height",
-              hostEl.style.height,
-            );
-          } catch {
-            /* */
-          }
-        }
+      attachVerticalResizeHandle(hostEl, {
+        storageKey: "mojo:json-editor:height",
+        minHeight: 128,
+        getResetHeight: () => {
+          const scroller = hostEl.querySelector(
+            ".cm-scroller",
+          ) as HTMLElement | null;
+          return scroller ? scroller.scrollHeight + "px" : undefined;
+        },
       });
 
       // Swap theme when dark mode toggles.

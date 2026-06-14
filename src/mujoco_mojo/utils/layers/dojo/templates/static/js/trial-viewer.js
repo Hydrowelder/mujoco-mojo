@@ -1994,6 +1994,68 @@
     hoverLabel: (v) => labelOf(HOVER_OPTIONS, v)
   };
 
+  // src/lib/resize.ts
+  function restorePersistedHeight(hostEl, storageKey) {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) hostEl.style.height = saved;
+  }
+  function attachVerticalResizeHandle(hostEl, options) {
+    const minHeight = options.minHeight ?? 128;
+    const persist = (height) => {
+      try {
+        localStorage.setItem(options.storageKey, height);
+      } catch {
+      }
+    };
+    const handle = document.createElement("div");
+    handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+    const grip = document.createElement("div");
+    grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+    handle.appendChild(grip);
+    handle.addEventListener("mouseenter", () => {
+      grip.style.background = "#06b6d4";
+      grip.style.width = "52px";
+    });
+    handle.addEventListener("mouseleave", () => {
+      grip.style.background = "#334155";
+      grip.style.width = "36px";
+    });
+    handle.addEventListener("mousedown", (e) => {
+      const startY = e.clientY;
+      const startH = hostEl.offsetHeight;
+      let prevY = startY;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ns-resize";
+      const onMove = (ev) => {
+        const dy = ev.clientY - prevY;
+        prevY = ev.clientY;
+        const newH = Math.max(minHeight, startH + (ev.clientY - startY));
+        hostEl.style.height = newH + "px";
+        options.onResize?.(newH);
+        if (dy > 0) window.scrollBy(0, dy);
+      };
+      const onUp = () => {
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        persist(hostEl.style.height);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      e.preventDefault();
+    });
+    handle.addEventListener("dblclick", () => {
+      const resetHeight = options.getResetHeight?.();
+      if (!resetHeight) return;
+      hostEl.style.height = resetHeight;
+      options.onResize?.(hostEl.offsetHeight);
+      persist(hostEl.style.height);
+    });
+    hostEl.insertAdjacentElement("afterend", handle);
+    return handle;
+  }
+
   // src/lib/schema-validate.ts
   function resolveRef(ref, defs) {
     const name = ref.replace(/^#\/\$defs\//, "");
@@ -4046,6 +4108,36 @@
       copyRawConfig() {
         void this.copyToClipboard(this.configRaw, "JSON Config copied!");
       },
+      initChartResize(hostEl) {
+        if (!hostEl || hostEl.dataset.resizeAttached) return;
+        hostEl.dataset.resizeAttached = "true";
+        restorePersistedHeight(hostEl, "mojo:chart:height");
+        let resizeRaf = null;
+        let resizeQueued = false;
+        const doResize = () => {
+          resizeRaf = null;
+          const plotEl = document.getElementById("plot-area");
+          if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+          if (resizeQueued) {
+            resizeQueued = false;
+            resizeRaf = requestAnimationFrame(doResize);
+          }
+        };
+        const resizePlot = () => {
+          if (resizeRaf !== null) {
+            resizeQueued = true;
+            return;
+          }
+          resizeRaf = requestAnimationFrame(doResize);
+        };
+        attachVerticalResizeHandle(hostEl, {
+          storageKey: "mojo:chart:height",
+          minHeight: 300,
+          onResize: resizePlot,
+          getResetHeight: () => "600px"
+        });
+        resizePlot();
+      },
       initCodeMirror(hostEl) {
         if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
         const {
@@ -4062,8 +4154,7 @@
           defaultHighlightStyle
         } = CM;
         const self2 = this;
-        const savedH = localStorage.getItem("mojo:json-editor:height");
-        if (savedH) hostEl.style.height = savedH;
+        restorePersistedHeight(hostEl, "mojo:json-editor:height");
         const darkTheme = EditorView.theme(
           {
             "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
@@ -4194,63 +4285,14 @@
           ]
         });
         _cm.editor = new EditorView({ state: startState, parent: hostEl });
-        const handle = document.createElement("div");
-        handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
-        const grip = document.createElement("div");
-        grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
-        handle.appendChild(grip);
-        handle.addEventListener("mouseenter", () => {
-          grip.style.background = "#06b6d4";
-          grip.style.width = "52px";
-        });
-        handle.addEventListener("mouseleave", () => {
-          grip.style.background = "#334155";
-          grip.style.width = "36px";
-        });
-        hostEl.insertAdjacentElement("afterend", handle);
-        handle.addEventListener("mousedown", (e) => {
-          const startY = e.clientY;
-          const startH = hostEl.offsetHeight;
-          let prevY = startY;
-          document.body.style.userSelect = "none";
-          document.body.style.cursor = "ns-resize";
-          const onMove = (ev) => {
-            const dy = ev.clientY - prevY;
-            prevY = ev.clientY;
-            const newH = Math.max(128, startH + (ev.clientY - startY));
-            hostEl.style.height = newH + "px";
-            if (dy > 0) window.scrollBy(0, dy);
-          };
-          const onUp = () => {
-            document.body.style.userSelect = "";
-            document.body.style.cursor = "";
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-            try {
-              localStorage.setItem(
-                "mojo:json-editor:height",
-                hostEl.style.height
-              );
-            } catch {
-            }
-          };
-          document.addEventListener("mousemove", onMove);
-          document.addEventListener("mouseup", onUp);
-          e.preventDefault();
-        });
-        handle.addEventListener("dblclick", () => {
-          const scroller = hostEl.querySelector(
-            ".cm-scroller"
-          );
-          if (scroller) {
-            hostEl.style.height = scroller.scrollHeight + "px";
-            try {
-              localStorage.setItem(
-                "mojo:json-editor:height",
-                hostEl.style.height
-              );
-            } catch {
-            }
+        attachVerticalResizeHandle(hostEl, {
+          storageKey: "mojo:json-editor:height",
+          minHeight: 128,
+          getResetHeight: () => {
+            const scroller = hostEl.querySelector(
+              ".cm-scroller"
+            );
+            return scroller ? scroller.scrollHeight + "px" : void 0;
           }
         });
         new MutationObserver(() => {
