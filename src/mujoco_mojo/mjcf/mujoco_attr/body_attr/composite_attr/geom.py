@@ -26,6 +26,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import (
 )
 
 __all__ = [
+    "AnyCompositeGeom",
     "CompositeBox",
     "CompositeCapsule",
     "CompositeCylinder",

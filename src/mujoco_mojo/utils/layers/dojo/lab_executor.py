@@ -22,7 +22,9 @@ from mujoco_mojo.utils.filters.filters import (
     ComparisonFilter,
     DeadbandFilter,
     ExpFilter,
+    FirstFilter,
     HighPassFilter,
+    LastFilter,
     LogFilter,
     LowPassFilter,
     MaxFilter,
@@ -32,12 +34,15 @@ from mujoco_mojo.utils.filters.filters import (
     ModeFilter,
     NormalizeFilter,
     PowerFilter,
+    ReverseFilter,
     RollingMeanFilter,
     RollingMedianFilter,
+    RotationFilter,
     RoundFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
     SignFilter,
+    SortFilter,
     StandardDeviationFilter,
     TaringFilter,
     TrigFilter,
@@ -71,6 +76,10 @@ _FILTER_MAP = {
     "stat_median": MedianFilter,
     "stat_mode": ModeFilter,
     "stat_standard_deviation": StandardDeviationFilter,
+    "stat_first": FirstFilter,
+    "stat_last": LastFilter,
+    "sort": SortFilter,
+    "reverse": ReverseFilter,
 }
 
 
@@ -105,6 +114,38 @@ class LabExecutor:
             for n in self.nodes.values()
             if self._bare_type(n) == "signal_in"
         ]
+
+    @property
+    def rotation_dependencies(self) -> set[str]:
+        """
+        Parquet columns required by any Rotation node in this graph: the
+        quaternion's x/y/z/w components, and the x/y/z siblings of the vector
+        feeding the rotation's input (which must come directly from a Signal In
+        node - see the rotation handling note in `_apply`).
+        """
+        deps: set[str] = set()
+        for node in self.nodes.values():
+            if self._bare_type(node) != "rotation":
+                continue
+
+            quat_col = node.get("properties", {}).get("quat_col")
+            if quat_col:
+                deps.update(f"{quat_col}:{k}" for k in ("x", "y", "z", "w"))
+
+            link_id = node.get("inputs", [{}])[0].get("link")
+            lnk = self.links.get(link_id) if link_id is not None else None
+            if lnk is None:
+                continue
+            from_node = self.nodes.get(lnk[1])
+            if from_node is None or self._bare_type(from_node) != "signal_in":
+                continue
+            column = from_node.get("properties", {}).get("column", "")
+            if ":" not in column:
+                continue
+            base = column.rsplit(":", 1)[0]
+            deps.update(f"{base}:{k}" for k in ("x", "y", "z"))
+
+        return deps
 
     @property
     def output_labels(self) -> list[str]:
@@ -348,6 +389,18 @@ class LabExecutor:
                 return (signal.cast(pl.Float64) * dx).cum_sum()
             dt = float(props.get("dt", 0.001)) or 0.001
             return signal.cast(pl.Float64).cum_sum() * dt
+
+        # Rotation needs the full dataframe and the signal's original column
+        # name (to find its x/y/z siblings and the quaternion columns), so it
+        # is applied directly rather than via the renamed "_s" tmp column.
+        if ntype == "rotation":
+            clean = {k: v for k, v in props.items() if v is not None}
+            try:
+                filt = RotationFilter(**clean)
+            except Exception:
+                return signal
+            ctx = filt.apply_with_context(signal.cast(pl.Float64), df)
+            return ctx if ctx is not None else signal
 
         cls = _FILTER_MAP.get(ntype)
         if cls is None:

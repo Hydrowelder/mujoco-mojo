@@ -1,15 +1,1959 @@
 "use strict";
 (() => {
+  // src/lib/format.ts
+  function formatNum(value, sigDigits = 4) {
+    if (value == null) return "-";
+    if (!Number.isFinite(value)) return String(value);
+    if (value === 0) return "0";
+    const abs = Math.abs(value);
+    if (abs < 1e-4 || abs >= 10 ** sigDigits) {
+      return value.toExponential(Math.max(sigDigits - 1, 0)).replace(/\.?0+e/, "e");
+    }
+    return parseFloat(value.toPrecision(sigDigits)).toString();
+  }
+
+  // src/lib/plot-config.generated.ts
+  var DASH_STYLE_VALUES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
+  var GRID_MODE_VALUES = ["none", "major", "all"];
+  var LEGEND_POS_VALUES = ["bottom", "right", "hidden"];
+  var MARKER_SYMBOL_VALUES = ["none", "circle", "square", "diamond", "cross", "x", "triangle-up", "triangle-down", "triangle-left", "triangle-right", "triangle-ne", "triangle-se", "triangle-sw", "triangle-nw", "pentagon", "hexagon", "hexagon2", "octagon", "star", "hexagram", "starsquare", "diamond-cross", "diamond-x", "hourglass", "bowtie", "asterisk", "hash", "y-up", "y-down", "y-left", "y-right", "line-ew", "line-ns", "line-ne", "line-nw", "arrow-up", "arrow-down", "arrow-left", "arrow-right"];
+  var SCALE_TYPE_VALUES = ["linear", "log"];
+  var PLOT_CONFIG_SCHEMA = {
+    "$defs": {
+      "AbsoluteValueFilter": {
+        "additionalProperties": false,
+        "description": "Rectifies the signal by taking the magnitude of every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "absolute_value",
+            "default": "absolute_value",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "AbsoluteValueFilter",
+        "type": "object"
+      },
+      "Annotation": {
+        "description": "A text label pinned to a specific data coordinate.",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "text"
+        ],
+        "title": "Annotation",
+        "type": "object"
+      },
+      "ClipFilter": {
+        "additionalProperties": false,
+        "description": "Clamps the signal values within a specified range.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "clip",
+            "default": "clip",
+            "title": "Type",
+            "type": "string"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Min"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max"
+          }
+        },
+        "title": "ClipFilter",
+        "type": "object"
+      },
+      "ComparisonFilter": {
+        "additionalProperties": false,
+        "description": "Compares each sample against a threshold, returning 1.0 (true) or 0.0 (false).",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "comparison",
+            "default": "comparison",
+            "title": "Type",
+            "type": "string"
+          },
+          "operator": {
+            "default": "gt",
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "eq",
+              "neq"
+            ],
+            "title": "Operator",
+            "type": "string",
+            "ui_type": "select"
+          },
+          "threshold": {
+            "default": 0,
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "title": "ComparisonFilter",
+        "type": "object"
+      },
+      "DashStyle": {
+        "description": "Dash pattern applied to a plot line.",
+        "enum": [
+          "solid",
+          "dash",
+          "dot",
+          "dashdot",
+          "longdash",
+          "longdashdot"
+        ],
+        "title": "DashStyle",
+        "type": "string"
+      },
+      "DeadbandFilter": {
+        "additionalProperties": false,
+        "description": "Suppresses noise around zero by forcing values below a threshold to zero.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "deadband",
+            "default": "deadband",
+            "title": "Type",
+            "type": "string"
+          },
+          "threshold": {
+            "default": 0.01,
+            "minimum": 0,
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "title": "DeadbandFilter",
+        "type": "object"
+      },
+      "DerivativeFilter": {
+        "additionalProperties": false,
+        "description": "Computes the numerical rate of change using backward difference.\nUseful for deriving velocity from position or acceleration from velocity.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "derivative",
+            "default": "derivative",
+            "title": "Type",
+            "type": "string"
+          },
+          "dt": {
+            "default": 1e-3,
+            "exclusiveMinimum": 0,
+            "title": "Dt",
+            "type": "number"
+          },
+          "wrtCol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Wrtcol",
+            "ui_type": "col"
+          }
+        },
+        "title": "DerivativeFilter",
+        "type": "object"
+      },
+      "ExpFilter": {
+        "additionalProperties": false,
+        "description": "Raises a base to the power of each signal sample. Defaults to e^x.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "exp",
+            "default": "exp",
+            "title": "Type",
+            "type": "string"
+          },
+          "base": {
+            "default": 2.718281828459045,
+            "exclusiveMinimum": 0,
+            "title": "Base",
+            "type": "number"
+          }
+        },
+        "title": "ExpFilter",
+        "type": "object"
+      },
+      "FirstFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its first value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_first",
+            "default": "stat_first",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "FirstFilter",
+        "type": "object"
+      },
+      "GridMode": {
+        "description": "Which grid lines are drawn on the plot.",
+        "enum": [
+          "none",
+          "major",
+          "all"
+        ],
+        "title": "GridMode",
+        "type": "string"
+      },
+      "HighPassFilter": {
+        "additionalProperties": false,
+        "description": "Removes low-frequency drift or steady-state offsets.\nImplemented as the complement of the Exponential Moving Average.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "high_pass",
+            "default": "high_pass",
+            "title": "Type",
+            "type": "string"
+          },
+          "alpha": {
+            "default": 0.1,
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "title": "Alpha",
+            "type": "number"
+          }
+        },
+        "title": "HighPassFilter",
+        "type": "object"
+      },
+      "HlineShape": {
+        "description": "A horizontal reference line at a fixed y value.",
+        "properties": {
+          "type": {
+            "const": "hline",
+            "default": "hline",
+            "title": "Type",
+            "type": "string"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "dash": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DashStyle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "y0",
+          "color",
+          "label"
+        ],
+        "title": "HlineShape",
+        "type": "object"
+      },
+      "HoverMode": {
+        "description": "Tooltip behavior when hovering over the plot.",
+        "enum": [
+          "x unified",
+          "y unified",
+          "closest",
+          "x",
+          "y",
+          "none"
+        ],
+        "title": "HoverMode",
+        "type": "string"
+      },
+      "IntegralFilter": {
+        "additionalProperties": false,
+        "description": "Computes the cumulative sum of the signal multiplied by the time step.\nUseful for deriving position from velocity or calculating energy.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "integral",
+            "default": "integral",
+            "title": "Type",
+            "type": "string"
+          },
+          "dt": {
+            "default": 1e-3,
+            "exclusiveMinimum": 0,
+            "title": "Dt",
+            "type": "number"
+          },
+          "wrtCol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Wrtcol",
+            "ui_type": "col"
+          }
+        },
+        "title": "IntegralFilter",
+        "type": "object"
+      },
+      "InterpMode": {
+        "description": "Line interpolation method between data points.",
+        "enum": [
+          "linear",
+          "spline",
+          "hv",
+          "vh",
+          "hvh",
+          "vhv"
+        ],
+        "title": "InterpMode",
+        "type": "string"
+      },
+      "LastFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its last value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_last",
+            "default": "stat_last",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "LastFilter",
+        "type": "object"
+      },
+      "LegendPos": {
+        "description": "Position of the plot legend.",
+        "enum": [
+          "bottom",
+          "right",
+          "hidden"
+        ],
+        "title": "LegendPos",
+        "type": "string"
+      },
+      "LineMode": {
+        "description": "Controls whether traces are drawn as lines, markers, or both.",
+        "enum": [
+          "lines",
+          "markers",
+          "lines+markers"
+        ],
+        "title": "LineMode",
+        "type": "string"
+      },
+      "LogFilter": {
+        "additionalProperties": false,
+        "description": "Applies a logarithm to the signal. Defaults to natural log (base e).",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "log",
+            "default": "log",
+            "title": "Type",
+            "type": "string"
+          },
+          "base": {
+            "default": 2.718281828459045,
+            "exclusiveMinimum": 0,
+            "title": "Base",
+            "type": "number"
+          }
+        },
+        "title": "LogFilter",
+        "type": "object"
+      },
+      "LowPassFilter": {
+        "additionalProperties": false,
+        "description": "Applies a 1st-order Exponential Moving Average (EMA) to smooth the signal.\nEffective for removing high-frequency noise while introducing slight phase lag.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "low_pass",
+            "default": "low_pass",
+            "title": "Type",
+            "type": "string"
+          },
+          "alpha": {
+            "default": 0.1,
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "title": "Alpha",
+            "type": "number"
+          }
+        },
+        "title": "LowPassFilter",
+        "type": "object"
+      },
+      "MarkerSymbol": {
+        "description": "Shape used to mark individual data points.",
+        "enum": [
+          "none",
+          "circle",
+          "square",
+          "diamond",
+          "cross",
+          "x",
+          "triangle-up",
+          "triangle-down",
+          "triangle-left",
+          "triangle-right",
+          "triangle-ne",
+          "triangle-se",
+          "triangle-sw",
+          "triangle-nw",
+          "pentagon",
+          "hexagon",
+          "hexagon2",
+          "octagon",
+          "star",
+          "hexagram",
+          "starsquare",
+          "diamond-cross",
+          "diamond-x",
+          "hourglass",
+          "bowtie",
+          "asterisk",
+          "hash",
+          "y-up",
+          "y-down",
+          "y-left",
+          "y-right",
+          "line-ew",
+          "line-ns",
+          "line-ne",
+          "line-nw",
+          "arrow-up",
+          "arrow-down",
+          "arrow-left",
+          "arrow-right"
+        ],
+        "title": "MarkerSymbol",
+        "type": "string"
+      },
+      "MaxFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its maximum value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_max",
+            "default": "stat_max",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "MaxFilter",
+        "type": "object"
+      },
+      "MeanFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its mean value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_mean",
+            "default": "stat_mean",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "MeanFilter",
+        "type": "object"
+      },
+      "MedianFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its median value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_median",
+            "default": "stat_median",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "MedianFilter",
+        "type": "object"
+      },
+      "MinFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its minimum value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_min",
+            "default": "stat_min",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "MinFilter",
+        "type": "object"
+      },
+      "ModeFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its most frequent value, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_mode",
+            "default": "stat_mode",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "ModeFilter",
+        "type": "object"
+      },
+      "NormalizeFilter": {
+        "additionalProperties": false,
+        "description": "Rescales the signal to the range [0, 1].",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "normalize",
+            "default": "normalize",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "NormalizeFilter",
+        "type": "object"
+      },
+      "PlotType": {
+        "description": "Coordinate system used to render the plot.",
+        "enum": [
+          "cartesian",
+          "polar"
+        ],
+        "title": "PlotType",
+        "type": "string"
+      },
+      "PowerFilter": {
+        "additionalProperties": false,
+        "description": "Raises each signal sample to a fixed exponent. Supports fractional exponents (e.g. 0.5 for sqrt).",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "power",
+            "default": "power",
+            "title": "Type",
+            "type": "string"
+          },
+          "exponent": {
+            "default": 2,
+            "title": "Exponent",
+            "type": "number"
+          }
+        },
+        "title": "PowerFilter",
+        "type": "object"
+      },
+      "RectShape": {
+        "description": "A filled rectangle drawn as a reference region.",
+        "properties": {
+          "type": {
+            "const": "rect",
+            "default": "rect",
+            "title": "Type",
+            "type": "string"
+          },
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "dash": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DashStyle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "x0",
+          "x1",
+          "y0",
+          "y1",
+          "color",
+          "label"
+        ],
+        "title": "RectShape",
+        "type": "object"
+      },
+      "ReverseFilter": {
+        "additionalProperties": false,
+        "description": "Reverses the order of the signal's values without changing their order of occurrence in time.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "reverse",
+            "default": "reverse",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "ReverseFilter",
+        "type": "object"
+      },
+      "RollingMeanFilter": {
+        "additionalProperties": false,
+        "description": "Applies a sliding window average to the signal.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "rolling_mean",
+            "default": "rolling_mean",
+            "title": "Type",
+            "type": "string"
+          },
+          "window": {
+            "default": 10,
+            "exclusiveMinimum": 0,
+            "title": "Window",
+            "type": "integer"
+          },
+          "center": {
+            "default": true,
+            "title": "Center",
+            "type": "boolean"
+          }
+        },
+        "title": "RollingMeanFilter",
+        "type": "object"
+      },
+      "RollingMedianFilter": {
+        "additionalProperties": false,
+        "description": "Applies a sliding window median filter.\nHighly effective for removing impulse noise (spikes) without blurring edges.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "median",
+            "default": "median",
+            "title": "Type",
+            "type": "string"
+          },
+          "window": {
+            "default": 10,
+            "exclusiveMinimum": 0,
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "title": "RollingMedianFilter",
+        "type": "object"
+      },
+      "RotationFilter": {
+        "additionalProperties": false,
+        "description": "Rotates a 3D vector component into a reference frame using a quaternion column.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "rotation",
+            "default": "rotation",
+            "title": "Type",
+            "type": "string"
+          },
+          "quatCol": {
+            "default": "",
+            "title": "Quatcol",
+            "type": "string",
+            "ui_type": "quat_col"
+          },
+          "invert": {
+            "default": true,
+            "title": "Invert",
+            "type": "boolean"
+          }
+        },
+        "title": "RotationFilter",
+        "type": "object"
+      },
+      "RoundFilter": {
+        "additionalProperties": false,
+        "description": "Quantizes the signal to a fixed number of decimal places.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "round",
+            "default": "round",
+            "title": "Type",
+            "type": "string"
+          },
+          "method": {
+            "default": "round",
+            "enum": [
+              "round",
+              "floor",
+              "ceil"
+            ],
+            "title": "Method",
+            "type": "string",
+            "ui_type": "select"
+          },
+          "decimals": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Decimals",
+            "type": "integer"
+          }
+        },
+        "title": "RoundFilter",
+        "type": "object"
+      },
+      "SavitzkyGolayFilter": {
+        "additionalProperties": false,
+        "description": "Applies a Savitzky-Golay smoothing filter by fitting a polynomial to the data.\nPreserves signal features (like peaks and transients) better than a simple moving average.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "savitzky_golay",
+            "default": "savitzky_golay",
+            "title": "Type",
+            "type": "string"
+          },
+          "window": {
+            "default": 11,
+            "exclusiveMinimum": 1,
+            "title": "Window",
+            "type": "integer"
+          },
+          "order": {
+            "default": 2,
+            "minimum": 0,
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "title": "SavitzkyGolayFilter",
+        "type": "object"
+      },
+      "ScaleFilter": {
+        "additionalProperties": false,
+        "description": "Applies a linear transformation: (value * factor) + offset.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "scale",
+            "default": "scale",
+            "title": "Type",
+            "type": "string"
+          },
+          "factor": {
+            "default": 1,
+            "title": "Factor",
+            "type": "number"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "number"
+          }
+        },
+        "title": "ScaleFilter",
+        "type": "object"
+      },
+      "ScaleType": {
+        "description": "Numeric scale type for an axis.",
+        "enum": [
+          "linear",
+          "log"
+        ],
+        "title": "ScaleType",
+        "type": "string"
+      },
+      "SignFilter": {
+        "additionalProperties": false,
+        "description": "Returns the sign of each sample: 1 for positive, -1 for negative, 0 for zero.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "sign",
+            "default": "sign",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "SignFilter",
+        "type": "object"
+      },
+      "SortFilter": {
+        "additionalProperties": false,
+        "description": "Sorts the signal's values in ascending or descending order.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "sort",
+            "default": "sort",
+            "title": "Type",
+            "type": "string"
+          },
+          "descending": {
+            "default": false,
+            "title": "Descending",
+            "type": "boolean"
+          }
+        },
+        "title": "SortFilter",
+        "type": "object"
+      },
+      "StandardDeviationFilter": {
+        "additionalProperties": false,
+        "description": "Reduces the signal to its standard deviation, broadcast across every sample.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "stat_standard_deviation",
+            "default": "stat_standard_deviation",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "StandardDeviationFilter",
+        "type": "object"
+      },
+      "TaringFilter": {
+        "additionalProperties": false,
+        "description": "Offsets the entire signal so that the first sample is zero.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "taring",
+            "default": "taring",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "TaringFilter",
+        "type": "object"
+      },
+      "TrigFilter": {
+        "additionalProperties": false,
+        "description": "Applies a trigonometric or angle-conversion function to the signal.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "trig",
+            "default": "trig",
+            "title": "Type",
+            "type": "string"
+          },
+          "func": {
+            "default": "sin",
+            "enum": [
+              "sin",
+              "cos",
+              "tan",
+              "asin",
+              "acos",
+              "atan",
+              "sinh",
+              "cosh",
+              "tanh",
+              "degrees",
+              "radians"
+            ],
+            "title": "Func",
+            "type": "string",
+            "ui_type": "select"
+          }
+        },
+        "title": "TrigFilter",
+        "type": "object"
+      },
+      "UnitFilter": {
+        "additionalProperties": false,
+        "description": "Unit conversion using Pint.\nEnsures dimensional consistency and applies necessary scaling/offsets.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "unit",
+            "default": "unit",
+            "title": "Type",
+            "type": "string"
+          },
+          "fromUnit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rad",
+                  "deg",
+                  "mrad",
+                  "rev",
+                  "rpm",
+                  "rad/s",
+                  "deg/s",
+                  "rad/s^2",
+                  "deg/s^2",
+                  "m",
+                  "mm",
+                  "cm",
+                  "um",
+                  "km",
+                  "in",
+                  "ft",
+                  "thou",
+                  "m/s",
+                  "mm/s",
+                  "cm/s",
+                  "ft/s",
+                  "in/s",
+                  "km/h",
+                  "mph",
+                  "m/s^2",
+                  "mm/s^2",
+                  "ft/s^2",
+                  "in/s^2",
+                  "kg",
+                  "g",
+                  "mg",
+                  "lbm",
+                  "slug",
+                  "N",
+                  "mN",
+                  "uN",
+                  "kN",
+                  "lbf",
+                  "N*m",
+                  "N*mm",
+                  "mN*m",
+                  "kN*m",
+                  "lbf*ft",
+                  "lbf*in",
+                  "ozf*in",
+                  "kg*m^2",
+                  "kg*mm^2",
+                  "lbm*in^2",
+                  "lbm*ft^2",
+                  "slug*ft^2",
+                  "J",
+                  "mJ",
+                  "kJ",
+                  "W*s",
+                  "W*h",
+                  "kW*h",
+                  "ft*lbf",
+                  "BTU",
+                  "W",
+                  "mW",
+                  "kW",
+                  "MW",
+                  "hp",
+                  "ft*lbf/s",
+                  "Pa",
+                  "kPa",
+                  "MPa",
+                  "psi",
+                  "bar",
+                  "atm",
+                  "torr",
+                  "s",
+                  "ms",
+                  "us",
+                  "ns",
+                  "min",
+                  "hr",
+                  "Hz",
+                  "kHz",
+                  "MHz",
+                  "V",
+                  "mV",
+                  "kV",
+                  "A",
+                  "mA",
+                  "dimensionless",
+                  "pct",
+                  "count",
+                  "bit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Fromunit"
+          },
+          "toUnit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rad",
+                  "deg",
+                  "mrad",
+                  "rev",
+                  "rpm",
+                  "rad/s",
+                  "deg/s",
+                  "rad/s^2",
+                  "deg/s^2",
+                  "m",
+                  "mm",
+                  "cm",
+                  "um",
+                  "km",
+                  "in",
+                  "ft",
+                  "thou",
+                  "m/s",
+                  "mm/s",
+                  "cm/s",
+                  "ft/s",
+                  "in/s",
+                  "km/h",
+                  "mph",
+                  "m/s^2",
+                  "mm/s^2",
+                  "ft/s^2",
+                  "in/s^2",
+                  "kg",
+                  "g",
+                  "mg",
+                  "lbm",
+                  "slug",
+                  "N",
+                  "mN",
+                  "uN",
+                  "kN",
+                  "lbf",
+                  "N*m",
+                  "N*mm",
+                  "mN*m",
+                  "kN*m",
+                  "lbf*ft",
+                  "lbf*in",
+                  "ozf*in",
+                  "kg*m^2",
+                  "kg*mm^2",
+                  "lbm*in^2",
+                  "lbm*ft^2",
+                  "slug*ft^2",
+                  "J",
+                  "mJ",
+                  "kJ",
+                  "W*s",
+                  "W*h",
+                  "kW*h",
+                  "ft*lbf",
+                  "BTU",
+                  "W",
+                  "mW",
+                  "kW",
+                  "MW",
+                  "hp",
+                  "ft*lbf/s",
+                  "Pa",
+                  "kPa",
+                  "MPa",
+                  "psi",
+                  "bar",
+                  "atm",
+                  "torr",
+                  "s",
+                  "ms",
+                  "us",
+                  "ns",
+                  "min",
+                  "hr",
+                  "Hz",
+                  "kHz",
+                  "MHz",
+                  "V",
+                  "mV",
+                  "kV",
+                  "A",
+                  "mA",
+                  "dimensionless",
+                  "pct",
+                  "count",
+                  "bit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Tounit"
+          }
+        },
+        "required": [
+          "fromUnit",
+          "toUnit"
+        ],
+        "title": "UnitFilter",
+        "type": "object"
+      },
+      "VlineShape": {
+        "description": "A vertical reference line at a fixed x value.",
+        "properties": {
+          "type": {
+            "const": "vline",
+            "default": "vline",
+            "title": "Type",
+            "type": "string"
+          },
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "dash": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DashStyle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "x0",
+          "color",
+          "label"
+        ],
+        "title": "VlineShape",
+        "type": "object"
+      },
+      "WrapFilter": {
+        "additionalProperties": false,
+        "description": "Keeps circular data (like Euler angles or radians) within a specific range.\nEnsures continuity when a signal crosses the upper or lower boundary.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "wrap",
+            "default": "wrap",
+            "title": "Type",
+            "type": "string"
+          },
+          "lb": {
+            "default": -3.141592653589793,
+            "title": "Lb",
+            "type": "number"
+          },
+          "ub": {
+            "default": 3.141592653589793,
+            "title": "Ub",
+            "type": "number"
+          }
+        },
+        "title": "WrapFilter",
+        "type": "object"
+      },
+      "XAxisConfig": {
+        "description": "Configuration for the x-axis signal and its filter chain.",
+        "properties": {
+          "col": {
+            "default": "time",
+            "title": "Col",
+            "type": "string"
+          },
+          "filters": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "absolute_value": "#/$defs/AbsoluteValueFilter",
+                  "clip": "#/$defs/ClipFilter",
+                  "comparison": "#/$defs/ComparisonFilter",
+                  "deadband": "#/$defs/DeadbandFilter",
+                  "derivative": "#/$defs/DerivativeFilter",
+                  "exp": "#/$defs/ExpFilter",
+                  "high_pass": "#/$defs/HighPassFilter",
+                  "integral": "#/$defs/IntegralFilter",
+                  "log": "#/$defs/LogFilter",
+                  "low_pass": "#/$defs/LowPassFilter",
+                  "median": "#/$defs/RollingMedianFilter",
+                  "normalize": "#/$defs/NormalizeFilter",
+                  "power": "#/$defs/PowerFilter",
+                  "reverse": "#/$defs/ReverseFilter",
+                  "rolling_mean": "#/$defs/RollingMeanFilter",
+                  "rotation": "#/$defs/RotationFilter",
+                  "round": "#/$defs/RoundFilter",
+                  "savitzky_golay": "#/$defs/SavitzkyGolayFilter",
+                  "scale": "#/$defs/ScaleFilter",
+                  "sign": "#/$defs/SignFilter",
+                  "sort": "#/$defs/SortFilter",
+                  "stat_first": "#/$defs/FirstFilter",
+                  "stat_last": "#/$defs/LastFilter",
+                  "stat_max": "#/$defs/MaxFilter",
+                  "stat_mean": "#/$defs/MeanFilter",
+                  "stat_median": "#/$defs/MedianFilter",
+                  "stat_min": "#/$defs/MinFilter",
+                  "stat_mode": "#/$defs/ModeFilter",
+                  "stat_standard_deviation": "#/$defs/StandardDeviationFilter",
+                  "taring": "#/$defs/TaringFilter",
+                  "trig": "#/$defs/TrigFilter",
+                  "unit": "#/$defs/UnitFilter",
+                  "wrap": "#/$defs/WrapFilter"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ScaleFilter"
+                },
+                {
+                  "$ref": "#/$defs/AbsoluteValueFilter"
+                },
+                {
+                  "$ref": "#/$defs/DerivativeFilter"
+                },
+                {
+                  "$ref": "#/$defs/IntegralFilter"
+                },
+                {
+                  "$ref": "#/$defs/LowPassFilter"
+                },
+                {
+                  "$ref": "#/$defs/HighPassFilter"
+                },
+                {
+                  "$ref": "#/$defs/RollingMeanFilter"
+                },
+                {
+                  "$ref": "#/$defs/SavitzkyGolayFilter"
+                },
+                {
+                  "$ref": "#/$defs/ClipFilter"
+                },
+                {
+                  "$ref": "#/$defs/DeadbandFilter"
+                },
+                {
+                  "$ref": "#/$defs/TaringFilter"
+                },
+                {
+                  "$ref": "#/$defs/UnitFilter"
+                },
+                {
+                  "$ref": "#/$defs/RollingMedianFilter"
+                },
+                {
+                  "$ref": "#/$defs/NormalizeFilter"
+                },
+                {
+                  "$ref": "#/$defs/WrapFilter"
+                },
+                {
+                  "$ref": "#/$defs/RotationFilter"
+                },
+                {
+                  "$ref": "#/$defs/LogFilter"
+                },
+                {
+                  "$ref": "#/$defs/ExpFilter"
+                },
+                {
+                  "$ref": "#/$defs/PowerFilter"
+                },
+                {
+                  "$ref": "#/$defs/RoundFilter"
+                },
+                {
+                  "$ref": "#/$defs/TrigFilter"
+                },
+                {
+                  "$ref": "#/$defs/SignFilter"
+                },
+                {
+                  "$ref": "#/$defs/ComparisonFilter"
+                },
+                {
+                  "$ref": "#/$defs/MaxFilter"
+                },
+                {
+                  "$ref": "#/$defs/MinFilter"
+                },
+                {
+                  "$ref": "#/$defs/MeanFilter"
+                },
+                {
+                  "$ref": "#/$defs/MedianFilter"
+                },
+                {
+                  "$ref": "#/$defs/ModeFilter"
+                },
+                {
+                  "$ref": "#/$defs/StandardDeviationFilter"
+                },
+                {
+                  "$ref": "#/$defs/FirstFilter"
+                },
+                {
+                  "$ref": "#/$defs/LastFilter"
+                },
+                {
+                  "$ref": "#/$defs/SortFilter"
+                },
+                {
+                  "$ref": "#/$defs/ReverseFilter"
+                }
+              ]
+            },
+            "title": "Filters",
+            "type": "array"
+          }
+        },
+        "title": "XAxisConfig",
+        "type": "object"
+      },
+      "YAxisConfig": {
+        "description": "Visual and filter configuration for a single y-axis signal.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "number"
+          },
+          "opacity": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Opacity",
+            "type": "number"
+          },
+          "filters": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "absolute_value": "#/$defs/AbsoluteValueFilter",
+                  "clip": "#/$defs/ClipFilter",
+                  "comparison": "#/$defs/ComparisonFilter",
+                  "deadband": "#/$defs/DeadbandFilter",
+                  "derivative": "#/$defs/DerivativeFilter",
+                  "exp": "#/$defs/ExpFilter",
+                  "high_pass": "#/$defs/HighPassFilter",
+                  "integral": "#/$defs/IntegralFilter",
+                  "log": "#/$defs/LogFilter",
+                  "low_pass": "#/$defs/LowPassFilter",
+                  "median": "#/$defs/RollingMedianFilter",
+                  "normalize": "#/$defs/NormalizeFilter",
+                  "power": "#/$defs/PowerFilter",
+                  "reverse": "#/$defs/ReverseFilter",
+                  "rolling_mean": "#/$defs/RollingMeanFilter",
+                  "rotation": "#/$defs/RotationFilter",
+                  "round": "#/$defs/RoundFilter",
+                  "savitzky_golay": "#/$defs/SavitzkyGolayFilter",
+                  "scale": "#/$defs/ScaleFilter",
+                  "sign": "#/$defs/SignFilter",
+                  "sort": "#/$defs/SortFilter",
+                  "stat_first": "#/$defs/FirstFilter",
+                  "stat_last": "#/$defs/LastFilter",
+                  "stat_max": "#/$defs/MaxFilter",
+                  "stat_mean": "#/$defs/MeanFilter",
+                  "stat_median": "#/$defs/MedianFilter",
+                  "stat_min": "#/$defs/MinFilter",
+                  "stat_mode": "#/$defs/ModeFilter",
+                  "stat_standard_deviation": "#/$defs/StandardDeviationFilter",
+                  "taring": "#/$defs/TaringFilter",
+                  "trig": "#/$defs/TrigFilter",
+                  "unit": "#/$defs/UnitFilter",
+                  "wrap": "#/$defs/WrapFilter"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ScaleFilter"
+                },
+                {
+                  "$ref": "#/$defs/AbsoluteValueFilter"
+                },
+                {
+                  "$ref": "#/$defs/DerivativeFilter"
+                },
+                {
+                  "$ref": "#/$defs/IntegralFilter"
+                },
+                {
+                  "$ref": "#/$defs/LowPassFilter"
+                },
+                {
+                  "$ref": "#/$defs/HighPassFilter"
+                },
+                {
+                  "$ref": "#/$defs/RollingMeanFilter"
+                },
+                {
+                  "$ref": "#/$defs/SavitzkyGolayFilter"
+                },
+                {
+                  "$ref": "#/$defs/ClipFilter"
+                },
+                {
+                  "$ref": "#/$defs/DeadbandFilter"
+                },
+                {
+                  "$ref": "#/$defs/TaringFilter"
+                },
+                {
+                  "$ref": "#/$defs/UnitFilter"
+                },
+                {
+                  "$ref": "#/$defs/RollingMedianFilter"
+                },
+                {
+                  "$ref": "#/$defs/NormalizeFilter"
+                },
+                {
+                  "$ref": "#/$defs/WrapFilter"
+                },
+                {
+                  "$ref": "#/$defs/RotationFilter"
+                },
+                {
+                  "$ref": "#/$defs/LogFilter"
+                },
+                {
+                  "$ref": "#/$defs/ExpFilter"
+                },
+                {
+                  "$ref": "#/$defs/PowerFilter"
+                },
+                {
+                  "$ref": "#/$defs/RoundFilter"
+                },
+                {
+                  "$ref": "#/$defs/TrigFilter"
+                },
+                {
+                  "$ref": "#/$defs/SignFilter"
+                },
+                {
+                  "$ref": "#/$defs/ComparisonFilter"
+                },
+                {
+                  "$ref": "#/$defs/MaxFilter"
+                },
+                {
+                  "$ref": "#/$defs/MinFilter"
+                },
+                {
+                  "$ref": "#/$defs/MeanFilter"
+                },
+                {
+                  "$ref": "#/$defs/MedianFilter"
+                },
+                {
+                  "$ref": "#/$defs/ModeFilter"
+                },
+                {
+                  "$ref": "#/$defs/StandardDeviationFilter"
+                },
+                {
+                  "$ref": "#/$defs/FirstFilter"
+                },
+                {
+                  "$ref": "#/$defs/LastFilter"
+                },
+                {
+                  "$ref": "#/$defs/SortFilter"
+                },
+                {
+                  "$ref": "#/$defs/ReverseFilter"
+                }
+              ]
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "dash": {
+            "$ref": "#/$defs/DashStyle"
+          },
+          "marker": {
+            "$ref": "#/$defs/MarkerSymbol"
+          }
+        },
+        "required": [
+          "label",
+          "color",
+          "width",
+          "opacity",
+          "filters",
+          "dash",
+          "marker"
+        ],
+        "title": "YAxisConfig",
+        "type": "object"
+      }
+    },
+    "description": "Complete serialisable state of a trial-viewer plot.",
+    "properties": {
+      "xAxis": {
+        "$ref": "#/$defs/XAxisConfig"
+      },
+      "yAxes": {
+        "additionalProperties": {
+          "$ref": "#/$defs/YAxisConfig"
+        },
+        "title": "Yaxes",
+        "type": "object"
+      },
+      "refFrame": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Refframe"
+      },
+      "grid": {
+        "$ref": "#/$defs/GridMode"
+      },
+      "lineMode": {
+        "$ref": "#/$defs/LineMode"
+      },
+      "interp": {
+        "$ref": "#/$defs/InterpMode"
+      },
+      "hover": {
+        "$ref": "#/$defs/HoverMode"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      },
+      "xAxisTitle": {
+        "title": "Xaxistitle",
+        "type": "string"
+      },
+      "yAxisTitle": {
+        "title": "Yaxistitle",
+        "type": "string"
+      },
+      "showSpike": {
+        "title": "Showspike",
+        "type": "boolean"
+      },
+      "legendPos": {
+        "$ref": "#/$defs/LegendPos"
+      },
+      "rangeX": {
+        "anyOf": [
+          {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Rangex"
+      },
+      "rangeY": {
+        "anyOf": [
+          {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Rangey"
+      },
+      "xScale": {
+        "$ref": "#/$defs/ScaleType"
+      },
+      "yScale": {
+        "$ref": "#/$defs/ScaleType"
+      },
+      "xLogBase": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Xlogbase"
+      },
+      "yLogBase": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ylogbase"
+      },
+      "plotType": {
+        "$ref": "#/$defs/PlotType",
+        "default": "cartesian"
+      },
+      "vsEnabled": {
+        "title": "Vsenabled",
+        "type": "boolean"
+      },
+      "vsRange": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "title": "Vsrange",
+        "type": "array"
+      },
+      "annotations": {
+        "items": {
+          "$ref": "#/$defs/Annotation"
+        },
+        "title": "Annotations",
+        "type": "array"
+      },
+      "shapes": {
+        "items": {
+          "discriminator": {
+            "mapping": {
+              "hline": "#/$defs/HlineShape",
+              "rect": "#/$defs/RectShape",
+              "vline": "#/$defs/VlineShape"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/VlineShape"
+            },
+            {
+              "$ref": "#/$defs/HlineShape"
+            },
+            {
+              "$ref": "#/$defs/RectShape"
+            }
+          ]
+        },
+        "title": "Shapes",
+        "type": "array"
+      }
+    },
+    "required": [
+      "yAxes",
+      "refFrame",
+      "grid",
+      "lineMode",
+      "interp",
+      "hover",
+      "title",
+      "xAxisTitle",
+      "yAxisTitle",
+      "showSpike",
+      "legendPos",
+      "rangeX",
+      "rangeY",
+      "xScale",
+      "yScale",
+      "vsEnabled",
+      "vsRange",
+      "annotations",
+      "shapes"
+    ],
+    "title": "PlotConfig",
+    "type": "object"
+  };
+
   // src/lib/options.ts
-  var DASH_OPTIONS = ["solid", "dash", "dot", "dashdot"];
-  var MARKER_OPTIONS = [
-    "none",
-    "circle",
-    "square",
-    "diamond",
-    "cross"
-  ];
-  var GRID_OPTIONS = ["none", "major", "all"];
+  var DASH_OPTIONS = DASH_STYLE_VALUES;
+  var MARKER_OPTIONS = MARKER_SYMBOL_VALUES;
+  var GRID_OPTIONS = GRID_MODE_VALUES;
   var LINE_MODE_OPTIONS = [
     { label: "Lines", value: "lines" },
     { label: "Markers", value: "markers" },
@@ -31,8 +1975,8 @@
     { label: "Y Axis", value: "y" },
     { label: "Off", value: "none" }
   ];
-  var LEGEND_POS_OPTIONS = ["bottom", "right", "hidden"];
-  var SCALE_OPTIONS = ["linear", "log"];
+  var LEGEND_POS_OPTIONS = LEGEND_POS_VALUES;
+  var SCALE_OPTIONS = SCALE_TYPE_VALUES;
   function labelOf(options, value) {
     return options.find((o) => o.value === value)?.label ?? value;
   }
@@ -49,6 +1993,194 @@
     interpLabel: (v) => labelOf(INTERP_OPTIONS, v),
     hoverLabel: (v) => labelOf(HOVER_OPTIONS, v)
   };
+
+  // src/lib/resize.ts
+  function restorePersistedHeight(hostEl, storageKey) {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) hostEl.style.height = saved;
+  }
+  function attachVerticalResizeHandle(hostEl, options) {
+    const minHeight = options.minHeight ?? 128;
+    const persist = (height) => {
+      try {
+        localStorage.setItem(options.storageKey, height);
+      } catch {
+      }
+    };
+    const handle = document.createElement("div");
+    handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+    const grip = document.createElement("div");
+    grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+    handle.appendChild(grip);
+    handle.addEventListener("mouseenter", () => {
+      grip.style.background = "#06b6d4";
+      grip.style.width = "52px";
+    });
+    handle.addEventListener("mouseleave", () => {
+      grip.style.background = "#334155";
+      grip.style.width = "36px";
+    });
+    handle.addEventListener("mousedown", (e) => {
+      const startY = e.clientY;
+      const startH = hostEl.offsetHeight;
+      let prevY = startY;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ns-resize";
+      const onMove = (ev) => {
+        const dy = ev.clientY - prevY;
+        prevY = ev.clientY;
+        const newH = Math.max(minHeight, startH + (ev.clientY - startY));
+        hostEl.style.height = newH + "px";
+        options.onResize?.(newH);
+        if (dy > 0) window.scrollBy(0, dy);
+      };
+      const onUp = () => {
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        persist(hostEl.style.height);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      e.preventDefault();
+    });
+    handle.addEventListener("dblclick", () => {
+      const resetHeight = options.getResetHeight?.();
+      if (!resetHeight) return;
+      hostEl.style.height = resetHeight;
+      options.onResize?.(hostEl.offsetHeight);
+      persist(hostEl.style.height);
+    });
+    hostEl.insertAdjacentElement("afterend", handle);
+    return handle;
+  }
+
+  // src/lib/schema-validate.ts
+  function resolveRef(ref, defs) {
+    const name = ref.replace(/^#\/\$defs\//, "");
+    const resolved = defs[name];
+    if (!resolved) throw new Error(`Unresolved $ref: ${ref}`);
+    return resolved;
+  }
+  function typeOfValue(value) {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value;
+  }
+  function matchesType(value, type) {
+    const actual = typeOfValue(value);
+    if (type === "integer") return actual === "number" && Number.isInteger(value);
+    if (type === "number") return actual === "number" || actual === "integer";
+    return actual === type;
+  }
+  function pickDiscriminatedBranch(data, schema, defs, path) {
+    const disc = schema.discriminator;
+    if (!disc || typeOfValue(data) !== "object") {
+      return { error: `${path}: does not match any allowed type` };
+    }
+    const obj = data;
+    const tag = obj[disc.propertyName];
+    const ref = typeof tag === "string" ? disc.mapping?.[tag] : void 0;
+    if (!ref) {
+      return { error: `${path}: unknown "${disc.propertyName}" value ${JSON.stringify(tag)}` };
+    }
+    return { schema: resolveRef(ref, defs) };
+  }
+  function validatesQuietly(data, schema, defs) {
+    return validateNode(data, schema, defs, "$").length === 0;
+  }
+  function validateNode(data, schema, defs, path) {
+    if (typeof schema.$ref === "string") {
+      return validateNode(data, resolveRef(schema.$ref, defs), defs, path);
+    }
+    if (Array.isArray(schema.anyOf)) {
+      const branches = schema.anyOf;
+      if (branches.some((s) => validatesQuietly(data, s, defs))) return [];
+      return [`${path}: does not match any allowed type`];
+    }
+    if (Array.isArray(schema.oneOf)) {
+      const branch = pickDiscriminatedBranch(data, schema, defs, path);
+      if (branch.error) return [branch.error];
+      return validateNode(data, branch.schema, defs, path);
+    }
+    if ("const" in schema) {
+      if (data !== schema.const) return [`${path}: must equal ${JSON.stringify(schema.const)}`];
+      return [];
+    }
+    if (Array.isArray(schema.enum)) {
+      if (!schema.enum.includes(data)) {
+        return [`${path}: must be one of ${schema.enum.map((v) => JSON.stringify(v)).join(", ")}`];
+      }
+      return [];
+    }
+    const errors = [];
+    const type = schema.type;
+    if (type) {
+      const types = Array.isArray(type) ? type : [type];
+      if (!types.some((t) => matchesType(data, t))) {
+        errors.push(`${path}: must be of type ${types.join(" | ")} (got ${typeOfValue(data)})`);
+        return errors;
+      }
+    }
+    if (type === "object" && typeOfValue(data) === "object") {
+      const obj = data;
+      for (const key of schema.required ?? []) {
+        if (!(key in obj)) errors.push(`${path}.${key}: required field is missing`);
+      }
+      const properties = schema.properties;
+      if (properties) {
+        for (const [key, propSchema] of Object.entries(properties)) {
+          if (key in obj) errors.push(...validateNode(obj[key], propSchema, defs, `${path}.${key}`));
+        }
+      }
+      const additionalProperties = schema.additionalProperties;
+      if (additionalProperties && typeof additionalProperties === "object") {
+        for (const [key, value] of Object.entries(obj)) {
+          if (!properties || !(key in properties)) {
+            errors.push(...validateNode(value, additionalProperties, defs, `${path}.${key}`));
+          }
+        }
+      }
+    }
+    if (type === "array" && Array.isArray(data)) {
+      const prefixItems = schema.prefixItems;
+      const items = schema.items;
+      if (prefixItems) {
+        prefixItems.forEach((itemSchema, i) => {
+          if (i < data.length) errors.push(...validateNode(data[i], itemSchema, defs, `${path}[${i}]`));
+        });
+      } else if (items) {
+        data.forEach((item, i) => errors.push(...validateNode(item, items, defs, `${path}[${i}]`)));
+      }
+      if (typeof schema.minItems === "number" && data.length < schema.minItems) {
+        errors.push(`${path}: must have at least ${schema.minItems} items`);
+      }
+      if (typeof schema.maxItems === "number" && data.length > schema.maxItems) {
+        errors.push(`${path}: must have at most ${schema.maxItems} items`);
+      }
+    }
+    if (type === "number" || type === "integer") {
+      const n = data;
+      if (typeof schema.minimum === "number" && n < schema.minimum) {
+        errors.push(`${path}: must be >= ${schema.minimum}`);
+      }
+      if (typeof schema.maximum === "number" && n > schema.maximum) {
+        errors.push(`${path}: must be <= ${schema.maximum}`);
+      }
+      if (typeof schema.exclusiveMinimum === "number" && n <= schema.exclusiveMinimum) {
+        errors.push(`${path}: must be > ${schema.exclusiveMinimum}`);
+      }
+      if (typeof schema.exclusiveMaximum === "number" && n >= schema.exclusiveMaximum) {
+        errors.push(`${path}: must be < ${schema.exclusiveMaximum}`);
+      }
+    }
+    return errors;
+  }
+  function validateAgainstSchema(data, schema) {
+    const defs = schema.$defs ?? {};
+    return validateNode(data, schema, defs, "config");
+  }
 
   // src/lib/toast.ts
   function createToastMixin() {
@@ -105,7 +2237,7 @@
     yAxes: {},
     refFrame: null,
     grid: "all",
-    lineMode: "lines",
+    lineMode: "lines+markers",
     interp: "linear",
     hover: "closest",
     title: "",
@@ -218,6 +2350,8 @@
       labActiveTabId: null,
       nodePickingColumn: null,
       nodeColSearch: "",
+      nodePickingQuat: null,
+      nodeQuatSearch: "",
       nodePickingTemplate: null,
       labSchemas: [],
       // --- SHAPES ---
@@ -361,7 +2495,7 @@
         }
         const queryStr = colParams.toString();
         if (queryStr) url += `?${queryStr}`;
-        const resp = await fetch(url);
+        const resp = await fetch(url, { cache: "no-store" });
         if (!resp.ok) throw new Error(`Trial ${id} failed`);
         const result = await resp.json();
         if (result.filter_errors && result.filter_errors.length > 0) {
@@ -506,7 +2640,10 @@
         const startX = e.clientX;
         const startWidth = this.logColWidths[col];
         const onMove = (ev) => {
-          this.logColWidths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+          this.logColWidths[col] = Math.max(
+            40,
+            startWidth + (ev.clientX - startX)
+          );
         };
         const onUp = () => {
           window.removeEventListener("mousemove", onMove);
@@ -582,7 +2719,8 @@
       },
       formatLogTime(timestamp, _tick) {
         const diff = Date.now() - timestamp;
-        if (diff < 24 * 60 * 60 * 1e3) return window.notifTimeAgo(timestamp, _tick);
+        if (diff < 24 * 60 * 60 * 1e3)
+          return window.notifTimeAgo(timestamp, _tick);
         return new Date(timestamp).toLocaleString();
       },
       _updateIsScrubbable() {
@@ -929,7 +3067,6 @@
         } else if (this.placementMode === "hline") {
           newShape = {
             type: "hline",
-            x0: pt.x,
             y0: pt.y,
             color: defaultColor,
             label: ""
@@ -1278,7 +3415,7 @@
             if (e.key === "/" && !isTextInput) {
               e.preventDefault();
               document.querySelector(
-                'input[type="number"]'
+                "input[data-warp-input]"
               )?.focus();
             }
             if (e.key === "Escape") {
@@ -1717,7 +3854,7 @@
       },
       getFilteredCols(field) {
         if (!this.columns || !Array.isArray(this.columns)) return [];
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         if (!search) return this.smartSort([...base]);
         try {
@@ -1763,7 +3900,7 @@
         self2[key] = (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
       },
       getSegmentsAtDepth(field, depth) {
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const pathSearch = search.split(":")[0] ?? "";
         const parts = pathSearch.split("/").filter((p) => p !== "");
@@ -1778,7 +3915,7 @@
         return this.smartSort([.../* @__PURE__ */ new Set([...selected, ...segments])]);
       },
       getAvailableSuffixes(field) {
-        const base = field === "x" || field === "nodeCol" ? this.columns : this.selectableYColumns;
+        const base = field === "x" || field === "nodeCol" ? this.columns : field === "nodeQuat" ? this.availableQuats : this.selectableYColumns;
         const search = this[field + "Search"] ?? "";
         const [pathPart = "", suffixPart = ""] = search.split(":");
         const selected = (suffixPart ?? "").replace(/[()]/g, "").split("|").filter(Boolean).map((s) => ":" + s);
@@ -1837,7 +3974,7 @@
         );
       },
       validateConfig(cfg) {
-        const errors = [];
+        const errors = validateAgainstSchema(cfg, PLOT_CONFIG_SCHEMA);
         const labsNoted = /* @__PURE__ */ new Set();
         const schemasLoaded = this.labSchemas.length > 0;
         const checkCol = (col, label) => {
@@ -1971,6 +4108,36 @@
       copyRawConfig() {
         void this.copyToClipboard(this.configRaw, "JSON Config copied!");
       },
+      initChartResize(hostEl) {
+        if (!hostEl || hostEl.dataset.resizeAttached) return;
+        hostEl.dataset.resizeAttached = "true";
+        restorePersistedHeight(hostEl, "mojo:chart:height");
+        let resizeRaf = null;
+        let resizeQueued = false;
+        const doResize = () => {
+          resizeRaf = null;
+          const plotEl = document.getElementById("plot-area");
+          if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+          if (resizeQueued) {
+            resizeQueued = false;
+            resizeRaf = requestAnimationFrame(doResize);
+          }
+        };
+        const resizePlot = () => {
+          if (resizeRaf !== null) {
+            resizeQueued = true;
+            return;
+          }
+          resizeRaf = requestAnimationFrame(doResize);
+        };
+        attachVerticalResizeHandle(hostEl, {
+          storageKey: "mojo:chart:height",
+          minHeight: 300,
+          onResize: resizePlot,
+          getResetHeight: () => "600px"
+        });
+        resizePlot();
+      },
       initCodeMirror(hostEl) {
         if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
         const {
@@ -1987,8 +4154,7 @@
           defaultHighlightStyle
         } = CM;
         const self2 = this;
-        const savedH = localStorage.getItem("mojo:json-editor:height");
-        if (savedH) hostEl.style.height = savedH;
+        restorePersistedHeight(hostEl, "mojo:json-editor:height");
         const darkTheme = EditorView.theme(
           {
             "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
@@ -2119,63 +4285,14 @@
           ]
         });
         _cm.editor = new EditorView({ state: startState, parent: hostEl });
-        const handle = document.createElement("div");
-        handle.style.cssText = "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
-        const grip = document.createElement("div");
-        grip.style.cssText = "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
-        handle.appendChild(grip);
-        handle.addEventListener("mouseenter", () => {
-          grip.style.background = "#06b6d4";
-          grip.style.width = "52px";
-        });
-        handle.addEventListener("mouseleave", () => {
-          grip.style.background = "#334155";
-          grip.style.width = "36px";
-        });
-        hostEl.insertAdjacentElement("afterend", handle);
-        handle.addEventListener("mousedown", (e) => {
-          const startY = e.clientY;
-          const startH = hostEl.offsetHeight;
-          let prevY = startY;
-          document.body.style.userSelect = "none";
-          document.body.style.cursor = "ns-resize";
-          const onMove = (ev) => {
-            const dy = ev.clientY - prevY;
-            prevY = ev.clientY;
-            const newH = Math.max(128, startH + (ev.clientY - startY));
-            hostEl.style.height = newH + "px";
-            if (dy > 0) window.scrollBy(0, dy);
-          };
-          const onUp = () => {
-            document.body.style.userSelect = "";
-            document.body.style.cursor = "";
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-            try {
-              localStorage.setItem(
-                "mojo:json-editor:height",
-                hostEl.style.height
-              );
-            } catch {
-            }
-          };
-          document.addEventListener("mousemove", onMove);
-          document.addEventListener("mouseup", onUp);
-          e.preventDefault();
-        });
-        handle.addEventListener("dblclick", () => {
-          const scroller = hostEl.querySelector(
-            ".cm-scroller"
-          );
-          if (scroller) {
-            hostEl.style.height = scroller.scrollHeight + "px";
-            try {
-              localStorage.setItem(
-                "mojo:json-editor:height",
-                hostEl.style.height
-              );
-            } catch {
-            }
+        attachVerticalResizeHandle(hostEl, {
+          storageKey: "mojo:json-editor:height",
+          minHeight: 128,
+          getResetHeight: () => {
+            const scroller = hostEl.querySelector(
+              ".cm-scroller"
+            );
+            return scroller ? scroller.scrollHeight + "px" : void 0;
           }
         });
         new MutationObserver(() => {
@@ -2360,7 +4477,7 @@
           const initFilters = this.config.refFrame ? [
             {
               type: "rotation",
-              quat_col: this.config.refFrame,
+              quatCol: this.config.refFrame,
               invert: true,
               enabled: true
             }
@@ -2401,7 +4518,7 @@
           if (frame) {
             const newEntry = {
               type: "rotation",
-              quat_col: frame,
+              quatCol: frame,
               invert: true,
               enabled: true
             };
@@ -2550,8 +4667,7 @@
           const val = entry[p.name];
           if (typeof val === "boolean")
             return `${p.name}=${val ? "on" : "off"}`;
-          if (typeof val === "number")
-            return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          if (typeof val === "number") return `${p.name}=${formatNum(val)}`;
           return `${p.name}=${val}`;
         });
         return parts.slice(0, 3).join(", ");
@@ -2682,7 +4798,9 @@
           }
         })();
         const id = this._tabId();
-        this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
+        this.labTabs = [
+          { id, name, graph, savedState: null, dirty: false, viewport: null }
+        ];
         this.labActiveTabId = id;
         this.labName = name;
         this.labGraph = graph;
@@ -2927,6 +5045,15 @@
         this.nodePickingColumn = null;
         this.nodeColSearch = "";
       },
+      selectNodeQuat(base) {
+        if (this.nodePickingQuat !== null) {
+          if (typeof window.mojoLabSelectNodeQuat === "function") {
+            window.mojoLabSelectNodeQuat(this.nodePickingQuat, base);
+          }
+        }
+        this.nodePickingQuat = null;
+        this.nodeQuatSearch = "";
+      },
       selectNodeTemplate(name) {
         if (this.nodePickingTemplate !== null) {
           if (typeof window.mojoLabSelectNodeTemplate === "function") {
@@ -3126,6 +5253,7 @@
         const pad = padding ? (globalMax - globalMin) / 16 : 0;
         return [globalMin - pad, globalMax + pad];
       },
+      formatNum,
       // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
       rangeBoundValue(axis, bound) {
         const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
@@ -3211,6 +5339,12 @@
         const showX = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("x") || this.config.hover === "closest");
         const showY = this.config.showSpike && !isHoverDisabled && (this.config.hover.includes("y") || this.config.hover === "closest");
         const isPolar = this.config.plotType === "polar";
+        const traceMode = (marker) => {
+          if (marker !== "none") return this.config.lineMode;
+          if (this.config.lineMode === "lines+markers") return "lines";
+          if (this.config.lineMode === "markers") return "none";
+          return this.config.lineMode;
+        };
         const yKeys = Object.keys(this.config.yAxes);
         let traces = yKeys.map((key, i) => {
           const p = this.getYProps(key, i);
@@ -3228,7 +5362,7 @@
               r: this.data[p.name],
               theta: this.data[this.config.xAxis.col],
               name: p.label,
-              mode: this.config.lineMode,
+              mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
               marker: { size: 6, symbol: p.marker },
@@ -3246,7 +5380,7 @@
             x: this.data[this.config.xAxis.col],
             y: this.data[p.name],
             name: p.label,
-            mode: this.config.lineMode,
+            mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
             marker: { size: 6, symbol: p.marker },
@@ -3287,7 +5421,7 @@
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
-                mode: this.config.lineMode,
+                mode: traceMode(p.marker),
                 type: "scatterpolar",
                 line: lineStyle,
                 opacity: 0.35,
@@ -3300,7 +5434,7 @@
                 name: `${p.label} (<i>vs.</i>)`,
                 legendgroup: `group_${key}`,
                 showlegend: isFirst,
-                mode: this.config.lineMode,
+                mode: traceMode(p.marker),
                 type: "scatter",
                 line: lineStyle,
                 opacity: 0.35,
@@ -3457,17 +5591,19 @@
               borderpad: 4
             })),
             ...(this.config.shapes ?? []).filter((s) => s.label).map((s) => {
-              let x = s.x0, y = s.y0 ?? 0, xanchor = "left", yanchor = "bottom", xref = "x", yref = "y";
+              let x = 0, y = 0, xanchor = "left", yanchor = "bottom", xref = "x", yref = "y";
               if (s.type === "vline") {
+                x = s.x0;
                 y = 1;
                 yref = "paper";
               } else if (s.type === "hline") {
                 x = 1;
+                y = s.y0;
                 xref = "paper";
                 xanchor = "right";
               } else if (s.type === "rect") {
                 x = s.x0;
-                y = s.y1 ?? 0;
+                y = s.y1;
               }
               return {
                 x,

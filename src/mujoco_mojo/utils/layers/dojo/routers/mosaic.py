@@ -226,6 +226,8 @@ async def get_filter_schema():
     def _infer_type(prop: dict) -> str:
         if prop.get("ui_type") == "col":
             return "col"
+        if prop.get("ui_type") == "quat_col":
+            return "quat_col"
         if prop.get("ui_type") == "select":
             return "select"
         if "anyOf" in prop:
@@ -731,6 +733,12 @@ async def get_trial_data(
                 for si_col in executor.signal_in_columns:
                     if si_col in available_cols:
                         extra_si.add(si_col)
+                # Sibling vector components and quaternion columns needed by any
+                # in-graph Rotation node - without these, apply_with_context()
+                # can't find the columns it needs and the rotation is a no-op.
+                for dep_col in executor.rotation_dependencies:
+                    if dep_col in available_cols:
+                        extra_si.add(dep_col)
             if _TIME_COLUMN_NAME in available_cols:
                 extra_si.add(_TIME_COLUMN_NAME)
             existing_targets = set(fetch_targets)
@@ -794,8 +802,11 @@ async def get_trial_data(
         data: dict = {}
 
         # ── Execute lab virtual columns (multi-pass for chained labs) ──────────
+        # exec_df accumulates lab outputs alongside the raw fetched columns, so
+        # that stacked filters on Lab/... columns (e.g. RotationFilter) can find
+        # sibling Lab/... vector components via apply_with_context.
+        exec_df = df
         if lab_cols and lab_executors:
-            exec_df = df
             lab_cols_set = set(lab_cols)
 
             # For transitive deps not directly requested, expose all their outputs
@@ -854,7 +865,7 @@ async def get_trial_data(
                 if filter_list and col in data:
                     series = pl.Series(name=col, values=data[col], dtype=pl.Float64)
                     for f in filter_list:
-                        ctx = f.apply_with_context(series, df)
+                        ctx = f.apply_with_context(series, exec_df)
                         if ctx is not None:
                             series = ctx
                         else:

@@ -257,6 +257,9 @@
                         this.addWidget("combo", p.name, p.default,
                             (v) => { this.properties[p.name] = v; },
                             { values: p.values || [] });
+                    } else if (p.widget === "text") {
+                        this.addWidget("text", p.name, p.default ?? "",
+                            (v) => { this.properties[p.name] = v; });
                     } else {
                         // Use slider when both min and max are defined; otherwise plain number.
                         const opts = p.opts || {};
@@ -350,6 +353,93 @@
         reg("stat_median", "Median", [], C_MATH, "Statistics");
         reg("stat_mode", "Mode", [], C_MATH, "Statistics");
         reg("stat_standard_deviation", "Standard Deviation", [], C_MATH, "Statistics");
+        reg("stat_first", "First", [], C_MATH, "Statistics");
+        reg("stat_last", "Last", [], C_MATH, "Statistics");
+        reg("sort", "Sort", [{ name: "descending", default: false, widget: "toggle" }], C_MATH, "Ordering");
+        reg("reverse", "Reverse", [], C_MATH, "Ordering");
+
+        // ── Vector: rotate a component into/out of a quaternion frame ──────────
+        (function () {
+            function RotationNode() {
+                this.addInput("signal", SER);
+                this.addOutput("signal", SER);
+                this.properties = { quat_col: "", invert: true };
+                this._quatWidget = this.addWidget(
+                    "text", "quat_col", "",
+                    (v) => {
+                        this.properties.quat_col = v;
+                        _rotColor(this);
+                        if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                    }
+                );
+                // Browse button - fires to Alpine which opens the quaternion-base picker
+                this.addWidget("button", "pick", "Browse…", () => {
+                    document.dispatchEvent(new CustomEvent("mojo:lab-pick-quat", {
+                        detail: { nodeId: this.id }
+                    }));
+                });
+                this._invertWidget = this.addWidget("toggle", "invert", true,
+                    (v) => { this.properties.invert = v; });
+                this.size = [220, 100];
+            }
+            RotationNode.title = "Rotation";
+            RotationNode.color = C_CALC;
+            RotationNode.bgcolor = BG;
+            RotationNode.prototype.onConfigure = function () {
+                if (this._quatWidget) this._quatWidget.value = this.properties.quat_col ?? "";
+                if (this._invertWidget) this._invertWidget.value = this.properties.invert ?? true;
+                _rotColor(this);
+            };
+            RotationNode.prototype.onConnectionsChange = function () {
+                _rotColor(this);
+                if (_lab.graph) _lab.graph.setDirtyCanvas(true, false);
+            };
+            RotationNode.prototype.onDrawForeground = function (ctx) {
+                const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
+                const quatBases = RotCtor._quatBases || [];
+                const rotatableBases = RotCtor._rotatableBases || [];
+                const quat = this.properties && this.properties.quat_col;
+                const quatBad = !quat || !quatBases.includes(quat);
+
+                const fromNode = this.getInputNode ? this.getInputNode(0) : null;
+                let vecBad = true;
+                if (fromNode && (fromNode.type || '').endsWith('signal_in')) {
+                    const col = (fromNode.properties && fromNode.properties.column) || '';
+                    const idx = col.lastIndexOf(':');
+                    const base = idx >= 0 ? col.slice(0, idx) : '';
+                    const suffix = idx >= 0 ? col.slice(idx + 1) : '';
+                    vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
+                }
+
+                if (!quatBad && !vecBad) return;
+                ctx.save();
+                ctx.font = "italic 10px monospace";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillStyle = "#f59e0b";
+                let y = this.size[1] - 4;
+                if (vecBad) {
+                    ctx.fillText("input is not a rotatable vector", this.size[0] / 2, y);
+                    y -= 14;
+                }
+                if (quatBad) {
+                    ctx.fillText("unknown quaternion base", this.size[0] / 2, y);
+                }
+                ctx.restore();
+            };
+            LiteGraph.registerNodeType("Vector/rotation", RotationNode);
+        })();
+
+        // Global callback - called by trial-viewer.ts when the user picks a quaternion base
+        window.mojoLabSelectNodeQuat = function (nodeId, base) {
+            if (!_lab.graph) return;
+            const node = _lab.graph.getNodeById(nodeId);
+            if (!node) return;
+            node.properties.quat_col = base;
+            if (node._quatWidget) node._quatWidget.value = base;
+            _rotColor(node);
+            _lab.graph.setDirtyCanvas(true, true);
+        };
 
         // ── Arithmetic: two-input (Lab only) ─────────────────────────────────
         (function () {
@@ -926,6 +1016,36 @@
         node.size[1] = collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55);
     }
 
+    // Validates a Rotation node's quaternion base and its incoming vector component,
+    // recoloring/resizing the node to surface either problem as a warning.
+    function _rotColor(node) {
+        const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
+        const quatBases = RotCtor._quatBases || [];
+        const rotatableBases = RotCtor._rotatableBases || [];
+
+        const quat = node.properties && node.properties.quat_col;
+        const quatBad = !quat || !quatBases.includes(quat);
+
+        // the input must come directly from a Signal In node whose column is a
+        // rotatable x/y/z vector component - filters between them rename the
+        // series and break the base-name lookup RotationFilter relies on.
+        let vecBad = true;
+        const fromNode = node.getInputNode ? node.getInputNode(0) : null;
+        if (fromNode && (fromNode.type || '').endsWith('signal_in')) {
+            const col = (fromNode.properties && fromNode.properties.column) || '';
+            const idx = col.lastIndexOf(':');
+            const base = idx >= 0 ? col.slice(0, idx) : '';
+            const suffix = idx >= 0 ? col.slice(idx + 1) : '';
+            vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
+        }
+
+        node.color = (quatBad || vecBad) ? "#78350f" : "#3b0764";
+        let h = 100;
+        if (quatBad) h += 14;
+        if (vecBad) h += 14;
+        node.size[1] = h;
+    }
+
     function _tmplColor(node, schemas) {
         const name = (node.properties && node.properties.name) || '';
         const schema = name ? (schemas || []).find(s => s.name === name) : null;
@@ -969,12 +1089,36 @@
             cols.filter(c => !c.startsWith('Lab/')).forEach(c => nameMap.set(c, "trial column"));
             SoCtor._existingNames = nameMap;
         }
+        const RotCtor = LiteGraph.registered_node_types["Vector/rotation"];
+        if (RotCtor) {
+            // Group columns by base name to find vector (x,y,z) and quaternion (w,x,y,z)
+            // families - this includes 'Lab/...' virtual columns since they're part of cols.
+            const baseMap = new Map();
+            cols.forEach(c => {
+                const idx = c.lastIndexOf(':');
+                if (idx === -1) return;
+                const base = c.slice(0, idx);
+                const suffix = c.slice(idx + 1);
+                if (!baseMap.has(base)) baseMap.set(base, new Set());
+                baseMap.get(base).add(suffix);
+            });
+            const rotatableBases = [];
+            const quatBases = [];
+            baseMap.forEach((sfx, base) => {
+                if (!['x', 'y', 'z'].every(s => sfx.has(s))) return;
+                if (sfx.has('w')) quatBases.push(base);
+                else rotatableBases.push(base);
+            });
+            RotCtor._rotatableBases = rotatableBases;
+            RotCtor._quatBases = quatBases;
+        }
         _computeAndStoreCyclicCols();
         if (_lab.graph) {
             (_lab.graph._nodes || []).forEach(n => {
                 const t = (n.type || '').split('/').pop();
                 if (t === 'signal_in') _siColor(n);
                 else if (t === 'signal_out') _soColor(n);
+                else if (t === 'rotation') _rotColor(n);
                 else if (t === 'template_ref') _tmplColor(n, schemas);
             });
             _lab.graph.setDirtyCanvas(true, false);
@@ -1290,6 +1434,7 @@
             const t = (n.type || '').split('/').pop();
             if (t === 'signal_in') _siColor(n);
             else if (t === 'signal_out') _soColor(n);
+            else if (t === 'rotation') _rotColor(n);
             else if (t === 'template_ref') _tmplColor(n, _labContext.schemas);
         });
         _lab.graph.setDirtyCanvas(true, false);
@@ -2057,7 +2202,8 @@
     <!-- canvas area -->
     <div class="flex-1 relative overflow-hidden"
          @mojo:lab-close-tab.document="closeTab($event.detail.tabId)"
-         @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId; nodeColSearch = ''"
+         @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId"
+         @mojo:lab-pick-quat.document="nodePickingQuat = $event.detail.nodeId"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
          @mojo:lab-new.document="newTab()"
@@ -2099,7 +2245,7 @@
 
     <!-- ── Column picker — fixed so it escapes the overflow-hidden canvas container ── -->
     <div x-show="nodePickingColumn !== null"
-         @click.self="nodePickingColumn = null; nodeColSearch = ''"
+         @click.self="nodePickingColumn = null"
          class="fixed inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
          style="display:none;">
         <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
@@ -2107,7 +2253,7 @@
             <!-- header -->
             <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
                 <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Signal</p>
-                <button @click="nodePickingColumn = null; nodeColSearch = ''"
+                <button @click="nodePickingColumn = null"
                         class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
                     <svg class="w-4 h-4"
                          fill="none"
@@ -2192,6 +2338,87 @@
                 </template>
                 <p x-show="getFilteredCols('nodeCol').length === 0"
                    class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">No matching signals</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Quaternion base picker — fixed so it escapes the overflow-hidden canvas container ── -->
+    <div x-show="nodePickingQuat !== null"
+         @click.self="nodePickingQuat = null"
+         class="fixed inset-0 z-[600] flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm"
+         style="display:none;">
+        <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
+
+            <!-- header -->
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700 shrink-0">
+                <p class="text-sm font-black uppercase text-slate-700 dark:text-slate-300 tracking-widest">Select Quaternion Base</p>
+                <button @click="nodePickingQuat = null"
+                        class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    <svg class="w-4 h-4"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- search -->
+            <div class="relative shrink-0">
+                <input type="text"
+                       x-model="nodeQuatSearch"
+                       placeholder="Filter quaternions…"
+                       class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 pr-7 py-1.5 text-sm font-mono text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+                <button x-show="nodeQuatSearch"
+                        type="button"
+                        @click="nodeQuatSearch = ''"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="3"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- hierarchical segment drills -->
+            <div class="flex flex-col gap-1.5 shrink-0">
+                <template x-for="depth in getActiveLevels('nodeQuat')"
+                          :key="depth">
+                    <div x-show="getSegmentsAtDepth('nodeQuat', depth).length > 0"
+                         class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                        <template x-for="seg in getSegmentsAtDepth('nodeQuat', depth)"
+                                  :key="seg">
+                            <button @click="toggleRegexSegment('nodeQuat', seg, depth)"
+                                    :class="isSegmentActive('nodeQuat', seg, depth)
+                                        ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-cyan-500/50'"
+                                    class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
+                                    x-text="seg">
+                            </button>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <!-- filtered quaternion base list -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar space-y-0.5 min-h-0">
+                <template x-for="base in getFilteredCols('nodeQuat')"
+                          :key="base">
+                    <button @click="selectNodeQuat(base)"
+                            class="w-full text-left px-2 py-1 text-sm font-mono rounded truncate transition-colors text-slate-500 dark:text-slate-400 hover:bg-cyan-500/20 hover:text-cyan-700 dark:hover:text-cyan-200"
+                            x-text="base">
+                    </button>
+                </template>
+                <p x-show="getFilteredCols('nodeQuat').length === 0"
+                   class="px-2 py-2 text-sm font-mono italic text-slate-500 dark:text-slate-500">No matching quaternions</p>
             </div>
         </div>
     </div>

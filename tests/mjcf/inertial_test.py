@@ -127,15 +127,31 @@ def test_from_random_max_retries(mojo_model: MojoModel):
     """Verify the retry logic when a distribution is physically impossible."""
     # Force a failure: Mass is positive, but diaginertia is zero/negative
     # (Uniform low=0 effectively creates invalid non-positive-definite matrices)
-    bad_dist = UniformDistribution(name=DistName("bad_inertia"), low=-1.0, high=0.0)
+    bad_dist_x = UniformDistribution(name=DistName("bad_inertia_x"), low=-1.0, high=0.0)
+    bad_dist_y = UniformDistribution(name=DistName("bad_inertia_y"), low=-1.0, high=0.0)
+    bad_dist_z = UniformDistribution(name=DistName("bad_inertia_z"), low=-1.0, high=0.0)
 
     with pytest.raises(RuntimeError, match="Failed to generate valid Inertial"):
         Inertial.from_random(
             mojo_model=mojo_model,
             mass=1.0,
             pos=np.asarray([0, 0, 0]),
-            diaginertia=(bad_dist, bad_dist, bad_dist),
+            diaginertia=(bad_dist_x, bad_dist_y, bad_dist_z),
             max_retries=3,
+        )
+
+
+def test_from_random_duplicate_distribution_name_raises(mojo_model: MojoModel):
+    """Verify that reusing the same distribution name for multiple components raises an error."""
+    dup_a = UniformDistribution(name=DistName("dup_inertia"), low=0.1, high=0.2)
+    dup_b = UniformDistribution(name=DistName("dup_inertia"), low=0.1, high=0.2)
+
+    with pytest.raises(KeyError, match="already been registered"):
+        Inertial.from_random(
+            mojo_model=mojo_model,
+            mass=1.0,
+            pos=np.asarray([0, 0, 0]),
+            diaginertia=(dup_a, dup_b, 0.1),
         )
 
 

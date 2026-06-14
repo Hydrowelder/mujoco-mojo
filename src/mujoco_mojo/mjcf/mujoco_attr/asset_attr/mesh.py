@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = [
+    "AnyMesh",
     "Mesh",
     "MeshCone",
     "MeshHemisphere",

@@ -11,7 +11,7 @@ To regenerate TypeScript types after changing this file:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
@@ -44,6 +44,12 @@ class DashStyle(StrEnum):
     DASHDOT = "dashdot"
     """Alternating dash and dot."""
 
+    LONGDASH = "longdash"
+    """Dashes with longer lengths."""
+
+    LONGDASHDOT = "longdashdot"
+    """Alternating long dashes and dots."""
+
 
 class MarkerSymbol(StrEnum):
     """Shape used to mark individual data points."""
@@ -62,6 +68,108 @@ class MarkerSymbol(StrEnum):
 
     CROSS = "cross"
     """Cross (+) marker."""
+
+    X = "x"
+    """x marker."""
+
+    TRIANGLE_UP = "triangle-up"
+    """Triangle-up marker."""
+
+    TRIANGLE_DOWN = "triangle-down"
+    """Triangle-down marker."""
+
+    TRIANGLE_LEFT = "triangle-left"
+    """Triangle-left marker."""
+
+    TRIANGLE_RIGHT = "triangle-right"
+    """Triangle-right marker."""
+
+    TRIANGLE_NE = "triangle-ne"
+    """Triangle-ne marker."""
+
+    TRIANGLE_SE = "triangle-se"
+    """Triangle-se marker."""
+
+    TRIANGLE_SW = "triangle-sw"
+    """Triangle-sw marker."""
+
+    TRIANGLE_NW = "triangle-nw"
+    """Triangle-nw marker."""
+
+    PENTAGON = "pentagon"
+    """Pentagon marker."""
+
+    HEXAGON = "hexagon"
+    """Hexagon marker."""
+
+    HEXAGON2 = "hexagon2"
+    """Hexagon2 marker."""
+
+    OCTAGON = "octagon"
+    """Octagon marker."""
+
+    STAR = "star"
+    """Star marker."""
+
+    HEXAGRAM = "hexagram"
+    """Hexagram marker."""
+
+    STARSQUARE = "starsquare"
+    """Starsquare marker."""
+
+    DIAMOND_CROSS = "diamond-cross"
+    """Diamond-cross marker."""
+
+    DIAMOND_X = "diamond-x"
+    """Diamond-x marker."""
+
+    HOURGLASS = "hourglass"
+    """Hourglass marker."""
+
+    BOWTIE = "bowtie"
+    """Bowtie marker."""
+
+    ASTERISK = "asterisk"
+    """Asterisk marker."""
+
+    HASH = "hash"
+    """Hash marker."""
+
+    Y_UP = "y-up"
+    """Y-up marker."""
+
+    Y_DOWN = "y-down"
+    """Y-down marker."""
+
+    Y_LEFT = "y-left"
+    """Y-left marker."""
+
+    Y_RIGHT = "y-right"
+    """Y-right marker."""
+
+    LINE_EW = "line-ew"
+    """Line-ew marker."""
+
+    LINE_NS = "line-ns"
+    """Line-ns marker."""
+
+    LINE_NE = "line-ne"
+    """Line-ne marker."""
+
+    LINE_NW = "line-nw"
+    """Line-nw marker."""
+
+    ARROW_UP = "arrow-up"
+    """Arrow-up marker."""
+
+    ARROW_DOWN = "arrow-down"
+    """Arrow-down marker."""
+
+    ARROW_LEFT = "arrow-left"
+    """Arrow-left marker."""
+
+    ARROW_RIGHT = "arrow-right"
+    """Arrow-right  marker."""
 
 
 class GridMode(StrEnum):
@@ -239,48 +347,90 @@ class Annotation(BaseModel):
     """Annotation text content."""
 
 
-class Shape(BaseModel):
-    """A geometric shape drawn over the plot as a reference marker."""
+class VlineShape(BaseModel):
+    """A vertical reference line at a fixed x value."""
 
     model_config = camel_case_dict
 
-    type: ShapeType
-    """Shape variant (vertical line, horizontal line, or rectangle)."""
+    type: Literal[ShapeType.VLINE] = ShapeType.VLINE
+    """Shape variant discriminator."""
 
     x0: float
-    """Left x coordinate. For `vline` this is the line position."""
+    """X coordinate of the line."""
 
-    x1: float | None = None
-    """Right x coordinate. Required for `rect`."""
+    color: str
+    """Stroke color as a CSS color string."""
 
-    y0: float | None = None
-    """Bottom y coordinate. Required for `rect` and `hline`."""
+    dash: DashStyle | None = None
+    """Dash pattern for the line. `None` uses a solid stroke."""
 
-    y1: float | None = None
-    """Top y coordinate. Required for `rect`."""
+    label: str
+    """Short label displayed alongside the shape."""
+
+
+class HlineShape(BaseModel):
+    """A horizontal reference line at a fixed y value."""
+
+    model_config = camel_case_dict
+
+    type: Literal[ShapeType.HLINE] = ShapeType.HLINE
+    """Shape variant discriminator."""
+
+    y0: float
+    """Y coordinate of the line."""
+
+    color: str
+    """Stroke color as a CSS color string."""
+
+    dash: DashStyle | None = None
+    """Dash pattern for the line. `None` uses a solid stroke."""
+
+    label: str
+    """Short label displayed alongside the shape."""
+
+
+class RectShape(BaseModel):
+    """A filled rectangle drawn as a reference region."""
+
+    model_config = camel_case_dict
+
+    type: Literal[ShapeType.RECT] = ShapeType.RECT
+    """Shape variant discriminator."""
+
+    x0: float
+    """Left x coordinate."""
+
+    x1: float
+    """Right x coordinate."""
+
+    y0: float
+    """Bottom y coordinate."""
+
+    y1: float
+    """Top y coordinate."""
 
     color: str
     """Fill/stroke color as a CSS color string."""
 
     dash: DashStyle | None = None
-    """Dash pattern for the shape border. `None` uses a solid stroke."""
+    """Dash pattern for the rectangle border. `None` uses a solid stroke."""
 
     label: str
     """Short label displayed alongside the shape."""
 
     @model_validator(mode="after")
-    def validate_coords(self) -> Shape:
-        if self.type == ShapeType.HLINE:
-            if self.y0 is None:
-                raise ValueError("hline requires y0")
-        if self.type == ShapeType.RECT:
-            if self.x1 is None or self.y0 is None or self.y1 is None:
-                raise ValueError("rect requires x1, y0, and y1")
-            if self.x0 >= self.x1:
-                raise ValueError("rect requires x0 < x1")
-            if self.y0 >= self.y1:
-                raise ValueError("rect requires y0 < y1")
+    def validate_coords(self) -> RectShape:
+        if self.x0 >= self.x1:
+            raise ValueError("rect requires x0 < x1")
+        if self.y0 >= self.y1:
+            raise ValueError("rect requires y0 < y1")
         return self
+
+
+Shape = Annotated[
+    VlineShape | HlineShape | RectShape,
+    Field(discriminator="type"),
+]
 
 
 class PlotConfig(BaseModel):
@@ -336,10 +486,10 @@ class PlotConfig(BaseModel):
     y_scale: ScaleType
     """Scale type for the y-axis."""
 
-    x_log_base: float | None = Field(default=None, gt=1)
+    x_log_base: float | None = Field(default=None, gt=0)
     """Logarithm base for the x-axis. Only used when `x_scale` is `log`."""
 
-    y_log_base: float | None = Field(default=None, gt=1)
+    y_log_base: float | None = Field(default=None, gt=0)
     """Logarithm base for the y-axis. Only used when `y_scale` is `log`."""
 
     plot_type: PlotType = PlotType.CARTESIAN
@@ -386,4 +536,8 @@ class PlotConfig(BaseModel):
             raise ValueError("x_log_base is required when x_scale is log")
         if self.y_scale == ScaleType.LOG and self.y_log_base is None:
             raise ValueError("y_log_base is required when y_scale is log")
+        if self.x_log_base == 1:
+            raise ValueError("x_log_base must not be 1")
+        if self.y_log_base == 1:
+            raise ValueError("y_log_base must not be 1")
         return self

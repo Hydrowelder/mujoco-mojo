@@ -1,4 +1,8 @@
+import { formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
+import { PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
+import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
+import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
@@ -58,7 +62,7 @@ const DEFAULT_CONFIG: PlotConfig = {
   yAxes: {},
   refFrame: null,
   grid: "all",
-  lineMode: "lines",
+  lineMode: "lines+markers",
   interp: "linear",
   hover: "closest",
   title: "",
@@ -213,6 +217,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     labActiveTabId: null as string | null,
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
+    nodePickingQuat: null as number | null,
+    nodeQuatSearch: "" as string,
     nodePickingTemplate: null as number | null,
     labSchemas: [] as Array<{
       name: string;
@@ -389,7 +395,9 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       const queryStr = colParams.toString();
       if (queryStr) url += `?${queryStr}`;
-      const resp = await fetch(url);
+      // lab-virtual columns can change value for the same URL after an
+      // in-place edit + save, so always bypass the browser HTTP cache
+      const resp = await fetch(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
@@ -558,7 +566,10 @@ function trialViewer(trialId: string, externalUrl: string) {
       const startX = e.clientX;
       const startWidth = this.logColWidths[col];
       const onMove = (ev: MouseEvent) => {
-        this.logColWidths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+        this.logColWidths[col] = Math.max(
+          40,
+          startWidth + (ev.clientX - startX),
+        );
       };
       const onUp = () => {
         window.removeEventListener("mousemove", onMove);
@@ -570,7 +581,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     _measureTextWidth(text: string, refEl: HTMLElement): number {
-      const canvas = (this._logMeasureCanvas ??= document.createElement("canvas"));
+      const canvas = (this._logMeasureCanvas ??=
+        document.createElement("canvas"));
       const ctx = canvas.getContext("2d");
       if (!ctx) return 0;
       ctx.font = getComputedStyle(refEl).font;
@@ -617,7 +629,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       }
 
-      const padding = col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
+      const padding =
+        col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
       this.logColWidths[col] = Math.ceil(width) + padding;
       this._persistLogColWidths();
     },
@@ -628,7 +641,9 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     logSourceFull(entry: LogEntry): string {
-      return entry.lineno != null ? `${entry.pathname}:${entry.lineno}` : entry.pathname;
+      return entry.lineno != null
+        ? `${entry.pathname}:${entry.lineno}`
+        : entry.pathname;
     },
 
     logLevelClass(level: string): string {
@@ -649,7 +664,8 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     formatLogTime(timestamp: number, _tick?: number): string {
       const diff = Date.now() - timestamp;
-      if (diff < 24 * 60 * 60 * 1000) return window.notifTimeAgo(timestamp, _tick);
+      if (diff < 24 * 60 * 60 * 1000)
+        return window.notifTimeAgo(timestamp, _tick);
       return new Date(timestamp).toLocaleString();
     },
 
@@ -1097,7 +1113,6 @@ function trialViewer(trialId: string, externalUrl: string) {
       } else if (this.placementMode === "hline") {
         newShape = {
           type: "hline",
-          x0: pt.x,
           y0: pt.y,
           color: defaultColor,
           label: "",
@@ -1561,7 +1576,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             e.preventDefault();
             (
               document.querySelector(
-                'input[type="number"]',
+                "input[data-warp-input]",
               ) as HTMLElement | null
             )?.focus();
           }
@@ -2106,7 +2121,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       if (!search) return this.smartSort([...base]);
@@ -2174,7 +2191,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const pathSearch = search.split(":")[0] ?? "";
@@ -2200,7 +2219,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : this.selectableYColumns;
+          : field === "nodeQuat"
+            ? this.availableQuats
+            : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const [pathPart = "", suffixPart = ""] = search.split(":");
@@ -2288,7 +2309,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     validateConfig(cfg: PlotConfig): string[] {
-      const errors: string[] = [];
+      // schema-level checks (types, required fields, enums, discriminated unions, ...)
+      const errors: string[] = validateAgainstSchema(cfg, PLOT_CONFIG_SCHEMA);
       const labsNoted = new Set<string>();
       const schemasLoaded = this.labSchemas.length > 0;
 
@@ -2441,6 +2463,46 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
     },
 
+    initChartResize(hostEl: HTMLElement | undefined) {
+      if (!hostEl || hostEl.dataset.resizeAttached) return;
+      hostEl.dataset.resizeAttached = "true";
+
+      restorePersistedHeight(hostEl, "mojo:chart:height");
+
+      // Plotly.Plots.resize() can take longer than a single frame, so a
+      // simple rAF throttle would drop requests that arrive mid-resize and
+      // leave the plot visibly lagging behind the cursor. Instead, queue at
+      // most one follow-up resize so it keeps catching up to the latest size.
+      let resizeRaf: number | null = null;
+      let resizeQueued = false;
+      const doResize = () => {
+        resizeRaf = null;
+        const plotEl = document.getElementById("plot-area");
+        if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+        if (resizeQueued) {
+          resizeQueued = false;
+          resizeRaf = requestAnimationFrame(doResize);
+        }
+      };
+      const resizePlot = () => {
+        if (resizeRaf !== null) {
+          resizeQueued = true;
+          return;
+        }
+        resizeRaf = requestAnimationFrame(doResize);
+      };
+
+      attachVerticalResizeHandle(hostEl, {
+        storageKey: "mojo:chart:height",
+        minHeight: 300,
+        onResize: resizePlot,
+        getResetHeight: () => "600px",
+      });
+
+      // Fill (or shrink to) the restored height once the plot has rendered.
+      resizePlot();
+    },
+
     initCodeMirror(hostEl: HTMLElement) {
       if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
       const {
@@ -2459,8 +2521,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const self = this;
 
       // Restore persisted height before creating the editor so it sizes correctly.
-      const savedH = localStorage.getItem("mojo:json-editor:height");
-      if (savedH) hostEl.style.height = savedH;
+      restorePersistedHeight(hostEl, "mojo:json-editor:height");
 
       // --- themes (base chrome only; highlight handled separately) ---
       const darkTheme = EditorView.theme(
@@ -2600,70 +2661,15 @@ function trialViewer(trialId: string, externalUrl: string) {
       _cm.editor = new EditorView({ state: startState, parent: hostEl });
 
       // Custom resize handle
-      const handle = document.createElement("div");
-      handle.style.cssText =
-        "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
-      const grip = document.createElement("div");
-      grip.style.cssText =
-        "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
-      handle.appendChild(grip);
-      handle.addEventListener("mouseenter", () => {
-        grip.style.background = "#06b6d4";
-        grip.style.width = "52px";
-      });
-      handle.addEventListener("mouseleave", () => {
-        grip.style.background = "#334155";
-        grip.style.width = "36px";
-      });
-      hostEl.insertAdjacentElement("afterend", handle);
-
-      handle.addEventListener("mousedown", (e) => {
-        const startY = e.clientY;
-        const startH = hostEl.offsetHeight;
-        let prevY = startY;
-        document.body.style.userSelect = "none";
-        document.body.style.cursor = "ns-resize";
-        const onMove = (ev: MouseEvent) => {
-          const dy = ev.clientY - prevY;
-          prevY = ev.clientY;
-          const newH = Math.max(128, startH + (ev.clientY - startY));
-          hostEl.style.height = newH + "px";
-          if (dy > 0) window.scrollBy(0, dy);
-        };
-        const onUp = () => {
-          document.body.style.userSelect = "";
-          document.body.style.cursor = "";
-          document.removeEventListener("mousemove", onMove);
-          document.removeEventListener("mouseup", onUp);
-          try {
-            localStorage.setItem(
-              "mojo:json-editor:height",
-              hostEl.style.height,
-            );
-          } catch {
-            /* */
-          }
-        };
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
-        e.preventDefault();
-      });
-
-      handle.addEventListener("dblclick", () => {
-        const scroller = hostEl.querySelector(
-          ".cm-scroller",
-        ) as HTMLElement | null;
-        if (scroller) {
-          hostEl.style.height = scroller.scrollHeight + "px";
-          try {
-            localStorage.setItem(
-              "mojo:json-editor:height",
-              hostEl.style.height,
-            );
-          } catch {
-            /* */
-          }
-        }
+      attachVerticalResizeHandle(hostEl, {
+        storageKey: "mojo:json-editor:height",
+        minHeight: 128,
+        getResetHeight: () => {
+          const scroller = hostEl.querySelector(
+            ".cm-scroller",
+          ) as HTMLElement | null;
+          return scroller ? scroller.scrollHeight + "px" : undefined;
+        },
       });
 
       // Swap theme when dark mode toggles.
@@ -2863,7 +2869,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           ? [
               {
                 type: "rotation",
-                quat_col: this.config.refFrame,
+                quatCol: this.config.refFrame,
                 invert: true,
                 enabled: true,
               },
@@ -2909,7 +2915,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         if (frame) {
           const newEntry: FilterEntry = {
             type: "rotation",
-            quat_col: frame,
+            quatCol: frame,
             invert: true,
             enabled: true,
           };
@@ -3081,8 +3087,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           const val = (entry as Record<string, unknown>)[p.name];
           if (typeof val === "boolean")
             return `${p.name}=${val ? "on" : "off"}`;
-          if (typeof val === "number")
-            return `${p.name}=${parseFloat(val.toFixed(4))}`;
+          if (typeof val === "number") return `${p.name}=${formatNum(val)}`;
           return `${p.name}=${val as string}`;
         });
       return parts.slice(0, 3).join(", ");
@@ -3242,7 +3247,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       })();
       const id = this._tabId();
-      this.labTabs = [{ id, name, graph, savedState: null, dirty: false, viewport: null }];
+      this.labTabs = [
+        { id, name, graph, savedState: null, dirty: false, viewport: null },
+      ];
       this.labActiveTabId = id;
       this.labName = name;
       this.labGraph = graph;
@@ -3536,6 +3543,17 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.nodeColSearch = "";
     },
 
+    selectNodeQuat(base: string) {
+      if (this.nodePickingQuat !== null) {
+        // Defined in _signal_lab.html - updates the LiteGraph node property
+        if (typeof window.mojoLabSelectNodeQuat === "function") {
+          window.mojoLabSelectNodeQuat(this.nodePickingQuat, base);
+        }
+      }
+      this.nodePickingQuat = null;
+      this.nodeQuatSearch = "";
+    },
+
     selectNodeTemplate(name: string) {
       if (this.nodePickingTemplate !== null) {
         if (typeof window.mojoLabSelectNodeTemplate === "function") {
@@ -3792,6 +3810,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       return [globalMin - pad, globalMax + pad];
     },
 
+    formatNum,
+
     // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
     rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {
       const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
@@ -3908,6 +3928,15 @@ function trialViewer(trialId: string, externalUrl: string) {
         (this.config.hover.includes("y") || this.config.hover === "closest");
 
       const isPolar = this.config.plotType === "polar";
+
+      // a marker symbol of "none" hides per-point markers regardless of lineMode
+      const traceMode = (marker: string): string => {
+        if (marker !== "none") return this.config.lineMode;
+        if (this.config.lineMode === "lines+markers") return "lines";
+        if (this.config.lineMode === "markers") return "none";
+        return this.config.lineMode;
+      };
+
       const yKeys = Object.keys(this.config.yAxes);
       let traces: object[] = yKeys
         .map((key, i) => {
@@ -3926,7 +3955,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               r: this.data![p.name]!,
               theta: this.data![this.config.xAxis!.col!],
               name: p.label,
-              mode: this.config.lineMode,
+              mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
               marker: { size: 6, symbol: p.marker },
@@ -3944,7 +3973,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
             name: p.label,
-            mode: this.config.lineMode,
+            mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
             marker: { size: 6, symbol: p.marker },
@@ -3991,7 +4020,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.lineMode,
+                    mode: traceMode(p.marker),
                     type: "scatterpolar",
                     line: lineStyle,
                     opacity: 0.35,
@@ -4005,7 +4034,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                     name: `${p.label} (<i>vs.</i>)`,
                     legendgroup: `group_${key}`,
                     showlegend: isFirst,
-                    mode: this.config.lineMode,
+                    mode: traceMode(p.marker),
                     type: "scatter",
                     line: lineStyle,
                     opacity: 0.35,
@@ -4199,22 +4228,24 @@ function trialViewer(trialId: string, externalUrl: string) {
               ...(this.config.shapes ?? [])
                 .filter((s) => s.label)
                 .map((s) => {
-                  let x = s.x0,
-                    y = s.y0 ?? 0,
+                  let x = 0,
+                    y = 0,
                     xanchor = "left",
                     yanchor = "bottom",
                     xref = "x",
                     yref = "y";
                   if (s.type === "vline") {
+                    x = s.x0;
                     y = 1;
                     yref = "paper";
                   } else if (s.type === "hline") {
                     x = 1;
+                    y = s.y0;
                     xref = "paper";
                     xanchor = "right";
                   } else if (s.type === "rect") {
                     x = s.x0;
-                    y = s.y1 ?? 0;
+                    y = s.y1;
                   }
                   return {
                     x,

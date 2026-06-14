@@ -10,8 +10,10 @@ from mujoco_mojo.utils.filters import (
     ClipFilter,
     DeadbandFilter,
     DerivativeFilter,
+    FirstFilter,
     HighPassFilter,
     IntegralFilter,
+    LastFilter,
     LowPassFilter,
     MaxFilter,
     MeanFilter,
@@ -23,6 +25,7 @@ from mujoco_mojo.utils.filters import (
     RollingMedianFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
+    SortFilter,
     StandardDeviationFilter,
     TaringFilter,
     UnitFilter,
@@ -403,3 +406,29 @@ def test_standard_deviation_filter():
 
     expected = float(np.std(df["x"].to_numpy(), ddof=1))
     assert np.allclose(result, [expected] * 8)
+
+
+def test_first_filter():
+    df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
+    result = df.with_columns(FirstFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [1.0, 1.0, 1.0, 1.0]
+
+
+def test_last_filter():
+    df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
+    result = df.with_columns(LastFilter().apply(pl.col("x")))["x"].to_list()
+
+    assert result == [-2.0, -2.0, -2.0, -2.0]
+
+
+def test_sort_filter():
+    df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
+
+    ascending = df.with_columns(SortFilter().apply(pl.col("x")))["x"].to_list()
+    assert ascending == [-2.0, 1.0, 3.0, 5.0]
+
+    descending = df.with_columns(SortFilter(descending=True).apply(pl.col("x")))[
+        "x"
+    ].to_list()
+    assert descending == [5.0, 3.0, 1.0, -2.0]

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import getpass
 import math
 import threading
@@ -255,7 +257,7 @@ class JobStatus(MojoBaseModel):
         """Wipes the internal trial cache to force a full disk re-scan."""
         self._cache.clear()
 
-    def reload_if_new_run(self) -> "JobStatus | None":
+    def reload_if_new_run(self) -> JobStatus | None:
         """
         Checks `workdir/JOB_STATUS_FNAME` for a `run_id` different from this instance's.
 
@@ -288,9 +290,17 @@ class JobStatus(MojoBaseModel):
         n_proc: int = 1,
         progress_callback: Callable[[float], None] | None = None,
         force_refetch: bool = False,
+        persist: bool = True,
     ) -> None:
         """
         Scans the workdir to identify which trials still need execution, but only for runs not already in the cache (i.e., completed).
+
+        Args:
+            n_proc: Number of worker threads used to scan trial status files.
+            progress_callback: Optional callback invoked with scan progress (0-100).
+            force_refetch: If `True`, clears the cache before scanning so every trial is re-read from disk.
+            persist: If `True` (default), writes the refreshed status back to `workdir/JOB_STATUS_FNAME`. Read-only consumers (e.g. the Dojo monitor) should pass `False` so they don't overwrite the file the run owner manages.
+
         """
         if force_refetch:
             self.clear_cache()
@@ -354,7 +364,8 @@ class JobStatus(MojoBaseModel):
 
             if not self.is_done:
                 self.elapsed = datetime.now(UTC) - self.start_time
-        self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+        if persist:
+            self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     def total_runtimes(
         self,

@@ -115,14 +115,36 @@ def _load_func(
     # try to find the longest importable module path
     mod = None
     attr_parts = None
+    import_error: Exception | None = None
     for i in range(len(parts) - 1, 0, -1):
         mod_path = ".".join(parts[:i])
         try:
             mod = importlib.import_module(mod_path)
             attr_parts = parts[i:]
             break
-        except ImportError:
-            continue
+        except ModuleNotFoundError as e:
+            # only keep trying shorter prefixes if mod_path itself (or one of its
+            # parent packages) is what's missing - otherwise mod_path exists but
+            # failed to import for some other reason, which is a real error
+            if e.name == mod_path or mod_path.startswith(f"{e.name}."):
+                continue
+            import_error = e
+            break
+        except Exception as e:
+            import_error = e
+            break
+
+    if import_error is not None:
+        logger = get_logger(__name__)
+        console.print(
+            f"[bold red]Error:[/bold red] Failed to import module for [bold green]`{path}`[/bold green]: {import_error}"
+        )
+        logger.error(
+            f"Failed to import module for `{path}`",
+            exc_info=import_error,
+            extra={"file_only": True},
+        )
+        raise typer.Exit(code=1)
 
     if mod is None or attr_parts is None:
         logger = get_logger(__name__)
@@ -1277,7 +1299,7 @@ def run_dojo(
 
     # read job status file for monitoring and inject
     job = JobStatus.model_validate_json(status_file.read_text())
-    job.refresh_from_disk(n_proc=n_proc)
+    job.refresh_from_disk(n_proc=n_proc, persist=False)
 
     shared.CURRENT_JOB = job
     shared.AUTH_PASSWORD = password

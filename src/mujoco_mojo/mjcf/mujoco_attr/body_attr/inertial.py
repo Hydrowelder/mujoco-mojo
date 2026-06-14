@@ -446,10 +446,16 @@ class Inertial(XMLModel):
                         item.with_seed(mojo_model.seed).with_trial_num(
                             mojo_model.trial_num
                         )
+
+                        # register the distribution for serialization
+                        mojo_model.dists[item.name] = cast(Dist, item)
             elif isinstance(input_val, Distribution):
                 input_val.with_seed(mojo_model.seed).with_trial_num(
                     mojo_model.trial_num
                 )
+
+                # register the distribution for serialization
+                mojo_model.dists[input_val.name] = cast(Dist, input_val)
 
         _seed_dist(mass)
         _seed_dist(pos)
@@ -540,6 +546,10 @@ class Inertial(XMLModel):
                 for nv in all_pending:
                     mojo_model.named.force_update(nv, warn=False)
 
+                if all_pending:
+                    logger.info(
+                        f"Generated valid Inertial after {attempts + 1} attempt(s) by sampling {len(all_pending)} distribution(s)"
+                    )
                 return instance
 
             except ValueError as e:

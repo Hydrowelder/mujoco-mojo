@@ -11,7 +11,6 @@ export type {
   PlotConfig,
   ScaleType,
   Shape,
-  ShapeType,
   YAxisConfig,
 } from "./lib/plot-config.generated";
 

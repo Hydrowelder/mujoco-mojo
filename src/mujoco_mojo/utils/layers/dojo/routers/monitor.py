@@ -40,8 +40,14 @@ async def broadcast_updates():
 
             new_listeners = ACTIVE_CONNECTIONS - synced_connections
 
-            # If there is work to do OR new people need a catch-up packet
-            if not job.is_done or new_listeners:
+            if job.is_done and not new_listeners:
+                # Job is finished and everyone has already had at least one
+                # catch-up. Keep resending the final state cheaply (no disk
+                # refresh, no progress bar) so a client that missed the
+                # earlier "final" message - e.g. a dropped SSE frame - still
+                # gets it on a later tick.
+                await _emit_to_all({"type": "final", "status": job.to_monitor_json()})
+            else:
                 # 1. Start event for the progress bar
                 await _emit_to_all({"type": "start", "total": job.n_trial})
 
@@ -57,7 +63,9 @@ async def broadcast_updates():
 
                 await loop.run_in_executor(
                     None,
-                    lambda: job.refresh_from_disk(progress_callback=sync_reporter),  # pyright: ignore[reportOptionalMemberAccess]
+                    lambda: job.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
+                        progress_callback=sync_reporter, persist=False
+                    ),
                 )
 
                 # 3. Always send the "final" state to everyone
@@ -111,7 +119,9 @@ async def get_job_status():
 
     await loop.run_in_executor(
         None,
-        lambda: shared.CURRENT_JOB.refresh_from_disk(force_refetch=True),  # pyright: ignore[reportOptionalMemberAccess]
+        lambda: shared.CURRENT_JOB.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
+            force_refetch=True, persist=False
+        ),
     )
 
     return shared.CURRENT_JOB.to_monitor_json()

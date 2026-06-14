@@ -6,6 +6,13 @@
 // and imported from plot-config.generated.ts to avoid duplication.
 // ---------------------------------------------------------------------------
 
+import {
+  DASH_STYLE_VALUES,
+  GRID_MODE_VALUES,
+  LEGEND_POS_VALUES,
+  MARKER_SYMBOL_VALUES,
+  SCALE_TYPE_VALUES,
+} from "./plot-config.generated";
 import type {
   DashStyle,
   GridMode,
@@ -28,17 +35,14 @@ export type {
   ScaleType,
 };
 
-export const DASH_OPTIONS: DashStyle[] = ["solid", "dash", "dot", "dashdot"];
+// Bare-value option arrays are derived from the generated *_VALUES constants
+// (sourced from the Pydantic StrEnums in plot_config.py) so new enum members
+// show up in the UI automatically without editing this file.
+export const DASH_OPTIONS: DashStyle[] = DASH_STYLE_VALUES;
 
-export const MARKER_OPTIONS: MarkerSymbol[] = [
-  "none",
-  "circle",
-  "square",
-  "diamond",
-  "cross",
-];
+export const MARKER_OPTIONS: MarkerSymbol[] = MARKER_SYMBOL_VALUES;
 
-export const GRID_OPTIONS: GridMode[] = ["none", "major", "all"];
+export const GRID_OPTIONS: GridMode[] = GRID_MODE_VALUES;
 
 export const LINE_MODE_OPTIONS = [
   { label: "Lines", value: "lines" as LineMode },
@@ -64,9 +68,9 @@ export const HOVER_OPTIONS = [
   { label: "Off", value: "none" as HoverMode },
 ] as const;
 
-export const LEGEND_POS_OPTIONS: LegendPos[] = ["bottom", "right", "hidden"];
+export const LEGEND_POS_OPTIONS: LegendPos[] = LEGEND_POS_VALUES;
 
-export const SCALE_OPTIONS: ScaleType[] = ["linear", "log"];
+export const SCALE_OPTIONS: ScaleType[] = SCALE_TYPE_VALUES;
 
 // ---------------------------------------------------------------------------
 // Label-lookup helpers - derive the display string for a current config value.

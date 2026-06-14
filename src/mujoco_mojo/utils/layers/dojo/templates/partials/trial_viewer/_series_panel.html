@@ -413,7 +413,11 @@
                                                              :style="`position:absolute;top:${uCoords.top}px;left:${uCoords.left}px;width:10rem;`"
                                                              class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-52 overflow-y-auto custom-scrollbar"
                                                              style="display:none;">
-                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
+                                                            <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
+                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                - select -
+                                                            </button>
+                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'])"
                                                                       :key="group.label">
                                                                 <div>
                                                                     <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
@@ -498,6 +502,56 @@
                                                                             x-text="c">
                                                                     </button>
                                                                 </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            <template x-if="param.type === 'quat_col'">
+                                                <div class="flex-1 relative"
+                                                     x-data="{ qOpen: false, qSearch: '', qCoords: { top: 0, left: 0, width: 0 } }"
+                                                     @click.away="qOpen = false">
+                                                    <button x-ref="qBtn"
+                                                            @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
+                                                            class="{{ dropdown_trigger_sm }}">
+                                                        <span class="text-xs truncate"
+                                                              x-text="f[param.name] || '- select -'"></span>
+                                                        <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
+                                                             :class="qOpen ? 'rotate-180' : ''"
+                                                             fill="none"
+                                                             stroke="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round"
+                                                                  stroke-linejoin="round"
+                                                                  stroke-width="3"
+                                                                  d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                    <template x-teleport="body">
+                                                        <div x-show="qOpen"
+                                                             x-transition
+                                                             @click.stop
+                                                             @click.away="qOpen = false"
+                                                             :style="`position:absolute;top:${qCoords.top}px;left:${qCoords.left}px;width:14rem;`"
+                                                             class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                             style="display:none;">
+                                                            <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                <input type="text"
+                                                                       x-model="qSearch"
+                                                                       placeholder="Filter..."
+                                                                       class="input-field w-full px-2 py-1 text-xs" />
+                                                            </div>
+                                                            <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                <template x-for="c in availableQuats.filter(c => !qSearch || c.toLowerCase().includes(qSearch.toLowerCase()))"
+                                                                          :key="c">
+                                                                    <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; qOpen = false"
+                                                                            :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                            x-text="c">
+                                                                    </button>
+                                                                </template>
+                                                                <p x-show="availableQuats.length === 0"
+                                                                   class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">No quaternions available</p>
                                                             </div>
                                                         </div>
                                                     </template>
@@ -813,12 +867,12 @@
                         <span x-ref="anchor"
                               class="pl-1 pr-1 py-0.5 rounded text-sm font-mono font-bold flex items-center gap-1 group/chip transition-all shadow-sm border cursor-default"
                               :style="`
-                background-color: ${config.yAxes[col].color || getSignalColor(index)}1a;
-                border-color: ${config.yAxes[col].color || getSignalColor(index)}4d;
-                color: ${config.yAxes[col].color || getSignalColor(index)};
+                background-color: ${config.yAxes[col]?.color || getSignalColor(index)}1a;
+                border-color: ${config.yAxes[col]?.color || getSignalColor(index)}4d;
+                color: ${config.yAxes[col]?.color || getSignalColor(index)};
               `"
-                              @mouseenter="$el.style.borderColor = (config.yAxes[col].color || getSignalColor(index))"
-                              @mouseleave="if(!open) $el.style.borderColor = (config.yAxes[col].color || getSignalColor(index)) + '4d'">
+                              @mouseenter="$el.style.borderColor = (config.yAxes[col]?.color || getSignalColor(index))"
+                              @mouseleave="if(!open) $el.style.borderColor = (config.yAxes[col]?.color || getSignalColor(index)) + '4d'">
 
                             <!-- shift left arrow -->
                             <button @click.stop="shiftY(index, -1, $event.shiftKey)"
@@ -1057,7 +1111,7 @@
                                             </button>
                                             <div x-show="mOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-[310]">
+                                                 class="{{ dropdown_panel }} z-[310] max-h-52 overflow-y-auto custom-scrollbar">
                                                 <template x-for="opt in opts.marker">
                                                     <button @click="temp.marker = opt; isDirty = true; mOpen = false"
                                                             class="{{ dropdown_option }}"
@@ -1258,7 +1312,7 @@
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.checked); isDirty = true"
                                                                            class="rounded accent-cyan-500 w-4 h-4" />
                                                                 </template>
-                                                                <!-- UnitFilter dropdowns for from_unit / to_unit -->
+                                                                <!-- UnitFilter dropdowns for fromUnit / toUnit -->
                                                                 <template x-if="param.type === 'string' && f.type === 'unit'">
                                                                     <div class="flex-1 relative"
                                                                          x-data="{ uOpen: false }"
@@ -1281,7 +1335,11 @@
                                                                         <div x-show="uOpen"
                                                                              x-transition
                                                                              class="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-52 overflow-y-auto custom-scrollbar">
-                                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'to_unit' ? f['from_unit'] : null)"
+                                                                            <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
+                                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                                - select -
+                                                                            </button>
+                                                                            <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'])"
                                                                                       :key="group.label">
                                                                                 <div>
                                                                                     <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest bg-slate-100 dark:bg-slate-900/50 sticky top-0"
@@ -1368,6 +1426,56 @@
                                                                                                 x-text="c">
                                                                                         </button>
                                                                                     </template>
+                                                                                </div>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
+                                                                </template>
+                                                                <template x-if="param.type === 'quat_col'">
+                                                                    <div class="flex-1 relative"
+                                                                         x-data="{ qOpen: false, qSearch: '', qCoords: { top: 0, left: 0, width: 0 } }"
+                                                                         @click.away="qOpen = false">
+                                                                        <button x-ref="qBtn"
+                                                                                @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
+                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                            <span class="text-xs truncate"
+                                                                                  x-text="f[param.name] || '- select -'"></span>
+                                                                            <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
+                                                                                 :class="qOpen ? 'rotate-180' : ''"
+                                                                                 fill="none"
+                                                                                 stroke="currentColor"
+                                                                                 viewBox="0 0 24 24">
+                                                                                <path stroke-linecap="round"
+                                                                                      stroke-linejoin="round"
+                                                                                      stroke-width="3"
+                                                                                      d="M19 9l-7 7-7-7" />
+                                                                            </svg>
+                                                                        </button>
+                                                                        <template x-teleport="body">
+                                                                            <div x-show="qOpen"
+                                                                                 x-transition
+                                                                                 @click.stop
+                                                                                 @click.away="qOpen = false"
+                                                                                 :style="`position:absolute;top:${qCoords.top}px;left:${qCoords.left}px;width:14rem;`"
+                                                                                 class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                                                 style="display:none;">
+                                                                                <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                                    <input type="text"
+                                                                                           x-model="qSearch"
+                                                                                           placeholder="Filter..."
+                                                                                           class="input-field w-full px-2 py-1 text-xs" />
+                                                                                </div>
+                                                                                <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                                    <template x-for="c in availableQuats.filter(c => !qSearch || c.toLowerCase().includes(qSearch.toLowerCase()))"
+                                                                                              :key="c">
+                                                                                        <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; qOpen = false"
+                                                                                                :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                                                x-text="c">
+                                                                                        </button>
+                                                                                    </template>
+                                                                                    <p x-show="availableQuats.length === 0"
+                                                                                       class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">No quaternions available</p>
                                                                                 </div>
                                                                             </div>
                                                                         </template>

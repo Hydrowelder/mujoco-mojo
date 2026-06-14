@@ -23,8 +23,10 @@ __all__ = [
     "DerivativeFilter",
     "ExpFilter",
     "FilterType",
+    "FirstFilter",
     "HighPassFilter",
     "IntegralFilter",
+    "LastFilter",
     "LogFilter",
     "LowPassFilter",
     "MaxFilter",
@@ -34,6 +36,7 @@ __all__ = [
     "ModeFilter",
     "NormalizeFilter",
     "PowerFilter",
+    "ReverseFilter",
     "RollingMeanFilter",
     "RollingMedianFilter",
     "RotationFilter",
@@ -41,6 +44,7 @@ __all__ = [
     "SavitzkyGolayFilter",
     "ScaleFilter",
     "SignFilter",
+    "SortFilter",
     "StandardDeviationFilter",
     "TaringFilter",
     "TrigFilter",
@@ -80,6 +84,10 @@ class FilterType(StrEnum):
     STAT_MEDIAN = "stat_median"
     STAT_MODE = "stat_mode"
     STAT_STANDARD_DEVIATION = "stat_standard_deviation"
+    STAT_FIRST = "stat_first"
+    STAT_LAST = "stat_last"
+    SORT = "sort"
+    REVERSE = "reverse"
 
 
 class BaseFilter(ABC, BaseModel):
@@ -505,7 +513,7 @@ class RotationFilter(BaseFilter):
     type: Literal[FilterType.ROTATION] = FilterType.ROTATION
     """The discriminator type for Pydantic."""
 
-    quat_col: str = Field("", json_schema_extra={"ui_type": "col"})
+    quat_col: str = Field("", json_schema_extra={"ui_type": "quat_col"})
     """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat')."""
 
     invert: bool = True
@@ -801,6 +809,57 @@ class StandardDeviationFilter(BaseFilter):
         return expr.std()
 
 
+class FirstFilter(BaseFilter):
+    """Reduces the signal to its first value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_FIRST] = FilterType.STAT_FIRST
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.first()
+
+
+class LastFilter(BaseFilter):
+    """Reduces the signal to its last value, broadcast across every sample."""
+
+    category: ClassVar[str] = "Statistics"
+
+    type: Literal[FilterType.STAT_LAST] = FilterType.STAT_LAST
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.last()
+
+
+class SortFilter(BaseFilter):
+    """Sorts the signal's values in ascending or descending order."""
+
+    category: ClassVar[str] = "Ordering"
+
+    type: Literal[FilterType.SORT] = FilterType.SORT
+    """The discriminator type for Pydantic."""
+
+    descending: bool = False
+    """Whether to sort in descending order."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.sort(descending=self.descending)
+
+
+class ReverseFilter(BaseFilter):
+    """Reverses the order of the signal's values without changing their order of occurrence in time."""
+
+    category: ClassVar[str] = "Ordering"
+
+    type: Literal[FilterType.REVERSE] = FilterType.REVERSE
+    """The discriminator type for Pydantic."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr.reverse()
+
+
 AnyFilter = Annotated[
     ScaleFilter
     | AbsoluteValueFilter
@@ -830,7 +889,11 @@ AnyFilter = Annotated[
     | MeanFilter
     | MedianFilter
     | ModeFilter
-    | StandardDeviationFilter,
+    | StandardDeviationFilter
+    | FirstFilter
+    | LastFilter
+    | SortFilter
+    | ReverseFilter,
     Field(discriminator="type"),
 ]
 
