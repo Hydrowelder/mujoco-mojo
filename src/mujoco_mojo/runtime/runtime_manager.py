@@ -1,3 +1,4 @@
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -14,6 +15,10 @@ from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
+
+
+class SimulationStopped(Exception):
+    """Raised by `RuntimeManager.step` to unwind a running simulation when the user requests a stop."""
 
 
 @runtime_checkable
@@ -40,6 +45,7 @@ class RuntimeManager:
 
     _sync_hook: SyncHook | None = None
     _skip_recording: bool = False
+    _stop_event: threading.Event | None = None
 
     _resolved: bool = False
 
@@ -103,6 +109,9 @@ class RuntimeManager:
         """
         Calculates forces, integratess physics, and handles telemetry.
         """
+        if self._stop_event is not None and self._stop_event.is_set():
+            raise SimulationStopped("Simulation stopped by user request.")
+
         # clear buffers for next timestep
         state.data.xfrc_applied.fill(0)  # external forces
         state.data.qfrc_applied.fill(0)  # user-defined forces
@@ -141,7 +150,7 @@ class RuntimeManager:
                 all_arrows.extend(load.get_visuals(state))
 
             for proximity in self.proximities:
-                visual = proximity.get_visuals(state)
+                visual = proximity.get_visuals(state, self.signal_manager)
                 if visual is not None:
                     all_lines.append(visual)
 
@@ -172,4 +181,9 @@ class RuntimeManager:
 
             sleep_time = target_wall_elapsed - actual_wall_elapsed
             if sleep_time > 0:
-                time.sleep(sleep_time)
+                if self._stop_event is not None:
+                    # use wait() instead of sleep() so a stop request interrupts
+                    # the pacing delay immediately, rather than after it elapses
+                    self._stop_event.wait(timeout=sleep_time)
+                else:
+                    time.sleep(sleep_time)

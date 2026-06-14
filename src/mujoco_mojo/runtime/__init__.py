@@ -10,7 +10,7 @@ from .load import (
     VectorForce,
     VectorTorque,
 )
-from .runtime_manager import RuntimeManager
+from .runtime_manager import RuntimeManager, SimulationStopped
 from .signal_manager import SignalManager
 from .video_recorder import VideoRecorder
 
@@ -24,6 +24,7 @@ __all__ = [
     "ScalarForce",
     "ScalarTorque",
     "SignalManager",
+    "SimulationStopped",
     "SiteLoad",
     "VectorForce",
     "VectorTorque",

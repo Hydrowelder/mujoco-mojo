@@ -3,9 +3,11 @@ import queue
 import sys
 import threading
 import time
+import types
 from bdb import BdbQuit
+from collections.abc import Callable
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, cast, runtime_checkable
 
@@ -50,43 +52,6 @@ class OnReloadCallback(Protocol):
 @runtime_checkable
 class IsRunningCheck(Protocol):
     def __call__(self) -> Any: ...
-
-
-def is_dark_mode() -> bool:
-    """Determine if the system is in dark mode using only the standard library."""
-    import platform
-    import subprocess
-
-    system = platform.system()
-
-    try:
-        if system == "Windows":
-            import winreg
-
-            # Look at the 'Personalize' key for AppsUseLightTheme
-            path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:  # pyright: ignore[reportAttributeAccessIssue]
-                # 0 = Dark, 1 = Light
-                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")  # pyright: ignore[reportAttributeAccessIssue]
-                return value == 0
-
-        elif system == "Darwin":  # macOS
-            # 'defaults read -g AppleInterfaceStyle' returns 'Dark' or errors out if Light
-            cmd = ["defaults", "read", "-g", "AppleInterfaceStyle"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            return "Dark" in result.stdout
-
-        elif system == "Linux":
-            # Check GNOME/GTK settings (most common)
-            cmd = ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            return "dark" in result.stdout.lower()
-
-    except Exception:
-        # Fallback to Light Mode if anything fails (e.g. old Windows versions)
-        return False
-
-    return False
 
 
 def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
@@ -227,8 +192,27 @@ class MojoReloaded:
     _last_command: str = "run"
     _current_trial_dir: Path | None = None
     _job_status: JobStatus | None = None
+    _stop_event: threading.Event = field(default_factory=threading.Event)
+    _print_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
+    _reprint_prompt: Callable[[], None] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     _trial_padding_style = "03d"
+
+    def _print(self, *args, **kwargs):
+        """Prints a message, redrawing the persistent prompt below it if the interactive loop is active."""
+        with self._print_lock:
+            if self._reprint_prompt is not None:
+                # write the clear-line escape directly, bypassing rich's markup/highlighting
+                # which otherwise mangles raw ANSI control sequences
+                console.file.write("\r\x1b[2K")
+                console.file.flush()
+            console.print(*args, **kwargs)
+            if self._reprint_prompt is not None:
+                self._reprint_prompt()
 
     def trial_dir_for(self, trial_num: int) -> Path:
         """
@@ -341,7 +325,7 @@ class MojoReloaded:
 
                     # edge case check: file no longer exists
                     if not source_file.exists():
-                        console.print(
+                        self._print(
                             f"[bold red]Stop![/bold red] The source file for {label} is missing.\n"
                             f"Expected: [dim]{source_file}[/dim]\n"
                             f"[yellow]Hint:[/yellow] Did you rename [bold]'{source_file.name}'[/bold] or move it?"
@@ -358,7 +342,7 @@ class MojoReloaded:
                 return _load_func(path_str)
 
             except (ModuleNotFoundError, ImportError):
-                console.print(
+                self._print(
                     f"[bold red]Error:[/bold red] Could not find [bold green]{path_str}[/bold green].\n"
                     f"[yellow]Hint:[/yellow] Check your spelling or ensure the module path is correct."
                 )
@@ -463,7 +447,7 @@ class MojoReloaded:
             if on_reload_callback:
                 on_reload_callback(state)
 
-            console.print(
+            self._print(
                 f"[dim white]Model generated in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
             )
 
@@ -478,6 +462,7 @@ class MojoReloaded:
                         _sync_hook=self._sync_hook,
                         _skip_recording=not self.record,
                         playback_speed=self._playback_speed,
+                        _stop_event=self._stop_event,
                     )
                     start = time.time()
                     run_func(
@@ -487,12 +472,12 @@ class MojoReloaded:
                         *self.run_args,
                         **self.run_kwargs,
                     )
-                    console.print(
+                    self._print(
                         f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
                     )
                 else:
                     mujoco.mj_forward(state.model, state.data)
-        except (BdbQuit, KeyboardInterrupt):
+        except (BdbQuit, KeyboardInterrupt, rt.SimulationStopped):
             raise
         except Exception:
             if trial_status is not None:
@@ -557,16 +542,18 @@ class MojoReloaded:
         )
         watch_status = "[bold blue]on[/bold blue]" if self.watch else "[dim]off[/dim]"
         record_status = "[bold blue]on[/bold blue]" if self.record else "[dim]off[/dim]"
-        console.print(
+        self._print(
             Panel(
                 "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
                 "- [bold yellow]ENTER[/]: Repeat last command\n"
                 "- [bold magenta]gen[/]: Generate only\n"
                 f"{runtime_cmd}"
-                "- [bold white]seed <N>[/]: Set seed to N\n"
+                "- [bold white]seed <N>[/]: Set seed to N [dim](use [bold]seed none[/bold] to clear)[/dim]\n"
                 "- [bold white]trial <N>[/]: Set trial number to N\n"
                 f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
                 f"- [bold blue]record[/bold blue]: Toggle telemetry recording for [dim]mujoco-mojo dojo[/dim] (currently {record_status})\n"
+                "- [bold blue]dojo[/bold blue]: Print a command to launch the Dojo monitor for this session\n"
+                "- [bold red]stop[/bold red] / [bold red]halt[/bold red]: Abort a run in progress\n"
                 "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
                 "- [bold red]exit[/] / [bold red]q[/]: Close",
                 title="Interactive Controls",
@@ -581,13 +568,15 @@ class MojoReloaded:
         event_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         stop_event = threading.Event()
         watcher_stop_event: threading.Event | None = None
+        busy_event = threading.Event()
+        job_thread: threading.Thread | None = None
 
         def start_watcher() -> threading.Event | None:
             try:
                 from watchfiles import PythonFilter
                 from watchfiles import watch as wf_watch
             except ImportError:
-                console.print(
+                self._print(
                     "[bold yellow]Warning:[/bold yellow] watchfiles not installed. "
                     "Install [bold]mujoco-mojo[reloaded][/bold] to use --watch."
                 )
@@ -633,16 +622,77 @@ class MojoReloaded:
         if self.watch:
             watcher_stop_event = start_watcher()
 
-        self._print_help()
-
         def print_prompt():
-            watch_indicator = " [bold blue]W[/bold blue]" if self.watch else ""
+            if busy_event.is_set():
+                console.print(
+                    "[bold yellow]Running trial...[/bold yellow] "
+                    "[dim](type stop/halt to abort)[/dim][white] > [/white]",
+                    end="",
+                )
+                return
+
+            watch_indicator = " | [bold blue]W[/bold blue]" if self.watch else ""
             console.print(
-                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num})[/dim] {watch_indicator}[white] > [/white]",
+                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num}{watch_indicator})[/dim][white] > [/white]",
                 end="",
             )
 
-        print_prompt()
+        self._reprint_prompt = print_prompt
+        self._print_help()
+
+        # logging handlers write directly to the terminal, bypassing `self._print`'s
+        # prompt-clearing - wrap them so log lines don't step on the prompt either
+        root_logger = logging.getLogger()
+        wrapped_handlers: list[
+            tuple[logging.Handler, Callable[[logging.LogRecord], None]]
+        ] = []
+
+        def _wrap_handler(handler: logging.Handler):
+            original_emit = handler.emit
+
+            def emit(_self: logging.Handler, record: logging.LogRecord) -> None:
+                with self._print_lock:
+                    if self._reprint_prompt is not None:
+                        console.file.write("\r\x1b[2K")
+                        console.file.flush()
+                    original_emit(record)
+                    if self._reprint_prompt is not None:
+                        self._reprint_prompt()
+
+            setattr(handler, "emit", types.MethodType(emit, handler))
+            wrapped_handlers.append((handler, original_emit))
+
+        for handler in root_logger.handlers:
+            _wrap_handler(handler)
+
+        def run_construct(use_runtime: bool):
+            """Runs `generate_construct` in the background, blocking new runs/reloads until it finishes."""
+            nonlocal job_thread
+
+            def _job():
+                try:
+                    start = time.time()
+                    new_state = self.generate_construct(
+                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
+                    )
+                    on_reload_callback(new_state)
+                    msg = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                except rt.SimulationStopped:
+                    msg = "[bold yellow]Run stopped by user.[/bold yellow]"
+                except Exception as e:
+                    logger.exception(e)
+                    msg = f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
+                finally:
+                    self._stop_event.clear()
+
+                # clear busy before printing so the redrawn prompt shows "Awaiting command"
+                busy_event.clear()
+                self._print(msg)
+
+            self._stop_event.clear()
+            busy_event.set()
+            job_thread = threading.Thread(target=_job, daemon=True)
+            job_thread.start()
 
         while is_running_check():
             try:
@@ -655,96 +705,121 @@ class MojoReloaded:
             if event_type == "reload":
                 count = int(data) if data.isdigit() else 0
                 plural = "s" if count != 1 else ""
-                console.print(
+
+                if busy_event.is_set():
+                    self._print(
+                        f"\n[dim]{count} change{plural} detected, but a run is in "
+                        "progress - ignoring. Save again once it finishes to "
+                        "reload.[/dim]"
+                    )
+                    continue
+
+                self._print(
                     f"\n[dim]{count} change{plural} detected, reloading with last command...[/dim]"
                 )
                 use_runtime = self._last_command != "gen"
-                try:
-                    start = time.time()
-                    new_state = self.generate_construct(
-                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
-                    )
-                    on_reload_callback(new_state)
-                    console.print(
-                        f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
-                    )
-                except Exception as e:
-                    logger.exception(e)
-                    console.print(
-                        f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
-                    )
-                print_prompt()
+                run_construct(use_runtime)
                 continue
 
             raw = data.lower()
 
+            if busy_event.is_set():
+                if raw in ("stop", "halt"):
+                    self._print(
+                        "[bold yellow]Stopping the current run...[/bold yellow]"
+                    )
+                    self._stop_event.set()
+                else:
+                    self._print(
+                        "[dim]A run is in progress - type [bold]stop[/bold] or "
+                        "[bold]halt[/bold] to cancel it.[/dim]"
+                    )
+                continue
+
             if raw in ("exit", "quit", "q"):
                 break
 
-            if raw in ("h", "help"):
-                self._print_help()
-                print_prompt()
+            if raw in ("stop", "halt"):
+                self._print("[dim]No run is currently in progress.[/dim]")
                 continue
 
-            if raw == "watch":
+            if raw in ("h", "help"):
+                self._print_help()
+                continue
+
+            if raw in ["watch", "w"]:
                 self.watch = not self.watch
                 if self.watch:
                     watcher_stop_event = start_watcher()
                     if watcher_stop_event is None:
                         self.watch = False
                     else:
-                        console.print("[dim]Auto-watch enabled[/dim]")
+                        self._print("[dim]Auto-watch enabled[/dim]")
                 else:
                     stop_watcher()
-                    console.print("[dim]Auto-watch disabled[/dim]")
-                print_prompt()
+                    self._print("[dim]Auto-watch disabled[/dim]")
+                continue
+
+            if raw == "dojo":
+                hint = (
+                    "\n[dim]Note: telemetry recording is currently off, so the "
+                    "Dojo won't have trial data until you enable [bold]record[/bold].[/dim]"
+                    if not self.record
+                    else ""
+                )
+                self._print(
+                    "[dim]Run this in another terminal to monitor this session:[/dim]\n"
+                    f"[bold cyan]mujoco-mojo dojo {self.workdir}[/bold cyan]"
+                    f"{hint}"
+                )
                 continue
 
             if raw == "record":
                 self.record = not self.record
                 if self.record:
-                    console.print(
+                    self._print(
                         "[dim]Telemetry recording enabled - "
                         "the next reload will be visible in `mujoco-mojo dojo`.[/dim]"
                     )
                 else:
-                    console.print("[dim]Telemetry recording disabled[/dim]")
-                print_prompt()
+                    self._print("[dim]Telemetry recording disabled[/dim]")
                 continue
 
             if raw.startswith("seed "):
-                try:
-                    self.seed = int(raw[5:].strip())
-                    console.print(f"[dim]Seed set to {self.seed}.[/dim]")
-                except ValueError:
-                    console.print(
-                        "[bold red]Invalid seed.[/bold red] Use: seed <integer>"
-                    )
-                print_prompt()
+                seed_arg = raw[5:].strip()
+                if seed_arg in ("none", "null"):
+                    self.seed = None
+                    self._print("[dim]Seed cleared.[/dim]")
+                else:
+                    try:
+                        self.seed = int(seed_arg)
+                        self._print(f"[dim]Seed set to {self.seed}.[/dim]")
+                    except ValueError:
+                        self._print(
+                            "[bold red]Invalid seed.[/bold red] Use: seed <integer> or seed none"
+                        )
                 continue
 
             if raw.startswith("trial "):
                 try:
                     self.trial_num = int(raw[6:].strip())
-                    console.print(f"[dim]Trial number set to {self.trial_num}.[/dim]")
+                    self._print(f"[dim]Trial number set to {self.trial_num}.[/dim]")
                 except ValueError:
-                    console.print(
+                    self._print(
                         "[bold red]Invalid trial number.[/bold red] Use: trial <integer>"
                     )
-                print_prompt()
                 continue
 
             if raw and raw != "gen":
                 try:
                     self._playback_speed = float(raw)
-                    console.print(
+                    self._print(
                         f"[dim]Playback speed set to {self._playback_speed}x[/]"
                     )
                 except ValueError:
-                    console.print(
+                    self._print(
                         f"[bold red]Unknown command:[/bold red] '{raw}'. Type [bold cyan]h[/bold cyan] for help."
                     )
-                    print_prompt()
                     continue
 
             cmd = raw if raw else self._last_command
@@ -752,26 +827,21 @@ class MojoReloaded:
 
             use_runtime = cmd != "gen"
 
-            try:
-                start = time.time()
-                console.print("[dim]Processing...[/dim]")
-                new_state = self.generate_construct(
-                    use_runtime=use_runtime, on_reload_callback=on_reload_callback
-                )
-                on_reload_callback(new_state)
-                console.print(
-                    f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
-                )
-            except Exception as e:
-                logger.exception(e)
-                console.print(
-                    f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
-                )
-
-            print_prompt()
+            self._print("[dim]Processing...[/dim]")
+            run_construct(use_runtime)
 
         stop_watcher()
         stop_event.set()
+
+        if busy_event.is_set():
+            self._stop_event.set()
+            if job_thread is not None:
+                job_thread.join(timeout=5)
+
+        self._reprint_prompt = None
+
+        for handler, original_emit in wrapped_handlers:
+            setattr(handler, "emit", original_emit)
 
     def run_opengl(self, state: MjState):
         import mujoco.viewer
@@ -835,7 +905,7 @@ class MojoReloaded:
             scene: ViserMujocoScene
             arrow_handle: None | viser.LineSegmentsHandle
 
-        for name in ["websockets"]:
+        for name in ["websockets", "matplotlib.font_manager"]:
             _l = logging.getLogger(name)
             _l.setLevel(logging.WARNING)
             _l.propagate = False
@@ -867,10 +937,13 @@ class MojoReloaded:
                 label=f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})",
                 verbose=False,
             )
-        server.configure_theme(  # pyright: ignore[reportAttributeAccessIssue]
-            dark_mode=is_dark_mode(),
+        brand_rgb = (Color.CYAN_500.rgb * 255).round()
+        # dark_mode is a server-wide setting broadcast to every client - viser has no
+        # way to detect a client's browser/OS theme preference, so we default to dark.
+        server.gui.configure_theme(
+            dark_mode=True,
             show_logo=False,
-            brand_color=tuple(int(x) for x in (Color.CYAN_500.rgb * 255).round()),
+            brand_color=(int(brand_rgb[0]), int(brand_rgb[1]), int(brand_rgb[2])),
         )
 
         server.scene.reset()
@@ -928,6 +1001,9 @@ class MojoReloaded:
                 server=server, mj_model=s.model, num_envs=1
             )
             viser_state["scene"].update_from_mjdata(s.data)
+            server.gui.set_panel_label(
+                f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})"
+            )
             return viser_state["scene"]
 
         # initial render

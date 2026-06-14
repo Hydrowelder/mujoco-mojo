@@ -41,10 +41,10 @@ def test_joint_request_posts_qpos_signal(
     state.data.qpos[0] = 1.23
     mujoco.mj_forward(state.model, state.data)
 
-    joint.request(sm, attrs=["qpos"])
+    joint.request(sm, channels=["qpos"])
     sm.record(state)
 
-    key = "Joints/elbow/qpos"
+    key = "Joints/elbow:qpos"
     assert key in sm._key_to_idx
     idx: int = sm._key_to_idx[key]
     assert sm._data_buffer[0, idx] == pytest.approx(1.23, abs=1e-6)
@@ -60,10 +60,10 @@ def test_joint_request_posts_qvel_signal(
     state.data.qvel[0] = 2.5
     mujoco.mj_forward(state.model, state.data)
 
-    joint.request(sm, attrs=["qvel"])
+    joint.request(sm, channels=["qvel"])
     sm.record(state)
 
-    key = "Joints/elbow/qvel"
+    key = "Joints/elbow:qvel"
     assert key in sm._key_to_idx
     idx: int = sm._key_to_idx[key]
     assert sm._data_buffer[0, idx] == pytest.approx(2.5, abs=1e-6)

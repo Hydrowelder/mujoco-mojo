@@ -152,20 +152,33 @@ class SiteLoad(Load):
     def request(
         self,
         signal_manager: SignalManager,
-        attrs: list[Literal["force", "torque"]] = ["force", "torque"],
+        channels: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
+        """
+        Registers specific channels for logging.
+
+        | Channel  | Description                        | Type |
+        |:---------|:-----------------------------------|:-----|
+        | `force`  | applied force in the world frame   | xyzm |
+        | `torque` | applied torque in the world frame  | xyzm |
+
+        Each channel is posted under `subgroups=(load_name, channel)`.
+
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+        """
+
         def sample(state: MjState):
-            for attr in attrs:
-                source = self._last_f if attr == "force" else self._last_t
+            for channel in channels:
+                source = self._last_f if channel == "force" else self._last_t
 
                 # iterate through x, y, z, and magnitude (pop. pop.)
-                for i, k in enumerate("xyzm"):
+                for i, attr in enumerate("xyzm"):
                     signal_manager.post(
                         value=float(source[i]) if self.active else 0.0,
                         category=SignalCategory.LOADS,
                         # nest the force/torque under the function name
-                        subgroups=(f"{self.name}", attr),
-                        attr=k,
+                        subgroups=(f"{self.name}", channel),
+                        attr=attr,
                     )
 
         signal_manager.register_sampler(sample)
@@ -642,10 +655,21 @@ class JointFriction(JointLoad):
 
     def request(self, signal_manager: SignalManager) -> None:
         """
-        Registers per-timestep friction force/torque in the world frame for telemetry. Posts x, y, z components and magnitude. Raises ValueError if the joint has no name.
+        Registers specific channels for logging.
+
+        | Channel    | Description                                       | Type |
+        |:-----------|:--------------------------------------------------|:-----|
+        | `friction` | applied friction force/torque in the world frame  | xyzm |
+
+        Each channel is posted under `subgroups=(load_name, channel)`.
+
+        * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
         Args:
             signal_manager (SignalManager): Manager to register the sampler with.
+
+        Raises:
+            ValueError: If the joint has no name.
 
         """
         if self.joint.name is None:
@@ -655,12 +679,12 @@ class JointFriction(JointLoad):
 
         def sample(state: MjState) -> None:
             frc = self._last_force if self.active else np.zeros(3)
-            for v, label in zip(frc, ("x", "y", "z")):
+            for v, attr in zip(frc, ("x", "y", "z")):
                 signal_manager.post(
                     value=float(v),
                     category=SignalCategory.LOADS,
                     subgroups=(self.name, "friction"),
-                    attr=label,
+                    attr=attr,
                 )
             signal_manager.post(
                 value=float(np.linalg.norm(frc)),

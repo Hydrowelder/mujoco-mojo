@@ -284,7 +284,7 @@ def runtime(
             for b in mojo_model.mjcf.worldbody.walk_bodies():
                 b.request(
                     rm.signal_manager,
-                    attrs=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
+                    channels=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
                 )
             handoff.box1_rot.request(rm.signal_manager)
         # --8<-- [end:requests]

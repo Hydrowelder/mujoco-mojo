@@ -6,16 +6,14 @@ import mujoco_mojo.runtime as rt
 logger = mojo.utils.get_logger(__name__)
 
 MESHES_DIR = mojo.DepPath(__file__).parent.parent.parent / "meshes"
+RECORD_VIDEO = False
+CALC_PROX = False
 
 # ── tune these to compare contact algorithms and compliance ───────────────────
 ALGORITHM = mojo.ProximityType.VERTEX_TO_FACE
 # ALGORITHM = mojo.ProximityType.CONVEX_HULL       # fast, convex approximation
 # ALGORITHM = mojo.ProximityType.SPHERE_TO_SPHERE  # broadphase only, least precise
 # ALGORITHM = mojo.ProximityType.FACE_TO_FACE      # most precise, slowest
-
-STIFFNESS = 30_000.0  # N/m — spring constant k in F = k*delta + c*v_close
-DAMPING = 300.0  # N·s/m — damping c, only on closing contact
-CLEARANCE = 0.01  # m — contact zone begins this far before surface contact
 
 SIM_DURATION = 0.5  # seconds
 TIMESTEP = 0.002  # seconds
@@ -120,23 +118,24 @@ def runtime(
 ) -> mojo.MojoModel:
     handoff = mojo_model.get_user_data(Handoff)
 
-    prox = mojo.utils.Proximity(
-        geom_1=handoff.ball_geom,
-        geom_2=handoff.cup_geom,
-        dist_max=1.5,
-        algorithm=ALGORITHM,
-    ).register_to_rm(runtime_manager)
-
     with runtime_manager as rm:
-        rt.VideoRecorder(
-            path=mojo_model.trial_dir / "overview.mp4",
-            camera_name=mojo.CameraName("overview"),
-            show_loads=True,
-            show_proximities=True,
-        ).setup(state).register_to_rm(rm)
+        if RECORD_VIDEO:
+            rt.VideoRecorder(
+                path=mojo_model.trial_dir / "overview.mp4",
+                camera_name=mojo.CameraName("overview"),
+                show_loads=True,
+                show_proximities=True,
+            ).setup(state).register_to_rm(rm)
 
+        prox = mojo.utils.Proximity(
+            geom_1=handoff.ball_geom,
+            geom_2=handoff.cup_geom,
+            dist_max=1.5,
+            algorithm=ALGORITHM,
+        ).register_to_rm(rm)
         if rm.signal_manager:
-            prox.request(rm.signal_manager, attrs=["dist", "prox_type"])
+            if CALC_PROX:
+                prox.request(rm.signal_manager, channels=["dist", "prox_type"])
             handoff.ball_geom.request(rm.signal_manager)
 
         while state.data.time < SIM_DURATION:

@@ -622,8 +622,13 @@ class MojoRunner:
         self.workdir.mkdir(parents=True, exist_ok=True)
         if not (self.workdir / ".gitignore").exists():
             (self.workdir / ".gitignore").write_text("*", encoding="utf-8")
-        write_dojo_script(self.workdir)
-        self.capture_environment()
+
+        # SLURM workers re-enter run() with execution_mode=LOCAL; these only need
+        # to happen once, during orchestration, to avoid every worker racing to
+        # write the same shared files
+        if self.slurm_trial_id is None:
+            write_dojo_script(self.workdir)
+            self.capture_environment()
 
         match execution_mode:
             case ExecutionMode.LOCAL:
@@ -1480,6 +1485,17 @@ class MojoRunner:
             if not Confirm.ask("Proceed anyway?", default=False):
                 return True
 
+        # === get concurrency throttle ===
+        max_concurrent = Prompt.ask(
+            "  [white]Max concurrent tasks[/] [dim](blank = no limit, let SLURM decide)[/]",
+            default="",
+        )
+        if max_concurrent and not max_concurrent.isdigit():
+            console.print(
+                f"\n[bold red]WARNING:[/] '{max_concurrent}' is not a number. Ignoring."
+            )
+            max_concurrent = ""
+
         current_pythonpath = os.getenv("PYTHONPATH", "")
         if str(project_root) not in current_pythonpath:
             console.print(
@@ -1513,6 +1529,8 @@ class MojoRunner:
             if not Confirm.ask("Proceed anyway?", default=False):
                 return True
         array_range = self.get_slurm_array_string(to_run)
+        if max_concurrent:
+            array_range += f"%{max_concurrent}"
         script_path = (self.workdir / "mujoco_mojo_submit.sh").resolve()
 
         sbatch_content = f"""#!/bin/bash
@@ -1527,6 +1545,9 @@ class MojoRunner:
 # Move to the project root so imports work
 cd {project_root}
 {python_path_line}
+
+# Avoid concurrent array tasks racing to write .pyc files into the shared venv
+export PYTHONDONTWRITEBYTECODE=1
 
 # Execute the worker command
 {cmd}

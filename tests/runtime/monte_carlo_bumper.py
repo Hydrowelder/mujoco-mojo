@@ -349,7 +349,7 @@ def runtime(
 
             proximity.request(
                 signal_manager=rm.signal_manager,
-                attrs=["dist", "fromto", "prox_type"],
+                channels=["dist", "fromto", "prox_type"],
             )
 
             handoff.box1_rot.request(rm.signal_manager)
