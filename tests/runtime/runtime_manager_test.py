@@ -201,4 +201,4 @@ def test_step_calls_proximity_get_visuals(
     mgr.proximities.append(mock_proximity)
     mgr.step(state)
 
-    mock_proximity.get_visuals.assert_called_once_with(state)
+    mock_proximity.get_visuals.assert_called_once_with(state, mgr.signal_manager)
