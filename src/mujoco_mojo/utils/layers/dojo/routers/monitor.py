@@ -40,8 +40,14 @@ async def broadcast_updates():
 
             new_listeners = ACTIVE_CONNECTIONS - synced_connections
 
-            # If there is work to do OR new people need a catch-up packet
-            if not job.is_done or new_listeners:
+            if job.is_done and not new_listeners:
+                # Job is finished and everyone has already had at least one
+                # catch-up. Keep resending the final state cheaply (no disk
+                # refresh, no progress bar) so a client that missed the
+                # earlier "final" message - e.g. a dropped SSE frame - still
+                # gets it on a later tick.
+                await _emit_to_all({"type": "final", "status": job.to_monitor_json()})
+            else:
                 # 1. Start event for the progress bar
                 await _emit_to_all({"type": "start", "total": job.n_trial})
 
