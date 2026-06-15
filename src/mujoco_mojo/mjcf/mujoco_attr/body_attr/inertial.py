@@ -402,6 +402,7 @@ class Inertial(XMLModel):
         | AnyOrientation
         | None = None,
         max_retries: int = 10,
+        reset_rng: bool = True,
     ) -> Inertial:
         """
         Generates an Inertial element by sampling from provided distributions.
@@ -416,6 +417,7 @@ class Inertial(XMLModel):
             fullinertia (Vec6 | tuple[ float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, ] | None, optional): Full inertia vector or tuple of component distributions. Defaults to None.
             orientation (tuple[type[OrientationBase], list[float | Dist], EulerSeq | None] | Orientation | None, optional): Orientation for the inertial frame. Defaults to None.
             max_retries (int, optional): Maximum number of re-samples on physics failure. Defaults to 10.
+            reset_rng (bool, optional): Whether or not to reset the seed and trial number for the distribution. Setting the seed and trial number will reset the random number cycle. This will not skip registering the distribution or NamedValues to the MojoModel. If you want pseudorandom number generation, setting to False will require you to manually set the seed and trial number before passing the distribution into `from_random`. Defaults to True.
 
         Raises:
             ValueError: If neither diaginertia nor fullinertia are provided.
@@ -443,16 +445,18 @@ class Inertial(XMLModel):
             if isinstance(input_val, (list, tuple)):
                 for item in input_val:
                     if isinstance(item, Distribution):
-                        item.with_seed(mojo_model.seed).with_trial_num(
-                            mojo_model.trial_num
-                        )
+                        if not reset_rng:
+                            item.with_seed(mojo_model.seed).with_trial_num(
+                                mojo_model.trial_num
+                            )
 
                         # register the distribution for serialization
                         mojo_model.dists[item.name] = cast(Dist, item)
             elif isinstance(input_val, Distribution):
-                input_val.with_seed(mojo_model.seed).with_trial_num(
-                    mojo_model.trial_num
-                )
+                if not reset_rng:
+                    input_val.with_seed(mojo_model.seed).with_trial_num(
+                        mojo_model.trial_num
+                    )
 
                 # register the distribution for serialization
                 mojo_model.dists[input_val.name] = cast(Dist, input_val)
