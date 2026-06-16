@@ -804,6 +804,9 @@ class MojoRunner:
             logger.info("All trials were already completed. Nothing to do.")
             return bool(status_tracker.failed_trial_nums)
 
+        # holds one successful model so we can write distribution tables after all trials finish
+        _dist_model: MojoModel | None = None
+
         if self.config.is_parallel:
             logger.info(
                 f"Running {len(to_run)} trials with {self.config.n_proc} processors. {status_tracker.n_done}/{self.config.n_trial} ({status_tracker.progress:.2%}) trials completed."
@@ -834,8 +837,10 @@ class MojoRunner:
                     for f in as_completed(future_to_tn):
                         tn = future_to_tn[f]
                         try:
-                            _mojo_model, trial_status, _ = f.result()
+                            mojo_model, trial_status, _ = f.result()
                             status_tracker.update_trial(status=trial_status)
+                            if _dist_model is None and mojo_model is not None:
+                                _dist_model = mojo_model
                         except (BdbQuit, KeyboardInterrupt):
                             # user is quitting from breakpoint() or CTRL+C
                             raise
@@ -858,7 +863,7 @@ class MojoRunner:
         else:
             for tn in to_run:
                 try:
-                    _mojo_model, trial_status, _ = self.execute_single_trial(
+                    mojo_model, trial_status, _ = self.execute_single_trial(
                         trial_num=tn,
                         seed=self.seed,
                         overrides_payload=global_overrides.model_dump(),
@@ -866,6 +871,8 @@ class MojoRunner:
                     status_tracker.update_trial(
                         status=trial_status,
                     )
+                    if _dist_model is None and mojo_model is not None:
+                        _dist_model = mojo_model
                 except (BdbQuit, KeyboardInterrupt):
                     # user is quitting from breakpoint() or CTRL+C
                     raise
@@ -875,6 +882,13 @@ class MojoRunner:
                         status=TrialStatus(trial_num=tn, completion=Completion.FAILED)
                     )
                 status_tracker.generate_report()
+
+        # write distribution tables once from the main process after all workers finish;
+        # called here (not inside workers) so concurrent writes can never race
+        if _dist_model is not None and _dist_model.dists:
+            stochas_dir = self.workdir / "stochas"
+            stochas_dir.mkdir(exist_ok=True)
+            _dist_model.dists.to_tables(stochas_dir)
 
         status_tracker.generate_report(alert_generation=True)
         return bool(status_tracker.failed_trial_nums)
