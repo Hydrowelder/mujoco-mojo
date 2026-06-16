@@ -135,7 +135,19 @@
           });
           clearTimeout(timeoutId);
           this._setConnected(response.ok);
-          if (!response.ok && this.source) this.stopGlobalSync();
+          if (!response.ok && this.source) {
+            this.stopGlobalSync();
+            return;
+          }
+          if (response.ok) {
+            const status = await response.json();
+            if (this.isComplete && status.is_complete === false) {
+              this.isComplete = false;
+              this.toast("New run detected", "info");
+              this.addNotification("New run detected", "info");
+              this.startGlobalSync();
+            }
+          }
         } catch {
           this._setConnected(false);
           if (this.source) this.stopGlobalSync();

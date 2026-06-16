@@ -118,6 +118,43 @@ export interface FilterSchema {
   unit_groups?: UnitGroup[];
 }
 
+// ---------------------------------------------------------------------------
+// Distribution viewer
+// ---------------------------------------------------------------------------
+
+export type DistChartType =
+  | "continuous"
+  | "discrete"
+  | "categorical"
+  | "permutation"
+  | "none";
+
+export interface DistEntry {
+  name: string;
+  dist_type: string;
+  category: string;
+  units: string;
+  nominal: number | null;
+  nominal_label: string | null;
+  sampled_value: number | null;
+  sampled_label: string | null;
+  z_score: number | null;
+  percentile: number | null;
+  is_discrete: boolean;
+  chart_type: DistChartType;
+  pdf_x: number[];
+  pdf_y: number[];
+  cdf_x: number[];
+  cdf_y: number[];
+  cat_labels: string[];
+  cat_probs: number[];
+  params: Record<string, string | number | boolean>;
+}
+
+export interface DistsResponse {
+  entries: DistEntry[];
+}
+
 // PlotConfig and related types are generated from plot_config.py - see the
 // re-exports at the top of this file and lib/plot-config.generated.ts.
 

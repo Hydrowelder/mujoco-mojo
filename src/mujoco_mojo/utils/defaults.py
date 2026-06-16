@@ -16,6 +16,8 @@ __all__ = [
     "DEFAULT_SEED",
     "DEFAULT_XML_NAME",
     "NAMED_VALUES_FNAME",
+    "STOCHAS_DIR_NAME",
+    "STOCHAS_DISTS_FNAME",
     "TIME_COLUMN_NAME",
 ]
 
@@ -28,6 +30,8 @@ DEFAULT_WORKDIR = Path("./mojo-models")
 DEFAULT_MODEL_CONFIG_NAME = "model_config.json"
 DEFAULT_XML_NAME = "model.xml"
 NAMED_VALUES_FNAME = "named_values.json"
+STOCHAS_DIR_NAME = "stochas"
+STOCHAS_DISTS_FNAME = "dists.json"
 DEFAULT_SEED = None
 DEFAULT_N_PROC = 1
 

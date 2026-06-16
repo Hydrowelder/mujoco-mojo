@@ -7,6 +7,8 @@ import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
   Annotation,
+  DistEntry,
+  DistsResponse,
   DojoStore,
   FilterEntry,
   FilterSchema,
@@ -242,6 +244,41 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- TRIAL STATUS ---
     trialStatus: null as TrialStatus | null,
     _trialStatusPoll: null as ReturnType<typeof setTimeout> | null,
+
+    // --- DISTRIBUTIONS ---
+    dists: [] as DistEntry[],
+    _distTooltipEntry: null as DistEntry | null,
+    distFilterName: "" as string,
+    distFilterCategories: [] as string[],
+    distFilterTypes: [] as string[],
+    distFilterUnits: [] as string[],
+    distSortKey: "name" as
+      | "name"
+      | "category"
+      | "dist_type"
+      | "nominal"
+      | "sampled_value"
+      | "stat",
+    distSortAsc: true,
+    distColWidths: ((): Record<
+      "name" | "category" | "dist_type" | "units" | "nominal" | "sampled",
+      number
+    > => {
+      try {
+        const saved = localStorage.getItem("mojo:dists:col-widths");
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore malformed storage
+      }
+      return {
+        name: 180,
+        category: 100,
+        dist_type: 148,
+        units: 70,
+        nominal: 88,
+        sampled: 88,
+      };
+    })(),
 
     // --- TRIAL LOGS ---
     logFilename: null as string | null,
@@ -489,6 +526,461 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     // -----------------------------------------------------------------------
+    // Distributions
+    // -----------------------------------------------------------------------
+    async fetchDists() {
+      try {
+        const resp = await fetch(`/mosaic/${this.trialId}/dists`, {
+          cache: "no-store",
+        });
+        if (!resp.ok) return;
+        const result = (await resp.json()) as DistsResponse;
+        this.dists = result.entries;
+      } catch {
+        // stochas tables not written yet - silently skip
+      }
+    },
+
+    showDistTooltip(event: MouseEvent, entry: DistEntry) {
+      const hasChart =
+        entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
+      const hasParams = Object.keys(entry.params).length > 0;
+      if (!hasChart && !hasParams) return;
+      this._distTooltipEntry = entry;
+      const tooltip = document.getElementById(
+        "dist-pdf-tooltip",
+      ) as HTMLElement | null;
+      if (!tooltip) return;
+      // widen tooltip for categorical with many choices so bars have room
+      const minW =
+        entry.chart_type === "categorical"
+          ? Math.min(560, Math.max(340, entry.cat_labels.length * 52))
+          : 340;
+      tooltip.style.minWidth = `${minW}px`;
+      const x = event.clientX + 18;
+      const y = event.clientY - 110;
+      tooltip.style.left = `${Math.min(x, window.innerWidth - minW - 20)}px`;
+      tooltip.style.top = `${Math.max(8, y)}px`;
+      tooltip.style.display = "block";
+      void this._renderDistTooltipPlot(entry);
+    },
+
+    hideDistTooltip() {
+      this._distTooltipEntry = null;
+      const tooltip = document.getElementById("dist-pdf-tooltip");
+      if (tooltip) tooltip.style.display = "none";
+    },
+
+    async _renderDistTooltipPlot(entry: DistEntry) {
+      const chartEl = document.getElementById(
+        "dist-pdf-chart",
+      ) as HTMLElement | null;
+      const paramsEl = document.getElementById("dist-pdf-params");
+      if (!chartEl) return;
+
+      const isDark = this.theme === "dark";
+      const bg = isDark ? "#1e293b" : "#ffffff";
+      const textColor = isDark ? "#94a3b8" : "#64748b";
+      const curveColor = isDark ? "#06b6d4" : "#0891b2";
+      const cdfColor = isDark ? "#a78bfa" : "#7c3aed";
+      const fillColor = isDark
+        ? "rgba(6,182,212,0.12)"
+        : "rgba(8,145,178,0.10)";
+      const sampledColor = "#ef4444";
+
+      const chartType = entry.chart_type;
+
+      if (chartType === "permutation" || chartType === "none") {
+        // no chart — hide the chart element so the tooltip is params-only
+        chartEl.style.display = "none";
+      } else {
+        chartEl.style.display = "";
+
+        let traces: object[];
+        let layout: object;
+
+        if (chartType === "categorical") {
+          const barColors = entry.cat_labels.map((lbl) =>
+            lbl === entry.sampled_label ? sampledColor : curveColor,
+          );
+          traces = [
+            {
+              x: entry.cat_labels,
+              y: entry.cat_probs,
+              type: "bar",
+              marker: { color: barColors, opacity: 0.85 },
+              hoverinfo: "x+y",
+            },
+          ];
+          layout = {
+            paper_bgcolor: bg,
+            plot_bgcolor: bg,
+            margin: { t: 14, r: 10, b: 52, l: 52 },
+            xaxis: {
+              color: textColor,
+              showgrid: false,
+              tickfont: { size: 10 },
+              tickangle: entry.cat_labels.length > 5 ? -30 : 0,
+            },
+            yaxis: {
+              color: textColor,
+              showgrid: false,
+              tickfont: { size: 11 },
+              title: {
+                text: "Probability",
+                font: { size: 13 },
+                standoff: 4,
+              },
+              range: [0, 1],
+            },
+            showlegend: false,
+            font: { size: 11, color: textColor },
+          };
+        } else {
+          // continuous or discrete: PDF/PMF + CDF on secondary y-axis
+          const unitsLabel =
+            entry.units !== "unset" && entry.units !== "" ? entry.units : "";
+
+          const shapes: object[] = [];
+          if (entry.nominal !== null && typeof entry.nominal === "number") {
+            shapes.push({
+              type: "line",
+              x0: entry.nominal,
+              x1: entry.nominal,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+              line: { color: "#94a3b8", width: 1.5, dash: "dot" },
+            });
+          }
+          if (entry.sampled_value !== null) {
+            shapes.push({
+              type: "line",
+              x0: entry.sampled_value,
+              x1: entry.sampled_value,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+              line: { color: sampledColor, width: 2, dash: "solid" },
+            });
+          }
+
+          const pdfTrace: object =
+            chartType === "discrete"
+              ? {
+                  x: entry.pdf_x,
+                  y: entry.pdf_y,
+                  type: "bar",
+                  marker: { color: curveColor, opacity: 0.75 },
+                  name: "P(x)",
+                  hoverinfo: "x+y",
+                }
+              : {
+                  x: entry.pdf_x,
+                  y: entry.pdf_y,
+                  type: "scatter",
+                  mode: "lines",
+                  fill: "tozeroy",
+                  line: { color: curveColor, width: 1.5 },
+                  fillcolor: fillColor,
+                  name: "PDF",
+                  hoverinfo: "x+y",
+                };
+
+          const cdfTrace: object = {
+            x: entry.cdf_x,
+            y: entry.cdf_y,
+            type: "scatter",
+            mode: "lines",
+            line: {
+              color: cdfColor,
+              width: 1.5,
+              shape: chartType === "discrete" ? "hv" : "linear",
+            },
+            name: "CDF",
+            yaxis: "y2",
+            hoverinfo: "x+y",
+          };
+
+          traces = [pdfTrace, cdfTrace];
+          layout = {
+            paper_bgcolor: bg,
+            plot_bgcolor: bg,
+            // only reserve bottom space for x-axis title when units are present
+            margin: { t: 14, r: 48, b: unitsLabel ? 46 : 32, l: 64 },
+            xaxis: {
+              color: textColor,
+              showgrid: false,
+              tickfont: { size: 11 },
+              ...(unitsLabel
+                ? { title: { text: unitsLabel, font: { size: 13 }, standoff: 4 } }
+                : {}),
+            },
+            yaxis: {
+              color: curveColor,
+              showgrid: false,
+              tickfont: { size: 11 },
+              title: {
+                text:
+                  chartType === "discrete"
+                    ? "Probability"
+                    : "Probability Density",
+                font: { size: 13 },
+                standoff: 4,
+              },
+            },
+            // avoid setting `color` on yaxis2 — it bleeds into the x-axis ticks;
+            // use per-property colors on tickfont and title.font instead
+            yaxis2: {
+              overlaying: "y",
+              side: "right",
+              range: [0, 1],
+              showgrid: false,
+              tickfont: { size: 10, color: cdfColor },
+              title: {
+                text: "CDF",
+                font: { size: 12, color: cdfColor },
+                standoff: 2,
+              },
+              tickformat: ".1f",
+            },
+            showlegend: false,
+            shapes,
+            font: { size: 11, color: textColor },
+          };
+        }
+
+        await Plotly.react(chartEl, traces, layout, {
+          displayModeBar: false,
+          responsive: true,
+        });
+      }
+
+      if (paramsEl) {
+        const fmt = (v: string | number | boolean): string => {
+          if (typeof v === "number") {
+            return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
+              ? v.toExponential(3)
+              : v.toPrecision(4).replace(/\.?0+$/, "");
+          }
+          return String(v);
+        };
+        paramsEl.innerHTML = Object.entries(entry.params)
+          .map(
+            ([k, v]) =>
+              `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
+          )
+          .join("");
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // Distributions: sorting, filtering & column resize
+    // -----------------------------------------------------------------------
+    get distCategories(): string[] {
+      return Array.from(new Set(this.dists.map((d) => d.category))).sort();
+    },
+
+    get distTypes(): string[] {
+      return Array.from(new Set(this.dists.map((d) => d.dist_type))).sort();
+    },
+
+    get distUnits(): string[] {
+      return Array.from(new Set(this.dists.map((d) => d.units))).sort();
+    },
+
+    // empty array = all pass; unchecking when all are checked populates with
+    // all-except-one; re-checking to full set normalises back to empty
+    toggleDistCategoryFilter(cat: string) {
+      const all = this.distCategories;
+      if (this.distFilterCategories.length === 0) {
+        this.distFilterCategories = all.filter((c) => c !== cat);
+        return;
+      }
+      const idx = this.distFilterCategories.indexOf(cat);
+      if (idx === -1) {
+        this.distFilterCategories.push(cat);
+        if (this.distFilterCategories.length === all.length)
+          this.distFilterCategories = [];
+      } else {
+        this.distFilterCategories.splice(idx, 1);
+      }
+    },
+
+    toggleDistTypeFilter(type: string) {
+      const all = this.distTypes;
+      if (this.distFilterTypes.length === 0) {
+        this.distFilterTypes = all.filter((t) => t !== type);
+        return;
+      }
+      const idx = this.distFilterTypes.indexOf(type);
+      if (idx === -1) {
+        this.distFilterTypes.push(type);
+        if (this.distFilterTypes.length === all.length)
+          this.distFilterTypes = [];
+      } else {
+        this.distFilterTypes.splice(idx, 1);
+      }
+    },
+
+    toggleDistUnitFilter(unit: string) {
+      const all = this.distUnits;
+      if (this.distFilterUnits.length === 0) {
+        this.distFilterUnits = all.filter((u) => u !== unit);
+        return;
+      }
+      const idx = this.distFilterUnits.indexOf(unit);
+      if (idx === -1) {
+        this.distFilterUnits.push(unit);
+        if (this.distFilterUnits.length === all.length)
+          this.distFilterUnits = [];
+      } else {
+        this.distFilterUnits.splice(idx, 1);
+      }
+    },
+
+    get filteredDists(): DistEntry[] {
+      const name = this.distFilterName.trim().toLowerCase();
+      const filtered = this.dists.filter((d) => {
+        if (name && !d.name.toLowerCase().includes(name)) return false;
+        if (
+          this.distFilterCategories.length > 0 &&
+          !this.distFilterCategories.includes(d.category)
+        )
+          return false;
+        if (
+          this.distFilterTypes.length > 0 &&
+          !this.distFilterTypes.includes(d.dist_type)
+        )
+          return false;
+        if (
+          this.distFilterUnits.length > 0 &&
+          !this.distFilterUnits.includes(d.units)
+        )
+          return false;
+        return true;
+      });
+      const dir = this.distSortAsc ? 1 : -1;
+      return filtered.slice().sort((a, b) => {
+        switch (this.distSortKey) {
+          case "name":
+            return dir * a.name.localeCompare(b.name);
+          case "category":
+            return dir * a.category.localeCompare(b.category);
+          case "dist_type":
+            return dir * a.dist_type.localeCompare(b.dist_type);
+          case "nominal": {
+            const av = a.nominal ?? -Infinity;
+            const bv = b.nominal ?? -Infinity;
+            return dir * (av - bv);
+          }
+          case "sampled_value": {
+            const av = a.sampled_value ?? -Infinity;
+            const bv = b.sampled_value ?? -Infinity;
+            return dir * (av - bv);
+          }
+          case "stat": {
+            const av =
+              a.z_score ?? (a.percentile != null ? a.percentile / 100 : -Infinity);
+            const bv =
+              b.z_score ?? (b.percentile != null ? b.percentile / 100 : -Infinity);
+            return dir * (av - bv);
+          }
+        }
+      });
+    },
+
+    toggleDistSort(
+      key: "name" | "category" | "dist_type" | "nominal" | "sampled_value" | "stat",
+    ) {
+      if (this.distSortKey === key) {
+        this.distSortAsc = !this.distSortAsc;
+      } else {
+        this.distSortKey = key;
+        this.distSortAsc = true;
+      }
+    },
+
+    _persistDistColWidths() {
+      try {
+        localStorage.setItem(
+          "mojo:dists:col-widths",
+          JSON.stringify(this.distColWidths),
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+
+    startDistColResize(
+      e: MouseEvent,
+      col: "name" | "category" | "dist_type" | "units" | "nominal" | "sampled",
+    ) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = this.distColWidths[col];
+      const MIN: Record<typeof col, number> = {
+        name: 80,
+        category: 68,
+        dist_type: 96,
+        units: 48,
+        nominal: 64,
+        sampled: 64,
+      };
+      const onMove = (ev: MouseEvent) => {
+        this.distColWidths[col] = Math.max(
+          MIN[col],
+          startWidth + (ev.clientX - startX),
+        );
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        this._persistDistColWidths();
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+
+    autoFitDistColumn(
+      col: "name" | "category" | "dist_type" | "units" | "nominal" | "sampled",
+    ) {
+      const container = this.$refs.distTable as HTMLElement | undefined;
+      if (!container) return;
+      const headerEl = container.querySelector<HTMLElement>(
+        `[data-distcol-header="${col}"]`,
+      );
+      if (!headerEl) return;
+      // header: canvas-measure the label text + room for the sort chevron
+      let width =
+        this._measureTextWidth(headerEl.textContent?.trim() ?? "", headerEl) +
+        20;
+      // per-column total horizontal padding: outer cell px-3 = 24px;
+      // dist_type badge adds its own px-1.5 (12px) on top, so 36px total
+      const PADDING: Record<typeof col, number> = {
+        name: 24,
+        category: 24,
+        dist_type: 36,
+        units: 24,
+        nominal: 24,
+        sampled: 24,
+      };
+      const pad = PADDING[col];
+      // read rendered text from every content cell — handles all formatting
+      // (uppercase CSS, toPrecision, em-dash substitution) without a switch
+      for (const cell of container.querySelectorAll<HTMLElement>(
+        `[data-distcol-content="${col}"]`,
+      )) {
+        width = Math.max(
+          width,
+          this._measureTextWidth((cell.innerText ?? "").trim(), cell) + pad,
+        );
+      }
+      this.distColWidths[col] = Math.ceil(width);
+      this._persistDistColWidths();
+    },
+
+    // -----------------------------------------------------------------------
     // Logs: sorting, filtering & styling
     // -----------------------------------------------------------------------
     get filteredLogEntries(): LogEntry[] {
@@ -565,9 +1057,14 @@ function trialViewer(trialId: string, externalUrl: string) {
       e.preventDefault();
       const startX = e.clientX;
       const startWidth = this.logColWidths[col];
+      const MIN: Record<typeof col, number> = {
+        time: 60,
+        level: 56,
+        source: 60,
+      };
       const onMove = (ev: MouseEvent) => {
         this.logColWidths[col] = Math.max(
-          40,
+          MIN[col],
           startWidth + (ev.clientX - startX),
         );
       };
@@ -578,6 +1075,17 @@ function trialViewer(trialId: string, externalUrl: string) {
       };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
+    },
+
+    // format a number with 4 significant figures, switching to exponential
+    // notation when the exponent is < -4 or >= 4 (matches Python's g format)
+    fmtSigFig(v: number | null): string {
+      if (v === null) return "—";
+      if (v === 0) return "0";
+      const abs = Math.abs(v);
+      const exp = Math.floor(Math.log10(abs));
+      if (exp < -4 || exp >= 4) return v.toExponential(3);
+      return parseFloat(v.toPrecision(4)).toString();
     },
 
     _measureTextWidth(text: string, refEl: HTMLElement): number {
@@ -1289,6 +1797,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.fetchTrialStatus();
       void this.fetchTrialLogs();
       void this.fetchMediaFiles();
+      void this.fetchDists();
 
       // initialize tab state (populates labTabs, labActiveTabId, labName, labGraph)
       this._initTabs();
@@ -2665,10 +3174,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         storageKey: "mojo:json-editor:height",
         minHeight: 128,
         getResetHeight: () => {
-          const scroller = hostEl.querySelector(
-            ".cm-scroller",
-          ) as HTMLElement | null;
-          return scroller ? scroller.scrollHeight + "px" : undefined;
+          // .cm-scroller fills the host at 100% height, so its scrollHeight
+          // equals the panel height when content is shorter (useless for
+          // shrinking). .cm-content has natural height matching actual content.
+          const content = hostEl.querySelector<HTMLElement>(".cm-content");
+          if (!content) return undefined;
+          return Math.max(128, content.offsetHeight) + "px";
         },
       });
 
