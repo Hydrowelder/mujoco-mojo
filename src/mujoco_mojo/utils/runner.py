@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
 import joblib
 import numpy as np
 import optuna
+from filelock import FileLock
 from numpydantic import NDArray
 from pydantic import Field, field_validator, model_validator
 
@@ -52,6 +53,8 @@ from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     DEFAULT_XML_NAME,
     NAMED_VALUES_FNAME,
+    STOCHAS_DIR_NAME,
+    STOCHAS_DISTS_FNAME,
     SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, get_trial_log_handler, worker_init
@@ -731,7 +734,13 @@ class MojoRunner:
     def execute_single_trial(
         self, trial_num: int, seed: int | None, overrides_payload: dict
     ) -> tuple[MojoModel | None, TrialStatus, MjState | None]:
-        """Helper to package a Trial and run it."""
+        """
+        Helper to package a Trial and run it.
+
+        The model and state are live in-process objects; callers that need to cross a ProcessPoolExecutor boundary (i.e. parallel MC) must use `_execute_trial_subprocess` instead, which drops the non-picklable objects before the result is serialized back.
+
+        Returns `(mojo_model, trial_status, state)`.
+        """
         overrides = NamedValueDict[NDArray].model_validate(overrides_payload)
 
         trial = Trial(
@@ -742,7 +751,7 @@ class MojoRunner:
             padding_style=self.config.padding_style,
         )
 
-        return trial.run(
+        mojo_model, trial_status, state = trial.run(
             generator=self.generator,
             runtime=self.runtime,
             seed=seed,
@@ -752,6 +761,35 @@ class MojoRunner:
             run_args=self.run_args,
             run_kwargs=self.run_kwargs,
         )
+
+        # write distribution tables from this process so they never need to
+        # cross the pickle boundary; FileLock serializes concurrent workers,
+        # and the inner exists() check ensures only the first one writes
+        if mojo_model is not None and mojo_model.dists:
+            stochas_dir = self.workdir / STOCHAS_DIR_NAME
+            stochas_dir.mkdir(exist_ok=True)
+            dists_json_path = stochas_dir / STOCHAS_DISTS_FNAME
+            with FileLock(stochas_dir / ".dists.lock"):
+                if not dists_json_path.exists():
+                    mojo_model.dists.to_tables(stochas_dir)
+                    tmp = stochas_dir / "dists.tmp.json"
+                    tmp.write_text(mojo_model.dists.model_dump_json(), encoding="utf-8")
+                    tmp.replace(dists_json_path)
+
+        return mojo_model, trial_status, state
+
+    def _execute_trial_subprocess(
+        self, trial_num: int, seed: int | None, overrides_payload: dict
+    ) -> TrialStatus:
+        """
+        Subprocess-safe wrapper around `execute_single_trial` for parallel MC.
+
+        Runs the trial in-process (including stochas writes), then drops the non-picklable MojoModel and MjState before returning so the result can be serialized back across the ProcessPoolExecutor boundary.
+        """
+        _, trial_status, _ = self.execute_single_trial(
+            trial_num, seed, overrides_payload
+        )
+        return trial_status
 
     def run_monte_carlo(
         self,
@@ -824,7 +862,7 @@ class MojoRunner:
                 try:
                     future_to_tn = {
                         executor.submit(
-                            self.execute_single_trial,
+                            self._execute_trial_subprocess,
                             tn,
                             self.seed,
                             global_overrides.model_dump(),
@@ -834,7 +872,7 @@ class MojoRunner:
                     for f in as_completed(future_to_tn):
                         tn = future_to_tn[f]
                         try:
-                            _mojo_model, trial_status, _ = f.result()
+                            trial_status = f.result()
                             status_tracker.update_trial(status=trial_status)
                         except (BdbQuit, KeyboardInterrupt):
                             # user is quitting from breakpoint() or CTRL+C
@@ -858,7 +896,7 @@ class MojoRunner:
         else:
             for tn in to_run:
                 try:
-                    _mojo_model, trial_status, _ = self.execute_single_trial(
+                    _, trial_status, _ = self.execute_single_trial(
                         trial_num=tn,
                         seed=self.seed,
                         overrides_payload=global_overrides.model_dump(),

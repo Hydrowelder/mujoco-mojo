@@ -136,7 +136,20 @@ document.addEventListener("alpine:init", () => {
         });
         clearTimeout(timeoutId);
         this._setConnected(response.ok);
-        if (!response.ok && this.source) this.stopGlobalSync();
+        if (!response.ok && this.source) {
+          this.stopGlobalSync();
+          return;
+        }
+        if (response.ok) {
+          const status = (await response.json()) as { is_complete?: boolean };
+          // a new run started while we were idle after a completed job
+          if (this.isComplete && status.is_complete === false) {
+            this.isComplete = false;
+            this.toast("New run detected", "info");
+            this.addNotification("New run detected", "info");
+            this.startGlobalSync();
+          }
+        }
       } catch {
         this._setConnected(false);
         if (this.source) this.stopGlobalSync();

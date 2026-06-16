@@ -11,12 +11,16 @@ from pathlib import Path
 from typing import get_args
 
 import polars as pl
+import stochas
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
+from mujoco_mojo.utils.defaults import NAMED_VALUES_FNAME as _NAMED_VALUES_FNAME
+from mujoco_mojo.utils.defaults import STOCHAS_DIR_NAME as _STOCHAS_DIR_NAME
+from mujoco_mojo.utils.defaults import STOCHAS_DISTS_FNAME as _STOCHAS_DISTS_FNAME
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
 from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
@@ -145,7 +149,7 @@ async def get_mosaic(request: Request):
 
 @router.get("/api/trials")
 async def get_valid_trials():
-    """Scans the workdir for folders containing 'telemetry.parquet'"""
+    """Scans the workdir for folders containing telemetry data."""
     job = shared.CURRENT_JOB
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
@@ -1063,6 +1067,235 @@ def _parse_log_file(log_path: Path) -> list[dict]:
                 if entries:
                     entries[-1]["message"] += f"\n{line}"
     return entries
+
+
+def _chart_data(dist: stochas.Dist) -> dict:
+    """
+    Return chart data for the distribution tooltip.
+
+    Categorical distributions are detected by duck-typing `choices` and rendered
+    as a bar chart. Permutations expose `items` but have no meaningful density to
+    plot, so only params are shown. All other distributions get a PDF/PMF trace
+    plus a CDF trace on a secondary y-axis.
+    """
+    import numpy as np
+
+    choices = getattr(dist, "choices", None)
+    if isinstance(choices, dict):
+        labels = [str(k) for k in choices]
+        probs = [float(v) for v in choices.values()]
+        return {
+            "chart_type": "categorical",
+            "pdf_x": [],
+            "pdf_y": [],
+            "cdf_x": [],
+            "cdf_y": [],
+            "cat_labels": labels,
+            "cat_probs": probs,
+            "is_discrete": True,
+        }
+
+    if getattr(dist, "items", None) is not None:
+        return {
+            "chart_type": "permutation",
+            "pdf_x": [],
+            "pdf_y": [],
+            "cdf_x": [],
+            "cdf_y": [],
+            "cat_labels": [],
+            "cat_probs": [],
+            "is_discrete": True,
+        }
+
+    n = 200
+    try:
+        if dist.is_discrete:
+            k_low = int(dist.ppf(0.001))
+            k_high = max(int(dist.ppf(0.999)), k_low + 1)
+            k = np.arange(k_low, k_high + 1)
+            pdf_y = np.asarray(dist.pdf(k), dtype=float)  # pyright: ignore[reportArgumentType]
+            cdf_y = np.asarray(dist.cdf(k), dtype=float)  # pyright: ignore[reportArgumentType]
+            xs = [float(v) for v in k]
+            return {
+                "chart_type": "discrete",
+                "pdf_x": xs,
+                "pdf_y": pdf_y.tolist(),
+                "cdf_x": xs,
+                "cdf_y": cdf_y.tolist(),
+                "cat_labels": [],
+                "cat_probs": [],
+                "is_discrete": True,
+            }
+        x_low = float(dist.ppf(0.001))
+        x_high = float(dist.ppf(0.999))
+        x = np.linspace(x_low, x_high, n)
+        pdf_y = np.asarray(dist.pdf(x), dtype=float)
+        cdf_y = np.asarray(dist.cdf(x), dtype=float)
+        return {
+            "chart_type": "continuous",
+            "pdf_x": x.tolist(),
+            "pdf_y": pdf_y.tolist(),
+            "cdf_x": x.tolist(),
+            "cdf_y": cdf_y.tolist(),
+            "cat_labels": [],
+            "cat_probs": [],
+            "is_discrete": False,
+        }
+    except Exception:
+        return {
+            "chart_type": "none",
+            "pdf_x": [],
+            "pdf_y": [],
+            "cdf_x": [],
+            "cdf_y": [],
+            "cat_labels": [],
+            "cat_probs": [],
+            "is_discrete": dist.is_discrete,
+        }
+
+
+def _stat(
+    dist: stochas.Dist, sampled: float | None
+) -> tuple[float | None, float | None]:
+    """
+    Return (z_score, percentile) for a sampled value against a distribution.
+
+    z-score is returned for any distribution that exposes `mu` and `sigma` (normal-family). New normal-like distributions gain z-score support automatically via duck-typing.
+    """
+    if sampled is None:
+        return None, None
+    try:
+        pct = round(float(dist.cdf(sampled)) * 100, 1)
+        mu = getattr(dist, "mu", None)
+        sigma = getattr(dist, "sigma", None)
+        if mu is not None and sigma is not None and float(sigma) > 0:
+            return round((sampled - float(mu)) / float(sigma), 3), pct
+        return None, pct
+    except Exception:
+        return None, None
+
+
+def _safe_param(v: object) -> object:
+    """Convert values that can't be serialized to standard JSON to a display string."""
+    import math
+
+    if isinstance(v, float) and math.isinf(v):
+        return "-∞" if v < 0 else "∞"
+    return v
+
+
+def _extract_sampled_value(named_raw: dict, name: str) -> float | None:
+    """Pull the first scalar out of a NamedValue's stored_value regardless of nesting."""
+    import numpy as np
+
+    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
+    if entry is None:
+        return None
+    sv = entry.get("stored_value")
+    if sv is None:
+        return None
+    try:
+        flat = np.array(sv, dtype=float).flatten()
+        return float(flat[0]) if len(flat) > 0 else None
+    except Exception:
+        return None
+
+
+def _extract_sampled_label(named_raw: dict, name: str) -> str | None:
+    """Pull the raw string sampled value for non-numeric distributions (e.g. categorical)."""
+    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
+    if entry is None:
+        return None
+    sv = entry.get("stored_value")
+    if isinstance(sv, str):
+        return sv
+    if isinstance(sv, list) and sv and isinstance(sv[0], str):
+        return sv[0]
+    return None
+
+
+@router.get("/{trial_id}/dists")
+async def get_trial_dists(trial_id: str) -> dict:
+    """Returns per-trial distribution configs merged with sampled values and PDF/PMF data."""
+    trial_dir = _resolve_trial_dir(trial_id)
+    job = shared.CURRENT_JOB
+    if not job:
+        raise HTTPException(status_code=503, detail="No job active")
+
+    dists_path = job.workdir / _STOCHAS_DIR_NAME / _STOCHAS_DISTS_FNAME
+    if not dists_path.exists():
+        return {"entries": []}
+
+    try:
+        text = dists_path.read_text(encoding="utf-8")
+        dist_dict = stochas.DistributionDict.model_validate_json(text)
+    except Exception as exc:
+        logger.error(f"Failed to parse {dists_path}: {exc}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to parse distribution metadata: {exc}"
+        ) from exc
+
+    named_path = trial_dir / _NAMED_VALUES_FNAME
+    named_raw: dict = {}
+    if named_path.exists():
+        try:
+            named_raw = json.loads(named_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            # non-standard JSON (e.g. Infinity from numpydantic) - continue
+            # without sampled values rather than returning 500
+            logger.warning(f"Failed to parse {named_path}: {exc}")
+
+    loop = asyncio.get_running_loop()
+
+    def _build_entries() -> list[dict]:
+        entries = []
+        for dist in dist_dict.values():
+            chart = _chart_data(dist)
+            sampled = _extract_sampled_value(named_raw, dist.name)
+            sampled_label = _extract_sampled_label(named_raw, dist.name)
+            z_score, percentile = _stat(dist, sampled)
+            # nominal may be any type T (float, str, list...); expose as a
+            # scalar float when possible, or as a string label (e.g. for
+            # categorical nominals like "class_A"), mirroring sampled_value /
+            # sampled_label
+            nominal_raw = dist.nominal if dist.has_nominal else None
+            nominal: float | None = None
+            nominal_label: str | None = None
+            if nominal_raw is not None:
+                try:
+                    nominal = float(nominal_raw)  # pyright: ignore[reportArgumentType]
+                except (TypeError, ValueError):
+                    if isinstance(nominal_raw, str):
+                        nominal_label = nominal_raw
+                    elif isinstance(nominal_raw, (list, tuple)):
+                        nominal_label = ", ".join(str(v) for v in nominal_raw)
+            entries.append(
+                {
+                    "name": dist.name,
+                    "dist_type": dist.dist_type,
+                    "category": dist.category,
+                    "units": dist.units,
+                    "nominal": nominal,
+                    "nominal_label": nominal_label,
+                    "sampled_value": sampled,
+                    "sampled_label": sampled_label,
+                    "z_score": z_score,
+                    "percentile": percentile,
+                    "is_discrete": chart["is_discrete"],
+                    "chart_type": chart["chart_type"],
+                    "pdf_x": chart["pdf_x"],
+                    "pdf_y": chart["pdf_y"],
+                    "cdf_x": chart["cdf_x"],
+                    "cdf_y": chart["cdf_y"],
+                    "cat_labels": chart["cat_labels"],
+                    "cat_probs": chart["cat_probs"],
+                    "params": {k: _safe_param(v) for k, v in dist.table_params.items()},
+                }
+            )
+        return entries
+
+    entries = await loop.run_in_executor(None, _build_entries)
+    return {"entries": entries}
 
 
 @router.get("/{trial_id}/logs")
