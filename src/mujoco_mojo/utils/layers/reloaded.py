@@ -769,7 +769,7 @@ class MojoReloaded:
                 )
                 self._print(
                     "[dim]Run this in another terminal to monitor this session:[/dim]\n"
-                    f"[bold cyan]mujoco-mojo dojo {self.workdir}[/bold cyan]"
+                    f'[bold cyan]mujoco-mojo dojo "{self.workdir}"[/bold cyan]'
                     f"{hint}"
                 )
                 continue
