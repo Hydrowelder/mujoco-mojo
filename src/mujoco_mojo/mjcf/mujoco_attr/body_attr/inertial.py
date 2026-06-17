@@ -12,7 +12,7 @@ from mujoco_mojo.mjcf.orientation import (
 )
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.stochas import Dist, Distribution, NamedValue
+from mujoco_mojo.stochas import AnyDist, Distribution, NamedValue
 from mujoco_mojo.typing import EulerSeq, Mat3, Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
 
@@ -383,22 +383,24 @@ class Inertial(XMLModel):
     def from_random(
         cls,
         mojo_model: MojoModel,
-        mass: float | Dist,
-        pos: Vec3 | tuple[float | Dist, float | Dist, float | Dist] | Pos,
+        mass: float | AnyDist,
+        pos: Vec3 | tuple[float | AnyDist, float | AnyDist, float | AnyDist] | Pos,
         diaginertia: Vec3
-        | tuple[float | Dist, float | Dist, float | Dist]
+        | tuple[float | AnyDist, float | AnyDist, float | AnyDist]
         | None = None,
         fullinertia: Vec6
         | tuple[
-            float | Dist,
-            float | Dist,
-            float | Dist,
-            float | Dist,
-            float | Dist,
-            float | Dist,
+            float | AnyDist,
+            float | AnyDist,
+            float | AnyDist,
+            float | AnyDist,
+            float | AnyDist,
+            float | AnyDist,
         ]
         | None = None,
-        orientation: tuple[type[OrientationBase], list[float | Dist], EulerSeq | None]
+        orientation: tuple[
+            type[OrientationBase], list[float | AnyDist], EulerSeq | None
+        ]
         | AnyOrientation
         | None = None,
         max_retries: int = 10,
@@ -451,7 +453,7 @@ class Inertial(XMLModel):
                             )
 
                         # register the distribution for serialization
-                        mojo_model.dists[item.name] = cast(Dist, item)
+                        mojo_model.dists[item.name] = cast(AnyDist, item)
             elif isinstance(input_val, Distribution):
                 if not reset_rng:
                     input_val.with_seed(mojo_model.seed).with_trial_num(
@@ -459,7 +461,7 @@ class Inertial(XMLModel):
                     )
 
                 # register the distribution for serialization
-                mojo_model.dists[input_val.name] = cast(Dist, input_val)
+                mojo_model.dists[input_val.name] = cast(AnyDist, input_val)
 
         _seed_dist(mass)
         _seed_dist(pos)

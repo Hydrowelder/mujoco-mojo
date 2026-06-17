@@ -701,13 +701,13 @@ def run_monte_carlo(
 
     logger.info("Initializing Monte Carlo with CLI!")
 
-    dojo_cmd = f"mujoco-mojo dojo {workdir}"
+    dojo_cmd = f'mujoco-mojo dojo "{workdir}"'
     console.print(
         Panel(
             "[bold green]Campaign Initialized![/]\n\n"
             "[white]To monitor progress and view results, run:[/]\n"
             f"    [bold yellow]{dojo_cmd}[/]",
-            title="[cyan]Launch Control[/]",
+            title="[cyan]Monte Carlo Initialized[/]",
             expand=False,
             border_style="cyan",
         )
@@ -850,13 +850,13 @@ def run_single(
 
     logger.info("Initializing single trial with CLI!")
 
-    dojo_cmd = f"mujoco-mojo dojo {workdir}"
+    dojo_cmd = f'mujoco-mojo dojo "{workdir}"'
     console.print(
         Panel(
             "[bold green]Trial Ready![/]\n\n"
             "[white]To monitor progress and view results, run:[/]\n"
             f"    [bold yellow]{dojo_cmd}[/]",
-            title="[cyan]Launch Control[/]",
+            title="[cyan]Single Run Initialized[/]",
             expand=False,
             border_style="cyan",
         )
@@ -1389,7 +1389,7 @@ def run_optimizer(
 
     workdir = workdir.resolve()
 
-    dojo_cmd = f"mujoco-mojo dojo {workdir}"
+    dojo_cmd = f'mujoco-mojo dojo "{workdir}"'
     console.print(
         Panel(
             f"[bold green]Optimization Engine Engaged![/]\n\n"
@@ -1398,7 +1398,7 @@ def run_optimizer(
             f"[white]Sampler:[/]    [yellow]{sampler}[/]\n\n"
             f"[white]To monitor live progress, run:[/]\n"
             f"    [bold yellow]{dojo_cmd}[/]",
-            title="[cyan]Optimizer Launch Control[/]",
+            title="[cyan]Optimizer Initialized[/]",
             expand=False,
             border_style="cyan",
         )

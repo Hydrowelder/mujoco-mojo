@@ -1069,7 +1069,7 @@ def _parse_log_file(log_path: Path) -> list[dict]:
     return entries
 
 
-def _chart_data(dist: stochas.Dist) -> dict:
+def _chart_data(dist: stochas.AnyDist) -> dict:
     """
     Return chart data for the distribution tooltip.
 
@@ -1126,8 +1126,12 @@ def _chart_data(dist: stochas.Dist) -> dict:
                 "cat_probs": [],
                 "is_discrete": True,
             }
-        x_low = float(dist.ppf(0.001))
-        x_high = float(dist.ppf(0.999))
+        if isinstance(dist, stochas.CauchyDistribution):
+            x_low = dist.theta - 5 * dist.sigma
+            x_high = dist.theta + 5 * dist.sigma
+        else:
+            x_low = float(dist.ppf(0.001))
+            x_high = float(dist.ppf(0.999))
         x = np.linspace(x_low, x_high, n)
         pdf_y = np.asarray(dist.pdf(x), dtype=float)
         cdf_y = np.asarray(dist.cdf(x), dtype=float)
@@ -1155,7 +1159,7 @@ def _chart_data(dist: stochas.Dist) -> dict:
 
 
 def _stat(
-    dist: stochas.Dist, sampled: float | None
+    dist: stochas.AnyDist, sampled: float | None
 ) -> tuple[float | None, float | None]:
     """
     Return (z_score, percentile) for a sampled value against a distribution.
