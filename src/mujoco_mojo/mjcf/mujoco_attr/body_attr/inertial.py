@@ -413,11 +413,11 @@ class Inertial(XMLModel):
 
         Args:
             mojo_model (MojoModel): The MojoModel instance for sampling and registration.
-            mass (float | Dist): Mass value or distribution.
-            pos (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist]): Position vector or tuple of component distributions.
-            diaginertia (Vec3 | tuple[float  |  Dist, float  |  Dist, float  |  Dist] | None, optional): Principal moments or tuple of component distributions. Defaults to None.
-            fullinertia (Vec6 | tuple[ float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, float  |  Dist, ] | None, optional): Full inertia vector or tuple of component distributions. Defaults to None.
-            orientation (tuple[type[OrientationBase], list[float | Dist], EulerSeq | None] | Orientation | None, optional): Orientation for the inertial frame. Defaults to None.
+            mass (float | AnyDist): Mass value or distribution.
+            pos (Vec3 | tuple[float  |  AnyDist, float  |  AnyDist, float  |  AnyDist]): Position vector or tuple of component distributions.
+            diaginertia (Vec3 | tuple[float  |  AnyDist, float  |  AnyDist, float  |  AnyDist] | None, optional): Principal moments or tuple of component distributions. Defaults to None.
+            fullinertia (Vec6 | tuple[ float  |  AnyDist, float  |  AnyDist, float  |  AnyDist, float  |  AnyDist, float  |  AnyDist, float  |  AnyDist, ] | None, optional): Full inertia vector or tuple of component distributions. Defaults to None.
+            orientation (tuple[type[OrientationBase], list[float | AnyDist], EulerSeq | None] | Orientation | None, optional): Orientation for the inertial frame. Defaults to None.
             max_retries (int, optional): Maximum number of re-samples on physics failure. Defaults to 10.
             reset_rng (bool, optional): Whether or not to reset the seed and trial number for the distribution. Setting the seed and trial number will reset the random number cycle. This will not skip registering the distribution or NamedValues to the MojoModel. If you want pseudorandom number generation, setting to False will require you to manually set the seed and trial number before passing the distribution into `from_random`. Defaults to True.
 
@@ -477,7 +477,7 @@ class Inertial(XMLModel):
             resolved_values = []
             pending_named_values = []
 
-            # case 1: tuple/list of components [(Dist|float), ...]
+            # case 1: tuple/list of components [(AnyDist|float), ...]
             if isinstance(input_val, (list, tuple)):
                 for item in input_val:
                     if isinstance(item, Distribution):
