@@ -19,4 +19,4 @@ class SensorTactile(SensorBase):
     """Name of the geom to associate the tactile sensor with."""
 
     mesh: MeshName
-    """Name of the mesh to associate the tactile sensor with. The mesh will be created by the sensor."""
+    """Name of the mesh to associate the tactile sensor with."""

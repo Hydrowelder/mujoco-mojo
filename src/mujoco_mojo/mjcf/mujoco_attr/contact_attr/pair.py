@@ -17,7 +17,7 @@ class Pair(XMLModel):
 
     tag = "pair"
 
-    children = (
+    attributes = (
         "name",
         "class_",
         "geom1",

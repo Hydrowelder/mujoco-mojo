@@ -12,7 +12,7 @@ __all__ = ["ActuatorAdhesion"]
 
 class ActuatorAdhesion(ActuatorBase):
     """
-    This element is used to model a muscle actuator, as described in the Muscles actuators section. The underlying general attributes are set as follows:
+    This element defines an active adhesion actuator which injects forces at contacts in the normal direction, see illustration video. The model shown in the video can be found here and includes inline annotations. The transmission target is a body, and adhesive forces are injected into all contacts involving geoms which belong to this body. The force is divided equally between multiple contacts. When the gap attribute is not used, this actuator requires active contacts and cannot apply a force at a distance, more like the active adhesion on the feet of geckos and insects rather than an industrial vacuum gripper. In order to enable "suction at a distance", set the gap attribute of the body's geoms to a positive value. This creates a layer around each geom where contacts are detected but no contact forces are generated, and the adhesive force can act across this gap. In the video above, such inactive contacts are blue, while active contacts are orange. An adhesion actuator's length is always 0. ctrlrange is required and must also be nonnegative (no repulsive forces are allowed). The underlying general attributes are set as follows:
 
     !!! note
         These general attributes are accessible via their respective properties for reference.
@@ -30,6 +30,9 @@ class ActuatorAdhesion(ActuatorBase):
 
         > `trntype` means transmission type. Meaning the Actuator uses the Body field.
         > It is not accessible as a property. See ActuatorGeneral.
+
+    This element has a subset of the common attributes and two custom attributes.
+
     """
 
     tag = "adhesion"
@@ -48,6 +51,8 @@ class ActuatorAdhesion(ActuatorBase):
 
     # inherited from ActuatorBase but not valid for adhesion's fixed body transmission
     non_xml_fields = (
+        "nsample",
+        "interp",
         "delay",
         "ctrllimited",
         "lengthrange",

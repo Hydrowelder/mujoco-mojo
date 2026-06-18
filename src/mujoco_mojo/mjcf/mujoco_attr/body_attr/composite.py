@@ -17,7 +17,7 @@ __all__ = ["Composite"]
 
 
 class Composite(XMLModel):
-    """This element is used to construct the kinematic tree via nesting. The element worldbody is used for the top-level body, while the element body is used for all other bodies. The top-level body is a restricted type of body: it cannot have child elements inertial and joint, and also cannot have any attributes. It corresponds to the origin of the world frame, within which the rest of the kinematic tree is defined. Its body name is automatically defined as "world"."""
+    """This is not a model element, but rather a macro which expands into multiple model elements representing a composite object. These elements are bodies (with their own joints and geoms) that become children of the parent body containing the macro. The macro expansion is done by the model compiler. If the resulting model is then saved, the macro will be replaced with the actual model elements. The defaults mechanism used in the rest of MJCF does not apply here, even if the parent body has a childclass attribute defined. Instead there are internal defaults adjusted automatically for each composite object type. See Composite objects in the modeling guide for more detailed explanation. Note that several legacy composite types have been replaced by replicate (for repeated objects) and flexcomp (for soft objects). Therefore, the only supported composite type is now cable, which produces an inextensible chain of bodies connected with ball joints."""
 
     tag = "composite"
 
@@ -40,7 +40,7 @@ class Composite(XMLModel):
     type: CompositeType = CompositeType.CABLE
     """This attribute determines the type of composite object. The only supported type is cable.
 
-    The `cable` type creates a 1D chain of bodies connected with ball joints, each having a geom with user-defined type (cylinder, capsule or box). The geometry can either be defined with an array of 3D vertex coordinates vertex or with prescribed functions with the option curve. Currently, only linear and trigonometric functions are supported. For example, an helix can be obtained with curve="cos(s) sin(s) s". The size is set with the option size, resulting in f(s)={size[1]⋅cos(2π⋅size[2]), size[1]⋅sin(2π⋅size[2]),  size[0]⋅s}."""
+    The `cable` type creates a 1D chain of bodies connected with ball joints, each having a geom with user-defined type (cylinder, capsule or box). The geometry can either be defined with an array of 3D vertex coordinates vertex or with prescribed functions with the option curve. Currently, only linear and trigonometric functions are supported. For example, an helix can be obtained with curve="cos(s) sin(s) s". The size is set with the option size, resulting in f(s)={size[1]⋅cos(2π⋅size[2]), size[1]⋅sin(2π⋅size[2]), size[0]⋅s}."""
 
     count: tuple[int] | tuple[int, int] | tuple[int, int, int]
     """The element count in each dimension of the grid. This can have 1, 2 or 3 numbers, specifying the element count along the X, Y and Z axis of the parent body frame within. Any missing numbers default to 1. If any of these numbers is 1, all subsequent numbers must also be 1, so that the leading dimensions of the grid are used. This means for example that a 1D grid will always extend along the X axis. To achieve a different orientation, rotate the frame of the parent body. Note that some types imply a grid of certain dimensionality, so the requirements for this attribute depend on the specified type."""

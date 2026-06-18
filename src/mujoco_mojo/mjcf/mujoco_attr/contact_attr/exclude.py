@@ -15,7 +15,7 @@ class Exclude(XMLModel):
 
     tag = "exclude"
 
-    children = (
+    attributes = (
         "name",
         "body1",
         "body2",

@@ -37,6 +37,7 @@ class Flag(XMLModel):
         "invdiscrete",
         "multiccd",
         "sleep",
+        "diagexact",
     )
 
     constraint: EnableDisable = EnableDisable.ENABLE
@@ -125,3 +126,6 @@ class Flag(XMLModel):
     !!! warning "Flag value at initialization time"
         Unlike any other flag, the sleep flag has an effect during mjData initialization (mj_makeData or mj_resetData). First, it must be set at initialization time in order for the sleep-init policy to take effect. Second, it must be set in order for static quantities to be computed. See implementation notes for more details.
     """
+
+    diagexact: EnableDisable = EnableDisable.DISABLE
+    """This flag enables computation of the exact diagonal of the constraint-space inertia matrix A = J M^-1 J^T, replacing the body-based approximation normally used. The exact diagonal is computed from the whitened Jacobian Y = J M^-1/2 as A_ii = ||Y_i||^2. This provides a more accurate impedance computation, which can improve solver quality for models with complex kinematic coupling. The cost is one back-substitution with the Cholesky factor of the mass matrix per active constraint row; if dual solvers are used (PGS or NoSlip), the cost is negligible since Y is computed anyway. Consider enabling this flag when observing divergence or poor constraint quality, particularly in models with highly anisotropic body inertias or bodies operating far from the initial configuration qpos0."""
