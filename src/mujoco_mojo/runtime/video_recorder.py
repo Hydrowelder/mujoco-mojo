@@ -105,8 +105,33 @@ class VideoRecorder:
         """Frame rate of the saved video, after applying `playback_speed` to `fps`."""
         return self.fps * self.playback_speed
 
+    def _validate(self, state: MjState) -> None:
+        """Checks settings against the model before allocating any GL resources, so failures are raised here rather than as a confusing error deep in the simulation loop."""
+        offwidth = state.model.vis.global_.offwidth
+        offheight = state.model.vis.global_.offheight
+        if self.width > offwidth or self.height > offheight:
+            msg = (
+                f"Requested render size ({self.width}w x {self.height}h) exceeds the model's offscreen "
+                f"buffer size ({offwidth}w x {offheight}h). Increase offwidth/offheight in the model's "
+                f"`mojo.Visual(global_=mojo.VisualGlobal(offwidth={self.width}, offheight={self.height}))` element, or reduce the recorder's width/height."
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if (
+            mujoco.mj_name2id(
+                state.model, mujoco.mjtObj.mjOBJ_CAMERA.value, self.camera_name
+            )
+            == -1
+        ):
+            msg = f'Camera "{self.camera_name}" does not exist in the model.'
+            logger.error(msg)
+            raise ValueError(msg)
+
     def setup(self, state: MjState) -> Self:
         """Initializes the MuJoCo renderer for this model. Must be called before the simulation loop."""
+        self._validate(state)
+
         try:
             self._renderer = mujoco.Renderer(
                 model=state.model, height=self.height, width=self.width
