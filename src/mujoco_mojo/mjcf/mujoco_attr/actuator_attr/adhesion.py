@@ -46,6 +46,24 @@ class ActuatorAdhesion(ActuatorBase):
         "gain",
     )
 
+    # inherited from ActuatorBase but not valid for adhesion's fixed body transmission
+    non_xml_fields = (
+        "delay",
+        "ctrllimited",
+        "lengthrange",
+        "gear",
+        "damping",
+        "armature",
+        "cranklength",
+        "joint",
+        "jointinparent",
+        "site",
+        "refsite",
+        "tendon",
+        "cranksite",
+        "slidersite",
+    )
+
     body: BodyName
     """The actuator acts on all contacts involving this body's geoms."""
 

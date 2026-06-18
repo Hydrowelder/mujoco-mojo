@@ -16,5 +16,8 @@ class CompositeSite(SiteBase):
 
     attributes = ("group", "size", "material", "rgba")
 
+    # inherited from SiteBase but not part of the composite site's restricted schema
+    non_xml_fields = ("name", "class_", "pose", "user")
+
     size: Vec3 | None = None
     """Sizes of the geometric shape representing the site. What shape it is I do not know."""

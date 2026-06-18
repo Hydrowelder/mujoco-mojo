@@ -11,7 +11,7 @@ class SpatialGeom(XMLModel):
 
     tag = "geom"
 
-    attributes = ("geom",)
+    attributes = ("geom", "sidesite")
 
     geom: GeomName
     """The name of a geom that acts as an obstacle for the tendon path. Only sphere and cylinder geoms can be referenced here."""

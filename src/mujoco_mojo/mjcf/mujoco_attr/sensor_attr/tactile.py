@@ -9,7 +9,11 @@ class SensorTactile(SensorBase):
 
     tag = "tactile"
 
-    attributes = ("name", "user", "geom", "mesh")
+    attributes = (
+        *SensorBase.attributes,
+        "geom",
+        "mesh",
+    )
 
     geom: GeomName
     """Name of the geom to associate the tactile sensor with."""

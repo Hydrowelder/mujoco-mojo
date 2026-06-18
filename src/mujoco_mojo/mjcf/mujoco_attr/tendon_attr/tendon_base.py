@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import ClassVar
 
 import mujoco
@@ -19,7 +20,7 @@ from mujoco_mojo.typing import (
 __all__ = ["TendonBase"]
 
 
-class TendonBase(XMLModel):
+class TendonBase(XMLModel, ABC):
     """Base model to be used for Tendons."""
 
     tag = ""

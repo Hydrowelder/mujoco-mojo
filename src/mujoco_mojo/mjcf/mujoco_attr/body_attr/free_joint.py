@@ -23,6 +23,10 @@ class FreeJoint(XMLModel):
 
     tag = "freejoint"
 
+    attributes = ("name", "group")
+
+    non_xml_fields = ("align",)  # never saved to XML, see the align docstring below
+
     type: ClassVar[JointType] = JointType.FREE
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_JOINT

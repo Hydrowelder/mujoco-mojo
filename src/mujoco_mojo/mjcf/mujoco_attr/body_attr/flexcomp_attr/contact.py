@@ -22,3 +22,6 @@ class FlexCompContact(FlexContact):
         "margin",
         "gap",
     )
+
+    # inherited from FlexContact but not part of the flexcomp contact element's schema
+    non_xml_fields = ("solref", "passive")

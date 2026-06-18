@@ -35,7 +35,32 @@ class Joint(XMLModel):
 
     tag = "joint"
 
-    attributes = ()
+    attributes = (
+        "name",
+        "class_",
+        "type",
+        "group",
+        "pos",
+        "axis",
+        "springdamper",
+        "solreflimit",
+        "solimplimit",
+        "solreffriction",
+        "solimpfriction",
+        "stiffness",
+        "range",
+        "limited",
+        "actuatorfrcrange",
+        "actuatorfrclimited",
+        "actuatorgravcomp",
+        "margin",
+        "ref",
+        "springref",
+        "armature",
+        "damping",
+        "frictionloss",
+        "user",
+    )
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_JOINT
 

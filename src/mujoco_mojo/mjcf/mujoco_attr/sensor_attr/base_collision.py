@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from abc import ABC
+
 from pydantic import model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.base import SensorBase
@@ -14,7 +16,7 @@ logger = get_logger(__name__)
 __all__ = ["SensorCollisionBase"]
 
 
-class SensorCollisionBase(SensorBase):
+class SensorCollisionBase(SensorBase, ABC):
     """
     This is a base class for collision sensors.
 

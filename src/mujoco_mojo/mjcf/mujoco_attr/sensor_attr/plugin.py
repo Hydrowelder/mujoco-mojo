@@ -11,13 +11,15 @@ class SensorPlugin(SensorBase, Plugin):
     tag = "plugin"
 
     attributes = (
-        *tuple([a for a in SensorBase.attributes if a not in ("noise")]),
+        *tuple([a for a in SensorBase.attributes if a not in ("noise",)]),
         *Plugin.attributes,
         "objtype",
         "objname",
         "reftype",
         "refname",
     )
+
+    non_xml_fields = ("noise",)  # plugin sensors define their own noise model
 
     objtype: str | None = None
     """Type of MuJoCo object attached to this sensor."""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from abc import ABC
 from collections.abc import Sequence
 from pathlib import Path
 from typing import (
@@ -81,6 +82,9 @@ class XMLModel(MojoBaseModel):
 
     children: ClassVar[tuple[str, ...]] = ()
     """Children of the XML tag."""
+
+    non_xml_fields: ClassVar[tuple[str, ...]] = ()
+    """Fields that exist on this model but are intentionally not written to XML as an attribute or child (e.g. an attribute documented as never being saved to XML). Every field not covered by `attributes`, `children`, or this tuple is treated as a missed schema entry. Each entry should be accompanied by a comment explaining why it is exempt."""
 
     __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
@@ -278,6 +282,38 @@ class XMLModel(MojoBaseModel):
         for name in cls.children:
             if name not in valid_names:
                 msg = f"{cls.__name__}: child '{name}' is not defined as a field or class variable. Please contact a MuJoCo Mojo developer."
+                logger.error(msg)
+                raise TypeError(msg)
+
+        # Validate non_xml_fields
+        for name in cls.non_xml_fields:
+            if name not in valid_names:
+                msg = f"{cls.__name__}: non_xml_fields entry '{name}' is not defined as a field or class variable. Please contact a MuJoCo Mojo developer."
+                logger.error(msg)
+                raise TypeError(msg)
+
+        # Every class must explicitly define its own tag (an empty string is fine for
+        # classes that only ever get flattened into a parent's attributes via
+        # `_collect_xml_attributes`), so that `to_xml` never fails with a confusing
+        # AttributeError deep in serialization.
+        if not hasattr(cls, "tag"):
+            msg = f"{cls.__name__}: must define 'tag' (use an empty string if this class is never rendered as its own XML element). Please contact a MuJoCo Mojo developer."
+            logger.error(msg)
+            raise TypeError(msg)
+
+        # Classes that exist purely to be inherited from (never directly serialized)
+        # opt out of the field-coverage check below by directly subclassing ABC.
+        if ABC not in cls.__bases__:
+            accounted = (
+                set(cls.attributes) | set(cls.children) | set(cls.non_xml_fields)
+            )
+            for name, field_info in cls.model_fields.items():
+                if name in accounted:
+                    continue
+                if get_origin(field_info.annotation) is Literal:
+                    # discriminator fields are never real XML attributes
+                    continue
+                msg = f"{cls.__name__}: field '{name}' is not listed in attributes, children, or non_xml_fields. Please contact a MuJoCo Mojo developer."
                 logger.error(msg)
                 raise TypeError(msg)
 

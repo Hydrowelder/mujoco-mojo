@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -78,7 +79,7 @@ class MeshAttributes(TypedDict):
     material: NotRequired[MaterialName | None]
 
 
-class MeshBase(XMLModel):
+class MeshBase(XMLModel, ABC):
     """Base class from which other mesh classes are built from."""
 
     tag = "mesh"

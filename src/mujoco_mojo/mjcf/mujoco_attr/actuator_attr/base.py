@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import ClassVar
 
 import mujoco
@@ -22,7 +23,7 @@ from mujoco_mojo.typing import (
 __all__ = ["ActuatorBase"]
 
 
-class ActuatorBase(XMLModel):
+class ActuatorBase(XMLModel, ABC):
     """This element creates a base class for actuators, this is not intended for use in the SDK apart from inheritance."""
 
     tag = ""
@@ -31,6 +32,7 @@ class ActuatorBase(XMLModel):
         "name",
         "class_",
         "group",
+        "delay",
         "ctrllimited",
         "forcelimited",
         "ctrlrange",
