@@ -1109,11 +1109,11 @@ def _chart_data(dist: stochas.AnyDist) -> dict:
 
     n = 200
     try:
-        if dist.is_discrete:
+        if isinstance(dist, stochas.DiscreteDistribution):
             k_low = int(dist.ppf(0.001))
             k_high = max(int(dist.ppf(0.999)), k_low + 1)
             k = np.arange(k_low, k_high + 1)
-            pdf_y = np.asarray(dist.pmf(k), dtype=float)  # pyright: ignore[reportAttributeAccessIssue]
+            pdf_y = np.asarray(dist.pmf(k), dtype=float)
             cdf_y = np.asarray(dist.cdf(k), dtype=float)
             xs = [float(v) for v in k]
             return {

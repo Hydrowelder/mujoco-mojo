@@ -2367,9 +2367,12 @@
       dists: [],
       _distTooltipEntry: null,
       distFilterName: "",
-      distFilterCategories: [],
-      distFilterTypes: [],
-      distFilterUnits: [],
+      // null = no filter applied (all pass); a (possibly empty) array is an
+      // explicit selection, so deselecting every item shows zero rows instead
+      // of silently falling back to "all"
+      distFilterCategories: null,
+      distFilterTypes: null,
+      distFilterUnits: null,
       distSortKey: "name",
       distSortAsc: true,
       distColWidths: (() => {
@@ -2819,62 +2822,72 @@
       get distUnits() {
         return Array.from(new Set(this.dists.map((d) => d.units))).sort();
       },
-      // empty array = all pass; unchecking when all are checked populates with
-      // all-except-one; re-checking to full set normalises back to empty
+      // signal counts per dropdown option, shown right-justified next to each
+      // checkbox so users can see how many rows a filter choice covers
+      get distCategoryCounts() {
+        const counts = {};
+        for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+        return counts;
+      },
+      get distTypeCounts() {
+        const counts = {};
+        for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+        return counts;
+      },
+      get distUnitCounts() {
+        const counts = {};
+        for (const d of this.dists) counts[d.units] = (counts[d.units] ?? 0) + 1;
+        return counts;
+      },
+      // null = all selected; toggling derives the explicit set from the
+      // current selection (defaulting to "all" the first time) and only
+      // collapses back to null once it matches the full set again - it never
+      // re-expands to "all" just because the set happens to become empty
       toggleDistCategoryFilter(cat) {
         const all = this.distCategories;
-        if (this.distFilterCategories.length === 0) {
-          this.distFilterCategories = all.filter((c) => c !== cat);
-          return;
-        }
-        const idx = this.distFilterCategories.indexOf(cat);
-        if (idx === -1) {
-          this.distFilterCategories.push(cat);
-          if (this.distFilterCategories.length === all.length)
-            this.distFilterCategories = [];
-        } else {
-          this.distFilterCategories.splice(idx, 1);
-        }
+        const current = this.distFilterCategories ?? all;
+        const next = current.includes(cat) ? current.filter((c) => c !== cat) : [...current, cat];
+        this.distFilterCategories = next.length === all.length ? null : next;
+      },
+      selectAllDistCategories() {
+        this.distFilterCategories = null;
+      },
+      deselectAllDistCategories() {
+        this.distFilterCategories = [];
       },
       toggleDistTypeFilter(type) {
         const all = this.distTypes;
-        if (this.distFilterTypes.length === 0) {
-          this.distFilterTypes = all.filter((t) => t !== type);
-          return;
-        }
-        const idx = this.distFilterTypes.indexOf(type);
-        if (idx === -1) {
-          this.distFilterTypes.push(type);
-          if (this.distFilterTypes.length === all.length)
-            this.distFilterTypes = [];
-        } else {
-          this.distFilterTypes.splice(idx, 1);
-        }
+        const current = this.distFilterTypes ?? all;
+        const next = current.includes(type) ? current.filter((t) => t !== type) : [...current, type];
+        this.distFilterTypes = next.length === all.length ? null : next;
+      },
+      selectAllDistTypes() {
+        this.distFilterTypes = null;
+      },
+      deselectAllDistTypes() {
+        this.distFilterTypes = [];
       },
       toggleDistUnitFilter(unit) {
         const all = this.distUnits;
-        if (this.distFilterUnits.length === 0) {
-          this.distFilterUnits = all.filter((u) => u !== unit);
-          return;
-        }
-        const idx = this.distFilterUnits.indexOf(unit);
-        if (idx === -1) {
-          this.distFilterUnits.push(unit);
-          if (this.distFilterUnits.length === all.length)
-            this.distFilterUnits = [];
-        } else {
-          this.distFilterUnits.splice(idx, 1);
-        }
+        const current = this.distFilterUnits ?? all;
+        const next = current.includes(unit) ? current.filter((u) => u !== unit) : [...current, unit];
+        this.distFilterUnits = next.length === all.length ? null : next;
+      },
+      selectAllDistUnits() {
+        this.distFilterUnits = null;
+      },
+      deselectAllDistUnits() {
+        this.distFilterUnits = [];
       },
       get filteredDists() {
         const name = this.distFilterName.trim().toLowerCase();
         const filtered = this.dists.filter((d) => {
           if (name && !d.name.toLowerCase().includes(name)) return false;
-          if (this.distFilterCategories.length > 0 && !this.distFilterCategories.includes(d.category))
+          if (this.distFilterCategories !== null && !this.distFilterCategories.includes(d.category))
             return false;
-          if (this.distFilterTypes.length > 0 && !this.distFilterTypes.includes(d.dist_type))
+          if (this.distFilterTypes !== null && !this.distFilterTypes.includes(d.dist_type))
             return false;
-          if (this.distFilterUnits.length > 0 && !this.distFilterUnits.includes(d.units))
+          if (this.distFilterUnits !== null && !this.distFilterUnits.includes(d.units))
             return false;
           return true;
         });
@@ -3084,6 +3097,11 @@
           return entry.sampled_labels.join(", ");
         }
         return "\u2014";
+      },
+      // formats a percentile in the standard P{x} notation (e.g. P95.7) rather
+      // than the nonstandard "%ile" shorthand
+      fmtPercentile(p) {
+        return `P${p.toFixed(1)}`;
       },
       _measureTextWidth(text, refEl) {
         const canvas = this._logMeasureCanvas ?? (this._logMeasureCanvas = document.createElement("canvas"));
