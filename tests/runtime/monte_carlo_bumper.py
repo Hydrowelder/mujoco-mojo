@@ -14,6 +14,259 @@ BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 
+def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
+    """
+    Draws one sample from every distribution type stochas supports.
+
+    These draws don't feed into the model or the simulation in any way; this just exists to exercise every distribution type (with categories/units set) during a Monte Carlo run for testing.
+    """
+    mojo_model.sample_dist(
+        mojo.NormalDistribution(
+            name=mojo.DistName("mock_normal"),
+            mu=0,
+            sigma=1.0,
+            category="link_props",
+            units="kg",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.UniformDistribution(
+            name=mojo.DistName("mock_uniform"),
+            low=0,
+            high=2.0,
+            category="contact",
+            units="m",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.DiscreteUniformDistribution(
+            name=mojo.DistName("mock_discrete_uniform"),
+            low=0,
+            high=5,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.CategoricalDistribution[str](
+            name=mojo.DistName("mock_categorical"),
+            choices={
+                "O+": 0.36,
+                "O-": 0.14,
+                "A+": 0.28,
+                "A-": 0.08,
+                "B+": 0.08,
+                "B-": 0.03,
+                "AB+": 0.02,
+                "AB-": 0.01,
+            },
+            nominal="O+",
+            category="material",
+            units="n/a",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.PermutationDistribution[str](
+            name=mojo.DistName("mock_permutation"),
+            items=["A", "B", "C"],
+            category="ordering",
+            units="n/a",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.TriangularDistribution(
+            name=mojo.DistName("mock_triangular"),
+            low=0,
+            high=1,
+            mode=0.5,
+            category="geometry",
+            units="m",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.TruncatedNormalDistribution(
+            name=mojo.DistName("mock_truncated_normal"),
+            mu=0,
+            sigma=1,
+            low=-1.0,
+            category="sensor_noise",
+            units="m/s",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.LogNormalDistribution(
+            name=mojo.DistName("mock_log_normal"),
+            s=0.5,
+            scale=1,
+            category="material",
+            units="Pa",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.PoissonDistribution(
+            name=mojo.DistName("mock_poisson"),
+            lam=4.0,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.ExponentialDistribution(
+            name=mojo.DistName("mock_exponential"),
+            lam=1.0,
+            category="reliability",
+            units="1/s",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.RayleighDistribution(
+            name=mojo.DistName("mock_rayleigh"),
+            scale=1.0,
+            category="vibration",
+            units="m/s",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.BernoulliDistribution(
+            name=mojo.DistName("mock_bernoulli"), p=0.5, category="flags", units="n/a"
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.GammaDistribution(
+            name=mojo.DistName("mock_gamma"),
+            alpha=2.0,
+            beta=1.0,
+            category="actuation",
+            units="N",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.BetaDistribution(
+            name=mojo.DistName("mock_beta"),
+            alpha=2.0,
+            beta=2.0,
+            category="friction",
+            units="unitless",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.WeibullDistribution(
+            name=mojo.DistName("mock_weibull"),
+            shape=1.5,
+            scale=1.0,
+            category="fatigue",
+            units="cycles",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.BinomialDistribution(
+            name=mojo.DistName("mock_binomial"),
+            n=20,
+            p=0.5,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.NegativeBinomialDistribution(
+            name=mojo.DistName("mock_negative_binomial"),
+            r=3,
+            p=0.5,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.GeometricDistribution(
+            name=mojo.DistName("mock_geometric"),
+            p=0.5,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.LogisticDistribution(
+            name=mojo.DistName("mock_logistic"),
+            mu=0.0,
+            beta=1.0,
+            category="control",
+            units="V",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.ParetoDistribution(
+            name=mojo.DistName("mock_pareto"),
+            alpha=2.5,
+            beta=1.0,
+            category="economics",
+            units="unitless",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.StudentTDistribution(
+            name=mojo.DistName("mock_student_t"),
+            nu=5.0,
+            category="sensor_noise",
+            units="unitless",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.HypergeometricDistribution(
+            name=mojo.DistName("mock_hypergeometric"),
+            N=50,
+            M=20,
+            K=20,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.BetaBinomialDistribution(
+            name=mojo.DistName("mock_beta_binomial"),
+            n=20,
+            alpha=5.0,
+            beta=5.0,
+            category="counts",
+            units="count",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.CauchyDistribution(
+            name=mojo.DistName("mock_cauchy"),
+            theta=0.0,
+            sigma=1.0,
+            category="sensor_noise",
+            units="rad",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.ChiSquaredDistribution(
+            name=mojo.DistName("mock_chi_squared"),
+            p=4,
+            category="statistics",
+            units="unitless",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.LaplaceDistribution(
+            name=mojo.DistName("mock_laplace"),
+            mu=0.0,
+            sigma=1.0,
+            category="sensor_noise",
+            units="m",
+        )
+    )
+    mojo_model.sample_dist(
+        mojo.FDistribution(
+            name=mojo.DistName("mock_f"),
+            nu1=5.0,
+            nu2=10.0,
+            category="statistics",
+            units="unitless",
+        )
+    )
+
+
 class Handoff(mojo.UserData):
     """
     This class exists to serve as a user defined interconnect between the generator and runtime function.
@@ -107,6 +360,9 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     logger.warning(f"This is a log for {mojo_model.trial_num}")
     logger.error(f"This is a log for {mojo_model.trial_num}")
     logger.critical(f"This is a log for {mojo_model.trial_num}")
+
+    # mock draws across every stochas distribution type, unused by the sim itself
+    perform_mock_draws(mojo_model)
     # configure simulation
     mojo_model.mjcf.assets = [
         # add a checkerboard
