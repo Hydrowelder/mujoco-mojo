@@ -2656,7 +2656,7 @@
           let layout;
           if (chartType === "categorical") {
             const barColors = entry.cat_labels.map(
-              (lbl) => lbl === entry.sampled_label ? sampledColor : curveColor
+              (lbl) => entry.sampled_labels?.includes(lbl) ? sampledColor : curveColor
             );
             traces = [
               {
@@ -2705,11 +2705,11 @@
                 line: { color: "#94a3b8", width: 1.5, dash: "dot" }
               });
             }
-            if (entry.sampled_value !== null) {
+            for (const sampledValue of entry.sampled_values ?? []) {
               shapes.push({
                 type: "line",
-                x0: entry.sampled_value,
-                x1: entry.sampled_value,
+                x0: sampledValue,
+                x1: sampledValue,
                 y0: 0,
                 y1: 1,
                 yref: "paper",
@@ -3070,6 +3070,20 @@
         const exp = Math.floor(Math.log10(abs));
         if (exp < -4 || exp >= 4) return v.toExponential(3);
         return parseFloat(v.toPrecision(4)).toString();
+      },
+      // formats every drawn value for a dist table row, regardless of whether it
+      // sampled numbers, labels, or (for permutations) a list of items per draw
+      fmtSampled(entry) {
+        if (entry.sampled_permutations && entry.sampled_permutations.length > 0) {
+          return entry.sampled_permutations.map((perm) => `[${perm.join(", ")}]`).join("; ");
+        }
+        if (entry.sampled_values && entry.sampled_values.length > 0) {
+          return entry.sampled_values.map((v) => this.fmtSigFig(v)).join(", ");
+        }
+        if (entry.sampled_labels && entry.sampled_labels.length > 0) {
+          return entry.sampled_labels.join(", ");
+        }
+        return "\u2014";
       },
       _measureTextWidth(text, refEl) {
         const canvas = this._logMeasureCanvas ?? (this._logMeasureCanvas = document.createElement("canvas"));

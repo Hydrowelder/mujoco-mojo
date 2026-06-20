@@ -416,11 +416,12 @@
                         <!-- sampled -->
                         <span data-distcol-content="sampled"
                               :style="{ width: distColWidths.sampled + 'px' }"
-                              class="flex-shrink-0 px-3 py-2 text-right font-semibold"
-                              :class="entry.sampled_value !== null
+                              class="flex-shrink-0 px-3 py-2 text-right font-semibold truncate"
+                              :title="fmtSampled(entry)"
+                              :class="(entry.sampled_values || entry.sampled_labels || entry.sampled_permutations)
                                   ? 'text-slate-800 dark:text-slate-100'
                                   : 'text-slate-400 dark:text-slate-600'"
-                              x-text="fmtSigFig(entry.sampled_value)"></span>
+                              x-text="fmtSampled(entry)"></span>
                         <div class="w-1.5 flex-shrink-0"></div>
 
                         <!-- stat: z-score or percentile (flex-1, last column) -->

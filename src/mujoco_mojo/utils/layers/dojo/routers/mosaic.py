@@ -1113,8 +1113,8 @@ def _chart_data(dist: stochas.AnyDist) -> dict:
             k_low = int(dist.ppf(0.001))
             k_high = max(int(dist.ppf(0.999)), k_low + 1)
             k = np.arange(k_low, k_high + 1)
-            pdf_y = np.asarray(dist.pdf(k), dtype=float)  # pyright: ignore[reportArgumentType]
-            cdf_y = np.asarray(dist.cdf(k), dtype=float)  # pyright: ignore[reportArgumentType]
+            pdf_y = np.asarray(dist.pmf(k), dtype=float)  # pyright: ignore[reportAttributeAccessIssue]
+            cdf_y = np.asarray(dist.cdf(k), dtype=float)
             xs = [float(v) for v in k]
             return {
                 "chart_type": "discrete",
@@ -1188,8 +1188,8 @@ def _safe_param(v: object) -> object:
     return v
 
 
-def _extract_sampled_value(named_raw: dict, name: str) -> float | None:
-    """Pull the first scalar out of a NamedValue's stored_value regardless of nesting."""
+def _extract_sampled_values(named_raw: dict, name: str) -> list[float] | None:
+    """Pull every drawn scalar out of a NamedValue's stored_value, flattening any nesting."""
     import numpy as np
 
     entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
@@ -1200,21 +1200,32 @@ def _extract_sampled_value(named_raw: dict, name: str) -> float | None:
         return None
     try:
         flat = np.array(sv, dtype=float).flatten()
-        return float(flat[0]) if len(flat) > 0 else None
+        return [float(v) for v in flat] if len(flat) > 0 else None
     except Exception:
         return None
 
 
-def _extract_sampled_label(named_raw: dict, name: str) -> str | None:
-    """Pull the raw string sampled value for non-numeric distributions (e.g. categorical)."""
+def _extract_sampled_labels(named_raw: dict, name: str) -> list[str] | None:
+    """Pull every drawn label out of a NamedValue's stored_value for non-numeric distributions (e.g. categorical)."""
     entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
     if entry is None:
         return None
     sv = entry.get("stored_value")
     if isinstance(sv, str):
+        return [sv]
+    if isinstance(sv, list) and sv and all(isinstance(v, str) for v in sv):
         return sv
-    if isinstance(sv, list) and sv and isinstance(sv[0], str):
-        return sv[0]
+    return None
+
+
+def _extract_sampled_permutations(named_raw: dict, name: str) -> list[list] | None:
+    """Pull every drawn permutation out of a NamedValue's stored_value, where each draw is itself a list of items."""
+    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
+    if entry is None:
+        return None
+    sv = entry.get("stored_value")
+    if isinstance(sv, list) and sv and all(isinstance(row, list) for row in sv):
+        return sv
     return None
 
 
@@ -1255,13 +1266,30 @@ async def get_trial_dists(trial_id: str) -> dict:
         entries = []
         for dist in dist_dict.values():
             chart = _chart_data(dist)
-            sampled = _extract_sampled_value(named_raw, dist.name)
-            sampled_label = _extract_sampled_label(named_raw, dist.name)
+            is_permutation = chart["chart_type"] == "permutation"
+            # permutations store each draw as a list of items (a 2D array overall), so
+            # the flat-scalar/flat-label extractors below don't apply to them
+            sampled_values = (
+                None
+                if is_permutation
+                else _extract_sampled_values(named_raw, dist.name)
+            )
+            sampled = sampled_values[0] if sampled_values else None
+            sampled_labels = (
+                None
+                if is_permutation
+                else _extract_sampled_labels(named_raw, dist.name)
+            )
+            sampled_permutations = (
+                _extract_sampled_permutations(named_raw, dist.name)
+                if is_permutation
+                else None
+            )
             z_score, percentile = _stat(dist, sampled)
             # nominal may be any type T (float, str, list...); expose as a
             # scalar float when possible, or as a string label (e.g. for
             # categorical nominals like "class_A"), mirroring sampled_value /
-            # sampled_label
+            # sampled_labels
             nominal_raw = dist.nominal if dist.has_nominal else None
             nominal: float | None = None
             nominal_label: str | None = None
@@ -1282,7 +1310,9 @@ async def get_trial_dists(trial_id: str) -> dict:
                     "nominal": nominal,
                     "nominal_label": nominal_label,
                     "sampled_value": sampled,
-                    "sampled_label": sampled_label,
+                    "sampled_values": sampled_values,
+                    "sampled_labels": sampled_labels,
+                    "sampled_permutations": sampled_permutations,
                     "z_score": z_score,
                     "percentile": percentile,
                     "is_discrete": chart["is_discrete"],

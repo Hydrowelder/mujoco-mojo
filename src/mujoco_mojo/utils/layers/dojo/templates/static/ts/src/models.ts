@@ -137,7 +137,9 @@ export interface DistEntry {
   nominal: number | null;
   nominal_label: string | null;
   sampled_value: number | null;
-  sampled_label: string | null;
+  sampled_values: number[] | null;
+  sampled_labels: string[] | null;
+  sampled_permutations: (string | number)[][] | null;
   z_score: number | null;
   percentile: number | null;
   is_discrete: boolean;
