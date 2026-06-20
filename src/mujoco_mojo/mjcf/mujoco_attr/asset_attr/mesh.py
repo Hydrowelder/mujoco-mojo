@@ -102,8 +102,8 @@ class MeshBase(XMLModel, ABC):
     scale: Vec3 = np.array((1, 1, 1))
     """This attribute specifies the scaling that will be applied to the vertex data along each coordinate axis. Negative values are allowed, resulting in flipping the mesh along the corresponding axis."""
 
-    inertia: Inertia = Inertia.CONVEX  # Gable Jan 2026 - I have elected to get out ahead of the upcoming change to convex.
-    """This attribute controls how the mesh is used when mass and inertia are inferred from geometry.
+    inertia: Inertia = Inertia.LEGACY
+    """This attribute controls how the mesh is used when mass and inertia are inferred from geometry. The default value is legacy for backward compatibility, but convex is recommended.
 
     - convex: Use the mesh's convex hull to compute volume and inertia, assuming uniform density.
     - exact: Compute volume and inertia exactly, even for non-convex meshes. This algorithm requires a well-oriented, watertight mesh and will error otherwise.
@@ -129,7 +129,7 @@ class MeshBase(XMLModel, ABC):
     face: tuple[tuple[int, int, int], ...] | None = None
     """Faces of the mesh. Each face is a sequence of 3 vertex indices, in counter-clockwise order. The indices must be integers between 0 and nvert-1."""
 
-    refpos: Vec3 = np.array((1, 1, 1))
+    refpos: Vec3 = np.array((0, 0, 0))
     """Reference position relative to which the 3D vertex coordinates are defined. This vector is subtracted from the positions."""
 
     refquat: Vec4 = np.array((1, 0, 0, 0))

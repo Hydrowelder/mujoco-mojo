@@ -1005,13 +1005,13 @@ class ContactData(StrEnum):
 
     Importantly, the data attribute can contain multiple sequential data types, as long as the relative order—as listed above—is maintained. For example, data = "found force dist" will return 5 numbers per contact (the concateneated values of [found, force, dist]), while data = "force found dist" is an error because found must come before force.
 
-    !!! quote "Missing contacts"
+    Missing contacts:
         If less than num contacts satisfy the matching criterion, the entire data slot is set to be identically zero. Because most data types can take 0 as a valid value, only the zero-ness of the normal and tangent unit vectors can be used to unambiguously detect an empty slot. For this reason, the found data type is in place to allow for simple detection of missing contacts.
 
-    !!! quote "Size of sensordata block"
+    Size of sensordata block:
         Unlike other sensors, the size of the corresponding sensordata block depends on the values of its attributes num and data. The total size of the output of a contact sensor is the product num x size(selected data fields). For example, requesting num = 6 contacts with data = "force dist normal" (3+1+3=7), will result in a sensordata block of 42 numbers (6 consecutive slots x 7 numbers per slot).
 
-    !!! quote "Direction convention"
+    Direction convention:
         Because contacts create two equal-and-opposite forces between contacting bodies, there is freedom in the choice of which body impinges on which.
 
         The sensor's convention is for "geom1/body1/subtree1" and "geom2/body2/subtree2" to determine the direction of the normal. The normal always points from the first to the second.

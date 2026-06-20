@@ -37,7 +37,7 @@ class Composite(XMLModel):
     prefix: str | None = None
     """All automatically generated model elements have names indicating the element type and index. For example, the body at coordinates (2, 0) in a 2D grid is named "B2_0" by default. If prefix="C" is specified, the same body is named "CB2_0". The prefix is needed when multiple composite objects are used in the same model, to avoid name conflicts."""
 
-    type: CompositeType = CompositeType.CABLE
+    type: CompositeType
     """This attribute determines the type of composite object. The only supported type is cable.
 
     The `cable` type creates a 1D chain of bodies connected with ball joints, each having a geom with user-defined type (cylinder, capsule or box). The geometry can either be defined with an array of 3D vertex coordinates vertex or with prescribed functions with the option curve. Currently, only linear and trigonometric functions are supported. For example, an helix can be obtained with curve="cos(s) sin(s) s". The size is set with the option size, resulting in f(s)={size[1]⋅cos(2π⋅size[2]), size[1]⋅sin(2π⋅size[2]), size[0]⋅s}."""

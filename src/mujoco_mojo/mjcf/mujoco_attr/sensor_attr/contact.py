@@ -11,20 +11,20 @@ __all__ = ["SensorContact"]
 
 class SensorContact(SensorBase):
     """
-    !!! quote "Motivation"
+    Motivation:
         The array of contacts which occur during the main dynamics pipeline is inherently variable-sized. The purpose of the contact sensor is to report contact-related information in a fixed-size array. This is useful as input to learning-based agents and in environment logic.
 
         Unlike the purely geometric collision sensors that act independently of the dynamics pipeline, the contact sensor reports information that was discovered during the collision and constraint steps, extracting data from mjData.{contact, efc_force}, ignoring contacts that were filtered out by the standard mechanism and produce no force.
 
         Contact sensor output involves three stages: matching, reduction and extraction.
 
-    !!! quote "Matching"
-        Selects a set of contacts from mjData.contact using criteria defined by geom1, geom2, body1, body2, subtree1, subtree2 and site. Matching applies an intersection of criteria, for example setting body1 and body2 will match contacts that involve both bodies, while setting only geom1 will match any contacts involving that geom. Setting site will match contacts that are inside the volume defined by the site; this matching criterion can be used with {geom2, body2, subtree2}. The subtree attributes take a body name and match all contacts involving the body's subtree i.e., the body and all of its descendants. Setting subtree1 and subtree2 to the same body will match self-collisions in the subtree. Specifying no matching criterion will match all contacts.
+    Matching:
+        Selects a set of contacts from `mjData.contact` using criteria defined by geom1, geom2, body1, body2, subtree1, subtree2 and site. Matching applies an intersection of criteria, for example setting body1 and body2 will match contacts that involve both bodies, while setting only geom1 will match any contacts involving that geom. Setting site will match contacts that are inside the volume defined by the site; this matching criterion can be used with {geom2, body2, subtree2}. The subtree attributes take a body name and match all contacts involving the body's subtree i.e., the body and all of its descendants. Setting subtree1 and subtree2 to the same body will match self-collisions in the subtree. Specifying no matching criterion will match all contacts.
 
-    !!! quote "Reduction"
-        Reduces the number of matched contacts to exactly num sub-arrays, or "slots". If less than num contacts match, the remaining slots are set to be identically zero. Note that the default, "unsorted" reduction criterion is potentitally non-deterministic. See reduce below.
+    Reduction:
+        Reduces the number of matched contacts to exactly num sub-arrays, or "slots". If less than num contacts match, the remaining slots are set to be identically zero. Note that the default, "unsorted" reduction criterion is potentially non-deterministic. See reduce below.
 
-    !!! quote "Extraction"
+    Extraction:
         Copies the set of fields specified by the user into each slot, see data.
     """
 

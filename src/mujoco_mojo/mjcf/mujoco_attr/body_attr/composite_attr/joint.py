@@ -66,12 +66,12 @@ class CompositeJoint(XMLModel):
     )
     """Integer group to which the joint belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of joints."""
 
-    stiffness: float = Field(
+    stiffness: Vec3 = Field(
         default_factory=lambda: deepcopy(Joint.model_fields["stiffness"].default),
     )
     """Joint stiffness. The spring force is computed along with the other passive forces."""
 
-    damping: float = Field(
+    damping: Vec3 = Field(
         default_factory=lambda: deepcopy(Joint.model_fields["damping"].default),
     )
     """Damping applied to all degrees of freedom created by this joint. Unlike friction loss which is computed by the constraint solver, damping is simply a force linear in velocity. It is included in the passive forces. Despite this simplicity, larger damping values can make numerical integrators unstable, which is why our Euler integrator handles damping implicitly. See Integration in the Computation chapter."""

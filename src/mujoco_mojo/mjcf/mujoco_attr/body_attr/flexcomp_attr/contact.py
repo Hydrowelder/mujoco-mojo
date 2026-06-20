@@ -6,7 +6,7 @@ __all__ = ["FlexCompContact"]
 
 
 class FlexCompContact(FlexContact):
-    """This is basically a FlexContact."""
+    """Same as in flex/contact. All attributes are passed through to the automatically-generated flex."""
 
     attributes = (
         "internal",

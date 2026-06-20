@@ -12,6 +12,8 @@ __all__ = ["ActuatorMotor"]
 
 class ActuatorMotor(ActuatorBase):
     """
+    This and the next three elements are the Actuator shortcuts discussed earlier. When such a shortcut is encountered, the parser creates a general actuator and sets its dynprm, gainprm and biasprm attributes to the internal defaults shown above, regardless of any default settings. It then adjusts dyntype, gaintype and biastype depending on the shortcut, parses any custom attributes (beyond the common ones), and translates them into regular attributes (i.e., attributes of the general actuator type) as explained here.
+
     This element creates a direct-drive actuator. The underlying general attributes are set as follows:
 
     !!! note
