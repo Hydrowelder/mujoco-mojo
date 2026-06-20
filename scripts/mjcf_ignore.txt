@@ -1,0 +1,96 @@
+# Reviewed findings from check_mjcf_spec_coverage.py that are either false positives
+# or accepted as-is. Each line is "<category>:<key>"; blank lines and lines starting
+# with `#` are ignored. This only suppresses the five sections named below --
+# "Attribute docstring warnings" always shows everything and can't be silenced here.
+#
+# Categories and their key format:
+#   unimplemented:<spec element name>          -- "Spec elements with no matching implemented tag"
+#   untagged:<python tag>                      -- "Implemented tags with no matching spec element"
+#   coverage_gap:<tag>.<attr>                  -- "Attribute coverage gaps"
+#   default_mismatch:<tag>.<attr>               -- "Default value mismatches" (applies to every
+#                                                   class sharing that tag/attr, not just one)
+#   docstring_class:<tag>                      -- "Docstring similarity warnings" (class-level)
+#
+# Add a new line whenever you've reviewed a finding and decided it's not worth fixing
+# (e.g. the spec groups unrelated elements under one bare tag name, or a "default" in
+# the spec is just placeholder notation like the `user` attribute's compiler-determined
+# length). Remove a line if the underlying code changes and the finding should be
+# re-evaluated.
+
+# RST-only directives with no corresponding MJCF element to implement
+unimplemented:custom
+unimplemented:default
+unimplemented:element
+unimplemented:include
+unimplemented:numeric
+unimplemented:replicate
+unimplemented:text
+unimplemented:tuple
+
+# generic <mesh> built-in shape parameters; covered per-shape by each MeshXxx subclass's
+# own params (e.g. MeshSphere.radius) instead of a shared `params` field
+coverage_gap:mesh.params
+
+# `user` is a compiler-determined-length scratch array (real(nuser_X), "0 0 ...") --
+# there's no fixed-length literal default to match, so `None` (omit the attribute) is
+# the only sound Python default
+default_mismatch:body.user
+default_mismatch:camera.user
+default_mismatch:general.user
+default_mismatch:geom.user
+default_mismatch:joint.user
+default_mismatch:site.user
+default_mismatch:spatial.user
+
+# same compiler-determined-length placeholder pattern as `user`, for actuator/general's
+# other real(...)-sized parameter arrays
+default_mismatch:general.dynprm
+default_mismatch:general.gainprm
+default_mismatch:general.biasprm
+
+# bare "geom" tag name is shared by body/geom, composite/geom, spatial/geom, and
+# default/geom in the spec; `size`/`hfield`/`mesh` required-ness differs by which one
+# is actually being merged here
+default_mismatch:geom.size
+default_mismatch:geom.hfield
+default_mismatch:geom.mesh
+
+# `composite.initial` -- spec's literal "0" default is for a different "composite" sub-element
+# merged under the same bare tag name than the one CompositeBase.initial models
+default_mismatch:composite.initial
+
+# bare "connect"/"weld" tag merges equality/connect's two distinct body-pair vs.
+# site-pair variants; each variant requires the attributes the other one doesn't
+default_mismatch:connect.body1
+default_mismatch:connect.site1
+default_mismatch:connect.site2
+default_mismatch:weld.body1
+default_mismatch:weld.site1
+default_mismatch:weld.site2
+
+# <key> attributes (qvel/act/ctrl) are sized from the model's nv/na/nu at compile
+# time, same placeholder-default situation as `user` above
+default_mismatch:key.qvel
+default_mismatch:key.act
+default_mismatch:key.ctrl
+
+# spec's `plugin` attribute description differs across the several distinct elements
+# (asset/plugin vs sensor/plugin vs actuator/plugin) that share the bare "plugin" tag
+default_mismatch:plugin.plugin
+
+# composite/skin's `texcoord` literal default doesn't apply to CompositeSkin's own
+# generated-skin semantics
+default_mismatch:skin.texcoord
+
+# asset/texture's generic `builtin` default doesn't apply to the dedicated
+# TextureBuiltIn variant, which requires it
+default_mismatch:texture.builtin
+
+# these elements' docstrings are deliberately reworded/condensed from the spec's prose
+docstring_class:adhesion
+docstring_class:contact
+docstring_class:elasticity
+docstring_class:plugin
+docstring_class:skin
+docstring_class:spatial
+docstring_class:tactile

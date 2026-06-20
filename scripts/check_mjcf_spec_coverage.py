@@ -18,6 +18,13 @@ several distinct elements, e.g. body/joint vs tendon/fixed/joint, under the same
 tag name) and docstrings are deliberately reworded in places, so review the output
 rather than treating it as pass/fail.
 
+Reviewed, accepted findings can be silenced by adding them to `mjcf_ignore.txt`
+(next to this script) -- see that file's header for the format. This only applies to
+the "Spec elements with no matching implemented tag", "Implemented tags with no
+matching spec element", "Attribute coverage gaps", "Default value mismatches", and
+"Docstring similarity warnings" sections; "Attribute docstring warnings" always shows
+everything, since per-field docstrings are easy to add and shouldn't be silenced.
+
 Usage:
     python scripts/check_mjcf_spec_coverage.py                       # fetch the spec live
     python scripts/check_mjcf_spec_coverage.py path/to/XMLreference.rst.txt  # use a local copy
@@ -43,6 +50,8 @@ from rich.console import Console
 from rich.markup import escape
 
 SPEC_URL = "https://mujoco.readthedocs.io/en/stable/_sources/XMLreference.rst.txt"
+
+IGNORE_FILE = Path(__file__).with_name("mjcf_ignore.txt")
 
 # below this difflib ratio, a description is flagged as likely drifted from the spec
 DOCSTRING_SIMILARITY_THRESHOLD = 0.2
@@ -247,6 +256,24 @@ def normalize_field_name(name: str) -> str:
     if name.endswith("_") and len(name) > 1:
         return name[:-1]
     return name
+
+
+def load_ignore_file(path: Path = IGNORE_FILE) -> dict[str, set[str]]:
+    """
+    Parses `mjcf_ignore.txt`-style lines of the form `<category>:<key>` into
+    {category: {key, ...}}. Blank lines and lines starting with `#` are skipped.
+    Missing file just means nothing is ignored.
+    """
+    ignored: dict[str, set[str]] = {}
+    if not path.exists():
+        return ignored
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        category, _, key = line.partition(":")
+        ignored.setdefault(category, set()).add(key)
+    return ignored
 
 
 @functools.cache
@@ -493,12 +520,19 @@ def main() -> None:
     spec_elements = parse_spec(text)
     spec_by_name = merge_by_bare_name(spec_elements)
     python_registry = build_python_registry()
+    ignored = load_ignore_file()
 
     spec_names = set(spec_by_name)
     python_tags = set(python_registry)
 
-    unimplemented = sorted(spec_names - python_tags)
-    untagged = sorted(python_tags - spec_names)
+    unimplemented = sorted(
+        n
+        for n in (spec_names - python_tags)
+        if n not in ignored.get("unimplemented", ())
+    )
+    untagged = sorted(
+        n for n in (python_tags - spec_names) if n not in ignored.get("untagged", ())
+    )
 
     console.rule(
         f"[bold]Spec elements with no matching implemented tag[/bold] ({len(unimplemented)})"
@@ -527,6 +561,8 @@ def main() -> None:
                 continue
             if attr in ORIENTATION_GROUP and covered & ORIENTATION_COVERING_FIELDS:
                 continue
+            if f"{name}.{attr}" in ignored.get("coverage_gap", ()):
+                continue
             missing.add(attr)
         if missing:
             console.print(
@@ -543,6 +579,8 @@ def main() -> None:
         for _, location, cls in python_registry[name]["classes"]:
             for field_name in cls.attributes:
                 attr_name = normalize_field_name(field_name)
+                if f"{name}.{attr_name}" in ignored.get("default_mismatch", ()):
+                    continue
                 spec_attr = spec_el.attrs.get(attr_name)
                 if spec_attr is None:
                     continue
@@ -594,6 +632,8 @@ def main() -> None:
         "[bold]Docstring similarity warnings[/bold] (ratio < 0.2, review for drift)"
     )
     for name in sorted(spec_names & python_tags):
+        if name in ignored.get("docstring_class", ()):
+            continue
         spec_desc = spec_by_name[name].description
         py_desc = _clean(" ".join(dict.fromkeys(python_registry[name]["docstrings"])))
         if not spec_desc or not py_desc:
