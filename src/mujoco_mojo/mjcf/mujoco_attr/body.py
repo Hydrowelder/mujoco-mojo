@@ -545,6 +545,10 @@ class WorldBody(Body):
     attributes = ()
     children = _world_body_children
 
+    # per the class docstring, the top-level body cannot have any attributes
+    # or the inertial/joints child elements
+    non_xml_fields = (*_body_attr, "inertial", "joints")
+
     @staticmethod
     def get_com(
         state: MjState,

@@ -45,12 +45,15 @@ class Proximity(MojoBaseModel):
     _last_t: float = PrivateAttr(default=np.nan)
     _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
     _last_p2: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
+    _last_dist: float = PrivateAttr(default=np.nan)
 
     _vis: VisualizationSettings = PrivateAttr(default_factory=VisualizationSettings)
     _vis_loaded: bool = PrivateAttr(default=False)
 
     _requested: bool = PrivateAttr(default=False)
     _warned_unrequested: bool = PrivateAttr(default=False)
+
+    _last_prox_type: ProximityType | None = PrivateAttr(default=None)
 
     @field_validator("geom_1", "geom_2")
     @classmethod
@@ -353,21 +356,49 @@ class Proximity(MojoBaseModel):
 
             tuple[tuple[float, Vec3, Vec3], ProximityType]: If fromto=True, returns the minimum distance, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which algorithm produced the result.
 
+        The result is cached per-timestep (keyed on `state.data.time`), so calling this more than once during the same step (e.g. once from `request()`'s telemetry sampler and again from a user-defined runtime input/Load that reads the same `Proximity` instance) only pays for the underlying calculation once.
+
         """
+        is_cached = (
+            self._last_prox_type is not None
+            and not np.isnan(self._last_dist)
+            and state.data.time == self._last_t
+        )
+        if is_cached:
+            assert self._last_prox_type is not None  # narrows for the type checker
+            return self._last_dist, self._last_p1, self._last_p2, self._last_prox_type
+
         match self.algorithm:
             case ProximityType.SPHERE_TO_SPHERE:
                 d_est, p1, p2, _skip = self.get_sphere_to_sphere_proximity(state)
-                return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
+                result = (d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE)
             case ProximityType.CONVEX_HULL:
-                return self.get_convex_hull_proximity(state)
+                result = self.get_convex_hull_proximity(state)
             case ProximityType.VERTEX_TO_FACE:
-                return self.get_vertex_to_face_proximity(state)
+                result = self.get_vertex_to_face_proximity(state)
             case ProximityType.FACE_TO_FACE:
-                return self.get_face_to_face_proximity(state)
+                result = self.get_face_to_face_proximity(state)
             case _:
                 msg = f"Method for {self.algorithm.name} not implemented."
                 logger.error(msg)
                 raise NotImplementedError(msg)
+
+        # the configured algorithm's broadphase sphere-to-sphere check can exit early
+        # (objects farther apart than dist_max), so the phase that actually produced
+        # this result can flip between SPHERE_TO_SPHERE and the configured narrowphase
+        # algorithm from one call to the next; surface that for performance debugging
+        prox_type = result[3]
+        if self._last_prox_type is not None and prox_type != self._last_prox_type:
+            logger.debug(
+                f"Proximity {self.pair_name} switched phase: "
+                f"{self._last_prox_type.name} -> {prox_type.name} (t={state.data.time:.4f})"
+            )
+        self._last_prox_type = prox_type
+        self._last_dist = result[0]
+        # _last_t/_last_p1/_last_p2 were already set by update_last() inside whichever
+        # method above produced `result`
+
+        return result
 
     def get_visuals(
         self, state: MjState, signal_manager: SignalManager | None = None
@@ -392,20 +423,13 @@ class Proximity(MojoBaseModel):
             )
             self._warned_unrequested = True
 
-        is_stale = self._last_t != state.data.time
-        is_uninitialized = any(
-            [
-                np.any(np.isnan(self._last_p1)),
-                np.any(np.isnan(self._last_p2)),
-                np.isnan(self._last_t),
-            ]
-        )
-        if is_stale or is_uninitialized:
-            self.get_proximity(state)
+        # get_proximity() caches per-timestep internally, so this is a no-op if
+        # request()'s sampler (or some other caller) already computed it this step
+        _dist, p1, p2, _prox_type = self.get_proximity(state)
 
         return LineConfig(
-            pos1=self._last_p1,
-            pos2=self._last_p2,
+            pos1=p1,
+            pos2=p2,
             color=Color[self._vis.clearance_line].rgba,
             width=0.005,
         )

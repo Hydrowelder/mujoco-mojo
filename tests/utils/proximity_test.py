@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from unittest import mock
 
 import mujoco
 import numpy as np
@@ -543,6 +544,41 @@ def test_proximity_caching(compiled_model: CompiledModel):
 
     # Results should be identical
     assert np.isclose(dist1, dist2)
+
+
+def test_get_proximity_caches_per_timestep(compiled_model: CompiledModel):
+    """get_proximity() should only run the underlying calculation once per timestep, regardless of how many times it's called (e.g. once for telemetry, once as a runtime input)."""
+    proximity = mojo.utils.Proximity(
+        geom_1=compiled_model.bunny_in_cup_geom,
+        geom_2=compiled_model.cup_geom,
+        dist_max=10.0,
+        algorithm=mojo.ProximityType.CONVEX_HULL,
+    )
+
+    with mock.patch.object(
+        Proximity,
+        "get_convex_hull_proximity",
+        wraps=proximity.get_convex_hull_proximity,
+    ) as spy:
+        dist1, p1_1, p2_1, type1 = proximity.get_proximity(compiled_model.state)
+        dist2, p1_2, p2_2, type2 = proximity.get_proximity(compiled_model.state)
+
+    spy.assert_called_once()
+    assert dist1 == dist2
+    assert np.array_equal(p1_1, p1_2)
+    assert np.array_equal(p2_1, p2_2)
+    assert type1 == type2
+
+    # advancing time should invalidate the cache and recompute
+    compiled_model.state.data.time += 1.0
+    with mock.patch.object(
+        Proximity,
+        "get_convex_hull_proximity",
+        wraps=proximity.get_convex_hull_proximity,
+    ) as spy:
+        proximity.get_proximity(compiled_model.state)
+
+    spy.assert_called_once()
 
 
 def test_radius_caching(compiled_model: CompiledModel):

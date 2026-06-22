@@ -6,7 +6,7 @@ __all__ = ["FlexCompContact"]
 
 
 class FlexCompContact(FlexContact):
-    """This is basically a FlexContact."""
+    """Same as in flex/contact. All attributes are passed through to the automatically-generated flex."""
 
     attributes = (
         "internal",
@@ -22,3 +22,6 @@ class FlexCompContact(FlexContact):
         "margin",
         "gap",
     )
+
+    # inherited from FlexContact but not part of the flexcomp contact element's schema
+    non_xml_fields = ("solref", "passive")

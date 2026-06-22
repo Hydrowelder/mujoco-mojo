@@ -25,7 +25,7 @@ class EqualityWeldBody(EqualityBase):
         "body2",
         "anchor",
         "relpose",
-        "toquescale",
+        "torquescale",
     )
 
     type: Literal["body"] = "body"
@@ -42,8 +42,8 @@ class EqualityWeldBody(EqualityBase):
     anchor: Vec3 | None = np.array((0, 0, 0))
     """Coordinates of the weld point relative to body2. If relpose is not specified, the meaning of this parameter is the same as for connect constraints, except that is relative to body2. If relpose is specified, body1 will use the pose to compute its anchor point."""
 
-    toquescale: float = 1
-    """A constant that scales the angular residual (angular constraint violation). Notionally in units of torque/force=lengthtorque/force=length. Intuitively this coefficient defines how much the weld "cares" about rotational displacements vs. translational displacements. Setting this value to 0 makes the weld behave like a connect constraint. Note that this value has units of length and can therefore be understood as follows. Imagining that the weld is implemented by a flat patch of glue sticking the two bodies together, torquescale can be interpreted as the diameter of this glue patch."""
+    torquescale: float = 1
+    """A constant that scales the angular residual (angular constraint violation). Notionally in units of torque/force=length. Intuitively this coefficient defines how much the weld "cares" about rotational displacements vs. translational displacements. Setting this value to 0 makes the weld behave like a connect constraint. Note that this value has units of length and can therefore be understood as follows. Imagining that the weld is implemented by a flat patch of glue sticking the two bodies together, torquescale can be interpreted as the diameter of this glue patch."""
 
 
 class EqualityWeldSite(EqualityBase):
@@ -54,7 +54,7 @@ class EqualityWeldSite(EqualityBase):
     """
 
     tag = "weld"
-    attributes = (*EqualityBase.attributes, "site1", "site2", "toquescale")
+    attributes = (*EqualityBase.attributes, "site1", "site2", "torquescale")
 
     type: Literal["site"] = "site"
 
@@ -64,8 +64,8 @@ class EqualityWeldSite(EqualityBase):
     site2: SiteName
     """Name of a site belonging to the second body participating in the constraint. When specified, site1 must also be specified. See the site1 description for more details."""
 
-    toquescale: float = 1
-    """A constant that scales the angular residual (angular constraint violation). Notionally in units of torque/force=lengthtorque/force=length. Intuitively this coefficient defines how much the weld "cares" about rotational displacements vs. translational displacements. Setting this value to 0 makes the weld behave like a connect constraint. Note that this value has units of length and can therefore be understood as follows. Imagining that the weld is implemented by a flat patch of glue sticking the two bodies together, torquescale can be interpreted as the diameter of this glue patch."""
+    torquescale: float = 1
+    """A constant that scales the angular residual (angular constraint violation). Notionally in units of torque/force=length. Intuitively this coefficient defines how much the weld "cares" about rotational displacements vs. translational displacements. Setting this value to 0 makes the weld behave like a connect constraint. Note that this value has units of length and can therefore be understood as follows. Imagining that the weld is implemented by a flat patch of glue sticking the two bodies together, torquescale can be interpreted as the diameter of this glue patch."""
 
 
 AnyEqualityWeld = Annotated[

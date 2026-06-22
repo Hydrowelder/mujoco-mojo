@@ -7,6 +7,7 @@ __all__ = ["ActuatorPlugin"]
 
 
 class ActuatorPlugin(ActuatorGeneral, Plugin):
-    """Associate this actuator with an engine plugin. Either plugin or instance are required."""
+    """Associate this actuator with an engine plugin. Either `plugin` or `instance` are required."""
 
+    tag = "plugin"
     attributes = ActuatorGeneral.attributes + Plugin.attributes

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import Annotated, Any, Self
 
 import numpy as np
@@ -27,7 +28,7 @@ __all__ = [
 ]
 
 
-class PoseBase(Pos, OrientationBase):
+class PoseBase(Pos, OrientationBase, ABC):
     """
     Base class for objects representing a full 3D coordinate frame.
     Inherits math logic from Pos and rotation logic from OrientationBase.

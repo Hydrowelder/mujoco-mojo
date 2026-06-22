@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
@@ -42,7 +43,7 @@ _texture_attr = (
 )
 
 
-class TextureBase(XMLModel):
+class TextureBase(XMLModel, ABC):
     """
     This element creates a texture asset, which is then referenced from a material asset, which is finally referenced from a model element that needs to be textured.
 

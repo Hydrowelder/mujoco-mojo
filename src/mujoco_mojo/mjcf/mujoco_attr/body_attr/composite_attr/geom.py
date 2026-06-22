@@ -58,6 +58,20 @@ _composite_geom_attr = (
 )
 """Composite geometry XML attributes."""
 
+# fields inherited from GeomBase that composite geoms deliberately don't expose,
+# per the module docstring above (lazily inherited from the respective Geom class)
+_composite_geom_non_xml = (
+    "class_",
+    "fitscale",
+    "fluidcoef",
+    "fluidshape",
+    "fromto",
+    "name",
+    "pose",
+    "shellinertia",
+    "user",
+)
+
 
 class CompositePlane(GeomPlane):
     """
@@ -70,6 +84,7 @@ class CompositePlane(GeomPlane):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = _composite_geom_non_xml
 
 
 class CompositeHField(GeomHField):
@@ -80,6 +95,7 @@ class CompositeHField(GeomHField):
     """
 
     attributes = _composite_geom_attr
+    non_xml_fields = (*_composite_geom_non_xml, "hfield")
 
 
 class CompositeSphere(GeomSphere):
@@ -93,6 +109,7 @@ class CompositeSphere(GeomSphere):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeCapsule(GeomCapsule):
@@ -106,6 +123,7 @@ class CompositeCapsule(GeomCapsule):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeEllipsoid(GeomEllipsoid):
@@ -119,6 +137,7 @@ class CompositeEllipsoid(GeomEllipsoid):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeCylinder(GeomCylinder):
@@ -132,6 +151,7 @@ class CompositeCylinder(GeomCylinder):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeBox(GeomBox):
@@ -145,6 +165,7 @@ class CompositeBox(GeomBox):
         *_composite_geom_attr,
         "size",
     )
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeMesh(GeomMesh):
@@ -155,6 +176,7 @@ class CompositeMesh(GeomMesh):
     """
 
     attributes = _composite_geom_attr
+    non_xml_fields = (*_composite_geom_non_xml, "mesh")
 
 
 class CompositeSDF(GeomSDF):
@@ -165,6 +187,7 @@ class CompositeSDF(GeomSDF):
     """
 
     attributes = _composite_geom_attr
+    non_xml_fields = _composite_geom_non_xml
 
 
 AnyCompositeGeom = Annotated[

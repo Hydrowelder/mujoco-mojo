@@ -558,6 +558,31 @@ class MojoRunner:
                 time.sleep(1)
         logger.info(f"Countdown finished. Commencing cleanup of {path}")
 
+        # On Windows, `dojo.sh` (written by write_dojo_script) stays checked out for as
+        # long as a `mujoco-mojo dojo` monitoring session launched from it is still
+        # running, even after the dojo.sh template was fixed to `exec` into the server
+        # process instead of forking it (older workdirs still have the un-fixed
+        # script). Rather than fail the whole cleanup over one harmless,
+        # idempotently-regenerated launcher script, skip just that file if it's still
+        # locked and let the rest of the workdir clear out normally.
+        skipped_dojo_script = False
+
+        def _on_rmtree_error(_func, error_path: str, exc: BaseException) -> None:
+            nonlocal skipped_dojo_script
+            error_path_obj = Path(error_path)
+            if error_path_obj.name == "dojo.sh" and error_path_obj.parent == path:
+                logger.warning(
+                    f"{error_path_obj} is still locked (likely a running `mujoco-mojo "
+                    "dojo` session) -- leaving it in place and continuing cleanup."
+                )
+                skipped_dojo_script = True
+                return
+            if error_path_obj == path and skipped_dojo_script:
+                # path can't be rmdir'd because dojo.sh is still inside it -- expected
+                # once we've already decided to leave that file behind above
+                return
+            raise exc
+
         # try to chmod and remove first
         try:
             for root, dirs, files in os.walk(path):
@@ -574,7 +599,7 @@ class MojoRunner:
                     except PermissionError:
                         pass
 
-            shutil.rmtree(path)
+            shutil.rmtree(path, onexc=_on_rmtree_error)
             return
         except Exception:
             logger.warning(

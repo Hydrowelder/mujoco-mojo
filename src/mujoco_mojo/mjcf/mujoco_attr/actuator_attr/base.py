@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import ClassVar
 
 import mujoco
@@ -11,6 +12,7 @@ from mujoco_mojo.typing import (
     ActuatorForceLimited,
     ActuatorName,
     JointName,
+    SensorInterp,
     SiteName,
     TendonName,
     Vec2,
@@ -22,7 +24,7 @@ from mujoco_mojo.typing import (
 __all__ = ["ActuatorBase"]
 
 
-class ActuatorBase(XMLModel):
+class ActuatorBase(XMLModel, ABC):
     """This element creates a base class for actuators, this is not intended for use in the SDK apart from inheritance."""
 
     tag = ""
@@ -31,6 +33,9 @@ class ActuatorBase(XMLModel):
         "name",
         "class_",
         "group",
+        "nsample",
+        "interp",
+        "delay",
         "ctrllimited",
         "forcelimited",
         "ctrlrange",
@@ -60,6 +65,18 @@ class ActuatorBase(XMLModel):
 
     group: int = 0
     """Integer group to which the actuator belongs. This attribute can be used for custom tags. It is also used by the visualizer to enable and disable the rendering of entire groups of actuators."""
+
+    nsample: int = 0
+    """If greater than 0, creates a time-indexed ring buffer with nsample samples of this actuator's `ctrl` history. During state advancement, the current control input is appended to the buffer with timestamp `time`, and the oldest sample is removed. Values in the history buffer can be read via mj_readCtrl.
+
+    A positive nsample is required for delay."""
+
+    interp: SensorInterp = SensorInterp.ZOH
+    """The interpolation method used when reading from the history buffer. Corresponds to the interp argument in mj_readCtrl.
+
+    - zoh: Zero-order hold (piecewise constant).
+    - linear: Piecewise linear interpolation.
+    - cubic: Cubic spline interpolation (Catmull-Rom)."""
 
     delay: float = 0
     """If greater than 0, then during the forward dynamics, instead of reading the control input to the actuator from `mjData.ctrl`, the control input is read from the history buffer using mj_readCtrl. Requires a history buffer (nsample > 0).

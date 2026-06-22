@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import ClassVar
 
 import mujoco
@@ -8,7 +9,7 @@ from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import EqualityName, Vec2, Vec5
 
 
-class EqualityBase(XMLModel):
+class EqualityBase(XMLModel, ABC):
     tag = ""
 
     attributes = ("name", "class_", "active", "solref", "solimp")

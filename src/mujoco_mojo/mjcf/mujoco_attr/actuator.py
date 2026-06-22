@@ -36,6 +36,7 @@ class Actuator(XMLModel):
         "cylinders",
         "muscles",
         "adhesions",
+        "dcmotors",
         "plugins",
     )
 

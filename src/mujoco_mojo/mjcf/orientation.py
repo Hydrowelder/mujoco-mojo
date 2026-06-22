@@ -252,6 +252,9 @@ class AxisAngle(OrientationBase):
 
     type: Literal[OrientationType.AXISANGLE] = OrientationType.AXISANGLE
     attributes = ("axisangle",)
+    non_xml_fields = (
+        "angle",
+    )  # degrees-vs-radians is passed to to_xml as compiler_degrees instead
     _rotation_attr = "axisangle"
 
     axisangle: Vec4 = np.array((1, 0, 0, 0))
@@ -356,6 +359,10 @@ class Euler(OrientationBase):
 
     type: Literal[OrientationType.EULER] = OrientationType.EULER
     attributes = ("euler",)
+    non_xml_fields = (
+        "eulerseq",
+        "angle",
+    )  # passed to to_xml as compiler_eulerseq/compiler_degrees instead
     _rotation_attr = "euler"
 
     euler: Vec3 = np.array((0, 0, 0))

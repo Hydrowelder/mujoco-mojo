@@ -76,7 +76,7 @@ class Camera(XMLModel):
     focal: Vec2 = np.array((0, 0))
     """Focal length of the camera in length units. It is mutually exclusive with fovy. See Cameras for details."""
 
-    focalpixel: tuple[int, int] = (1, 1)
+    focalpixel: tuple[int, int] = (0, 0)
     """Focal length of the camera in pixel units. If both focal and focalpixel are specified, the former is ignored."""
 
     principal: Vec2 = np.array((0, 0))

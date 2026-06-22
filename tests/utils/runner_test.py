@@ -1,6 +1,8 @@
 """Tests for MojoRunner distribution table output."""
 
+import os
 from pathlib import Path
+from unittest import mock
 
 import mujoco_mojo as mojo
 import pytest
@@ -77,3 +79,48 @@ def test_stochas_dir_absent_when_all_trials_fail(tmp_path: Path) -> None:
     runner.run()
 
     assert not (tmp_path / "stochas").exists()
+
+
+def test_force_remove_dir_skips_locked_dojo_script(tmp_path: Path) -> None:
+    """A `dojo.sh` still locked by a running dojo session is left in place rather than aborting the whole cleanup."""
+    (tmp_path / "dojo.sh").write_text("exec mujoco-mojo dojo .")
+    (tmp_path / "other.txt").write_text("x")
+    trial_dir = tmp_path / "trials" / "trial_000"
+    trial_dir.mkdir(parents=True)
+    (trial_dir / "result.json").write_text("{}")
+
+    real_unlink = os.unlink
+
+    def fake_unlink(path, *args, **kwargs):
+        if Path(path).name == "dojo.sh":
+            raise PermissionError(13, "file is in use by another process")
+        return real_unlink(path, *args, **kwargs)
+
+    with mock.patch("os.unlink", side_effect=fake_unlink):
+        MojoRunner.force_remove_dir(countdown_from=-1, path=tmp_path)
+
+    assert (tmp_path / "dojo.sh").exists()
+    assert not (tmp_path / "other.txt").exists()
+    assert not trial_dir.exists()
+
+
+def test_force_remove_dir_reraises_for_unrelated_locked_file(tmp_path: Path) -> None:
+    """A lock on a file other than the top-level dojo.sh still escalates to the rm -rf fallback."""
+    (tmp_path / "dojo.sh").write_text("exec mujoco-mojo dojo .")
+    (tmp_path / "other.txt").write_text("x")
+
+    real_unlink = os.unlink
+
+    def fake_unlink(path, *args, **kwargs):
+        if Path(path).name == "other.txt":
+            raise PermissionError(13, "simulated unrelated lock")
+        return real_unlink(path, *args, **kwargs)
+
+    with (
+        mock.patch("os.unlink", side_effect=fake_unlink),
+        mock.patch("subprocess.run") as run_mock,
+    ):
+        run_mock.return_value = mock.Mock(returncode=0)
+        MojoRunner.force_remove_dir(countdown_from=-1, path=tmp_path)
+
+    run_mock.assert_called_once_with(["rm", "-rf", str(tmp_path.resolve())], check=True)

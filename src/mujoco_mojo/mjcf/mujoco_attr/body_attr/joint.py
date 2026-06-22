@@ -35,7 +35,32 @@ class Joint(XMLModel):
 
     tag = "joint"
 
-    attributes = ()
+    attributes = (
+        "name",
+        "class_",
+        "type",
+        "group",
+        "pos",
+        "axis",
+        "springdamper",
+        "solreflimit",
+        "solimplimit",
+        "solreffriction",
+        "solimpfriction",
+        "stiffness",
+        "range",
+        "limited",
+        "actuatorfrcrange",
+        "actuatorfrclimited",
+        "actuatorgravcomp",
+        "margin",
+        "ref",
+        "springref",
+        "armature",
+        "damping",
+        "frictionloss",
+        "user",
+    )
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_JOINT
 
@@ -78,8 +103,8 @@ class Joint(XMLModel):
     solimpfriction: Vec5 = SOLIMP_DEFAULT
     """Constraint solver parameters for simulating dry friction. See Solver parameters."""
 
-    stiffness: float = 0
-    """Joint stiffness. If this value is positive, a spring will be created with equilibrium position given by springref below. The spring force is computed along with the other passive forces."""
+    stiffness: Vec3 = np.array((0, 0, 0))
+    """Joint stiffness. If this value is positive, a spring will be created with equilibrium position given by springref below. The spring force  is computed along with the other passive forces."""
 
     range: Vec2 = np.array((0, 0))
     """The joint limits. Limits can be imposed on all joint types except for free joints. For hinge and ball joints, the range is specified in degrees or radians depending on the angle attribute of compiler. For ball joints, the limit is imposed on the angle of rotation (relative to the reference configuration) regardless of the axis of rotation. Only the second range parameter is used for ball joints; the first range parameter should be set to 0. See the Limit section in the Computation chapter for more information.
@@ -115,7 +140,7 @@ class Joint(XMLModel):
 
     Besides increasing the realism of joints with geared transmission, positive armature significantly improves simulation stability, even for small values, and is a recommended possible fix when encountering stability issues."""
 
-    damping: float = 0
+    damping: Vec3 = np.array((0, 0, 0))
     """Damping applied to all degrees of freedom created by this joint. Unlike friction loss which is computed by the constraint solver, damping is simply a force linear in velocity. It is included in the passive forces. Despite this simplicity, larger damping values can make numerical integrators unstable, which is why our Euler integrator handles damping implicitly. See Integration in the Computation chapter."""
 
     frictionloss: float = 0

@@ -1,12 +1,13 @@
-import { formatNum } from "./lib/format";
+import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
-import { PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
+import { DASH_STYLE_VALUES, PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
 import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
 import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
   Annotation,
+  DashStyle,
   DistEntry,
   DistsResponse,
   DojoStore,
@@ -154,6 +155,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       tw.amber[500],
       tw.rose[500],
     ],
+    dashStyles: DASH_STYLE_VALUES,
 
     // Toast (shared mixin)
     ...createToastMixin(),
@@ -249,9 +251,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     dists: [] as DistEntry[],
     _distTooltipEntry: null as DistEntry | null,
     distFilterName: "" as string,
-    distFilterCategories: [] as string[],
-    distFilterTypes: [] as string[],
-    distFilterUnits: [] as string[],
+    // null = no filter applied (all pass); a (possibly empty) array is an
+    // explicit selection, so deselecting every item shows zero rows instead
+    // of silently falling back to "all"
+    distFilterCategories: null as string[] | null,
+    distFilterTypes: null as string[] | null,
+    distFilterUnits: null as string[] | null,
     distSortKey: "name" as
       | "name"
       | "category"
@@ -601,7 +606,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         if (chartType === "categorical") {
           const barColors = entry.cat_labels.map((lbl) =>
-            lbl === entry.sampled_label ? sampledColor : curveColor,
+            entry.sampled_labels?.includes(lbl) ? sampledColor : curveColor,
           );
           traces = [
             {
@@ -653,11 +658,11 @@ function trialViewer(trialId: string, externalUrl: string) {
               line: { color: "#94a3b8", width: 1.5, dash: "dot" },
             });
           }
-          if (entry.sampled_value !== null) {
+          for (const sampledValue of entry.sampled_values ?? []) {
             shapes.push({
               type: "line",
-              x0: entry.sampled_value,
-              x1: entry.sampled_value,
+              x0: sampledValue,
+              x1: sampledValue,
               y0: 0,
               y1: 1,
               yref: "paper",
@@ -789,54 +794,79 @@ function trialViewer(trialId: string, externalUrl: string) {
       return Array.from(new Set(this.dists.map((d) => d.units))).sort();
     },
 
-    // empty array = all pass; unchecking when all are checked populates with
-    // all-except-one; re-checking to full set normalises back to empty
+    // signal counts per dropdown option, shown right-justified next to each
+    // checkbox so users can see how many rows a filter choice covers
+    get distCategoryCounts(): Record<string, number> {
+      const counts: Record<string, number> = {};
+      for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+      return counts;
+    },
+
+    get distTypeCounts(): Record<string, number> {
+      const counts: Record<string, number> = {};
+      for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+      return counts;
+    },
+
+    get distUnitCounts(): Record<string, number> {
+      const counts: Record<string, number> = {};
+      for (const d of this.dists) counts[d.units] = (counts[d.units] ?? 0) + 1;
+      return counts;
+    },
+
+    // null = all selected; toggling derives the explicit set from the
+    // current selection (defaulting to "all" the first time) and only
+    // collapses back to null once it matches the full set again - it never
+    // re-expands to "all" just because the set happens to become empty
     toggleDistCategoryFilter(cat: string) {
       const all = this.distCategories;
-      if (this.distFilterCategories.length === 0) {
-        this.distFilterCategories = all.filter((c) => c !== cat);
-        return;
-      }
-      const idx = this.distFilterCategories.indexOf(cat);
-      if (idx === -1) {
-        this.distFilterCategories.push(cat);
-        if (this.distFilterCategories.length === all.length)
-          this.distFilterCategories = [];
-      } else {
-        this.distFilterCategories.splice(idx, 1);
-      }
+      const current = this.distFilterCategories ?? all;
+      const next = current.includes(cat)
+        ? current.filter((c) => c !== cat)
+        : [...current, cat];
+      this.distFilterCategories = next.length === all.length ? null : next;
+    },
+
+    selectAllDistCategories() {
+      this.distFilterCategories = null;
+    },
+
+    deselectAllDistCategories() {
+      this.distFilterCategories = [];
     },
 
     toggleDistTypeFilter(type: string) {
       const all = this.distTypes;
-      if (this.distFilterTypes.length === 0) {
-        this.distFilterTypes = all.filter((t) => t !== type);
-        return;
-      }
-      const idx = this.distFilterTypes.indexOf(type);
-      if (idx === -1) {
-        this.distFilterTypes.push(type);
-        if (this.distFilterTypes.length === all.length)
-          this.distFilterTypes = [];
-      } else {
-        this.distFilterTypes.splice(idx, 1);
-      }
+      const current = this.distFilterTypes ?? all;
+      const next = current.includes(type)
+        ? current.filter((t) => t !== type)
+        : [...current, type];
+      this.distFilterTypes = next.length === all.length ? null : next;
+    },
+
+    selectAllDistTypes() {
+      this.distFilterTypes = null;
+    },
+
+    deselectAllDistTypes() {
+      this.distFilterTypes = [];
     },
 
     toggleDistUnitFilter(unit: string) {
       const all = this.distUnits;
-      if (this.distFilterUnits.length === 0) {
-        this.distFilterUnits = all.filter((u) => u !== unit);
-        return;
-      }
-      const idx = this.distFilterUnits.indexOf(unit);
-      if (idx === -1) {
-        this.distFilterUnits.push(unit);
-        if (this.distFilterUnits.length === all.length)
-          this.distFilterUnits = [];
-      } else {
-        this.distFilterUnits.splice(idx, 1);
-      }
+      const current = this.distFilterUnits ?? all;
+      const next = current.includes(unit)
+        ? current.filter((u) => u !== unit)
+        : [...current, unit];
+      this.distFilterUnits = next.length === all.length ? null : next;
+    },
+
+    selectAllDistUnits() {
+      this.distFilterUnits = null;
+    },
+
+    deselectAllDistUnits() {
+      this.distFilterUnits = [];
     },
 
     get filteredDists(): DistEntry[] {
@@ -844,17 +874,17 @@ function trialViewer(trialId: string, externalUrl: string) {
       const filtered = this.dists.filter((d) => {
         if (name && !d.name.toLowerCase().includes(name)) return false;
         if (
-          this.distFilterCategories.length > 0 &&
+          this.distFilterCategories !== null &&
           !this.distFilterCategories.includes(d.category)
         )
           return false;
         if (
-          this.distFilterTypes.length > 0 &&
+          this.distFilterTypes !== null &&
           !this.distFilterTypes.includes(d.dist_type)
         )
           return false;
         if (
-          this.distFilterUnits.length > 0 &&
+          this.distFilterUnits !== null &&
           !this.distFilterUnits.includes(d.units)
         )
           return false;
@@ -1086,6 +1116,29 @@ function trialViewer(trialId: string, externalUrl: string) {
       const exp = Math.floor(Math.log10(abs));
       if (exp < -4 || exp >= 4) return v.toExponential(3);
       return parseFloat(v.toPrecision(4)).toString();
+    },
+
+    // formats every drawn value for a dist table row, regardless of whether it
+    // sampled numbers, labels, or (for permutations) a list of items per draw
+    fmtSampled(entry: DistEntry): string {
+      if (entry.sampled_permutations && entry.sampled_permutations.length > 0) {
+        return entry.sampled_permutations
+          .map((perm) => `[${perm.join(", ")}]`)
+          .join("; ");
+      }
+      if (entry.sampled_values && entry.sampled_values.length > 0) {
+        return entry.sampled_values.map((v) => this.fmtSigFig(v)).join(", ");
+      }
+      if (entry.sampled_labels && entry.sampled_labels.length > 0) {
+        return entry.sampled_labels.join(", ");
+      }
+      return "—";
+    },
+
+    // formats a percentile in the standard P{x} notation (e.g. P95.7) rather
+    // than the nonstandard "%ile" shorthand
+    fmtPercentile(p: number): string {
+      return `P${p.toFixed(1)}`;
     },
 
     _measureTextWidth(text: string, refEl: HTMLElement): number {
@@ -1612,17 +1665,25 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     handlePlotClickForShapes(pt: { x: number; y: number }): boolean {
       if (!this.placementMode) return false;
-      const defaultColor =
-        this.plotColors[this.config.shapes.length % this.plotColors.length]!;
+      const defaultStyle = this.nextAvailableStyle(
+        this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" })),
+      );
       let newShape: Shape | null = null;
 
       if (this.placementMode === "vline") {
-        newShape = { type: "vline", x0: pt.x, color: defaultColor, label: "" };
+        newShape = {
+          type: "vline",
+          x0: pt.x,
+          color: defaultStyle.color,
+          dash: defaultStyle.dash,
+          label: "",
+        };
       } else if (this.placementMode === "hline") {
         newShape = {
           type: "hline",
           y0: pt.y,
-          color: defaultColor,
+          color: defaultStyle.color,
+          dash: defaultStyle.dash,
           label: "",
         };
       } else if (this.placementMode === "rect") {
@@ -1636,7 +1697,8 @@ function trialViewer(trialId: string, externalUrl: string) {
           x1: pt.x,
           y0: this.rectStart.y,
           y1: pt.y,
-          color: defaultColor,
+          color: defaultStyle.color,
+          dash: defaultStyle.dash,
           label: "",
         };
         this.rectStart = null;
@@ -2399,6 +2461,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       );
 
       this.$watch("config", async (value: PlotConfig, oldValue: PlotConfig) => {
+        // re-validate on every config change, not just raw-JSON edits, so fixes
+        // made through the UI (column pickers, filters, etc.) clear a stale
+        // Config Error banner instead of requiring a page refresh
+        this.configErrors = this.validateConfig(value);
+        this.isValidConfig = this.configErrors.length === 0;
+        this.isValidJson = true;
+
         if (!this.isEditingRaw) {
           this.configRaw = JSON.stringify(value, null, 4);
           try {
@@ -3375,7 +3444,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         const { [col]: _, ...rest } = this.config.yAxes;
         this.config.yAxes = rest;
       } else {
-        const nextIndex = Object.keys(this.config.yAxes).length;
+        const usedStyles = Object.values(this.config.yAxes).map((y) => ({
+          color: y.color,
+          dash: y.dash,
+        }));
+        const nextStyle = this.nextAvailableStyle(usedStyles);
         const initFilters: FilterEntry[] = this.config.refFrame
           ? [
               {
@@ -3387,12 +3460,12 @@ function trialViewer(trialId: string, externalUrl: string) {
             ]
           : [];
         this.config.yAxes[col] = {
-          color: this.getSignalColor(nextIndex),
+          color: nextStyle.color,
           label: "",
           width: 3,
           opacity: 1,
           filters: initFilters,
-          dash: "solid",
+          dash: nextStyle.dash,
           marker: "none",
         };
         // eagerly fetch if this column has no cached data yet
@@ -3466,6 +3539,30 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     getSignalColor(index: number): string {
       return this.plotColors[index % this.plotColors.length] ?? tw.cyan[500];
+    },
+
+    // picks the lowest-index (color, dash) pair not already in use by `used`,
+    // so removing an earlier item in the cycle and adding a new one doesn't
+    // collide with a pair still in use. Cycles through every color before
+    // advancing to the next dash style, and falls back to round-robin by
+    // count once every color/dash combination is taken.
+    nextAvailableStyle(
+      used: { color: string; dash: DashStyle }[],
+    ): { color: string; dash: DashStyle } {
+      const usedKeys = new Set(used.map((u) => `${u.color}|${u.dash}`));
+      const numColors = this.plotColors.length;
+      const numCombos = numColors * this.dashStyles.length;
+      const styleAt = (i: number) => ({
+        color: this.getSignalColor(i % numColors),
+        dash: this.dashStyles[Math.floor(i / numColors) % this.dashStyles.length]!,
+      });
+      let i = 0;
+      while (i < numCombos) {
+        const style = styleAt(i);
+        if (!usedKeys.has(`${style.color}|${style.dash}`)) return style;
+        i++;
+      }
+      return styleAt(used.length);
     },
 
     getYProps(axis: string, index: number) {
@@ -4322,6 +4419,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     formatNum,
+    breakableLabel,
 
     // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
     rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {

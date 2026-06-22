@@ -39,6 +39,7 @@ class EqualityConnectSite(EqualityBase):
     site1 and site2 (both required). When using this specification, the two sites will be pulled together by the constraint, regardless of their position in the default configuration. An example of this specification is shown in this model.
     """
 
+    tag = "connect"
     attributes = (*EqualityBase.attributes, "site1", "site2")
 
     type: Literal["site"] = "site"

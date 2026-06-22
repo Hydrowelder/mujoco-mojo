@@ -9,7 +9,7 @@ class SensorInsidesite(SensorBase):
 
     tag = "insidesite"
 
-    attributes = (*SensorBase.attributes,)
+    attributes = (*SensorBase.attributes, "objtype", "objname", "site")
 
     objtype: SensorObjectType
     """The type of the object whose position will be queried. See framepos."""

@@ -9,7 +9,7 @@ __all__ = ["EqualityTendon"]
 
 
 class EqualityTendon(EqualityBase):
-    """This element constrains the position or angle of one joint to be a quartic polynomial of another joint. Only scalar joint types (slide and hinge) can be used."""
+    """This element constrains the length of one tendon to be a quartic polynomial of another tendon."""
 
     tag = "tendon"
     attributes = (*EqualityBase.attributes, "tendon1", "tendon2", "polycoef")
@@ -21,5 +21,4 @@ class EqualityTendon(EqualityBase):
     """Name of the second tendon. If this attribute is omitted, the first tendon is fixed to a constant."""
 
     polycoef: Vec5 = np.array((0, 1, 0, 0, 0))
-    """Same as in the EqualityJoint element, but applied to tendon lengths instead of joint positions.
-    """
+    """Same as in the EqualityJoint element, but applied to tendon lengths instead of joint positions."""

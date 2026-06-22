@@ -7,6 +7,10 @@ from mujoco_mojo.typing import MaterialName, Vec4
 class CompositeSkin(XMLModel):
     """If this element is included, the model compiler will generate a skinned mesh asset and attach it to the element bodies of the composite object. Skin can be attached to 2D grid, cloth, box, cylinder and ellipsoid. For other composite types it has no effect. Note that the skin created here is equivalent to a skin specified directly in the XML, as opposed to a skin loaded from file. So if the model is saved as XML, it will contain a large section describing the automatically-generated skin."""
 
+    tag = "skin"
+
+    attributes = ("texcoord", "material", "rgba", "group", "inflate", "subgrid")
+
     texcoord: bool = False
     """If this is true, explicit texture coordinates will be generated, mapping the skin to the unit square in texture space. This is needed when the material specifies a texture. If texcoord is false and the skin has texture, the texture will appear fixed to the world instead of the skin. The reason for having this attribute in the first place is because skins with texture coordinates upload these coordinates to the GPU even if no texture is applied later. So this attribute should be set to false in cases where no texture will be applied via the material attribute."""
 

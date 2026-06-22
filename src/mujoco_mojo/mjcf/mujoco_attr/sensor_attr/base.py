@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
@@ -23,7 +24,7 @@ logger = get_logger(__name__)
 __all__ = ["SensorBase"]
 
 
-class SensorBase(XMLModel):
+class SensorBase(XMLModel, ABC):
     """MuJoCo can simulate a wide variety of sensors as described in the sensor element below. User sensor types can also be defined, and are evaluated by the callback mjcb_sensor. Sensors do not affect the simulation. Instead their outputs are copied in the array mjData.sensordata and are available for user processing."""
 
     tag = ""

@@ -34,7 +34,7 @@ class ActuatorVelocity(ActuatorBase):
         "kv",
     )
 
-    kv: float = 0
+    kv: float = 1
     """Velocity feedback gain."""
 
     @property
