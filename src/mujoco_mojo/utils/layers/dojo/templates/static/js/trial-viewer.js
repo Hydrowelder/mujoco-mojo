@@ -11,6 +11,9 @@
     }
     return parseFloat(value.toPrecision(sigDigits)).toString();
   }
+  function breakableLabel(text) {
+    return text.replace(/([/:])/g, "$1\u200B");
+  }
 
   // src/lib/plot-config.generated.ts
   var DASH_STYLE_VALUES = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
@@ -5743,6 +5746,7 @@
         return [globalMin - pad, globalMax + pad];
       },
       formatNum,
+      breakableLabel,
       // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
       rangeBoundValue(axis, bound) {
         const range = axis === "x" ? this.config.rangeX : this.config.rangeY;

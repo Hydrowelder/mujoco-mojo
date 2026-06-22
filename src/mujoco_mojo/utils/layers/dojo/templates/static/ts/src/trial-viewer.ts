@@ -1,4 +1,4 @@
-import { formatNum } from "./lib/format";
+import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
 import { DASH_STYLE_VALUES, PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
 import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
@@ -4419,6 +4419,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     formatNum,
+    breakableLabel,
 
     // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
     rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {

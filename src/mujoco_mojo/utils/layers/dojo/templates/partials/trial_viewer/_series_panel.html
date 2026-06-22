@@ -119,10 +119,10 @@
                         <template x-for="col in getFilteredCols('x')"
                                   :key="col">
                             <button @click="config.xAxis.col = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold pr-2"
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between gap-2 group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
                                       :class="config.xAxis.col === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="col"></span>
+                                      x-text="breakableLabel(col)"></span>
                                 <span x-show="config.xAxis.col === col"
                                       class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
                             </button>
@@ -642,12 +642,12 @@
                         <template x-for="q in availableQuats"
                                   :key="q">
                             <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold pr-2 whitespace-normal break-all"
+                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between gap-2 group border-b last:border-none border-slate-100 dark:border-slate-700">
+                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
                                       :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="q"></span>
+                                      x-text="breakableLabel(q)"></span>
                                 <span x-show="config.refFrame === q"
-                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
                             </button>
                         </template>
                     </div>
@@ -784,10 +784,10 @@
                                     <input type="checkbox"
                                            :checked="config.yAxes[col]"
                                            @click.stop="toggleY(col)"
-                                           class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
-                                    <span class="text-sm font-mono font-bold"
+                                           class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800 shrink-0" />
+                                    <span class="text-sm font-mono font-bold min-w-0 flex-1"
                                           :class="config.yAxes[col] ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                          x-text="col"></span>
+                                          x-text="breakableLabel(col)"></span>
                                 </label>
                             </template>
                         </template>

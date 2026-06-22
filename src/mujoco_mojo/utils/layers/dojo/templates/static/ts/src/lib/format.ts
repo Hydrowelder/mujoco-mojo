@@ -15,6 +15,12 @@ export function formatNum(value: number | null | undefined, sigDigits = 4): stri
   return parseFloat(value.toPrecision(sigDigits)).toString();
 }
 
+// Inserts a zero-width space after every "/" and ":" so long signal/frame
+// names wrap only at those separators instead of mid-word or not at all.
+export function breakableLabel(text: string): string {
+  return text.replace(/([/:])/g, "$1​");
+}
+
 export function formatTimeAgo(seconds: number): string {
   if (!seconds || seconds < 60) return `${seconds || 0}s ago`;
   const mins = Math.floor(seconds / 60);
