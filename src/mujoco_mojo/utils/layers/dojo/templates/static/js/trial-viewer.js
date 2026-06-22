@@ -2298,6 +2298,7 @@
         tw.amber[500],
         tw.rose[500]
       ],
+      dashStyles: DASH_STYLE_VALUES,
       // Toast (shared mixin)
       ...createToastMixin(),
       // Options - exposed so templates can use opts.lineMode, opts.interpLabel(...), etc.
@@ -3510,15 +3511,24 @@
       },
       handlePlotClickForShapes(pt) {
         if (!this.placementMode) return false;
-        const defaultColor = this.plotColors[this.config.shapes.length % this.plotColors.length];
+        const defaultStyle = this.nextAvailableStyle(
+          this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" }))
+        );
         let newShape = null;
         if (this.placementMode === "vline") {
-          newShape = { type: "vline", x0: pt.x, color: defaultColor, label: "" };
+          newShape = {
+            type: "vline",
+            x0: pt.x,
+            color: defaultStyle.color,
+            dash: defaultStyle.dash,
+            label: ""
+          };
         } else if (this.placementMode === "hline") {
           newShape = {
             type: "hline",
             y0: pt.y,
-            color: defaultColor,
+            color: defaultStyle.color,
+            dash: defaultStyle.dash,
             label: ""
           };
         } else if (this.placementMode === "rect") {
@@ -3532,7 +3542,8 @@
             x1: pt.x,
             y0: this.rectStart.y,
             y1: pt.y,
-            color: defaultColor,
+            color: defaultStyle.color,
+            dash: defaultStyle.dash,
             label: ""
           };
           this.rectStart = null;
@@ -4119,6 +4130,9 @@
           }
         );
         this.$watch("config", async (value, oldValue) => {
+          this.configErrors = this.validateConfig(value);
+          this.isValidConfig = this.configErrors.length === 0;
+          this.isValidJson = true;
           if (!this.isEditingRaw) {
             this.configRaw = JSON.stringify(value, null, 4);
             try {
@@ -4923,7 +4937,11 @@
           const { [col]: _, ...rest } = this.config.yAxes;
           this.config.yAxes = rest;
         } else {
-          const nextIndex = Object.keys(this.config.yAxes).length;
+          const usedStyles = Object.values(this.config.yAxes).map((y) => ({
+            color: y.color,
+            dash: y.dash
+          }));
+          const nextStyle = this.nextAvailableStyle(usedStyles);
           const initFilters = this.config.refFrame ? [
             {
               type: "rotation",
@@ -4933,12 +4951,12 @@
             }
           ] : [];
           this.config.yAxes[col] = {
-            color: this.getSignalColor(nextIndex),
+            color: nextStyle.color,
             label: "",
             width: 3,
             opacity: 1,
             filters: initFilters,
-            dash: "solid",
+            dash: nextStyle.dash,
             marker: "none"
           };
           if (!Object.prototype.hasOwnProperty.call(this.data ?? {}, col)) {
@@ -5001,6 +5019,27 @@
       },
       getSignalColor(index) {
         return this.plotColors[index % this.plotColors.length] ?? tw.cyan[500];
+      },
+      // picks the lowest-index (color, dash) pair not already in use by `used`,
+      // so removing an earlier item in the cycle and adding a new one doesn't
+      // collide with a pair still in use. Cycles through every color before
+      // advancing to the next dash style, and falls back to round-robin by
+      // count once every color/dash combination is taken.
+      nextAvailableStyle(used) {
+        const usedKeys = new Set(used.map((u) => `${u.color}|${u.dash}`));
+        const numColors = this.plotColors.length;
+        const numCombos = numColors * this.dashStyles.length;
+        const styleAt = (i2) => ({
+          color: this.getSignalColor(i2 % numColors),
+          dash: this.dashStyles[Math.floor(i2 / numColors) % this.dashStyles.length]
+        });
+        let i = 0;
+        while (i < numCombos) {
+          const style = styleAt(i);
+          if (!usedKeys.has(`${style.color}|${style.dash}`)) return style;
+          i++;
+        }
+        return styleAt(used.length);
       },
       getYProps(axis, index) {
         const obj = this.config.yAxes[axis] ?? {};
