@@ -80,8 +80,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
-        assert rm.signal_manager is not None
+    def add_spring_force(self, loc: Literal["pz", "mz"]):
         base, tip, stiffness, stroke, preload = self.springs[loc]
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(
@@ -91,12 +90,12 @@ class Handoff(mojo.UserData):
             stiffness=stiffness,
             max_stroke=stroke,
             preload=preload,
-        ).register_to_rm(rm)
+        ).register_to_rm()
 
         # Request high-fidelity telemetry for these components
-        base.request(rm.signal_manager)
-        tip.request(rm.signal_manager)
-        spring_force.request(rm.signal_manager)
+        base.request()
+        tip.request()
+        spring_force.request()
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
@@ -205,13 +204,13 @@ def runtime(
         assert mojo_model.mjcf.worldbody
 
         # Apply forces defined during generation
-        handoff.add_spring_force("pz", rm)
-        handoff.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz")
+        handoff.add_spring_force("mz")
 
         if rm.signal_manager:
             for b in mojo_model.mjcf.worldbody.walk_bodies():
-                b.request(rm.signal_manager)
-            handoff.box1_rot.request(rm.signal_manager)
+                b.request()
+            handoff.box1_rot.request()
 
         while state.data.time < 2.0:
             rm.step(state)

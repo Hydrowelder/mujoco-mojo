@@ -30,6 +30,9 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 
 The `RuntimeManager` is the orchestrator of your simulation. It is recommended to use it as a context manager (`with runtime_manager as rm:`). This ensures that the results database is properly opened, the clocks are synchronized, and all resources are cleaned up when the trial finishes.
 
+???+ tip "Tip: No Need to Pass `rm` Around"
+    While inside the `with runtime_manager as rm:` block, `rm` is also available ambiently. Methods like `register_to_rm()` and `request()` will automatically find the active `RuntimeManager`/`SignalManager` if you don't pass one explicitly, e.g. `spring_force.register_to_rm()` instead of `spring_force.register_to_rm(rm)`. This means helper functions like `add_spring_force()` in the `Handoff` class don't need to accept `rm` as a parameter at all, so long as they're called from within the `with` block.
+
 ### Defining Loads
 
 This is where the `Handoff` pattern pays off! Since we packed our site references into `user_data` during generation, we can now easily apply complex forces and torques without searching through the MuJoCo model for IDs.
