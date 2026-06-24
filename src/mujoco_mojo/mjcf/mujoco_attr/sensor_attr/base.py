@@ -100,11 +100,13 @@ class SensorBase(XMLModel, ABC):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(sensor_name, tag)`.
         * An `indexed` output posts `dim` values under `subgroups=(sensor_name, tag)` with `attr` set to `0`-`dim - 1`.
 
-        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
         signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
 
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."

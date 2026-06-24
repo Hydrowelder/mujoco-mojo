@@ -461,12 +461,15 @@ class Proximity(MojoBaseModel):
 
         Only the computations required by the requested channels are performed each timestep.
 
-        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
         signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
         needs_proximity = bool(set(channels) & _prox_attrs)

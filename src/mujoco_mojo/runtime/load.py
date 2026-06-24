@@ -169,11 +169,13 @@ class SiteLoad(Load):
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
-        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
         signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
 
         def sample(state: MjState):
             for channel in channels:
@@ -674,7 +676,7 @@ class JointFriction(JointLoad):
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
         Args:
-            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
         Raises:
             ValueError: If the joint has no name.
@@ -683,6 +685,8 @@ class JointFriction(JointLoad):
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
         signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
 
         if self.joint.name is None:
             msg = f"Cannot request telemetry for JointFriction '{self.name}': joint has no name."
@@ -855,12 +859,14 @@ class ActuatorLoad(Load):
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
 
         Args:
-            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
         signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
 
         def sample(state: MjState) -> None:
             signal_manager.post(
