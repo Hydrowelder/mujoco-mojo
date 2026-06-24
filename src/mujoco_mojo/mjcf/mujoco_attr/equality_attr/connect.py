@@ -7,7 +7,7 @@ from pydantic import Field
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.equality_base import EqualityBase
 from mujoco_mojo.typing import BodyName, SiteName, Vec3
 
-__all__ = ["EqualityConnectBody", "EqualityConnectSite"]
+__all__ = ["AnyEqualityConnect", "EqualityConnectBody", "EqualityConnectSite"]
 
 
 class EqualityConnectBody(EqualityBase):

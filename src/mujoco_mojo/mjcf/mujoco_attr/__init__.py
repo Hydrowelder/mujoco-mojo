@@ -70,6 +70,8 @@ from .contact_attr import Exclude, Pair
 from .deformable import Deformable
 from .equality import Equality
 from .equality_attr import (
+    AnyEqualityConnect,
+    AnyEqualityWeld,
     EqualityConnectBody,
     EqualityConnectSite,
     EqualityFlex,
@@ -171,6 +173,8 @@ __all__ = [
     "ActuatorPosition",
     "ActuatorVelocity",
     "AnyCompositeGeom",
+    "AnyEqualityConnect",
+    "AnyEqualityWeld",
     "AnyGeom",
     "AnyMesh",
     "AnySite",

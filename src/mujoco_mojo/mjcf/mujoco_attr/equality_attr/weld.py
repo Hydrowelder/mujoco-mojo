@@ -8,7 +8,7 @@ from pydantic import Field
 from mujoco_mojo.mjcf.mujoco_attr.equality_attr.equality_base import EqualityBase
 from mujoco_mojo.typing import BodyName, SiteName, Vec3, Vec7
 
-__all__ = ["EqualityWeldBody", "EqualityWeldSite"]
+__all__ = ["AnyEqualityWeld", "EqualityWeldBody", "EqualityWeldSite"]
 
 
 class EqualityWeldBody(EqualityBase):
