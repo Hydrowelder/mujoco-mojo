@@ -16,6 +16,22 @@ from mujoco_mojo.utils.log import get_logger
 logger = get_logger(__name__)
 
 
+def resolve_signal_manager(
+    signal_manager: SignalManager | None,
+) -> SignalManager | None:
+    """
+    Returns `signal_manager` if given, otherwise falls back to the `SignalManager` of the innermost enclosing `RuntimeManager` `with` block.
+
+    The result may still be `None` if that `RuntimeManager` simply has no `SignalManager` configured (telemetry recording disabled for this trial) -- callers should treat `None` as "nothing to record to" rather than an error. Raises only if there is no active `RuntimeManager` context at all.
+    """
+    if signal_manager is not None:
+        return signal_manager
+
+    from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+    return RuntimeManager.current().signal_manager
+
+
 @dataclass
 class SignalManager:
     export_path: Path

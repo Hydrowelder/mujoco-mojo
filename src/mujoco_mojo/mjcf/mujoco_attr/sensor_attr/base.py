@@ -82,7 +82,7 @@ class SensorBase(XMLModel, ABC):
     user: VecN | None = None
     """See User parameters."""
 
-    def request(self, signal_manager: SignalManager):
+    def request(self, signal_manager: SignalManager | None = None):
         """
         Registers the sensor's output for logging.
 
@@ -99,7 +99,15 @@ class SensorBase(XMLModel, ABC):
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`) under `subgroups=(sensor_name, tag)`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(sensor_name, tag)`.
         * An `indexed` output posts `dim` values under `subgroups=(sensor_name, tag)` with `attr` set to `0`-`dim - 1`.
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)

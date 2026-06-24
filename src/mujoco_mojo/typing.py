@@ -38,6 +38,7 @@ __all__ = [
     "DynType",
     "EdgeEquality",
     "EnableDisable",
+    "EqualityName",
     "EulerSeq",
     "FlexCompDOF",
     "FlexCompType",

@@ -1,4 +1,5 @@
 import logging
+import os
 import queue
 import sys
 import threading
@@ -22,7 +23,12 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
-from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR, NAMED_VALUES_FNAME
+from mujoco_mojo.utils.defaults import (
+    DEFAULT_WORKDIR,
+    NAMED_VALUES_FNAME,
+    STOCHAS_DIR_NAME,
+    STOCHAS_DISTS_FNAME,
+)
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
 from mujoco_mojo.utils.statusing import (
@@ -199,20 +205,35 @@ class MojoReloaded:
     _reprint_prompt: Callable[[], None] | None = field(
         default=None, repr=False, compare=False
     )
+    _line_buffer: str = field(default="", init=False, repr=False)
+    _line_cursor: int = field(default=0, init=False, repr=False)
 
     _trial_padding_style = "03d"
+
+    def _clear_line(self):
+        """Writes the clear-line escape directly, bypassing rich's markup/highlighting which otherwise mangles raw ANSI control sequences. Caller must hold `_print_lock`."""
+        if self._reprint_prompt is not None:
+            console.file.write("\r\x1b[2K")
+            console.file.flush()
+
+    def _redraw_line(self):
+        """Reprints the prompt plus any in-progress input line (with the cursor restored to its column), so async output never wipes out what the user was mid-typing. No-op if there's no active prompt. Caller must hold `_print_lock`."""
+        if self._reprint_prompt is None:
+            return
+        self._reprint_prompt()
+        if self._line_buffer:
+            console.file.write(self._line_buffer)
+        trailing = len(self._line_buffer) - self._line_cursor
+        if trailing > 0:
+            console.file.write(f"\x1b[{trailing}D")
+        console.file.flush()
 
     def _print(self, *args, **kwargs):
         """Prints a message, redrawing the persistent prompt below it if the interactive loop is active."""
         with self._print_lock:
-            if self._reprint_prompt is not None:
-                # write the clear-line escape directly, bypassing rich's markup/highlighting
-                # which otherwise mangles raw ANSI control sequences
-                console.file.write("\r\x1b[2K")
-                console.file.flush()
+            self._clear_line()
             console.print(*args, **kwargs)
-            if self._reprint_prompt is not None:
-                self._reprint_prompt()
+            self._redraw_line()
 
     def trial_dir_for(self, trial_num: int) -> Path:
         """
@@ -223,6 +244,23 @@ class MojoReloaded:
         return (
             self.workdir / "trials" / f"trial_{trial_num:{self._trial_padding_style}}"
         ).resolve()
+
+    def _infer_padding_style(self) -> str:
+        """
+        Detects the zero-padding width already used by `trial_*` folders on disk, so reconnecting `reloaded` to an existing workdir (e.g. one a Monte Carlo / Optimize job created) extends it with matching folder names instead of creating a mismatched width alongside them (e.g. 'trial_0042' next to existing 'trial_00042's).
+
+        Falls back to the current default if the workdir has no trial folders yet.
+        """
+        widths: set[int] = set()
+        for p in (self.workdir / "trials").glob("trial_*"):
+            suffix = p.name.removeprefix("trial_")
+            if p.is_dir() and suffix.isdigit():
+                widths.add(len(suffix))
+
+        if not widths:
+            return self._trial_padding_style
+
+        return f"0{max(widths)}d"
 
     def _ensure_job_status(
         self, gen_func: MojoGenerator | None, run_func: MojoRuntime | None
@@ -419,6 +457,19 @@ class MojoReloaded:
                     (trial_dir / NAMED_VALUES_FNAME).write_text(
                         mojo_model.named.model_dump_json()
                     )
+
+                    # overwrite on every reload (rather than write-once like the
+                    # Runner) since the user's generator -- and therefore which
+                    # distributions exist -- can change between reloads
+                    if mojo_model.dists:
+                        stochas_dir = self.workdir / STOCHAS_DIR_NAME
+                        stochas_dir.mkdir(exist_ok=True)
+                        mojo_model.dists.to_tables(stochas_dir)
+                        tmp = stochas_dir / "dists.tmp.json"
+                        tmp.write_text(
+                            mojo_model.dists.model_dump_json(), encoding="utf-8"
+                        )
+                        tmp.replace(stochas_dir / STOCHAS_DISTS_FNAME)
                 else:
                     assert self.config_path
                     try:
@@ -509,6 +560,7 @@ class MojoReloaded:
         self.workdir.mkdir(parents=True, exist_ok=True)
         (self.workdir / ".gitignore").write_text("*")
         write_dojo_script(self.workdir)
+        self._trial_padding_style = self._infer_padding_style()
 
         try:
             start = time.time()
@@ -605,7 +657,8 @@ class MojoReloaded:
                 watcher_stop_event.set()
                 watcher_stop_event = None
 
-        def stdin_reader():
+        def plain_stdin_reader():
+            """Fallback used when raw mode isn't available (not a tty, or `termios` is missing, e.g. on Windows). No history/line-editing beyond whatever the terminal driver provides."""
             while not stop_event.is_set():
                 try:
                     line = sys.stdin.readline()
@@ -616,6 +669,148 @@ class MojoReloaded:
                 except (KeyboardInterrupt, EOFError):
                     event_queue.put(("input", "exit"))
                     break
+
+        def raw_stdin_reader(fd: int):
+            """
+            Byte-level input reader that hand-rolls just enough line-editing to support Up/Down history navigation, alongside the Left/Right/Backspace editing a cooked tty already gives users for free.
+
+            Runs with local echo and canonical mode off, so every visible character is one we wrote ourselves via `_redraw_line` - that's what lets history navigation (and async output from other threads) safely rewrite the in-progress line without fighting the tty driver's own buffering.
+            """
+            import select
+
+            history: list[str] = []
+            history_index: int | None = None
+            pending_line = ""
+
+            while not stop_event.is_set():
+                try:
+                    ch = os.read(fd, 1)
+                except OSError:
+                    # e.g. EINTR from a signal landing on this thread; just retry
+                    continue
+                if not ch:
+                    event_queue.put(("input", "exit"))
+                    break
+
+                if ch == b"\x03":  # Ctrl-C (only reachable if ISIG is somehow off)
+                    event_queue.put(("input", "exit"))
+                    break
+
+                if ch in (b"\r", b"\n"):
+                    with self._print_lock:
+                        console.file.write("\r\n")
+                        console.file.flush()
+                        line = self._line_buffer
+                        self._line_buffer = ""
+                        self._line_cursor = 0
+                    if line and (not history or history[-1] != line):
+                        history.append(line)
+                    history_index = None
+                    pending_line = ""
+                    event_queue.put(("input", line.strip()))
+                    continue
+
+                if ch in (b"\x7f", b"\x08"):  # backspace
+                    if self._line_cursor > 0:
+                        with self._print_lock:
+                            self._line_buffer = (
+                                self._line_buffer[: self._line_cursor - 1]
+                                + self._line_buffer[self._line_cursor :]
+                            )
+                            self._line_cursor -= 1
+                            self._clear_line()
+                            self._redraw_line()
+                    continue
+
+                if ch == b"\x1b":
+                    # arrow keys (and other CSI sequences) arrive as ESC '[' <letter>;
+                    # give the rest a brief window so a bare Escape keypress (which sends
+                    # no follow-up bytes) doesn't block waiting for more input
+                    rest = (
+                        os.read(fd, 2) if select.select([fd], [], [], 0.05)[0] else b""
+                    )
+
+                    if rest == b"[A":  # up
+                        if history:
+                            if history_index is None:
+                                pending_line = self._line_buffer
+                                history_index = len(history) - 1
+                            elif history_index > 0:
+                                history_index -= 1
+                            with self._print_lock:
+                                self._line_buffer = history[history_index]
+                                self._line_cursor = len(self._line_buffer)
+                                self._clear_line()
+                                self._redraw_line()
+                    elif rest == b"[B":  # down
+                        if history_index is not None:
+                            if history_index < len(history) - 1:
+                                history_index += 1
+                                text = history[history_index]
+                            else:
+                                history_index = None
+                                text = pending_line
+                            with self._print_lock:
+                                self._line_buffer = text
+                                self._line_cursor = len(self._line_buffer)
+                                self._clear_line()
+                                self._redraw_line()
+                    elif rest == b"[C":  # right
+                        if self._line_cursor < len(self._line_buffer):
+                            with self._print_lock:
+                                self._line_cursor += 1
+                                self._clear_line()
+                                self._redraw_line()
+                    elif rest == b"[D":  # left
+                        if self._line_cursor > 0:
+                            with self._print_lock:
+                                self._line_cursor -= 1
+                                self._clear_line()
+                                self._redraw_line()
+                    continue
+
+                if ch < b"\x20":
+                    # other control characters (tab, etc.) aren't supported; ignore
+                    continue
+
+                char = ch.decode("ascii", errors="ignore")
+                if not char:
+                    continue
+                with self._print_lock:
+                    self._line_buffer = (
+                        self._line_buffer[: self._line_cursor]
+                        + char
+                        + self._line_buffer[self._line_cursor :]
+                    )
+                    self._line_cursor += 1
+                    self._clear_line()
+                    self._redraw_line()
+
+        old_termios = None
+        stdin_fd: int | None = None
+        if sys.stdin.isatty():
+            try:
+                import atexit
+                import termios
+
+                fd = sys.stdin.fileno()
+                old_termios = termios.tcgetattr(fd)
+                new_termios = termios.tcgetattr(fd)
+                new_termios[3] &= ~(termios.ICANON | termios.ECHO)
+                termios.tcsetattr(fd, termios.TCSADRAIN, new_termios)
+                # belt-and-suspenders: guarantees the terminal gets restored even if
+                # this function exits via an exception that skips its normal cleanup
+                atexit.register(termios.tcsetattr, fd, termios.TCSADRAIN, old_termios)
+                stdin_fd = fd
+            except Exception:
+                old_termios = None
+                stdin_fd = None
+
+        def stdin_reader():
+            if stdin_fd is not None:
+                raw_stdin_reader(stdin_fd)
+            else:
+                plain_stdin_reader()
 
         threading.Thread(target=stdin_reader, daemon=True).start()
 
@@ -652,12 +847,9 @@ class MojoReloaded:
 
             def emit(_self: logging.Handler, record: logging.LogRecord) -> None:
                 with self._print_lock:
-                    if self._reprint_prompt is not None:
-                        console.file.write("\r\x1b[2K")
-                        console.file.flush()
+                    self._clear_line()
                     original_emit(record)
-                    if self._reprint_prompt is not None:
-                        self._reprint_prompt()
+                    self._redraw_line()
 
             setattr(handler, "emit", types.MethodType(emit, handler))
             wrapped_handlers.append((handler, original_emit))
@@ -838,6 +1030,14 @@ class MojoReloaded:
             if job_thread is not None:
                 job_thread.join(timeout=5)
 
+        # restore the tty ourselves rather than relying on raw_stdin_reader's own
+        # cleanup - it's a daemon thread blocked on os.read() until the next
+        # keystroke, so it may never get a chance to run its own restore
+        if old_termios is not None and stdin_fd is not None:
+            import termios
+
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_termios)
+
         self._reprint_prompt = None
 
         for handler, original_emit in wrapped_handlers:
@@ -927,6 +1127,7 @@ class MojoReloaded:
                     f"""{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
                     border_style="yellow",
                     title="Connection Info.",
+                    expand=False,
                 )
             )
 

@@ -151,7 +151,7 @@ class Joint(XMLModel):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"]
         ] = ["qpos", "qvel"],
@@ -173,13 +173,19 @@ class Joint(XMLModel):
         * For free joints, `qpos` is split into an `xyzm` posted under `pos_qpos` and a `quat` posted under `quat_qpos`; the remaining channels are split into an `xyzm` posted under `lin_<channel>` (linear) and another `xyzm` posted under `ang_<channel>` (angular).
 
         Args:
-            signal_manager: The signal manager to register the sampler with.
+            signal_manager: The signal manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
             channels: The joint data channels to log.
 
         Raises:
             ValueError: If the joint has no name.
 
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)

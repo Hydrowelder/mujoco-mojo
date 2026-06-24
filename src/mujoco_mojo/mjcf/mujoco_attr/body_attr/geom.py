@@ -203,7 +203,7 @@ class GeomBase(XMLModel, ABC):
         """Returns the radius of a bounding sphere of the geom."""
         return state.model.geom_rbound[self.get_id(state.model)]
 
-    def rt_xpos(self, state: MjState) -> Vec3:
+    def rt_pos(self, state: MjState) -> Vec3:
         """Returns the world position of the center of the geom."""
         return state.data.geom_xpos[self.get_id(state.model)]
 
@@ -260,7 +260,7 @@ class GeomBase(XMLModel, ABC):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
         ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
@@ -283,7 +283,15 @@ class GeomBase(XMLModel, ABC):
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
         * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}."
             logger.error(msg)
@@ -294,7 +302,7 @@ class GeomBase(XMLModel, ABC):
                 # Manual mapping to avoid getattr
                 match channel:
                     case "xpos":
-                        val = self.rt_xpos(state)
+                        val = self.rt_pos(state)
                     case "xmat":
                         val = self.rt_xmat(state)
                     case "xvelp":

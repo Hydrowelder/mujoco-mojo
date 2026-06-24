@@ -79,8 +79,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
-        assert rm.signal_manager is not None
+    def add_spring_force(self, loc: Literal["pz", "mz"]):
         base, tip, stiffness, stroke = self.springs[loc]
 
         # --8<-- [start:forces]
@@ -91,11 +90,11 @@ class Handoff(mojo.UserData):
             stiffness=float(stiffness),
             max_stroke=float(stroke),
             preload=1000 if loc == "pz" else 750,
-        ).register_to_rm(rm)
+        ).register_to_rm()
 
-        base.request(rm.signal_manager)
-        tip.request(rm.signal_manager)
-        spring_force.request(rm.signal_manager)
+        base.request()
+        tip.request()
+        spring_force.request()
         # --8<-- [end:forces]
 
 
@@ -270,12 +269,12 @@ def runtime(
                 path=Path("runtime-anim.gif"),
                 camera_name=FIXED_CAMERA_NAME,
                 show_loads=True,
-            ).setup(state).register_to_rm(rm)
+            ).setup(state).register_to_rm()
         # --8<-- [end:video]
 
         # Register forces from our handoff data
-        handoff.add_spring_force("pz", rm)
-        handoff.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz")
+        handoff.add_spring_force("mz")
 
         # --8<-- [start:requests]
         # Request telemetry for bodies and sites
@@ -283,10 +282,9 @@ def runtime(
             rm.signal_manager.record_decimation = 10  # Only record every 10 steps
             for b in mojo_model.mjcf.worldbody.walk_bodies():
                 b.request(
-                    rm.signal_manager,
                     channels=["ke_total", "ke_rot", "xpos", "xvelp", "xvelr"],
                 )
-            handoff.box1_rot.request(rm.signal_manager)
+            handoff.box1_rot.request()
         # --8<-- [end:requests]
 
         # --8<-- [start:stepping]

@@ -10,6 +10,7 @@ from pydantic import PrivateAttr, SerializeAsAny, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
@@ -64,8 +65,10 @@ class Load(MojoBaseModel, ABC):
         """Returns a list of arrow configurations for the renderer."""
         return []
 
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_load(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_load(self)
         return self
 
 
@@ -151,7 +154,7 @@ class SiteLoad(Load):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
         """
@@ -165,7 +168,14 @@ class SiteLoad(Load):
         Each channel is posted under `subgroups=(load_name, channel)`.
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
 
         def sample(state: MjState):
             for channel in channels:
@@ -653,7 +663,7 @@ class JointFriction(JointLoad):
         state.data.qfrc_applied[self._dof_adr : self._dof_adr + self._nv] += frc
         self._last_force = self._to_world_frc(frc, state)
 
-    def request(self, signal_manager: SignalManager) -> None:
+    def request(self, signal_manager: SignalManager | None = None) -> None:
         """
         Registers specific channels for logging.
 
@@ -666,12 +676,18 @@ class JointFriction(JointLoad):
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
         Args:
-            signal_manager (SignalManager): Manager to register the sampler with.
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
         Raises:
             ValueError: If the joint has no name.
 
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         if self.joint.name is None:
             msg = f"Cannot request telemetry for JointFriction '{self.name}': joint has no name."
             logger.error(msg)
@@ -805,3 +821,81 @@ class JointFriction(JointLoad):
             return -mag * vel / speed
 
         return cls(name=name, joint=joint, friction_func=func)
+
+
+class ActuatorLoad(Load):
+    """Drives an actuator's control input each timestep, writing into `mjData.ctrl`. Use `control_func` for an arbitrary control law, or the `constant` factory for a simple, runtime-mutable set point."""
+
+    actuator: SerializeAsAny[ActuatorBase]
+    """The MJCF actuator this load drives."""
+
+    control_func: Callable[[UserData | None, MjState], float] = lambda ud, s: 0.0
+    """Callable (user_data, state) -> control value written into `mjData.ctrl` for this actuator."""
+
+    user_data: SerializeAsAny[UserData] | None = None
+    """Optional strongly-typed payload accessible inside `control_func`. Passed through unchanged each timestep."""
+
+    _aid: int = PrivateAttr(default=-1)
+    """Cached actuator ID, resolved against the compiled MuJoCo model."""
+
+    _last_ctrl: float = PrivateAttr(default=0.0)
+    """Previous timestep's applied control value. Used for telemetry."""
+
+    def resolve_ids(self, state: MjState) -> None:
+        """Caches the actuator ID from the compiled MuJoCo model."""
+        self._aid = self.actuator.get_id(state.model)
+
+    def apply_load(self, state: MjState) -> None:
+        """Evaluates `control_func` and writes the result into `mjData.ctrl[self._aid]`."""
+        if not self.active:
+            self._last_ctrl = 0.0
+            return
+
+        self._last_ctrl = float(self.control_func(self.user_data, state))
+        state.data.ctrl[self._aid] = self._last_ctrl
+
+    def request(self, signal_manager: SignalManager | None = None) -> None:
+        """
+        Registers the applied control value for logging under `Loads/<name>:ctrl`.
+
+        Args:
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
+        def sample(state: MjState) -> None:
+            signal_manager.post(
+                value=self._last_ctrl if self.active else 0.0,
+                category=SignalCategory.LOADS,
+                subgroups=(self.name,),
+                attr="ctrl",
+            )
+
+        signal_manager.register_sampler(sample)
+
+    @classmethod
+    def constant(
+        cls,
+        name: str,
+        actuator: ActuatorBase,
+        value: float | NamedValue[float],
+    ) -> Self:
+        """
+        Drives the actuator with a fixed set point.
+
+        Args:
+            name (str): Load name used for telemetry column labeling.
+            actuator (ActuatorBase): The MJCF actuator to drive.
+            value (float | NamedValue[float]): Control value written to `mjData.ctrl` every timestep. Accepts `NamedValue[float]` for runtime mutation.
+
+        """
+
+        def func(ud: UserData | None, state: MjState) -> float:
+            return value.value if isinstance(value, NamedValue) else value
+
+        return cls(name=name, actuator=actuator, control_func=func)

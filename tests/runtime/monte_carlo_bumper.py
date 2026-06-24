@@ -363,8 +363,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
-        assert rm.signal_manager is not None
+    def add_spring_force(self, loc: Literal["pz", "mz"]):
         base, tip, stiffness, stroke = self.springs[loc]
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(
@@ -374,11 +373,11 @@ class Handoff(mojo.UserData):
             stiffness=float(stiffness),
             max_stroke=float(stroke),
             preload=1000 if loc == "pz" else 750,
-        ).register_to_rm(rm)
+        ).register_to_rm()
 
-        base.request(rm.signal_manager)
-        tip.request(rm.signal_manager)
-        spring_force.request(rm.signal_manager)
+        base.request()
+        tip.request()
+        spring_force.request()
 
 
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
@@ -603,7 +602,11 @@ def runtime(
                 show_loads=True,
                 show_net_force=True,
                 show_proximities=True,
-            ).setup(state).register_to_rm(rm)
+                show_traces=True,
+            ).setup(state).register_to_rm()
+
+        rt.Tracer(target=handoff.box1_bunny, duration=1.0).register_to_rm()
+        rt.Tracer(target=handoff.box2_bunny, duration=1.0).register_to_rm()
 
         if mojo_model.is_nominal:
             rt.VideoRecorder(
@@ -611,36 +614,35 @@ def runtime(
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
                 show_proximities=True,
-            ).setup(state).register_to_rm(rm)
+                show_traces=True,
+            ).setup(state).register_to_rm()
 
             rt.VideoRecorder(
                 path=mojo_model.trial_dir / "box_camera.gif",
                 camera_name=BOX_CAMERA_NAME,
-            ).setup(state).register_to_rm(rm)
+                show_traces=True,
+            ).setup(state).register_to_rm()
 
         # Create compression springs
-        handoff.add_spring_force("pz", rm)
-        handoff.add_spring_force("mz", rm)
+        handoff.add_spring_force("pz")
+        handoff.add_spring_force("mz")
 
         proximity = mojo.utils.Proximity(
             geom_1=handoff.box1_bunny,
             geom_2=handoff.box2_bunny,
             dist_max=3,
             algorithm=mojo.ProximityType.CONVEX_HULL,
-        ).register_to_rm(rm)
+        ).register_to_rm()
 
         if rm.signal_manager:
             rm.signal_manager.record_decimation = 1
 
             for b in mojo_model.mjcf.worldbody.walk_bodies():
-                b.request(rm.signal_manager)
+                b.request()
 
-            proximity.request(
-                signal_manager=rm.signal_manager,
-                channels=["dist", "fromto", "prox_type"],
-            )
+            proximity.request(channels=["dist", "fromto", "prox_type"])
 
-            handoff.box1_rot.request(rm.signal_manager)
+            handoff.box1_rot.request()
 
         # Run for 2 seconds
         while state.data.time < 2.0:

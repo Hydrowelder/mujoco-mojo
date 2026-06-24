@@ -77,8 +77,10 @@ class Proximity(MojoBaseModel):
         self._last_p1 = p1
         self._last_p2 = p2
 
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_proximity(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_proximity(self)
         return self
 
     def get_sphere_to_sphere_proximity(
@@ -96,10 +98,10 @@ class Proximity(MojoBaseModel):
 
         """
         # get world orientations and origins
-        origin_geom_1 = self.geom_1.rt_xpos(state)
+        origin_geom_1 = self.geom_1.rt_pos(state)
         mat_geom_1 = self.geom_1.rt_xmat(state)
 
-        origin_geom_2 = self.geom_2.rt_xpos(state)
+        origin_geom_2 = self.geom_2.rt_pos(state)
         mat_geom_2 = self.geom_2.rt_xmat(state)
 
         if np.isnan(self.geom_1._rad):
@@ -220,8 +222,8 @@ class Proximity(MojoBaseModel):
             return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== COORDINATE TRANSFORMATION ==========
-        pos_geom_1 = self.geom_1.rt_xpos(state)
-        pos_geom_2 = self.geom_2.rt_xpos(state)
+        pos_geom_1 = self.geom_1.rt_pos(state)
+        pos_geom_2 = self.geom_2.rt_pos(state)
 
         mat_geom_1 = self.geom_1.rt_xmat(state)  # already Mat3 (3x3)
         mat_geom_2 = self.geom_2.rt_xmat(state)
@@ -309,11 +311,11 @@ class Proximity(MojoBaseModel):
         # set the other transformation relative to geom_1's local frame
         t_geom_1 = np.eye(4)
         t_geom_1[:3, :3] = self.geom_1.rt_xmat(state)
-        t_geom_1[:3, 3] = self.geom_1.rt_xpos(state)
+        t_geom_1[:3, 3] = self.geom_1.rt_pos(state)
 
         t_geom_2 = np.eye(4)
         t_geom_2[:3, :3] = self.geom_2.rt_xmat(state)
-        t_geom_2[:3, 3] = self.geom_2.rt_xpos(state)
+        t_geom_2[:3, 3] = self.geom_2.rt_pos(state)
 
         self.geom_1._baked_manager.set_transform(self.geom_1.name, t_geom_1)
         self.geom_2._baked_manager.set_transform(self.geom_2.name, t_geom_2)
@@ -440,7 +442,7 @@ class Proximity(MojoBaseModel):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[Literal["dist", "fromto", "prox_type"]] = ["dist", "prox_type"],
     ):
         """
@@ -459,7 +461,15 @@ class Proximity(MojoBaseModel):
 
         Only the computations required by the requested channels are performed each timestep.
 
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
         pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
         needs_proximity = bool(set(channels) & _prox_attrs)

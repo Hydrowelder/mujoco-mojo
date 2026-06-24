@@ -12,6 +12,7 @@ from .load import (
 )
 from .runtime_manager import RuntimeManager, SimulationStopped
 from .signal_manager import SignalManager
+from .tracer import Tracer
 from .video_recorder import VideoRecorder
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "SignalManager",
     "SimulationStopped",
     "SiteLoad",
+    "Tracer",
     "VectorForce",
     "VectorTorque",
     "VideoRecorder",

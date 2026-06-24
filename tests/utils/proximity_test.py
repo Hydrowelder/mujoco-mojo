@@ -182,7 +182,7 @@ def _model_with_geoms(
     bounding_spheres: list[mojo.AnySite] = []
     for geom, b_name in viz_targets:
         rad, local_centroid = geom.vertex_max_norm(_init_state.model)
-        world_centroid = geom.rt_xpos(_init_state) + (
+        world_centroid = geom.rt_pos(_init_state) + (
             geom.rt_xmat(_init_state) @ local_centroid
         )
         bounding_spheres.append(

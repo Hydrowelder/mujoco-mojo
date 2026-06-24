@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Self, runtime_checkable
 
@@ -9,12 +12,15 @@ import mujoco
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.runtime.tracer import Tracer
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
+
+_current: ContextVar[RuntimeManager] = ContextVar("_current_runtime_manager")
 
 
 class SimulationStopped(Exception):
@@ -37,6 +43,7 @@ class RuntimeManager:
 
     loads: list[Load] = field(default_factory=list)
     proximities: list[Proximity] = field(default_factory=list)
+    tracers: list[Tracer] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     playback_speed: float = 1.0
@@ -48,18 +55,34 @@ class RuntimeManager:
     _stop_event: threading.Event | None = None
 
     _resolved: bool = False
+    _context_token: Token | None = field(default=None, init=False, repr=False)
 
     def __enter__(self) -> Self:
-        """Prime the model and prepare results."""
+        """Prime the model and prepare results. Also makes this instance available via `RuntimeManager.current()` for the duration of the `with` block."""
+        self._context_token = _current.set(self)
         return self
 
     def __exit__(self, exc_type, exc, tb):
         """Ensure all telemetry is flushed even if the simulation crashed. Also saves recordings"""
+        assert self._context_token is not None
+        _current.reset(self._context_token)
+        self._context_token = None
+
         if self.signal_manager:
             self.signal_manager.close()
 
         if self.video_recorders:
             self.save_recordings()
+
+    @classmethod
+    def current(cls) -> RuntimeManager:
+        """Returns the `RuntimeManager` of the innermost enclosing `with` block. Raises if called outside of one."""
+        try:
+            return _current.get()
+        except LookupError:
+            msg = "No active RuntimeManager context. Call this from within a `with runtime_manager as rm:` block, or pass the runtime_manager/signal_manager explicitly."
+            logger.error(msg)
+            raise RuntimeError(msg) from None
 
     def save_recordings(self):
         logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")
@@ -105,17 +128,36 @@ class RuntimeManager:
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
 
-    def step(self, state: MjState):
+    def add_tracer(self, tracer: Tracer):
+        self.tracers.append(tracer)
+
+    def step(
+        self,
+        state: MjState,
+        clear_xfrc_applied: bool = True,
+        clear_qfrc_applied: bool = True,
+        clear_ctrl: bool = True,
+    ):
         """
         Calculates forces, integratess physics, and handles telemetry.
+
+        Args:
+            state: The paired MuJoCo model and data instance.
+            clear_xfrc_applied: If True, zero `xfrc_applied` (external forces) before applying loads.
+            clear_qfrc_applied: If True, zero `qfrc_applied` (user-defined forces) before applying loads.
+            clear_ctrl: If True, zero `ctrl` (actuator controls) before applying loads. Set to False if controls are set externally and should persist across steps, e.g. when not driven by an `ActuatorLoad` every timestep.
+
         """
         if self._stop_event is not None and self._stop_event.is_set():
             raise SimulationStopped("Simulation stopped by user request.")
 
         # clear buffers for next timestep
-        state.data.xfrc_applied.fill(0)  # external forces
-        state.data.qfrc_applied.fill(0)  # user-defined forces
-        state.data.ctrl.fill(0)  # actuator forces
+        if clear_xfrc_applied:
+            state.data.xfrc_applied.fill(0)  # external forces
+        if clear_qfrc_applied:
+            state.data.qfrc_applied.fill(0)  # user-defined forces
+        if clear_ctrl:
+            state.data.ctrl.fill(0)  # actuator forces
 
         # sync state variables and clear render buffer
         mujoco.mj_forward(state.model, state.data)
@@ -141,10 +183,12 @@ class RuntimeManager:
         # record any frames which are due
         all_arrows = None
         all_lines = None
+        all_traces = None
         if self.video_recorders or self._sync_hook:
             # gather arrows for forcing functions
             all_arrows: list[ArrowConfig] | None = []
             all_lines: list[LineConfig] | None = []
+            all_traces: list[LineConfig] | None = []
 
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(state))
@@ -154,21 +198,44 @@ class RuntimeManager:
                 if visual is not None:
                     all_lines.append(visual)
 
+            # tracer.get_visuals() rebuilds its whole trail every call, which is only
+            # cheap relative to *rendered frames* (tens per second), not physics steps
+            # (potentially thousands per second) - so only pay for it on steps where
+            # something will actually consume it. update() stays unconditional so the
+            # trail's position history doesn't lose resolution between rendered frames.
+            needs_traces = self._sync_hook is not None or any(
+                r.is_due(state) for r in self.video_recorders
+            )
+            for tracer in self.tracers:
+                tracer.update(state)
+                if needs_traces:
+                    all_traces.extend(tracer.get_visuals(state))
+
         if self.video_recorders:
-            assert all_arrows is not None and all_lines is not None
+            assert (
+                all_arrows is not None
+                and all_lines is not None
+                and all_traces is not None
+            )
             for recorder in self.video_recorders:
                 recorder.capture_frame(
                     state=state,
                     custom_arrows=all_arrows,
                     custom_lines=all_lines,
+                    custom_traces=all_traces,
                 )
 
         # integrate physics and advance the time
         mujoco.mj_step(state.model, state.data)
 
         if self._sync_hook:
-            assert all_arrows is not None and all_lines is not None
-            self._sync_hook(state, all_arrows, all_lines)
+            assert (
+                all_arrows is not None
+                and all_lines is not None
+                and all_traces is not None
+            )
+            # the live-viewer sync hook has no per-category toggle, so just merge everything it should draw
+            self._sync_hook(state, all_arrows, all_lines + all_traces)
 
         if self.playback_speed > 0:
             sim_elapsed = state.data.time - self._start_sim_time

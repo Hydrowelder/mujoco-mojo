@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +26,7 @@ class VideoRecorder:
 
     Frames are captured at a fixed rate (`fps`) relative to simulation time, not wall-clock time, so the output plays back at the exact rate specified regardless of how fast the simulation runs. The recorder skips `capture_frame` calls that fall between the interval boundaries, which prevents duplicate frames when the physics step is finer than 1/fps.
 
-    Typical usage inside a runtime function::
+    Typical usage inside a runtime function, within a `with runtime_manager as rm:` block::
 
         recorder = VideoRecorder(
             path=model.trial_dir / "camera.mp4",
@@ -32,9 +34,9 @@ class VideoRecorder:
             fps=30,
             width=1280,
             height=720,
-        ).setup(mj_model).register_to_rm(runtime_manager)
+        ).setup(mj_model).register_to_rm()
 
-    `register_to_rm` wires the recorder into the `RuntimeManager` so that `capture_frame` is called automatically on every physics step and `save` is called when the simulation finishes.
+    `register_to_rm` wires the recorder into the `RuntimeManager` so that `capture_frame` is called automatically on every physics step and `save` is called when the simulation finishes. If no `runtime_manager` is passed, it registers to the `RuntimeManager` of the active `with` block.
 
     Supported output formats (determined by the `path` extension):
 
@@ -72,6 +74,9 @@ class VideoRecorder:
 
     show_proximities: bool = False
     """Whether to render custom line overlays (passed via `custom_lines` in `capture_frame`)."""
+
+    show_traces: bool = False
+    """Whether to render `Tracer` trails (passed via `custom_traces` in `capture_frame`)."""
 
     fps: int = 30
     """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
@@ -154,6 +159,7 @@ class VideoRecorder:
         state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
+        custom_traces: list[LineConfig],
     ):
         """Updates the scene for the current state and renders it to an image array."""
         self._renderer.update_scene(
@@ -168,6 +174,10 @@ class VideoRecorder:
 
         if custom_lines and self.show_proximities:
             for line in custom_lines:
+                line.draw_in_scene(self._renderer.scene)
+
+        if custom_traces and self.show_traces:
+            for line in custom_traces:
                 line.draw_in_scene(self._renderer.scene)
 
         frame = self._renderer.render()
@@ -185,11 +195,22 @@ class VideoRecorder:
         ImageDraw.Draw(image).text((10, 10), label, fill=(255, 255, 255))
         return np.asarray(image)
 
+    def is_due(self, state: MjState) -> bool:
+        """Returns whether `capture_frame` would actually capture a frame for `state` right now, without any side effects. Lets callers skip expensive work (e.g. building `custom_traces`) that would otherwise go unused on the steps between frames."""
+        if state.data.time < self._next_record_time:
+            return False
+        if not self.recording_trigger(state):
+            return False
+        if self.max_frames is not None and len(self._frames) >= self.max_frames:
+            return False
+        return True
+
     def capture_frame(
         self,
         state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
+        custom_traces: list[LineConfig],
     ):
         """Captures the current state as a video frame."""
         if state.data.time < self._next_record_time:
@@ -208,7 +229,9 @@ class VideoRecorder:
             return
 
         # capture and increment the clock for the next frame
-        self._frames.append(self._render_frame(state, custom_arrows, custom_lines))
+        self._frames.append(
+            self._render_frame(state, custom_arrows, custom_lines, custom_traces)
+        )
         self._next_record_time += 1 / self.fps
 
     def snapshot(
@@ -217,11 +240,14 @@ class VideoRecorder:
         path: Path,
         custom_arrows: list[ArrowConfig] | None = None,
         custom_lines: list[LineConfig] | None = None,
+        custom_traces: list[LineConfig] | None = None,
     ):
         """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `fps` timing."""
         from PIL import Image
 
-        frame = self._render_frame(state, custom_arrows or [], custom_lines or [])
+        frame = self._render_frame(
+            state, custom_arrows or [], custom_lines or [], custom_traces or []
+        )
         Image.fromarray(frame).save(path)
         logger.info(f"Snapshot saved to {path}")
 
@@ -322,6 +348,8 @@ class VideoRecorder:
         """Releases the GL context held by the underlying MuJoCo renderer. Call once recording is finished and `save` has been called."""
         self._renderer.close()
 
-    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
-        runtime_manager.add_video_recorder(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_video_recorder(self)
         return self
