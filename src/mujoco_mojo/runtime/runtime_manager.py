@@ -105,17 +105,33 @@ class RuntimeManager:
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
 
-    def step(self, state: MjState):
+    def step(
+        self,
+        state: MjState,
+        clear_xfrc_applied: bool = True,
+        clear_qfrc_applied: bool = True,
+        clear_ctrl: bool = True,
+    ):
         """
         Calculates forces, integratess physics, and handles telemetry.
+
+        Args:
+            state: The paired MuJoCo model and data instance.
+            clear_xfrc_applied: If True, zero `xfrc_applied` (external forces) before applying loads.
+            clear_qfrc_applied: If True, zero `qfrc_applied` (user-defined forces) before applying loads.
+            clear_ctrl: If True, zero `ctrl` (actuator controls) before applying loads. Set to False if controls are set externally and should persist across steps, e.g. when not driven by an `ActuatorLoad` every timestep.
+
         """
         if self._stop_event is not None and self._stop_event.is_set():
             raise SimulationStopped("Simulation stopped by user request.")
 
         # clear buffers for next timestep
-        state.data.xfrc_applied.fill(0)  # external forces
-        state.data.qfrc_applied.fill(0)  # user-defined forces
-        state.data.ctrl.fill(0)  # actuator forces
+        if clear_xfrc_applied:
+            state.data.xfrc_applied.fill(0)  # external forces
+        if clear_qfrc_applied:
+            state.data.qfrc_applied.fill(0)  # user-defined forces
+        if clear_ctrl:
+            state.data.ctrl.fill(0)  # actuator forces
 
         # sync state variables and clear render buffer
         mujoco.mj_forward(state.model, state.data)

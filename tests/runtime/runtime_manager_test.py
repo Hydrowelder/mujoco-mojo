@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import mujoco
 import numpy as np
+import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomMesh
@@ -67,6 +68,28 @@ def test_buffer_clearing_hygiene(mj_setup):
     assert np.all(data.qfrc_applied == 0), "qfrc_applied was not cleared"
     assert np.all(data.xfrc_applied == 0), "xfrc_applied was not cleared"
     assert np.all(data.ctrl == 0), "ctrl was not cleared"
+
+
+def test_buffer_clearing_is_individually_disableable(mj_setup):
+    """Each buffer's clearing can be disabled independently via step() arguments."""
+    model, data = mj_setup
+    state = MjState(model, data)
+    mgr = RuntimeManager(signal_manager=None)
+
+    data.qfrc_applied[0] = 50.0
+    data.xfrc_applied[1, 0] = 50.0
+    data.ctrl[0] = 1.0
+
+    mgr.step(
+        state,
+        clear_xfrc_applied=False,
+        clear_qfrc_applied=False,
+        clear_ctrl=False,
+    )
+
+    assert data.qfrc_applied[0] == pytest.approx(50.0), "qfrc_applied was cleared"
+    assert data.xfrc_applied[1, 0] == pytest.approx(50.0), "xfrc_applied was cleared"
+    assert data.ctrl[0] == pytest.approx(1.0), "ctrl was cleared"
 
 
 def test_video_capture_with_arrows(mj_setup):
