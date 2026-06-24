@@ -77,8 +77,10 @@ class Proximity(MojoBaseModel):
         self._last_p1 = p1
         self._last_p2 = p2
 
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_proximity(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_proximity(self)
         return self
 
     def get_sphere_to_sphere_proximity(
@@ -440,7 +442,7 @@ class Proximity(MojoBaseModel):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[Literal["dist", "fromto", "prox_type"]] = ["dist", "prox_type"],
     ):
         """
@@ -459,7 +461,12 @@ class Proximity(MojoBaseModel):
 
         Only the computations required by the requested channels are performed each timestep.
 
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
+
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
         pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
         needs_proximity = bool(set(channels) & _prox_attrs)

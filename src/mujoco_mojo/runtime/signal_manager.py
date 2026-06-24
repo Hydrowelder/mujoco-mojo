@@ -16,6 +16,21 @@ from mujoco_mojo.utils.log import get_logger
 logger = get_logger(__name__)
 
 
+def resolve_signal_manager(signal_manager: SignalManager | None) -> SignalManager:
+    """Returns `signal_manager` if given, otherwise falls back to the `SignalManager` of the innermost enclosing `RuntimeManager` `with` block. Raises if neither is available."""
+    if signal_manager is not None:
+        return signal_manager
+
+    from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+    signal_manager = RuntimeManager.current().signal_manager
+    if signal_manager is None:
+        msg = "No signal_manager was provided and the active RuntimeManager has none configured."
+        logger.error(msg)
+        raise ValueError(msg)
+    return signal_manager
+
+
 @dataclass
 class SignalManager:
     export_path: Path

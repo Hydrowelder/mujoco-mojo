@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,7 +26,7 @@ class VideoRecorder:
 
     Frames are captured at a fixed rate (`fps`) relative to simulation time, not wall-clock time, so the output plays back at the exact rate specified regardless of how fast the simulation runs. The recorder skips `capture_frame` calls that fall between the interval boundaries, which prevents duplicate frames when the physics step is finer than 1/fps.
 
-    Typical usage inside a runtime function::
+    Typical usage inside a runtime function, within a `with runtime_manager as rm:` block::
 
         recorder = VideoRecorder(
             path=model.trial_dir / "camera.mp4",
@@ -32,9 +34,9 @@ class VideoRecorder:
             fps=30,
             width=1280,
             height=720,
-        ).setup(mj_model).register_to_rm(runtime_manager)
+        ).setup(mj_model).register_to_rm()
 
-    `register_to_rm` wires the recorder into the `RuntimeManager` so that `capture_frame` is called automatically on every physics step and `save` is called when the simulation finishes.
+    `register_to_rm` wires the recorder into the `RuntimeManager` so that `capture_frame` is called automatically on every physics step and `save` is called when the simulation finishes. If no `runtime_manager` is passed, it registers to the `RuntimeManager` of the active `with` block.
 
     Supported output formats (determined by the `path` extension):
 
@@ -322,6 +324,8 @@ class VideoRecorder:
         """Releases the GL context held by the underlying MuJoCo renderer. Call once recording is finished and `save` has been called."""
         self._renderer.close()
 
-    def register_to_rm(self, runtime_manager: "RuntimeManager") -> Self:
-        runtime_manager.add_video_recorder(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_video_recorder(self)
         return self

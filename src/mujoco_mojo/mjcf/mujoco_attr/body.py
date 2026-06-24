@@ -322,7 +322,7 @@ class Body(XMLModel):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[
             Literal[
                 "xpos",
@@ -383,7 +383,13 @@ class Body(XMLModel):
         * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
         * A `scalar` is posted as a single value with `attr=channel` under `subgroups=(body_name,)`.
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+
         if self.name is None:
             msg = f"Cannot request telemetry for an unnamed {self.tag}. Please assign a 'name' to the site before requesting outputs."
             logger.error(msg)

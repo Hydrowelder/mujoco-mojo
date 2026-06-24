@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Self, runtime_checkable
 
@@ -15,6 +18,8 @@ from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
+
+_current: ContextVar[RuntimeManager] = ContextVar("_current_runtime_manager")
 
 
 class SimulationStopped(Exception):
@@ -48,18 +53,34 @@ class RuntimeManager:
     _stop_event: threading.Event | None = None
 
     _resolved: bool = False
+    _context_token: Token | None = field(default=None, init=False, repr=False)
 
     def __enter__(self) -> Self:
-        """Prime the model and prepare results."""
+        """Prime the model and prepare results. Also makes this instance available via `RuntimeManager.current()` for the duration of the `with` block."""
+        self._context_token = _current.set(self)
         return self
 
     def __exit__(self, exc_type, exc, tb):
         """Ensure all telemetry is flushed even if the simulation crashed. Also saves recordings"""
+        assert self._context_token is not None
+        _current.reset(self._context_token)
+        self._context_token = None
+
         if self.signal_manager:
             self.signal_manager.close()
 
         if self.video_recorders:
             self.save_recordings()
+
+    @classmethod
+    def current(cls) -> RuntimeManager:
+        """Returns the `RuntimeManager` of the innermost enclosing `with` block. Raises if called outside of one."""
+        try:
+            return _current.get()
+        except LookupError:
+            msg = "No active RuntimeManager context. Call this from within a `with runtime_manager as rm:` block, or pass the runtime_manager/signal_manager explicitly."
+            logger.error(msg)
+            raise RuntimeError(msg) from None
 
     def save_recordings(self):
         logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")

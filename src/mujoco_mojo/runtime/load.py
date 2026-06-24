@@ -65,8 +65,10 @@ class Load(MojoBaseModel, ABC):
         """Returns a list of arrow configurations for the renderer."""
         return []
 
-    def register_to_rm(self, runtime_manager: RuntimeManager) -> Self:
-        runtime_manager.add_load(self)
+    def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).add_load(self)
         return self
 
 
@@ -152,7 +154,7 @@ class SiteLoad(Load):
 
     def request(
         self,
-        signal_manager: SignalManager,
+        signal_manager: SignalManager | None = None,
         channels: list[Literal["force", "torque"]] = ["force", "torque"],
     ):
         """
@@ -166,7 +168,12 @@ class SiteLoad(Load):
         Each channel is posted under `subgroups=(load_name, channel)`.
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
 
         def sample(state: MjState):
             for channel in channels:
@@ -654,7 +661,7 @@ class JointFriction(JointLoad):
         state.data.qfrc_applied[self._dof_adr : self._dof_adr + self._nv] += frc
         self._last_force = self._to_world_frc(frc, state)
 
-    def request(self, signal_manager: SignalManager) -> None:
+    def request(self, signal_manager: SignalManager | None = None) -> None:
         """
         Registers specific channels for logging.
 
@@ -667,12 +674,16 @@ class JointFriction(JointLoad):
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
         Args:
-            signal_manager (SignalManager): Manager to register the sampler with.
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
 
         Raises:
             ValueError: If the joint has no name.
 
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+
         if self.joint.name is None:
             msg = f"Cannot request telemetry for JointFriction '{self.name}': joint has no name."
             logger.error(msg)
@@ -839,14 +850,17 @@ class ActuatorLoad(Load):
         self._last_ctrl = float(self.control_func(self.user_data, state))
         state.data.ctrl[self._aid] = self._last_ctrl
 
-    def request(self, signal_manager: SignalManager) -> None:
+    def request(self, signal_manager: SignalManager | None = None) -> None:
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
 
         Args:
-            signal_manager (SignalManager): Manager to register the sampler with.
+            signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used.
 
         """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
 
         def sample(state: MjState) -> None:
             signal_manager.post(
