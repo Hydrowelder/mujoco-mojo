@@ -1,12 +1,21 @@
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 import mujoco
 import numpy as np
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
+
+
+@runtime_checkable
+class Traceable(Protocol):
+    """Anything with a world position that can be followed by a `Tracer`, e.g. a `Body`, `Site`, or `Geom`."""
+
+    def rt_pos(self, state: MjState) -> Vec3: ...
 
 
 @dataclass

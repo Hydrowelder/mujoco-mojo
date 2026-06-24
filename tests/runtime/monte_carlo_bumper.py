@@ -602,7 +602,11 @@ def runtime(
                 show_loads=True,
                 show_net_force=True,
                 show_proximities=True,
+                show_traces=True,
             ).setup(state).register_to_rm()
+
+        rt.Tracer(target=handoff.box1_bunny, duration=1.0).register_to_rm()
+        rt.Tracer(target=handoff.box2_bunny, duration=1.0).register_to_rm()
 
         if mojo_model.is_nominal:
             rt.VideoRecorder(
@@ -610,11 +614,13 @@ def runtime(
                 camera_name=TRACKING_CAMERA_NAME,
                 show_loads=True,
                 show_proximities=True,
+                show_traces=True,
             ).setup(state).register_to_rm()
 
             rt.VideoRecorder(
                 path=mojo_model.trial_dir / "box_camera.gif",
                 camera_name=BOX_CAMERA_NAME,
+                show_traces=True,
             ).setup(state).register_to_rm()
 
         # Create compression springs

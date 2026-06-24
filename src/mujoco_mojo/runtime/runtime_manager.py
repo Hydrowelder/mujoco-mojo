@@ -12,6 +12,7 @@ import mujoco
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.load import Load
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.runtime.tracer import Tracer
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity import Proximity
@@ -42,6 +43,7 @@ class RuntimeManager:
 
     loads: list[Load] = field(default_factory=list)
     proximities: list[Proximity] = field(default_factory=list)
+    tracers: list[Tracer] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
 
     playback_speed: float = 1.0
@@ -126,6 +128,9 @@ class RuntimeManager:
     def add_video_recorder(self, video_recorder: VideoRecorder):
         self.video_recorders.append(video_recorder)
 
+    def add_tracer(self, tracer: Tracer):
+        self.tracers.append(tracer)
+
     def step(
         self,
         state: MjState,
@@ -178,10 +183,12 @@ class RuntimeManager:
         # record any frames which are due
         all_arrows = None
         all_lines = None
+        all_traces = None
         if self.video_recorders or self._sync_hook:
             # gather arrows for forcing functions
             all_arrows: list[ArrowConfig] | None = []
             all_lines: list[LineConfig] | None = []
+            all_traces: list[LineConfig] | None = []
 
             for load in self.loads:
                 all_arrows.extend(load.get_visuals(state))
@@ -191,21 +198,35 @@ class RuntimeManager:
                 if visual is not None:
                     all_lines.append(visual)
 
+            for tracer in self.tracers:
+                tracer.update(state)
+                all_traces.extend(tracer.get_visuals(state))
+
         if self.video_recorders:
-            assert all_arrows is not None and all_lines is not None
+            assert (
+                all_arrows is not None
+                and all_lines is not None
+                and all_traces is not None
+            )
             for recorder in self.video_recorders:
                 recorder.capture_frame(
                     state=state,
                     custom_arrows=all_arrows,
                     custom_lines=all_lines,
+                    custom_traces=all_traces,
                 )
 
         # integrate physics and advance the time
         mujoco.mj_step(state.model, state.data)
 
         if self._sync_hook:
-            assert all_arrows is not None and all_lines is not None
-            self._sync_hook(state, all_arrows, all_lines)
+            assert (
+                all_arrows is not None
+                and all_lines is not None
+                and all_traces is not None
+            )
+            # the live-viewer sync hook has no per-category toggle, so just merge everything it should draw
+            self._sync_hook(state, all_arrows, all_lines + all_traces)
 
         if self.playback_speed > 0:
             sim_elapsed = state.data.time - self._start_sim_time

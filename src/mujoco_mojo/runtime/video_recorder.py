@@ -75,6 +75,9 @@ class VideoRecorder:
     show_proximities: bool = False
     """Whether to render custom line overlays (passed via `custom_lines` in `capture_frame`)."""
 
+    show_traces: bool = False
+    """Whether to render `Tracer` trails (passed via `custom_traces` in `capture_frame`)."""
+
     fps: int = 30
     """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
 
@@ -156,6 +159,7 @@ class VideoRecorder:
         state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
+        custom_traces: list[LineConfig],
     ):
         """Updates the scene for the current state and renders it to an image array."""
         self._renderer.update_scene(
@@ -170,6 +174,10 @@ class VideoRecorder:
 
         if custom_lines and self.show_proximities:
             for line in custom_lines:
+                line.draw_in_scene(self._renderer.scene)
+
+        if custom_traces and self.show_traces:
+            for line in custom_traces:
                 line.draw_in_scene(self._renderer.scene)
 
         frame = self._renderer.render()
@@ -192,6 +200,7 @@ class VideoRecorder:
         state: MjState,
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
+        custom_traces: list[LineConfig],
     ):
         """Captures the current state as a video frame."""
         if state.data.time < self._next_record_time:
@@ -210,7 +219,9 @@ class VideoRecorder:
             return
 
         # capture and increment the clock for the next frame
-        self._frames.append(self._render_frame(state, custom_arrows, custom_lines))
+        self._frames.append(
+            self._render_frame(state, custom_arrows, custom_lines, custom_traces)
+        )
         self._next_record_time += 1 / self.fps
 
     def snapshot(
@@ -219,11 +230,14 @@ class VideoRecorder:
         path: Path,
         custom_arrows: list[ArrowConfig] | None = None,
         custom_lines: list[LineConfig] | None = None,
+        custom_traces: list[LineConfig] | None = None,
     ):
         """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `fps` timing."""
         from PIL import Image
 
-        frame = self._render_frame(state, custom_arrows or [], custom_lines or [])
+        frame = self._render_frame(
+            state, custom_arrows or [], custom_lines or [], custom_traces or []
+        )
         Image.fromarray(frame).save(path)
         logger.info(f"Snapshot saved to {path}")
 

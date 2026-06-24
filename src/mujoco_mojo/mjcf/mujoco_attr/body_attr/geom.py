@@ -203,7 +203,7 @@ class GeomBase(XMLModel, ABC):
         """Returns the radius of a bounding sphere of the geom."""
         return state.model.geom_rbound[self.get_id(state.model)]
 
-    def rt_xpos(self, state: MjState) -> Vec3:
+    def rt_pos(self, state: MjState) -> Vec3:
         """Returns the world position of the center of the geom."""
         return state.data.geom_xpos[self.get_id(state.model)]
 
@@ -300,7 +300,7 @@ class GeomBase(XMLModel, ABC):
                 # Manual mapping to avoid getattr
                 match channel:
                     case "xpos":
-                        val = self.rt_xpos(state)
+                        val = self.rt_pos(state)
                     case "xmat":
                         val = self.rt_xmat(state)
                     case "xvelp":

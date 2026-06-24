@@ -23,6 +23,7 @@ _COLOR_FIELDS = (
     "torque",
     "contact",
     "clearance_line",
+    "trace_line",
 )
 
 
@@ -43,6 +44,9 @@ class VisualizationSettings(BaseModel):
 
     clearance_line: str | None = "WHITE"
     """Color of proximity clearance lines. Set to null (or `""` in TOML) to hide."""
+
+    trace_line: str | None = "VIOLET_500"
+    """Default color of `Tracer` trails. Set to null (or `""` in TOML) to hide. Overridden per-`Tracer` by passing `color`."""
 
     @field_validator(*_COLOR_FIELDS, mode="before")
     @classmethod

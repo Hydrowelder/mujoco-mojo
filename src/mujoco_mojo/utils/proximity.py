@@ -98,10 +98,10 @@ class Proximity(MojoBaseModel):
 
         """
         # get world orientations and origins
-        origin_geom_1 = self.geom_1.rt_xpos(state)
+        origin_geom_1 = self.geom_1.rt_pos(state)
         mat_geom_1 = self.geom_1.rt_xmat(state)
 
-        origin_geom_2 = self.geom_2.rt_xpos(state)
+        origin_geom_2 = self.geom_2.rt_pos(state)
         mat_geom_2 = self.geom_2.rt_xmat(state)
 
         if np.isnan(self.geom_1._rad):
@@ -222,8 +222,8 @@ class Proximity(MojoBaseModel):
             return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== COORDINATE TRANSFORMATION ==========
-        pos_geom_1 = self.geom_1.rt_xpos(state)
-        pos_geom_2 = self.geom_2.rt_xpos(state)
+        pos_geom_1 = self.geom_1.rt_pos(state)
+        pos_geom_2 = self.geom_2.rt_pos(state)
 
         mat_geom_1 = self.geom_1.rt_xmat(state)  # already Mat3 (3x3)
         mat_geom_2 = self.geom_2.rt_xmat(state)
@@ -311,11 +311,11 @@ class Proximity(MojoBaseModel):
         # set the other transformation relative to geom_1's local frame
         t_geom_1 = np.eye(4)
         t_geom_1[:3, :3] = self.geom_1.rt_xmat(state)
-        t_geom_1[:3, 3] = self.geom_1.rt_xpos(state)
+        t_geom_1[:3, 3] = self.geom_1.rt_pos(state)
 
         t_geom_2 = np.eye(4)
         t_geom_2[:3, :3] = self.geom_2.rt_xmat(state)
-        t_geom_2[:3, 3] = self.geom_2.rt_xpos(state)
+        t_geom_2[:3, 3] = self.geom_2.rt_pos(state)
 
         self.geom_1._baked_manager.set_transform(self.geom_1.name, t_geom_1)
         self.geom_2._baked_manager.set_transform(self.geom_2.name, t_geom_2)
