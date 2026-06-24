@@ -195,6 +195,16 @@ class VideoRecorder:
         ImageDraw.Draw(image).text((10, 10), label, fill=(255, 255, 255))
         return np.asarray(image)
 
+    def is_due(self, state: MjState) -> bool:
+        """Returns whether `capture_frame` would actually capture a frame for `state` right now, without any side effects. Lets callers skip expensive work (e.g. building `custom_traces`) that would otherwise go unused on the steps between frames."""
+        if state.data.time < self._next_record_time:
+            return False
+        if not self.recording_trigger(state):
+            return False
+        if self.max_frames is not None and len(self._frames) >= self.max_frames:
+            return False
+        return True
+
     def capture_frame(
         self,
         state: MjState,

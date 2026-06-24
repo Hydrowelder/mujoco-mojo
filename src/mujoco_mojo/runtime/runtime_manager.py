@@ -198,9 +198,18 @@ class RuntimeManager:
                 if visual is not None:
                     all_lines.append(visual)
 
+            # tracer.get_visuals() rebuilds its whole trail every call, which is only
+            # cheap relative to *rendered frames* (tens per second), not physics steps
+            # (potentially thousands per second) - so only pay for it on steps where
+            # something will actually consume it. update() stays unconditional so the
+            # trail's position history doesn't lose resolution between rendered frames.
+            needs_traces = self._sync_hook is not None or any(
+                r.is_due(state) for r in self.video_recorders
+            )
             for tracer in self.tracers:
                 tracer.update(state)
-                all_traces.extend(tracer.get_visuals(state))
+                if needs_traces:
+                    all_traces.extend(tracer.get_visuals(state))
 
         if self.video_recorders:
             assert (
