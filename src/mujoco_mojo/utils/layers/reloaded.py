@@ -22,7 +22,12 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
-from mujoco_mojo.utils.defaults import DEFAULT_WORKDIR, NAMED_VALUES_FNAME
+from mujoco_mojo.utils.defaults import (
+    DEFAULT_WORKDIR,
+    NAMED_VALUES_FNAME,
+    STOCHAS_DIR_NAME,
+    STOCHAS_DISTS_FNAME,
+)
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
 from mujoco_mojo.utils.statusing import (
@@ -419,6 +424,19 @@ class MojoReloaded:
                     (trial_dir / NAMED_VALUES_FNAME).write_text(
                         mojo_model.named.model_dump_json()
                     )
+
+                    # overwrite on every reload (rather than write-once like the
+                    # Runner) since the user's generator -- and therefore which
+                    # distributions exist -- can change between reloads
+                    if mojo_model.dists:
+                        stochas_dir = self.workdir / STOCHAS_DIR_NAME
+                        stochas_dir.mkdir(exist_ok=True)
+                        mojo_model.dists.to_tables(stochas_dir)
+                        tmp = stochas_dir / "dists.tmp.json"
+                        tmp.write_text(
+                            mojo_model.dists.model_dump_json(), encoding="utf-8"
+                        )
+                        tmp.replace(stochas_dir / STOCHAS_DISTS_FNAME)
                 else:
                     assert self.config_path
                     try:
@@ -927,6 +945,7 @@ class MojoReloaded:
                     f"""{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
                     border_style="yellow",
                     title="Connection Info.",
+                    expand=False,
                 )
             )
 
