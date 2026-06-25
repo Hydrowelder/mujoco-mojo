@@ -3,13 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, NotRequired, Self, TypedDict
 
 import mujoco
 import numpy as np
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.typing import CameraName
+from mujoco_mojo.typing import CameraName, Vec3, Vec4
+from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
@@ -17,6 +18,44 @@ if TYPE_CHECKING:
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 logger = get_logger(__name__)
+
+__all__ = ["LabelConfig", "VideoRecorder"]
+
+
+class LabelConfig(TypedDict):
+    """Describes one frame label, returned fresh per-frame by `VideoRecorder.frame_label`."""
+
+    text: str
+    """The label text to burn into the frame."""
+
+    position: NotRequired[tuple[int, int]]
+    """Top-left pixel coordinate to draw at. Defaults to `(10, 10)`."""
+
+    color: NotRequired[Vec3 | Vec4]
+    """Text color, normalized `[0, 1]` RGB(A) (e.g. `Color.WHITE.rgba`). Defaults to opaque white."""
+
+    background_color: NotRequired[Vec3 | Vec4 | None]
+    """Optional fill behind the text, normalized `[0, 1]` RGB(A). An RGBA alpha `< 1` is true-blended with the frame beneath it. Defaults to no background."""
+
+    border_color: NotRequired[Vec3 | Vec4 | None]
+    """Optional 1px outline around the padded label box, normalized `[0, 1]` RGB(A). Defaults to no border."""
+
+    font_size: NotRequired[int]
+    """Font size in pixels. Defaults to `14`."""
+
+    font_path: NotRequired[str | Path | None]
+    """Path to a TrueType/OpenType font file, for custom styles/weights. Defaults to PIL's built-in font."""
+
+    padding: NotRequired[int]
+    """Padding in pixels around the text when drawing `background_color`. Defaults to `4`."""
+
+
+def _color_to_rgb255_alpha(color: Vec3 | Vec4) -> tuple[tuple[int, int, int], float]:
+    """Splits a normalized `[0, 1]` RGB(A) color into a `0-255` RGB tuple (for PIL) and a separate `[0, 1]` alpha (for manual blending). RGB-only input is treated as fully opaque."""
+    arr = np.asarray(color, dtype=float)
+    alpha = float(arr[3]) if arr.shape[0] == 4 else 1.0
+    r, g, b = (round(c * 255) for c in arr[:3])
+    return (r, g, b), alpha
 
 
 @dataclass
@@ -50,7 +89,7 @@ class VideoRecorder:
 
     `recording_trigger` is a function of the current `MjState` that gates whether a due frame is actually captured, e.g. `lambda state: 5.0 <= state.data.time <= 10.0` to only record a window of the simulation.
 
-    `frame_label`, if set, is called with the current `MjState` and the returned string is burned into the top-left corner of each captured frame.
+    `frame_label`, if set, is called with the current `MjState` and the returned `LabelConfig` is burned into the frame - text, position, color, an optional (alpha-blended) background, and font are all configurable per-frame.
 
     `max_frames` caps the number of frames held in memory; once reached, further `capture_frame` calls are silently ignored (with a one-time warning).
 
@@ -93,8 +132,8 @@ class VideoRecorder:
     recording_trigger: Callable[[MjState], bool] = lambda state: True
     """Function evaluated against the current `MjState` on every step. Frames are only captured while it returns `True`."""
 
-    frame_label: Callable[[MjState], str] | None = None
-    """Optional function returning a text label to burn into the top-left corner of each captured frame, e.g. `lambda state: f"t={state.data.time:.2f}s"`."""
+    frame_label: Callable[[MjState], LabelConfig] | None = None
+    """Optional function returning a `LabelConfig` to burn into each captured frame, e.g. `lambda state: {"text": f"t={state.data.time:.2f}s"}`."""
 
     max_frames: int | None = None
     """Optional cap on the number of frames held in memory. Once reached, further `capture_frame` calls are ignored."""
@@ -187,12 +226,64 @@ class VideoRecorder:
 
         return frame
 
-    def _draw_label(self, frame: np.ndarray, label: str) -> np.ndarray:
-        """Burns `label` into the top-left corner of `frame`."""
-        from PIL import Image, ImageDraw
+    def _draw_label(self, frame: np.ndarray, label: LabelConfig) -> np.ndarray:
+        """Burns `label`'s text into `frame`, with an optional alpha-blended background rectangle behind it."""
+        text = label.get("text", "")
+        if not text:
+            return frame
 
+        from PIL import Image, ImageDraw, ImageFont
+
+        position = label.get("position", (10, 10))
+        font_path = label.get("font_path")
+        font_size = label.get("font_size", 14)
+        font = (
+            ImageFont.truetype(str(font_path), font_size)
+            if font_path is not None
+            else ImageFont.load_default(size=font_size)
+        )
+
+        # measure on a throwaway image before touching the real frame, so the
+        # background rectangle's extent is known up front
+        bbox = ImageDraw.Draw(Image.new("RGB", (1, 1))).textbbox(
+            position, text, font=font
+        )
+
+        background_color = label.get("background_color")
+        border_color = label.get("border_color")
+        box = None
+        if background_color is not None or border_color is not None:
+            padding = label.get("padding", 4)
+            box = (
+                max(bbox[0] - padding, 0),
+                max(bbox[1] - padding, 0),
+                min(bbox[2] + padding, frame.shape[1]),
+                min(bbox[3] + padding, frame.shape[0]),
+            )
+
+        if background_color is not None:
+            assert box is not None
+            x0, y0, x1, y1 = box
+            frame = frame.copy()
+            rgb255, alpha = _color_to_rgb255_alpha(background_color)
+            if alpha >= 1.0:
+                frame[y0:y1, x0:x1] = rgb255
+            else:
+                region = frame[y0:y1, x0:x1].astype(np.float32)
+                blended = (
+                    region * (1 - alpha) + np.array(rgb255, dtype=np.float32) * alpha
+                )
+                frame[y0:y1, x0:x1] = blended.astype(np.uint8)
+
+        text_rgb255, _ = _color_to_rgb255_alpha(label.get("color", Color.WHITE.rgba))
         image = Image.fromarray(frame)
-        ImageDraw.Draw(image).text((10, 10), label, fill=(255, 255, 255))
+        draw = ImageDraw.Draw(image)
+        if border_color is not None:
+            assert box is not None
+            x0, y0, x1, y1 = box
+            border_rgb255, _ = _color_to_rgb255_alpha(border_color)
+            draw.rectangle([x0, y0, x1 - 1, y1 - 1], outline=border_rgb255, width=1)
+        draw.text(position, text, font=font, fill=text_rgb255)
         return np.asarray(image)
 
     def is_due(self, state: MjState) -> bool:
@@ -264,7 +355,6 @@ class VideoRecorder:
         """
         if not self._frames:
             return
-        import mediapy as media
 
         if self.path.suffix.lower() == ".gif":
             from PIL import Image
@@ -283,6 +373,8 @@ class VideoRecorder:
         elif self.path.suffix.lower() == ".webm":
             self._save_webm()
         else:
+            import mediapy as media
+
             media.write_video(path=self.path, images=self._frames, fps=self._output_fps)
         logger.info(f"Video saved to {self.path}")
 

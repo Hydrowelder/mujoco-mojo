@@ -15,6 +15,8 @@ from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 
+__all__ = ["SignalManager"]
+
 
 def resolve_signal_manager(
     signal_manager: SignalManager | None,

@@ -15,10 +15,17 @@ jobs:
       matrix:
         # Parallelize tests across your supported versions
         python-version: ["3.12", "3.13", "3.14"]
+    env:
+      # Without this, MuJoCo's renderer falls back to GLFW, which needs a
+      # real display and aborts the process on this headless runner.
+      MUJOCO_GL: egl
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install EGL/Mesa libraries for headless rendering
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libopengl0 libglx-mesa0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5

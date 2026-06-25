@@ -1,4 +1,6 @@
 from .load import (
+    ActuatorLoad,
+    BodyReactionForce,
     GeneralLoad,
     JointFriction,
     JointLoad,
@@ -13,12 +15,15 @@ from .load import (
 from .runtime_manager import RuntimeManager, SimulationStopped
 from .signal_manager import SignalManager
 from .tracer import Tracer
-from .video_recorder import VideoRecorder
+from .video_recorder import LabelConfig, VideoRecorder
 
 __all__ = [
+    "ActuatorLoad",
+    "BodyReactionForce",
     "GeneralLoad",
     "JointFriction",
     "JointLoad",
+    "LabelConfig",
     "Load",
     "PointToPointForce",
     "RuntimeManager",
