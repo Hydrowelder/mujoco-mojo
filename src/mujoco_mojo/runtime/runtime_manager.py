@@ -20,6 +20,8 @@ from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 logger = get_logger(__name__)
 
+__all__ = ["RuntimeManager"]
+
 _current: ContextVar[RuntimeManager] = ContextVar("_current_runtime_manager")
 
 
