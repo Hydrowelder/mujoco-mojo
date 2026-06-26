@@ -162,6 +162,8 @@ class RuntimeManager:
             state.data.ctrl.fill(0)  # actuator forces
 
         # sync state variables and clear render buffer
+        # invalidate first: mj_forward changes qacc, which cfrc_int/cacc are derived from
+        state.invalidate_rne_post_constraint()
         mujoco.mj_forward(state.model, state.data)
 
         if state.data.time == 0.0 or self._start_sim_time == 0.0:
@@ -179,6 +181,8 @@ class RuntimeManager:
 
         # record data
         if self.signal_manager and not self._skip_recording:
+            # invalidate first: loads may have changed qfrc_applied/xfrc_applied since the last mj_forward
+            state.invalidate_rne_post_constraint()
             mujoco.mj_forward(state.model, state.data)
             self.signal_manager.record(state)
 
@@ -228,6 +232,7 @@ class RuntimeManager:
                 )
 
         # integrate physics and advance the time
+        state.invalidate_rne_post_constraint()
         mujoco.mj_step(state.model, state.data)
 
         if self._sync_hook:

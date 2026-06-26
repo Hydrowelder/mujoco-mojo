@@ -358,8 +358,13 @@ class SiteBase(XMLModel, ABC):
         return float(np.linalg.norm(self.rt_velocities(other=other, state=state)[0:3]))
 
     def rt_acc(self, state: MjState) -> Vec6:
-        """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
+        """
+        Returns the 6D acceleration vector (ang, lin) in world coordinates.
+
+        This reads `mjData.cacc`/`cdof_dot` under the hood (via `mj_objectAcceleration`), which require `mj_rnePostConstraint` to have run. This method calls `state.ensure_rne_post_constraint()` itself before reading, so it's always fresh.
+        """
         assert self._mjt_obj is not None
+        state.ensure_rne_post_constraint()
         res = np.zeros(6)  # 6 element buffer for angular, linear
         mujoco.mj_objectAcceleration(
             state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0

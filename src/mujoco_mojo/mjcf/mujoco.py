@@ -279,4 +279,5 @@ class Mujoco(XMLModel):
 
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
+        mujoco.mj_rnePostConstraint(model, data)
         return MjState(model, data)
