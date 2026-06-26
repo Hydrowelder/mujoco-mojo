@@ -8,7 +8,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.runtime.load import (
-    ActuatorLoad,
+    ActuatorControl,
     GeneralLoad,
     JointFriction,
     PointToPointForce,
@@ -1022,7 +1022,7 @@ def test_friction_func_receives_state():
     assert state.data.qfrc_applied[0] == pytest.approx(-3.0)
 
 
-# -- ActuatorLoad --
+# -- ActuatorControl --
 
 ACTUATED_SLIDE_XML = """
 <mujoco>
@@ -1053,7 +1053,7 @@ def _motor() -> ActuatorMotor:
 def test_actuator_load_constant_writes_ctrl():
     """constant() writes a fixed set point into mjData.ctrl for the resolved actuator."""
     state = _actuated_slide_state()
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.75)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.75)
     load.resolve_ids(state)
     load.apply_load(state)
 
@@ -1064,7 +1064,7 @@ def test_actuator_load_constant_named_value_is_mutable_at_runtime():
     """constant() unwraps a NamedValue each timestep, picking up live updates."""
     state = _actuated_slide_state()
     set_point = NamedValue(name=ValueName("set_point"), stored_value=0.2)
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=set_point)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=set_point)
     load.resolve_ids(state)
 
     load.apply_load(state)
@@ -1084,7 +1084,7 @@ def test_actuator_load_custom_control_func_receives_state():
         return 0.5
 
     state = _actuated_slide_state()
-    load = ActuatorLoad(name="drive", actuator=_motor(), control_func=custom_func)
+    load = ActuatorControl(name="drive", actuator=_motor(), control_func=custom_func)
     load.resolve_ids(state)
     load.apply_load(state)
 
@@ -1097,7 +1097,7 @@ def test_actuator_load_inactive_does_not_write_ctrl():
     """When inactive, apply_load leaves mjData.ctrl untouched and resets cached telemetry to zero."""
     state = _actuated_slide_state()
     state.data.ctrl[0] = 0.4
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=1.0)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=1.0)
     load.active = False
     load.resolve_ids(state)
     load.apply_load(state)
@@ -1107,13 +1107,13 @@ def test_actuator_load_inactive_does_not_write_ctrl():
 
 
 def test_actuator_load_runtime_manager_integration():
-    """ActuatorLoad survives RuntimeManager's default buffer clearing: apply_load runs after the clear, every step."""
+    """ActuatorControl survives RuntimeManager's default buffer clearing: apply_load runs after the clear, every step."""
     state = _actuated_slide_state()
     mgr = RuntimeManager()
 
-    ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.75).register_to_rm(
-        mgr
-    )
+    ActuatorControl.constant(
+        name="drive", actuator=_motor(), value=0.75
+    ).register_to_rm(mgr)
 
     mgr.step(state)
 
@@ -1123,7 +1123,7 @@ def test_actuator_load_runtime_manager_integration():
 def test_actuator_load_request_posts_ctrl_signal(tmp_path):
     """request() registers a sampler that posts the last applied control value."""
     state = _actuated_slide_state()
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.6)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
     load.resolve_ids(state)
     load.apply_load(state)
 

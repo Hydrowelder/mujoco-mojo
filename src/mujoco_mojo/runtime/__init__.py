@@ -1,5 +1,5 @@
 from .load import (
-    ActuatorLoad,
+    ActuatorControl,
     BodyReactionForce,
     GeneralLoad,
     JointFriction,
@@ -18,7 +18,7 @@ from .tracer import Tracer
 from .video_recorder import LabelConfig, VideoRecorder
 
 __all__ = [
-    "ActuatorLoad",
+    "ActuatorControl",
     "BodyReactionForce",
     "GeneralLoad",
     "JointFriction",

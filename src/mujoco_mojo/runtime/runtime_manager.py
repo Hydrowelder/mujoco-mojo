@@ -147,7 +147,7 @@ class RuntimeManager:
             state: The paired MuJoCo model and data instance.
             clear_xfrc_applied: If True, zero `xfrc_applied` (external forces) before applying loads.
             clear_qfrc_applied: If True, zero `qfrc_applied` (user-defined forces) before applying loads.
-            clear_ctrl: If True, zero `ctrl` (actuator controls) before applying loads. Set to False if controls are set externally and should persist across steps, e.g. when not driven by an `ActuatorLoad` every timestep.
+            clear_ctrl: If True, zero `ctrl` (actuator controls) before applying loads. Set to False if controls are set externally and should persist across steps, e.g. when not driven by an `ActuatorControl` every timestep.
 
         """
         if self._stop_event is not None and self._stop_event.is_set():

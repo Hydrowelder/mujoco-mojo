@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = [
-    "ActuatorLoad",
+    "ActuatorControl",
     "BodyReactionForce",
     "GeneralLoad",
     "JointFriction",
@@ -838,7 +838,7 @@ class JointFriction(JointLoad):
         return cls(name=name, joint=joint, friction_func=func)
 
 
-class ActuatorLoad(Load):
+class ActuatorControl(Load):
     """Drives an actuator's control input each timestep, writing into `mjData.ctrl`. Use `control_func` for an arbitrary control law, or the `constant` factory for a simple, runtime-mutable set point."""
 
     actuator: SerializeAsAny[ActuatorBase]
