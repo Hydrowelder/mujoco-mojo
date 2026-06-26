@@ -43,8 +43,11 @@ def state(cam_setup):
 
 @pytest.fixture
 def recorder(tmp_path, state):
+    # .gif buffers frames instead of streaming to ffmpeg, so these generic
+    # logic tests don't need ffmpeg installed; the actual ffmpeg-streaming
+    # path is covered separately by TestSaveEncodesRealVideo.
     rec = VideoRecorder(
-        path=tmp_path / "out.mp4",
+        path=tmp_path / "out.gif",
         camera_name=CAM1,
         width=64,
         height=48,
@@ -85,6 +88,39 @@ class TestSetupValidation:
         with pytest.raises(ValueError, match="exceeds"):
             rec.setup(state)
 
+    def test_raises_on_out_of_range_encode_speed(self, state):
+        rec = VideoRecorder(
+            path=Path("unused.mp4"),
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            encode_speed=9,
+        )
+        with pytest.raises(ValueError, match="encode_speed"):
+            rec.setup(state)
+
+    def test_raises_on_negative_quality(self, state):
+        rec = VideoRecorder(
+            path=Path("unused.mp4"), camera_name=CAM1, width=64, height=48, quality=-1
+        )
+        with pytest.raises(ValueError, match="quality"):
+            rec.setup(state)
+
+    def test_raises_when_ffmpeg_missing_for_streamed_format(self, state, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        rec = VideoRecorder(
+            path=Path("unused.mp4"), camera_name=CAM1, width=64, height=48
+        )
+        with pytest.raises(RuntimeError, match="ffmpeg was not found"):
+            rec.setup(state)
+
+    def test_does_not_require_ffmpeg_for_gif(self, state, tmp_path, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        rec = VideoRecorder(
+            path=tmp_path / "out.gif", camera_name=CAM1, width=64, height=48
+        ).setup(state)
+        rec.close()
+
 
 class TestIsDueAndCaptureFrame:
     def test_is_due_true_immediately(self, recorder, state):
@@ -97,7 +133,7 @@ class TestIsDueAndCaptureFrame:
 
     def test_is_due_respects_recording_trigger(self, state, tmp_path):
         rec = VideoRecorder(
-            path=tmp_path / "out.mp4",
+            path=tmp_path / "out.gif",
             camera_name=CAM1,
             width=64,
             height=48,
@@ -116,7 +152,7 @@ class TestIsDueAndCaptureFrame:
         for i in range(5):
             state.data.time = i * 0.01  # fps=10 -> only t=0 is due among these
             recorder.capture_frame(state, [], [], [])
-        assert len(recorder._frames) == 1
+        assert recorder._frame_count == 1
 
     def test_capture_frame_warns_once_at_max_frames(self, recorder, state, caplog):
         recorder.max_frames = 1
@@ -128,7 +164,7 @@ class TestIsDueAndCaptureFrame:
             recorder.capture_frame(state, [], [], [])
         warnings = [r for r in caplog.records if "max_frames" in r.message]
         assert len(warnings) == 1
-        assert len(recorder._frames) == 1
+        assert recorder._frame_count == 1
 
 
 class TestRenderFrameOverlayGating:
@@ -274,11 +310,15 @@ class TestSaveEncodesRealVideo:
             if suffix == ".gif":
                 with Image.open(rec.path) as img:
                     assert getattr(img, "n_frames", 1) == 3
+                # .gif has no incremental encoder, so frames stay buffered until save
+                assert len(rec._frames) == 3
             else:
                 import mediapy as media
 
                 frames = media.read_video(str(rec.path))
                 assert len(frames) == 3
+                # .mp4/.webm are piped to ffmpeg as captured, never buffered
+                assert len(rec._frames) == 0
         finally:
             rec.close()
 
@@ -289,6 +329,112 @@ class TestSaveEncodesRealVideo:
         rec.save()
         assert not rec.path.exists()
         rec.close()
+
+    def test_close_kills_unfinished_encoder(self, tmp_path, state):
+        """If `save` is never called, `close` must not leave a hung ffmpeg process behind."""
+        rec = VideoRecorder(
+            path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48, fps=10
+        ).setup(state)
+        rec.capture_frame(state, [], [], [])
+        proc = rec._encoder_proc
+        assert proc is not None
+        assert proc.poll() is None  # still running, waiting on stdin
+
+        rec.close()
+        assert proc.poll() is not None  # killed, not left hanging
+
+
+class TestEncoderMissingFfmpeg:
+    def test_missing_ffmpeg_raises_clear_error(self, tmp_path, state, monkeypatch):
+        def raise_not_found(*args, **kwargs):
+            raise FileNotFoundError("ffmpeg")
+
+        # Pretend ffmpeg is on PATH so setup()'s eager check passes, letting
+        # the FileNotFoundError surface from the Popen call in _open_encoder instead.
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
+        monkeypatch.setattr("subprocess.Popen", raise_not_found)
+
+        rec = VideoRecorder(
+            path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48
+        ).setup(state)
+        try:
+            with pytest.raises(RuntimeError, match="ffmpeg was not found"):
+                rec.capture_frame(state, [], [], [])
+        finally:
+            rec.close()
+
+
+class TestEncoderCodecArgs:
+    """Verifies `quality`/`encode_speed` reach the ffmpeg command line, without spawning a real process."""
+
+    @pytest.fixture
+    def captured_argv(self, monkeypatch):
+        calls = []
+
+        class FakeStdin:
+            def write(self, data):
+                pass
+
+        class FakeProc:
+            stdin = FakeStdin()
+            returncode = 0
+
+            def poll(self):
+                return 0
+
+        def fake_popen(argv, **kwargs):
+            calls.append(argv)
+            return FakeProc()
+
+        # Pretend ffmpeg is on PATH so setup()'s eager check passes regardless
+        # of whether ffmpeg is actually installed in this environment.
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
+        monkeypatch.setattr("subprocess.Popen", fake_popen)
+        return calls
+
+    def test_mp4_uses_default_crf_and_preset(self, tmp_path, state, captured_argv):
+        rec = VideoRecorder(
+            path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48
+        ).setup(state)
+        rec.capture_frame(state, [], [], [])
+        rec.close()
+        argv = captured_argv[0]
+        assert "-crf" in argv and argv[argv.index("-crf") + 1] == "23"
+        assert "-preset" in argv and argv[argv.index("-preset") + 1] == "fast"
+
+    def test_mp4_quality_and_encode_speed_overrides(
+        self, tmp_path, state, captured_argv
+    ):
+        rec = VideoRecorder(
+            path=tmp_path / "out.mp4",
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            quality=18,
+            encode_speed=0,
+        ).setup(state)
+        rec.capture_frame(state, [], [], [])
+        rec.close()
+        argv = captured_argv[0]
+        assert argv[argv.index("-crf") + 1] == "18"
+        assert argv[argv.index("-preset") + 1] == "veryslow"
+
+    def test_webm_quality_and_encode_speed_overrides(
+        self, tmp_path, state, captured_argv
+    ):
+        rec = VideoRecorder(
+            path=tmp_path / "out.webm",
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            quality=15,
+            encode_speed=8,
+        ).setup(state)
+        rec.capture_frame(state, [], [], [])
+        rec.close()
+        argv = captured_argv[0]
+        assert argv[argv.index("-crf") + 1] == "15"
+        assert argv[argv.index("-cpu-used") + 1] == "8"
 
 
 class TestSnapshot:

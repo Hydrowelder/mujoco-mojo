@@ -6,10 +6,11 @@ import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomMesh
-from mujoco_mojo.runtime.load import Load
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
+from mujoco_mojo.runtime.load import JointFriction, Load
 from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.typing import GeomName, MeshName
+from mujoco_mojo.typing import GeomName, JointName, MeshName
 from mujoco_mojo.utils.proximity import Proximity
 
 
@@ -225,3 +226,63 @@ def test_step_calls_proximity_get_visuals(
     mgr.step(state)
 
     mock_proximity.get_visuals.assert_called_once_with(state, mgr.signal_manager)
+
+
+def _karnopp_load() -> JointFriction:
+    return JointFriction.karnopp(
+        name="k",
+        joint=Joint(name=JointName("joint1")),
+        mu_kinetic=0.3,
+        mu_static=0.5,
+        velocity_threshold=0.01,
+    )
+
+
+def test_rne_post_constraint_not_called_when_nothing_reads_it(
+    mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """step() never calls mj_rnePostConstraint on its own; it's only triggered lazily by an accessor that reads cfrc_int/cacc."""
+    model, data = mj_setup
+    state = MjState(model, data)
+    mgr = RuntimeManager()
+
+    with patch(
+        "mujoco_mojo.runtime.runtime_manager.mujoco.mj_rnePostConstraint"
+    ) as mock_rne:
+        mgr.step(state)
+    mock_rne.assert_not_called()
+
+
+def test_rne_post_constraint_called_once_when_karnopp_applies_load(
+    mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """A karnopp friction load reads Joint.rt_bearing_load during apply_load, which lazily triggers mj_rnePostConstraint exactly once per step."""
+    model, data = mj_setup
+    state = MjState(model, data)
+    mgr = RuntimeManager()
+    mgr.add_load(_karnopp_load())
+
+    with patch(
+        "mujoco_mojo.runtime.runtime_manager.mujoco.mj_rnePostConstraint",
+        wraps=mujoco.mj_rnePostConstraint,
+    ) as mock_rne:
+        mgr.step(state)
+    mock_rne.assert_called_once_with(state.model, state.data)
+
+
+def test_rne_post_constraint_invalidated_for_next_step(
+    mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
+    """The freshness flag is invalidated by step()'s mj_forward/mj_step calls, so a second step() re-triggers mj_rnePostConstraint rather than reusing stale data."""
+    model, data = mj_setup
+    state = MjState(model, data)
+    mgr = RuntimeManager()
+    mgr.add_load(_karnopp_load())
+
+    with patch(
+        "mujoco_mojo.runtime.runtime_manager.mujoco.mj_rnePostConstraint",
+        wraps=mujoco.mj_rnePostConstraint,
+    ) as mock_rne:
+        mgr.step(state)
+        mgr.step(state)
+    assert mock_rne.call_count == 2

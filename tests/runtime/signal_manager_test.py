@@ -12,11 +12,19 @@ from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 
 
+class _FixedCapacitySignalManager(SignalManager):
+    """A SignalManager whose flush capacity (in rows) is pinned rather than re-derived from `target_buffer_bytes` as columns are registered, so unit tests can assert exact flush points regardless of column count."""
+
+    def _recompute_capacity(self) -> None:
+        pass
+
+
 @pytest.fixture
 def sm(tmp_path: Path) -> Generator[SignalManager, None, None]:
-    """Provides a SignalManager pointing to a temporary directory."""
+    """Provides a SignalManager pointing to a temporary directory, with a small fixed flush capacity for deterministic tests."""
     db_file = tmp_path / "test_telemetry.parquet"
-    manager = SignalManager(export_path=db_file, batch_size=5)
+    manager = _FixedCapacitySignalManager(export_path=db_file)
+    manager._capacity = 5
     yield manager
     # Ensure connection is closed so the file isn't locked
     try:
@@ -41,17 +49,17 @@ def test_hierarchical_key_generation(sm: SignalManager) -> None:
 
 
 def test_batching_and_persistence(sm: SignalManager) -> None:
-    """Verify data is only committed to output after reaching batch_size."""
+    """Verify data is only committed to output after reaching the flush capacity."""
     # We need a mock MjModel/Data for the record call
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
-    # Post 4 steps (Batch size is 5)
+    # Post 4 steps (fixture's flush capacity is 5)
     for i in range(4):
         sm.post(float(i), "Custom", ("Signal",))
         sm.record(MjState(m, d))
 
-    # Buffer row index should have 4 rows (batch_size is 5, so no flush yet)
+    # Buffer row index should have 4 rows (capacity is 5, so no flush yet)
     assert sm._buffer_row_idx == 4
 
     # 5th step triggers flush
@@ -60,7 +68,8 @@ def test_batching_and_persistence(sm: SignalManager) -> None:
 
     assert sm._buffer_row_idx == 0  # Buffer cleared after flush
 
-    # Verify output has the data
+    # export_path is only written once parts are merged on close()
+    sm.close()
     df: pl.DataFrame = pl.read_parquet(sm.export_path)
     assert df.height == 5
     assert TIME_COLUMN_NAME in df.columns
@@ -153,6 +162,24 @@ def test_buffer_growth_on_signal_overflow(sm: SignalManager) -> None:
     assert sm._n_cols == 121  # 120 signals + 1 for TIME_COLUMN_NAME
 
 
+def test_capacity_shrinks_as_more_signals_are_registered(tmp_path: Path) -> None:
+    """Verify the flush capacity (row threshold) shrinks as more signal columns are registered, since each row then costs more bytes."""
+    db_file = tmp_path / "test_telemetry.parquet"
+    manager = SignalManager(export_path=db_file, target_buffer_bytes=8000)
+    try:
+        initial_capacity = manager._capacity
+        assert initial_capacity == 10  # 8000 bytes // (100 guessed cols * 8 bytes)
+
+        for i in range(150):
+            manager.post(float(i), "Signal", (f"S{i}",))
+
+        assert manager._n_cols == 151  # 150 signals + time
+        assert manager._capacity < initial_capacity
+        assert manager._capacity == 8000 // (manager._n_cols * 8)
+    finally:
+        manager.close()
+
+
 def test_signal_value_correctness_in_output(sm: SignalManager) -> None:
     """Verify that signal values are correctly written to output file."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
@@ -169,6 +196,7 @@ def test_signal_value_correctness_in_output(sm: SignalManager) -> None:
 
     sm.record(MjState(m, d))
     sm.flush()
+    sm.close()
 
     df: pl.DataFrame = pl.read_parquet(sm.export_path)
 
@@ -195,7 +223,7 @@ def test_cache_hit_performance(sm: SignalManager) -> None:
 
 
 def test_append_to_existing_file(sm: SignalManager) -> None:
-    """Verify diagonal concat when appending to existing parquet file."""
+    """Verify each flush writes its own part file, and close() diagonal-concats them into one file."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
@@ -212,10 +240,11 @@ def test_append_to_existing_file(sm: SignalManager) -> None:
     sm.record(MjState(m, d))
     sm.flush()
 
-    initial_df: pl.DataFrame = pl.read_parquet(sm.export_path)
-    assert initial_df.height == 5
+    # flush() only writes a part file; export_path isn't created until close()
+    assert not sm.export_path.exists()
+    assert len(sm._part_paths) == 1
 
-    # Add a new signal and write another batch (should append to existing file)
+    # Add a new signal and write another batch
     sm.post(10.0, "Signal", ("A",))
     sm.post(20.0, "Signal", ("B",))  # New signal
     sm.record(MjState(m, d))
@@ -227,10 +256,29 @@ def test_append_to_existing_file(sm: SignalManager) -> None:
     sm.record(MjState(m, d))
     sm.flush()
 
-    # Verify file was appended to
-    appended_df: pl.DataFrame = pl.read_parquet(sm.export_path)
-    assert appended_df.height == 8  # 5 + 3 new rows
-    assert "Signal/B" in appended_df.columns
+    part_paths = list(sm._part_paths)
+    sm.close()
+
+    # Verify parts were merged into a single file and cleaned up
+    merged_df: pl.DataFrame = pl.read_parquet(sm.export_path)
+    assert merged_df.height == 8  # 5 + 3 rows
+    assert "Signal/B" in merged_df.columns
+    assert not sm._part_paths
+    assert not any(p.exists() for p in part_paths)
+
+
+def test_stale_part_files_cleaned_up_on_init(tmp_path: Path) -> None:
+    """Verify part files left behind by a run that crashed before close() don't leak into a new run."""
+    db_file = tmp_path / "test_telemetry.parquet"
+    stale_part = db_file.with_name(f".{db_file.name}.part00000")
+    stale_part.write_bytes(b"not a real parquet file")
+
+    manager = SignalManager(export_path=db_file)
+    try:
+        assert not stale_part.exists()
+        assert not manager._part_paths
+    finally:
+        manager.close()
 
 
 def test_empty_flush_early_return(sm: SignalManager) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,11 +16,30 @@ from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 if TYPE_CHECKING:
+    import subprocess
+
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 logger = get_logger(__name__)
 
 __all__ = ["LabelConfig", "VideoRecorder"]
+
+
+STREAMED_VIDEO_FORMAT = {".mp4", ".webm"}
+"""Formats encoded incrementally by piping frames to ffmpeg as they're captured, instead of buffering them in memory."""
+
+_X264_PRESETS = (
+    "veryslow",
+    "slower",
+    "slow",
+    "medium",
+    "fast",
+    "faster",
+    "veryfast",
+    "superfast",
+    "ultrafast",
+)
+"""x264 `-preset` names indexed by `VideoRecorder.encode_speed` (0=slowest/best, 8=fastest/worst), mirroring libvpx-vp9's `-cpu-used` scale so `.mp4`/`.webm` share one knob."""
 
 
 class LabelConfig(TypedDict):
@@ -79,9 +99,11 @@ class VideoRecorder:
 
     Supported output formats (determined by the `path` extension):
 
-    - `.mp4`: H.264 via mediapy/ffmpeg; widest browser and player compatibility.
+    - `.mp4`: H.264 via ffmpeg; widest browser and player compatibility.
     - `.webm`: VP9 via ffmpeg; smaller files, fully seekable in the Dojo viewer. Requires ffmpeg with libvpx-vp9 support.
     - `.gif`: via PIL; no audio, loops automatically; large file size, not seekable.
+
+    `.mp4` and `.webm` frames are piped to ffmpeg as they're captured rather than buffered in memory, so recording length isn't limited by available RAM. `.gif` (and any other extension, which falls back to mediapy) still buffers every frame until `save` is called. `quality` and `encode_speed` tune the ffmpeg encoder for `.mp4`/`.webm`; both have no effect on `.gif`.
 
     Visual overlays (contact forces, net forces, custom arrows/lines) are controlled by the `show_*` flags and the `show_loads` flag passed to `capture_frame`.
 
@@ -117,7 +139,7 @@ class VideoRecorder:
     show_traces: bool = False
     """Whether to render `Tracer` trails (passed via `custom_traces` in `capture_frame`)."""
 
-    fps: int = 30
+    fps: float = 30
     """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
 
     playback_speed: float = 1.0
@@ -136,13 +158,24 @@ class VideoRecorder:
     """Optional function returning a `LabelConfig` to burn into each captured frame, e.g. `lambda state: {"text": f"t={state.data.time:.2f}s"}`."""
 
     max_frames: int | None = None
-    """Optional cap on the number of frames held in memory. Once reached, further `capture_frame` calls are ignored."""
+    """Optional cap on the number of frames captured. Once reached, further `capture_frame` calls are ignored. For `.gif` and other buffered formats this also bounds memory use; `.mp4`/`.webm` are streamed to disk as they're captured, so it only bounds recording length for those."""
+
+    quality: int | None = None
+    """Override for ffmpeg's `-crf` (constant rate factor) on `.mp4`/`.webm`: lower means higher quality and a larger file. Defaults to a codec-specific value (`23` for `.mp4`/libx264, `33` for `.webm`/libvpx-vp9) when unset. Useful range is roughly `18`-`32`; has no effect on `.gif`."""
+
+    encode_speed: int | None = None
+    """Override for the `.mp4`/`.webm` encoder's speed-vs-compression trade-off, on a `0`-`8` scale where `0` is slowest/best compression and `8` is fastest/worst (passed straight through as `-cpu-used` for `.webm`; mapped to an x264 `-preset` name for `.mp4`). Defaults to a codec-specific value (`4` for `.mp4`, `2` for `.webm`) when unset. Has no effect on `.gif`."""
 
     _frames: list = field(default_factory=list)
+    """Buffered frames awaiting encoding. Only populated for formats outside `STREAMED_VIDEO_FORMAT` (e.g. `.gif`), since those formats can't be written incrementally."""
     _renderer: mujoco.Renderer = field(init=False)
     _vopt: mujoco.MjvOption = field(default_factory=mujoco.MjvOption, init=False)
     _next_record_time: float = field(default=0.0, init=False)
     _max_frames_warned: bool = field(default=False, init=False)
+    _frame_count: int = field(default=0, init=False)
+    _encoder_proc: subprocess.Popen | None = field(default=None, init=False)
+    _encode_size: tuple[int, int] = field(default=(0, 0), init=False)
+    """Even-rounded `(width, height)` fed to ffmpeg; set once the encoder opens."""
 
     @property
     def _output_fps(self) -> float:
@@ -171,6 +204,26 @@ class VideoRecorder:
             msg = f'Camera "{self.camera_name}" does not exist in the model.'
             logger.error(msg)
             raise ValueError(msg)
+
+        if self.encode_speed is not None and not (0 <= self.encode_speed <= 8):
+            msg = f"encode_speed must be between 0 and 8 (got {self.encode_speed})."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if self.quality is not None and self.quality < 0:
+            msg = f"quality must be non-negative (got {self.quality})."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if self.path.suffix.lower() in STREAMED_VIDEO_FORMAT and not shutil.which(
+            "ffmpeg"
+        ):
+            msg = (
+                "ffmpeg was not found on PATH. Install ffmpeg to record "
+                f"{self.path.name}, or use a .gif path instead."
+            )
+            logger.error(msg)
+            raise RuntimeError(msg)
 
     def setup(self, state: MjState) -> Self:
         """Initializes the MuJoCo renderer for this model. Must be called before the simulation loop."""
@@ -292,7 +345,7 @@ class VideoRecorder:
             return False
         if not self.recording_trigger(state):
             return False
-        if self.max_frames is not None and len(self._frames) >= self.max_frames:
+        if self.max_frames is not None and self._frame_count >= self.max_frames:
             return False
         return True
 
@@ -310,7 +363,7 @@ class VideoRecorder:
         if not self.recording_trigger(state):
             return
 
-        if self.max_frames is not None and len(self._frames) >= self.max_frames:
+        if self.max_frames is not None and self._frame_count >= self.max_frames:
             if not self._max_frames_warned:
                 logger.warning(
                     f"VideoRecorder for {self.path} reached max_frames={self.max_frames}; "
@@ -319,10 +372,21 @@ class VideoRecorder:
                 self._max_frames_warned = True
             return
 
-        # capture and increment the clock for the next frame
-        self._frames.append(
-            self._render_frame(state, custom_arrows, custom_lines, custom_traces)
-        )
+        frame = self._render_frame(state, custom_arrows, custom_lines, custom_traces)
+
+        if self.path.suffix.lower() in STREAMED_VIDEO_FORMAT:
+            if self._encoder_proc is None:
+                self._open_encoder()
+            w, h = self._encode_size
+            assert (
+                self._encoder_proc is not None and self._encoder_proc.stdin is not None
+            )
+            self._encoder_proc.stdin.write(frame[:h, :w].tobytes())
+        else:
+            self._frames.append(frame)
+
+        # increment the clock for the next frame
+        self._frame_count += 1
         self._next_record_time += 1 / self.fps
 
     def snapshot(
@@ -344,19 +408,23 @@ class VideoRecorder:
 
     def save(self):
         """
-        Writes the captured frames to a video file.
+        Finishes writing the video file.
 
         Supported formats:
-        - `.mp4` — H.264 via mediapy/ffmpeg; universally compatible.
-        - `.webm` — VP9 via mediapy/ffmpeg; smaller files and fully seekable.
+        - `.mp4` — H.264 via ffmpeg; universally compatible.
+        - `.webm` — VP9 via ffmpeg; smaller files and fully seekable.
         - `.gif` — via PIL; no audio, loops automatically, large file size, not seekable.
+
+        `.mp4` and `.webm` are encoded incrementally: each frame is piped to ffmpeg as it's captured, so `save` only needs to close that pipe and wait for ffmpeg to finish. `.gif` (and any other format) buffers every frame in memory and is only encoded here.
 
         The output format is determined by the extension of `path`.
         """
-        if not self._frames:
+        if self._frame_count == 0:
             return
 
-        if self.path.suffix.lower() == ".gif":
+        if self._encoder_proc is not None:
+            self._finish_encoding()
+        elif self.path.suffix.lower() == ".gif":
             from PIL import Image
 
             # convert arrays to PIL images
@@ -370,63 +438,91 @@ class VideoRecorder:
                 duration=int(1000 / self._output_fps),  # ms per frame
                 loop=0,  # loop forever
             )
-        elif self.path.suffix.lower() == ".webm":
-            self._save_webm()
         else:
             import mediapy as media
 
             media.write_video(path=self.path, images=self._frames, fps=self._output_fps)
         logger.info(f"Video saved to {self.path}")
 
-    def _save_webm(self) -> None:
-        """Encodes frames to VP9 WebM by piping raw RGB directly to ffmpeg (no intermediate file)."""
+    def _open_encoder(self) -> None:
+        """Spawns the ffmpeg subprocess that frames are piped to as they're captured. Called once, from `capture_frame`, on the first frame -- so a recorder that's set up but never used never spawns a process."""
         import subprocess
 
-        h_raw, w_raw = self._frames[0].shape[:2]
-        # yuv420p requires even dimensions
-        w = w_raw - (w_raw % 2)
-        h = h_raw - (h_raw % 2)
+        w = self.width - (self.width % 2)  # yuv420p requires even dimensions
+        h = self.height - (self.height % 2)
+        self._encode_size = (w, h)
 
-        proc = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "rawvideo",
-                "-vcodec",
-                "rawvideo",
-                "-s",
-                f"{w}x{h}",
-                "-pix_fmt",
-                "rgb24",
-                "-r",
-                str(self._output_fps),
-                "-i",
-                "pipe:0",
+        if self.path.suffix.lower() == ".mp4":
+            crf = self.quality if self.quality is not None else 23
+            speed = self.encode_speed if self.encode_speed is not None else 4
+            codec_args = [
+                "-c:v",
+                "libx264",
+                "-preset",
+                _X264_PRESETS[speed],
+                "-crf",
+                str(crf),
+                "-movflags",
+                "+faststart",
+            ]
+        else:
+            crf = self.quality if self.quality is not None else 33
+            speed = self.encode_speed if self.encode_speed is not None else 2
+            codec_args = [
                 "-c:v",
                 "libvpx-vp9",
                 "-b:v",
                 "0",
                 "-crf",
-                "33",
+                str(crf),
                 "-cpu-used",
-                "2",  # 0=slowest/best ... 8=fastest/worst; 4 is a good balance
+                str(speed),  # 0=slowest/best ... 8=fastest/worst
                 "-row-mt",
                 "1",  # row-based multithreading
                 "-threads",
                 "0",  # use all available cores
-                "-an",
-                "-pix_fmt",
-                "yuv420p",
-                str(self.path),
-            ],
-            stdin=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
+            ]
+
+        try:
+            self._encoder_proc = subprocess.Popen(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "rawvideo",
+                    "-vcodec",
+                    "rawvideo",
+                    "-s",
+                    f"{w}x{h}",
+                    "-pix_fmt",
+                    "rgb24",
+                    "-r",
+                    str(self._output_fps),
+                    "-i",
+                    "pipe:0",
+                    *codec_args,
+                    "-an",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(self.path),
+                ],
+                stdin=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError as e:
+            msg = (
+                "ffmpeg was not found on PATH. Install ffmpeg to record "
+                f"{self.path.name}, or use a .gif path instead."
+            )
+            logger.error(msg)
+            raise RuntimeError(msg) from e
+
+    def _finish_encoding(self) -> None:
+        """Closes the ffmpeg stdin pipe opened by `_open_encoder` and waits for it to finish writing `self.path`."""
+        assert self._encoder_proc is not None
+        proc = self._encoder_proc
         try:
             assert proc.stdin is not None
-            for frame in self._frames:
-                proc.stdin.write(frame[:h, :w].tobytes())
             proc.stdin.close()
             if proc.wait() != 0:
                 raise RuntimeError(
@@ -437,7 +533,16 @@ class VideoRecorder:
             raise
 
     def close(self) -> None:
-        """Releases the GL context held by the underlying MuJoCo renderer. Call once recording is finished and `save` has been called."""
+        """Releases the GL context held by the underlying MuJoCo renderer, and kills the ffmpeg encoder if `save` was never called. Call once recording is finished and `save` has been called."""
+        if self._encoder_proc is not None and self._encoder_proc.poll() is None:
+            proc = self._encoder_proc
+            try:
+                if proc.stdin is not None:
+                    proc.stdin.close()
+            except BrokenPipeError:
+                pass
+            proc.kill()
+            proc.wait()
         self._renderer.close()
 
     def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:

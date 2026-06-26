@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 import mujoco
 import numpy as np
+from pydantic import PrivateAttr
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
@@ -18,6 +19,7 @@ from mujoco_mojo.typing import (
     Vec2,
     Vec3,
     Vec5,
+    Vec6,
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
@@ -149,6 +151,112 @@ class Joint(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
+    _jnt_type_cache: int = PrivateAttr(default=-1)
+    """Cached mjtJoint type of this joint, resolved against the compiled MuJoCo model."""
+
+    def _jnt_type(self, state: MjState) -> int:
+        """Returns the mjtJoint type of this joint."""
+        if self._jnt_type_cache == -1:
+            self._jnt_type_cache = int(state.model.jnt_type[self.get_id(state.model)])
+        return self._jnt_type_cache
+
+    _dims_cache: tuple[int, int, int, int] | None = PrivateAttr(default=None)
+    """Cached (qpos_adr, dof_adr, nq, nv), resolved against the compiled MuJoCo model."""
+
+    def _dims(self, state: MjState) -> tuple[int, int, int, int]:
+        """Returns (qpos_adr, dof_adr, nq, nv) for this joint, accounting for its type."""
+        if self._dims_cache is not None:
+            return self._dims_cache
+
+        jid = self.get_id(state.model)
+        qpos_adr = int(state.model.jnt_qposadr[jid])
+        dof_adr = int(state.model.jnt_dofadr[jid])
+
+        match self._jnt_type(state):
+            case mujoco.mjtJoint.mjJNT_FREE:
+                nq, nv = 7, 6
+            case mujoco.mjtJoint.mjJNT_BALL:
+                nq, nv = 4, 3
+            case mujoco.mjtJoint.mjJNT_HINGE | mujoco.mjtJoint.mjJNT_SLIDE:
+                nq, nv = 1, 1
+            case jnt_type:
+                msg = f"Joint {self.name} type {jnt_type} is invalid"
+                logger.exception(msg)
+                raise NotImplementedError(msg)
+
+        self._dims_cache = (qpos_adr, dof_adr, nq, nv)
+        return self._dims_cache
+
+    _body_id_cache: int = PrivateAttr(default=-1)
+    """Cached ID of the body this joint's DOFs belong to, resolved against the compiled MuJoCo model."""
+
+    def _body_id(self, state: MjState) -> int:
+        """Returns the ID of the body this joint's DOFs belong to."""
+        if self._body_id_cache == -1:
+            self._body_id_cache = int(state.model.jnt_bodyid[self.get_id(state.model)])
+        return self._body_id_cache
+
+    def rt_qpos(self, state: MjState) -> VecN:
+        """Position(s) of the joint during runtime (mjData.qpos slice for this joint)."""
+        qpos_adr, _, nq, _ = self._dims(state)
+        return state.data.qpos[qpos_adr : qpos_adr + nq]
+
+    def rt_qvel(self, state: MjState) -> VecN:
+        """Velocity/velocities of the joint during runtime (mjData.qvel slice for this joint)."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qvel[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_actuator(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by actuators during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_actuator[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_constraint(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by constraints (e.g. limits, contacts) during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_constraint[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_passive(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by passive elements (e.g. springs, dampers, gravity compensation) during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_passive[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_smooth(self, state: MjState) -> VecN:
+        """Sum of all smooth (non-constraint) generalized forces on this joint during runtime: passive + actuator + applied + bias (mjData.qfrc_smooth)."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_smooth[dof_adr : dof_adr + nv]
+
+    def rt_xaxis(self, state: MjState) -> Vec3:
+        """World-frame direction of the joint's axis of rotation/translation during runtime (mjData.xaxis). Undefined for ball and free joints, which have no single fixed axis."""
+        return state.data.xaxis[self.get_id(state.model)]
+
+    def rt_cfrc_int(self, state: MjState) -> Vec6:
+        """
+        Reaction force/torque this joint transmits from the parent to its child body, in all 6 spatial directions (3 torque + 3 force, world frame, about the body's center of mass; mjData.cfrc_int).
+
+        Unlike `rt_qfrc_constraint` (which is only nonzero when this joint's own DOFs are pressed against an active limit or equality constraint), this captures the joint's *complete* reaction, including ordinary side loads in directions the joint's DOFs don't even allow (e.g. a body's weight pressing on a hinge pin), since those directions are eliminated by the reduced-coordinate formulation rather than enforced by the constraint solver.
+
+        MuJoCo only populates this via `mj_rnePostConstraint`, which `mj_forward`/`mj_step` don't call unless the model has a `force`, `torque`, `accelerometer`, `framelinacc`, or `frameangacc` sensor. This method calls `state.ensure_rne_post_constraint()` itself before reading, so it's always fresh; repeated calls within the same step (across joints, or via `rt_bearing_load`) only pay for the underlying `mj_rnePostConstraint` once, since `RuntimeManager.step()` invalidates the freshness flag for you each step.
+        """
+        state.ensure_rne_post_constraint()
+        return state.data.cfrc_int[self._body_id(state)]
+
+    def rt_bearing_load(self, state: MjState) -> float:
+        """
+        Magnitude of the joint's reaction force that represents a genuine structural "squeeze" on the joint, as opposed to whatever is driving its own DOF -- suitable as a normal force for bearing/pin friction that responds to ordinary side loads, not just constraint engagement (see `rt_cfrc_int`).
+
+        - hinge: full reaction force magnitude. Rotation is free, so all 3 translational directions (both along and perpendicular to the hinge axis) are rigid, and therefore squeeze.
+        - ball: full reaction force magnitude. Rotation is free in every direction; translation is rigid, so the entire force vector is squeeze.
+        - slide: only the reaction force component perpendicular to the slide axis. The component along the axis is what's driving translation (akin to `rt_qfrc_smooth`), not a squeeze load.
+        """
+        force = self.rt_cfrc_int(state)[3:6]
+
+        if self._jnt_type(state) == mujoco.mjtJoint.mjJNT_SLIDE:
+            axis = self.rt_xaxis(state)
+            force = force - np.dot(force, axis) * axis
+
+        return float(np.linalg.norm(force))
+
     def request(
         self,
         signal_manager: SignalManager | None = None,
@@ -213,38 +321,20 @@ class Joint(XMLModel):
                 )
 
         def sample(state: MjState):
-            jid = self.get_id(state.model)
-
-            # joints have different start addresses in the qpos and qvel/qfrc vectors
-            qpos_adr = state.model.jnt_qposadr[jid]
-            dof_adr = state.model.jnt_dofadr[jid]
-
-            # determine how many values to read based on joint type
-            jnt_type = state.model.jnt_type[jid]
-            match jnt_type:
-                case mujoco.mjtJoint.mjJNT_FREE:
-                    nq, nv = 7, 6
-                case mujoco.mjtJoint.mjJNT_BALL:
-                    nq, nv = 4, 3
-                case mujoco.mjtJoint.mjJNT_HINGE | mujoco.mjtJoint.mjJNT_SLIDE:
-                    nq, nv = 1, 1
-                case _:
-                    msg = f"Joint {self.name} type {jnt_type} is invalid"
-                    logger.exception(msg)
-                    raise NotImplementedError(msg)
+            jnt_type = self._jnt_type(state)
 
             for channel in channels:
                 match channel:
                     case "qpos":
-                        val = state.data.qpos[qpos_adr : qpos_adr + nq]
+                        val = self.rt_qpos(state)
                     case "qvel":
-                        val = state.data.qvel[dof_adr : dof_adr + nv]
+                        val = self.rt_qvel(state)
                     case "qfrc_actuator":
-                        val = state.data.qfrc_actuator[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_actuator(state)
                     case "qfrc_constraint":
-                        val = state.data.qfrc_constraint[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_constraint(state)
                     case "qfrc_passive":
-                        val = state.data.qfrc_passive[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_passive(state)
                     case _:
                         continue
 

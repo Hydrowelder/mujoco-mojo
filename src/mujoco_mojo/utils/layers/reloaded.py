@@ -181,7 +181,7 @@ class MojoReloaded:
     config_path: Path | None
     trial_num: int
     seed: int | None
-    model_config_name: str
+    model_config_name: str | None
     xml_name: str
     gen_args: list[Any]
     gen_kwargs: dict[str, Any]
@@ -453,7 +453,8 @@ class MojoReloaded:
                         **self.gen_kwargs,
                     )
                     mojo_model._trial_dir = trial_dir
-                    mojo_model.dump_to_path(trial_dir / self.model_config_name)
+                    if self.model_config_name:
+                        mojo_model.dump_to_path(trial_dir / self.model_config_name)
                     (trial_dir / NAMED_VALUES_FNAME).write_text(
                         mojo_model.named.model_dump_json()
                     )

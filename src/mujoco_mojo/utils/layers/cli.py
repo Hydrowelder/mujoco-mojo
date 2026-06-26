@@ -278,7 +278,7 @@ if True:
         ),
     ]
     ModelConfigNameType = Annotated[
-        str,
+        str | None,
         typer.Option(
             "--model-config-name",
             "-mcn",

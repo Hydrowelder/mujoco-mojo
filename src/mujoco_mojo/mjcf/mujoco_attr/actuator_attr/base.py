@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import mujoco
 import numpy as np
+from pydantic import PrivateAttr
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     ActuatorControlLimited,
@@ -13,6 +15,7 @@ from mujoco_mojo.typing import (
     ActuatorName,
     JointName,
     SensorInterp,
+    SignalCategory,
     SiteName,
     TendonName,
     Vec2,
@@ -20,6 +23,12 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.log import get_logger
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.signal_manager import SignalManager
+
+logger = get_logger(__name__)
 
 __all__ = ["ActuatorBase"]
 
@@ -155,3 +164,140 @@ class ActuatorBase(XMLModel, ABC):
 
     user: VecN | None = None
     """See User parameters."""
+
+    _act_dims_cache: tuple[int, int] | None = PrivateAttr(default=None)
+    """Cached (actadr, actnum) for this actuator's internal activation state, resolved against the compiled MuJoCo model."""
+
+    def _act_dims(self, state: MjState) -> tuple[int, int]:
+        """Returns (actadr, actnum) for this actuator's internal activation state. actnum is 0 for actuators without internal dynamics (dyntype=none), e.g. motor, velocity, damper, adhesion."""
+        if self._act_dims_cache is not None:
+            return self._act_dims_cache
+
+        aid = self.get_id(state.model)
+        actnum = int(state.model.actuator_actnum[aid])
+        actadr = int(state.model.actuator_actadr[aid]) if actnum > 0 else -1
+
+        self._act_dims_cache = (actadr, actnum)
+        return self._act_dims_cache
+
+    def rt_ctrl(self, state: MjState) -> float:
+        """Control input to the actuator during runtime (mjData.ctrl)."""
+        return float(state.data.ctrl[self.get_id(state.model)])
+
+    def rt_length(self, state: MjState) -> float:
+        """Length of the actuator's transmission during runtime (mjData.actuator_length)."""
+        return float(state.data.actuator_length[self.get_id(state.model)])
+
+    def rt_velocity(self, state: MjState) -> float:
+        """Velocity of the actuator's transmission during runtime (mjData.actuator_velocity)."""
+        return float(state.data.actuator_velocity[self.get_id(state.model)])
+
+    def rt_force(self, state: MjState) -> float:
+        """Scalar force output of the actuator during runtime (mjData.actuator_force)."""
+        return float(state.data.actuator_force[self.get_id(state.model)])
+
+    def rt_act(self, state: MjState) -> VecN:
+        """Internal activation state(s) of the actuator during runtime (mjData.act slice for this actuator). Empty for actuators with no internal dynamics (dyntype=none), e.g. motor, velocity, damper, adhesion. Native activation dynamics (filter, filterexact, integrator, muscle, dcmotor) have exactly one element; only user-defined dynamics can have more."""
+        actadr, actnum = self._act_dims(state)
+        if actnum == 0:
+            return np.empty(0)
+        return state.data.act[actadr : actadr + actnum]
+
+    def rt_act_dot(self, state: MjState) -> VecN:
+        """Time derivative of the actuator's internal activation state(s) during runtime (mjData.act_dot slice for this actuator). Empty for actuators with no internal dynamics."""
+        actadr, actnum = self._act_dims(state)
+        if actnum == 0:
+            return np.empty(0)
+        return state.data.act_dot[actadr : actadr + actnum]
+
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        channels: list[
+            Literal["ctrl", "length", "velocity", "force", "act", "act_dot"]
+        ] = [
+            "ctrl",
+            "length",
+            "velocity",
+            "force",
+            "act",
+            "act_dot",
+        ],
+    ):
+        """
+        Registers specific channels for logging.
+
+        | Channel    | Description                                            | Type            |
+        |:-----------|:--------------------------------------------------------|:----------------|
+        | `ctrl`     | control input to the actuator                           | scalar          |
+        | `length`   | length of the actuator's transmission                   | scalar          |
+        | `velocity` | velocity of the actuator's transmission                 | scalar          |
+        | `force`    | scalar actuator force output                            | scalar          |
+        | `act`      | internal activation state(s), for stateful actuators    | scalar / vector |
+        | `act_dot`  | time derivative of the internal activation state(s)     | scalar / vector |
+
+        `act` and `act_dot` only apply to actuators with internal dynamics (dyntype != none, e.g. position with timeconst, intvelocity, cylinder, muscle, dcmotor); for actuators without internal state these channels are silently skipped. If there is more than one activation variable (only possible with user-defined dynamics), each is posted under `subgroups=(actuator_name, channel)` with `attr` set to `0`-`N`; otherwise the single value is posted as a scalar with `attr=channel` under `subgroups=(actuator_name,)`, same as the other channels.
+
+        If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Raises:
+            ValueError: If the actuator has no name.
+
+        """
+        from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
+
+        signal_manager = resolve_signal_manager(signal_manager)
+        if signal_manager is None:
+            return
+
+        if self.name is None:
+            msg = f"Cannot request telemetry for an unnamed {self.tag}."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        def sample(state: MjState):
+            for channel in channels:
+                match channel:
+                    case "ctrl":
+                        val = self.rt_ctrl(state)
+                    case "length":
+                        val = self.rt_length(state)
+                    case "velocity":
+                        val = self.rt_velocity(state)
+                    case "force":
+                        val = self.rt_force(state)
+                    case "act":
+                        val = self.rt_act(state)
+                    case "act_dot":
+                        val = self.rt_act_dot(state)
+                    case _:
+                        continue
+
+                if isinstance(val, np.ndarray):
+                    if val.size == 0:
+                        continue
+                    if val.size == 1:
+                        signal_manager.post(
+                            value=float(val[0]),
+                            category=SignalCategory.ACTUATORS,
+                            subgroups=(f"{self.name}",),
+                            attr=channel,
+                        )
+                    else:
+                        for i in range(val.size):
+                            signal_manager.post(
+                                value=float(val[i]),
+                                category=SignalCategory.ACTUATORS,
+                                subgroups=(f"{self.name}", channel),
+                                attr=str(i),
+                            )
+                    continue
+
+                signal_manager.post(
+                    value=val,
+                    category=SignalCategory.ACTUATORS,
+                    subgroups=(f"{self.name}",),
+                    attr=channel,
+                )
+
+        signal_manager.register_sampler(sample)

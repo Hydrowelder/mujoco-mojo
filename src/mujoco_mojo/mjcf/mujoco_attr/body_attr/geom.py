@@ -242,8 +242,13 @@ class GeomBase(XMLModel, ABC):
         return self.rt_xvel(state)[0:3]
 
     def rt_xacc(self, state: MjState) -> Vec6:
-        """Returns the 6D acceleration vector (ang, lin) in world coordinates."""
+        """
+        Returns the 6D acceleration vector (ang, lin) in world coordinates.
+
+        This reads `mjData.cacc`/`cdof_dot` under the hood (via `mj_objectAcceleration`), which require `mj_rnePostConstraint` to have run. This method calls `state.ensure_rne_post_constraint()` itself before reading, so it's always fresh.
+        """
         assert self._mjt_obj is not None
+        state.ensure_rne_post_constraint()
         res = np.zeros(6)
         mujoco.mj_objectAcceleration(
             state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0

@@ -27,7 +27,7 @@ TIME_COLUMN_NAME = "time"
 # MojoRunner defaults
 DEFAULT_RUNTIME = None
 DEFAULT_WORKDIR = Path("./mojo-models")
-DEFAULT_MODEL_CONFIG_NAME = "model_config.json"
+DEFAULT_MODEL_CONFIG_NAME = None
 DEFAULT_XML_NAME = "model.xml"
 NAMED_VALUES_FNAME = "named_values.json"
 STOCHAS_DIR_NAME = "stochas"

@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = [
-    "ActuatorLoad",
+    "ActuatorControl",
     "BodyReactionForce",
     "GeneralLoad",
     "JointFriction",
@@ -727,7 +727,7 @@ class JointFriction(JointLoad):
         signal_manager.register_sampler(sample)
 
     @classmethod
-    def coulomb(
+    def coulomb_simple(
         cls,
         name: str,
         joint: Joint,
@@ -735,6 +735,8 @@ class JointFriction(JointLoad):
     ) -> Self:
         """
         Constant-magnitude Coulomb (dry) friction opposing motion. Zero force at standstill. Good for brake pads, dry contacts, and cable friction.
+
+        "Simple" because the magnitude is a fixed number you choose, not derived from any actual load on the joint. See `karnopp` for friction that responds to the joint's real bearing/pin reaction load.
 
         Args:
             name (str): Load name used for telemetry column labeling.
@@ -752,7 +754,7 @@ class JointFriction(JointLoad):
         return cls(name=name, joint=joint, friction_func=func)
 
     @classmethod
-    def viscous(
+    def viscous_simple(
         cls,
         name: str,
         joint: Joint,
@@ -774,7 +776,7 @@ class JointFriction(JointLoad):
         return cls(name=name, joint=joint, friction_func=func)
 
     @classmethod
-    def coulomb_viscous(
+    def coulomb_viscous_simple(
         cls,
         name: str,
         joint: Joint,
@@ -782,7 +784,9 @@ class JointFriction(JointLoad):
         viscous: float | NamedValue[float],
     ) -> Self:
         """
-        Coulomb and viscous friction combined. Constant sliding friction plus a velocity-proportional drag term. Realistic for most real joints.
+        Coulomb and viscous friction combined, both at fixed magnitudes you choose. Constant sliding friction plus a velocity-proportional drag term.
+
+        "Simple" because neither term is derived from any actual load on the joint. See `karnopp` for friction that responds to the joint's real bearing/pin reaction load.
 
         Args:
             name (str): Load name used for telemetry column labeling.
@@ -802,7 +806,7 @@ class JointFriction(JointLoad):
         return cls(name=name, joint=joint, friction_func=func)
 
     @classmethod
-    def stribeck(
+    def stribeck_simple(
         cls,
         name: str,
         joint: Joint,
@@ -812,7 +816,7 @@ class JointFriction(JointLoad):
         viscous: float | NamedValue[float] = 0.0,
     ) -> Self:
         """
-        Full Stribeck friction model. Friction peaks at standstill, drops to the kinetic level as motion begins, then rises with speed. Best for brake and clutch models where stick-slip matters.
+        Full Stribeck friction model, at fixed magnitudes you choose. Friction peaks at standstill, drops to the kinetic level as motion begins, then rises with speed. Best for brake and clutch models where stick-slip matters.
 
         F = -(coulomb + (static - coulomb) * exp(-|v| / stribeck_velocity) + viscous * |v|) * v / |v|
 
@@ -837,8 +841,57 @@ class JointFriction(JointLoad):
 
         return cls(name=name, joint=joint, friction_func=func)
 
+    @classmethod
+    def karnopp(
+        cls,
+        name: str,
+        joint: Joint,
+        mu_kinetic: float | NamedValue[float],
+        mu_static: float | NamedValue[float],
+        velocity_threshold: float | NamedValue[float],
+        viscous: float | NamedValue[float] = 0.0,
+    ) -> Self:
+        """
+        Karnopp friction whose normal force is the joint's actual bearing/pin reaction load (`Joint.rt_bearing_load`), not a fixed magnitude. Responds to ordinary side loads (e.g. a body's weight pressing on a hinge pin, or a side load on a slider) not just a number you pick. Properly distinguishes "stuck" from "sliding" instead of picking a coefficient based on speed alone:
 
-class ActuatorLoad(Load):
+        - Sliding (`|v| >= velocity_threshold`): ordinary kinetic Coulomb friction, `F = -mu_kinetic * bearing_load * v/|v|`, plus an optional `viscous` term.
+        - Stuck (`|v| < velocity_threshold`): rather than picking a direction from a near-zero (and possibly noisy) velocity, friction is set to exactly cancel whatever other smooth force is currently acting on the joint (`qfrc_smooth`: passive + actuator + applied + bias), clamped to the static limit `mu_static * bearing_load`. If the driving force exceeds that limit the joint breaks away and friction saturates at the limit, opposing the driving force.
+
+        This avoids the chattering a pure velocity-direction switch can produce right at standstill, since the held force no longer depends on the sign of a near-zero, noisy velocity.
+
+        The bearing load comes from `Joint.rt_cfrc_int`, which refreshes itself on demand via `state.ensure_rne_post_constraint()`, so no extra wiring is needed regardless of how the simulation is driven. Note that `qfrc_smooth` reflects the previous step's solve, since this step's values are not yet known when loads are applied; this mirrors the existing one-step lag already inherent in using `vel` to set this step's force.
+
+        Args:
+            name (str): Load name used for telemetry column labeling.
+            joint (Joint): The MJCF joint to act on (slide, hinge, or ball).
+            mu_kinetic (float | NamedValue[float]): Friction coefficient applied to the bearing load while sliding. Accepts `NamedValue[float]`.
+            mu_static (float | NamedValue[float]): Friction coefficient applied to the bearing load that the joint can hold against before breaking away. Accepts `NamedValue[float]`.
+            velocity_threshold (float | NamedValue[float]): Speed below which the joint is considered stuck rather than sliding. Accepts `NamedValue[float]`.
+            viscous (float | NamedValue[float], optional): Velocity-proportional damping added on top of the kinetic term while sliding. Defaults to 0. Accepts `NamedValue[float]`.
+
+        """
+
+        def func(vel: np.ndarray, state: MjState) -> np.ndarray:
+            speed = float(np.linalg.norm(vel))
+            normal = joint.rt_bearing_load(state)
+
+            if speed < float(velocity_threshold):
+                driving = np.array(joint.rt_qfrc_smooth(state))
+                drive_mag = float(np.linalg.norm(driving))
+                if drive_mag < 1e-9:
+                    return np.zeros_like(vel)
+                max_static = float(mu_static) * normal
+                return -min(drive_mag, max_static) * driving / drive_mag
+
+            if speed < 1e-9:
+                return np.zeros_like(vel)
+            coulomb_term = -float(mu_kinetic) * normal * vel / speed
+            return coulomb_term - float(viscous) * vel
+
+        return cls(name=name, joint=joint, friction_func=func)
+
+
+class ActuatorControl(Load):
     """Drives an actuator's control input each timestep, writing into `mjData.ctrl`. Use `control_func` for an arbitrary control law, or the `constant` factory for a simple, runtime-mutable set point."""
 
     actuator: SerializeAsAny[ActuatorBase]

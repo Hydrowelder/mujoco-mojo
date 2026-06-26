@@ -8,7 +8,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body import Body
 from mujoco_mojo.mjcf.mujoco_attr.body_attr import SiteSphere
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.runtime.load import (
-    ActuatorLoad,
+    ActuatorControl,
     GeneralLoad,
     JointFriction,
     PointToPointForce,
@@ -704,12 +704,12 @@ def _slide_joint() -> Joint:
     return Joint(name=JointName("slide"))
 
 
-# -- coulomb --
+# -- coulomb_simple --
 
 
 def test_coulomb_opposes_positive_velocity():
     state = _hinge_state(vel=2.0)
-    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(-5.0)
@@ -717,7 +717,7 @@ def test_coulomb_opposes_positive_velocity():
 
 def test_coulomb_opposes_negative_velocity():
     state = _hinge_state(vel=-3.0)
-    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(5.0)
@@ -725,18 +725,18 @@ def test_coulomb_opposes_negative_velocity():
 
 def test_coulomb_zero_at_standstill():
     state = _hinge_state(vel=0.0)
-    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=5.0)
+    fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- viscous --
+# -- viscous_simple --
 
 
 def test_viscous_proportional_to_velocity():
     state = _slide_state(vel=4.0)
-    fric = JointFriction.viscous(name="v", joint=_slide_joint(), damping=3.0)
+    fric = JointFriction.viscous_simple(name="v", joint=_slide_joint(), damping=3.0)
     fric.resolve_ids(state)
     fric.apply_load(state)
     # -3.0 * 4.0 = -12.0
@@ -745,18 +745,18 @@ def test_viscous_proportional_to_velocity():
 
 def test_viscous_zero_at_standstill():
     state = _slide_state(vel=0.0)
-    fric = JointFriction.viscous(name="v", joint=_slide_joint(), damping=10.0)
+    fric = JointFriction.viscous_simple(name="v", joint=_slide_joint(), damping=10.0)
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- coulomb_viscous --
+# -- coulomb_viscous_simple --
 
 
 def test_coulomb_viscous_combined():
     state = _hinge_state(vel=2.0)
-    fric = JointFriction.coulomb_viscous(
+    fric = JointFriction.coulomb_viscous_simple(
         name="cv", joint=_hinge_joint(), coulomb=3.0, viscous=1.0
     )
     fric.resolve_ids(state)
@@ -767,7 +767,7 @@ def test_coulomb_viscous_combined():
 
 def test_coulomb_viscous_zero_velocity_no_coulomb():
     state = _hinge_state(vel=0.0)
-    fric = JointFriction.coulomb_viscous(
+    fric = JointFriction.coulomb_viscous_simple(
         name="cv", joint=_hinge_joint(), coulomb=10.0, viscous=5.0
     )
     fric.resolve_ids(state)
@@ -776,7 +776,7 @@ def test_coulomb_viscous_zero_velocity_no_coulomb():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- stribeck --
+# -- stribeck_simple --
 
 
 def test_stribeck_static_greater_than_kinetic():
@@ -788,10 +788,10 @@ def test_stribeck_static_greater_than_kinetic():
     high_vel_state = _hinge_state(vel=high_vel)
     joint = _hinge_joint()
 
-    fric_low = JointFriction.stribeck(
+    fric_low = JointFriction.stribeck_simple(
         name="s", joint=joint, coulomb=coulomb, static=static, stribeck_velocity=vs
     )
-    fric_high = JointFriction.stribeck(
+    fric_high = JointFriction.stribeck_simple(
         name="s", joint=joint, coulomb=coulomb, static=static, stribeck_velocity=vs
     )
 
@@ -813,7 +813,7 @@ def test_stribeck_formula_exact():
     vel = 1.0
     coulomb, static, vs, viscous = 2.0, 5.0, 0.5, 0.3
     state = _hinge_state(vel=vel)
-    fric = JointFriction.stribeck(
+    fric = JointFriction.stribeck_simple(
         name="s",
         joint=_hinge_joint(),
         coulomb=coulomb,
@@ -830,12 +830,228 @@ def test_stribeck_formula_exact():
 
 def test_stribeck_zero_at_standstill():
     state = _hinge_state(vel=0.0)
-    fric = JointFriction.stribeck(
+    fric = JointFriction.stribeck_simple(
         name="s", joint=_hinge_joint(), coulomb=3.0, static=6.0, stribeck_velocity=0.1
     )
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+# -- karnopp --
+
+
+DRIVEN_HINGE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="rotor">
+            <joint name="hinge" type="hinge" axis="0 1 0"/>
+            <geom type="sphere" size="0.1" pos="0.3 0 0" mass="1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+UNDRIVEN_HINGE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="rotor">
+            <joint name="hinge" type="hinge" axis="0 0 1"/>
+            <geom type="sphere" size="0.1" mass="1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+DRIVEN_SLIDE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="slide">
+            <joint name="slide" type="slide" axis="1 0 0" stiffness="50"/>
+            <geom type="sphere" size="0.1" mass="1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def _driven_hinge_state(vel: float = 0.0) -> MjState:
+    """Hinge with an offset mass: gravity both drives rotation (qfrc_smooth) and loads the bearing (cfrc_int), with no active limit/equality constraint."""
+    model = mujoco.MjModel.from_xml_string(DRIVEN_HINGE_XML)
+    data = mujoco.MjData(model)
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    mujoco.mj_rnePostConstraint(model, data)
+    return MjState(model, data)
+
+
+def _undriven_hinge_state(vel: float = 0.0) -> MjState:
+    """Hinge whose mass sits exactly on the rotation axis: gravity loads the bearing (translation is rigid) but drives no rotation (zero torque about the axis)."""
+    model = mujoco.MjModel.from_xml_string(UNDRIVEN_HINGE_XML)
+    data = mujoco.MjData(model)
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    mujoco.mj_rnePostConstraint(model, data)
+    return MjState(model, data)
+
+
+def _driven_slide_state(qpos: float = 0.0, vel: float = 0.0) -> MjState:
+    """Horizontal slider with gravity (radial load) and a spring along its own free axis."""
+    model = mujoco.MjModel.from_xml_string(DRIVEN_SLIDE_XML)
+    data = mujoco.MjData(model)
+    data.qpos[0] = qpos
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    mujoco.mj_rnePostConstraint(model, data)
+    return MjState(model, data)
+
+
+def test_rt_bearing_load_hinge_uses_full_reaction_force():
+    """For a hinge, rt_bearing_load is the full cfrc_int force magnitude (no limit needed -- qfrc_constraint is zero here)."""
+    state = _driven_hinge_state(vel=0.0)
+    joint = _hinge_joint()
+    assert state.data.qfrc_constraint[0] == pytest.approx(0.0)
+    expected = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+    assert joint.rt_bearing_load(state) == pytest.approx(expected, rel=1e-6)
+    assert expected > 0.0  # sanity check: gravity is actually loading the bearing
+
+
+def test_rt_bearing_load_slide_excludes_axial_component():
+    """For a slide joint, rt_bearing_load excludes the component along the (frictionless-by-definition) slide axis."""
+    state = _driven_slide_state(qpos=0.2, vel=0.0)
+    joint = Joint(name=JointName("slide"))
+    force = state.data.cfrc_int[1][3:6]
+    assert (
+        abs(force[0]) > 0.0
+    )  # sanity check: the spring is contributing along the axis
+    expected_radial = float(np.linalg.norm(force[1:3]))  # perpendicular to axis (1,0,0)
+    assert joint.rt_bearing_load(state) == pytest.approx(expected_radial, rel=1e-6)
+
+
+def test_karnopp_stuck_with_no_driving_force_is_zero():
+    """Stuck (below velocity_threshold) with nothing pushing on the joint produces no friction, even though the bearing itself is loaded."""
+    state = _undriven_hinge_state(vel=0.0)
+    bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+    assert (
+        bearing_load > 0.0
+    )  # sanity check: the bearing is loaded (gravity), just not driving rotation
+    assert state.data.qfrc_smooth[0] == pytest.approx(0.0)
+
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=0.5,
+        mu_static=0.9,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+def test_karnopp_holds_when_static_limit_sufficient():
+    """Stuck, with a driving force and a static limit well above it: friction exactly cancels the driving force."""
+    state = _driven_hinge_state(vel=0.0)
+    driving = float(state.data.qfrc_smooth[0])
+    assert abs(driving) > 0.0  # sanity check: gravity is actually driving the joint
+
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=0.1,
+        mu_static=10.0,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-driving, rel=1e-6)
+
+
+def test_karnopp_breaks_away_when_static_limit_insufficient():
+    """Stuck, with a driving force exceeding the static limit: friction saturates at the limit instead of fully holding."""
+    mu_static = 0.01
+    state = _driven_hinge_state(vel=0.0)
+    driving = float(state.data.qfrc_smooth[0])
+    bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+    max_static = mu_static * bearing_load
+    assert max_static < abs(
+        driving
+    )  # sanity check: the limit can't hold the driving force
+
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=0.1,
+        mu_static=mu_static,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert abs(state.data.qfrc_applied[0]) == pytest.approx(max_static, rel=1e-6)
+    # friction opposes the driving force, not just any arbitrary direction
+    assert np.sign(state.data.qfrc_applied[0]) == -np.sign(driving)
+
+
+def test_karnopp_sliding_uses_kinetic_coefficient():
+    """Sliding (at or above velocity_threshold) uses mu_kinetic, ignoring mu_static entirely."""
+    mu_kinetic = 0.3
+    state = _driven_hinge_state(vel=2.0)
+    bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=10.0,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(
+        -mu_kinetic * bearing_load, rel=1e-6
+    )
+
+
+def test_karnopp_sliding_viscous_term_added():
+    """The viscous term adds -viscous*v on top of the kinetic term while sliding."""
+    mu_kinetic, viscous, vel = 0.3, 1.5, 2.0
+    state = _driven_hinge_state(vel=vel)
+    bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=10.0,
+        velocity_threshold=0.01,
+        viscous=viscous,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    expected = -mu_kinetic * bearing_load - viscous * vel
+    assert state.data.qfrc_applied[0] == pytest.approx(expected, rel=1e-6)
+
+
+def test_karnopp_named_value_runtime_mutation():
+    """Changing the NamedValue mu_kinetic after construction affects the applied force."""
+    state = _driven_hinge_state(vel=2.0)
+    bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
+    mu_kinetic = NamedValue(name=ValueName("mu_kinetic"), stored_value=0.2)
+    fric = JointFriction.karnopp(
+        name="k",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=10.0,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-0.2 * bearing_load, rel=1e-6)
+
+    mu_kinetic.stored_value = 0.5
+    state.data.qfrc_applied.fill(0)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-0.5 * bearing_load, rel=1e-6)
 
 
 # -- named value runtime mutation --
@@ -845,7 +1061,7 @@ def test_coulomb_named_value_runtime_mutation():
     """Changing the NamedValue after construction affects the applied force."""
     state = _hinge_state(vel=1.0)
     mag = NamedValue(name=ValueName("mag"), stored_value=4.0)
-    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=mag)
+    fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=mag)
     fric.resolve_ids(state)
     fric.apply_load(state)
     assert state.data.qfrc_applied[0] == pytest.approx(-4.0)
@@ -861,7 +1077,7 @@ def test_coulomb_named_value_runtime_mutation():
 
 def test_joint_friction_inactive_produces_no_force():
     state = _hinge_state(vel=5.0)
-    fric = JointFriction.coulomb(name="c", joint=_hinge_joint(), magnitude=10.0)
+    fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=10.0)
     fric.active = False
     fric.resolve_ids(state)
     fric.apply_load(state)
@@ -874,7 +1090,9 @@ def test_joint_friction_inactive_produces_no_force():
 def test_joint_friction_request_registers_sampler(tmp_path):
     state = _hinge_state(vel=2.0)
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
-    fric = JointFriction.coulomb(name="brake", joint=_hinge_joint(), magnitude=7.0)
+    fric = JointFriction.coulomb_simple(
+        name="brake", joint=_hinge_joint(), magnitude=7.0
+    )
     fric.resolve_ids(state)
     fric.apply_load(state)
     fric.request(sm)
@@ -890,7 +1108,7 @@ def test_joint_friction_request_registers_sampler(tmp_path):
 
 def test_joint_friction_request_raises_without_joint_name():
     unnamed = Joint()  # no name
-    fric = JointFriction.coulomb(name="c", joint=unnamed, magnitude=1.0)
+    fric = JointFriction.coulomb_simple(name="c", joint=unnamed, magnitude=1.0)
     sm_mock = object()
     with pytest.raises(ValueError, match="no name"):
         fric.request(sm_mock)  # type: ignore[arg-type]
@@ -938,7 +1156,7 @@ def test_joint_friction_rejects_free_joint():
     mujoco.mj_forward(model, data)
     state = MjState(model, data)
 
-    fric = JointFriction.coulomb(
+    fric = JointFriction.coulomb_simple(
         name="c", joint=Joint(name=JointName("free")), magnitude=1.0
     )
     with pytest.raises(ValueError, match="hinge, slide, or ball"):
@@ -953,7 +1171,9 @@ def test_ball_coulomb_opposes_velocity_direction():
     omega = (1.0, 2.0, 2.0)  # speed = 3.0
     state = _ball_state(omega=omega)
     magnitude = 6.0
-    fric = JointFriction.coulomb(name="b", joint=_ball_joint(), magnitude=magnitude)
+    fric = JointFriction.coulomb_simple(
+        name="b", joint=_ball_joint(), magnitude=magnitude
+    )
     fric.resolve_ids(state)
     fric.apply_load(state)
 
@@ -968,7 +1188,7 @@ def test_ball_viscous_proportional_to_velocity():
     omega = (1.0, -2.0, 3.0)
     damping = 4.0
     state = _ball_state(omega=omega)
-    fric = JointFriction.viscous(name="b", joint=_ball_joint(), damping=damping)
+    fric = JointFriction.viscous_simple(name="b", joint=_ball_joint(), damping=damping)
     fric.resolve_ids(state)
     fric.apply_load(state)
 
@@ -981,7 +1201,7 @@ def test_ball_stribeck_opposes_velocity_direction():
     omega = (3.0, 4.0, 0.0)  # speed = 5.0
     coulomb, static, vs = 1.0, 4.0, 1.0
     state = _ball_state(omega=omega)
-    fric = JointFriction.stribeck(
+    fric = JointFriction.stribeck_simple(
         name="b",
         joint=_ball_joint(),
         coulomb=coulomb,
@@ -1022,7 +1242,7 @@ def test_friction_func_receives_state():
     assert state.data.qfrc_applied[0] == pytest.approx(-3.0)
 
 
-# -- ActuatorLoad --
+# -- ActuatorControl --
 
 ACTUATED_SLIDE_XML = """
 <mujoco>
@@ -1053,7 +1273,7 @@ def _motor() -> ActuatorMotor:
 def test_actuator_load_constant_writes_ctrl():
     """constant() writes a fixed set point into mjData.ctrl for the resolved actuator."""
     state = _actuated_slide_state()
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.75)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.75)
     load.resolve_ids(state)
     load.apply_load(state)
 
@@ -1064,7 +1284,7 @@ def test_actuator_load_constant_named_value_is_mutable_at_runtime():
     """constant() unwraps a NamedValue each timestep, picking up live updates."""
     state = _actuated_slide_state()
     set_point = NamedValue(name=ValueName("set_point"), stored_value=0.2)
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=set_point)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=set_point)
     load.resolve_ids(state)
 
     load.apply_load(state)
@@ -1084,7 +1304,7 @@ def test_actuator_load_custom_control_func_receives_state():
         return 0.5
 
     state = _actuated_slide_state()
-    load = ActuatorLoad(name="drive", actuator=_motor(), control_func=custom_func)
+    load = ActuatorControl(name="drive", actuator=_motor(), control_func=custom_func)
     load.resolve_ids(state)
     load.apply_load(state)
 
@@ -1097,7 +1317,7 @@ def test_actuator_load_inactive_does_not_write_ctrl():
     """When inactive, apply_load leaves mjData.ctrl untouched and resets cached telemetry to zero."""
     state = _actuated_slide_state()
     state.data.ctrl[0] = 0.4
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=1.0)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=1.0)
     load.active = False
     load.resolve_ids(state)
     load.apply_load(state)
@@ -1107,13 +1327,13 @@ def test_actuator_load_inactive_does_not_write_ctrl():
 
 
 def test_actuator_load_runtime_manager_integration():
-    """ActuatorLoad survives RuntimeManager's default buffer clearing: apply_load runs after the clear, every step."""
+    """ActuatorControl survives RuntimeManager's default buffer clearing: apply_load runs after the clear, every step."""
     state = _actuated_slide_state()
     mgr = RuntimeManager()
 
-    ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.75).register_to_rm(
-        mgr
-    )
+    ActuatorControl.constant(
+        name="drive", actuator=_motor(), value=0.75
+    ).register_to_rm(mgr)
 
     mgr.step(state)
 
@@ -1123,7 +1343,7 @@ def test_actuator_load_runtime_manager_integration():
 def test_actuator_load_request_posts_ctrl_signal(tmp_path):
     """request() registers a sampler that posts the last applied control value."""
     state = _actuated_slide_state()
-    load = ActuatorLoad.constant(name="drive", actuator=_motor(), value=0.6)
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
     load.resolve_ids(state)
     load.apply_load(state)
 
