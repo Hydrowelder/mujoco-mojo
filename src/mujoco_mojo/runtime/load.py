@@ -837,6 +837,52 @@ class JointFriction(JointLoad):
 
         return cls(name=name, joint=joint, friction_func=func)
 
+    @classmethod
+    def coulomb_from_constraint(
+        cls,
+        name: str,
+        joint: Joint,
+        mu_kinetic: float | NamedValue[float],
+        mu_static: float | NamedValue[float],
+        velocity_threshold: float | NamedValue[float],
+        viscous: float | NamedValue[float] = 0.0,
+    ) -> Self:
+        """
+        Dry (Coulomb) friction whose normal force is the joint's own instantaneous constraint force, rather than a fixed magnitude. Models friction that only exists while something else is pressing the joint against a constraint, e.g. a hinge held at a limit, or a joint coupled to another via an equality constraint. The Coulomb term is zero whenever the constraint is inactive (`qfrc_constraint` is zero for this joint's DOFs), even if the joint is moving.
+
+        Uses `mu_static` while sliding below `velocity_threshold` and `mu_kinetic` once sliding faster than that, a cheap two-level approximation of stiction/breakaway instead of a continuous Stribeck curve. Set `mu_static == mu_kinetic` for plain single-coefficient Coulomb friction.
+
+        An optional `viscous` term adds plain velocity-proportional damping on top, independent of the constraint force. Pure Coulomb friction flips sign discontinuously through zero velocity, which can make a stiff constraint chatter; a nonzero `viscous` keeps the restoring force continuous and well-behaved through standstill.
+
+        F = -mu * |qfrc_constraint| * v / |v| - viscous * v, where mu = mu_static if |v| < velocity_threshold else mu_kinetic
+
+        Note that `qfrc_constraint` reflects the constraint solve from the *previous* step, since the current step's constraint forces are not yet known when loads are applied; this mirrors the existing one-step lag already inherent in using `vel` to set this step's force.
+
+        Args:
+            name (str): Load name used for telemetry column labeling.
+            joint (Joint): The MJCF joint to act on (slide, hinge, or ball).
+            mu_kinetic (float | NamedValue[float]): Friction coefficient applied to the constraint force magnitude once sliding faster than `velocity_threshold`. Accepts `NamedValue[float]`.
+            mu_static (float | NamedValue[float]): Friction coefficient applied to the constraint force magnitude while sliding slower than `velocity_threshold`. Accepts `NamedValue[float]`.
+            velocity_threshold (float | NamedValue[float]): Speed below which `mu_static` is used instead of `mu_kinetic`. Accepts `NamedValue[float]`.
+            viscous (float | NamedValue[float], optional): Velocity-proportional damping added on top of the Coulomb term, for stability through standstill. Defaults to 0. Accepts `NamedValue[float]`.
+
+        """
+
+        def func(vel: np.ndarray, state: MjState) -> np.ndarray:
+            speed = float(np.linalg.norm(vel))
+            if speed < 1e-9:
+                return np.zeros_like(vel)
+            mu = (
+                float(mu_static)
+                if speed < float(velocity_threshold)
+                else float(mu_kinetic)
+            )
+            normal = float(np.linalg.norm(joint.rt_qfrc_constraint(state)))
+            coulomb_term = -mu * normal * vel / speed
+            return coulomb_term - float(viscous) * vel
+
+        return cls(name=name, joint=joint, friction_func=func)
+
 
 class ActuatorControl(Load):
     """Drives an actuator's control input each timestep, writing into `mjData.ctrl`. Use `control_func` for an arbitrary control law, or the `constant` factory for a simple, runtime-mutable set point."""

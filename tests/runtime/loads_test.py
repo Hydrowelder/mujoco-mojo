@@ -838,6 +838,157 @@ def test_stribeck_zero_at_standstill():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
+# -- coulomb_from_constraint --
+
+
+LIMITED_HINGE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="rotor">
+            <joint name="hinge" type="hinge" axis="0 0 1" range="-0.1 0.1" limited="true"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def _limited_hinge_state(qpos: float = 0.0, vel: float = 0.0) -> MjState:
+    model = mujoco.MjModel.from_xml_string(LIMITED_HINGE_XML)
+    data = mujoco.MjData(model)
+    data.qpos[0] = qpos
+    data.qvel[0] = vel
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+def test_coulomb_from_constraint_zero_without_active_constraint():
+    """No active constraint means qfrc_constraint is zero, so there is no friction even while moving."""
+    state = _hinge_state(vel=2.0)
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=0.5,
+        mu_static=0.5,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+def test_coulomb_from_constraint_zero_at_standstill():
+    """No motion means zero friction even while pressed against a limit."""
+    state = _limited_hinge_state(qpos=0.1, vel=0.0)
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=0.5,
+        mu_static=0.5,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
+def test_coulomb_from_constraint_scales_with_constraint_force():
+    """Friction magnitude equals mu * |qfrc_constraint|, opposing velocity, above the velocity threshold."""
+    mu_kinetic = 0.5
+    state = _limited_hinge_state(qpos=0.1, vel=2.0)
+    normal = float(np.linalg.norm(state.data.qfrc_constraint[0]))
+    assert normal > 0.0  # sanity check: the joint is actually pressed against its limit
+
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=0.9,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-mu_kinetic * normal, rel=1e-6)
+
+
+def test_coulomb_from_constraint_uses_static_below_threshold():
+    """Friction uses mu_static instead of mu_kinetic while sliding below velocity_threshold."""
+    mu_static = 0.9
+    state = _limited_hinge_state(qpos=0.1, vel=1e-4)
+    normal = float(np.linalg.norm(state.data.qfrc_constraint[0]))
+    assert normal > 0.0
+
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=0.2,
+        mu_static=mu_static,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-mu_static * normal, rel=1e-6)
+
+
+def test_coulomb_from_constraint_named_value_runtime_mutation():
+    """Changing the NamedValue mu_kinetic after construction affects the applied force."""
+    state = _limited_hinge_state(qpos=0.1, vel=2.0)
+    normal = float(np.linalg.norm(state.data.qfrc_constraint[0]))
+    mu_kinetic = NamedValue(name=ValueName("mu_kinetic"), stored_value=0.5)
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=0.5,
+        velocity_threshold=0.01,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-0.5 * normal, rel=1e-6)
+
+    mu_kinetic.stored_value = 1.0
+    state.data.qfrc_applied.fill(0)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(-1.0 * normal, rel=1e-6)
+
+
+def test_coulomb_from_constraint_viscous_term_added():
+    """The viscous term adds -viscous*v on top of the Coulomb term."""
+    mu_kinetic, viscous, vel = 0.5, 2.0, 2.0
+    state = _limited_hinge_state(qpos=0.1, vel=vel)
+    normal = float(np.linalg.norm(state.data.qfrc_constraint[0]))
+
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=mu_kinetic,
+        mu_static=mu_kinetic,
+        velocity_threshold=0.01,
+        viscous=viscous,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+
+    expected = -mu_kinetic * normal - viscous * vel
+    assert state.data.qfrc_applied[0] == pytest.approx(expected, rel=1e-6)
+
+
+def test_coulomb_from_constraint_viscous_zero_at_standstill():
+    """No motion means zero force even with viscous and static friction both set, since vel=0 makes both terms vanish."""
+    state = _limited_hinge_state(qpos=0.1, vel=0.0)
+    fric = JointFriction.coulomb_from_constraint(
+        name="c",
+        joint=_hinge_joint(),
+        mu_kinetic=0.5,
+        mu_static=0.9,
+        velocity_threshold=0.01,
+        viscous=2.0,
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    assert state.data.qfrc_applied[0] == pytest.approx(0.0)
+
+
 # -- named value runtime mutation --
 
 
