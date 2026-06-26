@@ -288,7 +288,7 @@ class Trial:
     xml_name: str
     """Filename for the generated MJCF XML (e.g., 'model.xml')."""
 
-    model_config_name: str
+    model_config_name: str | None
     """Filename for the serialized MojoModel configuration (e.g., 'config.json')."""
 
     padding_style: str
@@ -322,7 +322,12 @@ class Trial:
     @property
     def model_config_path(self) -> Path:
         """The full path to the JSON configuration file for this trial."""
-        return self.trial_dir / self.model_config_name
+        if self.model_config_name:
+            return self.trial_dir / self.model_config_name
+        else:
+            msg = "No model config name was set. Unable to determine where it would be saved."
+            logger.error(msg)
+            raise ValueError(msg)
 
     @property
     def named_value_path(self) -> Path:
@@ -403,7 +408,8 @@ class Trial:
                 # save XML (with modified DepPath)
                 if runtime is None:
                     mojo_model.mjcf.write_xml(self.xml_path)
-                mojo_model.dump_to_path(self.model_config_path)
+                if self.model_config_path:
+                    mojo_model.dump_to_path(self.model_config_path)
                 self.named_value_path.write_text(mojo_model.named.model_dump_json())
 
             with status.record_step(step_name="solving"):
@@ -434,7 +440,8 @@ class Trial:
                     state = None
 
             # serialize again in case new named values were added during the run
-            mojo_model.dump_to_path(self.model_config_path)
+            if self.model_config_path:
+                mojo_model.dump_to_path(self.model_config_path)
             self.named_value_path.write_text(mojo_model.named.model_dump_json())
 
             # clear unpicklable collision managers before returing to avoid multiprocessing serialization erros
@@ -470,7 +477,7 @@ class MojoRunner:
     objective_path: str | None = None
     seed: int | None = DEFAULT_SEED
     workdir: Path = DEFAULT_WORKDIR
-    model_config_name: str = DEFAULT_MODEL_CONFIG_NAME
+    model_config_name: str | None = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig | OptimizerConfig = field(default_factory=MonteCarloConfig)
 
