@@ -117,7 +117,7 @@ class VideoRecorder:
     show_traces: bool = False
     """Whether to render `Tracer` trails (passed via `custom_traces` in `capture_frame`)."""
 
-    fps: int = 30
+    fps: float = 30
     """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
 
     playback_speed: float = 1.0

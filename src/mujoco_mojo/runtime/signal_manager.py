@@ -9,13 +9,15 @@ import numpy as np
 import polars as pl
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.typing import SignalCategory, VecN
+from mujoco_mojo.typing import MatN, SignalCategory
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
 
 __all__ = ["SignalManager"]
+
+_FLOAT64_BYTES = np.dtype(np.float64).itemsize
 
 
 def resolve_signal_manager(
@@ -39,8 +41,8 @@ class SignalManager:
     export_path: Path
     """Where the output file should be saved."""
 
-    batch_size: int = 1000
-    """Number of steps before flushing to disk."""
+    target_buffer_bytes: int = 8 * 1024 * 1024
+    """Approximate in-memory buffer size, in bytes, before flushing to a part file. The actual row capacity is derived from this and the current column count (see `_recompute_capacity`), so flush frequency stays roughly memory/file-size bounded as signals are registered, rather than fixed at a row count regardless of width. Defaults to 8 MB."""
 
     record_decimation: int = 1
     """How many steps between each recording should be performed."""
@@ -54,8 +56,11 @@ class SignalManager:
     _key_to_idx: dict[str, int] = field(default_factory=dict, init=False)
     """Maps signal strings to their specific column index in the NumPy buffer."""
 
-    _data_buffer: VecN = field(init=False)
-    """2D NumPy array (batch_size, n_signals) for high-speed value insertion."""
+    _data_buffer: MatN = field(init=False)
+    """2D NumPy array (capacity, n_signals) for high-speed value insertion."""
+
+    _capacity: int = field(init=False)
+    """Row-count flush threshold derived from `target_buffer_bytes` and the current column count; shrinks as more signals are registered, never exceeding `_data_buffer`'s allocated rows."""
 
     _sample_tasks: list[Callable[[MjState], Any]] = field(
         default_factory=list, init=False
@@ -70,6 +75,9 @@ class SignalManager:
 
     _n_cols: int = 0
     """Current number of unique signals registered."""
+
+    _part_paths: list[Path] = field(default_factory=list, init=False)
+    """Paths of per-flush part files written this run, in order, pending merge in `close()`."""
 
     @staticmethod
     def default_output_name() -> Literal["telemetry.parquet"]:
@@ -87,26 +95,50 @@ class SignalManager:
     def table_name(self) -> str:
         return self.default_table_name()
 
+    def _part_path(self, idx: int) -> Path:
+        return self.export_path.with_name(f".{self.export_path.name}.part{idx:05d}")
+
     def __post_init__(self):
         # ensure directory exists and connect
         self.export_path.parent.mkdir(parents=True, exist_ok=True)
 
         # each SignalManager represents a brand new recording session: clear out
-        # any telemetry left over from a prior run at this path so that flush()'s
-        # diagonal-concat (meant to merge batches *within* this run) doesn't
-        # silently stitch stale rows from a previous, possibly longer, run onto
-        # the front of the new file.
+        # any telemetry left over from a prior run at this path (including
+        # unmerged part files from a run that crashed before close()) so that
+        # close()'s diagonal-concat (meant to merge batches *within* this run)
+        # doesn't silently stitch stale rows from a previous, possibly longer,
+        # run onto the front of the new file.
         if self.export_path.exists():
             self.export_path.unlink()
+        for stale_part in self.export_path.parent.glob(
+            f".{self.export_path.name}.part*"
+        ):
+            stale_part.unlink()
 
-        # pre-allocate some columns as a starting guess; grow as needed
-        self._data_buffer = np.zeros((self.batch_size, 100), dtype=np.float64)
+        # pre-allocate some columns as a starting guess, with row count sized to
+        # hold about target_buffer_bytes at that guess; grow columns as needed
+        # and shrink the capacity (see _recompute_capacity) as they do
+        initial_col_guess = 100
+        self._capacity = self._rows_for_cols(initial_col_guess)
+        self._data_buffer = np.zeros(
+            (self._capacity, initial_col_guess), dtype=np.float64
+        )
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
         self._n_cols = 1
         logger.debug(
-            f"SignalManager initialized: Batch size={self.batch_size}, Path={self.export_path}"
+            f"SignalManager initialized: buffer capacity={self._capacity} rows, Path={self.export_path}"
+        )
+
+    def _rows_for_cols(self, n_cols: int) -> int:
+        """Returns the number of float64 rows that fit in `target_buffer_bytes` given `n_cols` columns."""
+        return max(1, self.target_buffer_bytes // (n_cols * _FLOAT64_BYTES))
+
+    def _recompute_capacity(self) -> None:
+        """Re-derives the flush threshold for the current column count, clamped to `_data_buffer`'s allocated rows."""
+        self._capacity = min(
+            self._rows_for_cols(self._n_cols), self._data_buffer.shape[0]
         )
 
     def register_sampler(self, task: Callable[[MjState], Any]):
@@ -209,8 +241,13 @@ class SignalManager:
                 new_width = self._data_buffer.shape[1] + n_cols_to_add
                 logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
 
-                growth = np.zeros((self.batch_size, n_cols_to_add), dtype=np.float64)
+                growth = np.zeros(
+                    (self._data_buffer.shape[0], n_cols_to_add), dtype=np.float64
+                )
                 self._data_buffer = np.hstack([self._data_buffer, growth])
+
+            # more columns means more bytes per row, so the row budget shrinks
+            self._recompute_capacity()
 
         # write value to buffer for next flush
         self._data_buffer[self._buffer_row_idx, idx] = value
@@ -230,11 +267,11 @@ class SignalManager:
 
         self._buffer_row_idx += 1
 
-        if self._buffer_row_idx >= self.batch_size:
+        if self._buffer_row_idx >= self._capacity:
             self.flush()
 
     def flush(self):
-        """Commits the memory buffer to the output file."""
+        """Writes the memory buffer to a new part file; parts are merged into `export_path` on `close()`."""
         if self._buffer_row_idx == 0:
             return
 
@@ -247,25 +284,49 @@ class SignalManager:
             schema=sorted_keys,
         )
 
-        logger.debug(
-            f"Flushing {self._buffer_row_idx} steps to {self.export_path.name}"
-        )
-
-        if self.export_path.exists():
-            try:
-                # Use diagonal concat to safely handle signals added mid-simulation
-                existing_df = pl.read_parquet(self.export_path)
-                combined_df = pl.concat([existing_df, new_df], how="diagonal")
-                combined_df.write_parquet(self.export_path, compression="zstd")
-            except Exception as e:
-                logger.error(f"Failed to append telemetry: {e}")
-        else:
-            new_df.write_parquet(self.export_path, compression="zstd")
+        part_path = self._part_path(len(self._part_paths))
+        logger.info(f"Flushing {self._buffer_row_idx} steps to {part_path.name}")
+        # each part is a brand new file, never read back until close()'s merge,
+        # so flushing stays O(buffer capacity) instead of O(total rows written
+        # so far) and never reads-then-rewrites a file (avoiding a Windows file lock)
+        new_df.write_parquet(part_path, compression="zstd")
+        self._part_paths.append(part_path)
 
         # reset buffer for next batch
         self._buffer_row_idx = 0
         self._data_buffer.fill(0.0)
 
+    def _merge_parts(self):
+        """Streams all part files written this run into `export_path`, then removes the parts."""
+        if not self._part_paths:
+            return
+
+        if len(self._part_paths) == 1:
+            self._part_paths[0].replace(self.export_path)
+        else:
+            # every part's columns are a subset of the full signal set
+            # accumulated in _key_to_idx (columns are only ever added, never
+            # removed mid-run), so this schema already covers every part
+            # without needing to read any of them first
+            sorted_keys = sorted(
+                self._key_to_idx.keys(), key=lambda x: self._key_to_idx[x]
+            )
+            schema = dict.fromkeys(sorted_keys, pl.Float64)
+
+            # missing_columns="insert" reproduces diagonal-concat (null-filling
+            # columns a part doesn't have), and sink_parquet streams the merge
+            # instead of reading every part into memory at once like
+            # pl.concat(..., how="diagonal") would
+            pl.scan_parquet(
+                self._part_paths, schema=schema, missing_columns="insert"
+            ).sink_parquet(self.export_path)
+
+            for part_path in self._part_paths:
+                part_path.unlink()
+
+        self._part_paths.clear()
+
     def close(self):
         self.flush()
+        self._merge_parts()
         logger.info(f"Telemetry stream closed. Data saved to {self.export_path}")
