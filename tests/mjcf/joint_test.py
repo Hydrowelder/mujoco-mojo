@@ -75,3 +75,63 @@ def test_joint_request_raises_when_unnamed() -> None:
     sm_mock = object()  # won't be reached
     with pytest.raises(ValueError, match="unnamed"):
         unnamed.request(sm_mock)  # type: ignore[arg-type]
+
+
+def test_rt_qpos_matches_data(hinge_setup: tuple[MjState, Joint]) -> None:
+    """rt_qpos() returns the joint's qpos slice."""
+    state, joint = hinge_setup
+    state.data.qpos[0] = 1.23
+    mujoco.mj_forward(state.model, state.data)
+    assert joint.rt_qpos(state) == pytest.approx([1.23], abs=1e-6)
+
+
+def test_rt_qvel_matches_data(hinge_setup: tuple[MjState, Joint]) -> None:
+    """rt_qvel() returns the joint's qvel slice."""
+    state, joint = hinge_setup
+    state.data.qvel[0] = 2.5
+    mujoco.mj_forward(state.model, state.data)
+    assert joint.rt_qvel(state) == pytest.approx([2.5], abs=1e-6)
+
+
+def test_rt_qfrc_passive_reflects_damping() -> None:
+    """rt_qfrc_passive() is nonzero for a damped joint with nonzero velocity."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="arm">
+                <joint name="elbow" type="hinge" axis="0 1 0" damping="1.0"/>
+                <geom type="capsule" size="0.05" fromto="0 0 0 0.3 0 0"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    data.qvel[0] = 2.0
+    mujoco.mj_forward(model, data)
+    joint = Joint(name=JointName("elbow"))
+    joint.get_id(model)
+    state = MjState(model, data)
+    assert joint.rt_qfrc_passive(state) == pytest.approx([-2.0], abs=1e-6)
+
+
+def test_rt_dims_for_free_joint() -> None:
+    """rt_qpos()/rt_qvel() return 7/6 element vectors for a free joint."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="box">
+                <freejoint name="root"/>
+                <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    joint = Joint(name=JointName("root"))
+    joint.get_id(model)
+    state = MjState(model, data)
+    assert joint.rt_qpos(state).shape == (7,)
+    assert joint.rt_qvel(state).shape == (6,)

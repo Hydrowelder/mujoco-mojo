@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 import mujoco
 import numpy as np
+from pydantic import PrivateAttr
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
@@ -149,6 +150,58 @@ class Joint(XMLModel):
     user: VecN | None = None
     """See User parameters."""
 
+    _dims_cache: tuple[int, int, int, int] | None = PrivateAttr(default=None)
+    """Cached (qpos_adr, dof_adr, nq, nv), resolved against the compiled MuJoCo model."""
+
+    def _dims(self, state: MjState) -> tuple[int, int, int, int]:
+        """Returns (qpos_adr, dof_adr, nq, nv) for this joint, accounting for its type."""
+        if self._dims_cache is not None:
+            return self._dims_cache
+
+        jid = self.get_id(state.model)
+        qpos_adr = int(state.model.jnt_qposadr[jid])
+        dof_adr = int(state.model.jnt_dofadr[jid])
+
+        match state.model.jnt_type[jid]:
+            case mujoco.mjtJoint.mjJNT_FREE:
+                nq, nv = 7, 6
+            case mujoco.mjtJoint.mjJNT_BALL:
+                nq, nv = 4, 3
+            case mujoco.mjtJoint.mjJNT_HINGE | mujoco.mjtJoint.mjJNT_SLIDE:
+                nq, nv = 1, 1
+            case jnt_type:
+                msg = f"Joint {self.name} type {jnt_type} is invalid"
+                logger.exception(msg)
+                raise NotImplementedError(msg)
+
+        self._dims_cache = (qpos_adr, dof_adr, nq, nv)
+        return self._dims_cache
+
+    def rt_qpos(self, state: MjState) -> VecN:
+        """Position(s) of the joint during runtime (mjData.qpos slice for this joint)."""
+        qpos_adr, _, nq, _ = self._dims(state)
+        return state.data.qpos[qpos_adr : qpos_adr + nq]
+
+    def rt_qvel(self, state: MjState) -> VecN:
+        """Velocity/velocities of the joint during runtime (mjData.qvel slice for this joint)."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qvel[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_actuator(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by actuators during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_actuator[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_constraint(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by constraints (e.g. limits, contacts) during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_constraint[dof_adr : dof_adr + nv]
+
+    def rt_qfrc_passive(self, state: MjState) -> VecN:
+        """Force/torque applied to this joint by passive elements (e.g. springs, dampers, gravity compensation) during runtime."""
+        _, dof_adr, _, nv = self._dims(state)
+        return state.data.qfrc_passive[dof_adr : dof_adr + nv]
+
     def request(
         self,
         signal_manager: SignalManager | None = None,
@@ -213,38 +266,20 @@ class Joint(XMLModel):
                 )
 
         def sample(state: MjState):
-            jid = self.get_id(state.model)
-
-            # joints have different start addresses in the qpos and qvel/qfrc vectors
-            qpos_adr = state.model.jnt_qposadr[jid]
-            dof_adr = state.model.jnt_dofadr[jid]
-
-            # determine how many values to read based on joint type
-            jnt_type = state.model.jnt_type[jid]
-            match jnt_type:
-                case mujoco.mjtJoint.mjJNT_FREE:
-                    nq, nv = 7, 6
-                case mujoco.mjtJoint.mjJNT_BALL:
-                    nq, nv = 4, 3
-                case mujoco.mjtJoint.mjJNT_HINGE | mujoco.mjtJoint.mjJNT_SLIDE:
-                    nq, nv = 1, 1
-                case _:
-                    msg = f"Joint {self.name} type {jnt_type} is invalid"
-                    logger.exception(msg)
-                    raise NotImplementedError(msg)
+            jnt_type = state.model.jnt_type[self.get_id(state.model)]
 
             for channel in channels:
                 match channel:
                     case "qpos":
-                        val = state.data.qpos[qpos_adr : qpos_adr + nq]
+                        val = self.rt_qpos(state)
                     case "qvel":
-                        val = state.data.qvel[dof_adr : dof_adr + nv]
+                        val = self.rt_qvel(state)
                     case "qfrc_actuator":
-                        val = state.data.qfrc_actuator[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_actuator(state)
                     case "qfrc_constraint":
-                        val = state.data.qfrc_constraint[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_constraint(state)
                     case "qfrc_passive":
-                        val = state.data.qfrc_passive[dof_adr : dof_adr + nv]
+                        val = self.rt_qfrc_passive(state)
                     case _:
                         continue
 
