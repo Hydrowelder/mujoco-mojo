@@ -408,7 +408,7 @@ class Trial:
                 # save XML (with modified DepPath)
                 if runtime is None:
                     mojo_model.mjcf.write_xml(self.xml_path)
-                if self.model_config_path:
+                if self.model_config_name:
                     mojo_model.dump_to_path(self.model_config_path)
                 self.named_value_path.write_text(mojo_model.named.model_dump_json())
 
@@ -440,7 +440,7 @@ class Trial:
                     state = None
 
             # serialize again in case new named values were added during the run
-            if self.model_config_path:
+            if self.model_config_name:
                 mojo_model.dump_to_path(self.model_config_path)
             self.named_value_path.write_text(mojo_model.named.model_dump_json())
 
