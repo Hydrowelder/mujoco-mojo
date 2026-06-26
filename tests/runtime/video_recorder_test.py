@@ -349,6 +349,9 @@ class TestEncoderMissingFfmpeg:
         def raise_not_found(*args, **kwargs):
             raise FileNotFoundError("ffmpeg")
 
+        # Pretend ffmpeg is on PATH so setup()'s eager check passes, letting
+        # the FileNotFoundError surface from the Popen call in _open_encoder instead.
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
         monkeypatch.setattr("subprocess.Popen", raise_not_found)
 
         rec = VideoRecorder(
@@ -383,6 +386,9 @@ class TestEncoderCodecArgs:
             calls.append(argv)
             return FakeProc()
 
+        # Pretend ffmpeg is on PATH so setup()'s eager check passes regardless
+        # of whether ffmpeg is actually installed in this environment.
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/ffmpeg")
         monkeypatch.setattr("subprocess.Popen", fake_popen)
         return calls
 
