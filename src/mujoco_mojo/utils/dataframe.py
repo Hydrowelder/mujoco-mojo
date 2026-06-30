@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 if TYPE_CHECKING:
     from typing import Self
 
+import numpy as np
 import polars as pl
-from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.typing import (
     ActuatorName,
@@ -336,12 +336,14 @@ class MojoNamespace:
             )
             return _MojoFrame.from_pl(self._df)
 
-        # extract roation data (N, 4)
-        q_cols = [f"{quat_base}:{k}" for k in "xyzw"]  # w last for scipy!
+        # extract rotation data (N, 4) as [x, y, z, w]
+        q_cols = [f"{quat_base}:{k}" for k in "xyzw"]
         qs = self._df.select(q_cols).to_numpy()
-        transformer = R.from_quat(qs)
-        if invert:
-            transformer = transformer.inv()
+        qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
+
+        # vector part of the quaternion, negated for invert (conjugate == inverse for a unit quat)
+        u = -qs[:, :3] if invert else qs[:, :3]
+        w = qs[:, 3]
 
         # rotate all of the rotatables
         new_columns = []
@@ -349,7 +351,12 @@ class MojoNamespace:
             v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
             vs = self._df.select(v_cols).to_numpy()
 
-            v_rot = transformer.apply(vs)  # apply the rotation here!
+            # quaternion-vector rotation: v' = v + 2w(u x v) + 2u x (u x v)
+            cross_1 = np.cross(u, vs)
+            cross_2 = np.cross(u, cross_1)
+            v_rot = (
+                vs + 2 * w[:, None] * cross_1 + 2 * cross_2
+            )  # apply the rotation here!
 
             # prepare a new series for overwriting
             new_columns.extend(
