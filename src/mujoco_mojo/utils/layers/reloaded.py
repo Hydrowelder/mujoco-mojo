@@ -29,7 +29,7 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
 )
-from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.log import get_logger, get_trial_log_handler
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
@@ -419,6 +419,14 @@ class MojoReloaded:
         trial_dir.mkdir(parents=True, exist_ok=True)
         self._current_trial_dir = trial_dir
 
+        # set up a per-trial log file capturing everything logged during this run, mirroring
+        # the Runner's mojo.log. Unlike the Runner, overwrite (rather than append) on each
+        # reload, since the same trial_dir is reused across many reload/run iterations in a
+        # single interactive session and appending would mix logs from unrelated runs.
+        trial_log_handler = get_trial_log_handler(trial_dir / "mojo.log", mode="w")
+        root_logger = logging.getLogger()
+        root_logger.addHandler(trial_log_handler)
+
         # only worth tracking via TrialStatus/JobStatus if telemetry will actually be recorded
         trial_status: TrialStatus | None = None
         trial_status_path: Path | None = None
@@ -551,6 +559,9 @@ class MojoReloaded:
                         {*job_status.trial_nums, self.trial_num}
                     )
                 job_status.update_trial(status=trial_status)
+
+            root_logger.removeHandler(trial_log_handler)
+            trial_log_handler.close()
 
         return state
 
