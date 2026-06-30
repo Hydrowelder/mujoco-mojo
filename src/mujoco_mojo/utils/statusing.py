@@ -21,7 +21,16 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
 from mujoco_mojo.utils.log import get_logger
 
-__all__ = ["TRIAL_STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
+__all__ = [
+    "JOB_STATUS_FNAME",
+    "TRIAL_STATUS_FNAME",
+    "Completion",
+    "ExecutionMode",
+    "JobStatus",
+    "JobType",
+    "StepStatus",
+    "TrialStatus",
+]
 
 logger = get_logger(__name__)
 
