@@ -1049,7 +1049,11 @@ def init_project(
 def settings_init(
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="Overwrite an existing settings file."),
+        typer.Option(
+            "--force",
+            "-f",
+            help="Overwrite an existing settings file (will not overwrite existing settings).",
+        ),
     ] = False,
 ) -> None:
     """
