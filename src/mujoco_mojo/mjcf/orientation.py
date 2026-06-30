@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import StrEnum, auto
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, overload
 
 import numpy as np
 from pydantic import Field
@@ -118,21 +118,51 @@ class OrientationBase(XMLModel, ABC):
         as_rad = max(0.0, as_rad)
         return as_rad if angle == Angle.RADIAN else np.degrees(as_rad)
 
+    @overload
+    @classmethod
+    def look_at(
+        cls,
+        target: Vec3,
+        eye: Vec3 = ...,
+        *,
+        roll: float = 0.0,
+        angle: Angle = DEFAULT_ANGLE,
+        negative_z: bool = True,
+    ) -> Self: ...
+
+    @classmethod
+    @overload
+    def look_at(
+        cls,
+        target: Vec3,
+        eye: Vec3 = ...,
+        *,
+        up: Vec3,
+        negative_z: bool = True,
+    ) -> Self: ...
+
     @classmethod
     def look_at(
         cls,
         target: Vec3,
         eye: Vec3 = np.array([0, 0, 0]),
-        up: Vec3 = np.array([0, 0, 1]),
+        *,
+        roll: float = 0.0,
+        angle: Angle = DEFAULT_ANGLE,
+        up: Vec3 | None = None,
         negative_z: bool = True,
     ) -> Self:
         """
         Creates an orientation that points the Z-axis toward/away from a target.
 
+        The secondary (X/Y) axes are controlled either by `roll`, a rotation about the forward axis where `roll=0` places the local X axis as close to world +Z as possible, or by an explicit `up` vector for the rare case where an exact secondary direction is required. Passing `up` overrides `roll`.
+
         Args:
             target (Vec3): Where the vector should point to.
             eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            roll (float, optional): Rotation about the forward axis, in the units specified by `angle`. Ignored if `up` is given. Defaults to 0.0.
+            angle (Angle, optional): Whether `roll` is in degrees or radians. Defaults to DEFAULT_ANGLE.
+            up (Vec3, optional): Explicit secondary axis direction, overriding `roll`. Defaults to None.
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:
@@ -141,7 +171,6 @@ class OrientationBase(XMLModel, ABC):
         """
         target = np.asarray(target, dtype=float)
         eye = np.asarray(eye, dtype=float)
-        up = np.asarray(up, dtype=float)
 
         forward = target - eye
         norm = np.linalg.norm(forward)
@@ -155,11 +184,25 @@ class OrientationBase(XMLModel, ABC):
         if negative_z:
             forward = -forward
 
-        # Compute right and up axes
+        if up is not None:
+            x_axis, y_axis = cls._look_at_axes_from_up(
+                forward, np.asarray(up, dtype=float)
+            )
+        else:
+            x_axis, y_axis = cls._look_at_axes_from_roll(forward, roll, angle)
+
+        mat = np.column_stack((x_axis, y_axis, forward))
+        return cls.from_matrix(mat)
+
+    @staticmethod
+    def _look_at_axes_from_up(
+        forward: np.ndarray, up: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Computes the (X, Y) axes for look_at from an explicit up vector."""
         right = np.cross(up, forward)
         right_norm = np.linalg.norm(right)
 
-        # Handle case where 'up' is colinear with 'forward'
+        # handle case where 'up' is colinear with 'forward'
         if right_norm < 1e-10:
             # shift 'up' to an arbitrary axis to break colinearity
             alt_up = (
@@ -171,10 +214,29 @@ class OrientationBase(XMLModel, ABC):
             right_norm = np.linalg.norm(right)
 
         right /= right_norm
-        actual_up = np.cross(forward, right)
+        return right, np.cross(forward, right)
 
-        mat = np.column_stack((right, actual_up, forward))
-        return cls.from_matrix(mat)
+    @staticmethod
+    def _look_at_axes_from_roll(
+        forward: np.ndarray, roll: float, angle: Angle
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Computes the (X, Y) axes for look_at by rotating a canonical reference frame about the forward axis. At roll=0, X is as close to world +Z as possible."""
+        world_z = np.array([0.0, 0.0, 1.0])
+        x_ref = world_z - np.dot(world_z, forward) * forward
+        x_ref_norm = np.linalg.norm(x_ref)
+
+        # handle case where 'forward' is colinear with world +Z
+        if x_ref_norm < 1e-10:
+            world_x = np.array([1.0, 0.0, 0.0])
+            x_ref = world_x - np.dot(world_x, forward) * forward
+            x_ref_norm = np.linalg.norm(x_ref)
+
+        x_ref /= x_ref_norm
+        y_ref = np.cross(forward, x_ref)
+
+        roll_rad = np.radians(roll) if angle == Angle.DEGREE else roll
+        x_axis = np.cos(roll_rad) * x_ref + np.sin(roll_rad) * y_ref
+        return x_axis, np.cross(forward, x_axis)
 
     @classmethod
     def from_rotation(cls, rot: R) -> Self:

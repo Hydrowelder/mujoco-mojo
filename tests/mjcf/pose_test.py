@@ -83,6 +83,39 @@ def test_look_at_pose():
     assert np.allclose(pose.apply(np.asarray([0, 0, -1])), [0, 0, 0])
 
 
+def test_look_at_pose_roll():
+    """Verify Pose.look_at forwards roll to the underlying orientation, leaving position and forward direction unaffected."""
+    eye = np.asarray([0.0, 0.0, 0.0])
+    target = np.asarray([1.0, 0.0, 0.0])
+
+    pose_no_roll = PoseQuat.look_at(target=target, eye=eye, negative_z=False)
+    pose_rolled = PoseQuat.look_at(target=target, eye=eye, roll=90, negative_z=False)
+
+    assert np.allclose(np.asarray(pose_rolled.pos), eye)
+    assert np.allclose(
+        pose_rolled.apply(np.asarray([0, 0, 1])),
+        pose_no_roll.apply(np.asarray([0, 0, 1])),
+    )
+    assert np.allclose(
+        pose_rolled.apply(np.asarray([1, 0, 0])),
+        pose_no_roll.apply(np.asarray([0, 1, 0])),
+        atol=1e-7,
+    )
+
+
+def test_look_at_pose_up_overrides_roll():
+    """Verify Pose.look_at still accepts an explicit up vector, matching the legacy convention."""
+    eye = np.asarray([0.0, 0.0, 0.0])
+    target = np.asarray([1.0, 0.0, 0.0])
+
+    pose = PoseQuat.look_at(
+        target=target, eye=eye, up=np.asarray([0, 0, 1]), negative_z=False
+    )
+
+    world_x_axis = pose.apply(np.asarray([1, 0, 0])) - eye
+    assert np.allclose(world_x_axis, np.cross([0, 0, 1], [1, 0, 0]), atol=1e-7)
+
+
 def test_pose_converters():
     """Verify pivoting between Pose types preserves translation."""
     p_orig = np.asarray([7.0, 8.0, 9.0])

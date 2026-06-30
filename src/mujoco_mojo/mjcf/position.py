@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Self
+
 import numpy as np
 
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -20,6 +22,16 @@ class Pos(XMLModel):
 
     pos: Vec3 = np.array((0, 0, 0))
     """Position (in (x, y, z))"""
+
+    def __init__(self, pos: Vec3 = np.array((0, 0, 0)), **kwargs: Any) -> None:
+        """Allows positional construction, e.g. `Pos(my_vec)` instead of `Pos(pos=my_vec)`."""
+        kwargs["pos"] = pos
+        super().__init__(**kwargs)
+
+    def with_pos(self, pos: Pos | Vec3 | list | tuple) -> Self:
+        """Returns a copy of this object with a new position, keeping all other fields."""
+        pos_val = pos.pos if isinstance(pos, Pos) else np.asarray(pos, dtype=float)
+        return self.model_copy(update={"pos": pos_val})
 
     def distance_to(self, other: Pos | Vec3 | list | tuple) -> float:
         """Returns the euclidian distance to another position."""
@@ -53,7 +65,7 @@ class Pos(XMLModel):
             other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
         )
         assert isinstance(self.pos, np.ndarray)
-        return Pos(pos=self.pos + other_val)
+        return Pos(self.pos + other_val)
 
     def __sub__(self, other: Pos | Vec3 | list | tuple) -> Pos:
         """Subtracts another position or vector from this one."""
@@ -61,12 +73,12 @@ class Pos(XMLModel):
             other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
         )
         assert isinstance(self.pos, np.ndarray)
-        return Pos(pos=self.pos - other_val)
+        return Pos(self.pos - other_val)
 
     def __mul__(self, scalar: float) -> Pos:
         """Multiplies the position by a scalar."""
         assert isinstance(self.pos, np.ndarray)
-        return Pos(pos=self.pos * scalar)
+        return Pos(self.pos * scalar)
 
     def __rmul__(self, scalar: float) -> Pos:
         """Handles scalar * Pos (required for the m1 * p1 logic)."""
@@ -75,7 +87,7 @@ class Pos(XMLModel):
     def __truediv__(self, scalar: float) -> Pos:
         """Divides the position by a scalar."""
         assert isinstance(self.pos, np.ndarray)
-        return Pos(pos=self.pos / scalar)
+        return Pos(self.pos / scalar)
 
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         """Allows np.asarray(my_pos) to work seamlessly."""
