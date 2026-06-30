@@ -20,6 +20,15 @@ def test_defaults_are_valid_color_names():
     assert s.clearance_line == "WHITE"
 
 
+def test_defaults_arrow_scales_are_one():
+    """Default force/torque length and width scales are 1.0 (no adjustment)."""
+    s = VisualizationSettings()
+    assert s.force_length_scale == 1.0
+    assert s.force_width_scale == 1.0
+    assert s.torque_length_scale == 1.0
+    assert s.torque_width_scale == 1.0
+
+
 def test_invalid_color_name_raises():
     """An unrecognized color name raises ValidationError."""
     with pytest.raises(ValidationError, match="not a valid Color name"):

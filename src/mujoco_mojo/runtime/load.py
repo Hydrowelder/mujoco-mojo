@@ -99,6 +99,18 @@ class SiteLoad(Load):
     user_data: SerializeAsAny[UserData] | None = None
     """Optional strongly-typed payload accessible inside `calculate()`. Passed through unchanged each timestep."""
 
+    force_length_scale: float | None = None
+    """Length multiplier for this load's force arrow(s), on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.force_length_scale`."""
+
+    force_width_scale: float | None = None
+    """Width multiplier for this load's force arrow(s), on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.force_width_scale`."""
+
+    torque_length_scale: float | None = None
+    """Length multiplier for this load's torque arrow, on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.torque_length_scale`."""
+
+    torque_width_scale: float | None = None
+    """Width multiplier for this load's torque arrow, on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.torque_width_scale`."""
+
     _last_f: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
@@ -223,6 +235,12 @@ class SiteLoad(Load):
                     vec=self._last_f[:3],
                     color=Color[self._vis.action_force].rgba,
                     is_torque=False,
+                    length_scale=self.force_length_scale
+                    if self.force_length_scale is not None
+                    else self._vis.force_length_scale,
+                    width_scale=self.force_width_scale
+                    if self.force_width_scale is not None
+                    else self._vis.force_width_scale,
                 )
             )
 
@@ -233,6 +251,12 @@ class SiteLoad(Load):
                     vec=self._last_t[:3],
                     color=Color[self._vis.torque].rgba,
                     is_torque=True,
+                    length_scale=self.torque_length_scale
+                    if self.torque_length_scale is not None
+                    else self._vis.torque_length_scale,
+                    width_scale=self.torque_width_scale
+                    if self.torque_width_scale is not None
+                    else self._vis.torque_width_scale,
                 )
             )
 
@@ -306,6 +330,12 @@ class PointToPointForce(SiteLoad):
                     vec=-self._last_f[:3],
                     color=Color[self._vis.reaction_force].rgba,
                     is_torque=False,
+                    length_scale=self.force_length_scale
+                    if self.force_length_scale is not None
+                    else self._vis.force_length_scale,
+                    width_scale=self.force_width_scale
+                    if self.force_width_scale is not None
+                    else self._vis.force_width_scale,
                 )
             )
 

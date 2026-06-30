@@ -541,6 +541,48 @@ def test_get_visuals_returns_torque_arrow(
     assert np.allclose(arrow.vec, [10.0, 0, 0])
 
 
+def test_get_visuals_uses_default_scale_of_one_when_not_overridden(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """get_visuals() falls back to VisualizationSettings' length/width scale (1.0 by default) when the Load doesn't override it."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    twister = ScalarTorque(
+        name="twister", action_site=s1, scalar_func=lambda ud, s: 10.0
+    )
+    twister.resolve_ids(state)
+    twister.apply_load(state)
+
+    arrow = twister.get_visuals(state)[0]
+    assert arrow.length_scale == 1.0
+    assert arrow.width_scale == 1.0
+
+
+def test_get_visuals_respects_per_load_scale_override(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+):
+    """A Load's own torque_length_scale/torque_width_scale override the global VisualizationSettings default."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    twister = ScalarTorque(
+        name="twister",
+        action_site=s1,
+        scalar_func=lambda ud, s: 10.0,
+        torque_length_scale=2.5,
+        torque_width_scale=0.5,
+    )
+    twister.resolve_ids(state)
+    twister.apply_load(state)
+
+    arrow = twister.get_visuals(state)[0]
+    assert arrow.length_scale == 2.5
+    assert arrow.width_scale == 0.5
+
+
 def test_ptp_get_visuals_includes_reaction_arrow(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
 ):
