@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -31,6 +31,13 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity_mixin import ProximityMixin
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    angular_rate_metadata,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+)
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -49,6 +56,16 @@ __all__ = [
     "GeomSDF",
     "GeomSphere",
 ]
+
+_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
+    "xpos": dim(Dimension.LENGTH),
+    "xmat": dimensionless_metadata(),
+    "xvelp": dim(Dimension.VELOCITY),
+    "xvelr": angular_rate_metadata(),
+    "xaccp": dim(Dimension.ACCELERATION),
+    "xaccr": angular_rate_metadata(per="second ** 2"),
+    "quat": dimensionless_metadata(),
+}
 
 _geom_attr = (
     "name",
@@ -268,6 +285,10 @@ class GeomBase(XMLModel, ABC):
         signal_manager: SignalManager | None = None,
         channels: list[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
+        ]
+        | dict[
+            Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
+            dict[str, Any] | None,
         ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
     ):
         """
@@ -289,7 +310,14 @@ class GeomBase(XMLModel, ABC):
         * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
 
+        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (e.g. `xpos` is tagged as a length, `xaccr` as an angular acceleration in radians/second^2).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The geom data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -302,8 +330,21 @@ class GeomBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
         def sample(state: MjState):
             for channel in channels:
+                meta = merge_signal_metadata(
+                    _REQUEST_CHANNEL_METADATA.get(channel),
+                    channel,
+                    _meta,
+                    units=state.units,
+                )
+
                 # Manual mapping to avoid getattr
                 match channel:
                     case "xpos":
@@ -327,6 +368,7 @@ class GeomBase(XMLModel, ABC):
                                 category=SignalCategory.GEOMS,
                                 subgroups=(f"{self.name}", channel),
                                 attr=attr,
+                                metadata=meta,
                             )
                         continue
                     case _:
@@ -344,6 +386,7 @@ class GeomBase(XMLModel, ABC):
                             category=SignalCategory.GEOMS,
                             subgroups=(f"{self.name}", channel),
                             attr=attr,
+                            metadata=meta,
                         )
                 else:
                     # Handle flattened matrices (xmat)
@@ -354,6 +397,7 @@ class GeomBase(XMLModel, ABC):
                             category=SignalCategory.GEOMS,
                             subgroups=(f"{self.name}", channel),
                             attr=str(i),
+                            metadata=meta,
                         )
 
         signal_manager.register_sampler(sample)

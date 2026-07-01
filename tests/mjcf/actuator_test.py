@@ -155,3 +155,102 @@ def test_actuator_request_posts_act_for_stateful_actuator(
     assert key in sm._key_to_idx
     idx: int = sm._key_to_idx[key]
     assert sm._data_buffer[0, idx] == pytest.approx(float(state.data.act[0]), abs=1e-6)
+
+
+# --- telemetry metadata ---
+
+
+def test_actuator_request_tags_hinge_transmission_with_angle_metadata(
+    motor_setup: tuple[MjState, ActuatorMotor], tmp_path: Path
+) -> None:
+    """A hinge-joint-driven actuator's length/velocity/force are tagged with angle-based units/torque."""
+    state, actuator = motor_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    actuator.request(sm, channels=["length", "velocity", "force"])
+    sm.record(state)
+
+    assert sm._column_metadata["Actuators/elbow_motor:length"] == {"units": "radian"}
+    assert sm._column_metadata["Actuators/elbow_motor:velocity"] == {
+        "units": "radian / second"
+    }
+    assert sm._column_metadata["Actuators/elbow_motor:force"] == {
+        "dimension": "[length] ** 2 * [mass] / [time] ** 2",
+        "quantity": "torque",
+    }
+
+
+def test_actuator_request_tags_slide_transmission_with_length_dimension(
+    tmp_path: Path,
+) -> None:
+    """A slide-joint-driven actuator's length/velocity/force are tagged with scale-ambiguous dimensions."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="cart">
+                <joint name="rail" type="slide" axis="1 0 0"/>
+                <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+        </worldbody>
+        <actuator>
+            <motor name="rail_motor" joint="rail" gear="1"/>
+        </actuator>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    actuator = ActuatorMotor(name=ActuatorName("rail_motor"), joint=JointName("rail"))
+    actuator.get_id(model)
+    state = MjState(model, data)
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    actuator.request(sm, channels=["length", "velocity", "force"])
+    sm.record(state)
+
+    assert sm._column_metadata["Actuators/rail_motor:length"] == {
+        "dimension": "[length]"
+    }
+    assert sm._column_metadata["Actuators/rail_motor:velocity"] == {
+        "dimension": "[length] / [time]"
+    }
+    assert sm._column_metadata["Actuators/rail_motor:force"] == {
+        "dimension": "[mass] * [length] / [time] ** 2"
+    }
+
+
+def test_actuator_request_ctrl_has_no_builtin_default(
+    motor_setup: tuple[MjState, ActuatorMotor], tmp_path: Path
+) -> None:
+    """Ctrl has no built-in metadata default (its units depend on gear/dyntype, not the transmission alone)."""
+    state, actuator = motor_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    actuator.request(sm, channels=["ctrl"])
+    sm.record(state)
+
+    assert "Actuators/elbow_motor:ctrl" not in sm._column_metadata
+
+
+def test_actuator_request_metadata_override(
+    motor_setup: tuple[MjState, ActuatorMotor], tmp_path: Path
+) -> None:
+    """A caller-supplied metadata dict overrides the built-in default, and supplies one for ctrl."""
+    state, actuator = motor_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    actuator.request(
+        sm,
+        channels={
+            "force": {"display_name": "Elbow Torque"},
+            "ctrl": {"units": "newton"},
+        },
+    )
+    sm.record(state)
+
+    assert sm._column_metadata["Actuators/elbow_motor:force"] == {
+        "dimension": "[length] ** 2 * [mass] / [time] ** 2",
+        "quantity": "torque",
+        "display_name": "Elbow Torque",
+    }
+    assert sm._column_metadata["Actuators/elbow_motor:ctrl"] == {"units": "newton"}

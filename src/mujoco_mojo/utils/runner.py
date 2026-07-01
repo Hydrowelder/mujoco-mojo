@@ -424,7 +424,9 @@ class Trial:
                             / rt.SignalManager.default_output_name()
                         )
                     )
-                    state = mojo_model.mjcf.prep_for_sim(self.xml_path)
+                    state = mojo_model.mjcf.prep_for_sim(
+                        self.xml_path, units=mojo_model.u
+                    )
                     result = runtime(
                         mojo_model,
                         runtime_manager,

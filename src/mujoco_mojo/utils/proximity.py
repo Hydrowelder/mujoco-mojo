@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import mujoco
 import numpy as np
@@ -13,6 +13,12 @@ from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+)
 from mujoco_mojo.visualization import LineConfig
 
 if TYPE_CHECKING:
@@ -22,6 +28,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Proximity"]
+
+_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
+    "dist": dim(Dimension.LENGTH),
+    "fromto": dim(Dimension.LENGTH),
+    "prox_type": dimensionless_metadata(),
+}
 
 
 class Proximity(MojoBaseModel):
@@ -443,7 +455,11 @@ class Proximity(MojoBaseModel):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        channels: list[Literal["dist", "fromto", "prox_type"]] = ["dist", "prox_type"],
+        channels: list[Literal["dist", "fromto", "prox_type"]]
+        | dict[Literal["dist", "fromto", "prox_type"], dict[str, Any] | None] = [
+            "dist",
+            "prox_type",
+        ],
     ):
         """
         Registers specific channels for logging.
@@ -461,7 +477,13 @@ class Proximity(MojoBaseModel):
 
         Only the computations required by the requested channels are performed each timestep.
 
+        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (`dist`/`fromto` as a length, `prox_type` as dimensionless).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The proximity data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
 
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
@@ -469,6 +491,12 @@ class Proximity(MojoBaseModel):
         signal_manager = resolve_signal_manager(signal_manager)
         if signal_manager is None:
             return
+
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
 
         pair_name = self.pair_name
         _prox_attrs = {"dist", "fromto", "prox_type"}
@@ -487,6 +515,13 @@ class Proximity(MojoBaseModel):
                 dist, p1, p2, prox_type = self.get_proximity(state)
 
             for channel in channels:
+                meta = merge_signal_metadata(
+                    _REQUEST_CHANNEL_METADATA.get(channel),
+                    channel,
+                    _meta,
+                    units=state.units,
+                )
+
                 match channel:
                     case "dist":
                         signal_manager.post(
@@ -494,6 +529,7 @@ class Proximity(MojoBaseModel):
                             category=SignalCategory.PROXIMITIES,
                             subgroups=(pair_name,),
                             attr=channel,
+                            metadata=meta,
                         )
                     case "fromto":
                         for i, attr in enumerate("xyz"):
@@ -502,6 +538,7 @@ class Proximity(MojoBaseModel):
                                 category=SignalCategory.PROXIMITIES,
                                 subgroups=(pair_name, channel, str(self.geom_1.name)),
                                 attr=attr,
+                                metadata=meta,
                             )
                         for i, attr in enumerate("xyz"):
                             signal_manager.post(
@@ -509,6 +546,7 @@ class Proximity(MojoBaseModel):
                                 category=SignalCategory.PROXIMITIES,
                                 subgroups=(pair_name, channel, str(self.geom_2.name)),
                                 attr=attr,
+                                metadata=meta,
                             )
                     case "prox_type":
                         signal_manager.post(
@@ -516,6 +554,7 @@ class Proximity(MojoBaseModel):
                             category=SignalCategory.PROXIMITIES,
                             subgroups=(pair_name,),
                             attr=channel,
+                            metadata=meta,
                         )
                     case _:
                         continue

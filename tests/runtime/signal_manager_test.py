@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from pathlib import Path
 
@@ -297,3 +298,112 @@ def test_properties_and_static_methods(sm: SignalManager) -> None:
     assert sm.table_name == "result"
     assert SignalManager.default_output_name() == "telemetry.parquet"
     assert SignalManager.default_table_name() == "result"
+
+
+# --- Signal metadata tests ---
+
+
+def test_post_rejects_invalid_dimension(sm: SignalManager) -> None:
+    """An unparseable Pint dimension expression raises on first registration."""
+    with pytest.raises(ValueError, match="Invalid signal metadata dimension"):
+        sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "not_a_dimension"})
+
+
+def test_post_rejects_invalid_units(sm: SignalManager) -> None:
+    """An unparseable Pint unit string raises on first registration."""
+    with pytest.raises(ValueError, match="Invalid signal metadata units"):
+        sm.post(1.0, "Sensors", ("Foo",), metadata={"units": "not_a_unit"})
+
+
+def test_post_rejects_mismatched_dimension_and_units(sm: SignalManager) -> None:
+    """Units that don't match the given dimension raise on first registration."""
+    with pytest.raises(ValueError, match="do not"):
+        sm.post(
+            1.0,
+            "Sensors",
+            ("Foo",),
+            metadata={"dimension": "[length]", "units": "newton"},
+        )
+
+
+def test_post_accepts_consistent_dimension_and_units(sm: SignalManager) -> None:
+    """Matching dimension and units, and arbitrary extra keys, are stored as-is."""
+    sm.post(
+        1.0,
+        "Sensors",
+        ("Foo",),
+        metadata={
+            "dimension": "[length] / [time]",
+            "units": "meter / second",
+            "display_name": "Foo Speed",
+        },
+    )
+    assert sm._column_metadata["Sensors/Foo"] == {
+        "dimension": "[length] / [time]",
+        "units": "meter / second",
+        "display_name": "Foo Speed",
+    }
+
+
+def test_post_metadata_only_consulted_on_first_registration(sm: SignalManager) -> None:
+    """Metadata passed on a later call for an already-registered signal is ignored."""
+    sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
+    sm.post(2.0, "Sensors", ("Foo",), metadata={"dimension": "[force]"})
+
+    assert sm._column_metadata["Sensors/Foo"] == {"dimension": "[length]"}
+
+
+def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
+    """A single-part run (the rename fast path) still embeds column metadata."""
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+
+    sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
+    sm.record(MjState(m, d))
+    sm.close()
+
+    assert len(sm._part_paths) == 0
+    footer = pl.read_parquet_metadata(sm.export_path)
+    assert json.loads(footer["column_metadata"]) == {
+        "Sensors/Foo": {"dimension": "[length]"}
+    }
+
+
+def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
+    """A multi-part run (the scan/sink merge path) embeds column metadata too."""
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+
+    # fixture's flush capacity is 5: force two parts
+    for i in range(5):
+        sm.post(float(i), "Signal", ("A",))
+        sm.record(MjState(m, d))
+    sm.post(99.0, "Sensors", ("Foo",), metadata={"units": "volt"})
+    sm.record(MjState(m, d))
+    sm.close()
+
+    footer = pl.read_parquet_metadata(sm.export_path)
+    assert json.loads(footer["column_metadata"]) == {"Sensors/Foo": {"units": "volt"}}
+
+
+def test_no_metadata_no_footer_key(sm: SignalManager) -> None:
+    """When no signal registers metadata, the footer carries no column_metadata key."""
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+
+    sm.post(1.0, "Signal", ("A",))
+    sm.record(MjState(m, d))
+    sm.close()
+
+    footer = pl.read_parquet_metadata(sm.export_path)
+    assert "column_metadata" not in footer
+
+
+def test_track_forwards_metadata(sm: SignalManager) -> None:
+    """track() forwards its metadata kwarg into post() the same way as a direct post() call."""
+    sm.track(lambda: 1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+    sm.record(MjState(m, d))
+
+    assert sm._column_metadata["Sensors/Foo"] == {"dimension": "[length]"}

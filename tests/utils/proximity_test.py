@@ -13,6 +13,7 @@ import pytest
 
 import mujoco_mojo as mojo
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.visualization import LineConfig
 
@@ -725,6 +726,42 @@ def _cube_proximity(dist_max: float = 10.0) -> Proximity:
         geom_2=mojo.GeomMesh(name=mojo.GeomName("g2"), mesh=mojo.MeshName("cube")),
         dist_max=dist_max,
     )
+
+
+# --- telemetry metadata ---
+
+
+def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> None:
+    """request() tags dist/fromto as length and prox_type as dimensionless."""
+    state = _separated_state()
+    proximity = _cube_proximity()
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    proximity.request(sm, channels=["dist", "fromto", "prox_type"])
+    sm.record(state)
+
+    pair = proximity.pair_name
+    assert sm._column_metadata[f"Proximities/{pair}:dist"] == {"dimension": "[length]"}
+    assert sm._column_metadata[f"Proximities/{pair}/fromto/g1:x"] == {
+        "dimension": "[length]"
+    }
+    assert sm._column_metadata[f"Proximities/{pair}:prox_type"] == {"dimension": "[]"}
+
+
+def test_proximity_request_metadata_override(tmp_path: Path) -> None:
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    state = _separated_state()
+    proximity = _cube_proximity()
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    proximity.request(sm, channels={"dist": {"display_name": "Pair Distance"}})
+    sm.record(state)
+
+    pair = proximity.pair_name
+    assert sm._column_metadata[f"Proximities/{pair}:dist"] == {
+        "dimension": "[length]",
+        "display_name": "Pair Distance",
+    }
 
 
 if __name__ == "__main__":

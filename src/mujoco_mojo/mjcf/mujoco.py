@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import mujoco
 from pydantic import Field
@@ -29,6 +30,9 @@ from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Angle, EulerSeq, ModelName
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
+
+if TYPE_CHECKING:
+    from mujoco_mojo.utils.unit_system import UnitSystem
 
 logger = get_logger(__name__)
 
@@ -269,8 +273,10 @@ class Mujoco(XMLModel):
         """
         return self.pose_context.local_pose(frame, relative_to)
 
-    def prep_for_sim(self, save_path: Path | None = None) -> MjState:
-        """Creates an MjState (MjModel + MjData) from the Mujoco instance."""
+    def prep_for_sim(
+        self, save_path: Path | None = None, *, units: UnitSystem | None = None
+    ) -> MjState:
+        """Creates an MjState (MjModel + MjData) from the Mujoco instance. Pass `units` to attach the model's unit system so that telemetry channels emit concrete unit strings instead of abstract Pint dimension expressions."""
         if save_path:
             self.write_xml(save_path)
             model = mujoco.MjModel.from_xml_path(str(save_path))
@@ -280,4 +286,13 @@ class Mujoco(XMLModel):
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
         mujoco.mj_rnePostConstraint(model, data)
-        return MjState(model, data)
+        state = MjState(model, data)
+        state.units = units
+        if units is None:
+            logger.warning(
+                "No unit system declared on this model. Telemetry metadata will use "
+                "abstract Pint dimension strings ([length], [mass]) instead of concrete "
+                "units. Set mojo_model.u = UnitSystem.si() (or fps(), ips(), cgs()) "
+                "to resolve this."
+            )
+        return state

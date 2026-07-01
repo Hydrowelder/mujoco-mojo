@@ -637,6 +637,55 @@ def test_load_request_posts_xyzm_signals(
     assert sm._data_buffer[0, x_idx] == pytest.approx(30.0)
 
 
+def test_load_request_tags_builtin_dimension_metadata(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+    tmp_path,
+):
+    """request() tags force as force-dimension and torque as torque-dimension."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    force = ScalarForce(name="thruster", action_site=s1, scalar_func=lambda ud, s: 30.0)
+    force.resolve_ids(state)
+    force.apply_load(state)
+
+    force.request(sm, channels=["force", "torque"])
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/thruster/force:x"] == {
+        "dimension": "[mass] * [length] / [time] ** 2"
+    }
+    assert sm._column_metadata["Loads/thruster/torque:x"] == {
+        "dimension": "[length] ** 2 * [mass] / [time] ** 2",
+        "quantity": "torque",
+    }
+
+
+def test_load_request_metadata_override(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+    tmp_path,
+):
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    model, data = basic_mj_setup
+    state = MjState(model, data)
+    s1 = SiteSphere(name=SiteName("site1"))
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    force = ScalarForce(name="thruster", action_site=s1, scalar_func=lambda ud, s: 30.0)
+    force.resolve_ids(state)
+    force.apply_load(state)
+
+    force.request(sm, channels={"force": {"display_name": "Thrust"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/thruster/force:x"] == {
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "display_name": "Thrust",
+    }
+
+
 def test_ptp_apply_load_inactive_does_not_apply_reaction(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
 ) -> None:
@@ -1148,6 +1197,58 @@ def test_joint_friction_request_registers_sampler(tmp_path):
     assert sm._data_buffer[0, z_idx] == pytest.approx(-7.0)
 
 
+def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path):
+    """A hinge joint's friction is tagged as torque."""
+    state = _hinge_state(vel=2.0)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    fric = JointFriction.coulomb_simple(
+        name="brake", joint=_hinge_joint(), magnitude=7.0
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    fric.request(sm)
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/brake/friction:x"] == {
+        "dimension": "[length] ** 2 * [mass] / [time] ** 2",
+        "quantity": "torque",
+    }
+
+
+def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path):
+    """A slide joint's friction is tagged as force."""
+    state = _slide_state(vel=2.0)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    fric = JointFriction.viscous_simple(name="brake", joint=_slide_joint(), damping=3.0)
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    fric.request(sm)
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/brake/friction:x"] == {
+        "dimension": "[mass] * [length] / [time] ** 2"
+    }
+
+
+def test_joint_friction_request_metadata_override(tmp_path):
+    """A caller-supplied metadata dict extends the built-in default."""
+    state = _hinge_state(vel=2.0)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    fric = JointFriction.coulomb_simple(
+        name="brake", joint=_hinge_joint(), magnitude=7.0
+    )
+    fric.resolve_ids(state)
+    fric.apply_load(state)
+    fric.request(sm, metadata={"friction": {"display_name": "Brake Torque"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/brake/friction:x"] == {
+        "dimension": "[length] ** 2 * [mass] / [time] ** 2",
+        "quantity": "torque",
+        "display_name": "Brake Torque",
+    }
+
+
 def test_joint_friction_request_raises_without_joint_name():
     unnamed = Joint()  # no name
     fric = JointFriction.coulomb_simple(name="c", joint=unnamed, magnitude=1.0)
@@ -1396,3 +1497,31 @@ def test_actuator_load_request_posts_ctrl_signal(tmp_path):
     assert "Loads/drive:ctrl" in sm._key_to_idx
     ctrl_idx: int = sm._key_to_idx["Loads/drive:ctrl"]
     assert sm._data_buffer[0, ctrl_idx] == pytest.approx(0.6)
+
+
+def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path):
+    """Ctrl has no built-in metadata default (its units depend on gear/dyntype)."""
+    state = _actuated_slide_state()
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
+    load.resolve_ids(state)
+    load.apply_load(state)
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    load.request(sm)
+    sm.record(state)
+
+    assert "Loads/drive:ctrl" not in sm._column_metadata
+
+
+def test_actuator_load_request_metadata_override(tmp_path):
+    """A caller-supplied metadata dict supplies metadata for ctrl since there's no built-in default."""
+    state = _actuated_slide_state()
+    load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
+    load.resolve_ids(state)
+    load.apply_load(state)
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    load.request(sm, metadata={"ctrl": {"units": "newton"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Loads/drive:ctrl"] == {"units": "newton"}

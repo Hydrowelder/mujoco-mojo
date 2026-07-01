@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import mujoco
 import numpy as np
@@ -21,6 +21,13 @@ from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    dim,
+    force_or_torque,
+    merge_signal_metadata,
+    torque_metadata,
+)
 from mujoco_mojo.visualization import ArrowConfig
 
 if TYPE_CHECKING:
@@ -182,7 +189,8 @@ class SiteLoad(Load):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        channels: list[Literal["force", "torque"]] = ["force", "torque"],
+        channels: list[Literal["force", "torque"]]
+        | dict[Literal["force", "torque"], dict[str, Any] | None] = ["force", "torque"],
     ):
         """
         Registers specific channels for logging.
@@ -196,7 +204,14 @@ class SiteLoad(Load):
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
+        Each signal is tagged with built-in `dimension` metadata for its channel (`force` as force, `torque` as torque).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The load data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -204,9 +219,23 @@ class SiteLoad(Load):
         if signal_manager is None:
             return
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
+        channel_metadata = {
+            "force": dim(Dimension.FORCE),
+            "torque": torque_metadata(),
+        }
+
         def sample(state: MjState):
             for channel in channels:
                 source = self._last_f if channel == "force" else self._last_t
+                meta = merge_signal_metadata(
+                    channel_metadata.get(channel), channel, _meta, units=state.units
+                )
 
                 # iterate through x, y, z, and magnitude (pop. pop.)
                 for i, attr in enumerate("xyzm"):
@@ -216,6 +245,7 @@ class SiteLoad(Load):
                         # nest the force/torque under the function name
                         subgroups=(f"{self.name}", channel),
                         attr=attr,
+                        metadata=meta,
                     )
 
         signal_manager.register_sampler(sample)
@@ -708,7 +738,11 @@ class JointFriction(JointLoad):
         state.data.qfrc_applied[self._dof_adr : self._dof_adr + self._nv] += frc
         self._last_force = self._to_world_frc(frc, state)
 
-    def request(self, signal_manager: SignalManager | None = None) -> None:
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -720,8 +754,11 @@ class JointFriction(JointLoad):
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
+        `friction` is tagged with built-in `dimension` metadata resolved from the joint's type (force for slide, torque for hinge/ball).
+
         Args:
             signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+            metadata: Metadata overriding or extending the built-in default for the `friction` channel.
 
         Raises:
             ValueError: If the joint has no name.
@@ -739,6 +776,12 @@ class JointFriction(JointLoad):
             raise ValueError(msg)
 
         def sample(state: MjState) -> None:
+            jnt_id = self.joint.get_id(state.model)
+            jnt_type = int(state.model.jnt_type[jnt_id])
+            meta = merge_signal_metadata(
+                force_or_torque(jnt_type), "friction", metadata, units=state.units
+            )
+
             frc = self._last_force if self.active else np.zeros(3)
             for v, attr in zip(frc, ("x", "y", "z")):
                 signal_manager.post(
@@ -746,12 +789,14 @@ class JointFriction(JointLoad):
                     category=SignalCategory.LOADS,
                     subgroups=(self.name, "friction"),
                     attr=attr,
+                    metadata=meta,
                 )
             signal_manager.post(
                 value=float(np.linalg.norm(frc)),
                 category=SignalCategory.LOADS,
                 subgroups=(self.name, "friction"),
                 attr="m",
+                metadata=meta,
             )
 
         signal_manager.register_sampler(sample)
@@ -952,12 +997,19 @@ class ActuatorControl(Load):
         self._last_ctrl = float(self.control_func(self.user_data, state))
         state.data.ctrl[self._aid] = self._last_ctrl
 
-    def request(self, signal_manager: SignalManager | None = None) -> None:
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
 
+        `ctrl`'s units depend on the driven actuator's transmission and `gear`/`dyntype` (the same ambiguity as `ActuatorBase.request()`'s `ctrl` channel), so no built-in metadata default is applied -- supply `metadata={"ctrl": {...}}` yourself if you know it.
+
         Args:
             signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+            metadata: Metadata for the `ctrl` channel.
 
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
@@ -972,6 +1024,7 @@ class ActuatorControl(Load):
                 category=SignalCategory.LOADS,
                 subgroups=(self.name,),
                 attr="ctrl",
+                metadata=merge_signal_metadata(None, "ctrl", metadata),
             )
 
         signal_manager.register_sampler(sample)

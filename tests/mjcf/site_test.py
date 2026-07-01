@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import mujoco
 import numpy as np
 import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteSphere
+from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import SiteName
 
 
@@ -189,3 +192,40 @@ def test_rt_velocities_with_relative_to(
     assert local_rel.shape == (6,)
     # at identity orientation the frames match
     assert np.allclose(world_rel[3:6], local_rel[3:6], atol=1e-6)
+
+
+# --- telemetry metadata ---
+
+
+def test_request_tags_builtin_dimension_metadata(
+    two_body_setup: tuple[MjState, SiteSphere, SiteSphere], tmp_path: Path
+) -> None:
+    """request() tags each channel with its built-in dimension/units metadata."""
+    state, s1, _s2 = two_body_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    s1.request(sm, channels=["xpos", "xvelp", "xvelr", "quat"])
+    sm.record(state)
+
+    assert sm._column_metadata["Sites/site1/xpos:x"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Sites/site1/xvelp:x"] == {
+        "dimension": "[length] / [time]"
+    }
+    assert sm._column_metadata["Sites/site1/xvelr:x"] == {"units": "radian / second"}
+    assert sm._column_metadata["Sites/site1/quat:w"] == {"dimension": "[]"}
+
+
+def test_request_metadata_override(
+    two_body_setup: tuple[MjState, SiteSphere, SiteSphere], tmp_path: Path
+) -> None:
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    state, s1, _s2 = two_body_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    s1.request(sm, channels={"xpos": {"display_name": "Site Position"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Sites/site1/xpos:x"] == {
+        "dimension": "[length]",
+        "display_name": "Site Position",
+    }

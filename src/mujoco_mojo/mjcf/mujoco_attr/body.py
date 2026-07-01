@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -34,6 +34,13 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    angular_rate_metadata,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+)
 from mujoco_mojo.utils.utils import is_empty_list
 
 if TYPE_CHECKING:
@@ -42,6 +49,26 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Body", "WorldBody"]
+
+_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
+    "xpos": dim(Dimension.LENGTH),
+    "quat": dimensionless_metadata(),
+    "xmat": dimensionless_metadata(),
+    "xvelp": dim(Dimension.VELOCITY),
+    "xvelr": angular_rate_metadata(),
+    "xaccp": dim(Dimension.ACCELERATION),
+    "xaccr": angular_rate_metadata(per="second ** 2"),
+    "xipos": dim(Dimension.LENGTH),
+    "xiquat": dimensionless_metadata(),
+    "ximat": dimensionless_metadata(),
+    "lin_mom": dim(Dimension.LINEAR_MOMENTUM),
+    "ang_mom": dim(Dimension.ANGULAR_MOMENTUM),
+    "ke_trans": dim(Dimension.ENERGY),
+    "ke_rot": dim(Dimension.ENERGY),
+    "pe": dim(Dimension.ENERGY),
+    "ke_total": dim(Dimension.ENERGY),
+    "total_energy": dim(Dimension.ENERGY),
+}
 
 _body_attr = (
     "name",
@@ -258,6 +285,28 @@ class Body(XMLModel):
         """Angular velocity of the body center of mass during runtime  in the world frame."""
         return self.rt_spatial_vel(state)[0:3]
 
+    def rt_spatial_acc(self, state: MjState) -> Vec6:
+        """
+        Returns the 6D spatial acceleration (ang, lin) at the body CoM in the world frame.
+
+        Requires `mj_rnePostConstraint` to have run; calls `state.ensure_rne_post_constraint()` before reading so the result is always current.
+        """
+        assert self._mjt_obj is not None
+        state.ensure_rne_post_constraint()
+        res = np.zeros(6)
+        mujoco.mj_objectAcceleration(
+            state.model, state.data, self._mjt_obj, self.get_id(state.model), res, 0
+        )
+        return res
+
+    def rt_lin_acc(self, state: MjState) -> Vec3:
+        """Linear acceleration of the body CoM during runtime in the world frame."""
+        return self.rt_spatial_acc(state)[3:6]
+
+    def rt_ang_acc(self, state: MjState) -> Vec3:
+        """Angular acceleration of the body CoM during runtime in the world frame."""
+        return self.rt_spatial_acc(state)[0:3]
+
     def rt_lin_mom(self, state: MjState) -> Vec3:
         """Linear momentum of the body during runtime."""
         return self.rt_mass(state) * self.rt_lin_vel(state)
@@ -330,6 +379,8 @@ class Body(XMLModel):
                 "xmat",
                 "xvelp",
                 "xvelr",
+                "xaccp",
+                "xaccr",
                 "xipos",
                 "xiquat",
                 "ximat",
@@ -341,11 +392,35 @@ class Body(XMLModel):
                 "ke_total",
                 "total_energy",
             ]
+        ]
+        | dict[
+            Literal[
+                "xpos",
+                "quat",
+                "xmat",
+                "xvelp",
+                "xvelr",
+                "xaccp",
+                "xaccr",
+                "xipos",
+                "xiquat",
+                "ximat",
+                "lin_mom",
+                "ang_mom",
+                "ke_trans",
+                "ke_rot",
+                "pe",
+                "ke_total",
+                "total_energy",
+            ],
+            dict[str, Any] | None,
         ] = [
             "xpos",
             "quat",
             "xvelp",
             "xvelr",
+            "xaccp",
+            "xaccr",
             "xipos",
             "xiquat",
             "lin_mom",
@@ -366,6 +441,8 @@ class Body(XMLModel):
         | `xmat`         | world rotation matrix                               | mat9   |
         | `xvelp`        | linear velocity in world frame                      | xyzm   |
         | `xvelr`        | angular velocity in world frame                     | xyzm   |
+        | `xaccp`        | linear acceleration in world frame                  | xyzm   |
+        | `xaccr`        | angular acceleration in world frame                 | xyzm   |
         | `xipos`        | world position of the center of mass                | xyzm   |
         | `xiquat`       | world orientation quaternion of the inertial frame  | quat   |
         | `ximat`        | world rotation matrix of the inertial frame         | mat9   |
@@ -384,7 +461,14 @@ class Body(XMLModel):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
         * A `scalar` is posted as a single value with `attr=channel` under `subgroups=(body_name,)`.
 
+        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (e.g. `xpos` is tagged as a length, `lin_mom` as linear momentum).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The body data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -397,8 +481,21 @@ class Body(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
         def sample(state: MjState):
             for channel in channels:
+                meta = merge_signal_metadata(
+                    _REQUEST_CHANNEL_METADATA.get(channel),
+                    channel,
+                    _meta,
+                    units=state.units,
+                )
+
                 match channel:
                     case "xpos":
                         val = self.rt_pos(state)
@@ -415,6 +512,7 @@ class Body(XMLModel):
                                 category=SignalCategory.BODIES,
                                 subgroups=(f"{self.name}", channel),
                                 attr=str(i),
+                                metadata=meta,
                             )
                         continue
                     case "quat" | "xiquat":
@@ -430,12 +528,17 @@ class Body(XMLModel):
                                 category=SignalCategory.BODIES,
                                 subgroups=(f"{self.name}", channel),
                                 attr=attr,
+                                metadata=meta,
                             )
                         continue
                     case "xvelp":
                         val = self.rt_lin_vel(state)
                     case "xvelr":
                         val = self.rt_ang_vel(state)
+                    case "xaccp":
+                        val = self.rt_lin_acc(state)
+                    case "xaccr":
+                        val = self.rt_ang_acc(state)
                     case "xipos":
                         val = self.rt_xipos(state)
                     case "lin_mom":
@@ -466,6 +569,7 @@ class Body(XMLModel):
                             category=SignalCategory.BODIES,
                             subgroups=(f"{self.name}", channel),
                             attr=attr,
+                            metadata=meta,
                         )
                 else:
                     # scalar output
@@ -474,6 +578,7 @@ class Body(XMLModel):
                         category=SignalCategory.BODIES,
                         subgroups=(f"{self.name}",),
                         attr=channel,
+                        metadata=meta,
                     )
 
         signal_manager.register_sampler(sample)

@@ -9,6 +9,7 @@ from stochas import StochasBase
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mjcf.mujoco import Mujoco
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.unit_system import UnitSystem
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,9 @@ class MojoModel(MojoBaseModel, StochasBase):
 
     user_data: SerializeAsAny[UserData] | None = None
     """User defined data for the model. This is used for transferring information from one function to another (generator to runtime or objective function)."""
+
+    u: UnitSystem | None = None
+    """Physical unit system for this model. Set to `UnitSystem.si()` or similar so that values in the generator can be expressed in any unit (e.g. `pos * u.inch` converts inches to meters) and telemetry channels report concrete units instead of abstract Pint dimensions."""
 
     _trial_dir: Path | None = PrivateAttr(default=None)
 

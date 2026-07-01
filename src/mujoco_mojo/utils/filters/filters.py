@@ -413,13 +413,7 @@ class SavitzkyGolayFilter(BaseFilter):
         )
 
 
-ureg = pint.UnitRegistry()
-try:
-    ureg.define("lbm = pound")
-    ureg.define("lbf = force_pound")
-    ureg.define("ozf = force_ounce")
-except pint.errors.RedefinitionError:
-    pass
+from mujoco_mojo.utils.unit_system import ureg
 
 # ---------------------------------------------------------------------------
 # Unit groups - single source of truth for both the frontend smart dropdown

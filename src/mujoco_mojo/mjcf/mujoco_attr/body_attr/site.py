@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -23,11 +23,28 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    angular_rate_metadata,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+)
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
+
+_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
+    "xpos": dim(Dimension.LENGTH),
+    "xmat": dimensionless_metadata(),
+    "xvelp": dim(Dimension.VELOCITY),
+    "xvelr": angular_rate_metadata(),
+    "xaccp": dim(Dimension.ACCELERATION),
+    "xaccr": angular_rate_metadata(per="second ** 2"),
+    "quat": dimensionless_metadata(),
+}
 
 __all__ = [
     "AnySite",
@@ -535,11 +552,19 @@ class SiteBase(XMLModel, ABC):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        channels: list[Literal["xpos", "xmat", "xvelp", "xvelr", "quat"]] = [
+        channels: list[
+            Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"]
+        ]
+        | dict[
+            Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
+            dict[str, Any] | None,
+        ] = [
             "xpos",
             "quat",
             "xvelp",
             "xvelr",
+            "xaccp",
+            "xaccr",
         ],
     ):
         """
@@ -551,6 +576,8 @@ class SiteBase(XMLModel, ABC):
         | `xmat`  | world rotation matrix                  | mat9 |
         | `xvelp` | linear velocity in world frame         | xyzm |
         | `xvelr` | angular velocity in world frame        | xyzm |
+        | `xaccp` | linear acceleration in world frame     | xyzm |
+        | `xaccr` | angular acceleration in world frame    | xyzm |
         | `quat`  | world orientation quaternion           | quat |
 
         Each channel is posted under `subgroups=(site_name, channel)`.
@@ -559,7 +586,14 @@ class SiteBase(XMLModel, ABC):
         * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
 
+        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (e.g. `xpos` is tagged as a length, `xvelr` as an angular rate in radians/second).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The site data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -572,8 +606,21 @@ class SiteBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
         def sample(state: MjState):
             for channel in channels:
+                meta = merge_signal_metadata(
+                    _REQUEST_CHANNEL_METADATA.get(channel),
+                    channel,
+                    _meta,
+                    units=state.units,
+                )
+
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match channel:
                     case "xpos":
@@ -584,6 +631,10 @@ class SiteBase(XMLModel, ABC):
                         val = self.rt_lin_vel(state)
                     case "xvelr":
                         val = self.rt_ang_vel(state)
+                    case "xaccp":
+                        val = self.rt_lin_acc(state)
+                    case "xaccr":
+                        val = self.rt_ang_acc(state)
                     case "quat":
                         val = self.rt_quat(state)
 
@@ -593,6 +644,7 @@ class SiteBase(XMLModel, ABC):
                                 category=SignalCategory.SITES,
                                 subgroups=(f"{self.name}", channel),
                                 attr=attr,
+                                metadata=meta,
                             )
                         continue
                     case _:
@@ -609,6 +661,7 @@ class SiteBase(XMLModel, ABC):
                             category=SignalCategory.SITES,
                             subgroups=(f"{self.name}", channel),
                             attr=attr,
+                            metadata=meta,
                         )
                 else:
                     # longer arrays (or matrices like xmat), use flattened indices
@@ -619,6 +672,7 @@ class SiteBase(XMLModel, ABC):
                             category=SignalCategory.SITES,
                             subgroups=(f"{self.name}", channel),
                             attr=str(i),
+                            metadata=meta,
                         )
 
         signal_manager.register_sampler(sample)
