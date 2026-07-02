@@ -532,6 +532,9 @@ class PlotConfig(BaseModel):
     max_points: int | None = Field(default=None, gt=0)
     """Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points."""
 
+    vs_pinned: list[int] = Field(default_factory=list)
+    """Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set."""
+
     @field_validator("ref_frame")
     @classmethod
     def validate_ref_frame(cls, v: str | None) -> str | None:

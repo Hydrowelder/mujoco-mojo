@@ -52,7 +52,7 @@
              class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm font-mono overflow-x-auto min-w-0">
 
             <!-- column headers -->
-            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs font-black tracking-wider text-slate-400 min-w-max">
+            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs font-black tracking-wider text-slate-400 min-w-max w-full">
 
                 <button data-distcol-header="name"
                         @click="toggleDistSort('name')"
@@ -198,7 +198,7 @@
             </div>
 
             <!-- filter row (aligned to columns) -->
-            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 min-w-max">
+            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 min-w-max w-full">
 
                 <!-- name text filter -->
                 <div :style="{ width: distColWidths.name + 'px' }"
@@ -410,7 +410,7 @@
             </div>
 
             <!-- rows -->
-            <div class="divide-y divide-slate-100 dark:divide-slate-700/60 max-h-96 overflow-y-auto custom-scrollbar">
+            <div class="divide-y divide-slate-100 dark:divide-slate-700/60 max-h-96 overflow-y-auto custom-scrollbar min-w-max">
                 <template x-for="entry in filteredDists"
                           :key="entry.name">
                     <div class="flex items-center hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors cursor-default min-w-max"

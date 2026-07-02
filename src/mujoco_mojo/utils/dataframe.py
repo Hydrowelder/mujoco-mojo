@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
     from mujoco_mojo.stochas import UnitSystem
 
-import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 
@@ -30,6 +29,7 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter
+from mujoco_mojo.utils.filters.filters import RotationFilter
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -462,46 +462,15 @@ class MojoNamespace:
             Self: DataFrame with transformed :x, :y, :z columns.
 
         """
-        # validate the quaternion family
         if quat_base not in self.quaternion_bases:
             logger.warning(
                 f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
             )
             return _MojoFrame.from_pl(self._df)
-
-        # extract rotation data (N, 4) as [x, y, z, w]
-        q_cols = [f"{quat_base}:{k}" for k in "xyzw"]
-        qs = self._df.select(q_cols).to_numpy()
-        qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
-
-        # vector part of the quaternion, negated for invert (conjugate == inverse for a unit quat)
-        u = -qs[:, :3] if invert else qs[:, :3]
-        w = qs[:, 3]
-
-        # rotate all of the rotatables
-        new_columns = []
-        for base in self.rotatable_bases:
-            v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
-            vs = self._df.select(v_cols).to_numpy()
-
-            # quaternion-vector rotation: v' = v + 2w(u x v) + 2u x (u x v)
-            cross_1 = np.cross(u, vs)
-            cross_2 = np.cross(u, cross_1)
-            v_rot = (
-                vs + 2 * w[:, None] * cross_1 + 2 * cross_2
-            )  # apply the rotation here!
-
-            # prepare a new series for overwriting
-            new_columns.extend(
-                [
-                    pl.Series(name=f"{base}:x", values=v_rot[:, 0]),
-                    pl.Series(name=f"{base}:y", values=v_rot[:, 1]),
-                    pl.Series(name=f"{base}:z", values=v_rot[:, 2]),
-                ]
-            )
-
-        # overwrite with the new rotated data
-        return _MojoFrame.from_pl(self._df.with_columns(new_columns))
+        rotated = RotationFilter(quat_col=quat_base, invert=invert).apply_to_frame(
+            self._df, self.rotatable_bases
+        )
+        return _MojoFrame.from_pl(rotated)
 
     def with_filter_map(
         self, filter_map: dict[str, list[AnyFilter]], omit_time: bool = True

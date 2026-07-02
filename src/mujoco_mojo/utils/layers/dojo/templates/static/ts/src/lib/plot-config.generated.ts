@@ -310,6 +310,7 @@ export interface PlotConfig {
   shapes: Shape[];
   displayUnitSystem?: DisplayUnitSystem | null;
   maxPoints?: number | null;
+  vsPinned?: number[];
 }
 
 export type Shape = VlineShape | HlineShape | RectShape;
@@ -2258,6 +2259,13 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
       ],
       "default": null,
       "title": "Maxpoints"
+    },
+    "vsPinned": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Vspinned",
+      "type": "array"
     }
   },
   "required": [

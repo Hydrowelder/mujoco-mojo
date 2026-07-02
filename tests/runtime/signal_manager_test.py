@@ -354,7 +354,7 @@ def test_post_metadata_only_consulted_on_first_registration(sm: SignalManager) -
 
 
 def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
-    """A single-part run (the rename fast path) still embeds column metadata."""
+    """A single-part run embeds column metadata including the always-present time column."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
@@ -362,10 +362,10 @@ def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
     sm.record(MjState(m, d))
     sm.close()
 
-    assert len(sm._part_paths) == 0
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "Sensors/Foo": {"dimension": "[length]"}
+        "time": {"dimension": "[time]"},
+        "Sensors/Foo": {"dimension": "[length]"},
     }
 
 
@@ -383,11 +383,14 @@ def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
     sm.close()
 
     footer = pl.read_parquet_metadata(sm.export_path)
-    assert json.loads(footer["column_metadata"]) == {"Sensors/Foo": {"unit": "volt"}}
+    assert json.loads(footer["column_metadata"]) == {
+        "time": {"dimension": "[time]"},
+        "Sensors/Foo": {"unit": "volt"},
+    }
 
 
-def test_no_metadata_no_footer_key(sm: SignalManager) -> None:
-    """When no signal registers metadata, the footer carries no column_metadata key."""
+def test_time_metadata_always_in_footer(sm: SignalManager) -> None:
+    """The time column always carries dimension metadata in the footer even when no user signals register metadata."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
@@ -396,7 +399,7 @@ def test_no_metadata_no_footer_key(sm: SignalManager) -> None:
     sm.close()
 
     footer = pl.read_parquet_metadata(sm.export_path)
-    assert "column_metadata" not in footer
+    assert json.loads(footer["column_metadata"]) == {"time": {"dimension": "[time]"}}
 
 
 def test_track_forwards_metadata(sm: SignalManager) -> None:

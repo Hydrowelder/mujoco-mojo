@@ -1964,6 +1964,13 @@
         ],
         "default": null,
         "title": "Maxpoints"
+      },
+      "vsPinned": {
+        "items": {
+          "type": "integer"
+        },
+        "title": "Vspinned",
+        "type": "array"
       }
     },
     "required": [
@@ -2293,6 +2300,7 @@
     plotType: "cartesian",
     vsEnabled: false,
     vsRange: [0, 10],
+    vsPinned: [],
     annotations: [],
     shapes: [],
     maxPoints: null
@@ -2375,7 +2383,7 @@
       allTrials: [],
       vsMenuOpen: false,
       vsLoading: false,
-      vsDraft: { enabled: false, range: [0, 0] },
+      vsDraft: { enabled: false, range: [0, 0], pinned: [] },
       discoveryTimeout: null,
       // --- HISTORY STATE ---
       historyStack: [],
@@ -3575,9 +3583,10 @@
           this.config.xAxis.col,
           ...Object.keys(this.config.yAxes)
         ];
+        const pinnedSet = new Set(this.vsDraft.pinned);
         const draftIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
-          return n >= start && n <= end && id !== this.trialId;
+          return (n >= start && n <= end || pinnedSet.has(n)) && id !== this.trialId;
         });
         for (const id of draftIds) {
           if (currentId !== this.discoveryId) return;
@@ -3842,11 +3851,13 @@
             this.hydrateFromUrl(shared);
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
+            this.vsDraft.pinned = [...this.config.vsPinned ?? []];
             this.config.vsEnabled = false;
           } else {
             this.loadConfig();
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
+            this.vsDraft.pinned = [...this.config.vsPinned ?? []];
           }
           if (this.config.refFrame) {
             const hasRotation = Object.values(this.config.yAxes).some(
@@ -4110,6 +4121,12 @@
           }
         }
         this.$watch("vsDraft.range", () => {
+          if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
+          this.discoveryTimeout = setTimeout(() => {
+            if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
+          }, 500);
+        });
+        this.$watch("vsDraft.pinned", () => {
           if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
           this.discoveryTimeout = setTimeout(() => {
             if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
@@ -4408,9 +4425,10 @@
           }
           activeCols = [...new Set(activeCols)];
           const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
+          const pinnedSet = new Set(this.vsDraft.pinned);
           const targetIds = this.allTrials.filter((id) => {
             const n = parseInt(id.split("_").pop() ?? "");
-            return n >= start && n <= end && n !== currentNum;
+            return (n >= start && n <= end || pinnedSet.has(n)) && n !== currentNum;
           });
           await Promise.all(
             targetIds.map(async (id) => {
@@ -4429,6 +4447,7 @@
           );
           this.vsDatasets = { ...this.vsDatasets };
           this.config.vsRange = [start, end];
+          this.config.vsPinned = [...this.vsDraft.pinned];
           this.config.vsEnabled = true;
           if (targetIds.length > 0) {
             this.notify(
@@ -4475,6 +4494,24 @@
           const n = parseInt(id.split("_").pop() ?? "");
           return n >= lo && n <= hi && n !== cur;
         }).length;
+      },
+      vsTotalCount() {
+        const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const cur = parseInt(this.trialId.split("_").pop() ?? "");
+        const pinnedSet = new Set(this.vsDraft.pinned);
+        return this.allTrials.filter((id) => {
+          const n = parseInt(id.split("_").pop() ?? "");
+          return (n >= lo && n <= hi || pinnedSet.has(n)) && n !== cur;
+        }).length;
+      },
+      toggleVsPin(n) {
+        const idx = this.vsDraft.pinned.indexOf(n);
+        if (idx === -1) {
+          this.vsDraft.pinned = [...this.vsDraft.pinned, n].sort((a, b) => a - b);
+        } else {
+          this.vsDraft.pinned = this.vsDraft.pinned.filter((x) => x !== n);
+        }
       },
       // -----------------------------------------------------------------------
       // Column filtering & search
@@ -4681,7 +4718,8 @@
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            this.config = { ...this.config, ...parsed };
+            const { vsEnabled: _vs, ...rest } = parsed;
+            this.config = { ...this.config, ...rest };
           } catch {
             console.error("Stored config corrupt");
           }
@@ -5984,9 +6022,10 @@
         const activeDatasets = [this.data ?? {}];
         if (this.config.vsEnabled) {
           const [start, end] = this.config.vsRange;
+          const pinnedSet = new Set(this.config.vsPinned ?? []);
           Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (n >= start && n <= end) activeDatasets.push(dataset);
+            if (n >= start && n <= end || pinnedSet.has(n)) activeDatasets.push(dataset);
           });
         }
         activeDatasets.forEach((dataset) => {
@@ -6151,13 +6190,14 @@
         }).filter((t) => t !== null);
         if (this.config.vsEnabled) {
           const [start, end] = this.config.vsRange;
+          const pinnedSet = new Set(this.config.vsPinned ?? []);
           const legendTracker = /* @__PURE__ */ new Set();
           const sortedVsIds = Object.keys(this.vsDatasets).sort(
             (a, b) => parseInt(a.split("_").pop() ?? "0") - parseInt(b.split("_").pop() ?? "0")
           );
           sortedVsIds.forEach((vsId) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (n < start || n > end || vsId === this.trialId) return;
+            if (!(n >= start && n <= end || pinnedSet.has(n)) || vsId === this.trialId) return;
             const dataset = this.vsDatasets[vsId];
             if (!dataset) return;
             const vsTraces = yKeys.map((key, i) => {
