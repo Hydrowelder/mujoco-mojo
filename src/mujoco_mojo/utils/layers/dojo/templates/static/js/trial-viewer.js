@@ -223,6 +223,18 @@
         "title": "DerivativeFilter",
         "type": "object"
       },
+      "DisplayUnitSystem": {
+        "description": "Named unit system for display-time conversion of telemetry values. When set, data is converted from its logged units to the chosen system before being returned to the frontend.",
+        "enum": [
+          "si",
+          "cgs",
+          "fps",
+          "ips",
+          "fff"
+        ],
+        "title": "DisplayUnitSystem",
+        "type": "string"
+      },
       "ExpFilter": {
         "additionalProperties": false,
         "description": "Raises a base to the power of each signal sample. Defaults to e^x.",
@@ -1125,24 +1137,25 @@
                   "kg",
                   "g",
                   "mg",
-                  "lbm",
+                  "pound",
                   "slug",
                   "N",
                   "mN",
                   "uN",
                   "kN",
-                  "lbf",
+                  "pound_force",
+                  "ounce_force",
                   "N*m",
                   "N*mm",
                   "mN*m",
                   "kN*m",
-                  "lbf*ft",
-                  "lbf*in",
-                  "ozf*in",
+                  "pound_force*ft",
+                  "pound_force*in",
+                  "ounce_force*in",
                   "kg*m^2",
                   "kg*mm^2",
-                  "lbm*in^2",
-                  "lbm*ft^2",
+                  "pound*in^2",
+                  "pound*ft^2",
                   "slug*ft^2",
                   "J",
                   "mJ",
@@ -1150,14 +1163,14 @@
                   "W*s",
                   "W*h",
                   "kW*h",
-                  "ft*lbf",
+                  "ft*pound_force",
                   "BTU",
                   "W",
                   "mW",
                   "kW",
                   "MW",
                   "hp",
-                  "ft*lbf/s",
+                  "ft*pound_force/s",
                   "Pa",
                   "kPa",
                   "MPa",
@@ -1227,24 +1240,25 @@
                   "kg",
                   "g",
                   "mg",
-                  "lbm",
+                  "pound",
                   "slug",
                   "N",
                   "mN",
                   "uN",
                   "kN",
-                  "lbf",
+                  "pound_force",
+                  "ounce_force",
                   "N*m",
                   "N*mm",
                   "mN*m",
                   "kN*m",
-                  "lbf*ft",
-                  "lbf*in",
-                  "ozf*in",
+                  "pound_force*ft",
+                  "pound_force*in",
+                  "ounce_force*in",
                   "kg*m^2",
                   "kg*mm^2",
-                  "lbm*in^2",
-                  "lbm*ft^2",
+                  "pound*in^2",
+                  "pound*ft^2",
                   "slug*ft^2",
                   "J",
                   "mJ",
@@ -1252,14 +1266,14 @@
                   "W*s",
                   "W*h",
                   "kW*h",
-                  "ft*lbf",
+                  "ft*pound_force",
                   "BTU",
                   "W",
                   "mW",
                   "kW",
                   "MW",
                   "hp",
-                  "ft*lbf/s",
+                  "ft*pound_force/s",
                   "Pa",
                   "kPa",
                   "MPa",
@@ -1926,6 +1940,30 @@
         },
         "title": "Shapes",
         "type": "array"
+      },
+      "displayUnitSystem": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisplayUnitSystem"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "maxPoints": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Maxpoints"
       }
     },
     "required": [
@@ -2256,7 +2294,8 @@
     vsEnabled: false,
     vsRange: [0, 10],
     annotations: [],
-    shapes: []
+    shapes: [],
+    maxPoints: null
   };
   var _cm = {
     editor: null,
@@ -2371,13 +2410,40 @@
       // --- DISTRIBUTIONS ---
       dists: [],
       _distTooltipEntry: null,
-      distFilterName: "",
+      distFilterName: (() => {
+        try {
+          return localStorage.getItem("mojo:dists:filter-name") ?? "";
+        } catch {
+          return "";
+        }
+      })(),
       // null = no filter applied (all pass); a (possibly empty) array is an
       // explicit selection, so deselecting every item shows zero rows instead
       // of silently falling back to "all"
-      distFilterCategories: null,
-      distFilterTypes: null,
-      distFilterUnits: null,
+      distFilterCategories: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-categories");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
+      distFilterTypes: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-types");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
+      distFilterUnits: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-units");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
       distSortKey: "name",
       distSortAsc: true,
       distColWidths: (() => {
@@ -2525,6 +2591,12 @@
         if (Object.keys(filtersPayload).length > 0) {
           colParams.append("filters", JSON.stringify(filtersPayload));
         }
+        if (this.config.displayUnitSystem) {
+          colParams.append("display_unit_system", this.config.displayUnitSystem);
+        }
+        if (this.config.maxPoints != null) {
+          colParams.append("max_points", String(this.config.maxPoints));
+        }
         const queryStr = colParams.toString();
         if (queryStr) url += `?${queryStr}`;
         const resp = await fetch(url, { cache: "no-store" });
@@ -2632,7 +2704,8 @@
         tooltip.style.minWidth = `${minW}px`;
         const x = event.clientX + 18;
         const y = event.clientY - 110;
-        tooltip.style.left = `${Math.min(x, window.innerWidth - minW - 20)}px`;
+        const fitsRight = x + minW + 20 <= window.innerWidth;
+        tooltip.style.left = `${fitsRight ? x : Math.max(8, event.clientX - minW - 18)}px`;
         tooltip.style.top = `${Math.max(8, y)}px`;
         tooltip.style.display = "block";
         void this._renderDistTooltipPlot(entry);
@@ -2675,10 +2748,20 @@
                 hoverinfo: "x+y"
               }
             ];
+            const maxProb = Math.max(...entry.cat_probs.map((p) => p ?? 0), 0);
+            const annotations = entry.cat_labels.map((lbl, i) => ({
+              x: lbl,
+              y: entry.cat_probs[i] ?? 0,
+              text: `${((entry.cat_probs[i] ?? 0) * 100).toFixed(1)}%`,
+              showarrow: false,
+              yanchor: "bottom",
+              yshift: 2,
+              font: { size: 9, color: textColor }
+            }));
             layout = {
               paper_bgcolor: bg,
               plot_bgcolor: bg,
-              margin: { t: 14, r: 10, b: 52, l: 52 },
+              margin: { t: 22, r: 10, b: 52, l: 52 },
               xaxis: {
                 color: textColor,
                 showgrid: false,
@@ -2694,8 +2777,10 @@
                   font: { size: 13 },
                   standoff: 4
                 },
-                range: [0, 1]
+                // extend range above max bar so annotations have room
+                range: [0, maxProb * 1.2]
               },
+              annotations,
               showlegend: false,
               font: { size: 11, color: textColor }
             };
@@ -2804,16 +2889,27 @@
           });
         }
         if (paramsEl) {
-          const fmt = (v) => {
-            if (typeof v === "number") {
-              return Math.abs(v) >= 1e3 || Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(3) : v.toPrecision(4).replace(/\.?0+$/, "");
-            }
-            return String(v);
-          };
-          paramsEl.innerHTML = Object.entries(entry.params).map(
-            ([k, v]) => `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`
-          ).join("");
+          if (chartType === "categorical") {
+            paramsEl.innerHTML = "";
+          } else {
+            const fmt = (v) => {
+              if (typeof v === "number") {
+                return Math.abs(v) >= 1e3 || Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(3) : v.toPrecision(4).replace(/\.?0+$/, "");
+              }
+              return String(v);
+            };
+            paramsEl.innerHTML = Object.entries(entry.params).map(
+              ([k, v]) => `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`
+            ).join("");
+          }
         }
+      },
+      get dataLength() {
+        if (!this.data) return 0;
+        const xCol = this.config.xAxis?.col;
+        if (xCol && this.data[xCol]) return this.data[xCol].length;
+        const first = Object.values(this.data).find((arr) => arr.length > 0);
+        return first?.length ?? 0;
       },
       // -----------------------------------------------------------------------
       // Distributions: sorting, filtering & column resize
@@ -4187,9 +4283,79 @@
           this._syncOverlayVisibility();
           requestAnimationFrame(() => this._renderFrameMarkers());
         });
+        this.$watch(
+          "config.displayUnitSystem",
+          async (newVal, oldVal) => {
+            if (newVal === oldVal) return;
+            const activeCols = [
+              this.config.xAxis.col,
+              ...Object.keys(this.config.yAxes)
+            ];
+            this.vsDatasets = {};
+            try {
+              const resp2 = await this.fetchTrialData(this.trialId, activeCols);
+              this.columnMetadata = resp2.columns.column_metadata ?? {};
+              this.data = resp2.data;
+              this.renderPlot();
+              requestAnimationFrame(() => {
+                this._renderFrameMarkers();
+                this._syncOverlayVisibility();
+              });
+              void this.startBackgroundDiscovery();
+            } catch (e) {
+              console.warn("Display unit system re-fetch failed", e);
+            }
+          }
+        );
+        this.$watch(
+          "config.maxPoints",
+          async (newVal, oldVal) => {
+            if (newVal === oldVal) return;
+            const activeCols = [
+              this.config.xAxis.col,
+              ...Object.keys(this.config.yAxes)
+            ];
+            this.vsDatasets = {};
+            try {
+              const resp2 = await this.fetchTrialData(this.trialId, activeCols);
+              this.data = resp2.data;
+              this.renderPlot();
+              void this.startBackgroundDiscovery();
+            } catch (e) {
+              console.warn("Max points re-fetch failed", e);
+            }
+          }
+        );
         void this.startBackgroundDiscovery();
         this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
         this.updateFromRaw();
+        this.$watch("distFilterName", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-name", v);
+          } catch {
+          }
+        });
+        this.$watch("distFilterCategories", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-categories", JSON.stringify(v));
+          } catch {
+          }
+        });
+        this.$watch("distFilterTypes", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v));
+          } catch {
+          }
+        });
+        this.$watch("distFilterUnits", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v));
+          } catch {
+          }
+        });
+        window.addEventListener("mojo-data-updated", () => {
+          void this.fetchDists();
+        });
         window.addEventListener("mojo-sensai-plot-config", (e) => {
           const detail = e.detail;
           if (detail && typeof detail === "object") {
@@ -5262,7 +5428,8 @@
           entry[p.name] = p.default;
         }
         if (filterType === "unit" && col) {
-          const metaUnit = this.columnMetadata[col]?.unit;
+          const meta = this.columnMetadata[col];
+          const metaUnit = meta?.group_unit ?? meta?.unit;
           if (metaUnit) {
             entry["fromUnit"] = metaUnit;
           }

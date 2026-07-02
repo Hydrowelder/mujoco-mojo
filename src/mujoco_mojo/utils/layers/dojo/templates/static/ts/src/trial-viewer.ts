@@ -82,6 +82,7 @@ const DEFAULT_CONFIG: PlotConfig = {
   vsRange: [0, 10],
   annotations: [],
   shapes: [],
+  maxPoints: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -251,13 +252,30 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- DISTRIBUTIONS ---
     dists: [] as DistEntry[],
     _distTooltipEntry: null as DistEntry | null,
-    distFilterName: "" as string,
+    distFilterName: ((): string => {
+      try { return localStorage.getItem("mojo:dists:filter-name") ?? ""; } catch { return ""; }
+    })(),
     // null = no filter applied (all pass); a (possibly empty) array is an
     // explicit selection, so deselecting every item shows zero rows instead
     // of silently falling back to "all"
-    distFilterCategories: null as string[] | null,
-    distFilterTypes: null as string[] | null,
-    distFilterUnits: null as string[] | null,
+    distFilterCategories: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-categories");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch { return null; }
+    })(),
+    distFilterTypes: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-types");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch { return null; }
+    })(),
+    distFilterUnits: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-units");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch { return null; }
+    })(),
     distSortKey: "name" as
       | "name"
       | "category"
@@ -435,6 +453,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (Object.keys(filtersPayload).length > 0) {
         colParams.append("filters", JSON.stringify(filtersPayload));
       }
+      if (this.config.displayUnitSystem) {
+        colParams.append("display_unit_system", this.config.displayUnitSystem);
+      }
+      if (this.config.maxPoints != null) {
+        colParams.append("max_points", String(this.config.maxPoints));
+      }
 
       const queryStr = colParams.toString();
       if (queryStr) url += `?${queryStr}`;
@@ -565,7 +589,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       tooltip.style.minWidth = `${minW}px`;
       const x = event.clientX + 18;
       const y = event.clientY - 110;
-      tooltip.style.left = `${Math.min(x, window.innerWidth - minW - 20)}px`;
+      // flip to the left of the cursor when too close to the right edge so the
+      // cursor never lands inside the tooltip (Plotly SVG overrides pointer-events
+      // on child elements, causing mouseleave/mouseenter flicker if the cursor
+      // enters the tooltip bounds)
+      const fitsRight = x + minW + 20 <= window.innerWidth;
+      tooltip.style.left = `${fitsRight ? x : Math.max(8, event.clientX - minW - 18)}px`;
       tooltip.style.top = `${Math.max(8, y)}px`;
       tooltip.style.display = "block";
       void this._renderDistTooltipPlot(entry);
@@ -618,10 +647,20 @@ function trialViewer(trialId: string, externalUrl: string) {
               hoverinfo: "x+y",
             },
           ];
+          const maxProb = Math.max(...entry.cat_probs.map((p) => p ?? 0), 0);
+          const annotations = entry.cat_labels.map((lbl, i) => ({
+            x: lbl,
+            y: entry.cat_probs[i] ?? 0,
+            text: `${(((entry.cat_probs[i] ?? 0) * 100)).toFixed(1)}%`,
+            showarrow: false,
+            yanchor: "bottom",
+            yshift: 2,
+            font: { size: 9, color: textColor },
+          }));
           layout = {
             paper_bgcolor: bg,
             plot_bgcolor: bg,
-            margin: { t: 14, r: 10, b: 52, l: 52 },
+            margin: { t: 22, r: 10, b: 52, l: 52 },
             xaxis: {
               color: textColor,
               showgrid: false,
@@ -637,8 +676,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                 font: { size: 13 },
                 standoff: 4,
               },
-              range: [0, 1],
+              // extend range above max bar so annotations have room
+              range: [0, maxProb * 1.2],
             },
+            annotations,
             showlegend: false,
             font: { size: 11, color: textColor },
           };
@@ -763,21 +804,35 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
 
       if (paramsEl) {
-        const fmt = (v: string | number | boolean): string => {
-          if (typeof v === "number") {
-            return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
-              ? v.toExponential(3)
-              : v.toPrecision(4).replace(/\.?0+$/, "");
-          }
-          return String(v);
-        };
-        paramsEl.innerHTML = Object.entries(entry.params)
-          .map(
-            ([k, v]) =>
-              `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
-          )
-          .join("");
+        // categorical: probabilities are shown as bar annotations; skip the
+        // redundant params listing below the chart
+        if (chartType === "categorical") {
+          paramsEl.innerHTML = "";
+        } else {
+          const fmt = (v: string | number | boolean): string => {
+            if (typeof v === "number") {
+              return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
+                ? v.toExponential(3)
+                : v.toPrecision(4).replace(/\.?0+$/, "");
+            }
+            return String(v);
+          };
+          paramsEl.innerHTML = Object.entries(entry.params)
+            .map(
+              ([k, v]) =>
+                `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
+            )
+            .join("");
+        }
       }
+    },
+
+    get dataLength(): number {
+      if (!this.data) return 0;
+      const xCol = this.config.xAxis?.col;
+      if (xCol && this.data[xCol]) return this.data[xCol].length;
+      const first = Object.values(this.data).find((arr) => arr.length > 0);
+      return first?.length ?? 0;
     },
 
     // -----------------------------------------------------------------------
@@ -2532,11 +2587,82 @@ function trialViewer(trialId: string, externalUrl: string) {
         requestAnimationFrame(() => this._renderFrameMarkers());
       });
 
+      // re-fetch data and column manifest when display unit system changes so the
+      // plot values and unit dropdowns reflect the new unit system immediately
+      this.$watch(
+        "config.displayUnitSystem",
+        async (newVal: string | null, oldVal: string | null) => {
+          if (newVal === oldVal) return;
+          const activeCols = [
+            this.config.xAxis!.col!,
+            ...Object.keys(this.config.yAxes),
+          ];
+          this.vsDatasets = {};
+          try {
+            const resp = await this.fetchTrialData(this.trialId, activeCols);
+            this.columnMetadata = resp.columns.column_metadata ?? {};
+            // replace entirely so background-hydrated columns with stale unit values
+            // are not used; startBackgroundDiscovery re-hydrates the rest
+            this.data = resp.data;
+            this.renderPlot();
+            // re-index frame markers after the plot re-renders with the new unit scale
+            requestAnimationFrame(() => {
+              this._renderFrameMarkers();
+              this._syncOverlayVisibility();
+            });
+            void this.startBackgroundDiscovery();
+          } catch (e) {
+            console.warn("Display unit system re-fetch failed", e);
+          }
+        },
+      );
+
+      // re-fetch all data when max_points changes; also clear VS cache since
+      // all previously fetched comparison datasets used the old point limit
+      this.$watch(
+        "config.maxPoints",
+        async (newVal: number | null, oldVal: number | null) => {
+          if (newVal === oldVal) return;
+          const activeCols = [
+            this.config.xAxis!.col!,
+            ...Object.keys(this.config.yAxes),
+          ];
+          this.vsDatasets = {};
+          try {
+            const resp = await this.fetchTrialData(this.trialId, activeCols);
+            this.data = resp.data;
+            this.renderPlot();
+            void this.startBackgroundDiscovery();
+          } catch (e) {
+            console.warn("Max points re-fetch failed", e);
+          }
+        },
+      );
+
       void this.startBackgroundDiscovery();
       this.configRaw =
         localStorage.getItem("mojo:config:raw-draft") ??
         JSON.stringify(this.config, null, 4);
       this.updateFromRaw();
+
+      // persist dist filter state across page loads and trial navigation
+      this.$watch("distFilterName", (v: string) => {
+        try { localStorage.setItem("mojo:dists:filter-name", v); } catch { /* ignore */ }
+      });
+      this.$watch("distFilterCategories", (v: string[] | null) => {
+        try { localStorage.setItem("mojo:dists:filter-categories", JSON.stringify(v)); } catch { /* ignore */ }
+      });
+      this.$watch("distFilterTypes", (v: string[] | null) => {
+        try { localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v)); } catch { /* ignore */ }
+      });
+      this.$watch("distFilterUnits", (v: string[] | null) => {
+        try { localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v)); } catch { /* ignore */ }
+      });
+
+      // re-pull distribution metadata when new job data arrives
+      window.addEventListener("mojo-data-updated", () => {
+        void this.fetchDists();
+      });
 
       window.addEventListener("mojo-sensai-plot-config", (e) => {
         const detail = (e as CustomEvent<PlotConfig>).detail;
@@ -3806,10 +3932,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       for (const p of schema.params) {
         (entry as Record<string, unknown>)[p.name] = p.default;
       }
-      // prefill fromUnit from signal metadata; Pint accepts arbitrary unit strings so
-      // we don't require the unit to appear in a known group before prefilling
+      // prefill fromUnit with a known unit group string; prefer group_unit (pre-resolved by
+      // Python to the nearest group equivalent), then unit (when a display unit system is
+      // active), so the dropdown shows a valid pre-selected option rather than "- select -"
       if (filterType === "unit" && col) {
-        const metaUnit = this.columnMetadata[col]?.unit;
+        const meta = this.columnMetadata[col];
+        const metaUnit = meta?.group_unit ?? meta?.unit;
         if (metaUnit) {
           (entry as Record<string, unknown>)["fromUnit"] = metaUnit;
         }

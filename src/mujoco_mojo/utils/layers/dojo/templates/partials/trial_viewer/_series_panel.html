@@ -1014,8 +1014,18 @@
                 );
             });
         }
+    },
+    _refreshMeta() {
+        if (this._cmMeta && this.metaOpen) {
+            const j = JSON.stringify(columnMetadata[col] ?? {}, null, 2);
+            this._cmMeta.dispatch({ changes: { from: 0, to: this._cmMeta.state.doc.length, insert: j } });
+        }
     }
-}">
+}"
+                                     x-init="
+    $watch('metaOpen', v => { if (v) _refreshMeta(); });
+    $watch('open', v => { if (v) _refreshMeta(); });
+">
                                     <div class="flex items-center justify-between">
                                         <p class="text-sm font-black uppercase text-slate-500 tracking-tight truncate max-w-[180px]"
                                            x-text="col"></p>
@@ -1063,7 +1073,8 @@
                                                 Copy
                                             </button>
                                         </div>
-                                        <div x-ref="metaHost"></div>
+                                        <div x-ref="metaHost"
+                                             x-effect="if (_cmMeta && metaOpen) { const _j = JSON.stringify(columnMetadata[col] ?? {}, null, 2); _cmMeta.dispatch({ changes: { from: 0, to: _cmMeta.state.doc.length, insert: _j } }); }"></div>
                                     </div>
 
                                     <button @click="console.debug('[mojo] applying changes for:', col, JSON.parse(JSON.stringify(temp))); applySignalConfig(col, temp); isDirty = false;"

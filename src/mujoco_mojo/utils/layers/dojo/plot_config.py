@@ -288,6 +288,25 @@ class PlotType(StrEnum):
     """Polar coordinates (r/theta)."""
 
 
+class DisplayUnitSystem(StrEnum):
+    """Named unit system for display-time conversion of telemetry values. When set, data is converted from its logged units to the chosen system before being returned to the frontend."""
+
+    SI = "si"
+    """SI units: meter / kilogram / second."""
+
+    CGS = "cgs"
+    """CGS units: centimeter / gram / second."""
+
+    FPS = "fps"
+    """FPS units: foot / slug / second."""
+
+    IPS = "ips"
+    """IPS units: inch / slinch / second."""
+
+    FFF = "fff"
+    """Furlong / firkin / fortnight. Not shown in the UI dropdown — set via the JSON editor."""
+
+
 # ---------------------------------------------------------------------------
 # Composite models
 # ---------------------------------------------------------------------------
@@ -506,6 +525,12 @@ class PlotConfig(BaseModel):
 
     shapes: list[Shape]
     """Geometric reference shapes drawn over the plot."""
+
+    display_unit_system: DisplayUnitSystem | None = None
+    """When set, telemetry values are converted from their logged units to this unit system before being returned. Only columns whose metadata carries a concrete `unit` key (or a `dimension` key resolvable against the target system) are converted; all others pass through unchanged."""
+
+    max_points: int | None = Field(default=None, gt=0)
+    """Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points."""
 
     @field_validator("ref_frame")
     @classmethod

@@ -99,7 +99,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             sigma=1,
             low=-1.0,
             category="sensor_noise",
-            unit=us.meter_per_second,
+            unit=us["m/s"],
         )
     )
     mojo_model.sample_dist(
@@ -136,7 +136,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=1.0,
             scale=1.0,
             category="vibration",
-            unit=us.meter_per_second,
+            unit=us.m / us.s,
         )
     )
     mojo_model.sample_dist(
