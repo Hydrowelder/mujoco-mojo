@@ -138,7 +138,7 @@ def test_rt_trans_ke_positive_with_velocity(body_setup: tuple[MjState, Body]) ->
 def test_body_request_tags_builtin_dimension_metadata(
     body_setup: tuple[MjState, Body], tmp_path: Path
 ) -> None:
-    """request() tags each channel with its built-in dimension/units metadata."""
+    """request() tags each channel with its built-in dimension/unit metadata."""
     state, body = body_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
@@ -149,7 +149,7 @@ def test_body_request_tags_builtin_dimension_metadata(
     assert sm._column_metadata["Bodies/box/xvelp:x"] == {
         "dimension": "[length] / [time]"
     }
-    assert sm._column_metadata["Bodies/box/xvelr:x"] == {"units": "radian / second"}
+    assert sm._column_metadata["Bodies/box/xvelr:x"] == {"unit": "radian / second"}
     assert sm._column_metadata["Bodies/box/quat:w"] == {"dimension": "[]"}
     assert sm._column_metadata["Bodies/box/lin_mom:x"] == {
         "dimension": "[mass] * [length] / [time]"
@@ -199,7 +199,7 @@ def geom_setup() -> tuple[MjState, GeomSphere]:
 def test_geom_request_tags_builtin_dimension_metadata(
     geom_setup: tuple[MjState, GeomSphere], tmp_path: Path
 ) -> None:
-    """request() tags each channel with its built-in dimension/units metadata."""
+    """request() tags each channel with its built-in dimension/unit metadata."""
     state, geom = geom_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
@@ -210,14 +210,12 @@ def test_geom_request_tags_builtin_dimension_metadata(
     assert sm._column_metadata["Geoms/ball_geom/xvelp:x"] == {
         "dimension": "[length] / [time]"
     }
-    assert sm._column_metadata["Geoms/ball_geom/xvelr:x"] == {
-        "units": "radian / second"
-    }
+    assert sm._column_metadata["Geoms/ball_geom/xvelr:x"] == {"unit": "radian / second"}
     assert sm._column_metadata["Geoms/ball_geom/xaccp:x"] == {
         "dimension": "[length] / [time] ** 2"
     }
     assert sm._column_metadata["Geoms/ball_geom/xaccr:x"] == {
-        "units": "radian / second ** 2"
+        "unit": "radian / second ** 2"
     }
     assert sm._column_metadata["Geoms/ball_geom/quat:w"] == {"dimension": "[]"}
 

@@ -255,8 +255,11 @@ from .stochas import (
     TriangularDistribution,
     TruncatedNormalDistribution,
     UniformDistribution,
+    UnitDescriptor,
+    UnitSystem,
     ValueName,
     WeibullDistribution,
+    ureg,
 )
 from .typing import (
     ActuatorControlLimited,
@@ -639,6 +642,8 @@ __all__ = [
     "TriangularDistribution",
     "TruncatedNormalDistribution",
     "UniformDistribution",
+    "UnitDescriptor",
+    "UnitSystem",
     "UserData",
     "ValueName",
     "Vec2",
@@ -662,5 +667,6 @@ __all__ = [
     "ZAxis",
     "mjcf",
     "typing",
+    "ureg",
     "utils",
 ]

@@ -109,14 +109,14 @@ def test_framequat_request_tags_dimensionless_metadata(
 def test_jointpos_request_resolves_hinge_to_angle_metadata(
     state: MjState, tmp_path: Path
 ) -> None:
-    """Jointpos on a hinge joint resolves to concrete radian units."""
+    """Jointpos on a hinge joint resolves to concrete radian unit."""
     sensor = SensorJointpos(name=SensorName("jp_h"), joint=JointName("h"))
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/jp_h:jointpos"] == {"units": "radian"}
+    assert sm._column_metadata["Sensors/jp_h:jointpos"] == {"unit": "radian"}
 
 
 def test_jointpos_request_resolves_slide_to_length_metadata(

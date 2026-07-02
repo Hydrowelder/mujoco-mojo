@@ -477,7 +477,7 @@ class Proximity(MojoBaseModel):
 
         Only the computations required by the requested channels are performed each timestep.
 
-        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (`dist`/`fromto` as a length, `prox_type` as dimensionless).
+        Each signal is tagged with built-in `dimension`/`unit` metadata for its channel (`dist`/`fromto` as a length, `prox_type` as dimensionless).
 
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
@@ -519,7 +519,7 @@ class Proximity(MojoBaseModel):
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
-                    units=state.units,
+                    unit_system=state.us,
                 )
 
                 match channel:

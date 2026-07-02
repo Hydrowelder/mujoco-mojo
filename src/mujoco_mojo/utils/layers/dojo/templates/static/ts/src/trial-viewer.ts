@@ -146,6 +146,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     editorOpen: false,
     columns: [] as string[],
     rotateableVectors: [] as string[],
+    columnMetadata: {} as Record<string, Record<string, string>>,
     discoveryId: 0,
     plotColors: [
       tw.cyan[500],
@@ -1940,6 +1941,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+        this.columnMetadata = response.columns.column_metadata ?? {};
         this.data = response.data;
         void this.loadLabSchemas();
 
@@ -3281,6 +3283,69 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
     },
 
+    initMetadataViewer(hostEl: HTMLElement, jsonText: string): object | null {
+      if (!hostEl || typeof CM === "undefined") return null;
+      const {
+        EditorView,
+        EditorState,
+        json,
+        syntaxHighlighting,
+        oneDarkHighlightStyle,
+        defaultHighlightStyle,
+      } = CM;
+      const isDark = document.documentElement.classList.contains("dark");
+      const darkTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+          ".cm-scroller": {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.8rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+          ".cm-gutters": { display: "none" },
+          ".cm-cursor, .cm-dropCursor": { display: "none" },
+          ".cm-activeLine": { backgroundColor: "transparent" },
+          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#1e293b !important",
+          },
+        },
+        { dark: true },
+      );
+      const lightTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+          ".cm-scroller": {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.8rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+          ".cm-gutters": { display: "none" },
+          ".cm-cursor, .cm-dropCursor": { display: "none" },
+          ".cm-activeLine": { backgroundColor: "transparent" },
+          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#e2e8f0 !important",
+          },
+        },
+        { dark: false },
+      );
+      const state = EditorState.create({
+        doc: jsonText,
+        extensions: [
+          EditorState.readOnly.of(true),
+          json(),
+          isDark ? darkTheme : lightTheme,
+          syntaxHighlighting(
+            isDark ? oneDarkHighlightStyle : defaultHighlightStyle,
+          ),
+        ],
+      });
+      return new EditorView({ state, parent: hostEl });
+    },
+
     async resetConfig() {
       const ok = await window.mojoConfirm?.({
         title: "Reset settings",
@@ -3677,11 +3742,38 @@ function trialViewer(trialId: string, externalUrl: string) {
     getUnitOptions(
       groups: UnitGroup[] | undefined,
       fromUnit: string | null | undefined,
+      colDimension?: string | null,
     ): UnitGroup[] {
       if (!groups) return [];
-      if (!fromUnit) return groups;
-      const match = groups.find((g) => g.units.includes(fromUnit));
-      return match ? [match] : groups;
+      // normalize Pint canonical strings ("m / s ** 2") to compact ("m/s^2") for matching
+      const normalize = (u: string) => u.replace(/\s+/g, "").replace(/\*\*/g, "^");
+      if (fromUnit) {
+        const norm = normalize(fromUnit);
+        const match = groups.find((g) =>
+          g.units.some((u) => u === fromUnit || u === norm),
+        );
+        if (match) return [match];
+      }
+      // fall back to dimension-based group filtering when column dimension is known
+      if (colDimension && groups.some((g) => g.dimension)) {
+        const compatible = groups.filter((g) => g.dimension === colDimension);
+        if (compatible.length > 0) return compatible;
+      }
+      return groups;
+    },
+
+    // returns the concrete unit of col after walking its active filter stack;
+    // starts from column_metadata and updates when a unit filter's toUnit changes it;
+    // pass filtersOverride for axes (e.g. x-axis) that store filters outside config.yAxes
+    effectiveUnit(col: string, filtersOverride?: FilterEntry[]): string | null {
+      let unit: string | null = this.columnMetadata[col]?.unit ?? null;
+      const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
+      for (const f of filters) {
+        if (f.enabled === false || f.type !== "unit") continue;
+        const to = (f as Record<string, unknown>)["toUnit"] as string | undefined;
+        if (to) unit = to;
+      }
+      return unit;
     },
 
     getFilterSummary(entry: FilterEntry): string {
@@ -3701,7 +3793,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       return parts.slice(0, 3).join(", ");
     },
 
-    addFilterToTemp(temp: YAxisConfig, filterType: string) {
+    addFilterToTemp(temp: YAxisConfig, filterType: string, col?: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
       if (!schema) return;
       if (!temp.filters) temp.filters = [];
@@ -3713,6 +3805,14 @@ function trialViewer(trialId: string, externalUrl: string) {
       const entry: FilterEntry = { type: filterType, enabled: true };
       for (const p of schema.params) {
         (entry as Record<string, unknown>)[p.name] = p.default;
+      }
+      // prefill fromUnit from signal metadata; Pint accepts arbitrary unit strings so
+      // we don't require the unit to appear in a known group before prefilling
+      if (filterType === "unit" && col) {
+        const metaUnit = this.columnMetadata[col]?.unit;
+        if (metaUnit) {
+          (entry as Record<string, unknown>)["fromUnit"] = metaUnit;
+        }
       }
       temp.filters.push(entry);
     },
@@ -4553,6 +4653,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           if (!this.data![p.name]) {
             return null;
           }
+          const unit = this.effectiveUnit(key);
+          const traceLabel =
+            p.label + (unit ? ` (${unit.replace(/\s+/g, "")})` : "");
           const lineStyle = {
             width: p.width,
             color: p.color,
@@ -4563,7 +4666,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             return {
               r: this.data![p.name]!,
               theta: this.data![this.config.xAxis!.col!],
-              name: p.label,
+              name: traceLabel,
               mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
@@ -4581,7 +4684,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           return {
             x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
-            name: p.label,
+            name: traceLabel,
             mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
@@ -4663,6 +4766,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.config.xAxis!.col!,
       ]);
 
+      const xCol = this.config.xAxis!.col!;
+      const xUnit = this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []);
+      const xAxisText =
+        this.config.xAxisTitle ||
+        (xUnit ? `${xCol} (${xUnit.replace(/\s+/g, "")})` : xCol);
+
       const xAxisObj = {
         type: this.config.xScale ?? "linear",
         ...(resolvedRangeX
@@ -4687,7 +4796,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.xAxisTitle || this.config.xAxis!.col!,
+          text: xAxisText,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showX,
@@ -4756,7 +4865,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 gridcolor: majorGrid,
                 tickfont: { color: textColor, size: 14, family: "monospace" },
                 title: {
-                  text: this.config.xAxisTitle || this.config.xAxis!.col!,
+                  text: xAxisText,
                   font: { size: 14, color: textColor, family: "monospace" },
                 },
               },

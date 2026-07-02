@@ -309,38 +309,38 @@ def test_post_rejects_invalid_dimension(sm: SignalManager) -> None:
         sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "not_a_dimension"})
 
 
-def test_post_rejects_invalid_units(sm: SignalManager) -> None:
+def test_post_rejects_invalid_unit(sm: SignalManager) -> None:
     """An unparseable Pint unit string raises on first registration."""
-    with pytest.raises(ValueError, match="Invalid signal metadata units"):
-        sm.post(1.0, "Sensors", ("Foo",), metadata={"units": "not_a_unit"})
+    with pytest.raises(ValueError, match="Invalid signal metadata unit"):
+        sm.post(1.0, "Sensors", ("Foo",), metadata={"unit": "not_a_unit"})
 
 
-def test_post_rejects_mismatched_dimension_and_units(sm: SignalManager) -> None:
+def test_post_rejects_mismatched_dimension_and_unit(sm: SignalManager) -> None:
     """Units that don't match the given dimension raise on first registration."""
     with pytest.raises(ValueError, match="do not"):
         sm.post(
             1.0,
             "Sensors",
             ("Foo",),
-            metadata={"dimension": "[length]", "units": "newton"},
+            metadata={"dimension": "[length]", "unit": "newton"},
         )
 
 
-def test_post_accepts_consistent_dimension_and_units(sm: SignalManager) -> None:
-    """Matching dimension and units, and arbitrary extra keys, are stored as-is."""
+def test_post_accepts_consistent_dimension_and_unit(sm: SignalManager) -> None:
+    """Matching dimension and unit, and arbitrary extra keys, are stored as-is."""
     sm.post(
         1.0,
         "Sensors",
         ("Foo",),
         metadata={
             "dimension": "[length] / [time]",
-            "units": "meter / second",
+            "unit": "meter / second",
             "display_name": "Foo Speed",
         },
     )
     assert sm._column_metadata["Sensors/Foo"] == {
         "dimension": "[length] / [time]",
-        "units": "meter / second",
+        "unit": "meter / second",
         "display_name": "Foo Speed",
     }
 
@@ -378,12 +378,12 @@ def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
     for i in range(5):
         sm.post(float(i), "Signal", ("A",))
         sm.record(MjState(m, d))
-    sm.post(99.0, "Sensors", ("Foo",), metadata={"units": "volt"})
+    sm.post(99.0, "Sensors", ("Foo",), metadata={"unit": "volt"})
     sm.record(MjState(m, d))
     sm.close()
 
     footer = pl.read_parquet_metadata(sm.export_path)
-    assert json.loads(footer["column_metadata"]) == {"Sensors/Foo": {"units": "volt"}}
+    assert json.loads(footer["column_metadata"]) == {"Sensors/Foo": {"unit": "volt"}}
 
 
 def test_no_metadata_no_footer_key(sm: SignalManager) -> None:

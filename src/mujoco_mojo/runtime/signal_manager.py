@@ -11,10 +11,10 @@ import pint
 import polars as pl
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.stochas import UnitSystem, ureg
 from mujoco_mojo.typing import MatN, SignalCategory
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.unit_system import ureg
 
 logger = get_logger(__name__)
 
@@ -28,12 +28,12 @@ _COLUMN_METADATA_KEY = "column_metadata"
 
 def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """
-    Validates the well-known `dimension`/`units` metadata keys via Pint, leaving any other user-defined keys untouched.
+    Validates the well-known `dimension`/`unit` metadata keys via Pint, leaving any other user-defined keys untouched.
 
-    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit -- the right choice for built-in signals where the user's modeling unit system isn't knowable. `units` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
+    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit -- the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
     """
     dimension = metadata.get("dimension")
-    units = metadata.get("units")
+    unit = metadata.get("unit")
 
     dimensionality = None
     if dimension is not None:
@@ -42,14 +42,14 @@ def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         except (pint.UndefinedUnitError, pint.DefinitionSyntaxError) as e:
             raise ValueError(f"Invalid signal metadata dimension {dimension!r}: {e}")
 
-    if units is not None:
+    if unit is not None:
         try:
-            parsed_units = ureg.parse_units(units)
+            parsed_unit = ureg.parse_units(unit)
         except pint.UndefinedUnitError as e:
-            raise ValueError(f"Invalid signal metadata units {units!r}: {e}")
-        if dimensionality is not None and parsed_units.dimensionality != dimensionality:
+            raise ValueError(f"Invalid signal metadata unit {unit!r}: {e}")
+        if dimensionality is not None and parsed_unit.dimensionality != dimensionality:
             raise ValueError(
-                f"Signal metadata units {units!r} ({parsed_units.dimensionality}) do not "
+                f"Signal metadata unit {unit!r} ({parsed_unit.dimensionality}) do not "
                 f"match dimension {dimension!r} ({dimensionality})"
             )
 
@@ -82,6 +82,9 @@ class SignalManager:
 
     record_decimation: int = 1
     """How many steps between each recording should be performed."""
+
+    unit_system: UnitSystem | None = None
+    """When set, the time column's concrete unit is resolved from `unit_system.time` (e.g. `"second"`, `"millisecond"`). Always tagged with `dimension="[time]"` regardless."""
 
     # === BEGIN PRIVATE API ===
     _key_cache: dict[tuple[str, tuple[str, ...], str], str] = field(
@@ -118,7 +121,7 @@ class SignalManager:
     _column_metadata: dict[str, dict[str, Any]] = field(
         default_factory=dict, init=False
     )
-    """User-supplied metadata (e.g. `dimension`/`units`) for columns that registered any, keyed by full signal key. Written into the merged parquet file's footer on `close()`."""
+    """User-supplied metadata (e.g. `dimension`/`unit`) for columns that registered any, keyed by full signal key. Written into the merged parquet file's footer on `close()`."""
 
     @staticmethod
     def default_output_name() -> Literal["telemetry.parquet"]:
@@ -167,6 +170,10 @@ class SignalManager:
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
+        time_meta: dict[str, str] = {"dimension": "[time]"}
+        if self.unit_system is not None and self.unit_system.time is not None:
+            time_meta["unit"] = self.unit_system.time
+        self._column_metadata[TIME_COLUMN_NAME] = time_meta
         self._n_cols = 1
         logger.debug(
             f"SignalManager initialized: buffer capacity={self._capacity} rows, Path={self.export_path}"
@@ -243,7 +250,7 @@ class SignalManager:
             category (SignalCategory | str): Top level category (e.g., "Bodies")
             subgroups (tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
-            metadata (dict[str, Any] | None, optional): Arbitrary metadata for this signal, persisted into the telemetry file's footer. Only consulted the first time this signal is registered (ignored on later calls for the same signal). Two keys are validated via Pint if present: `dimension` (e.g. `"[length] / [time]"`), for tagging the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `units` (e.g. `"meter / second"`), for the rarer case the concrete unit truly is known. Any other keys (e.g. `display_name`, `comment`) pass through unvalidated. Defaults to None.
+            metadata (dict[str, Any] | None, optional): Arbitrary metadata for this signal, persisted into the telemetry file's footer. Only consulted the first time this signal is registered (ignored on later calls for the same signal). Two keys are validated via Pint if present: `dimension` (e.g. `"[length] / [time]"`), for tagging the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `unit` (e.g. `"meter / second"`), for the rarer case the concrete unit truly is known. Any other keys (e.g. `display_name`, `comment`) pass through unvalidated. Defaults to None.
 
         Examples:
             >>> # Becomes "Bodies/Hand/xpos:x"

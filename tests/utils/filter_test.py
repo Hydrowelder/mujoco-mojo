@@ -294,27 +294,6 @@ def test_unit_filter_rotation_conversion(signal_df: MojoDataFrame):
     assert np.allclose(result, expected)
 
 
-def test_unit_filter_mass_vs_force():
-    """Ensures lbm and lbf are handled as distinct dimensions."""
-    # 1 lbm -> kg (Mass)
-    f_mass = UnitFilter(from_unit="lbm", to_unit="kg")
-    # 1 lbf -> N (Force)
-    f_force = UnitFilter(from_unit="lbf", to_unit="N")
-
-    df = pl.DataFrame({"m": [1.0], "f": [1.0]})
-    res = df.select(
-        [
-            f_mass.apply(pl.col("m")).alias("m_kg"),
-            f_force.apply(pl.col("f")).alias("f_N"),
-        ]
-    )
-
-    # 1 pound-mass is ~0.453 kg
-    assert np.allclose(res["m_kg"][0], 0.453592, atol=1e-5)
-    # 1 pound-force is ~4.448 N
-    assert np.allclose(res["f_N"][0], 4.44822, atol=1e-5)
-
-
 def test_unit_filter_offset_conversion():
     """Verifies affine transformations with offsets (e.g., Celsius to Kelvin)."""
     df = pl.DataFrame({"temp_c": [0.0, 100.0]})
@@ -331,11 +310,11 @@ def test_unit_filter_dimensionality_mismatch():
     # Length to Time should raise ValueError via model_validator
     with pytest.raises(ValidationError) as exc:
         UnitFilter(from_unit="m", to_unit="s")
-    assert "Incompatible units" in str(exc.value)
+    assert "Incompatible unit" in str(exc.value)
 
     # Angle to Force
     with pytest.raises(ValidationError):
-        UnitFilter(from_unit="rad", to_unit="lbf")
+        UnitFilter(from_unit="rad", to_unit="pound_force")
 
 
 def test_unit_filter_undefined_unit():

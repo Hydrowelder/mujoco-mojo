@@ -2292,6 +2292,7 @@
       editorOpen: false,
       columns: [],
       rotateableVectors: [],
+      columnMetadata: {},
       discoveryId: 0,
       plotColors: [
         tw.cyan[500],
@@ -3736,6 +3737,7 @@
           const response = await this.fetchTrialData(this.trialId, initialCols);
           this.columns = response.columns.all.sort();
           this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+          this.columnMetadata = response.columns.column_metadata ?? {};
           this.data = response.data;
           void this.loadLabSchemas();
           const params = new URLSearchParams(window.location.search);
@@ -4787,6 +4789,68 @@
           }
         });
       },
+      initMetadataViewer(hostEl, jsonText) {
+        if (!hostEl || typeof CM === "undefined") return null;
+        const {
+          EditorView,
+          EditorState,
+          json,
+          syntaxHighlighting,
+          oneDarkHighlightStyle,
+          defaultHighlightStyle
+        } = CM;
+        const isDark = document.documentElement.classList.contains("dark");
+        const darkTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+            ".cm-scroller": {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+            ".cm-gutters": { display: "none" },
+            ".cm-cursor, .cm-dropCursor": { display: "none" },
+            ".cm-activeLine": { backgroundColor: "transparent" },
+            ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#1e293b !important"
+            }
+          },
+          { dark: true }
+        );
+        const lightTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+            ".cm-scroller": {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+            ".cm-gutters": { display: "none" },
+            ".cm-cursor, .cm-dropCursor": { display: "none" },
+            ".cm-activeLine": { backgroundColor: "transparent" },
+            ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#e2e8f0 !important"
+            }
+          },
+          { dark: false }
+        );
+        const state = EditorState.create({
+          doc: jsonText,
+          extensions: [
+            EditorState.readOnly.of(true),
+            json(),
+            isDark ? darkTheme : lightTheme,
+            syntaxHighlighting(
+              isDark ? oneDarkHighlightStyle : defaultHighlightStyle
+            )
+          ]
+        });
+        return new EditorView({ state, parent: hostEl });
+      },
       async resetConfig() {
         const ok = await window.mojoConfirm?.({
           title: "Reset settings",
@@ -5144,11 +5208,34 @@
         }
         return null;
       },
-      getUnitOptions(groups, fromUnit) {
+      getUnitOptions(groups, fromUnit, colDimension) {
         if (!groups) return [];
-        if (!fromUnit) return groups;
-        const match = groups.find((g) => g.units.includes(fromUnit));
-        return match ? [match] : groups;
+        const normalize = (u) => u.replace(/\s+/g, "").replace(/\*\*/g, "^");
+        if (fromUnit) {
+          const norm = normalize(fromUnit);
+          const match = groups.find(
+            (g) => g.units.some((u) => u === fromUnit || u === norm)
+          );
+          if (match) return [match];
+        }
+        if (colDimension && groups.some((g) => g.dimension)) {
+          const compatible = groups.filter((g) => g.dimension === colDimension);
+          if (compatible.length > 0) return compatible;
+        }
+        return groups;
+      },
+      // returns the concrete unit of col after walking its active filter stack;
+      // starts from column_metadata and updates when a unit filter's toUnit changes it;
+      // pass filtersOverride for axes (e.g. x-axis) that store filters outside config.yAxes
+      effectiveUnit(col, filtersOverride) {
+        let unit = this.columnMetadata[col]?.unit ?? null;
+        const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
+        for (const f of filters) {
+          if (f.enabled === false || f.type !== "unit") continue;
+          const to = f["toUnit"];
+          if (to) unit = to;
+        }
+        return unit;
       },
       getFilterSummary(entry) {
         const schema = this.filterSchemas.find((s) => s.type === entry.type);
@@ -5164,7 +5251,7 @@
         });
         return parts.slice(0, 3).join(", ");
       },
-      addFilterToTemp(temp, filterType) {
+      addFilterToTemp(temp, filterType, col) {
         const schema = this.filterSchemas.find((s) => s.type === filterType);
         if (!schema) return;
         if (!temp.filters) temp.filters = [];
@@ -5173,6 +5260,12 @@
         const entry = { type: filterType, enabled: true };
         for (const p of schema.params) {
           entry[p.name] = p.default;
+        }
+        if (filterType === "unit" && col) {
+          const metaUnit = this.columnMetadata[col]?.unit;
+          if (metaUnit) {
+            entry["fromUnit"] = metaUnit;
+          }
         }
         temp.filters.push(entry);
       },
@@ -5844,6 +5937,8 @@
           if (!this.data[p.name]) {
             return null;
           }
+          const unit = this.effectiveUnit(key);
+          const traceLabel = p.label + (unit ? ` (${unit.replace(/\s+/g, "")})` : "");
           const lineStyle = {
             width: p.width,
             color: p.color,
@@ -5854,7 +5949,7 @@
             return {
               r: this.data[p.name],
               theta: this.data[this.config.xAxis.col],
-              name: p.label,
+              name: traceLabel,
               mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
@@ -5872,7 +5967,7 @@
           return {
             x: this.data[this.config.xAxis.col],
             y: this.data[p.name],
-            name: p.label,
+            name: traceLabel,
             mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
@@ -5944,6 +6039,9 @@
         const resolvedRangeX = this.resolveAxisRange(this.config.rangeX, [
           this.config.xAxis.col
         ]);
+        const xCol = this.config.xAxis.col;
+        const xUnit = this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []);
+        const xAxisText = this.config.xAxisTitle || (xUnit ? `${xCol} (${xUnit.replace(/\s+/g, "")})` : xCol);
         const xAxisObj = {
           type: this.config.xScale ?? "linear",
           ...resolvedRangeX ? {
@@ -5960,7 +6058,7 @@
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
           title: {
-            text: this.config.xAxisTitle || this.config.xAxis.col,
+            text: xAxisText,
             font: { size: 14, color: textColor, family: "monospace" }
           },
           showspikes: showX,
@@ -6014,7 +6112,7 @@
               gridcolor: majorGrid,
               tickfont: { color: textColor, size: 14, family: "monospace" },
               title: {
-                text: this.config.xAxisTitle || this.config.xAxis.col,
+                text: xAxisText,
                 font: { size: 14, color: textColor, family: "monospace" }
               }
             }

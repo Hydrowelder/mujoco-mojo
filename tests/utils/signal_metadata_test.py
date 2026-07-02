@@ -25,7 +25,7 @@ def test_torque_and_energy_are_not_aliased_but_are_dimensionally_equal() -> None
 
 def test_dim_and_unit_build_expected_dicts() -> None:
     assert dim(Dimension.LENGTH) == {"dimension": "[length]"}
-    assert unit("meter") == {"units": "meter"}
+    assert unit("meter") == {"unit": "meter"}
 
 
 def test_torque_metadata_includes_quantity_hint() -> None:
@@ -35,10 +35,10 @@ def test_torque_metadata_includes_quantity_hint() -> None:
     }
 
 
-def test_angle_and_angular_rate_metadata_use_radian_units() -> None:
-    assert angle_metadata() == {"units": "radian"}
-    assert angular_rate_metadata() == {"units": "radian / second"}
-    assert angular_rate_metadata(per="second ** 2") == {"units": "radian / second ** 2"}
+def test_angle_and_angular_rate_metadata_use_radian_unit() -> None:
+    assert angle_metadata() == {"unit": "radian"}
+    assert angular_rate_metadata() == {"unit": "radian / second"}
+    assert angular_rate_metadata(per="second ** 2") == {"unit": "radian / second ** 2"}
 
 
 def test_dimensionless_metadata() -> None:

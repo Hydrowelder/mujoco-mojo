@@ -84,6 +84,7 @@ export interface TrialDataResponse {
     all: string[];
     rotatable_vectors: string[];
     available_quats: string[];
+    column_metadata: Record<string, Record<string, string>>;
   };
   data: Record<string, number[]>;
   filter_errors?: string[];
@@ -107,6 +108,7 @@ export interface FilterParamSchema {
 export interface UnitGroup {
   label: string;
   units: string[];
+  dimension?: string;
 }
 
 export interface FilterSchema {

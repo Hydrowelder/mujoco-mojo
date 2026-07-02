@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import mujoco
 
 if TYPE_CHECKING:
-    from mujoco_mojo.utils.unit_system import UnitSystem
+    from mujoco_mojo.stochas import UnitSystem
 
 __all__ = ["MjState"]
 
@@ -17,7 +17,7 @@ class MjState:
 
     model: mujoco.MjModel
     data: mujoco.MjData
-    units: UnitSystem | None = field(default=None, repr=False, compare=False)
+    us: UnitSystem | None = field(default=None, repr=False, compare=False)
     """Physical unit system declared on the model. Set automatically from `mojo_model.u` at simulation startup. When set, telemetry channels report concrete units (e.g. `"meter"`) instead of abstract Pint dimensions (e.g. `"[length]"`)."""
 
     _rne_post_constraint_fresh: bool = field(

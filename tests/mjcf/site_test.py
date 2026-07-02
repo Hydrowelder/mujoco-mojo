@@ -200,7 +200,7 @@ def test_rt_velocities_with_relative_to(
 def test_request_tags_builtin_dimension_metadata(
     two_body_setup: tuple[MjState, SiteSphere, SiteSphere], tmp_path: Path
 ) -> None:
-    """request() tags each channel with its built-in dimension/units metadata."""
+    """request() tags each channel with its built-in dimension/unit metadata."""
     state, s1, _s2 = two_body_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
@@ -211,7 +211,7 @@ def test_request_tags_builtin_dimension_metadata(
     assert sm._column_metadata["Sites/site1/xvelp:x"] == {
         "dimension": "[length] / [time]"
     }
-    assert sm._column_metadata["Sites/site1/xvelr:x"] == {"units": "radian / second"}
+    assert sm._column_metadata["Sites/site1/xvelr:x"] == {"unit": "radian / second"}
     assert sm._column_metadata["Sites/site1/quat:w"] == {"dimension": "[]"}
 
 

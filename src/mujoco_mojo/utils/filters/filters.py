@@ -413,7 +413,7 @@ class SavitzkyGolayFilter(BaseFilter):
         )
 
 
-from mujoco_mojo.utils.unit_system import ureg
+from mujoco_mojo.stochas import ureg
 
 # ---------------------------------------------------------------------------
 # Unit groups - single source of truth for both the frontend smart dropdown
@@ -430,13 +430,24 @@ UNIT_GROUPS: list[tuple[str, list[str]]] = [
     ("Velocity", ["m/s", "mm/s", "cm/s", "ft/s", "in/s", "km/h", "mph"]),
     ("Acceleration", ["m/s^2", "mm/s^2", "ft/s^2", "in/s^2"]),
     # --- Dynamics & Statics ---
-    ("Mass", ["kg", "g", "mg", "lbm", "slug"]),
-    ("Force", ["N", "mN", "uN", "kN", "lbf"]),
-    ("Torque", ["N*m", "N*mm", "mN*m", "kN*m", "lbf*ft", "lbf*in", "ozf*in"]),
-    ("Inertia", ["kg*m^2", "kg*mm^2", "lbm*in^2", "lbm*ft^2", "slug*ft^2"]),
+    ("Mass", ["kg", "g", "mg", "pound", "slug"]),
+    ("Force", ["N", "mN", "uN", "kN", "pound_force", "ounce_force"]),
+    (
+        "Torque",
+        [
+            "N*m",
+            "N*mm",
+            "mN*m",
+            "kN*m",
+            "pound_force*ft",
+            "pound_force*in",
+            "ounce_force*in",
+        ],
+    ),
+    ("Inertia", ["kg*m^2", "kg*mm^2", "pound*in^2", "pound*ft^2", "slug*ft^2"]),
     # --- Work & Thermodynamics ---
-    ("Energy", ["J", "mJ", "kJ", "W*s", "W*h", "kW*h", "ft*lbf", "BTU"]),
-    ("Power", ["W", "mW", "kW", "MW", "hp", "ft*lbf/s"]),
+    ("Energy", ["J", "mJ", "kJ", "W*s", "W*h", "kW*h", "ft*pound_force", "BTU"]),
+    ("Power", ["W", "mW", "kW", "MW", "hp", "ft*pound_force/s"]),
     ("Pressure", ["Pa", "kPa", "MPa", "psi", "bar", "atm", "torr"]),
     # --- Temporal & Electronics ---
     ("Time", ["s", "ms", "us", "ns", "min", "hr"]),

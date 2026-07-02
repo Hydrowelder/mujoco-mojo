@@ -302,7 +302,9 @@ class ActuatorBase(XMLModel, ABC):
                     if transmission_meta is not None
                     else None
                 )
-                meta = merge_signal_metadata(builtin, channel, _meta, units=state.units)
+                meta = merge_signal_metadata(
+                    builtin, channel, _meta, unit_system=state.us
+                )
 
                 match channel:
                     case "ctrl":

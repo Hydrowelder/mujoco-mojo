@@ -17,12 +17,17 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.typing import SignalCategory
-from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
+from mujoco_mojo.utils.dataframe import (
+    ColumnManifest,
+    MojoDataFrame,
+    read_column_metadata,
+)
 from mujoco_mojo.utils.defaults import NAMED_VALUES_FNAME as _NAMED_VALUES_FNAME
 from mujoco_mojo.utils.defaults import STOCHAS_DIR_NAME as _STOCHAS_DIR_NAME
 from mujoco_mojo.utils.defaults import STOCHAS_DISTS_FNAME as _STOCHAS_DISTS_FNAME
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
+from mujoco_mojo.utils.filters.filters import ureg as _ureg
 from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
 from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
@@ -48,6 +53,17 @@ _annotated_args = get_args(_AnyFilter)
 _FILTER_CLASSES: list[type[_BaseFilter]] = (
     list(get_args(_annotated_args[0])) if _annotated_args else []
 )
+
+
+def _unit_group_dimension(units: list[str]) -> str | None:
+    """Returns the Pint dimensionality string for a unit group, derived from its first parseable unit."""
+    for u in units:
+        try:
+            return str(_ureg.parse_units(u).dimensionality)
+        except Exception:
+            continue
+    return None
+
 
 _CONSTRAINT_OPS = {
     "less_than_equal": "≤",
@@ -299,7 +315,12 @@ async def get_filter_schema():
         }
         if type_val == "unit":
             entry["unit_groups"] = [
-                {"label": label, "units": units} for label, units in _UNIT_GROUPS
+                {
+                    "label": label,
+                    "units": units,
+                    "dimension": _unit_group_dimension(units),
+                }
+                for label, units in _UNIT_GROUPS
             ]
         result.append(entry)
 
@@ -604,9 +625,17 @@ def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
 
 
 @lru_cache(maxsize=128)
+def _get_column_metadata(path: Path, mtime: float) -> dict:
+    """Reads per-column signal metadata from the parquet footer, cached by path and mtime."""
+    return read_column_metadata(path)
+
+
+@lru_cache(maxsize=128)
 def _get_column_manifest(path: Path, mtime: float) -> ColumnManifest:
-    """Retrieves all column names from the table schema."""
-    return _get_mojo_df(path, mtime).mojo.get_manifest()
+    """Retrieves all column names and their metadata from the table schema."""
+    return _get_mojo_df(path, mtime).mojo.get_manifest(
+        column_metadata=_get_column_metadata(path, mtime)
+    )
 
 
 @lru_cache(maxsize=2048)
@@ -665,7 +694,10 @@ async def get_trial_data(
     lab_mtime = _lab_dir_mtime()
     lab_extra = _valid_lab_columns_cached(frozenset(parquet_manifest["all"]), lab_mtime)
     column_manifest = (
-        _get_mojo_df(db_path, mtime).mojo.get_manifest(extra_columns=list(lab_extra))
+        _get_mojo_df(db_path, mtime).mojo.get_manifest(
+            extra_columns=list(lab_extra),
+            column_metadata=_get_column_metadata(db_path, mtime),
+        )
         if lab_extra
         else parquet_manifest
     )
@@ -943,7 +975,7 @@ def _gif_webm_cache_path(gif_path: Path) -> Path:
 
 
 def _convert_gif_to_webm_sync(gif_path: Path, webm_path: Path) -> None:
-    """Converts a GIF to WebM (VP9) using ffmpeg directly. Blocking — run in executor."""
+    """Converts a GIF to WebM (VP9) using ffmpeg directly. Blocking. Run in executor."""
     import subprocess
 
     subprocess.run(
@@ -1306,7 +1338,7 @@ async def get_trial_dists(trial_id: str) -> dict:
                     "name": dist.name,
                     "dist_type": dist.dist_type,
                     "category": dist.category,
-                    "units": dist.units,
+                    "units": str(dist.unit) if dist.unit is not None else "unset",
                     "nominal": nominal,
                     "nominal_label": nominal_label,
                     "sampled_value": sampled,

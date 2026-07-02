@@ -163,16 +163,16 @@ def test_actuator_request_posts_act_for_stateful_actuator(
 def test_actuator_request_tags_hinge_transmission_with_angle_metadata(
     motor_setup: tuple[MjState, ActuatorMotor], tmp_path: Path
 ) -> None:
-    """A hinge-joint-driven actuator's length/velocity/force are tagged with angle-based units/torque."""
+    """A hinge-joint-driven actuator's length/velocity/force are tagged with angle-based unit/torque."""
     state, actuator = motor_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
     actuator.request(sm, channels=["length", "velocity", "force"])
     sm.record(state)
 
-    assert sm._column_metadata["Actuators/elbow_motor:length"] == {"units": "radian"}
+    assert sm._column_metadata["Actuators/elbow_motor:length"] == {"unit": "radian"}
     assert sm._column_metadata["Actuators/elbow_motor:velocity"] == {
-        "units": "radian / second"
+        "unit": "radian / second"
     }
     assert sm._column_metadata["Actuators/elbow_motor:force"] == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
@@ -243,7 +243,7 @@ def test_actuator_request_metadata_override(
         sm,
         channels={
             "force": {"display_name": "Elbow Torque"},
-            "ctrl": {"units": "newton"},
+            "ctrl": {"unit": "newton"},
         },
     )
     sm.record(state)
@@ -253,4 +253,4 @@ def test_actuator_request_metadata_override(
         "quantity": "torque",
         "display_name": "Elbow Torque",
     }
-    assert sm._column_metadata["Actuators/elbow_motor:ctrl"] == {"units": "newton"}
+    assert sm._column_metadata["Actuators/elbow_motor:ctrl"] == {"unit": "newton"}

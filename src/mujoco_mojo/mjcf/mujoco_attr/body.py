@@ -461,7 +461,7 @@ class Body(XMLModel):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
         * A `scalar` is posted as a single value with `attr=channel` under `subgroups=(body_name,)`.
 
-        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (e.g. `xpos` is tagged as a length, `lin_mom` as linear momentum).
+        Each signal is tagged with built-in `dimension`/`unit` metadata for its channel (e.g. `xpos` is tagged as a length, `lin_mom` as linear momentum).
 
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
@@ -493,7 +493,7 @@ class Body(XMLModel):
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
-                    units=state.units,
+                    unit_system=state.us,
                 )
 
                 match channel:

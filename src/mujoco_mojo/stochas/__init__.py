@@ -48,8 +48,11 @@ from stochas import (
     TriangularDistribution,
     TruncatedNormalDistribution,
     UniformDistribution,
+    UnitDescriptor,
+    UnitSystem,
     ValueName,
     WeibullDistribution,
+    ureg,
 )
 
 __all__ = [
@@ -102,6 +105,9 @@ __all__ = [
     "TriangularDistribution",
     "TruncatedNormalDistribution",
     "UniformDistribution",
+    "UnitDescriptor",
+    "UnitSystem",
     "ValueName",
     "WeibullDistribution",
+    "ureg",
 ]

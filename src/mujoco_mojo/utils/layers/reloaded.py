@@ -496,7 +496,7 @@ class MojoReloaded:
 
                 try:
                     state = mojo_model.mjcf.prep_for_sim(
-                        save_path=trial_dir / self.xml_name, units=mojo_model.u
+                        save_path=trial_dir / self.xml_name, unit_system=mojo_model.us
                     )
                 except Exception as e:
                     msg = f"Failed to compile with MuJoCo: {e}"
@@ -517,7 +517,8 @@ class MojoReloaded:
                     runtime_manager = rt.RuntimeManager(
                         signal_manager=rt.SignalManager(
                             export_path=trial_dir
-                            / rt.SignalManager.default_output_name()
+                            / rt.SignalManager.default_output_name(),
+                            unit_system=mojo_model.us,
                         ),
                         _sync_hook=self._sync_hook,
                         _skip_recording=not self.record,

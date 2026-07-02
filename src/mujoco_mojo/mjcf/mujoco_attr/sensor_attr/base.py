@@ -156,7 +156,7 @@ class SensorBase(XMLModel, ABC):
     """Cached built-in metadata for this sensor's tag, resolved once on first sample."""
 
     def _resolve_builtin_metadata(self, state: MjState) -> dict[str, str] | None:
-        """Resolves and caches this sensor's built-in dimension/units metadata, based on its tag (and, for joint-/actuator-referencing tags, the referenced object's type)."""
+        """Resolves and caches this sensor's built-in dimension/unit metadata, based on its tag (and, for joint-/actuator-referencing tags, the referenced object's type)."""
         if self._metadata_resolved:
             return self._resolved_metadata_cache
 
@@ -210,7 +210,7 @@ class SensorBase(XMLModel, ABC):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(sensor_name, tag)`.
         * An `indexed` output posts `dim` values under `subgroups=(sensor_name, tag)` with `attr` set to `0`-`dim - 1`.
 
-        Each signal is tagged with built-in `dimension`/`units` metadata where the sensor's physical quantity is unambiguous (e.g. `accelerometer` is tagged as an acceleration). For `jointpos`/`jointvel`/`jointactuatorfrc`/`jointlimit*`, the metadata is resolved from the referenced joint's type (angle/length); for `actuatorpos`/`actuatorvel`/`actuatorfrc`, from the referenced actuator's transmission. No built-in default is applied for sensors whose unit is genuinely unspecified by MuJoCo (`magnetometer`, `tactile`, `user`, `plugin`, `camprojection`, `contact`) or for actuator-referencing tags on a SITE/BODY/SLIDERCRANK-transmission actuator -- supply `metadata` yourself for those if you know it.
+        Each signal is tagged with built-in `dimension`/`unit` metadata where the sensor's physical quantity is unambiguous (e.g. `accelerometer` is tagged as an acceleration). For `jointpos`/`jointvel`/`jointactuatorfrc`/`jointlimit*`, the metadata is resolved from the referenced joint's type (angle/length); for `actuatorpos`/`actuatorvel`/`actuatorfrc`, from the referenced actuator's transmission. No built-in default is applied for sensors whose unit is genuinely unspecified by MuJoCo (`magnetometer`, `tactile`, `user`, `plugin`, `camprojection`, `contact`) or for actuator-referencing tags on a SITE/BODY/SLIDERCRANK-transmission actuator -- supply `metadata` yourself for those if you know it.
 
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
@@ -236,7 +236,7 @@ class SensorBase(XMLModel, ABC):
                 self._resolve_builtin_metadata(state),
                 self.tag,
                 metadata,
-                units=state.units,
+                unit_system=state.us,
             )
 
             # find where this sensor's data starts and how long it is

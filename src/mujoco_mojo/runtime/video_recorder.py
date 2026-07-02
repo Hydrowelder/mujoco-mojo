@@ -411,9 +411,9 @@ class VideoRecorder:
         Finishes writing the video file.
 
         Supported formats:
-        - `.mp4` — H.264 via ffmpeg; universally compatible.
-        - `.webm` — VP9 via ffmpeg; smaller files and fully seekable.
-        - `.gif` — via PIL; no audio, loops automatically, large file size, not seekable.
+        - `.mp4`: H.264 via ffmpeg; universally compatible.
+        - `.webm`: VP9 via ffmpeg; smaller files and fully seekable.
+        - `.gif`: via PIL; no audio, loops automatically, large file size, not seekable.
 
         `.mp4` and `.webm` are encoded incrementally: each frame is piped to ffmpeg as it's captured, so `save` only needs to close that pipe and wait for ffmpeg to finish. `.gif` (and any other format) buffers every frame in memory and is only encoded here.
 

@@ -118,21 +118,21 @@ def test_rt_qfrc_passive_reflects_damping() -> None:
 def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
     hinge_setup: tuple[MjState, Joint], tmp_path: Path
 ) -> None:
-    """A hinge joint's qpos/qvel are tagged with concrete radian-based units."""
+    """A hinge joint's qpos/qvel are tagged with concrete radian-based unit."""
     state, joint = hinge_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"] == {"units": "radian"}
-    assert sm._column_metadata["Joints/elbow:qvel"] == {"units": "radian / second"}
+    assert sm._column_metadata["Joints/elbow:qpos"] == {"unit": "radian"}
+    assert sm._column_metadata["Joints/elbow:qvel"] == {"unit": "radian / second"}
 
 
 def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
     tmp_path: Path,
 ) -> None:
-    """A slide joint's qpos/qvel are tagged with scale-ambiguous length/velocity dimensions, not concrete units."""
+    """A slide joint's qpos/qvel are tagged with scale-ambiguous length/velocity dimensions, not concrete unit."""
     xml = """
     <mujoco>
         <worldbody>
@@ -169,7 +169,7 @@ def test_joint_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Joints/elbow:qpos"] == {
-        "units": "radian",
+        "unit": "radian",
         "display_name": "Elbow Angle",
     }
 

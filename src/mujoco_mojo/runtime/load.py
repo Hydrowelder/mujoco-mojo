@@ -234,7 +234,7 @@ class SiteLoad(Load):
             for channel in channels:
                 source = self._last_f if channel == "force" else self._last_t
                 meta = merge_signal_metadata(
-                    channel_metadata.get(channel), channel, _meta, units=state.units
+                    channel_metadata.get(channel), channel, _meta, unit_system=state.us
                 )
 
                 # iterate through x, y, z, and magnitude (pop. pop.)
@@ -694,10 +694,7 @@ class JointLoad(Load):
                 raise ValueError(msg)
         self._dof_adr = int(state.model.jnt_dofadr[self._jid])
         logger.debug(
-            "resolved joint '%s' to dof_adr=%d nv=%d",
-            self.joint.name,
-            self._dof_adr,
-            self._nv,
+            f"resolved joint '{self.joint.name}' to dof_adr={self._dof_adr} nv={self._nv}",
         )
 
     @abstractmethod
@@ -779,7 +776,7 @@ class JointFriction(JointLoad):
             jnt_id = self.joint.get_id(state.model)
             jnt_type = int(state.model.jnt_type[jnt_id])
             meta = merge_signal_metadata(
-                force_or_torque(jnt_type), "friction", metadata, units=state.units
+                force_or_torque(jnt_type), "friction", metadata, unit_system=state.us
             )
 
             frc = self._last_force if self.active else np.zeros(3)

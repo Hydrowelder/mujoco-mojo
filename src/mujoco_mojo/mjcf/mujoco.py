@@ -32,7 +32,7 @@ from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
 
 if TYPE_CHECKING:
-    from mujoco_mojo.utils.unit_system import UnitSystem
+    from mujoco_mojo.stochas import UnitSystem
 
 logger = get_logger(__name__)
 
@@ -274,9 +274,9 @@ class Mujoco(XMLModel):
         return self.pose_context.local_pose(frame, relative_to)
 
     def prep_for_sim(
-        self, save_path: Path | None = None, *, units: UnitSystem | None = None
+        self, save_path: Path | None = None, *, unit_system: UnitSystem | None = None
     ) -> MjState:
-        """Creates an MjState (MjModel + MjData) from the Mujoco instance. Pass `units` to attach the model's unit system so that telemetry channels emit concrete unit strings instead of abstract Pint dimension expressions."""
+        """Creates an MjState (MjModel + MjData) from the Mujoco instance. Pass `unit_system` to attach the model's unit system so that telemetry channels emit concrete unit strings instead of abstract Pint dimension expressions."""
         if save_path:
             self.write_xml(save_path)
             model = mujoco.MjModel.from_xml_path(str(save_path))
@@ -287,8 +287,8 @@ class Mujoco(XMLModel):
         mujoco.mj_forward(model, data)
         mujoco.mj_rnePostConstraint(model, data)
         state = MjState(model, data)
-        state.units = units
-        if units is None:
+        state.us = unit_system
+        if unit_system is None:
             logger.warning(
                 "No unit system declared on this model. Telemetry metadata will use "
                 "abstract Pint dimension strings ([length], [mass]) instead of concrete "

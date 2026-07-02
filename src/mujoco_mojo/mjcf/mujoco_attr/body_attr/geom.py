@@ -310,7 +310,7 @@ class GeomBase(XMLModel, ABC):
         * A `mat9` is a flattened 3x3 matrix, posted as 9 values with `attr` set to `0`-`8`.
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`).
 
-        Each signal is tagged with built-in `dimension`/`units` metadata for its channel (e.g. `xpos` is tagged as a length, `xaccr` as an angular acceleration in radians/second^2).
+        Each signal is tagged with built-in `dimension`/`unit` metadata for its channel (e.g. `xpos` is tagged as a length, `xaccr` as an angular acceleration in radians/second^2).
 
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
 
@@ -342,7 +342,7 @@ class GeomBase(XMLModel, ABC):
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
-                    units=state.units,
+                    unit_system=state.us,
                 )
 
                 # Manual mapping to avoid getattr

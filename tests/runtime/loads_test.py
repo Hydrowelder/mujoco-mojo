@@ -1521,7 +1521,7 @@ def test_actuator_load_request_metadata_override(tmp_path):
     load.apply_load(state)
 
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
-    load.request(sm, metadata={"ctrl": {"units": "newton"}})
+    load.request(sm, metadata={"ctrl": {"unit": "newton"}})
     sm.record(state)
 
-    assert sm._column_metadata["Loads/drive:ctrl"] == {"units": "newton"}
+    assert sm._column_metadata["Loads/drive:ctrl"] == {"unit": "newton"}

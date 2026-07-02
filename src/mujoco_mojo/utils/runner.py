@@ -421,11 +421,12 @@ class Trial:
                     runtime_manager = rt.RuntimeManager(
                         signal_manager=rt.SignalManager(
                             export_path=self.trial_dir
-                            / rt.SignalManager.default_output_name()
+                            / rt.SignalManager.default_output_name(),
+                            unit_system=mojo_model.us,
                         )
                     )
                     state = mojo_model.mjcf.prep_for_sim(
-                        self.xml_path, units=mojo_model.u
+                        self.xml_path, unit_system=mojo_model.us
                     )
                     result = runtime(
                         mojo_model,

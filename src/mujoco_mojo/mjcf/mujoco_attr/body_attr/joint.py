@@ -35,7 +35,7 @@ from mujoco_mojo.utils.signal_metadata import (
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
-    from mujoco_mojo.utils.unit_system import UnitSystem
+    from mujoco_mojo.stochas import UnitSystem
 
 logger = get_logger(__name__)
 
@@ -294,7 +294,7 @@ class Joint(XMLModel):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(joint_name, channel)`.
         * For free joints, `qpos` is split into an `xyzm` posted under `pos_qpos` and a `quat` posted under `quat_qpos`; the remaining channels are split into an `xyzm` posted under `lin_<channel>` (linear) and another `xyzm` posted under `ang_<channel>` (angular).
 
-        Each signal is tagged with built-in `dimension`/`units` metadata based on the joint's type (e.g. a hinge's `qpos` is tagged as an angle in radians; a slide's as a length). `qfrc_*` is tagged as force for slide joints and torque for hinge/ball/free.
+        Each signal is tagged with built-in `dimension`/`unit` metadata based on the joint's type (e.g. a hinge's `qpos` is tagged as an angle in radians; a slide's as a length). `qfrc_*` is tagged as force for slide joints and torque for hinge/ball/free.
 
         Args:
             signal_manager: The signal manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
@@ -326,11 +326,11 @@ class Joint(XMLModel):
             channel: str,
             builtin: dict[str, str] | None,
             *,
-            units: UnitSystem | None = None,
+            us: UnitSystem | None = None,
         ):
             """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
             full_vec = np.append(vec3, np.linalg.norm(vec3))
-            meta = merge_signal_metadata(builtin, channel, _meta, units=units)
+            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
             for v, attr in zip(full_vec, "xyzm", strict=True):
                 signal_manager.post(
                     value=float(v),
@@ -345,10 +345,10 @@ class Joint(XMLModel):
             channel: str,
             builtin: dict[str, str] | None,
             *,
-            units: UnitSystem | None = None,
+            us: UnitSystem | None = None,
         ):
             """Posts an orientation quaternion under w/x/y/z attrs."""
-            meta = merge_signal_metadata(builtin, channel, _meta, units=units)
+            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
             for v, attr in zip(quat, "wxyz", strict=True):
                 signal_manager.post(
                     value=float(v),
@@ -361,7 +361,7 @@ class Joint(XMLModel):
         def sample(state: MjState):
             jnt_type = self._jnt_type(state)
             scalar_meta = joint_type_metadata(jnt_type)
-            u = state.units
+            u = state.us
 
             for channel in channels:
                 match channel:
@@ -390,7 +390,7 @@ class Joint(XMLModel):
                         subgroups=(f"{self.name}",),
                         attr=channel,  # scalar values are considered an attr of the parent
                         metadata=merge_signal_metadata(
-                            scalar_meta[scalar_key], channel, _meta, units=u
+                            scalar_meta[scalar_key], channel, _meta, unit_system=u
                         ),
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_FREE:
@@ -398,17 +398,17 @@ class Joint(XMLModel):
                         val[:3],
                         channel=f"pos_{channel}",
                         builtin=dim(Dimension.LENGTH),
-                        units=u,
+                        us=u,
                     )
                     post_quat(
                         val[3:],
                         channel=f"quat_{channel}",
                         builtin=dimensionless_metadata(),
-                        units=u,
+                        us=u,
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
                     post_quat(
-                        val, channel=channel, builtin=dimensionless_metadata(), units=u
+                        val, channel=channel, builtin=dimensionless_metadata(), us=u
                     )
                 elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
                     lin_builtin = (
@@ -422,10 +422,10 @@ class Joint(XMLModel):
                         else torque_metadata()
                     )
                     post_vec3(
-                        val[:3], channel=f"lin_{channel}", builtin=lin_builtin, units=u
+                        val[:3], channel=f"lin_{channel}", builtin=lin_builtin, us=u
                     )
                     post_vec3(
-                        val[3:], channel=f"ang_{channel}", builtin=ang_builtin, units=u
+                        val[3:], channel=f"ang_{channel}", builtin=ang_builtin, us=u
                     )
                 else:
                     # ball joint's qvel/qfrc_* -- always rotational (3 DOF, no translation)
@@ -434,6 +434,6 @@ class Joint(XMLModel):
                         if channel == "qvel"
                         else torque_metadata()
                     )
-                    post_vec3(val, channel=channel, builtin=ang_builtin, units=u)
+                    post_vec3(val, channel=channel, builtin=ang_builtin, us=u)
 
         signal_manager.register_sampler(sample)

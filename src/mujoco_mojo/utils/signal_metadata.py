@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from mujoco_mojo.typing import Angle
 
 if TYPE_CHECKING:
-    from mujoco_mojo.utils.unit_system import UnitSystem
+    from mujoco_mojo.stochas import UnitSystem
 
 __all__ = [
     "Dimension",
@@ -53,23 +53,32 @@ class Dimension(StrEnum):
     DIMENSIONLESS = "[]"
 
 
-def _dimension_str_to_unit_string(dimension_str: str, units: UnitSystem) -> str:
-    """Substitutes base unit names into a Pint dimension expression to produce a concrete unit string (e.g. `"[length] / [time]"` + SI -> `"meter / second"`)."""
+def _dimension_str_to_unit_string(dimension_str: str, unit_system: UnitSystem) -> str:
+    """Substitutes base unit names into a Pint dimension expression to produce a concrete unit string (e.g. `"[length] / [time]"` + SI -> `"m / second"`)."""
+    replacements = {
+        "[length]": unit_system.length,
+        "[mass]": unit_system.mass,
+        "[time]": unit_system.time,
+        "[temperature]": unit_system.temperature,
+        "[current]": unit_system.current,
+        "[substance]": unit_system.amount,
+        "[luminosity]": unit_system.luminosity,
+    }
     s = dimension_str
-    s = s.replace("[length]", units.length)
-    s = s.replace("[mass]", units.mass)
-    s = s.replace("[time]", units.time)
+    for token, base in replacements.items():
+        if base is not None:
+            s = s.replace(token, base)
     return s
 
 
 def resolve_dimension_metadata(
-    meta: dict[str, str], units: UnitSystem
+    meta: dict[str, str], unit_system: UnitSystem
 ) -> dict[str, str]:
-    """Replaces a `"dimension"` key in `meta` with a concrete `"units"` string derived from `units`. Dimensionless signals (`dimension="[]"`) are left unchanged since `"[]"` has no concrete unit equivalent. All other keys in `meta` (e.g. `"quantity"`) are preserved."""
+    """Adds a concrete `"unit"` string to `meta` derived from its `"dimension"` key and the given `unit_system`. The `"dimension"` key is preserved so callers can still see both the physical quantity type and the concrete unit. Dimensionless signals (`dimension="[]"`) are left unchanged. All other keys in `meta` (e.g. `"quantity"`) are preserved."""
     if "dimension" not in meta or meta["dimension"] == "[]":
         return meta
-    concrete = _dimension_str_to_unit_string(meta["dimension"], units)
-    return {**{k: v for k, v in meta.items() if k != "dimension"}, "units": concrete}
+    concrete = _dimension_str_to_unit_string(meta["dimension"], unit_system)
+    return {**meta, "unit": concrete}
 
 
 def dim(dimension: Dimension | str) -> dict[str, str]:
@@ -79,7 +88,7 @@ def dim(dimension: Dimension | str) -> dict[str, str]:
         # so this must come before the str branch to avoid the Pint-lookup path running on
         # a known Dimension value (which would return the wrong enum member for TORQUE vs ENERGY)
         return {"dimension": str(dimension)}
-    from mujoco_mojo.utils.unit_system import ureg
+    from mujoco_mojo.stochas import ureg
 
     target = ureg.get_dimensionality(dimension)
     for member in Dimension:
@@ -90,9 +99,9 @@ def dim(dimension: Dimension | str) -> dict[str, str]:
     )
 
 
-def unit(units: str) -> dict[str, str]:
-    """Builds a `units=`-keyed metadata entry."""
-    return {"units": units}
+def unit(unit: str) -> dict[str, str]:
+    """Builds a `unit=`-keyed metadata entry."""
+    return {"unit": unit}
 
 
 def dimensionless_metadata() -> dict[str, str]:
@@ -129,11 +138,11 @@ def merge_signal_metadata(
     channel: str,
     user_metadata: Mapping[str, dict[str, Any] | None] | None,
     *,
-    units: UnitSystem | None = None,
+    unit_system: UnitSystem | None = None,
 ) -> dict[str, Any] | None:
-    """Merges a built-in default metadata dict with the caller-supplied override/extension for `channel`, with user-supplied keys winning on conflict. If `units` is provided and `builtin` contains a `"dimension"` key, the dimension is resolved to a concrete unit string. Returns `None` if both are empty."""
-    if builtin is not None and units is not None:
-        builtin = resolve_dimension_metadata(builtin, units)
+    """Merges a built-in default metadata dict with the caller-supplied override/extension for `channel`, with user-supplied keys winning on conflict. If `unit_system` is provided and `builtin` contains a `"dimension"` key, the dimension is resolved to a concrete unit string. Returns `None` if both are empty."""
+    if builtin is not None and unit_system is not None:
+        builtin = resolve_dimension_metadata(builtin, unit_system)
     user_override = (user_metadata or {}).get(channel)
     merged = {**(builtin or {}), **(user_override or {})}
     return merged or None

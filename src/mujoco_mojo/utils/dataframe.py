@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
     from typing import Self
 
+    from mujoco_mojo.stochas import UnitSystem
+
 import numpy as np
 import polars as pl
+import pyarrow.parquet as pq
 
 from mujoco_mojo.typing import (
     ActuatorName,
@@ -29,6 +33,17 @@ from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
+
+
+def read_column_metadata(path: Path | str) -> dict[str, dict[str, Any]]:
+    """Reads the per-column metadata dict from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata."""
+    file_meta = pq.read_metadata(str(path)).metadata
+    if not file_meta:
+        return {}
+    raw = file_meta.get(b"column_metadata")
+    if raw is None:
+        return {}
+    return json.loads(raw.decode())  # type: ignore[no-any-return]
 
 
 class _MojoFrame(pl.DataFrame):
@@ -114,6 +129,9 @@ class ColumnManifest(TypedDict):
 
     available_quats: list[str]
     """All quaternion names which have enough information to rotate self.rotateable_vectors."""
+
+    column_metadata: dict[str, dict[str, str]]
+    """All per-column signal metadata keyed by column name. Contains all metadata keys (e.g. `unit`, `dimension`, custom keys) for every column that has any metadata. Populated only when `column_metadata` is passed to `get_manifest()`."""
 
 
 class MojoNamespace:
@@ -304,18 +322,133 @@ class MojoNamespace:
             expanded.extend([f"{base}:w", f"{base}:x", f"{base}:y", f"{base}:z"])
         return expanded
 
-    def get_manifest(self, extra_columns: list[str] | None = None) -> ColumnManifest:
-        """Returns the structured manifest used by the frontend. extra_columns are appended to 'all' and included in rotatable/quat discovery."""
+    def get_manifest(
+        self,
+        extra_columns: list[str] | None = None,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> ColumnManifest:
+        """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `read_column_metadata()`) to populate `column_units`."""
         bm = self._get_base_map(extra_columns)
+        all_cols = list(self._df.columns) + (extra_columns or [])
+        meta = column_metadata or {}
+        col_meta = {col: m for col in all_cols if (m := meta.get(col)) is not None}
         return {
-            "all": list(self._df.columns) + (extra_columns or []),
+            "all": all_cols,
             "rotatable_vectors": sorted(
                 b for b, s in bm.items() if {"x", "y", "z"}.issubset(s) and "w" not in s
             ),
             "available_quats": sorted(
                 b for b, s in bm.items() if {"w", "x", "y", "z"}.issubset(s)
             ),
+            "column_metadata": col_meta,
         }
+
+    def with_unit_system(
+        self,
+        target: UnitSystem,
+        *,
+        path: Path | str | None = None,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
+        assume_source: UnitSystem | None = None,
+    ) -> MojoDataFrame:
+        """
+        Converts all columns with known units into the target unit system.
+
+        For each column whose metadata carries a concrete `"unit"` key, applies a unit conversion from that stored unit into the equivalent unit in `target`. If `assume_source` is given, columns that only carry a `"dimension"` key (no concrete unit) are treated as if their source unit is the corresponding unit in `assume_source`, so they are converted too.
+
+        All conversions are collected and applied in a single `with_columns()` call (Polars handles the vectorised execution across columns), so this is equivalent in cost to one pass over the data regardless of how many unit groups there are.
+
+        Args:
+            target: The target unit system (e.g. `UnitSystem.si()`).
+            path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
+            column_metadata: Pre-loaded metadata dict (from `read_column_metadata()`). Takes precedence over `path`.
+            assume_source: When set, columns with only a `"dimension"` tag (no `"unit"`) are converted as if they were expressed in the corresponding unit from this system.
+
+        """
+        from mujoco_mojo.stochas import UnitSystem as _US
+        from mujoco_mojo.stochas import ureg
+        from mujoco_mojo.utils.filters.filters import UnitFilter
+
+        meta: dict[str, dict[str, Any]]
+        if column_metadata is not None:
+            meta = column_metadata
+        elif path is not None:
+            meta = read_column_metadata(path)
+        else:
+            meta = {}
+
+        def _base_map(us: _US) -> dict[str, str]:
+            return {
+                k: v
+                for k, v in {
+                    "[length]": us.length,
+                    "[mass]": us.mass,
+                    "[time]": us.time,
+                    "[temperature]": us.temperature,
+                    "[current]": us.current,
+                    "[substance]": us.amount,
+                    "[luminosity]": us.luminosity,
+                }.items()
+                if v is not None
+            }
+
+        target_map = _base_map(target)
+        source_map = _base_map(assume_source) if assume_source is not None else None
+
+        def _unit_str_for(
+            dim_dict: dict[str, Any], unit_map: dict[str, str]
+        ) -> str | None:
+            """Build a unit string from a dimensionality dict + base-unit map. Returns None if any required dimension is unconfigured."""
+            u = ureg.dimensionless
+            for dim_key, exp in dim_dict.items():
+                base = unit_map.get(dim_key)
+                if base is None:
+                    return None
+                u = u * ureg.parse_units(base) ** exp
+            return str(u)
+
+        exprs = []
+        for col in self._df.columns:
+            col_meta = meta.get(col, {})
+            src_str: str | None = None
+
+            if "unit" in col_meta:
+                try:
+                    dim_dict = dict(ureg.get_dimensionality(col_meta["unit"]))
+                except Exception:
+                    continue
+                src_str = col_meta["unit"]
+            elif source_map is not None and "dimension" in col_meta:
+                dim_str = col_meta["dimension"]
+                if dim_str == "[]":
+                    continue
+                try:
+                    dim_dict = dict(ureg.get_dimensionality(dim_str))
+                except Exception:
+                    continue
+                src_str = _unit_str_for(dim_dict, source_map)
+                if src_str is None:
+                    continue
+            else:
+                continue
+
+            tgt_str = _unit_str_for(dim_dict, target_map)
+            if tgt_str is None:
+                continue
+
+            try:
+                exprs.append(
+                    UnitFilter(from_unit=src_str, to_unit=tgt_str)
+                    .apply(pl.col(col))
+                    .alias(col)
+                )
+            except Exception:
+                continue
+
+        if not exprs:
+            return _MojoFrame.from_pl(self._df)
+
+        return _MojoFrame.from_pl(self._df.with_columns(exprs))
 
     def with_rotation(self, quat_base: str, invert: bool = True) -> MojoDataFrame:
         """
