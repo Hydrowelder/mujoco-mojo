@@ -48,6 +48,18 @@ class VisualizationSettings(BaseModel):
     trace_line: str | None = "VIOLET_500"
     """Default color of `Tracer` trails. Set to null (or `""` in TOML) to hide. Overridden per-`Tracer` by passing `color`."""
 
+    force_length_scale: float = 1.0
+    """Default length multiplier for action/reaction force arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `force_length_scale`."""
+
+    force_width_scale: float = 1.0
+    """Default width multiplier for action/reaction force arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `force_width_scale`."""
+
+    torque_length_scale: float = 1.0
+    """Default length multiplier for torque arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `torque_length_scale`."""
+
+    torque_width_scale: float = 1.0
+    """Default width multiplier for torque arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `torque_width_scale`."""
+
     @field_validator(*_COLOR_FIELDS, mode="before")
     @classmethod
     def _parse_color(cls, v: str | None) -> str | None:

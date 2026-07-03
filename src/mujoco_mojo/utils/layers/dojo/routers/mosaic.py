@@ -17,12 +17,21 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.typing import SignalCategory
-from mujoco_mojo.utils.dataframe import ColumnManifest, MojoDataFrame
+from mujoco_mojo.utils.dataframe import (
+    ColumnManifest,
+    MojoDataFrame,
+    read_column_metadata,
+)
 from mujoco_mojo.utils.defaults import NAMED_VALUES_FNAME as _NAMED_VALUES_FNAME
 from mujoco_mojo.utils.defaults import STOCHAS_DIR_NAME as _STOCHAS_DIR_NAME
 from mujoco_mojo.utils.defaults import STOCHAS_DISTS_FNAME as _STOCHAS_DISTS_FNAME
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
+from mujoco_mojo.stochas import UnitSystem as _UnitSystem
+from mujoco_mojo.utils.signal_metadata import (
+    resolve_dimension_metadata as _resolve_dim_meta,
+)
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
+from mujoco_mojo.utils.filters.filters import ureg as _ureg
 from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
 from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
@@ -48,6 +57,111 @@ _annotated_args = get_args(_AnyFilter)
 _FILTER_CLASSES: list[type[_BaseFilter]] = (
     list(get_args(_annotated_args[0])) if _annotated_args else []
 )
+
+
+_UNIT_SYSTEMS: dict[str, _UnitSystem] = {
+    "si": _UnitSystem.si(),
+    "cgs": _UnitSystem.cgs(),
+    "fps": _UnitSystem.fps(),
+    "ips": _UnitSystem.ips(),
+    "fff": _UnitSystem.fff(),
+}
+
+
+def _downsample(data: dict[str, list], max_points: int) -> dict[str, list]:
+    """
+    Downsample all columns in `data` to at most `max_points` rows.
+
+    Uses uniform time-domain buckets when a time column is present: the full time range is divided into `max_points` equal-width intervals and one row is kept per interval. This gives equal temporal coverage regardless of variable timestep. Falls back to a uniform index stride when no time column exists.
+    """
+    lengths = {len(v) for v in data.values()}
+    if not lengths:
+        return data
+    n = max(lengths)
+    if n <= max_points:
+        return data
+
+    time_col = _TIME_COLUMN_NAME
+    if time_col in data and len(data[time_col]) == n:
+        t = data[time_col]
+        t_min = float(t[0])
+        t_max = float(t[-1])
+        if t_max > t_min:
+            span = t_max - t_min
+            # compute bucket index for each row, then keep first row per bucket
+            seen: set[int] = set()
+            indices: list[int] = []
+            for i, tv in enumerate(t):
+                bucket = int((float(tv) - t_min) / span * max_points)
+                bucket = min(bucket, max_points - 1)
+                if bucket not in seen:
+                    seen.add(bucket)
+                    indices.append(i)
+            return {
+                col: [vals[i] for i in indices]
+                for col, vals in data.items()
+                if len(vals) == n
+            }
+
+    # fallback: uniform index stride
+    stride = max(1, n // max_points)
+    indices = list(range(0, n, stride))
+    return {
+        col: [vals[i] for i in indices] for col, vals in data.items() if len(vals) == n
+    }
+
+
+def _unit_group_dimension(units: list[str]) -> str | None:
+    """Returns the Pint dimensionality string for a unit group, derived from its first parseable unit."""
+    for u in units:
+        try:
+            return str(_ureg.parse_units(u).dimensionality)
+        except Exception:
+            continue
+    return None
+
+
+@lru_cache(maxsize=256)
+def _find_group_unit(unit_str: str) -> str | None:
+    """Find a unit in UNIT_GROUPS that is scale-equivalent (factor=1.0) to unit_str."""
+    try:
+        src = _ureg.Quantity(1.0, unit_str)
+        for _, units in _UNIT_GROUPS:
+            for u in units:
+                try:
+                    if abs(src.to(u).magnitude - 1.0) < 1e-9:
+                        return u
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return None
+
+
+@lru_cache(maxsize=256)
+def _find_group_unit_by_dimension(dimension: str) -> str | None:
+    """Find the first unit in UNIT_GROUPS whose Pint dimensionality matches dimension."""
+    for _, units in _UNIT_GROUPS:
+        if _unit_group_dimension(units) == dimension:
+            return units[0]
+    return None
+
+
+def _augment_col_meta(meta: dict[str, str]) -> dict[str, str]:
+    """Adds group_unit to column metadata if a matching unit group member can be found."""
+    unit = meta.get("unit")
+    if unit:
+        group = _find_group_unit(unit)
+        if group and group != unit:
+            return {**meta, "group_unit": group}
+        return meta
+    dimension = meta.get("dimension")
+    if dimension and dimension != "[]":
+        group = _find_group_unit_by_dimension(dimension)
+        if group:
+            return {**meta, "group_unit": group}
+    return meta
+
 
 _CONSTRAINT_OPS = {
     "less_than_equal": "≤",
@@ -299,7 +413,12 @@ async def get_filter_schema():
         }
         if type_val == "unit":
             entry["unit_groups"] = [
-                {"label": label, "units": units} for label, units in _UNIT_GROUPS
+                {
+                    "label": label,
+                    "units": units,
+                    "dimension": _unit_group_dimension(units),
+                }
+                for label, units in _UNIT_GROUPS
             ]
         result.append(entry)
 
@@ -604,9 +723,26 @@ def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
 
 
 @lru_cache(maxsize=128)
+def _get_column_metadata(path: Path, mtime: float) -> dict:
+    """Reads per-column signal metadata from the parquet footer, cached by path and mtime."""
+    return read_column_metadata(path)
+
+
+@lru_cache(maxsize=128)
 def _get_column_manifest(path: Path, mtime: float) -> ColumnManifest:
-    """Retrieves all column names from the table schema."""
-    return _get_mojo_df(path, mtime).mojo.get_manifest()
+    """Retrieves all column names and their metadata from the table schema."""
+    raw = _get_mojo_df(path, mtime).mojo.get_manifest(
+        column_metadata=_get_column_metadata(path, mtime)
+    )
+    augmented = {
+        col: _augment_col_meta(meta) for col, meta in raw["column_metadata"].items()
+    }
+    return {
+        "all": raw["all"],
+        "rotatable_vectors": raw["rotatable_vectors"],
+        "available_quats": raw["available_quats"],
+        "column_metadata": augmented,
+    }
 
 
 @lru_cache(maxsize=2048)
@@ -623,6 +759,8 @@ async def get_trial_data(
     cols: str = Query(None),
     rotate_by: str = Query(None),
     filters: str = Query(None),
+    display_unit_system: str | None = Query(None),
+    max_points: int | None = Query(None, gt=0),
 ):
     """
     Loops over the columns in the trial_id provided and returns their data. Optionally performs a rotation if requested and there are an associated x, y, and z column.
@@ -632,6 +770,8 @@ async def get_trial_data(
         cols (str, optional): Comma separated list of column names to return data for (e.g. `"/Bodies/body1/xpos:x,/Bodies/body2/xpos:m"`). Defaults to Query(None).
         rotate_by (str, optional): Quaternion family to rotate vectors by (e.g. `"/Bodies/body1/quat"`). Defaults to Query(None).
         filters (str, optional): String representation of filters to be applied sequentially. Defaults to Query(None).
+        display_unit_system (str, optional): Named unit system to convert data into before returning (e.g. `"si"`, `"ips"`). Only columns whose metadata carries a resolvable unit or dimension are converted. Defaults to Query(None).
+        max_points (int, optional): Maximum number of data points per trace. When the raw data exceeds this limit the response is downsampled using uniform time-domain buckets. Defaults to Query(None).
 
     Raises:
         HTTPException: Raised if no shared.CURRENT_JOB was set.
@@ -665,7 +805,10 @@ async def get_trial_data(
     lab_mtime = _lab_dir_mtime()
     lab_extra = _valid_lab_columns_cached(frozenset(parquet_manifest["all"]), lab_mtime)
     column_manifest = (
-        _get_mojo_df(db_path, mtime).mojo.get_manifest(extra_columns=list(lab_extra))
+        _get_mojo_df(db_path, mtime).mojo.get_manifest(
+            extra_columns=list(lab_extra),
+            column_metadata=_get_column_metadata(db_path, mtime),
+        )
         if lab_extra
         else parquet_manifest
     )
@@ -793,6 +936,25 @@ async def get_trial_data(
             # rotate from world to rotate_by frame
             df = df.mojo.with_rotation(quat_base=rotate_by, invert=True)
 
+        # apply display unit system conversion before filters so filter params operate in display units
+        if display_unit_system and display_unit_system in _UNIT_SYSTEMS:
+            target_us = _UNIT_SYSTEMS[display_unit_system]
+            raw_col_meta = _get_column_metadata(db_path, mtime)
+            df = df.mojo.with_unit_system(target_us, column_metadata=raw_col_meta)
+            # update manifest column_metadata with resolved units and group_unit for the UI
+            display_col_meta = {
+                col: _augment_col_meta(
+                    _resolve_dim_meta(meta, target_us) if "dimension" in meta else meta
+                )
+                for col, meta in column_manifest["column_metadata"].items()
+            }
+            column_manifest = {
+                "all": column_manifest["all"],
+                "rotatable_vectors": column_manifest["rotatable_vectors"],
+                "available_quats": column_manifest["available_quats"],
+                "column_metadata": display_col_meta,
+            }
+
         # parse validated filter stacks (col_name -> list[AnyFilter])
         col_filters: dict = {}
         filter_errors: list[str] = []
@@ -896,6 +1058,9 @@ async def get_trial_data(
                         series = tmp[col]
             data[col] = series.to_list()
 
+        if max_points is not None:
+            data = _downsample(data, max_points)
+
         return {
             "columns": column_manifest,
             "data": data,
@@ -943,7 +1108,7 @@ def _gif_webm_cache_path(gif_path: Path) -> Path:
 
 
 def _convert_gif_to_webm_sync(gif_path: Path, webm_path: Path) -> None:
-    """Converts a GIF to WebM (VP9) using ffmpeg directly. Blocking — run in executor."""
+    """Converts a GIF to WebM (VP9) using ffmpeg directly. Blocking. Run in executor."""
     import subprocess
 
     subprocess.run(
@@ -1306,7 +1471,7 @@ async def get_trial_dists(trial_id: str) -> dict:
                     "name": dist.name,
                     "dist_type": dist.dist_type,
                     "category": dist.category,
-                    "units": dist.units,
+                    "units": str(dist.unit) if dist.unit is not None else "unset",
                     "nominal": nominal,
                     "nominal_label": nominal_label,
                     "sampled_value": sampled,

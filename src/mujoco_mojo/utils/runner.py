@@ -379,8 +379,12 @@ class Trial:
         with status.record_step(step_name="pending"):
             pass
 
+        from mujoco_mojo.runtime.requirements_manager import RequirementSatisfied
+        from mujoco_mojo.runtime.runtime_manager import SimulationStopped
+
         result = None
         state = None
+        runtime_manager: RuntimeManager | None = None
         try:
             # 1. Generate
             with status.record_step(step_name="generating"):
@@ -421,10 +425,14 @@ class Trial:
                     runtime_manager = rt.RuntimeManager(
                         signal_manager=rt.SignalManager(
                             export_path=self.trial_dir
-                            / rt.SignalManager.default_output_name()
+                            / rt.SignalManager.default_output_name(),
+                            unit_system=mojo_model.us,
                         )
                     )
-                    state = mojo_model.mjcf.prep_for_sim(self.xml_path)
+                    runtime_manager._mojo_model = mojo_model
+                    state = mojo_model.mjcf.prep_for_sim(
+                        self.xml_path, unit_system=mojo_model.us
+                    )
                     result = runtime(
                         mojo_model,
                         runtime_manager,
@@ -432,6 +440,7 @@ class Trial:
                         *run_args,
                         **run_kwargs,
                     )
+                    status.requirements = runtime_manager.requirement_results
                 else:
                     logger.info(
                         f"No runtime definition was provided for trial_num={self.trial_num} so MuJoCo will not be run."
@@ -448,14 +457,32 @@ class Trial:
             mojo_model.clear_unpickleable_data()
 
             status.step = "done"
-            status.completion = Completion.SUCCESS
+            if status.requirements and not all(r.passed for r in status.requirements):
+                status.completion = Completion.FAILURE
+            else:
+                status.completion = Completion.SUCCESS
 
         except (BdbQuit, KeyboardInterrupt):
             logger.warning("Quit command detected. Exiting execution...")
             raise
+        except RequirementSatisfied:
+            # a live requirement ended the trial early as a success: complete
+            # normally, with the outcome decided by the requirement results
+            status.step = "done"
+            if runtime_manager is not None:
+                status.requirements = runtime_manager.requirement_results
+            if status.requirements and not all(r.passed for r in status.requirements):
+                status.completion = Completion.FAILURE
+            else:
+                status.completion = Completion.SUCCESS
+        except SimulationStopped:
+            status.step = "done"
+            status.completion = Completion.TERMINATED
+            if runtime_manager is not None:
+                status.requirements = runtime_manager.requirement_results
         except Exception as e:
             status.step = "done"
-            status.completion = Completion.FAILED
+            status.completion = Completion.ERROR
             logger.exception(
                 f"Trial {self.trial_num} failed with the following error: {e}"
             )
@@ -580,12 +607,12 @@ class MojoRunner:
             if error_path_obj.name == "dojo.sh" and error_path_obj.parent == path:
                 logger.warning(
                     f"{error_path_obj} is still locked (likely a running `mujoco-mojo "
-                    "dojo` session) -- leaving it in place and continuing cleanup."
+                    "dojo` session); leaving it in place and continuing cleanup."
                 )
                 skipped_dojo_script = True
                 return
             if error_path_obj == path and skipped_dojo_script:
-                # path can't be rmdir'd because dojo.sh is still inside it -- expected
+                # path can't be rmdir'd because dojo.sh is still inside it. Expected
                 # once we've already decided to leave that file behind above
                 return
             raise exc
@@ -838,7 +865,7 @@ class MojoRunner:
                 overrides_payload=global_overrides.model_dump(),
             )
 
-            return trial_status.completion == Completion.FAILED
+            return trial_status.completion == Completion.ERROR
 
         job_trial_nums = trial_nums if trial_nums else self.config.trial_nums
 
@@ -872,7 +899,7 @@ class MojoRunner:
 
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
-            return bool(status_tracker.failed_trial_nums)
+            return bool(status_tracker.unsuccessful_trial_nums)
 
         if self.config.is_parallel:
             logger.info(
@@ -913,7 +940,7 @@ class MojoRunner:
                             logger.exception(f"Trial {tn} failed: {e}")
                             status_tracker.update_trial(
                                 status=TrialStatus(
-                                    trial_num=tn, completion=Completion.FAILED
+                                    trial_num=tn, completion=Completion.ERROR
                                 )
                             )
                         status_tracker.generate_report()
@@ -942,12 +969,12 @@ class MojoRunner:
                 except Exception as e:
                     logger.exception(f"A trial failed with error: {e}")
                     status_tracker.update_trial(
-                        status=TrialStatus(trial_num=tn, completion=Completion.FAILED)
+                        status=TrialStatus(trial_num=tn, completion=Completion.ERROR)
                     )
                 status_tracker.generate_report()
 
         status_tracker.generate_report(alert_generation=True)
-        return bool(status_tracker.failed_trial_nums)
+        return bool(status_tracker.unsuccessful_trial_nums)
 
     def discover_design_space(
         self,
@@ -1082,7 +1109,7 @@ class MojoRunner:
 
                 # handle failures with maximum error if there was an epic fail
                 if (
-                    iteration_status.completion == Completion.FAILED
+                    iteration_status.completion == Completion.ERROR
                     or mojo_model is None
                     or state is None
                 ):
@@ -1182,7 +1209,7 @@ class MojoRunner:
         logger.info(f"Best parameters saved to {best_params_file}")
 
         status_tracker.generate_report(alert_generation=True)
-        return bool(status_tracker.failed_trial_nums)
+        return bool(status_tracker.unsuccessful_trial_nums)
 
     @staticmethod
     def get_slurm_array_string(ids: list[int]) -> str:
@@ -1488,7 +1515,9 @@ class MojoRunner:
         console.print(f"\t[dim]mujoco-mojo binary:[/dim] {mojo_cmd}\n")
 
         # Standard colors only for Rich compatibility
-        job_name = Prompt.ask("  [white]Job Name[/]", default="mojo-sim")
+        job_name = Prompt.ask(
+            "  [white]Job Name[/]", default=f"mojo-sim-{status_tracker.id}"
+        )
         if available_partitions:
             # Use the actual SLURM default if we found one, otherwise the first in list
             initial_default = (

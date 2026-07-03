@@ -115,6 +115,65 @@ def test_rt_qfrc_passive_reflects_damping() -> None:
     assert joint.rt_qfrc_passive(state) == pytest.approx([-2.0], abs=1e-6)
 
 
+def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
+    hinge_setup: tuple[MjState, Joint], tmp_path: Path
+) -> None:
+    """A hinge joint's qpos/qvel are tagged with concrete radian-based unit."""
+    state, joint = hinge_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    joint.request(sm, channels=["qpos", "qvel"])
+    sm.record(state)
+
+    assert sm._column_metadata["Joints/elbow:qpos"] == {"unit": "radian"}
+    assert sm._column_metadata["Joints/elbow:qvel"] == {"unit": "radian / second"}
+
+
+def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
+    tmp_path: Path,
+) -> None:
+    """A slide joint's qpos/qvel are tagged with scale-ambiguous length/velocity dimensions, not concrete unit."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="cart">
+                <joint name="rail" type="slide" axis="1 0 0"/>
+                <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    joint = Joint(name=JointName("rail"))
+    joint.get_id(model)
+    state = MjState(model, data)
+
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    joint.request(sm, channels=["qpos", "qvel"])
+    sm.record(state)
+
+    assert sm._column_metadata["Joints/rail:qpos"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Joints/rail:qvel"] == {"dimension": "[length] / [time]"}
+
+
+def test_joint_request_metadata_override(
+    hinge_setup: tuple[MjState, Joint], tmp_path: Path
+) -> None:
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    state, joint = hinge_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    joint.request(sm, channels={"qpos": {"display_name": "Elbow Angle"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Joints/elbow:qpos"] == {
+        "unit": "radian",
+        "display_name": "Elbow Angle",
+    }
+
+
 def test_rt_dims_for_free_joint() -> None:
     """rt_qpos()/rt_qvel() return 7/6 element vectors for a free joint."""
     xml = """

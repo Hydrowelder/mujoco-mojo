@@ -447,7 +447,7 @@ class Inertial(XMLModel):
             if isinstance(input_val, (list, tuple)):
                 for item in input_val:
                     if isinstance(item, Distribution):
-                        if not reset_rng:
+                        if reset_rng:
                             item.with_seed(mojo_model.seed).with_trial_num(
                                 mojo_model.trial_num
                             )
@@ -455,7 +455,7 @@ class Inertial(XMLModel):
                         # register the distribution for serialization
                         mojo_model.dists[item.name] = cast(AnyDist, item)
             elif isinstance(input_val, Distribution):
-                if not reset_rng:
+                if reset_rng:
                     input_val.with_seed(mojo_model.seed).with_trial_num(
                         mojo_model.trial_num
                     )

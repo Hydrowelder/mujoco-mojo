@@ -20,6 +20,8 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
 
     These draws don't feed into the model or the simulation in any way; this just exists to exercise every distribution type (with categories/units set) during a Monte Carlo run for testing.
     """
+    assert mojo_model.us
+    us = mojo_model.us
     mojo_model.sample_dist(
         mojo.NormalDistribution(
             name=mojo.DistName("mock_normal"),
@@ -27,7 +29,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             mu=0,
             sigma=1.0,
             category="link_props",
-            units="kg",
+            unit=us.kg,
         )
     )
     mojo_model.sample_dist(
@@ -37,7 +39,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             low=0,
             high=2.0,
             category="contact",
-            units="m",
+            unit=us.m,
         )
     )
     mojo_model.sample_dist(
@@ -47,7 +49,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             low=0,
             high=5,
             category="counts",
-            units="count",
+            # unit=None: integer counts are dimensionless; no UnitDescriptor exists for "count"
         )
     )
     mojo_model.sample_dist(
@@ -65,7 +67,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             },
             nominal="O+",
             category="material",
-            units="n/a",
+            unit=us.dimensionless,  # non-numeric outputs (strings) cannot be scaled by a UnitDescriptor
         )
     )
     mojo_model.sample_dist(
@@ -74,7 +76,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=["A", "B", "C"],
             items=["A", "B", "C"],
             category="ordering",
-            units="n/a",
+            unit=us.dimensionless,  # non-numeric outputs (lists) cannot be scaled by a UnitDescriptor
         ),
         size=3,
     )
@@ -86,7 +88,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             high=1,
             mode=0.5,
             category="geometry",
-            units="m",
+            unit=us.m,
         )
     )
     mojo_model.sample_dist(
@@ -97,7 +99,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             sigma=1,
             low=-1.0,
             category="sensor_noise",
-            units="m/s",
+            unit=us["m/s"],
         )
     )
     mojo_model.sample_dist(
@@ -107,7 +109,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             s=0.5,
             scale=1,
             category="material",
-            units="Pa",
+            unit=us.pascal,
         )
     )
     mojo_model.sample_dist(
@@ -116,7 +118,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=4,
             lam=4.0,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  # Poisson outputs are event counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -125,7 +127,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=1.0,
             lam=1.0,
             category="reliability",
-            units="1/s",
+            unit=us.second,  # exponential samples are waiting times (seconds), not the rate
         )
     )
     mojo_model.sample_dist(
@@ -134,7 +136,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=1.0,
             scale=1.0,
             category="vibration",
-            units="m/s",
+            unit=us.m / us.s,
         )
     )
     mojo_model.sample_dist(
@@ -143,7 +145,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=True,
             p=0.5,
             category="flags",
-            units="n/a",
+            unit=us.dimensionless,  # boolean outcomes (0/1) are dimensionless
         ),
         size=4,
     )
@@ -154,7 +156,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             alpha=2.0,
             beta=1.0,
             category="actuation",
-            units="N",
+            unit=us.newton,
         )
     )
     mojo_model.sample_dist(
@@ -164,7 +166,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             alpha=2.0,
             beta=2.0,
             category="friction",
-            units="unitless",
+            unit=us.dimensionless,  # Beta outputs are probabilities/ratios in [0, 1] (dimensionless)
         ),
         size=5,
     )
@@ -175,7 +177,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             shape=1.5,
             scale=1.0,
             category="fatigue",
-            units="cycles",
+            unit=us.second,  # Weibull samples are time-to-failure values
         )
     )
     mojo_model.sample_dist(
@@ -185,7 +187,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             n=20,
             p=0.5,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  #  binomial outputs are success counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -195,7 +197,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             r=3,
             p=0.5,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  # negative binomial outputs are failure counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -204,7 +206,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=2,
             p=0.5,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  #  geometric outputs are trial counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -214,7 +216,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             mu=0.0,
             beta=1.0,
             category="control",
-            units="V",
+            unit=us.volt,
         )
     )
     mojo_model.sample_dist(
@@ -224,7 +226,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             alpha=2.5,
             beta=1.0,
             category="economics",
-            units="unitless",
+            unit=us.dimensionless,  # Pareto outputs are dimensionless scale ratios
         )
     )
     mojo_model.sample_dist(
@@ -233,7 +235,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=0.0,
             nu=5.0,
             category="sensor_noise",
-            units="unitless",
+            unit=us.dimensionless,  # Student-t outputs are dimensionless standardized scores
         )
     )
     mojo_model.sample_dist(
@@ -244,7 +246,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             M=20,
             K=20,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  #  hypergeometric outputs are draw counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -255,7 +257,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             alpha=5.0,
             beta=5.0,
             category="counts",
-            units="count",
+            unit=us.dimensionless,  #  beta-binomial outputs are success counts (dimensionless integers)
         )
     )
     mojo_model.sample_dist(
@@ -265,7 +267,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             theta=0.0,
             sigma=1.0,
             category="sensor_noise",
-            units="rad",
+            unit=us.radian,
         )
     )
     mojo_model.sample_dist(
@@ -274,19 +276,23 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nominal=4.0,
             p=4,
             category="statistics",
-            units="unitless",
+            unit=us.dimensionless,  #  chi-squared outputs are dimensionless test statistics
         )
     )
-    mojo_model.sample_dist(
-        mojo.LaplaceDistribution(
-            name=mojo.DistName("mock_laplace"),
-            nominal=0.0,
-            mu=0.0,
-            sigma=1.0,
-            category="sensor_noise",
-            units="m",
-        )
+    x = float(
+        mojo_model.sample_dist(
+            mojo.LaplaceDistribution(
+                name=mojo.DistName("mock_laplace"),
+                nominal=10.0,
+                mu=10.0,
+                sigma=5.0,
+                category="sensor_noise",
+                unit=us.cm,
+            )
+        ).squeeze()
     )
+    logger.info(f"Laplace sampled to {x} {us.length} (from {x / us.cm} cm)")
+
     mojo_model.sample_dist(
         mojo.FDistribution(
             name=mojo.DistName("mock_f"),
@@ -294,7 +300,7 @@ def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
             nu1=5.0,
             nu2=10.0,
             category="statistics",
-            units="unitless",
+            unit=us.dimensionless,  #  F-distribution outputs are dimensionless variance ratios
         )
     )
 
@@ -393,6 +399,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     logger.critical(f"This is a log for {mojo_model.trial_num}")
 
     # mock draws across every stochas distribution type, unused by the sim itself
+    mojo_model.with_unit_system(mojo.UnitSystem.si())
     perform_mock_draws(mojo_model)
     # configure simulation
     mojo_model.mjcf.assets = [
@@ -591,7 +598,9 @@ def runtime(
     # Identify our sites from the generated model
     # Note: We can find them by name in the worldbody
     assert mojo_model.mjcf.worldbody is not None
+    assert mojo_model.us is not None
 
+    us = mojo_model.us
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
@@ -630,7 +639,7 @@ def runtime(
         proximity = mojo.utils.Proximity(
             geom_1=handoff.box1_bunny,
             geom_2=handoff.box2_bunny,
-            dist_max=3,
+            dist_max=3 * us.meter,
             algorithm=mojo.ProximityType.CONVEX_HULL,
         ).register_to_rm()
 
@@ -644,9 +653,50 @@ def runtime(
 
             handoff.box1_rot.request()
 
+        @rm.requirement()
+        def time_greater_than_1_sec(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            if state.data.time > 1.0 * us.second:
+                return True, "time greater than 1 second at termination"
+            else:
+                return False, "time was not greater than 1 second at termination"
+
+        @rm.requirement(every=10, terminate_on_fail=True)
+        def time_is_not_negative(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            if state.data.time > 0.0 * us.second:
+                return True, "time is not negative"
+            else:
+                return False, "time was negative"
+
+        @rm.requirement(every=3)
+        def periodically_failing_requirement(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            # fails during the 0.5s-1.0s window but passes before, after, and at
+            # end of trial (t=2.0). the trial must still be marked as a failure:
+            # a live requirement that fails at any point during the solve is
+            # failed for the trial, even if it recovers by the end.
+            t = state.data.time
+            if 0.5 * us.second < t < 1.0 * us.second and mojo_model.trial_num % 10 == 0:
+                return False, f"inside failure window at t={t:.3f}"
+            return True, f"outside failure window at t={t:.3f}"
+
         # Run for 2 seconds
         while state.data.time < 2.0:
             rm.step(state)
+            if mojo_model.trial_num in [10, 22, 40]:
+                msg = "I intentionally raised this error on this trial"
+                logger.error(msg)
+                raise ValueError(msg)
 
     return mojo_model
 

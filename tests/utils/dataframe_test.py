@@ -134,6 +134,82 @@ def test_with_rotation_identity(sample_data: MojoDataFrame):
         assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
 
 
+def test_with_rotation_single_row_buffer_is_writable():
+    """
+    Regression test: with_rotation must work on a single-row DataFrame.
+
+    Polars' to_numpy() defaults to writable=False and returns a zero-copy, read-only view
+    when the selected columns are stored contiguously as a single chunk, the common case for
+    a freshly-constructed single-row frame. with_rotation previously passed that view straight
+    to scipy, which raised `ValueError: buffer source array is read-only`. The current
+    implementation does pure numpy arithmetic (no third-party calls requiring a writable
+    buffer), so this is now structurally prevented, but the test is kept as a guard.
+    """
+    single_row = MojoDataFrame.from_dict(
+        {
+            "Bodies/racket/xpos:x": [1.0],
+            "Bodies/racket/xpos:y": [0.0],
+            "Bodies/racket/xpos:z": [0.0],
+            "Bodies/racket/xiquat:x": [0.0],
+            "Bodies/racket/xiquat:y": [0.0],
+            "Bodies/racket/xiquat:z": [0.0],
+            "Bodies/racket/xiquat:w": [1.0],
+        }
+    )
+
+    rotated = single_row.mojo.with_rotation("Bodies/racket/xiquat", invert=False)
+
+    assert rotated.height == 1
+    assert np.allclose(rotated["Bodies/racket/xpos:x"].to_numpy(), [1.0])
+
+
+def test_with_rotation_matches_scipy():
+    """Cross-check the hand-rolled quaternion rotation against scipy as a trusted oracle."""
+    from scipy.spatial.transform import Rotation
+
+    rng = np.random.default_rng(0)
+    n = 25
+    raw_quats = rng.normal(size=(n, 4))
+    quats = raw_quats / np.linalg.norm(raw_quats, axis=1, keepdims=True)
+    vecs = rng.normal(size=(n, 3))
+
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/racket/xpos:x": vecs[:, 0],
+            "Bodies/racket/xpos:y": vecs[:, 1],
+            "Bodies/racket/xpos:z": vecs[:, 2],
+            "Bodies/racket/xiquat:x": quats[:, 0],
+            "Bodies/racket/xiquat:y": quats[:, 1],
+            "Bodies/racket/xiquat:z": quats[:, 2],
+            "Bodies/racket/xiquat:w": quats[:, 3],
+        }
+    )
+
+    for invert in (False, True):
+        transformer = Rotation.from_quat(quats)
+        if invert:
+            transformer = transformer.inv()
+        expected = transformer.apply(vecs)
+
+        rotated = df.mojo.with_rotation("Bodies/racket/xiquat", invert=invert)
+        actual = rotated.select(
+            ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
+        ).to_numpy()
+
+        assert np.allclose(actual, expected, atol=1e-10)
+
+
+def test_with_rotation_does_not_mutate_source(sample_data: MojoDataFrame):
+    """Regression test: with_rotation must not write into the source DataFrame's backing store."""
+    pos_cols = ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
+    before = {col: sample_data[col].to_numpy().copy() for col in pos_cols}
+
+    sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=False)
+
+    for col in pos_cols:
+        assert np.array_equal(sample_data[col].to_numpy(), before[col])
+
+
 def test_with_rotation_90deg_z(sample_data: MojoDataFrame):
     """Tests a 90-degree Z-axis rotation."""
     # quat for 90deg about Z: [0, 0, sin(45), cos(45)]

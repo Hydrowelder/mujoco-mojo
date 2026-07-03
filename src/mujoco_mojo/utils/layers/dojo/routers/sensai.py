@@ -9,7 +9,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from pydantic_ai.messages import (
+from pydantic_ai.messages import (  # pyright: ignore[reportMissingImports]
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -79,7 +79,7 @@ def _build_context_block(deps: SensAIDeps) -> str:
     else:
         lines.append(
             f"Job: {job.n_done}/{job.n_trial} trials done"
-            f" ({job.progress:.0%}, {job.n_success} succeeded, {job.n_failed} failed)"
+            f" ({job.progress:.0%}, {job.n_success} succeeded, {job.n_failed} failed requirements, {job.n_error} errored)"
         )
 
     config = deps.current_plot_config
@@ -222,12 +222,11 @@ async def post_chat(body: ChatRequest):
             logger.warning(
                 "Failed to parse current_plot_config_json; proceeding without it."
             )
-
     column_manifest: ColumnManifest = {
         "all": body.all_columns,
         "rotatable_vectors": body.rotatable_vectors,
         "available_quats": body.available_quats,
-    }
+    }  # pyright: ignore[reportAssignmentType]
 
     deps = SensAIDeps(
         job_status=shared.CURRENT_JOB,

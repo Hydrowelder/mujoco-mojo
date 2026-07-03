@@ -309,6 +309,7 @@ class SignalCategory(StrEnum):
     PLUGINS = "Plugins"
     DEFORMABLES = "Deformables"
     PROXIMITIES = "Proximities"
+    REQUIREMENTS = "Requirements"
     CUSTOM = "Custom"
     LAB = "Lab"
 

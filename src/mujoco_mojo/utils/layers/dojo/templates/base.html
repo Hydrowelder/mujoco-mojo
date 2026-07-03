@@ -27,6 +27,10 @@
   <script src="/mojo-static/js/main.js"></script>
   <script defer
           src="/mojo-static/vendored/alpine.min.js"></script>
+  <style>
+    /* plotly's built-in notifier boxes are re-surfaced as Mojo toasts (see store.ts) */
+    .plotly-notifier { display: none !important; }
+  </style>
   <style type="text/tailwindcss">
     @layer components {
       /* ── Surfaces ──────────────────────────────────────────────────────── */
@@ -85,6 +89,9 @@
       }
       .badge-failure {
         @apply badge bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-rose-100 dark:hover:bg-rose-800/50;
+      }
+      .badge-error {
+        @apply badge bg-amber-50 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-500/50 text-amber-600 dark:text-amber-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-amber-100 dark:hover:bg-amber-800/50;
       }
       .badge-disabled {
         @apply badge bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60;
@@ -438,13 +445,18 @@
         <div class="card p-3 space-y-1 w-full">
           <div class="flex items-center gap-2">
             <span class="text-sm uppercase font-black text-slate-500 w-auto">Owner</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate">{{ owner }}</p>
+            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate cursor-pointer hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors duration-150"
+               data-copy="{{ owner }}"
+               title="Click to copy"
+               @click="$store.dojo.copyText($el.dataset.copy, 'Owner copied')">{{ owner }}</p>
           </div>
           <div class="flex items-center gap-2">
             <span class="text-sm uppercase font-black text-slate-500 w-auto">Workdir</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate"
+            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate cursor-pointer hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors duration-150"
                style="direction: rtl"
-               title="{{ workdir_path }}">&lrm;{{ workdir_name }}</p>
+               data-copy="{{ job_status_path }}"
+               title="{{ job_status_path }} (click to copy: pastes as a file path so editors like VS Code can jump straight to it)"
+               @click="$store.dojo.copyText($el.dataset.copy, 'job_status.json path copied')">&lrm;{{ workdir_name }}</p>
           </div>
         </div>
         {% endif %}

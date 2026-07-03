@@ -124,18 +124,25 @@ def setup_logger(
 
 
 def get_trial_log_handler(
-    log_file: Path | str, level: int | None = None
+    log_file: Path | str, level: int | None = None, mode: str = "a"
 ) -> logging.FileHandler:
     """
     Creates a file handler using the standard mojo log format for per-trial logging.
 
     The returned handler is not attached to any logger. Attach it to the root
     logger (and remove/close it afterwards) to capture logs for a single trial.
+
+    Args:
+        log_file: Path to the log file.
+        level: Optional minimum level for this handler.
+        mode: File open mode, passed straight to `logging.FileHandler`. Use "a" (default) to
+            append across repeated writes to the same file, or "w" to truncate and overwrite.
+
     """
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    handler = logging.FileHandler(log_file)
+    handler = logging.FileHandler(log_file, mode=mode)
     handler.setFormatter(JsonLogFormatter())
     handler.addFilter(FileFilter())
     if level is not None:

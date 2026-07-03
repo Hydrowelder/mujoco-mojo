@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import mujoco
 import numpy as np
+from pydantic import PrivateAttr
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.mjcf.mujoco_attr.transmission_units import (
+    actuator_transmission_metadata,
+    joint_type_metadata,
+    sensor_referenced_joint_type,
+)
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     SensorInterp,
@@ -15,13 +21,74 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
-
-if TYPE_CHECKING:
-    from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    angular_rate_metadata,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+)
 
 logger = get_logger(__name__)
 
 __all__ = ["SensorBase"]
+
+if TYPE_CHECKING:
+    from mujoco_mojo.runtime.signal_manager import SignalManager
+
+# tags with a fixed, unambiguous physical quantity regardless of what the sensor references
+_TAG_METADATA: dict[str, dict[str, str]] = {
+    "accelerometer": dim(Dimension.ACCELERATION),
+    "velocimeter": dim(Dimension.VELOCITY),
+    "gyro": angular_rate_metadata(),
+    "force": dim(Dimension.FORCE),
+    "torque": {**dim(Dimension.TORQUE), "quantity": "torque"},
+    "framepos": dim(Dimension.LENGTH),
+    "subtreecom": dim(Dimension.LENGTH),
+    "framelinvel": dim(Dimension.VELOCITY),
+    "subtreelinvel": dim(Dimension.VELOCITY),
+    "frameangvel": angular_rate_metadata(),
+    "ballangvel": angular_rate_metadata(),
+    "framelinacc": dim(Dimension.ACCELERATION),
+    "frameangacc": angular_rate_metadata(per="second ** 2"),
+    "subtreeangmom": dim(Dimension.ANGULAR_MOMENTUM),
+    "e_kinetic": dim(Dimension.ENERGY),
+    "e_potential": dim(Dimension.ENERGY),
+    "touch": dim(Dimension.FORCE),
+    "distance": dim(Dimension.LENGTH),
+    "rangefinder": dim(Dimension.LENGTH),
+    "fromto": dim(Dimension.LENGTH),
+    "tendonpos": dim(Dimension.LENGTH),
+    "tendonvel": dim(Dimension.VELOCITY),
+    "tendonlimitvel": dim(Dimension.VELOCITY),
+    "tendonactuatorfrc": dim(Dimension.FORCE),
+    "tendonlimitfrc": dim(Dimension.FORCE),
+    "clock": dim(Dimension.TIME),
+    "framexaxis": dimensionless_metadata(),
+    "frameyaxis": dimensionless_metadata(),
+    "framezaxis": dimensionless_metadata(),
+    "normal": dimensionless_metadata(),
+    "insidesite": dimensionless_metadata(),
+}
+
+# tags whose physical quantity depends on the referenced joint's type (hinge vs. slide),
+# resolved at sample time via sensor_referenced_joint_type(); maps tag -> joint_type_metadata() key
+_JOINT_REF_TAGS: dict[str, str] = {
+    "jointpos": "pos",
+    "jointlimitpos": "pos",
+    "jointvel": "vel",
+    "jointlimitvel": "vel",
+    "jointactuatorfrc": "frc",
+    "jointlimitfrc": "frc",
+}
+
+# tags whose physical quantity depends on the referenced actuator's transmission, resolved at
+# sample time via actuator_transmission_metadata(); maps tag -> that function's result key
+_ACTUATOR_REF_TAGS: dict[str, str] = {
+    "actuatorpos": "length",
+    "actuatorvel": "velocity",
+    "actuatorfrc": "force",
+}
 
 
 class SensorBase(XMLModel, ABC):
@@ -82,7 +149,50 @@ class SensorBase(XMLModel, ABC):
     user: VecN | None = None
     """See User parameters."""
 
-    def request(self, signal_manager: SignalManager | None = None):
+    _metadata_resolved: bool = PrivateAttr(default=False)
+    """Whether `_resolved_metadata_cache` has been computed yet (None is itself a valid resolution, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
+
+    _resolved_metadata_cache: dict[str, str] | None = PrivateAttr(default=None)
+    """Cached built-in metadata for this sensor's tag, resolved once on first sample."""
+
+    def _resolve_builtin_metadata(self, state: MjState) -> dict[str, str] | None:
+        """Resolves and caches this sensor's built-in dimension/unit metadata, based on its tag (and, for joint-/actuator-referencing tags, the referenced object's type)."""
+        if self._metadata_resolved:
+            return self._resolved_metadata_cache
+
+        if self.tag in _TAG_METADATA:
+            builtin = _TAG_METADATA[self.tag]
+        elif self.tag in _JOINT_REF_TAGS:
+            sid = self.get_id(state.model)
+            jnt_type = sensor_referenced_joint_type(state, sid)
+            builtin = (
+                joint_type_metadata(jnt_type)[_JOINT_REF_TAGS[self.tag]]
+                if jnt_type is not None
+                else None
+            )
+        elif self.tag in _ACTUATOR_REF_TAGS:
+            sid = self.get_id(state.model)
+            actuator_id = int(state.model.sensor_objid[sid])
+            trans_meta = actuator_transmission_metadata(state, actuator_id)
+            builtin = (
+                trans_meta[_ACTUATOR_REF_TAGS[self.tag]]
+                if trans_meta is not None
+                else None
+            )
+        elif self.tag.endswith("quat"):
+            builtin = dimensionless_metadata()
+        else:
+            builtin = None
+
+        self._resolved_metadata_cache = builtin
+        self._metadata_resolved = True
+        return builtin
+
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        metadata: dict[str, dict[str, Any]] | None = None,
+    ):
         """
         Registers the sensor's output for logging.
 
@@ -100,7 +210,14 @@ class SensorBase(XMLModel, ABC):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(sensor_name, tag)`.
         * An `indexed` output posts `dim` values under `subgroups=(sensor_name, tag)` with `attr` set to `0`-`dim - 1`.
 
+        Each signal is tagged with built-in `dimension`/`unit` metadata where the sensor's physical quantity is unambiguous (e.g. `accelerometer` is tagged as an acceleration). For `jointpos`/`jointvel`/`jointactuatorfrc`/`jointlimit*`, the metadata is resolved from the referenced joint's type (angle/length); for `actuatorpos`/`actuatorvel`/`actuatorfrc`, from the referenced actuator's transmission. No built-in default is applied for sensors whose unit is genuinely unspecified by MuJoCo (`magnetometer`, `tactile`, `user`, `plugin`, `camprojection`, `contact`) or for actuator-referencing tags on a SITE/BODY/SLIDERCRANK-transmission actuator. Supply `metadata` yourself for those if you know it.
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            metadata: Metadata overriding or extending the built-in default for this sensor's tag.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -115,31 +232,39 @@ class SensorBase(XMLModel, ABC):
 
         def sample(state: MjState):
             sid = self.get_id(state.model)
+            meta = merge_signal_metadata(
+                self._resolve_builtin_metadata(state),
+                self.tag,
+                metadata,
+                unit_system=state.us,
+            )
 
             # find where this sensor's data starts and how long it is
-            # (e.g., dim=3 for an accelerometer, dim=4 for a framequat sensor)
+            # (e.g., sensor_dim=3 for an accelerometer, sensor_dim=4 for a framequat sensor)
             adr = state.model.sensor_adr[sid]
-            dim = state.model.sensor_dim[sid]
+            sensor_dim = state.model.sensor_dim[sid]
 
             # slice the flat sensordata array
-            val = state.data.sensordata[adr : adr + dim]
+            val = state.data.sensordata[adr : adr + sensor_dim]
 
-            if dim == 1:
+            if sensor_dim == 1:
                 signal_manager.post(
                     value=float(val[0]),
                     category=SignalCategory.SENSORS,
                     subgroups=(str(self.name),),
                     attr=self.tag,  # scalar values are considered an attr of the parent
+                    metadata=meta,
                 )
-            elif dim == 4 and self.tag.endswith("quat"):
+            elif sensor_dim == 4 and self.tag.endswith("quat"):
                 for v, attr in zip(val, "wxyz", strict=True):
                     signal_manager.post(
                         value=float(v),
                         category=SignalCategory.SENSORS,
                         subgroups=(str(self.name), self.tag),
                         attr=attr,
+                        metadata=meta,
                     )
-            elif dim == 3 and self.tag not in ("tactile", "user"):
+            elif sensor_dim == 3 and self.tag not in ("tactile", "user"):
                 full_vec = np.append(val, np.linalg.norm(val))
                 for v, attr in zip(full_vec, "xyzm", strict=True):
                     signal_manager.post(
@@ -147,6 +272,7 @@ class SensorBase(XMLModel, ABC):
                         category=SignalCategory.SENSORS,
                         subgroups=(str(self.name), self.tag),
                         attr=attr,
+                        metadata=meta,
                     )
             else:
                 for i, v in enumerate(val):
@@ -155,6 +281,7 @@ class SensorBase(XMLModel, ABC):
                         category=SignalCategory.SENSORS,
                         subgroups=(str(self.name), self.tag),
                         attr=str(i),
+                        metadata=meta,
                     )
 
         signal_manager.register_sampler(sample)

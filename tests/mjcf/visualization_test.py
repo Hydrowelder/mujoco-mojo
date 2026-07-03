@@ -71,6 +71,60 @@ class TestArrowConfig:
         start, end, _width = arrow.resolve_arrow_coords(mj_model)
         assert np.allclose(start, end)
 
+    def test_width_is_capped_relative_to_length(self, mj_model: mujoco.MjModel) -> None:
+        """A short torque vector gets a capped width instead of the disk-like native width."""
+        arrow = ArrowConfig(
+            pos=np.array([0.0, 0.0, 0.0]),
+            vec=np.array([0.0, 0.0, 1e-3]),
+            color=np.array([0.0, 1.0, 0.0, 1.0]),
+            is_torque=True,
+        )
+        start, end, width = arrow.resolve_arrow_coords(mj_model)
+        length = float(np.linalg.norm(end - start))
+        assert width <= length * arrow._MAX_WIDTH_TO_LENGTH_RATIO + 1e-9
+
+    def test_length_scale_multiplies_arrow_length(
+        self, mj_model: mujoco.MjModel
+    ) -> None:
+        """A custom `length_scale` enlarges (or shrinks) the resolved length independently of width."""
+        base = ArrowConfig(
+            pos=np.array([0.0, 0.0, 0.0]),
+            vec=np.array([10.0, 0.0, 0.0]),
+            color=np.array([1.0, 0.0, 0.0, 1.0]),
+            is_torque=False,
+        )
+        scaled = ArrowConfig(
+            pos=np.array([0.0, 0.0, 0.0]),
+            vec=np.array([10.0, 0.0, 0.0]),
+            color=np.array([1.0, 0.0, 0.0, 1.0]),
+            is_torque=False,
+            length_scale=3.0,
+        )
+        _, base_end, base_width = base.resolve_arrow_coords(mj_model)
+        _, scaled_end, scaled_width = scaled.resolve_arrow_coords(mj_model)
+        assert np.allclose(scaled_end, base_end * 3.0)
+        assert scaled_width == pytest.approx(base_width)
+
+    def test_width_scale_multiplies_arrow_width(self, mj_model: mujoco.MjModel) -> None:
+        """A custom `width_scale` thickens (or thins) the resolved width independently of length, as long as it stays below the disk-avoidance cap."""
+        base = ArrowConfig(
+            pos=np.array([0.0, 0.0, 0.0]),
+            vec=np.array([10.0, 0.0, 0.0]),
+            color=np.array([1.0, 0.0, 0.0, 1.0]),
+            is_torque=False,
+        )
+        thinner = ArrowConfig(
+            pos=np.array([0.0, 0.0, 0.0]),
+            vec=np.array([10.0, 0.0, 0.0]),
+            color=np.array([1.0, 0.0, 0.0, 1.0]),
+            is_torque=False,
+            width_scale=0.5,
+        )
+        _, base_end, base_width = base.resolve_arrow_coords(mj_model)
+        _, thinner_end, thinner_width = thinner.resolve_arrow_coords(mj_model)
+        assert np.allclose(thinner_end, base_end)
+        assert thinner_width == pytest.approx(base_width * 0.5)
+
 
 class TestLineConfig:
     def test_fields_are_stored_correctly(self) -> None:

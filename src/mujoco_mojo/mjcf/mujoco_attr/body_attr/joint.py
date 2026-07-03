@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -8,6 +8,7 @@ from pydantic import PrivateAttr
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
+from mujoco_mojo.mjcf.mujoco_attr.transmission_units import joint_type_metadata
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
@@ -23,9 +24,18 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    angular_rate_metadata,
+    dim,
+    dimensionless_metadata,
+    merge_signal_metadata,
+    torque_metadata,
+)
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
+    from mujoco_mojo.stochas import UnitSystem
 
 logger = get_logger(__name__)
 
@@ -243,7 +253,7 @@ class Joint(XMLModel):
 
     def rt_bearing_load(self, state: MjState) -> float:
         """
-        Magnitude of the joint's reaction force that represents a genuine structural "squeeze" on the joint, as opposed to whatever is driving its own DOF -- suitable as a normal force for bearing/pin friction that responds to ordinary side loads, not just constraint engagement (see `rt_cfrc_int`).
+        Magnitude of the joint's reaction force that represents a genuine structural "squeeze" on the joint, as opposed to whatever is driving its own DOF. Suitable as a normal force for bearing/pin friction that responds to ordinary side loads, not just constraint engagement (see `rt_cfrc_int`).
 
         - hinge: full reaction force magnitude. Rotation is free, so all 3 translational directions (both along and perpendicular to the hinge axis) are rigid, and therefore squeeze.
         - ball: full reaction force magnitude. Rotation is free in every direction; translation is rigid, so the entire force vector is squeeze.
@@ -262,6 +272,10 @@ class Joint(XMLModel):
         signal_manager: SignalManager | None = None,
         channels: list[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"]
+        ]
+        | dict[
+            Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"],
+            dict[str, Any] | None,
         ] = ["qpos", "qvel"],
     ):
         """
@@ -280,9 +294,11 @@ class Joint(XMLModel):
         * A `quat` is an orientation quaternion, posted as 4 values (`w`, `x`, `y`, `z`) under `subgroups=(joint_name, channel)`.
         * For free joints, `qpos` is split into an `xyzm` posted under `pos_qpos` and a `quat` posted under `quat_qpos`; the remaining channels are split into an `xyzm` posted under `lin_<channel>` (linear) and another `xyzm` posted under `ang_<channel>` (angular).
 
+        Each signal is tagged with built-in `dimension`/`unit` metadata based on the joint's type (e.g. a hinge's `qpos` is tagged as an angle in radians; a slide's as a length). `qfrc_*` is tagged as force for slide joints and torque for hinge/ball/free.
+
         Args:
             signal_manager: The signal manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
-            channels: The joint data channels to log.
+            channels: The joint data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
 
         Raises:
             ValueError: If the joint has no name.
@@ -299,29 +315,53 @@ class Joint(XMLModel):
             logger.error(msg)
             raise ValueError(msg)
 
-        def post_vec3(vec3: np.ndarray, channel: str):
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
+        def post_vec3(
+            vec3: np.ndarray,
+            channel: str,
+            builtin: dict[str, str] | None,
+            *,
+            us: UnitSystem | None = None,
+        ):
             """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
             full_vec = np.append(vec3, np.linalg.norm(vec3))
+            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
             for v, attr in zip(full_vec, "xyzm", strict=True):
                 signal_manager.post(
                     value=float(v),
                     category=SignalCategory.JOINTS,
                     subgroups=(f"{self.name}", channel),
                     attr=attr,
+                    metadata=meta,
                 )
 
-        def post_quat(quat: np.ndarray, channel: str):
+        def post_quat(
+            quat: np.ndarray,
+            channel: str,
+            builtin: dict[str, str] | None,
+            *,
+            us: UnitSystem | None = None,
+        ):
             """Posts an orientation quaternion under w/x/y/z attrs."""
+            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
             for v, attr in zip(quat, "wxyz", strict=True):
                 signal_manager.post(
                     value=float(v),
                     category=SignalCategory.JOINTS,
                     subgroups=(f"{self.name}", channel),
                     attr=attr,
+                    metadata=meta,
                 )
 
         def sample(state: MjState):
             jnt_type = self._jnt_type(state)
+            scalar_meta = joint_type_metadata(jnt_type)
+            u = state.us
 
             for channel in channels:
                 match channel:
@@ -339,21 +379,61 @@ class Joint(XMLModel):
                         continue
 
                 if len(val) == 1:
+                    scalar_key = (
+                        "pos"
+                        if channel == "qpos"
+                        else ("vel" if channel == "qvel" else "frc")
+                    )
                     signal_manager.post(
                         value=float(val[0]),
                         category=SignalCategory.JOINTS,
                         subgroups=(f"{self.name}",),
                         attr=channel,  # scalar values are considered an attr of the parent
+                        metadata=merge_signal_metadata(
+                            scalar_meta[scalar_key], channel, _meta, unit_system=u
+                        ),
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-                    post_vec3(val[:3], channel=f"pos_{channel}")
-                    post_quat(val[3:], channel=f"quat_{channel}")
+                    post_vec3(
+                        val[:3],
+                        channel=f"pos_{channel}",
+                        builtin=dim(Dimension.LENGTH),
+                        us=u,
+                    )
+                    post_quat(
+                        val[3:],
+                        channel=f"quat_{channel}",
+                        builtin=dimensionless_metadata(),
+                        us=u,
+                    )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
-                    post_quat(val, channel=channel)
+                    post_quat(
+                        val, channel=channel, builtin=dimensionless_metadata(), us=u
+                    )
                 elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-                    post_vec3(val[:3], channel=f"lin_{channel}")
-                    post_vec3(val[3:], channel=f"ang_{channel}")
+                    lin_builtin = (
+                        dim(Dimension.VELOCITY)
+                        if channel == "qvel"
+                        else dim(Dimension.FORCE)
+                    )
+                    ang_builtin = (
+                        angular_rate_metadata()
+                        if channel == "qvel"
+                        else torque_metadata()
+                    )
+                    post_vec3(
+                        val[:3], channel=f"lin_{channel}", builtin=lin_builtin, us=u
+                    )
+                    post_vec3(
+                        val[3:], channel=f"ang_{channel}", builtin=ang_builtin, us=u
+                    )
                 else:
-                    post_vec3(val, channel=channel)
+                    # ball joint's qvel/qfrc_*: always rotational (3 DOF, no translation)
+                    ang_builtin = (
+                        angular_rate_metadata()
+                        if channel == "qvel"
+                        else torque_metadata()
+                    )
+                    post_vec3(val, channel=channel, builtin=ang_builtin, us=u)
 
         signal_manager.register_sampler(sample)

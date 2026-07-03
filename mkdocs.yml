@@ -30,6 +30,7 @@ nav:
           - Optimization: user-guides/optimization.md
           - Reloaded: user-guides/reloaded.md
           - Pose Context: user-guides/pose-context.md
+          - Requirements: user-guides/requirements.md
   - Code Reference:
       - mujoco_mojo:
           - MojoModel: reference/mujoco_mojo/mojo_model.md
@@ -168,7 +169,9 @@ markdown_extensions:
       linenums: true
   - pymdownx.inlinehilite
   - pymdownx.details
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
+      dedent_subsections: true
   - pymdownx.blocks.caption
   - pymdownx.superfences:
       custom_fences:

@@ -11,12 +11,24 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
-from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.settings import ModelSettings
+from pydantic_ai import Agent, RunContext  # pyright: ignore[reportMissingImports]
+from pydantic_ai.messages import (  # pyright: ignore[reportMissingImports]
+    ModelMessage,
+    ModelResponse,
+    TextPart,
+)
+from pydantic_ai.models import (  # pyright: ignore[reportMissingImports]
+    Model,
+    ModelRequestParameters,
+    StreamedResponse,
+)
+from pydantic_ai.models.openai import (  # pyright: ignore[reportMissingImports]
+    OpenAIChatModel,
+)
+from pydantic_ai.providers.openai import (  # pyright: ignore[reportMissingImports]
+    OpenAIProvider,
+)
+from pydantic_ai.settings import ModelSettings  # pyright: ignore[reportMissingImports]
 
 from mujoco_mojo.settings import SensAISettings
 from mujoco_mojo.utils.dataframe import ColumnManifest
@@ -339,7 +351,7 @@ async def get_job_summary(ctx: RunContext[SensAIDeps]) -> str:
         f"Started by: {job.started_by}",
         f"Execution mode: {job.execution_mode}",
         f"Total trials: {job.n_trial}",
-        f"Completed: {job.n_done} ({job.n_success} succeeded, {job.n_failed} failed)",
+        f"Completed: {job.n_done} ({job.n_success} succeeded, {job.n_failed} failed requirements, {job.n_error} errored)",
         f"Remaining: {job.n_remaining}",
         f"Progress: {job.progress:.1%}",
         f"Progress bar: {job.progress_bar}",
@@ -350,7 +362,8 @@ async def get_job_summary(ctx: RunContext[SensAIDeps]) -> str:
     ]
     if job.n_done > 0:
         lines.append(f"Success rate: {job.success_rate:.1%}")
-        lines.append(f"Failure rate: {job.failure_rate:.1%}")
+        lines.append(f"Requirement failure rate: {job.failure_rate:.1%}")
+        lines.append(f"Error rate: {job.error_rate:.1%}")
 
     return "\n".join(lines)
 
@@ -364,11 +377,13 @@ async def get_trial_breakdown(ctx: RunContext[SensAIDeps]) -> str:
 
     success = job.success_trial_nums
     failed = job.failed_trial_nums
+    errored = job.error_trial_nums
     pending = job.pending_trial_nums
 
     lines = [
         f"Succeeded ({len(success)}): {success[:50]}{'...' if len(success) > 50 else ''}",
-        f"Failed ({len(failed)}): {failed[:50]}{'...' if len(failed) > 50 else ''}",
+        f"Failed requirements ({len(failed)}): {failed[:50]}{'...' if len(failed) > 50 else ''}",
+        f"Errored ({len(errored)}): {errored[:50]}{'...' if len(errored) > 50 else ''}",
         f"Pending ({len(pending)}): {pending[:50]}{'...' if len(pending) > 50 else ''}",
     ]
     return "\n".join(lines)

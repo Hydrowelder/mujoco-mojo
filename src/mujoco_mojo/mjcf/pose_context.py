@@ -66,13 +66,13 @@ class PoseContext:
         for attr in ("sites", "cameras", "lights"):
             for child in getattr(parent_obj, attr, ()):
                 logger.debug(
-                    "registering %s %s", attr[:-1], getattr(child, "name", id(child))
+                    f"registering {attr[:-1]} {getattr(child, 'name', id(child))}"
                 )
                 self._tm.add_transform(self._key(child), parent_key, _to_T(child))
 
     def _walk_frames(self, frm: Frame, parent_key: str) -> None:
         """Recursively registers a Frame and its nested frames."""
-        logger.debug("registering frame %s", getattr(frm, "name", id(frm)))
+        logger.debug(f"registering frame {getattr(frm, 'name', id(frm))}")
         frm_key = self._key(frm)
         self._tm.add_transform(frm_key, parent_key, _to_T(frm))
         for nested in frm.frames:
@@ -91,7 +91,7 @@ class PoseContext:
 
     def _walk(self, body: Body, parent_key: str) -> None:
         """Recursively registers a body and all its descendants."""
-        logger.debug("registering body %s", getattr(body, "name", id(body)))
+        logger.debug(f"registering body {getattr(body, 'name', id(body))}")
         body_key = self._key(body)
         self._tm.add_transform(body_key, parent_key, _to_T(body))
         self._register_posed_children(body, body_key)

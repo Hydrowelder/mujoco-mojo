@@ -50,6 +50,9 @@ export interface DerivativeFilter {
   wrtCol?: string | null;
 }
 
+export type DisplayUnitSystem = "si" | "cgs" | "fps" | "ips" | "fff";
+export const DISPLAY_UNIT_SYSTEM_VALUES: DisplayUnitSystem[] = ["si", "cgs", "fps", "ips", "fff"];
+
 export interface ExpFilter {
   enabled?: boolean;
   type?: "exp";
@@ -246,8 +249,8 @@ export interface TrigFilter {
 export interface UnitFilter {
   enabled?: boolean;
   type?: "unit";
-  fromUnit: "rad" | "deg" | "mrad" | "rev" | "rpm" | "rad/s" | "deg/s" | "rad/s^2" | "deg/s^2" | "m" | "mm" | "cm" | "um" | "km" | "in" | "ft" | "thou" | "m/s" | "mm/s" | "cm/s" | "ft/s" | "in/s" | "km/h" | "mph" | "m/s^2" | "mm/s^2" | "ft/s^2" | "in/s^2" | "kg" | "g" | "mg" | "lbm" | "slug" | "N" | "mN" | "uN" | "kN" | "lbf" | "N*m" | "N*mm" | "mN*m" | "kN*m" | "lbf*ft" | "lbf*in" | "ozf*in" | "kg*m^2" | "kg*mm^2" | "lbm*in^2" | "lbm*ft^2" | "slug*ft^2" | "J" | "mJ" | "kJ" | "W*s" | "W*h" | "kW*h" | "ft*lbf" | "BTU" | "W" | "mW" | "kW" | "MW" | "hp" | "ft*lbf/s" | "Pa" | "kPa" | "MPa" | "psi" | "bar" | "atm" | "torr" | "s" | "ms" | "us" | "ns" | "min" | "hr" | "Hz" | "kHz" | "MHz" | "V" | "mV" | "kV" | "A" | "mA" | "dimensionless" | "pct" | "count" | "bit" | string;
-  toUnit: "rad" | "deg" | "mrad" | "rev" | "rpm" | "rad/s" | "deg/s" | "rad/s^2" | "deg/s^2" | "m" | "mm" | "cm" | "um" | "km" | "in" | "ft" | "thou" | "m/s" | "mm/s" | "cm/s" | "ft/s" | "in/s" | "km/h" | "mph" | "m/s^2" | "mm/s^2" | "ft/s^2" | "in/s^2" | "kg" | "g" | "mg" | "lbm" | "slug" | "N" | "mN" | "uN" | "kN" | "lbf" | "N*m" | "N*mm" | "mN*m" | "kN*m" | "lbf*ft" | "lbf*in" | "ozf*in" | "kg*m^2" | "kg*mm^2" | "lbm*in^2" | "lbm*ft^2" | "slug*ft^2" | "J" | "mJ" | "kJ" | "W*s" | "W*h" | "kW*h" | "ft*lbf" | "BTU" | "W" | "mW" | "kW" | "MW" | "hp" | "ft*lbf/s" | "Pa" | "kPa" | "MPa" | "psi" | "bar" | "atm" | "torr" | "s" | "ms" | "us" | "ns" | "min" | "hr" | "Hz" | "kHz" | "MHz" | "V" | "mV" | "kV" | "A" | "mA" | "dimensionless" | "pct" | "count" | "bit" | string;
+  fromUnit: "rad" | "deg" | "mrad" | "rev" | "rpm" | "rad/s" | "deg/s" | "rad/s^2" | "deg/s^2" | "m" | "mm" | "cm" | "um" | "km" | "in" | "ft" | "thou" | "m/s" | "mm/s" | "cm/s" | "ft/s" | "in/s" | "km/h" | "mph" | "m/s^2" | "mm/s^2" | "ft/s^2" | "in/s^2" | "kg" | "g" | "mg" | "pound" | "slug" | "N" | "mN" | "uN" | "kN" | "pound_force" | "ounce_force" | "N*m" | "N*mm" | "mN*m" | "kN*m" | "pound_force*ft" | "pound_force*in" | "ounce_force*in" | "kg*m^2" | "kg*mm^2" | "pound*in^2" | "pound*ft^2" | "slug*ft^2" | "J" | "mJ" | "kJ" | "W*s" | "W*h" | "kW*h" | "ft*pound_force" | "BTU" | "W" | "mW" | "kW" | "MW" | "hp" | "ft*pound_force/s" | "Pa" | "kPa" | "MPa" | "psi" | "bar" | "atm" | "torr" | "s" | "ms" | "us" | "ns" | "min" | "hr" | "Hz" | "kHz" | "MHz" | "V" | "mV" | "kV" | "A" | "mA" | "dimensionless" | "pct" | "count" | "bit" | string;
+  toUnit: "rad" | "deg" | "mrad" | "rev" | "rpm" | "rad/s" | "deg/s" | "rad/s^2" | "deg/s^2" | "m" | "mm" | "cm" | "um" | "km" | "in" | "ft" | "thou" | "m/s" | "mm/s" | "cm/s" | "ft/s" | "in/s" | "km/h" | "mph" | "m/s^2" | "mm/s^2" | "ft/s^2" | "in/s^2" | "kg" | "g" | "mg" | "pound" | "slug" | "N" | "mN" | "uN" | "kN" | "pound_force" | "ounce_force" | "N*m" | "N*mm" | "mN*m" | "kN*m" | "pound_force*ft" | "pound_force*in" | "ounce_force*in" | "kg*m^2" | "kg*mm^2" | "pound*in^2" | "pound*ft^2" | "slug*ft^2" | "J" | "mJ" | "kJ" | "W*s" | "W*h" | "kW*h" | "ft*pound_force" | "BTU" | "W" | "mW" | "kW" | "MW" | "hp" | "ft*pound_force/s" | "Pa" | "kPa" | "MPa" | "psi" | "bar" | "atm" | "torr" | "s" | "ms" | "us" | "ns" | "min" | "hr" | "Hz" | "kHz" | "MHz" | "V" | "mV" | "kV" | "A" | "mA" | "dimensionless" | "pct" | "count" | "bit" | string;
 }
 
 export interface VlineShape {
@@ -305,6 +308,9 @@ export interface PlotConfig {
   vsRange: [number, number];
   annotations: Annotation[];
   shapes: Shape[];
+  displayUnitSystem?: DisplayUnitSystem | null;
+  maxPoints?: number | null;
+  vsPinned?: number[];
 }
 
 export type Shape = VlineShape | HlineShape | RectShape;
@@ -511,6 +517,18 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
       },
       "title": "DerivativeFilter",
       "type": "object"
+    },
+    "DisplayUnitSystem": {
+      "description": "Named unit system for display-time conversion of telemetry values. When set, data is converted from its logged units to the chosen system before being returned to the frontend.",
+      "enum": [
+        "si",
+        "cgs",
+        "fps",
+        "ips",
+        "fff"
+      ],
+      "title": "DisplayUnitSystem",
+      "type": "string"
     },
     "ExpFilter": {
       "additionalProperties": false,
@@ -1414,24 +1432,25 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
                 "kg",
                 "g",
                 "mg",
-                "lbm",
+                "pound",
                 "slug",
                 "N",
                 "mN",
                 "uN",
                 "kN",
-                "lbf",
+                "pound_force",
+                "ounce_force",
                 "N*m",
                 "N*mm",
                 "mN*m",
                 "kN*m",
-                "lbf*ft",
-                "lbf*in",
-                "ozf*in",
+                "pound_force*ft",
+                "pound_force*in",
+                "ounce_force*in",
                 "kg*m^2",
                 "kg*mm^2",
-                "lbm*in^2",
-                "lbm*ft^2",
+                "pound*in^2",
+                "pound*ft^2",
                 "slug*ft^2",
                 "J",
                 "mJ",
@@ -1439,14 +1458,14 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
                 "W*s",
                 "W*h",
                 "kW*h",
-                "ft*lbf",
+                "ft*pound_force",
                 "BTU",
                 "W",
                 "mW",
                 "kW",
                 "MW",
                 "hp",
-                "ft*lbf/s",
+                "ft*pound_force/s",
                 "Pa",
                 "kPa",
                 "MPa",
@@ -1516,24 +1535,25 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
                 "kg",
                 "g",
                 "mg",
-                "lbm",
+                "pound",
                 "slug",
                 "N",
                 "mN",
                 "uN",
                 "kN",
-                "lbf",
+                "pound_force",
+                "ounce_force",
                 "N*m",
                 "N*mm",
                 "mN*m",
                 "kN*m",
-                "lbf*ft",
-                "lbf*in",
-                "ozf*in",
+                "pound_force*ft",
+                "pound_force*in",
+                "ounce_force*in",
                 "kg*m^2",
                 "kg*mm^2",
-                "lbm*in^2",
-                "lbm*ft^2",
+                "pound*in^2",
+                "pound*ft^2",
                 "slug*ft^2",
                 "J",
                 "mJ",
@@ -1541,14 +1561,14 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
                 "W*s",
                 "W*h",
                 "kW*h",
-                "ft*lbf",
+                "ft*pound_force",
                 "BTU",
                 "W",
                 "mW",
                 "kW",
                 "MW",
                 "hp",
-                "ft*lbf/s",
+                "ft*pound_force/s",
                 "Pa",
                 "kPa",
                 "MPa",
@@ -2214,6 +2234,37 @@ export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {
         ]
       },
       "title": "Shapes",
+      "type": "array"
+    },
+    "displayUnitSystem": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DisplayUnitSystem"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "maxPoints": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Maxpoints"
+    },
+    "vsPinned": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Vspinned",
       "type": "array"
     }
   },

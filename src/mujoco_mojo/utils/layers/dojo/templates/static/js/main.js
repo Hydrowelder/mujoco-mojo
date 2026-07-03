@@ -103,12 +103,83 @@
         document.addEventListener("visibilitychange", () => {
           if (!document.hidden) this.checkServerHealth();
         });
+        this._installPlotlyLogCapture();
+      },
+      // plotly.js routes all its logging through loggers that prepend "WARN:"
+      // or "ERROR:" as the first console argument, so wrapping the console
+      // methods it uses lets us surface its complaints as toasts without
+      // touching any other console traffic
+      _installPlotlyLogCapture() {
+        const w = window;
+        if (w._mojoPlotlyLogsHooked) return;
+        w._mojoPlotlyLogsHooked = true;
+        const recent = /* @__PURE__ */ new Map();
+        const forward = (prefix, args) => {
+          const msg = args.map(String).join(" ").slice(0, 160);
+          const now = Date.now();
+          if (now - (recent.get(msg) ?? 0) < 1e4) return;
+          recent.set(msg, now);
+          const type = prefix === "ERROR:" ? "error" : "info";
+          this.toast(`${msg}`, type);
+          this.addNotification(`${msg}`, type);
+        };
+        ["trace", "log", "error"].forEach((level) => {
+          const orig = console[level].bind(console);
+          console[level] = (...args) => {
+            orig(...args);
+            const first = String(args[0] ?? "");
+            if (first === "WARN:" || first === "ERROR:") {
+              forward(first, args.slice(1));
+            }
+          };
+        });
+        const notifierObserver = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            for (const node of m.addedNodes) {
+              if (!(node instanceof HTMLElement)) continue;
+              const notes = node.classList.contains("notifier-note") ? [node] : Array.from(node.querySelectorAll(".notifier-note"));
+              for (const note of notes) {
+                const msg = (note.textContent ?? "").replace(/^\s*×/, "").trim();
+                if (msg) this.toast(`${msg}`, "info");
+              }
+            }
+          }
+        });
+        notifierObserver.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
       },
       toast(message, type = "info") {
         this.globalToast = { show: true, message, type };
         setTimeout(() => {
           this.globalToast = { ...this.globalToast, show: false };
         }, 3500);
+      },
+      async copyText(text, successMsg = "Copied to clipboard") {
+        if (navigator.clipboard && window.isSecureContext) {
+          try {
+            await navigator.clipboard.writeText(text);
+            this.toast(successMsg, "success");
+            return;
+          } catch (err) {
+            console.warn("Modern clipboard failed, falling back...", err);
+          }
+        }
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.cssText = "position:fixed;left:-9999px;top:0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          if (document.execCommand("copy")) {
+            this.toast(successMsg, "success");
+          } else throw new Error("execCommand returned false");
+        } catch {
+          this.toast("Failed to copy to clipboard", "error");
+        }
+        document.body.removeChild(textArea);
       },
       _setConnected(connected) {
         this.isConnected = connected;

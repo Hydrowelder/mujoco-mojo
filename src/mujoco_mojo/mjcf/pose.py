@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Self, overload
 
 import numpy as np
 from pydantic import Field
@@ -67,30 +67,69 @@ class PoseBase(Pos, OrientationBase, ABC):
 
     @property
     def as_pos(self) -> Pos:
-        return Pos(pos=self.pos)
+        return Pos(self.pos)
+
+    def with_orientation(self, orientation: OrientationBase) -> AnyPose:
+        """Returns a copy of this pose with a new orientation, keeping the same position."""
+        return orientation.as_pose(pos=self.pos)
+
+    @overload
+    @classmethod
+    def look_at(
+        cls,
+        target: Vec3,
+        eye: Vec3 = ...,
+        *,
+        roll: float = 0.0,
+        angle: Angle = DEFAULT_ANGLE,
+        negative_z: bool = True,
+    ) -> Self: ...
+
+    @classmethod
+    @overload
+    def look_at(
+        cls,
+        target: Vec3,
+        eye: Vec3 = ...,
+        *,
+        up: Vec3,
+        negative_z: bool = True,
+    ) -> Self: ...
 
     @classmethod
     def look_at(
         cls,
         target: Vec3,
         eye: Vec3 = np.array([0, 0, 0]),
-        up: Vec3 = np.array([0, 0, 1]),
+        *,
+        roll: float = 0.0,
+        angle: Angle = DEFAULT_ANGLE,
+        up: Vec3 | None = None,
         negative_z: bool = True,
     ) -> Self:
         """
         Creates a full Pose that points the Z-axis toward/away from a target.
 
+        The secondary (X/Y) axes are controlled either by `roll`, a rotation about the forward axis where `roll=0` places the local X axis as close to world +Z as possible, or by an explicit `up` vector for the rare case where an exact secondary direction is required. Passing `up` overrides `roll`.
+
         Args:
             target (Vec3): Where the vector should point to.
             eye (Vec3, optional): From where the vector should point. Defaults to np.array([0, 0, 0]).
-            up (Vec3, optional): Up axis for the vector. Defaults to np.array([0, 0, 1]).
+            roll (float, optional): Rotation about the forward axis, in the units specified by `angle`. Ignored if `up` is given. Defaults to 0.0.
+            angle (Angle, optional): Whether `roll` is in degrees or radians. Defaults to DEFAULT_ANGLE.
+            up (Vec3, optional): Explicit secondary axis direction, overriding `roll`. Defaults to None.
             negative_z (bool, optional): Whether the z axis should point its plus or minus axis at the target (Cameras and Lights use minus, Geom uses plus). Defaults to True.
 
         Returns:
             Self: New instance of Pose.
 
         """
-        ori = Quat.look_at(target=target, eye=eye, up=up, negative_z=negative_z)
+        if up is not None:
+            ori = Quat.look_at(target=target, eye=eye, up=up, negative_z=negative_z)
+        else:
+            ori = Quat.look_at(
+                target=target, eye=eye, roll=roll, angle=angle, negative_z=negative_z
+            )
         return cls.from_matrix(ori.as_matrix()).model_copy(update={"pos": eye})
 
     def as_pose_quat(self) -> PoseQuat:

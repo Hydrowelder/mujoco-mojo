@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 import pandas as pd
 from pydantic import Field, PrivateAttr, computed_field
@@ -21,7 +21,18 @@ from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
 from mujoco_mojo.utils.log import get_logger
 
-__all__ = ["TRIAL_STATUS_FNAME", "Completion", "JobStatus", "StepStatus", "TrialStatus"]
+__all__ = [
+    "JOB_STATUS_FNAME",
+    "REQUIREMENTS_FNAME",
+    "TRIAL_STATUS_FNAME",
+    "Completion",
+    "ExecutionMode",
+    "JobStatus",
+    "JobType",
+    "RequirementResult",
+    "StepStatus",
+    "TrialStatus",
+]
 
 logger = get_logger(__name__)
 
@@ -33,6 +44,9 @@ TRIAL_STATUS_FNAME = "trial_status.json"
 
 JOB_STATUS_FNAME = "job_status.json"
 """Filename of job status files."""
+
+REQUIREMENTS_FNAME = "requirements.json"
+"""Filename of per-trial requirement result files."""
 
 
 class JobType(StrEnum):
@@ -51,10 +65,54 @@ class Completion(StrEnum):
     """Neither completed nor failed. Indicates the process is ongoing."""
 
     SUCCESS = "success"
-    """Completed successfully with no detected exceptions."""
+    """Completed successfully; all requirements passed (or none were registered)."""
 
-    FAILED = "failed"
-    """Completed due to a failure/exceptions."""
+    FAILURE = "failure"
+    """Completed without exceptions but one or more requirements failed."""
+
+    TERMINATED = "terminated"
+    """Stopped early via `SimulationStopped` (user request or terminating requirement). Counted as a requirement failure in job statistics, not an error."""
+
+    ERROR = "error"
+    """An unhandled exception was raised while processing the trial. Distinct from `FAILURE`: the run broke, it did not merely miss its requirements."""
+
+
+_FAILED_COMPLETIONS = {Completion.FAILURE, Completion.TERMINATED}
+"""Completion states counted as requirement failures (the trial ran, but requirements were not met)."""
+
+_TIMED_COMPLETIONS = {Completion.SUCCESS} | _FAILED_COMPLETIONS
+"""Completion states whose durations feed `average_trial_duration` and throughput estimates. Errored trials are excluded because a run that crashed (possibly instantly) says nothing about how long a real trial takes."""
+
+
+class RequirementResult(MojoBaseModel):
+    """Result of a single requirement check evaluated at the end of a trial."""
+
+    name: str
+    """Name of the requirement."""
+
+    passed: bool
+    """Whether the requirement was satisfied."""
+
+    message: str
+    """Human-readable message from the requirement function."""
+
+    decided_at: float = 0.0
+    """Simulation time at which the verdict was determined: the time of the first live failure, the time it latched, or the trial's final sim time for a plain end-of-trial verdict."""
+
+    every: int | None = None
+    """Live-check cadence the requirement was registered with (steps), or `None` if it only ran once at end-of-trial."""
+
+    terminate_on_fail: bool = False
+    """Whether a failing live check was configured to end the simulation early."""
+
+    terminate_on_pass: bool = False
+    """Whether a passing live check was configured to end the simulation early."""
+
+    latch_on_fail: bool = False
+    """Whether the check stopped being re-evaluated once it first failed."""
+
+    latch_on_pass: bool = False
+    """Whether the check stopped being re-evaluated once it first passed."""
 
 
 class StepStatus(MojoBaseModel):
@@ -74,6 +132,24 @@ class StepStatus(MojoBaseModel):
         if self.elapsed is not None:
             return timedelta(seconds=self.elapsed)
         return None
+
+
+class TimelineBin(TypedDict):
+    t: float
+    label: str
+    n_success: int
+    n_failed: int
+    n_error: int
+    n_running: int
+    n_pending: int
+
+
+class RequirementSummary(TypedDict):
+    name: str
+    n_passed: int
+    n_failed: int
+    n_trials: int
+    pass_rate: float
 
 
 class TrialStatus(MojoBaseModel):
@@ -109,8 +185,19 @@ class TrialStatus(MojoBaseModel):
     - This step is the second step in the sequence.
     - Completion of the step is the end of the trial."""
 
+    requirements: list[RequirementResult] = Field(default_factory=list)
+    """Results of all requirement checks evaluated at the end of this trial."""
+
     _path: Path | None = PrivateAttr(default=None)
     """Where this status file is serialized."""
+
+    @computed_field
+    @property
+    def requirements_passed(self) -> bool | None:
+        """True if all requirements passed, False if any failed, None if no requirements were registered."""
+        if not self.requirements:
+            return None
+        return all(r.passed for r in self.requirements)
 
     @contextmanager
     def record_step(self, step_name: Step):
@@ -353,13 +440,13 @@ class JobStatus(MojoBaseModel):
 
         # post calculations
         with self._lock:
-            success_durations = [
+            timed_durations = [
                 s.td.total_seconds()
                 for s in self._cache.values()
-                if s.completion == Completion.SUCCESS
+                if s.completion in _TIMED_COMPLETIONS
             ]
-            if success_durations:
-                avg_sec = sum(success_durations) / len(success_durations)
+            if timed_durations:
+                avg_sec = sum(timed_durations) / len(timed_durations)
                 self.average_trial_duration = timedelta(seconds=avg_sec)
 
             if not self.is_done:
@@ -416,7 +503,7 @@ class JobStatus(MojoBaseModel):
     @property
     def time_remaining_average_success(self) -> timedelta:
         """
-        Calculates the estimated time ramianing based on the average successful trial completion rate.
+        Calculates the estimated time remaining based on the average completed-trial duration (successes and requirement failures; errored trials are excluded).
 
         For simulations which were resumed, this property is more accurate than the time_remaining_wall_clock property.
         """
@@ -432,7 +519,7 @@ class JobStatus(MojoBaseModel):
 
     @property
     def n_done(self) -> int:
-        return self.n_success + self.n_failed
+        return self.n_success + self.n_failed + self.n_error
 
     @property
     def progress(self) -> float:
@@ -449,7 +536,13 @@ class JobStatus(MojoBaseModel):
 
     @property
     def failure_rate(self) -> float:
+        """Fraction of done trials that failed one or more requirements."""
         return self.n_failed / self.n_done if self.n_done else 0
+
+    @property
+    def error_rate(self) -> float:
+        """Fraction of done trials that raised an unhandled exception."""
+        return self.n_error / self.n_done if self.n_done else 0
 
     @property
     def success_rate(self) -> float:
@@ -469,7 +562,13 @@ class JobStatus(MojoBaseModel):
 
     @property
     def n_failed(self) -> int:
-        return sum(1 for c in self._registry.values() if c == Completion.FAILED)
+        """Number of done trials that failed one or more requirements (`FAILURE` or `TERMINATED`). Errored trials are counted separately in `n_error`."""
+        return sum(1 for c in self._registry.values() if c in _FAILED_COMPLETIONS)
+
+    @property
+    def n_error(self) -> int:
+        """Number of trials that raised an unhandled exception (`ERROR`)."""
+        return sum(1 for c in self._registry.values() if c == Completion.ERROR)
 
     @property
     def success_trial_nums(self) -> list[int]:
@@ -482,26 +581,42 @@ class JobStatus(MojoBaseModel):
     @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
-        tns = []
-        for tn in self._registry.keys():
-            if self._registry[tn] == Completion.FAILED:
-                tns.append(tn)
-        return sorted(tns)
+        """Trials that completed but failed one or more requirements (`FAILURE` or `TERMINATED`)."""
+        return sorted(
+            tn for tn, comp in self._registry.items() if comp in _FAILED_COMPLETIONS
+        )
+
+    @computed_field
+    @property
+    def error_trial_nums(self) -> list[int]:
+        """Trials that raised an unhandled exception (`ERROR`)."""
+        return sorted(
+            tn for tn, comp in self._registry.items() if comp == Completion.ERROR
+        )
+
+    @property
+    def unsuccessful_trial_nums(self) -> list[int]:
+        """Union of failed and errored trials, for anything-went-wrong checks like process exit codes."""
+        return sorted(
+            tn
+            for tn, comp in self._registry.items()
+            if comp not in {Completion.SUCCESS, Completion.INCOMPLETE}
+        )
 
     def update_trial(self, status: TrialStatus, save: bool = True):
         """Updates the internal registry and average trial duration and optionally persists the global status."""
         with self._lock:
             self._cache[status.trial_num] = status
 
-            success_durations = [
+            timed_durations = [
                 s.td.total_seconds()
                 for s in self._cache.values()
-                if s.completion == Completion.SUCCESS and s.td is not None
+                if s.completion in _TIMED_COMPLETIONS and s.td is not None
             ]
 
-            if success_durations:
+            if timed_durations:
                 self.average_trial_duration = timedelta(
-                    seconds=sum(success_durations) / len(success_durations)
+                    seconds=sum(timed_durations) / len(timed_durations)
                 )
 
             self.elapsed = datetime.now(UTC) - self.start_time
@@ -555,6 +670,12 @@ class JobStatus(MojoBaseModel):
                 f'style="accent-color: #f43f5e;">'
                 f"{self.n_failed}</progress>"
             ),
+            "Errors": (
+                f"{self.n_error} ({self.error_rate:.1%}) "
+                f'<progress value="{self.n_error}" max="{self.n_done}" '
+                f'style="accent-color: #f59e0b;">'
+                f"{self.n_error}</progress>"
+            ),
             "Generator": _parse_func(*self.generator),
             "Runtime": _parse_func(*self.runtime),
             "Objective": _parse_func(*self.objective),
@@ -563,6 +684,24 @@ class JobStatus(MojoBaseModel):
             "Runtime Args Used?": "✅" if self.run_args_used else "❌",
             "Runtime Kwargs Used?": "✅" if self.run_kwargs_used else "❌",
         }
+        if self.requirement_summary:
+            n_rp = self.n_requirements_passed
+            n_rf = self.n_requirements_failed
+            n_rt = n_rp + n_rf
+            data["Requirement Checks Passed"] = (
+                f"{n_rp} / {n_rt} ({n_rp / n_rt:.1%}) "
+                f'<progress value="{n_rp}" max="{n_rt}" '
+                f'style="accent-color: #10b981;">{n_rp}</progress>'
+                if n_rt
+                else "N/A"
+            )
+            data["Requirement Checks Failed"] = (
+                f"{n_rf} / {n_rt} ({n_rf / n_rt:.1%}) "
+                f'<progress value="{n_rf}" max="{n_rt}" '
+                f'style="accent-color: #f43f5e;">{n_rf}</progress>'
+                if n_rt
+                else "N/A"
+            )
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     def _run_time_series(self) -> pd.DataFrame:
@@ -588,13 +727,77 @@ class JobStatus(MojoBaseModel):
         return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
 
     @property
+    def requirement_summary(self) -> list[RequirementSummary]:
+        """Per-requirement pass/fail counts aggregated across all cached trial statuses."""
+        from collections import defaultdict
+
+        counts: dict[str, list[bool]] = defaultdict(list)
+        with self._lock:
+            statuses = list(self._cache.values())
+        for status in statuses:
+            for result in status.requirements:
+                counts[result.name].append(result.passed)
+        return [
+            {
+                "name": name,
+                "n_passed": sum(results),
+                "n_failed": len(results) - sum(results),
+                "n_trials": len(results),
+                "pass_rate": sum(results) / len(results),
+            }
+            for name, results in sorted(counts.items())
+        ]
+
+    @property
+    def n_requirements_passed(self) -> int:
+        """Total number of individual requirement checks that passed across all trials."""
+        return sum(row["n_passed"] for row in self.requirement_summary)
+
+    @property
+    def n_requirements_failed(self) -> int:
+        """Total number of individual requirement checks that failed across all trials."""
+        return sum(row["n_failed"] for row in self.requirement_summary)
+
+    @property
+    def _requirements_series(self) -> pd.DataFrame | None:
+        summary = self.requirement_summary
+        if not summary:
+            return None
+        rows = []
+        for row in summary:
+            if row["pass_rate"] == 1.0:
+                icon = "✅"
+            elif row["pass_rate"] == 0.0:
+                icon = "❌"
+            else:
+                icon = "⚠️"
+            rows.append(
+                {
+                    "Requirement": f"{icon} {row['name']}",
+                    "Passed": str(row["n_passed"]),
+                    "Failed": str(row["n_failed"]),
+                    "Trials": str(row["n_trials"]),
+                    "Pass Rate": f"{row['pass_rate']:.1%}",
+                }
+            )
+        return pd.DataFrame(rows)
+
+    @property
     def _failed_runs_md(self) -> str:
         if not self.failed_trial_nums:
-            return "## Failed Trials\n✅ **No failures detected.** 🎉"
+            return "## Failed Trials\n✅ **No requirement failures detected.** 🎉"
 
         # Using a list with bullet points for clean Markdown rendering
         nums = [f"`{tn:{self.padding_style}}`" for tn in sorted(self.failed_trial_nums)]
         return "## ❌ Failed Trials\n* " + "\n* ".join(nums)
+
+    @property
+    def _error_runs_md(self) -> str:
+        if not self.error_trial_nums:
+            return "## Errored Trials\n✅ **No errors detected.** 🎉"
+
+        nums = [f"`{tn:{self.padding_style}}`" for tn in sorted(self.error_trial_nums)]
+        return "## ⚠️ Errored Trials\n* " + "\n* ".join(nums)
 
     def generate_report(
         self,
@@ -611,6 +814,13 @@ class JobStatus(MojoBaseModel):
                 f"Metrics and completion times are estimates based on the current "
                 f"{self.progress:.1%} progress.\n```\n"
             )
+
+        req_df = self._requirements_series
+        requirements_section = (
+            f"\n---\n\n## Requirements\n\n{req_df.to_markdown(index=False)}\n"
+            if req_df is not None
+            else ""
+        )
 
         content = f"""
 # Simulation Campaign Report
@@ -633,6 +843,8 @@ class JobStatus(MojoBaseModel):
 
 {self._failed_runs_md}
 
+{self._error_runs_md}
+{requirements_section}
 ---
 
 > **Generated by [`mujoco-mojo`]({REPO_URL})**
@@ -643,6 +855,76 @@ class JobStatus(MojoBaseModel):
 
         if alert_generation:
             logger.info(f"MuJoCo Mojo report generated at {report_path}")
+
+    def completion_timeline(self, n_bins: int = 40) -> list[TimelineBin]:
+        """
+        Reconstructs cumulative outcome counts over the job's wall-clock life, for the monitor's stacked progress histogram.
+
+        Each trial's completion time is taken as the latest recorded step end (`started + elapsed`). A trial that is still `INCOMPLETE` but has begun generating or solving counts as "running" from that start time onward rather than "pending"; claimed-but-not-yet-started trials (only `pending.started` set) still count as pending. The axis runs from job start to now if any trial is currently running, or to the last completion event if the job is idle/abandoned (so a stalled job doesn't render a flat tail stretching to now). For each of `n_bins` evenly spaced timestamps in that range, the bin reports how many trials had succeeded, failed requirements, errored, or were running by that time; everything else is pending.
+        """
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        events: list[tuple[datetime, Completion]] = []
+        running_starts: list[datetime] = []
+        for s in statuses:
+            if s.completion == Completion.INCOMPLETE:
+                run_start = s.generating.started or s.solving.started
+                if run_start is not None:
+                    running_starts.append(run_start)
+                continue
+            step_ends = [
+                step.started + timedelta(seconds=step.elapsed)
+                for step in (s.pending, s.generating, s.solving)
+                if step.started is not None and step.elapsed is not None
+            ]
+            if not step_ends:
+                continue
+            events.append((max(step_ends), s.completion))
+
+        if not events and not running_starts:
+            return []
+
+        start = self.start_time
+        if running_starts:
+            # the job is actively progressing right now: let the axis track
+            # "now" rather than freezing at the last completion event
+            end = datetime.now(UTC)
+        else:
+            # nothing is running: cap the axis at the last completion event so
+            # a job that stopped (or was abandoned) long ago doesn't render a
+            # flat tail stretching to now; self.elapsed can't be used here
+            # since refresh_from_disk keeps bumping it to now-start while the
+            # job is not done
+            end = min(datetime.now(UTC), max(ts for ts, _ in events))
+        total_span = (end - start).total_seconds()
+        if total_span <= 0:
+            return []
+
+        bins: list[TimelineBin] = []
+        for i in range(1, n_bins + 1):
+            t = start + timedelta(seconds=total_span * i / n_bins)
+            n_s = sum(1 for ts, c in events if ts <= t and c == Completion.SUCCESS)
+            n_f = sum(1 for ts, c in events if ts <= t and c in _FAILED_COMPLETIONS)
+            n_e = sum(1 for ts, c in events if ts <= t and c == Completion.ERROR)
+            n_r = sum(1 for rs in running_starts if rs <= t)
+            bins.append(
+                {
+                    "t": (t - start).total_seconds(),
+                    # microsecond precision: Plotly plots this as a categorical
+                    # x-axis, so two bins that round to the same whole second
+                    # (common with many bins over a short span) would collide
+                    # onto a single x position and appear summed/overlaid
+                    # instead of as separate bars
+                    "label": self._utc_to_local(t).strftime("%Y-%m-%d %H:%M:%S.%f"),
+                    "n_success": n_s,
+                    "n_failed": n_f,
+                    "n_error": n_e,
+                    "n_running": n_r,
+                    "n_pending": max(0, self.n_trial - n_s - n_f - n_e - n_r),
+                }
+            )
+        return bins
 
     def to_monitor_json(self, n_proc: int | None = None) -> dict:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
@@ -659,38 +941,45 @@ class JobStatus(MojoBaseModel):
         if avg_seconds > 0:
             throughput = (60.0 / avg_seconds) * self.n_proc
 
-        success_tns = [
-            tn for tn, comp in self._registry.items() if comp == Completion.SUCCESS
-        ]
-        last_success_tn = max(success_tns) if success_tns else None
-
-        failed_with_db = []
+        success_tns = self.success_trial_nums
         failed_tns = self.failed_trial_nums
-        for tn in failed_tns:
-            if (
-                self.trial_num_to_path(tn) / SignalManager.default_output_name()
-            ).exists():
-                failed_with_db.append(tn)
+        error_tns = self.error_trial_nums
+
+        def _with_db(tns: list[int]) -> list[int]:
+            return [
+                tn
+                for tn in tns
+                if (
+                    self.trial_num_to_path(tn) / SignalManager.default_output_name()
+                ).exists()
+            ]
 
         return {
             "progress": self.progress * 100,
             "n_success": self.n_success,
             "n_failed": self.n_failed,
+            "n_error": self.n_error,
             "n_trial": self.n_trial,
             "n_done": self.n_done,
             "n_remaining": self.n_remaining,
             "failure_rate": self.failure_rate,
+            "error_rate": self.error_rate,
             "throughput": round(throughput, 1),
             "avg_duration": str(self.average_trial_duration).split(".")[0],
             "time_remaining": str(self.time_remaining_average_success).split(".")[0],
             "elapsed": str(self.elapsed).split(".")[0],
             "is_complete": self.progress >= 1.0,
-            "success_tns": self.success_trial_nums,
+            "success_tns": success_tns,
             "failure_tns": failed_tns,
-            "last_success_tn": last_success_tn,
+            "error_tns": error_tns,
+            "last_success_tn": max(success_tns) if success_tns else None,
+            "last_failure_tn": max(failed_tns) if failed_tns else None,
+            "last_error_tn": max(error_tns) if error_tns else None,
             "start_time": f"{self._utc_to_local(self.start_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
             "end_time": f"{self._utc_to_local(self.end_time).strftime('%Y-%m-%d %H:%M:%S')} {self.local_tzabbr}",
             "version": f"mujoco-mojo v{version('mujoco-mojo')}",
             "padding_style": self.padding_style,
-            "failure_tns_with_db": failed_with_db,
+            "failure_tns_with_db": _with_db(failed_tns),
+            "error_tns_with_db": _with_db(error_tns),
+            "timeline": self.completion_timeline(),
         }

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
 from pydantic import PrivateAttr
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.mjcf.mujoco_attr.transmission_units import (
+    actuator_transmission_metadata,
+)
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     ActuatorControlLimited,
@@ -24,6 +27,7 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import merge_signal_metadata
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -210,11 +214,33 @@ class ActuatorBase(XMLModel, ABC):
             return np.empty(0)
         return state.data.act_dot[actadr : actadr + actnum]
 
+    _metadata_resolved: bool = PrivateAttr(default=False)
+    """Whether `_transmission_metadata_cache` has been computed yet (None is itself a valid resolution for SITE/BODY/SLIDERCRANK transmission, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
+
+    _transmission_metadata_cache: dict[str, dict[str, str]] | None = PrivateAttr(
+        default=None
+    )
+    """Cached `{"length": ..., "velocity": ..., "force": ...}` metadata for this actuator's transmission, resolved once on first sample."""
+
+    def _resolve_transmission_metadata(
+        self, state: MjState
+    ) -> dict[str, dict[str, str]] | None:
+        """Resolves and caches this actuator's transmission-based metadata for `length`/`velocity`/`force`."""
+        if not self._metadata_resolved:
+            actuator_id = self.get_id(state.model)
+            self._transmission_metadata_cache = actuator_transmission_metadata(
+                state, actuator_id
+            )
+            self._metadata_resolved = True
+        return self._transmission_metadata_cache
+
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        channels: list[
-            Literal["ctrl", "length", "velocity", "force", "act", "act_dot"]
+        channels: list[Literal["ctrl", "length", "velocity", "force", "act", "act_dot"]]
+        | dict[
+            Literal["ctrl", "length", "velocity", "force", "act", "act_dot"],
+            dict[str, Any] | None,
         ] = [
             "ctrl",
             "length",
@@ -238,7 +264,13 @@ class ActuatorBase(XMLModel, ABC):
 
         `act` and `act_dot` only apply to actuators with internal dynamics (dyntype != none, e.g. position with timeconst, intvelocity, cylinder, muscle, dcmotor); for actuators without internal state these channels are silently skipped. If there is more than one activation variable (only possible with user-defined dynamics), each is posted under `subgroups=(actuator_name, channel)` with `attr` set to `0`-`N`; otherwise the single value is posted as a scalar with `attr=channel` under `subgroups=(actuator_name,)`, same as the other channels.
 
+        `length`/`velocity`/`force` are tagged with built-in `dimension`/`units` metadata resolved from the actuator's transmission target when it's a single joint or a tendon (e.g. a hinge-driving actuator's `force` is tagged as torque). For SITE/BODY/SLIDERCRANK transmission, and for `ctrl`/`act`/`act_dot` on any actuator (control-signal abstractions reinterpreted by `gear`/`dyntype`, not direct physical readouts), no built-in default is applied. Supply `channels` as a dict with the desired metadata yourself if you know it.
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The actuator data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
 
         Raises:
             ValueError: If the actuator has no name.
@@ -255,8 +287,25 @@ class ActuatorBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
         def sample(state: MjState):
+            transmission_meta = self._resolve_transmission_metadata(state)
+
             for channel in channels:
+                builtin = (
+                    transmission_meta.get(channel)
+                    if transmission_meta is not None
+                    else None
+                )
+                meta = merge_signal_metadata(
+                    builtin, channel, _meta, unit_system=state.us
+                )
+
                 match channel:
                     case "ctrl":
                         val = self.rt_ctrl(state)
@@ -282,6 +331,7 @@ class ActuatorBase(XMLModel, ABC):
                             category=SignalCategory.ACTUATORS,
                             subgroups=(f"{self.name}",),
                             attr=channel,
+                            metadata=meta,
                         )
                     else:
                         for i in range(val.size):
@@ -290,6 +340,7 @@ class ActuatorBase(XMLModel, ABC):
                                 category=SignalCategory.ACTUATORS,
                                 subgroups=(f"{self.name}", channel),
                                 attr=str(i),
+                                metadata=meta,
                             )
                     continue
 
@@ -298,6 +349,7 @@ class ActuatorBase(XMLModel, ABC):
                     category=SignalCategory.ACTUATORS,
                     subgroups=(f"{self.name}",),
                     attr=channel,
+                    metadata=meta,
                 )
 
         signal_manager.register_sampler(sample)

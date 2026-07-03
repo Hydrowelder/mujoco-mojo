@@ -283,7 +283,7 @@ class TestDrawLabel:
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not available")
 class TestSaveEncodesRealVideo:
-    """Exercises the actual mediapy/ffmpeg/PIL encoding paths -- the same code path that broke when numpy 2.5.0 shipped without mediapy support."""
+    """Exercises the actual mediapy/ffmpeg/PIL encoding paths: the same code path that broke when numpy 2.5.0 shipped without mediapy support."""
 
     @pytest.mark.parametrize("suffix", [".mp4", ".webm", ".gif"])
     def test_save_writes_a_readable_video(self, tmp_path, state, suffix):

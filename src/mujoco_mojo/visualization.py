@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import ClassVar, Protocol, runtime_checkable
 
 import mujoco
 import numpy as np
@@ -24,6 +24,16 @@ class ArrowConfig:
     vec: Vec3
     color: Vec4
     is_torque: bool
+    length_scale: float = 1.0
+    """Extra multiplier applied on top of MuJoCo's native length scaling, for stretching or shrinking this arrow's length independently of the others."""
+    width_scale: float = 1.0
+    """Extra multiplier applied on top of MuJoCo's native width scaling, for thickening or thinning this arrow's shaft independently of the others."""
+
+    # the arrow head consumes a fixed fraction of the shaft width regardless of length, so a fixed
+    # width (e.g. jointwidth) on a short vector renders as a flattened disk rather than an arrow.
+    # capping the width relative to the resolved length keeps the head/shaft proportions sane at
+    # any magnitude.
+    _MAX_WIDTH_TO_LENGTH_RATIO: ClassVar[float] = 0.25
 
     def draw_in_scene(self, mj_model: mujoco.MjModel, scene: mujoco.MjvScene):
         if scene.ngeom >= scene.maxgeom:
@@ -73,10 +83,19 @@ class ArrowConfig:
             mag_scale = v_map.force
             width = v_scale.forcewidth * stat.meansize
 
-        # normalize length by mean body mass
-        scaled_vec = self.vec * (mag_scale / max(stat.meanmass, 1e-6))
+        # normalize length by mean body mass, then apply the caller's custom length scale
+        scaled_vec = (
+            self.vec * (mag_scale / max(stat.meanmass, 1e-6)) * self.length_scale
+        )
         start = np.asarray(self.pos)
-        return start, start + scaled_vec, width
+        end = start + scaled_vec
+
+        # apply the caller's custom width scale, then cap it so a short vector doesn't render as
+        # a disk (see _MAX_WIDTH_TO_LENGTH_RATIO)
+        length = float(np.linalg.norm(scaled_vec))
+        width = min(width * self.width_scale, length * self._MAX_WIDTH_TO_LENGTH_RATIO)
+
+        return start, end, width
 
 
 @dataclass

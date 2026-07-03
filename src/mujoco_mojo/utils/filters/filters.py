@@ -11,7 +11,6 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.alias_generators import to_camel
 from scipy.signal import savgol_filter
-from scipy.spatial.transform import Rotation as R
 
 __all__ = [
     "UNIT_GROUPS",
@@ -413,13 +412,7 @@ class SavitzkyGolayFilter(BaseFilter):
         )
 
 
-ureg = pint.UnitRegistry()
-try:
-    ureg.define("lbm = pound")
-    ureg.define("lbf = force_pound")
-    ureg.define("ozf = force_ounce")
-except pint.errors.RedefinitionError:
-    pass
+from mujoco_mojo.stochas import ureg
 
 # ---------------------------------------------------------------------------
 # Unit groups - single source of truth for both the frontend smart dropdown
@@ -436,13 +429,24 @@ UNIT_GROUPS: list[tuple[str, list[str]]] = [
     ("Velocity", ["m/s", "mm/s", "cm/s", "ft/s", "in/s", "km/h", "mph"]),
     ("Acceleration", ["m/s^2", "mm/s^2", "ft/s^2", "in/s^2"]),
     # --- Dynamics & Statics ---
-    ("Mass", ["kg", "g", "mg", "lbm", "slug"]),
-    ("Force", ["N", "mN", "uN", "kN", "lbf"]),
-    ("Torque", ["N*m", "N*mm", "mN*m", "kN*m", "lbf*ft", "lbf*in", "ozf*in"]),
-    ("Inertia", ["kg*m^2", "kg*mm^2", "lbm*in^2", "lbm*ft^2", "slug*ft^2"]),
+    ("Mass", ["kg", "g", "mg", "pound", "slug"]),
+    ("Force", ["N", "mN", "uN", "kN", "pound_force", "ounce_force"]),
+    (
+        "Torque",
+        [
+            "N*m",
+            "N*mm",
+            "mN*m",
+            "kN*m",
+            "pound_force*ft",
+            "pound_force*in",
+            "ounce_force*in",
+        ],
+    ),
+    ("Inertia", ["kg*m^2", "kg*mm^2", "pound*in^2", "pound*ft^2", "slug*ft^2"]),
     # --- Work & Thermodynamics ---
-    ("Energy", ["J", "mJ", "kJ", "W*s", "W*h", "kW*h", "ft*lbf", "BTU"]),
-    ("Power", ["W", "mW", "kW", "MW", "hp", "ft*lbf/s"]),
+    ("Energy", ["J", "mJ", "kJ", "W*s", "W*h", "kW*h", "ft*pound_force", "BTU"]),
+    ("Power", ["W", "mW", "kW", "MW", "hp", "ft*pound_force/s"]),
     ("Pressure", ["Pa", "kPa", "MPa", "psi", "bar", "atm", "torr"]),
     # --- Temporal & Electronics ---
     ("Time", ["s", "ms", "us", "ns", "min", "hr"]),
@@ -519,6 +523,35 @@ class RotationFilter(BaseFilter):
     invert: bool = True
     """If True, transforms world-to-local (invert the quaternion rotation)."""
 
+    def _rotate(self, vs: np.ndarray, qs: np.ndarray) -> np.ndarray:
+        """Rotate (N, 3) vectors by (N, 4) quaternions [x, y, z, w] using the sandwich formula v' = v + 2w(u x v) + 2u x (u x v). Quaternions are normalized in place."""
+        qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
+        u = -qs[:, :3] if self.invert else qs[:, :3]
+        w = qs[:, 3]
+        cross_1 = np.cross(u, vs)
+        return vs + 2 * w[:, None] * cross_1 + 2 * np.cross(u, cross_1)
+
+    def apply_to_frame(self, df: pl.DataFrame, vector_bases: set[str]) -> pl.DataFrame:
+        """Rotate all xyz vector families in `vector_bases` in one pass. Used by `MojoDataFrame.with_rotation` and any write path that needs the full-frame transform."""
+        q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
+        if not all(c in df.columns for c in q_cols):
+            return df
+        qs = df.select(q_cols).to_numpy()
+        new_columns: list[pl.Series] = []
+        for base in vector_bases:
+            v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
+            if not all(c in df.columns for c in v_cols):
+                continue
+            v_rot = self._rotate(df.select(v_cols).to_numpy(), qs.copy())
+            new_columns.extend(
+                [
+                    pl.Series(name=f"{base}:x", values=v_rot[:, 0]),
+                    pl.Series(name=f"{base}:y", values=v_rot[:, 1]),
+                    pl.Series(name=f"{base}:z", values=v_rot[:, 2]),
+                ]
+            )
+        return df.with_columns(new_columns) if new_columns else df
+
     def apply(self, expr: pl.Expr) -> pl.Expr:
         return expr
 
@@ -530,17 +563,14 @@ class RotationFilter(BaseFilter):
         if suffix not in ("x", "y", "z") or not self.quat_col:
             return None
         base = name.rsplit(":", 1)[0]
-        x_col, y_col, z_col = f"{base}:x", f"{base}:y", f"{base}:z"
-        if not all(c in df.columns for c in (x_col, y_col, z_col)):
+        v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
+        q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
+        if not all(c in df.columns for c in v_cols + q_cols):
             return None
-        # scipy expects (x, y, z, w) column order
-        q_cols = [f"{self.quat_col}:{k}" for k in ("x", "y", "z", "w")]
-        if not all(c in df.columns for c in q_cols):
-            return None
-        transformer = R.from_quat(df.select(q_cols).to_numpy())
-        if self.invert:
-            transformer = transformer.inv()
-        v_rot = transformer.apply(df.select([x_col, y_col, z_col]).to_numpy())
+        v_rot = self._rotate(
+            df.select(v_cols).to_numpy(),
+            df.select(q_cols).to_numpy(),
+        )
         return pl.Series(name=name, values=v_rot[:, {"x": 0, "y": 1, "z": 2}[suffix]])
 
 

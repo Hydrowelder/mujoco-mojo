@@ -7,7 +7,7 @@ import time
 import types
 from bdb import BdbQuit
 from collections.abc import Callable
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, cast, runtime_checkable
@@ -29,7 +29,7 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
 )
-from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.log import get_logger, get_trial_log_handler
 from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
@@ -163,12 +163,12 @@ def recursive_reload(module, project_root: Path, visited: set | None = None):
 
     try:
         importlib.reload(module)
-    except (ImportError, ModuleNotFoundError) as e:
+    except Exception as e:
+        # a failed reload leaves the previous version of the module in sys.modules,
+        # so swallowing here would silently keep running stale code - the error
+        # (e.g. a SyntaxError in the edited file) must reach the caller
         logger.error(f"Failed to reload {module.__name__}: {e}")
-        raise e
-    except Exception:
-        # some modules (like namespace packages) can be finicky
-        pass
+        raise
 
 
 @dataclass
@@ -194,6 +194,7 @@ class MojoReloaded:
     record: bool = False
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
+    _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
     _playback_speed: float = 1.0
     _last_command: str = "run"
     _current_trial_dir: Path | None = None
@@ -379,10 +380,10 @@ class MojoReloaded:
                 # reload to get the reference
                 return _load_func(path_str)
 
-            except (ModuleNotFoundError, ImportError):
+            except (ModuleNotFoundError, ImportError) as e:
                 self._print(
-                    f"[bold red]Error:[/bold red] Could not find [bold green]{path_str}[/bold green].\n"
-                    f"[yellow]Hint:[/yellow] Check your spelling or ensure the module path is correct."
+                    f"[bold red]Error:[/bold red] Failed to import [bold green]{path_str}[/bold green]: {e}\n"
+                    f"[yellow]Hint:[/yellow] Check the module path for typos, and check the imports inside your file."
                 )
                 raise
 
@@ -419,6 +420,14 @@ class MojoReloaded:
         trial_dir.mkdir(parents=True, exist_ok=True)
         self._current_trial_dir = trial_dir
 
+        # set up a per-trial log file capturing everything logged during this run, mirroring
+        # the Runner's mojo.log. Unlike the Runner, overwrite (rather than append) on each
+        # reload, since the same trial_dir is reused across many reload/run iterations in a
+        # single interactive session and appending would mix logs from unrelated runs.
+        trial_log_handler = get_trial_log_handler(trial_dir / "mojo.log", mode="w")
+        root_logger = logging.getLogger()
+        root_logger.addHandler(trial_log_handler)
+
         # only worth tracking via TrialStatus/JobStatus if telemetry will actually be recorded
         trial_status: TrialStatus | None = None
         trial_status_path: Path | None = None
@@ -429,6 +438,7 @@ class MojoReloaded:
             with trial_status.record_step(step_name="pending"):
                 pass
 
+        runtime_manager: rt.RuntimeManager | None = None
         try:
             # execute generation
             start = time.time()
@@ -460,8 +470,8 @@ class MojoReloaded:
                     )
 
                     # overwrite on every reload (rather than write-once like the
-                    # Runner) since the user's generator -- and therefore which
-                    # distributions exist -- can change between reloads
+                    # Runner) since the user's generator, and therefore which
+                    # distributions exist, can change between reloads
                     if mojo_model.dists:
                         stochas_dir = self.workdir / STOCHAS_DIR_NAME
                         stochas_dir.mkdir(exist_ok=True)
@@ -488,7 +498,7 @@ class MojoReloaded:
 
                 try:
                     state = mojo_model.mjcf.prep_for_sim(
-                        save_path=trial_dir / self.xml_name
+                        save_path=trial_dir / self.xml_name, unit_system=mojo_model.us
                     )
                 except Exception as e:
                     msg = f"Failed to compile with MuJoCo: {e}"
@@ -509,9 +519,11 @@ class MojoReloaded:
                     runtime_manager = rt.RuntimeManager(
                         signal_manager=rt.SignalManager(
                             export_path=trial_dir
-                            / rt.SignalManager.default_output_name()
+                            / rt.SignalManager.default_output_name(),
+                            unit_system=mojo_model.us,
                         ),
                         _sync_hook=self._sync_hook,
+                        _viewer_lock=self._viewer_lock,
                         _skip_recording=not self.record,
                         playback_speed=self._playback_speed,
                         _stop_event=self._stop_event,
@@ -529,12 +541,26 @@ class MojoReloaded:
                     )
                 else:
                     mujoco.mj_forward(state.model, state.data)
+        except rt.RequirementSatisfied:
+            # a live requirement ended the run early as a success; the outcome
+            # is decided by the requirement results, then the caller prints it
+            if trial_status is not None:
+                trial_status.step = "done"
+                if runtime_manager is not None:
+                    trial_status.requirements = runtime_manager.requirement_results
+                trial_status.completion = (
+                    Completion.FAILURE
+                    if trial_status.requirements
+                    and not all(r.passed for r in trial_status.requirements)
+                    else Completion.SUCCESS
+                )
+            raise
         except (BdbQuit, KeyboardInterrupt, rt.SimulationStopped):
             raise
         except Exception:
             if trial_status is not None:
                 trial_status.step = "done"
-                trial_status.completion = Completion.FAILED
+                trial_status.completion = Completion.ERROR
             raise
         else:
             if trial_status is not None:
@@ -551,6 +577,9 @@ class MojoReloaded:
                         {*job_status.trial_nums, self.trial_num}
                     )
                 job_status.update_trial(status=trial_status)
+
+            root_logger.removeHandler(trial_log_handler)
+            trial_log_handler.close()
 
         return state
 
@@ -870,6 +899,12 @@ class MojoReloaded:
                     )
                     on_reload_callback(new_state)
                     msg = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                except rt.RequirementSatisfied as e:
+                    msg = f"[bold green]Run ended early, requirement satisfied: {e}[/bold green]"
+                except rt.RequirementTerminated as e:
+                    msg = (
+                        f"[bold yellow]Run terminated by requirement: {e}[/bold yellow]"
+                    )
                 except rt.SimulationStopped:
                     msg = "[bold yellow]Run stopped by user.[/bold yellow]"
                 except Exception as e:
@@ -1055,13 +1090,17 @@ class MojoReloaded:
                 lines: list[LineConfig],
             ):
                 assert viewer.user_scn
-                viewer.user_scn.ngeom = 0
+                # the viewer's GUI thread reads user_scn while rendering, so edits
+                # must happen under the viewer lock. viewer.sync() locks internally,
+                # so it stays outside to avoid nesting
+                with viewer.lock():
+                    viewer.user_scn.ngeom = 0
 
-                for arrow in arrows:
-                    arrow.draw_in_scene(mj_model=s.model, scene=viewer.user_scn)
+                    for arrow in arrows:
+                        arrow.draw_in_scene(mj_model=s.model, scene=viewer.user_scn)
 
-                for line in lines:
-                    line.draw_in_scene(scene=viewer.user_scn)
+                    for line in lines:
+                        line.draw_in_scene(scene=viewer.user_scn)
 
                 viewer.sync()
 
@@ -1071,7 +1110,8 @@ class MojoReloaded:
                     assert self._current_trial_dir is not None
                     if viewer.user_scn and s.data.time == 0.0:
                         # ensure the custom visual layer is wiped on every model reload
-                        viewer.user_scn.ngeom = 0
+                        with viewer.lock():
+                            viewer.user_scn.ngeom = 0
                     sim.load(
                         s.model,
                         s.data,
@@ -1082,6 +1122,9 @@ class MojoReloaded:
             reload_handler(state)
 
             self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
+            # the viewer's GUI thread reads model/data under this lock (e.g. the
+            # sensor/profiler panels), so physics stepping must hold it too
+            self._viewer_lock = viewer.lock
             self._interactive_loop(
                 lambda state: reload_handler(state),
                 is_running_check=viewer.is_running,
@@ -1150,24 +1193,55 @@ class MojoReloaded:
 
         server.scene.reset()
 
+        # shared between the runtime job thread (which steps physics) and viser's
+        # websocket thread (which runs GUI callbacks that re-render from live MjData,
+        # e.g. contact decor). RuntimeManager holds it while mutating model/data
+        runtime_lock = threading.RLock()
+
         viser_state: ViserState = {
             "scene": ViserMujocoScene(server=server, mj_model=state.model, num_envs=1),
             "arrow_handle": None,
         }
+
+        def refresh_from_gui():
+            # gui-triggered re-renders must hold the same lock as physics stepping,
+            # mirroring how mjviser's own viewer wires its refresh handler
+            with runtime_lock:
+                viser_state["scene"].refresh_visualization()
+
+        viser_state["scene"].set_refresh_handler(refresh_from_gui)
+        # create_visualization_gui already includes the scene (camera) controls tab
         viser_state["scene"].create_visualization_gui()
-        viser_state["scene"].create_scene_gui()
+
+        # cap how often scene updates are pushed to clients. the runtime calls the
+        # sync hook on every physics step (often 1000+ Hz), and pushing a full scene
+        # update plus a websocket flush at that rate overwhelms connected browsers as
+        # soon as they also handle interaction such as camera movement. mjviser's own
+        # viewer targets the same 60 Hz render rate
+        min_frame_time = 1.0 / 60.0
+        last_push = 0.0
+
+        def clear_arrows():
+            if viser_state["arrow_handle"] is not None:
+                viser_state["arrow_handle"].remove()
+                viser_state["arrow_handle"] = None
 
         def sync(
             s: MjState,
             arrows: list[ArrowConfig],
             lines: list[LineConfig],
         ):
+            nonlocal last_push
+            now = time.monotonic()
+            if now - last_push < min_frame_time:
+                return
+            last_push = now
+
             viser_state["scene"].update_from_mjdata(s.data)
-            node_name = "mojo_arrows"
 
             if not arrows and not lines:
-                # If no arrows this frame, clear the batch and exit
-                server.scene.remove_by_name(node_name)
+                # no arrows this frame; clear the batch and exit
+                clear_arrows()
                 return
 
             all_segments = []
@@ -1191,17 +1265,19 @@ class MojoReloaded:
             points_batch = np.array(all_segments, dtype=np.float32)
             colors_batch = np.array(all_colors, dtype=np.uint8)
 
-            server.scene.add_line_segments(
-                name=node_name,
+            viser_state["arrow_handle"] = server.scene.add_line_segments(
+                name="mojo_arrows",
                 points=points_batch,
                 colors=colors_batch,
                 line_width=line_width,
             )
 
         def update_scene(s: MjState):
+            clear_arrows()
             viser_state["scene"] = ViserMujocoScene(
                 server=server, mj_model=s.model, num_envs=1
             )
+            viser_state["scene"].set_refresh_handler(refresh_from_gui)
             viser_state["scene"].update_from_mjdata(s.data)
             server.gui.set_panel_label(
                 f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})"
@@ -1213,5 +1289,6 @@ class MojoReloaded:
         _print_connection_panel()
 
         self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
+        self._viewer_lock = lambda: runtime_lock
         self._interactive_loop(lambda state: update_scene(state), lambda: True)
         server.stop()

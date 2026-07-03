@@ -1,7 +1,13 @@
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
-import { DASH_STYLE_VALUES, PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
-import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
+import {
+  DASH_STYLE_VALUES,
+  PLOT_CONFIG_SCHEMA,
+} from "./lib/plot-config.generated";
+import {
+  attachVerticalResizeHandle,
+  restorePersistedHeight,
+} from "./lib/resize";
 import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
@@ -13,6 +19,7 @@ import type {
   DojoStore,
   FilterEntry,
   FilterSchema,
+  JobStatus,
   LogEntry,
   PlotConfig,
   Shape,
@@ -80,8 +87,10 @@ const DEFAULT_CONFIG: PlotConfig = {
   plotType: "cartesian",
   vsEnabled: false,
   vsRange: [0, 10],
+  vsPinned: [],
   annotations: [],
   shapes: [],
+  maxPoints: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -146,6 +155,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     editorOpen: false,
     columns: [] as string[],
     rotateableVectors: [] as string[],
+    columnMetadata: {} as Record<string, Record<string, string>>,
     discoveryId: 0,
     plotColors: [
       tw.cyan[500],
@@ -197,9 +207,15 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- MATCHUP STATE ---
     vsDatasets: {} as Record<string, Record<string, number[]>>,
     allTrials: [] as string[],
+    failureTrialNums: [] as number[],
+    errorTrialNums: [] as number[],
     vsMenuOpen: false,
     vsLoading: false,
-    vsDraft: { enabled: false, range: [0, 0] as [number, number] },
+    vsDraft: {
+      enabled: false,
+      range: [0, 0] as [number, number],
+      pinned: [] as number[],
+    },
     discoveryTimeout: null as ReturnType<typeof setTimeout> | null,
 
     // --- HISTORY STATE ---
@@ -250,13 +266,40 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- DISTRIBUTIONS ---
     dists: [] as DistEntry[],
     _distTooltipEntry: null as DistEntry | null,
-    distFilterName: "" as string,
+    distFilterName: ((): string => {
+      try {
+        return localStorage.getItem("mojo:dists:filter-name") ?? "";
+      } catch {
+        return "";
+      }
+    })(),
     // null = no filter applied (all pass); a (possibly empty) array is an
     // explicit selection, so deselecting every item shows zero rows instead
     // of silently falling back to "all"
-    distFilterCategories: null as string[] | null,
-    distFilterTypes: null as string[] | null,
-    distFilterUnits: null as string[] | null,
+    distFilterCategories: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-categories");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch {
+        return null;
+      }
+    })(),
+    distFilterTypes: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-types");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch {
+        return null;
+      }
+    })(),
+    distFilterUnits: ((): string[] | null => {
+      try {
+        const v = localStorage.getItem("mojo:dists:filter-units");
+        return v === null ? null : (JSON.parse(v) as string[] | null);
+      } catch {
+        return null;
+      }
+    })(),
     distSortKey: "name" as
       | "name"
       | "category"
@@ -434,6 +477,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (Object.keys(filtersPayload).length > 0) {
         colParams.append("filters", JSON.stringify(filtersPayload));
       }
+      if (this.config.displayUnitSystem) {
+        colParams.append("display_unit_system", this.config.displayUnitSystem);
+      }
+      if (this.config.maxPoints != null) {
+        colParams.append("max_points", String(this.config.maxPoints));
+      }
 
       const queryStr = colParams.toString();
       if (queryStr) url += `?${queryStr}`;
@@ -516,6 +565,43 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
     },
 
+    // the step whose block was active when an ERROR trial's exception was
+    // raised. record_step()'s `finally` always sets `elapsed`, even when the
+    // wrapped code throws, so `elapsed !== null` alone can't tell "this step
+    // finished cleanly" apart from "this step is where things broke". The
+    // runner also resets `status.step` to "done" in its except handler, so
+    // that can't be used either. `started` is reliable instead: generating
+    // and solving run strictly sequentially, so whichever one has `started`
+    // set *last* is the one that was in flight when the trial errored.
+    errorStep(): "generating" | "solving" | null {
+      if (!this.trialStatus || this.trialStatus.completion !== "error")
+        return null;
+      if (this.trialStatus.solving.started !== null) return "solving";
+      if (this.trialStatus.generating.started !== null) return "generating";
+      return null;
+    },
+
+    stepDotClass(stepName: "generating" | "solving"): string {
+      if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+      const step = this.trialStatus[stepName];
+      if (this.errorStep() === stepName) return "bg-amber-500";
+      if (step.elapsed !== null) return "bg-emerald-500";
+      if (this.trialStatus.step === stepName)
+        return "bg-cyan-400 animate-pulse";
+      return "bg-slate-300 dark:bg-slate-600";
+    },
+
+    stepTextClass(stepName: "generating" | "solving"): string {
+      if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+      const step = this.trialStatus[stepName];
+      if (this.errorStep() === stepName)
+        return "text-amber-500 dark:text-amber-400";
+      if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+      if (this.trialStatus.step === stepName)
+        return "text-cyan-500 dark:text-cyan-400";
+      return "text-slate-400 dark:text-slate-600";
+    },
+
     async fetchTrialLogs() {
       try {
         const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
@@ -547,8 +633,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     showDistTooltip(event: MouseEvent, entry: DistEntry) {
-      const hasChart =
-        entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
+      const hasChart = entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
       const hasParams = Object.keys(entry.params).length > 0;
       if (!hasChart && !hasParams) return;
       this._distTooltipEntry = entry;
@@ -564,7 +649,12 @@ function trialViewer(trialId: string, externalUrl: string) {
       tooltip.style.minWidth = `${minW}px`;
       const x = event.clientX + 18;
       const y = event.clientY - 110;
-      tooltip.style.left = `${Math.min(x, window.innerWidth - minW - 20)}px`;
+      // flip to the left of the cursor when too close to the right edge so the
+      // cursor never lands inside the tooltip (Plotly SVG overrides pointer-events
+      // on child elements, causing mouseleave/mouseenter flicker if the cursor
+      // enters the tooltip bounds)
+      const fitsRight = x + minW + 20 <= window.innerWidth;
+      tooltip.style.left = `${fitsRight ? x : Math.max(8, event.clientX - minW - 18)}px`;
       tooltip.style.top = `${Math.max(8, y)}px`;
       tooltip.style.display = "block";
       void this._renderDistTooltipPlot(entry);
@@ -617,10 +707,20 @@ function trialViewer(trialId: string, externalUrl: string) {
               hoverinfo: "x+y",
             },
           ];
+          const maxProb = Math.max(...entry.cat_probs.map((p) => p ?? 0), 0);
+          const annotations = entry.cat_labels.map((lbl, i) => ({
+            x: lbl,
+            y: entry.cat_probs[i] ?? 0,
+            text: `${((entry.cat_probs[i] ?? 0) * 100).toFixed(1)}%`,
+            showarrow: false,
+            yanchor: "bottom",
+            yshift: 2,
+            font: { size: 9, color: textColor },
+          }));
           layout = {
             paper_bgcolor: bg,
             plot_bgcolor: bg,
-            margin: { t: 14, r: 10, b: 52, l: 52 },
+            margin: { t: 22, r: 10, b: 52, l: 52 },
             xaxis: {
               color: textColor,
               showgrid: false,
@@ -636,8 +736,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                 font: { size: 13 },
                 standoff: 4,
               },
-              range: [0, 1],
+              // extend range above max bar so annotations have room
+              range: [0, maxProb * 1.2],
             },
+            annotations,
             showlegend: false,
             font: { size: 11, color: textColor },
           };
@@ -718,7 +820,13 @@ function trialViewer(trialId: string, externalUrl: string) {
               showgrid: false,
               tickfont: { size: 11 },
               ...(unitsLabel
-                ? { title: { text: unitsLabel, font: { size: 13 }, standoff: 4 } }
+                ? {
+                    title: {
+                      text: unitsLabel,
+                      font: { size: 13 },
+                      standoff: 4,
+                    },
+                  }
                 : {}),
             },
             yaxis: {
@@ -762,21 +870,35 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
 
       if (paramsEl) {
-        const fmt = (v: string | number | boolean): string => {
-          if (typeof v === "number") {
-            return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
-              ? v.toExponential(3)
-              : v.toPrecision(4).replace(/\.?0+$/, "");
-          }
-          return String(v);
-        };
-        paramsEl.innerHTML = Object.entries(entry.params)
-          .map(
-            ([k, v]) =>
-              `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
-          )
-          .join("");
+        // categorical: probabilities are shown as bar annotations; skip the
+        // redundant params listing below the chart
+        if (chartType === "categorical") {
+          paramsEl.innerHTML = "";
+        } else {
+          const fmt = (v: string | number | boolean): string => {
+            if (typeof v === "number") {
+              return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
+                ? v.toExponential(3)
+                : v.toPrecision(4).replace(/\.?0+$/, "");
+            }
+            return String(v);
+          };
+          paramsEl.innerHTML = Object.entries(entry.params)
+            .map(
+              ([k, v]) =>
+                `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
+            )
+            .join("");
+        }
       }
+    },
+
+    get dataLength(): number {
+      if (!this.data) return 0;
+      const xCol = this.config.xAxis?.col;
+      if (xCol && this.data[xCol]) return this.data[xCol].length;
+      const first = Object.values(this.data).find((arr) => arr.length > 0);
+      return first?.length ?? 0;
     },
 
     // -----------------------------------------------------------------------
@@ -798,13 +920,15 @@ function trialViewer(trialId: string, externalUrl: string) {
     // checkbox so users can see how many rows a filter choice covers
     get distCategoryCounts(): Record<string, number> {
       const counts: Record<string, number> = {};
-      for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+      for (const d of this.dists)
+        counts[d.category] = (counts[d.category] ?? 0) + 1;
       return counts;
     },
 
     get distTypeCounts(): Record<string, number> {
       const counts: Record<string, number> = {};
-      for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+      for (const d of this.dists)
+        counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
       return counts;
     },
 
@@ -911,9 +1035,11 @@ function trialViewer(trialId: string, externalUrl: string) {
           }
           case "stat": {
             const av =
-              a.z_score ?? (a.percentile != null ? a.percentile / 100 : -Infinity);
+              a.z_score ??
+              (a.percentile != null ? a.percentile / 100 : -Infinity);
             const bv =
-              b.z_score ?? (b.percentile != null ? b.percentile / 100 : -Infinity);
+              b.z_score ??
+              (b.percentile != null ? b.percentile / 100 : -Infinity);
             return dir * (av - bv);
           }
         }
@@ -921,7 +1047,13 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     toggleDistSort(
-      key: "name" | "category" | "dist_type" | "nominal" | "sampled_value" | "stat",
+      key:
+        | "name"
+        | "category"
+        | "dist_type"
+        | "nominal"
+        | "sampled_value"
+        | "stat",
     ) {
       if (this.distSortKey === key) {
         this.distSortAsc = !this.distSortAsc;
@@ -1210,6 +1342,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     logLevelClass(level: string): string {
       switch (level) {
         case "CRITICAL":
+          return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
         case "ERROR":
           return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
         case "WARNING":
@@ -1618,9 +1751,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         ...Object.keys(this.config.yAxes),
       ];
 
+      const pinnedSet = new Set(this.vsDraft.pinned);
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
-        return n >= start && n <= end && id !== this.trialId;
+        return (
+          ((n >= start && n <= end) || pinnedSet.has(n)) && id !== this.trialId
+        );
       });
 
       for (const id of draftIds) {
@@ -1666,7 +1802,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     handlePlotClickForShapes(pt: { x: number; y: number }): boolean {
       if (!this.placementMode) return false;
       const defaultStyle = this.nextAvailableStyle(
-        this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" })),
+        this.config.shapes.map((s) => ({
+          color: s.color,
+          dash: s.dash ?? "solid",
+        })),
       );
       let newShape: Shape | null = null;
 
@@ -1940,6 +2079,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+        this.columnMetadata = response.columns.column_metadata ?? {};
         this.data = response.data;
         void this.loadLabSchemas();
 
@@ -1949,11 +2089,13 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.hydrateFromUrl(shared);
           this.vsDraft.enabled = this.config.vsEnabled;
           this.vsDraft.range = [...this.config.vsRange];
+          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
           this.config.vsEnabled = false;
         } else {
           this.loadConfig();
           this.vsDraft.enabled = this.config.vsEnabled;
           this.vsDraft.range = [...this.config.vsRange];
+          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
         }
 
         // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
@@ -2319,6 +2461,13 @@ function trialViewer(trialId: string, externalUrl: string) {
         }, 500);
       });
 
+      this.$watch("vsDraft.pinned", () => {
+        if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
+        this.discoveryTimeout = setTimeout(() => {
+          if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
+        }, 500);
+      });
+
       this.$watch("profileSearch", (val: string) => {
         try {
           localStorage.setItem("mojo:profile:search", val);
@@ -2530,11 +2679,111 @@ function trialViewer(trialId: string, externalUrl: string) {
         requestAnimationFrame(() => this._renderFrameMarkers());
       });
 
+      // re-fetch data and column manifest when display unit system changes so the
+      // plot values and unit dropdowns reflect the new unit system immediately
+      this.$watch(
+        "config.displayUnitSystem",
+        async (newVal: string | null, oldVal: string | null) => {
+          if (newVal === oldVal) return;
+          const activeCols = [
+            this.config.xAxis!.col!,
+            ...Object.keys(this.config.yAxes),
+          ];
+          this.vsDatasets = {};
+          try {
+            const resp = await this.fetchTrialData(this.trialId, activeCols);
+            this.columnMetadata = resp.columns.column_metadata ?? {};
+            // replace entirely so background-hydrated columns with stale unit values
+            // are not used; startBackgroundDiscovery re-hydrates the rest
+            this.data = resp.data;
+            this.renderPlot();
+            // re-index frame markers after the plot re-renders with the new unit scale
+            requestAnimationFrame(() => {
+              this._renderFrameMarkers();
+              this._syncOverlayVisibility();
+            });
+            void this.startBackgroundDiscovery();
+          } catch (e) {
+            console.warn("Display unit system re-fetch failed", e);
+          }
+        },
+      );
+
+      // re-fetch all data when max_points changes; also clear VS cache since
+      // all previously fetched comparison datasets used the old point limit
+      this.$watch(
+        "config.maxPoints",
+        async (newVal: number | null, oldVal: number | null) => {
+          if (newVal === oldVal) return;
+          const activeCols = [
+            this.config.xAxis!.col!,
+            ...Object.keys(this.config.yAxes),
+          ];
+          this.vsDatasets = {};
+          try {
+            const resp = await this.fetchTrialData(this.trialId, activeCols);
+            this.data = resp.data;
+            this.renderPlot();
+            void this.startBackgroundDiscovery();
+          } catch (e) {
+            console.warn("Max points re-fetch failed", e);
+          }
+        },
+      );
+
       void this.startBackgroundDiscovery();
       this.configRaw =
         localStorage.getItem("mojo:config:raw-draft") ??
         JSON.stringify(this.config, null, 4);
       this.updateFromRaw();
+
+      // persist dist filter state across page loads and trial navigation
+      this.$watch("distFilterName", (v: string) => {
+        try {
+          localStorage.setItem("mojo:dists:filter-name", v);
+        } catch {
+          /* ignore */
+        }
+      });
+      this.$watch("distFilterCategories", (v: string[] | null) => {
+        try {
+          localStorage.setItem(
+            "mojo:dists:filter-categories",
+            JSON.stringify(v),
+          );
+        } catch {
+          /* ignore */
+        }
+      });
+      this.$watch("distFilterTypes", (v: string[] | null) => {
+        try {
+          localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v));
+        } catch {
+          /* ignore */
+        }
+      });
+      this.$watch("distFilterUnits", (v: string[] | null) => {
+        try {
+          localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v));
+        } catch {
+          /* ignore */
+        }
+      });
+
+      // re-pull distribution metadata when new job data arrives
+      window.addEventListener("mojo-data-updated", (e) => {
+        this.applyJobOutcomes((e as CustomEvent<JobStatus>).detail);
+        void this.fetchDists();
+      });
+
+      // bootstrap trial outcome hints so vs-mode chips are colored before the
+      // first SSE sync tick arrives
+      void fetch("/monitor/api/status/job")
+        .then((r) => r.json())
+        .then((data: JobStatus) => {
+          if (data && !data.error) this.applyJobOutcomes(data);
+        })
+        .catch(() => {});
 
       window.addEventListener("mojo-sensai-plot-config", (e) => {
         const detail = (e as CustomEvent<PlotConfig>).detail;
@@ -2551,6 +2800,31 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // VS (comparison) mode
     // -----------------------------------------------------------------------
+    applyJobOutcomes(data: JobStatus | undefined) {
+      if (!data) return;
+      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+      this.errorTrialNums = (data.error_tns ?? []).map(Number);
+    },
+
+    vsChipClass(t: string): string {
+      const tn = parseInt(t.split("_").pop() ?? "0");
+      if (this.vsDraft.pinned.includes(tn)) {
+        // keep the outcome hint on the border even while pinned
+        if (this.errorTrialNums.includes(tn))
+          return "bg-cyan-500 border-amber-500 text-white";
+        if (this.failureTrialNums.includes(tn))
+          return "bg-cyan-500 border-rose-500 text-white";
+        return "bg-cyan-500 border-cyan-500 text-white";
+      }
+      if (t === this.trialId)
+        return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
+      if (this.errorTrialNums.includes(tn))
+        return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
+      if (this.failureTrialNums.includes(tn))
+        return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
+      return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+    },
+
     async syncVsRange() {
       try {
         const resp = await fetch("/mosaic/api/trials");
@@ -2594,9 +2868,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         activeCols = [...new Set(activeCols)];
 
         const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
+        const pinnedSet = new Set(this.vsDraft.pinned);
         const targetIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
-          return n >= start && n <= end && n !== currentNum;
+          return (
+            ((n >= start && n <= end) || pinnedSet.has(n)) && n !== currentNum
+          );
         });
 
         await Promise.all(
@@ -2620,6 +2897,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         this.vsDatasets = { ...this.vsDatasets };
         this.config.vsRange = [start, end];
+        this.config.vsPinned = [...this.vsDraft.pinned];
         this.config.vsEnabled = true;
         if (targetIds.length > 0) {
           this.notify(
@@ -2679,6 +2957,26 @@ function trialViewer(trialId: string, externalUrl: string) {
         const n = parseInt(id.split("_").pop() ?? "");
         return n >= lo && n <= hi && n !== cur;
       }).length;
+    },
+
+    vsTotalCount(): number {
+      const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+      const cur = parseInt(this.trialId.split("_").pop() ?? "");
+      const pinnedSet = new Set(this.vsDraft.pinned);
+      return this.allTrials.filter((id) => {
+        const n = parseInt(id.split("_").pop() ?? "");
+        return ((n >= lo && n <= hi) || pinnedSet.has(n)) && n !== cur;
+      }).length;
+    },
+
+    toggleVsPin(n: number) {
+      const idx = this.vsDraft.pinned.indexOf(n);
+      if (idx === -1) {
+        this.vsDraft.pinned = [...this.vsDraft.pinned, n].sort((a, b) => a - b);
+      } else {
+        this.vsDraft.pinned = this.vsDraft.pinned.filter((x) => x !== n);
+      }
     },
 
     // -----------------------------------------------------------------------
@@ -2969,7 +3267,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as Partial<PlotConfig>;
-          this.config = { ...this.config, ...parsed };
+          const { vsEnabled: _vs, ...rest } = parsed;
+          this.config = { ...this.config, ...rest };
         } catch {
           console.error("Stored config corrupt");
         }
@@ -3281,6 +3580,69 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
     },
 
+    initMetadataViewer(hostEl: HTMLElement, jsonText: string): object | null {
+      if (!hostEl || typeof CM === "undefined") return null;
+      const {
+        EditorView,
+        EditorState,
+        json,
+        syntaxHighlighting,
+        oneDarkHighlightStyle,
+        defaultHighlightStyle,
+      } = CM;
+      const isDark = document.documentElement.classList.contains("dark");
+      const darkTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+          ".cm-scroller": {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.8rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+          ".cm-gutters": { display: "none" },
+          ".cm-cursor, .cm-dropCursor": { display: "none" },
+          ".cm-activeLine": { backgroundColor: "transparent" },
+          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#1e293b !important",
+          },
+        },
+        { dark: true },
+      );
+      const lightTheme = EditorView.theme(
+        {
+          "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+          ".cm-scroller": {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.8rem",
+            lineHeight: "1.625",
+          },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+          ".cm-gutters": { display: "none" },
+          ".cm-cursor, .cm-dropCursor": { display: "none" },
+          ".cm-activeLine": { backgroundColor: "transparent" },
+          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          "&.cm-focused .cm-selectionBackground": {
+            backgroundColor: "#e2e8f0 !important",
+          },
+        },
+        { dark: false },
+      );
+      const state = EditorState.create({
+        doc: jsonText,
+        extensions: [
+          EditorState.readOnly.of(true),
+          json(),
+          isDark ? darkTheme : lightTheme,
+          syntaxHighlighting(
+            isDark ? oneDarkHighlightStyle : defaultHighlightStyle,
+          ),
+        ],
+      });
+      return new EditorView({ state, parent: hostEl });
+    },
+
     async resetConfig() {
       const ok = await window.mojoConfirm?.({
         title: "Reset settings",
@@ -3546,15 +3908,18 @@ function trialViewer(trialId: string, externalUrl: string) {
     // collide with a pair still in use. Cycles through every color before
     // advancing to the next dash style, and falls back to round-robin by
     // count once every color/dash combination is taken.
-    nextAvailableStyle(
-      used: { color: string; dash: DashStyle }[],
-    ): { color: string; dash: DashStyle } {
+    nextAvailableStyle(used: { color: string; dash: DashStyle }[]): {
+      color: string;
+      dash: DashStyle;
+    } {
       const usedKeys = new Set(used.map((u) => `${u.color}|${u.dash}`));
       const numColors = this.plotColors.length;
       const numCombos = numColors * this.dashStyles.length;
       const styleAt = (i: number) => ({
         color: this.getSignalColor(i % numColors),
-        dash: this.dashStyles[Math.floor(i / numColors) % this.dashStyles.length]!,
+        dash: this.dashStyles[
+          Math.floor(i / numColors) % this.dashStyles.length
+        ]!,
       });
       let i = 0;
       while (i < numCombos) {
@@ -3677,11 +4042,41 @@ function trialViewer(trialId: string, externalUrl: string) {
     getUnitOptions(
       groups: UnitGroup[] | undefined,
       fromUnit: string | null | undefined,
+      colDimension?: string | null,
     ): UnitGroup[] {
       if (!groups) return [];
-      if (!fromUnit) return groups;
-      const match = groups.find((g) => g.units.includes(fromUnit));
-      return match ? [match] : groups;
+      // normalize Pint canonical strings ("m / s ** 2") to compact ("m/s^2") for matching
+      const normalize = (u: string) =>
+        u.replace(/\s+/g, "").replace(/\*\*/g, "^");
+      if (fromUnit) {
+        const norm = normalize(fromUnit);
+        const match = groups.find((g) =>
+          g.units.some((u) => u === fromUnit || u === norm),
+        );
+        if (match) return [match];
+      }
+      // fall back to dimension-based group filtering when column dimension is known
+      if (colDimension && groups.some((g) => g.dimension)) {
+        const compatible = groups.filter((g) => g.dimension === colDimension);
+        if (compatible.length > 0) return compatible;
+      }
+      return groups;
+    },
+
+    // returns the concrete unit of col after walking its active filter stack;
+    // starts from column_metadata and updates when a unit filter's toUnit changes it;
+    // pass filtersOverride for axes (e.g. x-axis) that store filters outside config.yAxes
+    effectiveUnit(col: string, filtersOverride?: FilterEntry[]): string | null {
+      let unit: string | null = this.columnMetadata[col]?.unit ?? null;
+      const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
+      for (const f of filters) {
+        if (f.enabled === false || f.type !== "unit") continue;
+        const to = (f as Record<string, unknown>)["toUnit"] as
+          | string
+          | undefined;
+        if (to) unit = to;
+      }
+      return unit;
     },
 
     getFilterSummary(entry: FilterEntry): string {
@@ -3701,7 +4096,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       return parts.slice(0, 3).join(", ");
     },
 
-    addFilterToTemp(temp: YAxisConfig, filterType: string) {
+    addFilterToTemp(temp: YAxisConfig, filterType: string, col?: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
       if (!schema) return;
       if (!temp.filters) temp.filters = [];
@@ -3713,6 +4108,16 @@ function trialViewer(trialId: string, externalUrl: string) {
       const entry: FilterEntry = { type: filterType, enabled: true };
       for (const p of schema.params) {
         (entry as Record<string, unknown>)[p.name] = p.default;
+      }
+      // prefill fromUnit with a known unit group string; prefer group_unit (pre-resolved by
+      // Python to the nearest group equivalent), then unit (when a display unit system is
+      // active), so the dropdown shows a valid pre-selected option rather than "- select -"
+      if (filterType === "unit" && col) {
+        const meta = this.columnMetadata[col];
+        const metaUnit = meta?.group_unit ?? meta?.unit;
+        if (metaUnit) {
+          (entry as Record<string, unknown>)["fromUnit"] = metaUnit;
+        }
       }
       temp.filters.push(entry);
     },
@@ -4394,9 +4799,11 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       if (this.config.vsEnabled) {
         const [start, end] = this.config.vsRange;
+        const pinnedSet = new Set(this.config.vsPinned ?? []);
         Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
-          if (n >= start && n <= end) activeDatasets.push(dataset);
+          if ((n >= start && n <= end) || pinnedSet.has(n))
+            activeDatasets.push(dataset);
         });
       }
 
@@ -4553,6 +4960,9 @@ function trialViewer(trialId: string, externalUrl: string) {
           if (!this.data![p.name]) {
             return null;
           }
+          const unit = this.effectiveUnit(key);
+          const traceLabel =
+            p.label + (unit ? ` (${unit.replace(/\s+/g, "")})` : "");
           const lineStyle = {
             width: p.width,
             color: p.color,
@@ -4563,7 +4973,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             return {
               r: this.data![p.name]!,
               theta: this.data![this.config.xAxis!.col!],
-              name: p.label,
+              name: traceLabel,
               mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
@@ -4581,7 +4991,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           return {
             x: this.data![this.config.xAxis!.col!],
             y: this.data![p.name]!,
-            name: p.label,
+            name: traceLabel,
             mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
@@ -4600,6 +5010,7 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       if (this.config.vsEnabled) {
         const [start, end] = this.config.vsRange;
+        const pinnedSet = new Set(this.config.vsPinned ?? []);
         const legendTracker = new Set<string>();
         const sortedVsIds = Object.keys(this.vsDatasets).sort(
           (a, b) =>
@@ -4608,7 +5019,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         );
         sortedVsIds.forEach((vsId) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
-          if (n < start || n > end || vsId === this.trialId) return;
+          if (
+            !((n >= start && n <= end) || pinnedSet.has(n)) ||
+            vsId === this.trialId
+          )
+            return;
           const dataset = this.vsDatasets[vsId];
           if (!dataset) return;
           const vsTraces = yKeys
@@ -4663,6 +5078,12 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.config.xAxis!.col!,
       ]);
 
+      const xCol = this.config.xAxis!.col!;
+      const xUnit = this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []);
+      const xAxisText =
+        this.config.xAxisTitle ||
+        (xUnit ? `${xCol} (${xUnit.replace(/\s+/g, "")})` : xCol);
+
       const xAxisObj = {
         type: this.config.xScale ?? "linear",
         ...(resolvedRangeX
@@ -4687,7 +5108,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.xAxisTitle || this.config.xAxis!.col!,
+          text: xAxisText,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showX,
@@ -4756,7 +5177,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 gridcolor: majorGrid,
                 tickfont: { color: textColor, size: 14, family: "monospace" },
                 title: {
-                  text: this.config.xAxisTitle || this.config.xAxis!.col!,
+                  text: xAxisText,
                   font: { size: 14, color: textColor, family: "monospace" },
                 },
               },

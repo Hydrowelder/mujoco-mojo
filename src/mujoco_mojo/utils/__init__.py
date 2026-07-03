@@ -1,4 +1,4 @@
-from . import filters
+from . import filters, statusing
 from .color import Color
 from .dataframe import MojoDataFrame
 from .interp import Interpolator
@@ -31,5 +31,6 @@ __all__ = [
     "get_logger",
     "is_empty_list",
     "setup_logger",
+    "statusing",
     "to_pretty_xml",
 ]

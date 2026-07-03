@@ -1,10 +1,14 @@
+from pathlib import Path
+
 import mujoco
 import numpy as np
 import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.mujoco_attr.body import Body
-from mujoco_mojo.typing import BodyName
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomSphere
+from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.typing import BodyName, GeomName
 
 
 @pytest.fixture
@@ -126,3 +130,107 @@ def test_rt_trans_ke_positive_with_velocity(body_setup: tuple[MjState, Body]) ->
     mujoco.mj_forward(state.model, state.data)
     # KE = 0.5 * 2 * 4 = 4
     assert body.rt_trans_ke(state) == pytest.approx(4.0, abs=1e-6)
+
+
+# --- telemetry metadata ---
+
+
+def test_body_request_tags_builtin_dimension_metadata(
+    body_setup: tuple[MjState, Body], tmp_path: Path
+) -> None:
+    """request() tags each channel with its built-in dimension/unit metadata."""
+    state, body = body_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    body.request(sm, channels=["xpos", "xvelp", "xvelr", "quat", "lin_mom", "ke_trans"])
+    sm.record(state)
+
+    assert sm._column_metadata["Bodies/box/xpos:x"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Bodies/box/xvelp:x"] == {
+        "dimension": "[length] / [time]"
+    }
+    assert sm._column_metadata["Bodies/box/xvelr:x"] == {"unit": "radian / second"}
+    assert sm._column_metadata["Bodies/box/quat:w"] == {"dimension": "[]"}
+    assert sm._column_metadata["Bodies/box/lin_mom:x"] == {
+        "dimension": "[mass] * [length] / [time]"
+    }
+    assert sm._column_metadata["Bodies/box:ke_trans"] == {
+        "dimension": "[mass] * [length] ** 2 / [time] ** 2"
+    }
+
+
+def test_body_request_metadata_override(
+    body_setup: tuple[MjState, Body], tmp_path: Path
+) -> None:
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    state, body = body_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    body.request(sm, channels={"xpos": {"display_name": "Box Position"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Bodies/box/xpos:x"] == {
+        "dimension": "[length]",
+        "display_name": "Box Position",
+    }
+
+
+@pytest.fixture
+def geom_setup() -> tuple[MjState, GeomSphere]:
+    """Single named sphere geom on a free body."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="ball" pos="0 0 1">
+                <freejoint/>
+                <geom name="ball_geom" type="sphere" size="0.1" mass="1"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    geom = GeomSphere(name=GeomName("ball_geom"), size=0.1)
+    geom.get_id(model)
+    return MjState(model, data), geom
+
+
+def test_geom_request_tags_builtin_dimension_metadata(
+    geom_setup: tuple[MjState, GeomSphere], tmp_path: Path
+) -> None:
+    """request() tags each channel with its built-in dimension/unit metadata."""
+    state, geom = geom_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    geom.request(sm, channels=["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"])
+    sm.record(state)
+
+    assert sm._column_metadata["Geoms/ball_geom/xpos:x"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Geoms/ball_geom/xvelp:x"] == {
+        "dimension": "[length] / [time]"
+    }
+    assert sm._column_metadata["Geoms/ball_geom/xvelr:x"] == {"unit": "radian / second"}
+    assert sm._column_metadata["Geoms/ball_geom/xaccp:x"] == {
+        "dimension": "[length] / [time] ** 2"
+    }
+    assert sm._column_metadata["Geoms/ball_geom/xaccr:x"] == {
+        "unit": "radian / second ** 2"
+    }
+    assert sm._column_metadata["Geoms/ball_geom/quat:w"] == {"dimension": "[]"}
+
+
+def test_geom_request_metadata_override(
+    geom_setup: tuple[MjState, GeomSphere], tmp_path: Path
+) -> None:
+    """A caller-supplied metadata dict extends the built-in default for a channel."""
+    state, geom = geom_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    geom.request(sm, channels={"xpos": {"display_name": "Ball Position"}})
+    sm.record(state)
+
+    assert sm._column_metadata["Geoms/ball_geom/xpos:x"] == {
+        "dimension": "[length]",
+        "display_name": "Ball Position",
+    }

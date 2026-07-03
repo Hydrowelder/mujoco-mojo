@@ -223,6 +223,18 @@
         "title": "DerivativeFilter",
         "type": "object"
       },
+      "DisplayUnitSystem": {
+        "description": "Named unit system for display-time conversion of telemetry values. When set, data is converted from its logged units to the chosen system before being returned to the frontend.",
+        "enum": [
+          "si",
+          "cgs",
+          "fps",
+          "ips",
+          "fff"
+        ],
+        "title": "DisplayUnitSystem",
+        "type": "string"
+      },
       "ExpFilter": {
         "additionalProperties": false,
         "description": "Raises a base to the power of each signal sample. Defaults to e^x.",
@@ -1125,24 +1137,25 @@
                   "kg",
                   "g",
                   "mg",
-                  "lbm",
+                  "pound",
                   "slug",
                   "N",
                   "mN",
                   "uN",
                   "kN",
-                  "lbf",
+                  "pound_force",
+                  "ounce_force",
                   "N*m",
                   "N*mm",
                   "mN*m",
                   "kN*m",
-                  "lbf*ft",
-                  "lbf*in",
-                  "ozf*in",
+                  "pound_force*ft",
+                  "pound_force*in",
+                  "ounce_force*in",
                   "kg*m^2",
                   "kg*mm^2",
-                  "lbm*in^2",
-                  "lbm*ft^2",
+                  "pound*in^2",
+                  "pound*ft^2",
                   "slug*ft^2",
                   "J",
                   "mJ",
@@ -1150,14 +1163,14 @@
                   "W*s",
                   "W*h",
                   "kW*h",
-                  "ft*lbf",
+                  "ft*pound_force",
                   "BTU",
                   "W",
                   "mW",
                   "kW",
                   "MW",
                   "hp",
-                  "ft*lbf/s",
+                  "ft*pound_force/s",
                   "Pa",
                   "kPa",
                   "MPa",
@@ -1227,24 +1240,25 @@
                   "kg",
                   "g",
                   "mg",
-                  "lbm",
+                  "pound",
                   "slug",
                   "N",
                   "mN",
                   "uN",
                   "kN",
-                  "lbf",
+                  "pound_force",
+                  "ounce_force",
                   "N*m",
                   "N*mm",
                   "mN*m",
                   "kN*m",
-                  "lbf*ft",
-                  "lbf*in",
-                  "ozf*in",
+                  "pound_force*ft",
+                  "pound_force*in",
+                  "ounce_force*in",
                   "kg*m^2",
                   "kg*mm^2",
-                  "lbm*in^2",
-                  "lbm*ft^2",
+                  "pound*in^2",
+                  "pound*ft^2",
                   "slug*ft^2",
                   "J",
                   "mJ",
@@ -1252,14 +1266,14 @@
                   "W*s",
                   "W*h",
                   "kW*h",
-                  "ft*lbf",
+                  "ft*pound_force",
                   "BTU",
                   "W",
                   "mW",
                   "kW",
                   "MW",
                   "hp",
-                  "ft*lbf/s",
+                  "ft*pound_force/s",
                   "Pa",
                   "kPa",
                   "MPa",
@@ -1926,6 +1940,37 @@
         },
         "title": "Shapes",
         "type": "array"
+      },
+      "displayUnitSystem": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/DisplayUnitSystem"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "maxPoints": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Maxpoints"
+      },
+      "vsPinned": {
+        "items": {
+          "type": "integer"
+        },
+        "title": "Vspinned",
+        "type": "array"
       }
     },
     "required": [
@@ -2255,8 +2300,10 @@
     plotType: "cartesian",
     vsEnabled: false,
     vsRange: [0, 10],
+    vsPinned: [],
     annotations: [],
-    shapes: []
+    shapes: [],
+    maxPoints: null
   };
   var _cm = {
     editor: null,
@@ -2292,6 +2339,7 @@
       editorOpen: false,
       columns: [],
       rotateableVectors: [],
+      columnMetadata: {},
       discoveryId: 0,
       plotColors: [
         tw.cyan[500],
@@ -2333,9 +2381,15 @@
       // --- MATCHUP STATE ---
       vsDatasets: {},
       allTrials: [],
+      failureTrialNums: [],
+      errorTrialNums: [],
       vsMenuOpen: false,
       vsLoading: false,
-      vsDraft: { enabled: false, range: [0, 0] },
+      vsDraft: {
+        enabled: false,
+        range: [0, 0],
+        pinned: []
+      },
       discoveryTimeout: null,
       // --- HISTORY STATE ---
       historyStack: [],
@@ -2370,13 +2424,40 @@
       // --- DISTRIBUTIONS ---
       dists: [],
       _distTooltipEntry: null,
-      distFilterName: "",
+      distFilterName: (() => {
+        try {
+          return localStorage.getItem("mojo:dists:filter-name") ?? "";
+        } catch {
+          return "";
+        }
+      })(),
       // null = no filter applied (all pass); a (possibly empty) array is an
       // explicit selection, so deselecting every item shows zero rows instead
       // of silently falling back to "all"
-      distFilterCategories: null,
-      distFilterTypes: null,
-      distFilterUnits: null,
+      distFilterCategories: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-categories");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
+      distFilterTypes: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-types");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
+      distFilterUnits: (() => {
+        try {
+          const v = localStorage.getItem("mojo:dists:filter-units");
+          return v === null ? null : JSON.parse(v);
+        } catch {
+          return null;
+        }
+      })(),
       distSortKey: "name",
       distSortAsc: true,
       distColWidths: (() => {
@@ -2524,6 +2605,12 @@
         if (Object.keys(filtersPayload).length > 0) {
           colParams.append("filters", JSON.stringify(filtersPayload));
         }
+        if (this.config.displayUnitSystem) {
+          colParams.append("display_unit_system", this.config.displayUnitSystem);
+        }
+        if (this.config.maxPoints != null) {
+          colParams.append("max_points", String(this.config.maxPoints));
+        }
         const queryStr = colParams.toString();
         if (queryStr) url += `?${queryStr}`;
         const resp = await fetch(url, { cache: "no-store" });
@@ -2592,6 +2679,40 @@
           }
         }
       },
+      // the step whose block was active when an ERROR trial's exception was
+      // raised. record_step()'s `finally` always sets `elapsed`, even when the
+      // wrapped code throws, so `elapsed !== null` alone can't tell "this step
+      // finished cleanly" apart from "this step is where things broke". The
+      // runner also resets `status.step` to "done" in its except handler, so
+      // that can't be used either. `started` is reliable instead: generating
+      // and solving run strictly sequentially, so whichever one has `started`
+      // set *last* is the one that was in flight when the trial errored.
+      errorStep() {
+        if (!this.trialStatus || this.trialStatus.completion !== "error")
+          return null;
+        if (this.trialStatus.solving.started !== null) return "solving";
+        if (this.trialStatus.generating.started !== null) return "generating";
+        return null;
+      },
+      stepDotClass(stepName) {
+        if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+        const step = this.trialStatus[stepName];
+        if (this.errorStep() === stepName) return "bg-amber-500";
+        if (step.elapsed !== null) return "bg-emerald-500";
+        if (this.trialStatus.step === stepName)
+          return "bg-cyan-400 animate-pulse";
+        return "bg-slate-300 dark:bg-slate-600";
+      },
+      stepTextClass(stepName) {
+        if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+        const step = this.trialStatus[stepName];
+        if (this.errorStep() === stepName)
+          return "text-amber-500 dark:text-amber-400";
+        if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+        if (this.trialStatus.step === stepName)
+          return "text-cyan-500 dark:text-cyan-400";
+        return "text-slate-400 dark:text-slate-600";
+      },
       async fetchTrialLogs() {
         try {
           const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
@@ -2631,7 +2752,8 @@
         tooltip.style.minWidth = `${minW}px`;
         const x = event.clientX + 18;
         const y = event.clientY - 110;
-        tooltip.style.left = `${Math.min(x, window.innerWidth - minW - 20)}px`;
+        const fitsRight = x + minW + 20 <= window.innerWidth;
+        tooltip.style.left = `${fitsRight ? x : Math.max(8, event.clientX - minW - 18)}px`;
         tooltip.style.top = `${Math.max(8, y)}px`;
         tooltip.style.display = "block";
         void this._renderDistTooltipPlot(entry);
@@ -2674,10 +2796,20 @@
                 hoverinfo: "x+y"
               }
             ];
+            const maxProb = Math.max(...entry.cat_probs.map((p) => p ?? 0), 0);
+            const annotations = entry.cat_labels.map((lbl, i) => ({
+              x: lbl,
+              y: entry.cat_probs[i] ?? 0,
+              text: `${((entry.cat_probs[i] ?? 0) * 100).toFixed(1)}%`,
+              showarrow: false,
+              yanchor: "bottom",
+              yshift: 2,
+              font: { size: 9, color: textColor }
+            }));
             layout = {
               paper_bgcolor: bg,
               plot_bgcolor: bg,
-              margin: { t: 14, r: 10, b: 52, l: 52 },
+              margin: { t: 22, r: 10, b: 52, l: 52 },
               xaxis: {
                 color: textColor,
                 showgrid: false,
@@ -2693,8 +2825,10 @@
                   font: { size: 13 },
                   standoff: 4
                 },
-                range: [0, 1]
+                // extend range above max bar so annotations have room
+                range: [0, maxProb * 1.2]
               },
+              annotations,
               showlegend: false,
               font: { size: 11, color: textColor }
             };
@@ -2765,7 +2899,13 @@
                 color: textColor,
                 showgrid: false,
                 tickfont: { size: 11 },
-                ...unitsLabel ? { title: { text: unitsLabel, font: { size: 13 }, standoff: 4 } } : {}
+                ...unitsLabel ? {
+                  title: {
+                    text: unitsLabel,
+                    font: { size: 13 },
+                    standoff: 4
+                  }
+                } : {}
               },
               yaxis: {
                 color: curveColor,
@@ -2803,16 +2943,27 @@
           });
         }
         if (paramsEl) {
-          const fmt = (v) => {
-            if (typeof v === "number") {
-              return Math.abs(v) >= 1e3 || Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(3) : v.toPrecision(4).replace(/\.?0+$/, "");
-            }
-            return String(v);
-          };
-          paramsEl.innerHTML = Object.entries(entry.params).map(
-            ([k, v]) => `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`
-          ).join("");
+          if (chartType === "categorical") {
+            paramsEl.innerHTML = "";
+          } else {
+            const fmt = (v) => {
+              if (typeof v === "number") {
+                return Math.abs(v) >= 1e3 || Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(3) : v.toPrecision(4).replace(/\.?0+$/, "");
+              }
+              return String(v);
+            };
+            paramsEl.innerHTML = Object.entries(entry.params).map(
+              ([k, v]) => `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`
+            ).join("");
+          }
         }
+      },
+      get dataLength() {
+        if (!this.data) return 0;
+        const xCol = this.config.xAxis?.col;
+        if (xCol && this.data[xCol]) return this.data[xCol].length;
+        const first = Object.values(this.data).find((arr) => arr.length > 0);
+        return first?.length ?? 0;
       },
       // -----------------------------------------------------------------------
       // Distributions: sorting, filtering & column resize
@@ -2830,12 +2981,14 @@
       // checkbox so users can see how many rows a filter choice covers
       get distCategoryCounts() {
         const counts = {};
-        for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+        for (const d of this.dists)
+          counts[d.category] = (counts[d.category] ?? 0) + 1;
         return counts;
       },
       get distTypeCounts() {
         const counts = {};
-        for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+        for (const d of this.dists)
+          counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
         return counts;
       },
       get distUnitCounts() {
@@ -3159,6 +3312,7 @@
       logLevelClass(level) {
         switch (level) {
           case "CRITICAL":
+            return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
           case "ERROR":
             return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
           case "WARNING":
@@ -3478,9 +3632,10 @@
           this.config.xAxis.col,
           ...Object.keys(this.config.yAxes)
         ];
+        const pinnedSet = new Set(this.vsDraft.pinned);
         const draftIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
-          return n >= start && n <= end && id !== this.trialId;
+          return (n >= start && n <= end || pinnedSet.has(n)) && id !== this.trialId;
         });
         for (const id of draftIds) {
           if (currentId !== this.discoveryId) return;
@@ -3515,7 +3670,10 @@
       handlePlotClickForShapes(pt) {
         if (!this.placementMode) return false;
         const defaultStyle = this.nextAvailableStyle(
-          this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" }))
+          this.config.shapes.map((s) => ({
+            color: s.color,
+            dash: s.dash ?? "solid"
+          }))
         );
         let newShape = null;
         if (this.placementMode === "vline") {
@@ -3736,6 +3894,7 @@
           const response = await this.fetchTrialData(this.trialId, initialCols);
           this.columns = response.columns.all.sort();
           this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+          this.columnMetadata = response.columns.column_metadata ?? {};
           this.data = response.data;
           void this.loadLabSchemas();
           const params = new URLSearchParams(window.location.search);
@@ -3744,11 +3903,13 @@
             this.hydrateFromUrl(shared);
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
+            this.vsDraft.pinned = [...this.config.vsPinned ?? []];
             this.config.vsEnabled = false;
           } else {
             this.loadConfig();
             this.vsDraft.enabled = this.config.vsEnabled;
             this.vsDraft.range = [...this.config.vsRange];
+            this.vsDraft.pinned = [...this.config.vsPinned ?? []];
           }
           if (this.config.refFrame) {
             const hasRotation = Object.values(this.config.yAxes).some(
@@ -4017,6 +4178,12 @@
             if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
           }, 500);
         });
+        this.$watch("vsDraft.pinned", () => {
+          if (this.discoveryTimeout) clearTimeout(this.discoveryTimeout);
+          this.discoveryTimeout = setTimeout(() => {
+            if (this.vsDraft.enabled) void this.startBackgroundDiscovery();
+          }, 500);
+        });
         this.$watch("profileSearch", (val) => {
           try {
             localStorage.setItem("mojo:profile:search", val);
@@ -4185,9 +4352,87 @@
           this._syncOverlayVisibility();
           requestAnimationFrame(() => this._renderFrameMarkers());
         });
+        this.$watch(
+          "config.displayUnitSystem",
+          async (newVal, oldVal) => {
+            if (newVal === oldVal) return;
+            const activeCols = [
+              this.config.xAxis.col,
+              ...Object.keys(this.config.yAxes)
+            ];
+            this.vsDatasets = {};
+            try {
+              const resp2 = await this.fetchTrialData(this.trialId, activeCols);
+              this.columnMetadata = resp2.columns.column_metadata ?? {};
+              this.data = resp2.data;
+              this.renderPlot();
+              requestAnimationFrame(() => {
+                this._renderFrameMarkers();
+                this._syncOverlayVisibility();
+              });
+              void this.startBackgroundDiscovery();
+            } catch (e) {
+              console.warn("Display unit system re-fetch failed", e);
+            }
+          }
+        );
+        this.$watch(
+          "config.maxPoints",
+          async (newVal, oldVal) => {
+            if (newVal === oldVal) return;
+            const activeCols = [
+              this.config.xAxis.col,
+              ...Object.keys(this.config.yAxes)
+            ];
+            this.vsDatasets = {};
+            try {
+              const resp2 = await this.fetchTrialData(this.trialId, activeCols);
+              this.data = resp2.data;
+              this.renderPlot();
+              void this.startBackgroundDiscovery();
+            } catch (e) {
+              console.warn("Max points re-fetch failed", e);
+            }
+          }
+        );
         void this.startBackgroundDiscovery();
         this.configRaw = localStorage.getItem("mojo:config:raw-draft") ?? JSON.stringify(this.config, null, 4);
         this.updateFromRaw();
+        this.$watch("distFilterName", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-name", v);
+          } catch {
+          }
+        });
+        this.$watch("distFilterCategories", (v) => {
+          try {
+            localStorage.setItem(
+              "mojo:dists:filter-categories",
+              JSON.stringify(v)
+            );
+          } catch {
+          }
+        });
+        this.$watch("distFilterTypes", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v));
+          } catch {
+          }
+        });
+        this.$watch("distFilterUnits", (v) => {
+          try {
+            localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v));
+          } catch {
+          }
+        });
+        window.addEventListener("mojo-data-updated", (e) => {
+          this.applyJobOutcomes(e.detail);
+          void this.fetchDists();
+        });
+        void fetch("/monitor/api/status/job").then((r) => r.json()).then((data2) => {
+          if (data2 && !data2.error) this.applyJobOutcomes(data2);
+        }).catch(() => {
+        });
         window.addEventListener("mojo-sensai-plot-config", (e) => {
           const detail = e.detail;
           if (detail && typeof detail === "object") {
@@ -4201,6 +4446,28 @@
       // -----------------------------------------------------------------------
       // VS (comparison) mode
       // -----------------------------------------------------------------------
+      applyJobOutcomes(data) {
+        if (!data) return;
+        this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+        this.errorTrialNums = (data.error_tns ?? []).map(Number);
+      },
+      vsChipClass(t) {
+        const tn = parseInt(t.split("_").pop() ?? "0");
+        if (this.vsDraft.pinned.includes(tn)) {
+          if (this.errorTrialNums.includes(tn))
+            return "bg-cyan-500 border-amber-500 text-white";
+          if (this.failureTrialNums.includes(tn))
+            return "bg-cyan-500 border-rose-500 text-white";
+          return "bg-cyan-500 border-cyan-500 text-white";
+        }
+        if (t === this.trialId)
+          return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
+        if (this.errorTrialNums.includes(tn))
+          return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
+        if (this.failureTrialNums.includes(tn))
+          return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
+        return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+      },
       async syncVsRange() {
         try {
           const resp = await fetch("/mosaic/api/trials");
@@ -4240,9 +4507,10 @@
           }
           activeCols = [...new Set(activeCols)];
           const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
+          const pinnedSet = new Set(this.vsDraft.pinned);
           const targetIds = this.allTrials.filter((id) => {
             const n = parseInt(id.split("_").pop() ?? "");
-            return n >= start && n <= end && n !== currentNum;
+            return (n >= start && n <= end || pinnedSet.has(n)) && n !== currentNum;
           });
           await Promise.all(
             targetIds.map(async (id) => {
@@ -4261,6 +4529,7 @@
           );
           this.vsDatasets = { ...this.vsDatasets };
           this.config.vsRange = [start, end];
+          this.config.vsPinned = [...this.vsDraft.pinned];
           this.config.vsEnabled = true;
           if (targetIds.length > 0) {
             this.notify(
@@ -4307,6 +4576,24 @@
           const n = parseInt(id.split("_").pop() ?? "");
           return n >= lo && n <= hi && n !== cur;
         }).length;
+      },
+      vsTotalCount() {
+        const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
+        const cur = parseInt(this.trialId.split("_").pop() ?? "");
+        const pinnedSet = new Set(this.vsDraft.pinned);
+        return this.allTrials.filter((id) => {
+          const n = parseInt(id.split("_").pop() ?? "");
+          return (n >= lo && n <= hi || pinnedSet.has(n)) && n !== cur;
+        }).length;
+      },
+      toggleVsPin(n) {
+        const idx = this.vsDraft.pinned.indexOf(n);
+        if (idx === -1) {
+          this.vsDraft.pinned = [...this.vsDraft.pinned, n].sort((a, b) => a - b);
+        } else {
+          this.vsDraft.pinned = this.vsDraft.pinned.filter((x) => x !== n);
+        }
       },
       // -----------------------------------------------------------------------
       // Column filtering & search
@@ -4513,7 +4800,8 @@
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            this.config = { ...this.config, ...parsed };
+            const { vsEnabled: _vs, ...rest } = parsed;
+            this.config = { ...this.config, ...rest };
           } catch {
             console.error("Stored config corrupt");
           }
@@ -4786,6 +5074,68 @@
             }
           }
         });
+      },
+      initMetadataViewer(hostEl, jsonText) {
+        if (!hostEl || typeof CM === "undefined") return null;
+        const {
+          EditorView,
+          EditorState,
+          json,
+          syntaxHighlighting,
+          oneDarkHighlightStyle,
+          defaultHighlightStyle
+        } = CM;
+        const isDark = document.documentElement.classList.contains("dark");
+        const darkTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+            ".cm-scroller": {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+            ".cm-gutters": { display: "none" },
+            ".cm-cursor, .cm-dropCursor": { display: "none" },
+            ".cm-activeLine": { backgroundColor: "transparent" },
+            ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#1e293b !important"
+            }
+          },
+          { dark: true }
+        );
+        const lightTheme = EditorView.theme(
+          {
+            "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+            ".cm-scroller": {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8rem",
+              lineHeight: "1.625"
+            },
+            ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+            ".cm-gutters": { display: "none" },
+            ".cm-cursor, .cm-dropCursor": { display: "none" },
+            ".cm-activeLine": { backgroundColor: "transparent" },
+            ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+            "&.cm-focused .cm-selectionBackground": {
+              backgroundColor: "#e2e8f0 !important"
+            }
+          },
+          { dark: false }
+        );
+        const state = EditorState.create({
+          doc: jsonText,
+          extensions: [
+            EditorState.readOnly.of(true),
+            json(),
+            isDark ? darkTheme : lightTheme,
+            syntaxHighlighting(
+              isDark ? oneDarkHighlightStyle : defaultHighlightStyle
+            )
+          ]
+        });
+        return new EditorView({ state, parent: hostEl });
       },
       async resetConfig() {
         const ok = await window.mojoConfirm?.({
@@ -5144,11 +5494,34 @@
         }
         return null;
       },
-      getUnitOptions(groups, fromUnit) {
+      getUnitOptions(groups, fromUnit, colDimension) {
         if (!groups) return [];
-        if (!fromUnit) return groups;
-        const match = groups.find((g) => g.units.includes(fromUnit));
-        return match ? [match] : groups;
+        const normalize = (u) => u.replace(/\s+/g, "").replace(/\*\*/g, "^");
+        if (fromUnit) {
+          const norm = normalize(fromUnit);
+          const match = groups.find(
+            (g) => g.units.some((u) => u === fromUnit || u === norm)
+          );
+          if (match) return [match];
+        }
+        if (colDimension && groups.some((g) => g.dimension)) {
+          const compatible = groups.filter((g) => g.dimension === colDimension);
+          if (compatible.length > 0) return compatible;
+        }
+        return groups;
+      },
+      // returns the concrete unit of col after walking its active filter stack;
+      // starts from column_metadata and updates when a unit filter's toUnit changes it;
+      // pass filtersOverride for axes (e.g. x-axis) that store filters outside config.yAxes
+      effectiveUnit(col, filtersOverride) {
+        let unit = this.columnMetadata[col]?.unit ?? null;
+        const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
+        for (const f of filters) {
+          if (f.enabled === false || f.type !== "unit") continue;
+          const to = f["toUnit"];
+          if (to) unit = to;
+        }
+        return unit;
       },
       getFilterSummary(entry) {
         const schema = this.filterSchemas.find((s) => s.type === entry.type);
@@ -5164,7 +5537,7 @@
         });
         return parts.slice(0, 3).join(", ");
       },
-      addFilterToTemp(temp, filterType) {
+      addFilterToTemp(temp, filterType, col) {
         const schema = this.filterSchemas.find((s) => s.type === filterType);
         if (!schema) return;
         if (!temp.filters) temp.filters = [];
@@ -5173,6 +5546,13 @@
         const entry = { type: filterType, enabled: true };
         for (const p of schema.params) {
           entry[p.name] = p.default;
+        }
+        if (filterType === "unit" && col) {
+          const meta = this.columnMetadata[col];
+          const metaUnit = meta?.group_unit ?? meta?.unit;
+          if (metaUnit) {
+            entry["fromUnit"] = metaUnit;
+          }
         }
         temp.filters.push(entry);
       },
@@ -5724,9 +6104,11 @@
         const activeDatasets = [this.data ?? {}];
         if (this.config.vsEnabled) {
           const [start, end] = this.config.vsRange;
+          const pinnedSet = new Set(this.config.vsPinned ?? []);
           Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (n >= start && n <= end) activeDatasets.push(dataset);
+            if (n >= start && n <= end || pinnedSet.has(n))
+              activeDatasets.push(dataset);
           });
         }
         activeDatasets.forEach((dataset) => {
@@ -5844,6 +6226,8 @@
           if (!this.data[p.name]) {
             return null;
           }
+          const unit = this.effectiveUnit(key);
+          const traceLabel = p.label + (unit ? ` (${unit.replace(/\s+/g, "")})` : "");
           const lineStyle = {
             width: p.width,
             color: p.color,
@@ -5854,7 +6238,7 @@
             return {
               r: this.data[p.name],
               theta: this.data[this.config.xAxis.col],
-              name: p.label,
+              name: traceLabel,
               mode: traceMode(p.marker),
               type: "scatterpolar",
               line: lineStyle,
@@ -5872,7 +6256,7 @@
           return {
             x: this.data[this.config.xAxis.col],
             y: this.data[p.name],
-            name: p.label,
+            name: traceLabel,
             mode: traceMode(p.marker),
             type: "scatter",
             line: lineStyle,
@@ -5889,13 +6273,15 @@
         }).filter((t) => t !== null);
         if (this.config.vsEnabled) {
           const [start, end] = this.config.vsRange;
+          const pinnedSet = new Set(this.config.vsPinned ?? []);
           const legendTracker = /* @__PURE__ */ new Set();
           const sortedVsIds = Object.keys(this.vsDatasets).sort(
             (a, b) => parseInt(a.split("_").pop() ?? "0") - parseInt(b.split("_").pop() ?? "0")
           );
           sortedVsIds.forEach((vsId) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (n < start || n > end || vsId === this.trialId) return;
+            if (!(n >= start && n <= end || pinnedSet.has(n)) || vsId === this.trialId)
+              return;
             const dataset = this.vsDatasets[vsId];
             if (!dataset) return;
             const vsTraces = yKeys.map((key, i) => {
@@ -5944,6 +6330,9 @@
         const resolvedRangeX = this.resolveAxisRange(this.config.rangeX, [
           this.config.xAxis.col
         ]);
+        const xCol = this.config.xAxis.col;
+        const xUnit = this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []);
+        const xAxisText = this.config.xAxisTitle || (xUnit ? `${xCol} (${xUnit.replace(/\s+/g, "")})` : xCol);
         const xAxisObj = {
           type: this.config.xScale ?? "linear",
           ...resolvedRangeX ? {
@@ -5960,7 +6349,7 @@
           zeroline: false,
           tickfont: { color: textColor, size: 14 },
           title: {
-            text: this.config.xAxisTitle || this.config.xAxis.col,
+            text: xAxisText,
             font: { size: 14, color: textColor, family: "monospace" }
           },
           showspikes: showX,
@@ -6014,7 +6403,7 @@
               gridcolor: majorGrid,
               tickfont: { color: textColor, size: 14, family: "monospace" },
               title: {
-                text: this.config.xAxisTitle || this.config.xAxis.col,
+                text: xAxisText,
                 font: { size: 14, color: textColor, family: "monospace" }
               }
             }

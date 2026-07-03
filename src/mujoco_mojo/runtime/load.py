@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self, cast
 
 import mujoco
 import numpy as np
@@ -21,6 +21,13 @@ from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import (
+    Dimension,
+    dim,
+    force_or_torque,
+    merge_signal_metadata,
+    torque_metadata,
+)
 from mujoco_mojo.visualization import ArrowConfig
 
 if TYPE_CHECKING:
@@ -99,6 +106,18 @@ class SiteLoad(Load):
     user_data: SerializeAsAny[UserData] | None = None
     """Optional strongly-typed payload accessible inside `calculate()`. Passed through unchanged each timestep."""
 
+    force_length_scale: float | None = None
+    """Length multiplier for this load's force arrow(s), on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.force_length_scale`."""
+
+    force_width_scale: float | None = None
+    """Width multiplier for this load's force arrow(s), on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.force_width_scale`."""
+
+    torque_length_scale: float | None = None
+    """Length multiplier for this load's torque arrow, on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.torque_length_scale`."""
+
+    torque_width_scale: float | None = None
+    """Width multiplier for this load's torque arrow, on top of MuJoCo's native scaling. `None` falls back to `VisualizationSettings.torque_width_scale`."""
+
     _last_f: Vec4 = PrivateAttr(default_factory=lambda: np.zeros(4))
     """Previous timestep's force values. Used for request management."""
 
@@ -170,7 +189,8 @@ class SiteLoad(Load):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        channels: list[Literal["force", "torque"]] = ["force", "torque"],
+        channels: list[Literal["force", "torque"]]
+        | dict[Literal["force", "torque"], dict[str, Any] | None] = ["force", "torque"],
     ):
         """
         Registers specific channels for logging.
@@ -184,7 +204,14 @@ class SiteLoad(Load):
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
+        Each signal is tagged with built-in `dimension` metadata for its channel (`force` as force, `torque` as torque).
+
         If `signal_manager` is omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+
+        Args:
+            signal_manager: The signal manager to register the sampler with.
+            channels: The load data channels to log. Pass a list to select channels, or a dict mapping channel name to metadata overrides (or `None`) to select channels and attach per-channel metadata in one step.
+
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
 
@@ -192,9 +219,23 @@ class SiteLoad(Load):
         if signal_manager is None:
             return
 
+        if isinstance(channels, dict):
+            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            channels = list(channels.keys())
+        else:
+            _meta = {}
+
+        channel_metadata = {
+            "force": dim(Dimension.FORCE),
+            "torque": torque_metadata(),
+        }
+
         def sample(state: MjState):
             for channel in channels:
                 source = self._last_f if channel == "force" else self._last_t
+                meta = merge_signal_metadata(
+                    channel_metadata.get(channel), channel, _meta, unit_system=state.us
+                )
 
                 # iterate through x, y, z, and magnitude (pop. pop.)
                 for i, attr in enumerate("xyzm"):
@@ -204,6 +245,7 @@ class SiteLoad(Load):
                         # nest the force/torque under the function name
                         subgroups=(f"{self.name}", channel),
                         attr=attr,
+                        metadata=meta,
                     )
 
         signal_manager.register_sampler(sample)
@@ -223,6 +265,12 @@ class SiteLoad(Load):
                     vec=self._last_f[:3],
                     color=Color[self._vis.action_force].rgba,
                     is_torque=False,
+                    length_scale=self.force_length_scale
+                    if self.force_length_scale is not None
+                    else self._vis.force_length_scale,
+                    width_scale=self.force_width_scale
+                    if self.force_width_scale is not None
+                    else self._vis.force_width_scale,
                 )
             )
 
@@ -233,6 +281,12 @@ class SiteLoad(Load):
                     vec=self._last_t[:3],
                     color=Color[self._vis.torque].rgba,
                     is_torque=True,
+                    length_scale=self.torque_length_scale
+                    if self.torque_length_scale is not None
+                    else self._vis.torque_length_scale,
+                    width_scale=self.torque_width_scale
+                    if self.torque_width_scale is not None
+                    else self._vis.torque_width_scale,
                 )
             )
 
@@ -306,6 +360,12 @@ class PointToPointForce(SiteLoad):
                     vec=-self._last_f[:3],
                     color=Color[self._vis.reaction_force].rgba,
                     is_torque=False,
+                    length_scale=self.force_length_scale
+                    if self.force_length_scale is not None
+                    else self._vis.force_length_scale,
+                    width_scale=self.force_width_scale
+                    if self.force_width_scale is not None
+                    else self._vis.force_width_scale,
                 )
             )
 
@@ -634,10 +694,7 @@ class JointLoad(Load):
                 raise ValueError(msg)
         self._dof_adr = int(state.model.jnt_dofadr[self._jid])
         logger.debug(
-            "resolved joint '%s' to dof_adr=%d nv=%d",
-            self.joint.name,
-            self._dof_adr,
-            self._nv,
+            f"resolved joint '{self.joint.name}' to dof_adr={self._dof_adr} nv={self._nv}",
         )
 
     @abstractmethod
@@ -678,7 +735,11 @@ class JointFriction(JointLoad):
         state.data.qfrc_applied[self._dof_adr : self._dof_adr + self._nv] += frc
         self._last_force = self._to_world_frc(frc, state)
 
-    def request(self, signal_manager: SignalManager | None = None) -> None:
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -690,8 +751,11 @@ class JointFriction(JointLoad):
 
         * An `xyzm` is a cartesian vector, posted as 4 values (`x`, `y`, `z`, and its magnitude `m`).
 
+        `friction` is tagged with built-in `dimension` metadata resolved from the joint's type (force for slide, torque for hinge/ball).
+
         Args:
             signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+            metadata: Metadata overriding or extending the built-in default for the `friction` channel.
 
         Raises:
             ValueError: If the joint has no name.
@@ -709,6 +773,12 @@ class JointFriction(JointLoad):
             raise ValueError(msg)
 
         def sample(state: MjState) -> None:
+            jnt_id = self.joint.get_id(state.model)
+            jnt_type = int(state.model.jnt_type[jnt_id])
+            meta = merge_signal_metadata(
+                force_or_torque(jnt_type), "friction", metadata, unit_system=state.us
+            )
+
             frc = self._last_force if self.active else np.zeros(3)
             for v, attr in zip(frc, ("x", "y", "z")):
                 signal_manager.post(
@@ -716,12 +786,14 @@ class JointFriction(JointLoad):
                     category=SignalCategory.LOADS,
                     subgroups=(self.name, "friction"),
                     attr=attr,
+                    metadata=meta,
                 )
             signal_manager.post(
                 value=float(np.linalg.norm(frc)),
                 category=SignalCategory.LOADS,
                 subgroups=(self.name, "friction"),
                 attr="m",
+                metadata=meta,
             )
 
         signal_manager.register_sampler(sample)
@@ -922,12 +994,19 @@ class ActuatorControl(Load):
         self._last_ctrl = float(self.control_func(self.user_data, state))
         state.data.ctrl[self._aid] = self._last_ctrl
 
-    def request(self, signal_manager: SignalManager | None = None) -> None:
+    def request(
+        self,
+        signal_manager: SignalManager | None = None,
+        metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
 
+        `ctrl`'s units depend on the driven actuator's transmission and `gear`/`dyntype` (the same ambiguity as `ActuatorBase.request()`'s `ctrl` channel), so no built-in metadata default is applied. Supply `metadata={"ctrl": {...}}` yourself if you know it.
+
         Args:
             signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.
+            metadata: Metadata for the `ctrl` channel.
 
         """
         from mujoco_mojo.runtime.signal_manager import resolve_signal_manager
@@ -942,6 +1021,7 @@ class ActuatorControl(Load):
                 category=SignalCategory.LOADS,
                 subgroups=(self.name,),
                 attr="ctrl",
+                metadata=merge_signal_metadata(None, "ctrl", metadata),
             )
 
         signal_manager.register_sampler(sample)

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+import pint
 import polars as pl
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.stochas import UnitSystem, ureg
 from mujoco_mojo.typing import MatN, SignalCategory
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
@@ -19,6 +22,39 @@ __all__ = ["SignalManager"]
 
 _FLOAT64_BYTES = np.dtype(np.float64).itemsize
 
+_COLUMN_METADATA_KEY = "column_metadata"
+"""Key under which the per-column metadata JSON blob is stored in the parquet file's footer."""
+
+
+def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """
+    Validates the well-known `dimension`/`unit` metadata keys via Pint, leaving any other user-defined keys untouched.
+
+    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
+    """
+    dimension = metadata.get("dimension")
+    unit = metadata.get("unit")
+
+    dimensionality = None
+    if dimension is not None:
+        try:
+            dimensionality = ureg.get_dimensionality(dimension)
+        except (pint.UndefinedUnitError, pint.DefinitionSyntaxError) as e:
+            raise ValueError(f"Invalid signal metadata dimension {dimension!r}: {e}")
+
+    if unit is not None:
+        try:
+            parsed_unit = ureg.parse_units(unit)
+        except pint.UndefinedUnitError as e:
+            raise ValueError(f"Invalid signal metadata unit {unit!r}: {e}")
+        if dimensionality is not None and parsed_unit.dimensionality != dimensionality:
+            raise ValueError(
+                f"Signal metadata unit {unit!r} ({parsed_unit.dimensionality}) do not "
+                f"match dimension {dimension!r} ({dimensionality})"
+            )
+
+    return metadata
+
 
 def resolve_signal_manager(
     signal_manager: SignalManager | None,
@@ -26,7 +62,7 @@ def resolve_signal_manager(
     """
     Returns `signal_manager` if given, otherwise falls back to the `SignalManager` of the innermost enclosing `RuntimeManager` `with` block.
 
-    The result may still be `None` if that `RuntimeManager` simply has no `SignalManager` configured (telemetry recording disabled for this trial) -- callers should treat `None` as "nothing to record to" rather than an error. Raises only if there is no active `RuntimeManager` context at all.
+    The result may still be `None` if that `RuntimeManager` simply has no `SignalManager` configured (telemetry recording disabled for this trial). Callers should treat `None` as "nothing to record to" rather than an error. Raises only if there is no active `RuntimeManager` context at all.
     """
     if signal_manager is not None:
         return signal_manager
@@ -46,6 +82,9 @@ class SignalManager:
 
     record_decimation: int = 1
     """How many steps between each recording should be performed."""
+
+    unit_system: UnitSystem | None = None
+    """When set, the time column's concrete unit is resolved from `unit_system.time` (e.g. `"second"`, `"millisecond"`). Always tagged with `dimension="[time]"` regardless."""
 
     # === BEGIN PRIVATE API ===
     _key_cache: dict[tuple[str, tuple[str, ...], str], str] = field(
@@ -78,6 +117,11 @@ class SignalManager:
 
     _part_paths: list[Path] = field(default_factory=list, init=False)
     """Paths of per-flush part files written this run, in order, pending merge in `close()`."""
+
+    _column_metadata: dict[str, dict[str, Any]] = field(
+        default_factory=dict, init=False
+    )
+    """User-supplied metadata (e.g. `dimension`/`unit`) for columns that registered any, keyed by full signal key. Written into the merged parquet file's footer on `close()`."""
 
     @staticmethod
     def default_output_name() -> Literal["telemetry.parquet"]:
@@ -120,12 +164,16 @@ class SignalManager:
         # and shrink the capacity (see _recompute_capacity) as they do
         initial_col_guess = 100
         self._capacity = self._rows_for_cols(initial_col_guess)
-        self._data_buffer = np.zeros(
-            (self._capacity, initial_col_guess), dtype=np.float64
+        self._data_buffer = np.full(
+            (self._capacity, initial_col_guess), np.nan, dtype=np.float64
         )
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
+        time_meta: dict[str, str] = {"dimension": "[time]"}
+        if self.unit_system is not None and self.unit_system.time is not None:
+            time_meta["unit"] = self.unit_system.time
+        self._column_metadata[TIME_COLUMN_NAME] = time_meta
         self._n_cols = 1
         logger.debug(
             f"SignalManager initialized: buffer capacity={self._capacity} rows, Path={self.export_path}"
@@ -154,6 +202,7 @@ class SignalManager:
         subgroups: tuple[str, ...] = (),
         *,
         attr: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
@@ -174,7 +223,7 @@ class SignalManager:
         """
 
         def _sample(_: MjState):
-            self.post(getter(), category, subgroups, attr=attr)
+            self.post(getter(), category, subgroups, attr=attr, metadata=metadata)
 
         self.register_sampler(_sample)
 
@@ -185,6 +234,7 @@ class SignalManager:
         subgroups: tuple[str, ...] = (),
         *,
         attr: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Injects a value into the telemetry ledger using a hierarchical namespace.
@@ -200,6 +250,7 @@ class SignalManager:
             category (SignalCategory | str): Top level category (e.g., "Bodies")
             subgroups (tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
+            metadata (dict[str, Any] | None, optional): Arbitrary metadata for this signal, persisted into the telemetry file's footer. Only consulted the first time this signal is registered (ignored on later calls for the same signal). Two keys are validated via Pint if present: `dimension` (e.g. `"[length] / [time]"`), for tagging the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `unit` (e.g. `"meter / second"`), for the rarer case the concrete unit truly is known. Any other keys (e.g. `display_name`, `comment`) pass through unvalidated. Defaults to None.
 
         Examples:
             >>> # Becomes "Bodies/Hand/xpos:x"
@@ -207,6 +258,9 @@ class SignalManager:
 
             >>> # Becomes "Sensors/IMU/Accel:z"
             >>> manager.post(9.81, "Sensors", ("IMU", "Accel"), attr="z")
+
+            >>> # Tag a custom signal's physical quantity type without committing to a unit system
+            >>> manager.post(0.4, "Custom", ("Spring",), attr="stiffness", metadata={"dimension": "[force] / [length]"})
 
         """
         # use tuple as cache key to avoid string construction
@@ -233,6 +287,9 @@ class SignalManager:
             self._key_to_idx[full_key] = idx
             self._n_cols += 1
 
+            if metadata:
+                self._column_metadata[full_key] = _validate_signal_metadata(metadata)
+
             logger.debug(f"New signal registered: {full_key} at index {idx}")
 
             # grow buffer if exceeding the initial guess
@@ -241,8 +298,10 @@ class SignalManager:
                 new_width = self._data_buffer.shape[1] + n_cols_to_add
                 logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
 
-                growth = np.zeros(
-                    (self._data_buffer.shape[0], n_cols_to_add), dtype=np.float64
+                growth = np.full(
+                    (self._data_buffer.shape[0], n_cols_to_add),
+                    np.nan,
+                    dtype=np.float64,
                 )
                 self._data_buffer = np.hstack([self._data_buffer, growth])
 
@@ -254,6 +313,8 @@ class SignalManager:
 
     def record(self, state: MjState):
         """Executes all samplers and advances the buffer index. Flushes if due."""
+        logger.debug(f"Recording telemetry at t={state.data.time:.6f}")
+
         self._step_count += 1
         if self._step_count % self.record_decimation != 0:
             return
@@ -294,14 +355,25 @@ class SignalManager:
 
         # reset buffer for next batch
         self._buffer_row_idx = 0
-        self._data_buffer.fill(0.0)
+        self._data_buffer.fill(np.nan)
+
+    def _file_metadata(self) -> dict[str, str] | None:
+        """Builds the parquet file-level metadata dict, or None if no signal registered any."""
+        if not self._column_metadata:
+            return None
+        return {_COLUMN_METADATA_KEY: json.dumps(self._column_metadata)}
 
     def _merge_parts(self):
         """Streams all part files written this run into `export_path`, then removes the parts."""
         if not self._part_paths:
             return
 
-        if len(self._part_paths) == 1:
+        file_metadata = self._file_metadata()
+
+        # the raw rename is only safe when there's no footer metadata to embed --
+        # a rename can't add a footer, so that case falls through to the
+        # scan/sink path below (a single part is just a one-element scan)
+        if len(self._part_paths) == 1 and file_metadata is None:
             self._part_paths[0].replace(self.export_path)
         else:
             # every part's columns are a subset of the full signal set
@@ -319,7 +391,7 @@ class SignalManager:
             # pl.concat(..., how="diagonal") would
             pl.scan_parquet(
                 self._part_paths, schema=schema, missing_columns="insert"
-            ).sink_parquet(self.export_path)
+            ).sink_parquet(self.export_path, metadata=file_metadata)
 
             for part_path in self._part_paths:
                 part_path.unlink()
