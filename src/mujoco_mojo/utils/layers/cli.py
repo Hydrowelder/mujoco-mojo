@@ -806,7 +806,7 @@ def run_monte_carlo(
                 )
             console.print(f"\n{finished_msg}")
 
-    raise typer.Exit()
+    raise typer.Exit(code=1 if had_fails else 0)
 
 
 @run_app.command(name="single")
@@ -948,7 +948,7 @@ def run_single(
                 )
             console.print(f"\n{finished_msg}")
 
-    raise typer.Exit()
+    raise typer.Exit(code=1 if had_fails else 0)
 
 
 @cli_app.command(name="init")
@@ -1461,7 +1461,7 @@ def run_optimizer(
             f"\n[bold green]Optimization study complete![/] Best parameters saved to [italic]{workdir}/best_params.json[/italic]"
         )
 
-    raise typer.Exit()
+    raise typer.Exit(code=1 if had_fails else 0)
 
 
 if __name__ == "__main__":
