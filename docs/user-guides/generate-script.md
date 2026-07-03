@@ -94,6 +94,11 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 ???+ note "Note: Squeezing `NamedValues`"
     The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.sqeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)
 
+???+ tip "Tip: Unit Systems"
+    The `MojoModel` provides a helpful way to define a model unit system which allows you to define values in whatever unit you want while maintaining consistent behavior while solving the dynamics.
+
+    > For details on usage visit the [`stochas` documentation](https://hydrowelder.github.io/stochas/user-guides/unit-system/)
+
 ???+ example "Example: Sampling"
     ```python
     --8<-- "docs/user-guides/monte_carlo_example.py:sampling"

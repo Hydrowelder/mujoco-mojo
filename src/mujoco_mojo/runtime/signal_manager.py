@@ -164,8 +164,8 @@ class SignalManager:
         # and shrink the capacity (see _recompute_capacity) as they do
         initial_col_guess = 100
         self._capacity = self._rows_for_cols(initial_col_guess)
-        self._data_buffer = np.zeros(
-            (self._capacity, initial_col_guess), dtype=np.float64
+        self._data_buffer = np.full(
+            (self._capacity, initial_col_guess), np.nan, dtype=np.float64
         )
 
         # ensure time is always index 0
@@ -298,8 +298,10 @@ class SignalManager:
                 new_width = self._data_buffer.shape[1] + n_cols_to_add
                 logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
 
-                growth = np.zeros(
-                    (self._data_buffer.shape[0], n_cols_to_add), dtype=np.float64
+                growth = np.full(
+                    (self._data_buffer.shape[0], n_cols_to_add),
+                    np.nan,
+                    dtype=np.float64,
                 )
                 self._data_buffer = np.hstack([self._data_buffer, growth])
 
@@ -311,6 +313,8 @@ class SignalManager:
 
     def record(self, state: MjState):
         """Executes all samplers and advances the buffer index. Flushes if due."""
+        logger.debug(f"Recording telemetry at t={state.data.time:.6f}")
+
         self._step_count += 1
         if self._step_count % self.record_decimation != 0:
             return
@@ -351,7 +355,7 @@ class SignalManager:
 
         # reset buffer for next batch
         self._buffer_row_idx = 0
-        self._data_buffer.fill(0.0)
+        self._data_buffer.fill(np.nan)
 
     def _file_metadata(self) -> dict[str, str] | None:
         """Builds the parquet file-level metadata dict, or None if no signal registered any."""

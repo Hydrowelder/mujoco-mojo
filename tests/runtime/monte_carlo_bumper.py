@@ -598,7 +598,9 @@ def runtime(
     # Identify our sites from the generated model
     # Note: We can find them by name in the worldbody
     assert mojo_model.mjcf.worldbody is not None
+    assert mojo_model.us is not None
 
+    us = mojo_model.us
     handoff = mojo_model.get_user_data(Handoff)
 
     with runtime_manager as rm:
@@ -637,7 +639,7 @@ def runtime(
         proximity = mojo.utils.Proximity(
             geom_1=handoff.box1_bunny,
             geom_2=handoff.box2_bunny,
-            dist_max=3,
+            dist_max=3 * us.meter,
             algorithm=mojo.ProximityType.CONVEX_HULL,
         ).register_to_rm()
 
@@ -651,9 +653,50 @@ def runtime(
 
             handoff.box1_rot.request()
 
+        @rm.requirement()
+        def time_greater_than_1_sec(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            if state.data.time > 1.0 * us.second:
+                return True, "time greater than 1 second at termination"
+            else:
+                return False, "time was not greater than 1 second at termination"
+
+        @rm.requirement(every=10, terminate_on_fail=True)
+        def time_is_not_negative(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            if state.data.time > 0.0 * us.second:
+                return True, "time is not negative"
+            else:
+                return False, "time was negative"
+
+        @rm.requirement(every=3)
+        def periodically_failing_requirement(
+            mojo_model: mojo.MojoModel,
+            state: mojo.MjState,
+            df: mojo.utils.MojoDataFrame | None = None,
+        ) -> tuple[bool, str]:
+            # fails during the 0.5s-1.0s window but passes before, after, and at
+            # end of trial (t=2.0). the trial must still be marked as a failure:
+            # a live requirement that fails at any point during the solve is
+            # failed for the trial, even if it recovers by the end.
+            t = state.data.time
+            if 0.5 * us.second < t < 1.0 * us.second and mojo_model.trial_num % 10 == 0:
+                return False, f"inside failure window at t={t:.3f}"
+            return True, f"outside failure window at t={t:.3f}"
+
         # Run for 2 seconds
         while state.data.time < 2.0:
             rm.step(state)
+            if mojo_model.trial_num in [10, 22, 40]:
+                msg = "I intentionally raised this error on this trial"
+                logger.error(msg)
+                raise ValueError(msg)
 
     return mojo_model
 

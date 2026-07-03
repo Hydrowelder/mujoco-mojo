@@ -18,15 +18,32 @@ export type {
 // Backend API shapes
 // ---------------------------------------------------------------------------
 
+export interface TimelineBin {
+  t: number;
+  label: string;
+  n_success: number;
+  n_failed: number;
+  n_error: number;
+  n_running: number;
+  n_pending: number;
+}
+
 export interface JobStatus {
   n_done: number;
   n_success: number;
   n_failed: number;
+  n_error: number;
   n_remaining: number;
   n_trial: number;
   progress: number;
   success_tns: string[];
   failure_tns: string[];
+  error_tns: string[];
+  failure_tns_with_db: string[];
+  error_tns_with_db: string[];
+  last_success_tn: number | null;
+  last_failure_tn: number | null;
+  last_error_tn: number | null;
   padding_style: string;
   throughput: string;
   avg_duration: string;
@@ -35,6 +52,7 @@ export interface JobStatus {
   time_remaining: string;
   end_time: string;
   is_complete: boolean;
+  timeline?: TimelineBin[];
   error?: string;
 }
 
@@ -43,13 +61,27 @@ export interface StepStatus {
   elapsed: number | null;
 }
 
+export interface RequirementResult {
+  name: string;
+  passed: boolean;
+  message: string;
+  decided_at: number;
+  every: number | null;
+  terminate_on_fail: boolean;
+  terminate_on_pass: boolean;
+  latch_on_fail: boolean;
+  latch_on_pass: boolean;
+}
+
 export interface TrialStatus {
   trial_num: number;
   step: "pending" | "generating" | "solving" | "done";
-  completion: "incomplete" | "success" | "failed";
+  completion: "incomplete" | "success" | "failure" | "terminated" | "error";
   pending: StepStatus;
   generating: StepStatus;
   solving: StepStatus;
+  requirements: RequirementResult[];
+  requirements_passed: boolean | null;
 }
 
 export interface TrialManifest {
@@ -202,6 +234,8 @@ export interface DojoStore {
   notifOpen: boolean;
   notifTick: number;
   toast(message: string, type?: "success" | "error" | "info"): void;
+  copyText(text: string, successMsg?: string): Promise<void>;
+  _installPlotlyLogCapture(): void;
   _setConnected(connected: boolean): void;
   startGlobalSync(): void;
   stopGlobalSync(): void;

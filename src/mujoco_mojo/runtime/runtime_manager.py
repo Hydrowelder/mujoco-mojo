@@ -2,31 +2,39 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Self, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, Self, runtime_checkable
 
 import mujoco
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.load import Load
+from mujoco_mojo.runtime.requirements_manager import (
+    RequirementFn,
+    RequirementsManager,
+    SimulationStopped,
+    _RequirementSpec,
+)
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.tracer import Tracer
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
+from mujoco_mojo.stochas import BaseDict
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity import Proximity
+from mujoco_mojo.utils.statusing import RequirementResult
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
+
+if TYPE_CHECKING:
+    from mujoco_mojo.mojo_model import MojoModel
 
 logger = get_logger(__name__)
 
-__all__ = ["RuntimeManager"]
+__all__ = ["RuntimeManager", "SimulationStopped"]
 
 _current: ContextVar[RuntimeManager] = ContextVar("_current_runtime_manager")
-
-
-class SimulationStopped(Exception):
-    """Raised by `RuntimeManager.step` to unwind a running simulation when the user requests a stop."""
 
 
 @runtime_checkable
@@ -47,6 +55,7 @@ class RuntimeManager:
     proximities: list[Proximity] = field(default_factory=list)
     tracers: list[Tracer] = field(default_factory=list)
     video_recorders: list[VideoRecorder] = field(default_factory=list)
+    requirements: RequirementsManager = field(default_factory=RequirementsManager)
 
     playback_speed: float = 1.0
     _start_wall_time: float = field(default_factory=time.time, init=False)
@@ -58,6 +67,21 @@ class RuntimeManager:
 
     _resolved: bool = False
     _context_token: Token | None = field(default=None, init=False, repr=False)
+
+    _mojo_model: MojoModel | None = field(default=None, init=False, repr=False)
+    _last_state: MjState | None = field(default=None, init=False, repr=False)
+
+    # --- backward-compat shims (thin delegation to self.requirements) ---
+
+    @property
+    def _requirements(self) -> BaseDict[_RequirementSpec]:
+        return self.requirements._requirements
+
+    @property
+    def requirement_results(self) -> list[RequirementResult]:
+        return self.requirements.results
+
+    # --- context manager ---
 
     def __enter__(self) -> Self:
         """Prime the model and prepare results. Also makes this instance available via `RuntimeManager.current()` for the duration of the `with` block."""
@@ -75,6 +99,22 @@ class RuntimeManager:
 
         if self.video_recorders:
             self.save_recordings()
+
+        controlled_exit = exc_type is None or (
+            exc_type is not None and issubclass(exc_type, SimulationStopped)
+        )
+        if (
+            controlled_exit
+            and self.requirements._requirements
+            and self._mojo_model is not None
+            and self.signal_manager is not None
+            and self._last_state is not None
+        ):
+            self.requirements.run_end_of_trial_evaluation(
+                self._last_state,
+                signal_manager=self.signal_manager,
+                mojo_model=self._mojo_model,
+            )
 
     @classmethod
     def current(cls) -> RuntimeManager:
@@ -133,6 +173,117 @@ class RuntimeManager:
     def add_tracer(self, tracer: Tracer):
         self.tracers.append(tracer)
 
+    # --- requirements API ---
+
+    def add_requirement(
+        self,
+        fn: RequirementFn,
+        *,
+        name: str | None = None,
+        every: int | None = None,
+        terminate_on_fail: bool = False,
+        terminate_on_pass: bool = False,
+        latch_on_fail: bool = False,
+        latch_on_pass: bool = False,
+        post_result: bool = True,
+    ) -> None:
+        """
+        Register a named pass/fail check evaluated at end of trial and optionally during simulation.
+
+        Args:
+            fn: Callable `(MojoModel, MjState, MojoDataFrame | None) -> (passed, message)` where `passed` is `True`, `False`, or `None` (undetermined; only meaningful during live checks).
+            name: Label for this check in results and telemetry. Defaults to `fn.__name__` when omitted or empty.
+            every: If `None` (default), the check runs once at end of trial. If set to N, the check also runs every N steps during simulation, posting a telemetry signal under `Requirements/{name}:result`.
+            terminate_on_fail: When `every` is set, a failing live check raises `RequirementTerminated` and the trial is marked `TERMINATED` (a requirement failure).
+            terminate_on_pass: When `every` is set, a passing live check raises `RequirementSatisfied` and the trial completes early as a normal success (subject to the other requirements).
+            latch_on_fail: When `every` is set, once a live check fails, `fn` is never called again (live or end-of-trial); the failing verdict is replayed. The trial's outcome is unchanged from the default sticky-failure behavior. This only saves the cost of re-evaluating a check whose result is already decided.
+            latch_on_pass: When `every` is set, once a live check passes, `fn` is never called again; the passing verdict is replayed for the rest of the trial. Unlike `latch_on_fail`, this changes the outcome: without it, a later `False` would still fail the requirement even after an earlier `True` (any live failure is sticky); with it, no evaluation after the pass can ever produce that later failure.
+            post_result: Post a telemetry column to the signal manager after evaluating the requirement if True.
+
+        """
+        self.requirements.add(
+            fn,
+            name=name,
+            every=every,
+            terminate_on_fail=terminate_on_fail,
+            terminate_on_pass=terminate_on_pass,
+            latch_on_fail=latch_on_fail,
+            latch_on_pass=latch_on_pass,
+            post_result=post_result,
+        )
+
+    def requirement(
+        self,
+        name: str | None = None,
+        *,
+        every: int | None = None,
+        terminate_on_fail: bool = False,
+        terminate_on_pass: bool = False,
+        latch_on_fail: bool = False,
+        latch_on_pass: bool = False,
+        post_result: bool = True,
+    ) -> Callable[[RequirementFn], RequirementFn]:
+        """
+        Registers a pass/fail check that runs automatically when the trial ends. Results are collected in `requirements.results` and written to `requirements.json` alongside the trial telemetry.
+
+        The decorated function must accept `(mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None)` and return `(passed, message)` where `passed` is `True`, `False`, or `None` (undetermined yet; a no-op during live checks, a failure if still undetermined at end of trial). `mojo_model` provides access to user data and named values. `state` is the last simulation state. `df` is the full trial telemetry parquet at end-of-trial, or `None` during live evaluations (see `every`).
+
+        Args:
+            name: Label for this check in results and telemetry. Defaults to the function's `__name__`.
+            every: When set, the check also runs inside `step()` every N steps, posting `1.0` (pass) or `0.0` (fail) under `Requirements/{name}:result` in the telemetry parquet. `df` is `None` during these live calls -- use `state` instead.
+            terminate_on_fail: When `every` is set, a failing live check raises `RequirementTerminated`, unwinds the simulation, and marks the trial `TERMINATED`.
+            terminate_on_pass: When `every` is set, a passing live check raises `RequirementSatisfied`, unwinds the simulation, and lets the trial complete early as a normal success (subject to the other requirements).
+            latch_on_fail: When `every` is set, once a live check fails, `fn` is never called again; the failing verdict is replayed for free. Purely a compute-saving option -- the trial's outcome is identical to the default sticky-failure behavior.
+            latch_on_pass: When `every` is set, once a live check passes, `fn` is never called again; the passing verdict is replayed for the rest of the trial. This is the only way to get "once passed, stays passed" semantics without ending the whole simulation via `terminate_on_pass`.
+            post_result: Post a telemetry column to the signal manager after evaluating the requirement if True.
+
+        Example:
+            `@rm.requirement(every=100, terminate_on_fail=True)`
+            `def upright(mojo_model, state, df): return state.data.qpos[2] > 0.1, "ok"`
+
+        """
+        return self.requirements.decorator(
+            name,
+            every=every,
+            terminate_on_fail=terminate_on_fail,
+            terminate_on_pass=terminate_on_pass,
+            latch_on_fail=latch_on_fail,
+            latch_on_pass=latch_on_pass,
+            post_result=post_result,
+        )
+
+    def last_passed(
+        self, name_or_fn: str | RequirementFn, state: MjState
+    ) -> bool | None:
+        """
+        Returns the cached live-check result for a requirement at the current sim time, or `None` if there is no verdict yet.
+
+        Accepts either the requirement's name or the function itself -- the decorator returns the original function unchanged, so the reference from `@rm.requirement(...)` can be passed directly instead of retyping its name. Passing a function that was never registered raises `ValueError`.
+
+        `None` covers two cases callers can't tell apart: the check hasn't run at this exact sim time (`every > 1` only evaluates on some steps), or it ran and explicitly returned undetermined (`None`). Either way, treat `None` as "no verdict yet", not as failure.
+
+        Example:
+            ```python
+            if rm.last_passed("upright", state) is False:
+                apply_recovery()
+
+            if rm.last_passed(upright, state) is False:  # or pass the function itself
+                apply_recovery()
+            ```
+
+        """
+        return self.requirements.last_passed(name_or_fn, state)
+
+    def _evaluate_requirements(self) -> None:
+        assert self.signal_manager is not None
+        assert self._mojo_model is not None
+        assert self._last_state is not None
+        self.requirements.run_end_of_trial_evaluation(
+            self._last_state,
+            signal_manager=self.signal_manager,
+            mojo_model=self._mojo_model,
+        )
+
     def step(
         self,
         state: MjState,
@@ -150,7 +301,10 @@ class RuntimeManager:
             clear_ctrl: If True, zero `ctrl` (actuator controls) before applying loads. Set to False if controls are set externally and should persist across steps, e.g. when not driven by an `ActuatorControl` every timestep.
 
         """
+        logger.debug(f"Computing simulation step t={state.data.time:.6f}")
+
         if self._stop_event is not None and self._stop_event.is_set():
+            logger.debug("'stop_event' is set; raising SimulationStopped")
             raise SimulationStopped("Simulation stopped by user request.")
 
         # clear buffers for next timestep
@@ -173,6 +327,7 @@ class RuntimeManager:
         # resolve IDs and initial distances
         # it is critical this is done after mj_forward to update site positions
         if not self._resolved:
+            logger.debug("First step; resolving load IDs")
             self.resolve(state)
 
         # apply user forcing functions
@@ -234,6 +389,7 @@ class RuntimeManager:
         # integrate physics and advance the time
         state.invalidate_rne_post_constraint()
         mujoco.mj_step(state.model, state.data)
+        logger.debug(f"Physics integrated; new t={state.data.time:.6f}")
 
         if self._sync_hook:
             assert (
@@ -243,6 +399,14 @@ class RuntimeManager:
             )
             # the live-viewer sync hook has no per-category toggle, so just merge everything it should draw
             self._sync_hook(state, all_arrows, all_lines + all_traces)
+
+        # track last state and evaluate live requirements
+        self._last_state = state
+        self.requirements.step(
+            state,
+            signal_manager=self.signal_manager,
+            mojo_model=self._mojo_model,
+        )
 
         if self.playback_speed > 0:
             sim_elapsed = state.data.time - self._start_sim_time
@@ -255,6 +419,10 @@ class RuntimeManager:
 
             sleep_time = target_wall_elapsed - actual_wall_elapsed
             if sleep_time > 0:
+                logger.debug(
+                    f"Pacing sleep {sleep_time:.4f}s "
+                    f"(sim={sim_elapsed:.6f}s, wall={actual_wall_elapsed:.6f}s)"
+                )
                 if self._stop_event is not None:
                     # use wait() instead of sleep() so a stop request interrupts
                     # the pacing delay immediately, rather than after it elapses

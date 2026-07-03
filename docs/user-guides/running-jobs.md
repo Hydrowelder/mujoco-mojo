@@ -148,4 +148,4 @@ For more advanced reporting, see the guide on the [Dojo Dashboard](dojo.md).
 ---
 
 !!! success
-    Your job is now running! You should see a rich progress bar interface in your terminal. To keep an eye on your telemetry while the trials are still processing, move on to the [Dojo Dashboard](dojo.md) guide to learn about real-time monitoring and rapid data analysis.
+    Your job is now running! To keep an eye on your telemetry while the trials are still processing, move on to the [Dojo Dashboard](dojo.md) guide to learn about real-time monitoring and rapid data analysis.

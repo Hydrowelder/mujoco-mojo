@@ -2381,9 +2381,15 @@
       // --- MATCHUP STATE ---
       vsDatasets: {},
       allTrials: [],
+      failureTrialNums: [],
+      errorTrialNums: [],
       vsMenuOpen: false,
       vsLoading: false,
-      vsDraft: { enabled: false, range: [0, 0], pinned: [] },
+      vsDraft: {
+        enabled: false,
+        range: [0, 0],
+        pinned: []
+      },
       discoveryTimeout: null,
       // --- HISTORY STATE ---
       historyStack: [],
@@ -2673,6 +2679,40 @@
           }
         }
       },
+      // the step whose block was active when an ERROR trial's exception was
+      // raised. record_step()'s `finally` always sets `elapsed`, even when the
+      // wrapped code throws, so `elapsed !== null` alone can't tell "this step
+      // finished cleanly" apart from "this step is where things broke". The
+      // runner also resets `status.step` to "done" in its except handler, so
+      // that can't be used either. `started` is reliable instead: generating
+      // and solving run strictly sequentially, so whichever one has `started`
+      // set *last* is the one that was in flight when the trial errored.
+      errorStep() {
+        if (!this.trialStatus || this.trialStatus.completion !== "error")
+          return null;
+        if (this.trialStatus.solving.started !== null) return "solving";
+        if (this.trialStatus.generating.started !== null) return "generating";
+        return null;
+      },
+      stepDotClass(stepName) {
+        if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+        const step = this.trialStatus[stepName];
+        if (this.errorStep() === stepName) return "bg-amber-500";
+        if (step.elapsed !== null) return "bg-emerald-500";
+        if (this.trialStatus.step === stepName)
+          return "bg-cyan-400 animate-pulse";
+        return "bg-slate-300 dark:bg-slate-600";
+      },
+      stepTextClass(stepName) {
+        if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+        const step = this.trialStatus[stepName];
+        if (this.errorStep() === stepName)
+          return "text-amber-500 dark:text-amber-400";
+        if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+        if (this.trialStatus.step === stepName)
+          return "text-cyan-500 dark:text-cyan-400";
+        return "text-slate-400 dark:text-slate-600";
+      },
       async fetchTrialLogs() {
         try {
           const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
@@ -2859,7 +2899,13 @@
                 color: textColor,
                 showgrid: false,
                 tickfont: { size: 11 },
-                ...unitsLabel ? { title: { text: unitsLabel, font: { size: 13 }, standoff: 4 } } : {}
+                ...unitsLabel ? {
+                  title: {
+                    text: unitsLabel,
+                    font: { size: 13 },
+                    standoff: 4
+                  }
+                } : {}
               },
               yaxis: {
                 color: curveColor,
@@ -2935,12 +2981,14 @@
       // checkbox so users can see how many rows a filter choice covers
       get distCategoryCounts() {
         const counts = {};
-        for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+        for (const d of this.dists)
+          counts[d.category] = (counts[d.category] ?? 0) + 1;
         return counts;
       },
       get distTypeCounts() {
         const counts = {};
-        for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+        for (const d of this.dists)
+          counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
         return counts;
       },
       get distUnitCounts() {
@@ -3264,6 +3312,7 @@
       logLevelClass(level) {
         switch (level) {
           case "CRITICAL":
+            return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
           case "ERROR":
             return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
           case "WARNING":
@@ -3621,7 +3670,10 @@
       handlePlotClickForShapes(pt) {
         if (!this.placementMode) return false;
         const defaultStyle = this.nextAvailableStyle(
-          this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" }))
+          this.config.shapes.map((s) => ({
+            color: s.color,
+            dash: s.dash ?? "solid"
+          }))
         );
         let newShape = null;
         if (this.placementMode === "vline") {
@@ -4354,7 +4406,10 @@
         });
         this.$watch("distFilterCategories", (v) => {
           try {
-            localStorage.setItem("mojo:dists:filter-categories", JSON.stringify(v));
+            localStorage.setItem(
+              "mojo:dists:filter-categories",
+              JSON.stringify(v)
+            );
           } catch {
           }
         });
@@ -4370,8 +4425,13 @@
           } catch {
           }
         });
-        window.addEventListener("mojo-data-updated", () => {
+        window.addEventListener("mojo-data-updated", (e) => {
+          this.applyJobOutcomes(e.detail);
           void this.fetchDists();
+        });
+        void fetch("/monitor/api/status/job").then((r) => r.json()).then((data2) => {
+          if (data2 && !data2.error) this.applyJobOutcomes(data2);
+        }).catch(() => {
         });
         window.addEventListener("mojo-sensai-plot-config", (e) => {
           const detail = e.detail;
@@ -4386,6 +4446,28 @@
       // -----------------------------------------------------------------------
       // VS (comparison) mode
       // -----------------------------------------------------------------------
+      applyJobOutcomes(data) {
+        if (!data) return;
+        this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+        this.errorTrialNums = (data.error_tns ?? []).map(Number);
+      },
+      vsChipClass(t) {
+        const tn = parseInt(t.split("_").pop() ?? "0");
+        if (this.vsDraft.pinned.includes(tn)) {
+          if (this.errorTrialNums.includes(tn))
+            return "bg-cyan-500 border-amber-500 text-white";
+          if (this.failureTrialNums.includes(tn))
+            return "bg-cyan-500 border-rose-500 text-white";
+          return "bg-cyan-500 border-cyan-500 text-white";
+        }
+        if (t === this.trialId)
+          return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
+        if (this.errorTrialNums.includes(tn))
+          return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
+        if (this.failureTrialNums.includes(tn))
+          return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
+        return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+      },
       async syncVsRange() {
         try {
           const resp = await fetch("/mosaic/api/trials");
@@ -6025,7 +6107,8 @@
           const pinnedSet = new Set(this.config.vsPinned ?? []);
           Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (n >= start && n <= end || pinnedSet.has(n)) activeDatasets.push(dataset);
+            if (n >= start && n <= end || pinnedSet.has(n))
+              activeDatasets.push(dataset);
           });
         }
         activeDatasets.forEach((dataset) => {
@@ -6197,7 +6280,8 @@
           );
           sortedVsIds.forEach((vsId) => {
             const n = parseInt(vsId.split("_").pop() ?? "");
-            if (!(n >= start && n <= end || pinnedSet.has(n)) || vsId === this.trialId) return;
+            if (!(n >= start && n <= end || pinnedSet.has(n)) || vsId === this.trialId)
+              return;
             const dataset = this.vsDatasets[vsId];
             if (!dataset) return;
             const vsTraces = yKeys.map((key, i) => {

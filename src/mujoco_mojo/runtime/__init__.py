@@ -12,6 +12,7 @@ from .load import (
     VectorForce,
     VectorTorque,
 )
+from .requirements_manager import RequirementSatisfied, RequirementTerminated
 from .runtime_manager import RuntimeManager, SimulationStopped
 from .signal_manager import SignalManager
 from .tracer import Tracer
@@ -26,6 +27,8 @@ __all__ = [
     "LabelConfig",
     "Load",
     "PointToPointForce",
+    "RequirementSatisfied",
+    "RequirementTerminated",
     "RuntimeManager",
     "ScalarForce",
     "ScalarTorque",

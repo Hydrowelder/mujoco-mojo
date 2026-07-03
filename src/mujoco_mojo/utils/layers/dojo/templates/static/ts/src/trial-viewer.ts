@@ -1,7 +1,13 @@
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
-import { DASH_STYLE_VALUES, PLOT_CONFIG_SCHEMA } from "./lib/plot-config.generated";
-import { attachVerticalResizeHandle, restorePersistedHeight } from "./lib/resize";
+import {
+  DASH_STYLE_VALUES,
+  PLOT_CONFIG_SCHEMA,
+} from "./lib/plot-config.generated";
+import {
+  attachVerticalResizeHandle,
+  restorePersistedHeight,
+} from "./lib/resize";
 import { validateAgainstSchema } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
@@ -13,6 +19,7 @@ import type {
   DojoStore,
   FilterEntry,
   FilterSchema,
+  JobStatus,
   LogEntry,
   PlotConfig,
   Shape,
@@ -200,9 +207,15 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- MATCHUP STATE ---
     vsDatasets: {} as Record<string, Record<string, number[]>>,
     allTrials: [] as string[],
+    failureTrialNums: [] as number[],
+    errorTrialNums: [] as number[],
     vsMenuOpen: false,
     vsLoading: false,
-    vsDraft: { enabled: false, range: [0, 0] as [number, number], pinned: [] as number[] },
+    vsDraft: {
+      enabled: false,
+      range: [0, 0] as [number, number],
+      pinned: [] as number[],
+    },
     discoveryTimeout: null as ReturnType<typeof setTimeout> | null,
 
     // --- HISTORY STATE ---
@@ -254,7 +267,11 @@ function trialViewer(trialId: string, externalUrl: string) {
     dists: [] as DistEntry[],
     _distTooltipEntry: null as DistEntry | null,
     distFilterName: ((): string => {
-      try { return localStorage.getItem("mojo:dists:filter-name") ?? ""; } catch { return ""; }
+      try {
+        return localStorage.getItem("mojo:dists:filter-name") ?? "";
+      } catch {
+        return "";
+      }
     })(),
     // null = no filter applied (all pass); a (possibly empty) array is an
     // explicit selection, so deselecting every item shows zero rows instead
@@ -263,19 +280,25 @@ function trialViewer(trialId: string, externalUrl: string) {
       try {
         const v = localStorage.getItem("mojo:dists:filter-categories");
         return v === null ? null : (JSON.parse(v) as string[] | null);
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     })(),
     distFilterTypes: ((): string[] | null => {
       try {
         const v = localStorage.getItem("mojo:dists:filter-types");
         return v === null ? null : (JSON.parse(v) as string[] | null);
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     })(),
     distFilterUnits: ((): string[] | null => {
       try {
         const v = localStorage.getItem("mojo:dists:filter-units");
         return v === null ? null : (JSON.parse(v) as string[] | null);
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     })(),
     distSortKey: "name" as
       | "name"
@@ -542,6 +565,43 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
     },
 
+    // the step whose block was active when an ERROR trial's exception was
+    // raised. record_step()'s `finally` always sets `elapsed`, even when the
+    // wrapped code throws, so `elapsed !== null` alone can't tell "this step
+    // finished cleanly" apart from "this step is where things broke". The
+    // runner also resets `status.step` to "done" in its except handler, so
+    // that can't be used either. `started` is reliable instead: generating
+    // and solving run strictly sequentially, so whichever one has `started`
+    // set *last* is the one that was in flight when the trial errored.
+    errorStep(): "generating" | "solving" | null {
+      if (!this.trialStatus || this.trialStatus.completion !== "error")
+        return null;
+      if (this.trialStatus.solving.started !== null) return "solving";
+      if (this.trialStatus.generating.started !== null) return "generating";
+      return null;
+    },
+
+    stepDotClass(stepName: "generating" | "solving"): string {
+      if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+      const step = this.trialStatus[stepName];
+      if (this.errorStep() === stepName) return "bg-amber-500";
+      if (step.elapsed !== null) return "bg-emerald-500";
+      if (this.trialStatus.step === stepName)
+        return "bg-cyan-400 animate-pulse";
+      return "bg-slate-300 dark:bg-slate-600";
+    },
+
+    stepTextClass(stepName: "generating" | "solving"): string {
+      if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+      const step = this.trialStatus[stepName];
+      if (this.errorStep() === stepName)
+        return "text-amber-500 dark:text-amber-400";
+      if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+      if (this.trialStatus.step === stepName)
+        return "text-cyan-500 dark:text-cyan-400";
+      return "text-slate-400 dark:text-slate-600";
+    },
+
     async fetchTrialLogs() {
       try {
         const resp = await fetch(`/mosaic/${this.trialId}/logs`, {
@@ -573,8 +633,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     showDistTooltip(event: MouseEvent, entry: DistEntry) {
-      const hasChart =
-        entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
+      const hasChart = entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
       const hasParams = Object.keys(entry.params).length > 0;
       if (!hasChart && !hasParams) return;
       this._distTooltipEntry = entry;
@@ -652,7 +711,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           const annotations = entry.cat_labels.map((lbl, i) => ({
             x: lbl,
             y: entry.cat_probs[i] ?? 0,
-            text: `${(((entry.cat_probs[i] ?? 0) * 100)).toFixed(1)}%`,
+            text: `${((entry.cat_probs[i] ?? 0) * 100).toFixed(1)}%`,
             showarrow: false,
             yanchor: "bottom",
             yshift: 2,
@@ -761,7 +820,13 @@ function trialViewer(trialId: string, externalUrl: string) {
               showgrid: false,
               tickfont: { size: 11 },
               ...(unitsLabel
-                ? { title: { text: unitsLabel, font: { size: 13 }, standoff: 4 } }
+                ? {
+                    title: {
+                      text: unitsLabel,
+                      font: { size: 13 },
+                      standoff: 4,
+                    },
+                  }
                 : {}),
             },
             yaxis: {
@@ -855,13 +920,15 @@ function trialViewer(trialId: string, externalUrl: string) {
     // checkbox so users can see how many rows a filter choice covers
     get distCategoryCounts(): Record<string, number> {
       const counts: Record<string, number> = {};
-      for (const d of this.dists) counts[d.category] = (counts[d.category] ?? 0) + 1;
+      for (const d of this.dists)
+        counts[d.category] = (counts[d.category] ?? 0) + 1;
       return counts;
     },
 
     get distTypeCounts(): Record<string, number> {
       const counts: Record<string, number> = {};
-      for (const d of this.dists) counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
+      for (const d of this.dists)
+        counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
       return counts;
     },
 
@@ -968,9 +1035,11 @@ function trialViewer(trialId: string, externalUrl: string) {
           }
           case "stat": {
             const av =
-              a.z_score ?? (a.percentile != null ? a.percentile / 100 : -Infinity);
+              a.z_score ??
+              (a.percentile != null ? a.percentile / 100 : -Infinity);
             const bv =
-              b.z_score ?? (b.percentile != null ? b.percentile / 100 : -Infinity);
+              b.z_score ??
+              (b.percentile != null ? b.percentile / 100 : -Infinity);
             return dir * (av - bv);
           }
         }
@@ -978,7 +1047,13 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     toggleDistSort(
-      key: "name" | "category" | "dist_type" | "nominal" | "sampled_value" | "stat",
+      key:
+        | "name"
+        | "category"
+        | "dist_type"
+        | "nominal"
+        | "sampled_value"
+        | "stat",
     ) {
       if (this.distSortKey === key) {
         this.distSortAsc = !this.distSortAsc;
@@ -1267,6 +1342,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     logLevelClass(level: string): string {
       switch (level) {
         case "CRITICAL":
+          return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
         case "ERROR":
           return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
         case "WARNING":
@@ -1678,7 +1754,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const pinnedSet = new Set(this.vsDraft.pinned);
       const draftIds = this.allTrials.filter((id) => {
         const n = parseInt(id.split("_").pop() ?? "");
-        return ((n >= start && n <= end) || pinnedSet.has(n)) && id !== this.trialId;
+        return (
+          ((n >= start && n <= end) || pinnedSet.has(n)) && id !== this.trialId
+        );
       });
 
       for (const id of draftIds) {
@@ -1724,7 +1802,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     handlePlotClickForShapes(pt: { x: number; y: number }): boolean {
       if (!this.placementMode) return false;
       const defaultStyle = this.nextAvailableStyle(
-        this.config.shapes.map((s) => ({ color: s.color, dash: s.dash ?? "solid" })),
+        this.config.shapes.map((s) => ({
+          color: s.color,
+          dash: s.dash ?? "solid",
+        })),
       );
       let newShape: Shape | null = null;
 
@@ -2658,22 +2739,51 @@ function trialViewer(trialId: string, externalUrl: string) {
 
       // persist dist filter state across page loads and trial navigation
       this.$watch("distFilterName", (v: string) => {
-        try { localStorage.setItem("mojo:dists:filter-name", v); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:dists:filter-name", v);
+        } catch {
+          /* ignore */
+        }
       });
       this.$watch("distFilterCategories", (v: string[] | null) => {
-        try { localStorage.setItem("mojo:dists:filter-categories", JSON.stringify(v)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem(
+            "mojo:dists:filter-categories",
+            JSON.stringify(v),
+          );
+        } catch {
+          /* ignore */
+        }
       });
       this.$watch("distFilterTypes", (v: string[] | null) => {
-        try { localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:dists:filter-types", JSON.stringify(v));
+        } catch {
+          /* ignore */
+        }
       });
       this.$watch("distFilterUnits", (v: string[] | null) => {
-        try { localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v)); } catch { /* ignore */ }
+        try {
+          localStorage.setItem("mojo:dists:filter-units", JSON.stringify(v));
+        } catch {
+          /* ignore */
+        }
       });
 
       // re-pull distribution metadata when new job data arrives
-      window.addEventListener("mojo-data-updated", () => {
+      window.addEventListener("mojo-data-updated", (e) => {
+        this.applyJobOutcomes((e as CustomEvent<JobStatus>).detail);
         void this.fetchDists();
       });
+
+      // bootstrap trial outcome hints so vs-mode chips are colored before the
+      // first SSE sync tick arrives
+      void fetch("/monitor/api/status/job")
+        .then((r) => r.json())
+        .then((data: JobStatus) => {
+          if (data && !data.error) this.applyJobOutcomes(data);
+        })
+        .catch(() => {});
 
       window.addEventListener("mojo-sensai-plot-config", (e) => {
         const detail = (e as CustomEvent<PlotConfig>).detail;
@@ -2690,6 +2800,31 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // VS (comparison) mode
     // -----------------------------------------------------------------------
+    applyJobOutcomes(data: JobStatus | undefined) {
+      if (!data) return;
+      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+      this.errorTrialNums = (data.error_tns ?? []).map(Number);
+    },
+
+    vsChipClass(t: string): string {
+      const tn = parseInt(t.split("_").pop() ?? "0");
+      if (this.vsDraft.pinned.includes(tn)) {
+        // keep the outcome hint on the border even while pinned
+        if (this.errorTrialNums.includes(tn))
+          return "bg-cyan-500 border-amber-500 text-white";
+        if (this.failureTrialNums.includes(tn))
+          return "bg-cyan-500 border-rose-500 text-white";
+        return "bg-cyan-500 border-cyan-500 text-white";
+      }
+      if (t === this.trialId)
+        return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
+      if (this.errorTrialNums.includes(tn))
+        return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
+      if (this.failureTrialNums.includes(tn))
+        return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
+      return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+    },
+
     async syncVsRange() {
       try {
         const resp = await fetch("/mosaic/api/trials");
@@ -2736,7 +2871,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         const pinnedSet = new Set(this.vsDraft.pinned);
         const targetIds = this.allTrials.filter((id) => {
           const n = parseInt(id.split("_").pop() ?? "");
-          return ((n >= start && n <= end) || pinnedSet.has(n)) && n !== currentNum;
+          return (
+            ((n >= start && n <= end) || pinnedSet.has(n)) && n !== currentNum
+          );
         });
 
         await Promise.all(
@@ -3771,15 +3908,18 @@ function trialViewer(trialId: string, externalUrl: string) {
     // collide with a pair still in use. Cycles through every color before
     // advancing to the next dash style, and falls back to round-robin by
     // count once every color/dash combination is taken.
-    nextAvailableStyle(
-      used: { color: string; dash: DashStyle }[],
-    ): { color: string; dash: DashStyle } {
+    nextAvailableStyle(used: { color: string; dash: DashStyle }[]): {
+      color: string;
+      dash: DashStyle;
+    } {
       const usedKeys = new Set(used.map((u) => `${u.color}|${u.dash}`));
       const numColors = this.plotColors.length;
       const numCombos = numColors * this.dashStyles.length;
       const styleAt = (i: number) => ({
         color: this.getSignalColor(i % numColors),
-        dash: this.dashStyles[Math.floor(i / numColors) % this.dashStyles.length]!,
+        dash: this.dashStyles[
+          Math.floor(i / numColors) % this.dashStyles.length
+        ]!,
       });
       let i = 0;
       while (i < numCombos) {
@@ -3906,7 +4046,8 @@ function trialViewer(trialId: string, externalUrl: string) {
     ): UnitGroup[] {
       if (!groups) return [];
       // normalize Pint canonical strings ("m / s ** 2") to compact ("m/s^2") for matching
-      const normalize = (u: string) => u.replace(/\s+/g, "").replace(/\*\*/g, "^");
+      const normalize = (u: string) =>
+        u.replace(/\s+/g, "").replace(/\*\*/g, "^");
       if (fromUnit) {
         const norm = normalize(fromUnit);
         const match = groups.find((g) =>
@@ -3930,7 +4071,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
       for (const f of filters) {
         if (f.enabled === false || f.type !== "unit") continue;
-        const to = (f as Record<string, unknown>)["toUnit"] as string | undefined;
+        const to = (f as Record<string, unknown>)["toUnit"] as
+          | string
+          | undefined;
         if (to) unit = to;
       }
       return unit;
@@ -4659,7 +4802,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         const pinnedSet = new Set(this.config.vsPinned ?? []);
         Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
-          if ((n >= start && n <= end) || pinnedSet.has(n)) activeDatasets.push(dataset);
+          if ((n >= start && n <= end) || pinnedSet.has(n))
+            activeDatasets.push(dataset);
         });
       }
 
@@ -4875,7 +5019,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         );
         sortedVsIds.forEach((vsId) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
-          if ((!((n >= start && n <= end) || pinnedSet.has(n))) || vsId === this.trialId) return;
+          if (
+            !((n >= start && n <= end) || pinnedSet.has(n)) ||
+            vsId === this.trialId
+          )
+            return;
           const dataset = this.vsDatasets[vsId];
           if (!dataset) return;
           const vsTraces = yKeys

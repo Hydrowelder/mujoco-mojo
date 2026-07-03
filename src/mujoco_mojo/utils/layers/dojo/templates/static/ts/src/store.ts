@@ -98,6 +98,66 @@ document.addEventListener("alpine:init", () => {
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) this.checkServerHealth();
       });
+      this._installPlotlyLogCapture();
+    },
+
+    // plotly.js routes all its logging through loggers that prepend "WARN:"
+    // or "ERROR:" as the first console argument, so wrapping the console
+    // methods it uses lets us surface its complaints as toasts without
+    // touching any other console traffic
+    _installPlotlyLogCapture() {
+      const w = window as unknown as { _mojoPlotlyLogsHooked?: boolean };
+      if (w._mojoPlotlyLogsHooked) return;
+      w._mojoPlotlyLogsHooked = true;
+
+      const recent = new Map<string, number>();
+      const forward = (prefix: string, args: unknown[]) => {
+        const msg = args.map(String).join(" ").slice(0, 160);
+        const now = Date.now();
+        // rate-limit: plotly repeats the same warning on every re-render
+        if (now - (recent.get(msg) ?? 0) < 10_000) return;
+        recent.set(msg, now);
+        const type = prefix === "ERROR:" ? "error" : "info";
+        this.toast(`${msg}`, type);
+        this.addNotification(`${msg}`, type);
+      };
+
+      // warns go through console.trace (falling back to console.log),
+      // errors through console.error
+      (["trace", "log", "error"] as const).forEach((level) => {
+        const orig = console[level].bind(console);
+        console[level] = (...args: unknown[]) => {
+          orig(...args);
+          const first = String(args[0] ?? "");
+          if (first === "WARN:" || first === "ERROR:") {
+            forward(first, args.slice(1));
+          }
+        };
+      });
+
+      // plotly's on-page notifier boxes ("Double-click to zoom back out",
+      // "Taking snapshot...", ...) never touch the console: plotly appends
+      // .plotly-notifier/.notifier-note divs straight to <body>. watch for
+      // them, re-surface the text as a toast, and let CSS hide the originals
+      // (see base.html)
+      const notifierObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (!(node instanceof HTMLElement)) continue;
+            const notes = node.classList.contains("notifier-note")
+              ? [node]
+              : Array.from(node.querySelectorAll(".notifier-note"));
+            for (const note of notes) {
+              const msg = (note.textContent ?? "").replace(/^\s*×/, "").trim();
+              if (msg) this.toast(`${msg}`, "info");
+            }
+          }
+        }
+      });
+      notifierObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
     },
 
     toast(message: string, type: "success" | "error" | "info" = "info") {
@@ -105,6 +165,32 @@ document.addEventListener("alpine:init", () => {
       setTimeout(() => {
         this.globalToast = { ...this.globalToast, show: false };
       }, 3500);
+    },
+
+    async copyText(text: string, successMsg = "Copied to clipboard") {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          this.toast(successMsg, "success");
+          return;
+        } catch (err) {
+          console.warn("Modern clipboard failed, falling back...", err);
+        }
+      }
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        if (document.execCommand("copy")) {
+          this.toast(successMsg, "success");
+        } else throw new Error("execCommand returned false");
+      } catch {
+        this.toast("Failed to copy to clipboard", "error");
+      }
+      document.body.removeChild(textArea);
     },
 
     _setConnected(connected: boolean) {

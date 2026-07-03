@@ -399,12 +399,13 @@
                         <div class="grid grid-cols-5 gap-1 pb-0.5">
                             <template x-for="t in allTrials" :key="t">
                                 <button @click.stop="toggleVsPin(parseInt(t.split('_').pop() ?? '0'))"
-                                        :class="vsDraft.pinned.includes(parseInt(t.split('_').pop() ?? '0'))
-                                            ? 'bg-cyan-500 border-cyan-500 text-white'
-                                            : t === trialId
-                                                ? 'border-amber-400 text-amber-500 dark:text-amber-400 cursor-default'
-                                                : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500'"
+                                        :class="vsChipClass(t)"
                                         :disabled="t === trialId"
+                                        :title="errorTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
+                                            ? 'Trial errored'
+                                            : failureTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
+                                                ? 'Trial failed requirements'
+                                                : ''"
                                         class="text-sm font-mono px-1 py-0.5 rounded border transition-colors leading-tight text-center"
                                         x-text="String(parseInt(t.split('_').pop() ?? '0')).padStart(paddingLen, '0')"></button>
                             </template>

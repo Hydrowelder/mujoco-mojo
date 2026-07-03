@@ -1,6 +1,7 @@
 <!-- ══════════════════════════════════════════════════════════════════
          TRIAL STATUS  ·  _trial_status.html
-         Execution step timing, shown when trialStatus is available.
+         Execution step timing and requirement results, shown when
+         trialStatus is available.
          ══════════════════════════════════════════════════════════════════ -->
 
 <div class="mt-8 space-y-2"
@@ -37,7 +38,8 @@
             <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full"
                   :class="{
                       'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400': trialStatus.completion === 'success',
-                      'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400': trialStatus.completion === 'failed',
+                      'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400': trialStatus.completion === 'failure' || trialStatus.completion === 'terminated',
+                      'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400': trialStatus.completion === 'error',
                       'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400': trialStatus.completion === 'incomplete'
                   }"
                   x-text="trialStatus.completion.toUpperCase()"></span>
@@ -52,7 +54,9 @@
          x-transition:leave="transition-opacity duration-100"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
-         class="overflow-hidden">
+         class="overflow-hidden space-y-4">
+
+        <!-- step timing table -->
         <template x-if="trialStatus">
             <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 divide-y divide-slate-200 dark:divide-slate-700 text-sm font-mono overflow-hidden">
 
@@ -63,11 +67,7 @@
 
                         <!-- step indicator dot -->
                         <span class="w-2 h-2 rounded-full flex-shrink-0"
-                              :class="{
-                                  'bg-emerald-500': trialStatus[stepName].elapsed !== null,
-                                  'bg-cyan-400 animate-pulse': trialStatus.step === stepName && trialStatus[stepName].elapsed === null,
-                                  'bg-slate-300 dark:bg-slate-600': trialStatus[stepName].started === null
-                              }">
+                              :class="stepDotClass(stepName)">
                         </span>
 
                         <!-- step name -->
@@ -83,11 +83,7 @@
 
                         <!-- elapsed or in-progress marker -->
                         <span class="text-right text-sm"
-                              :class="{
-                                  'text-slate-500 dark:text-slate-400': trialStatus[stepName].elapsed !== null,
-                                  'text-cyan-500 dark:text-cyan-400': trialStatus.step === stepName && trialStatus[stepName].elapsed === null,
-                                  'text-slate-400 dark:text-slate-600': trialStatus[stepName].started === null
-                              }"
+                              :class="stepTextClass(stepName)"
                               x-text="trialStatus[stepName].elapsed !== null
                                   ? trialStatus[stepName].elapsed.toFixed(2) + 's'
                                   : trialStatus.step === stepName
@@ -99,5 +95,108 @@
 
             </div>
         </template>
+
+        <!-- requirements table -->
+        <template x-if="trialStatus && trialStatus.requirements && trialStatus.requirements.length > 0">
+            <div>
+                <div class="flex items-center justify-between px-2 mb-1.5">
+                    <span class="text-xs font-black uppercase text-slate-400 tracking-widest">Requirements</span>
+                    <span class="text-xs font-bold font-mono px-2 py-0.5 rounded-full"
+                          :class="trialStatus.requirements_passed
+                              ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400'
+                              : 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400'"
+                          x-text="`${trialStatus.requirements.filter(r => r.passed).length}/${trialStatus.requirements.length} PASSED`"></span>
+                </div>
+
+                <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 divide-y divide-slate-200 dark:divide-slate-700 text-sm font-mono overflow-hidden">
+
+                    <template x-for="req in trialStatus.requirements"
+                              :key="req.name">
+                        <div class="flex items-start gap-3 px-4 py-2.5">
+
+                            <!-- pass/fail indicator dot -->
+                            <span class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
+                                  :class="req.passed ? 'bg-emerald-500' : 'bg-rose-500'">
+                            </span>
+
+                            <!-- requirement name -->
+                            <span class="w-36 flex-shrink-0 text-slate-700 dark:text-slate-200 font-bold break-words"
+                                  x-text="req.name"></span>
+
+                            <!-- sim time the verdict was decided -->
+                            <span class="w-20 flex-shrink-0 text-slate-400 dark:text-slate-500 text-xs mt-0.5"
+                                  :title="'Decided at simulation time ' + req.decided_at.toFixed(6) + 's'"
+                                  x-text="`t=${req.decided_at.toFixed(3)}s`"></span>
+
+                            <!-- message -->
+                            <span class="flex-1 text-sm break-words"
+                                  :class="req.passed ? 'text-slate-500 dark:text-slate-400' : 'text-rose-600 dark:text-rose-400'"
+                                  x-text="req.message"></span>
+
+                            <!-- config metadata (every/terminate/latch), shown on hover.
+                                 Teleported to <body> (not CSS group-hover) so the popover can
+                                 escape this table's overflow-hidden/rounded-corner clipping. -->
+                            <div class="flex-shrink-0 mt-0.5"
+                                 x-data="{ infoOpen: false, infoCoords: { top: 0, left: 0 } }">
+                                <svg x-ref="infoIcon"
+                                     @mouseenter="const r = $refs.infoIcon.getBoundingClientRect(); infoCoords = { top: r.bottom + window.scrollY + 6, left: r.right + window.scrollX - 224 }; infoOpen = true"
+                                     @mouseleave="infoOpen = false"
+                                     class="w-4 h-4 text-slate-400 dark:text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-400 cursor-help transition-colors duration-150"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2"
+                                     viewBox="0 0 24 24">
+                                    <circle cx="12"
+                                            cy="12"
+                                            r="10" />
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          d="M12 16v-4m0-4h.01" />
+                                </svg>
+                                <template x-teleport="body">
+                                    <div x-show="infoOpen"
+                                         x-transition
+                                         @mouseenter="infoOpen = true"
+                                         @mouseleave="infoOpen = false"
+                                         :style="`position:absolute;top:${infoCoords.top}px;left:${infoCoords.left}px;width:14rem;`"
+                                         class="panel z-[800] text-xs font-normal normal-case tracking-normal"
+                                         style="display:none;">
+                                        <div class="space-y-1.5">
+                                            <div class="flex justify-between items-center gap-3">
+                                                <span class="text-slate-400">Every</span>
+                                                <span class="text-slate-600 dark:text-slate-300"
+                                                      x-text="req.every !== null ? `${req.every} steps` : 'end of trial only'"></span>
+                                            </div>
+                                            <div class="flex justify-between items-center gap-3">
+                                                <span class="text-slate-400">Terminate on fail</span>
+                                                <span :class="req.terminate_on_fail ? 'text-rose-500 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'"
+                                                      x-text="req.terminate_on_fail ? 'yes' : 'no'"></span>
+                                            </div>
+                                            <div class="flex justify-between items-center gap-3">
+                                                <span class="text-slate-400">Terminate on pass</span>
+                                                <span :class="req.terminate_on_pass ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'"
+                                                      x-text="req.terminate_on_pass ? 'yes' : 'no'"></span>
+                                            </div>
+                                            <div class="flex justify-between items-center gap-3">
+                                                <span class="text-slate-400">Latch on fail</span>
+                                                <span :class="req.latch_on_fail ? 'text-cyan-500 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400'"
+                                                      x-text="req.latch_on_fail ? 'yes' : 'no'"></span>
+                                            </div>
+                                            <div class="flex justify-between items-center gap-3">
+                                                <span class="text-slate-400">Latch on pass</span>
+                                                <span :class="req.latch_on_pass ? 'text-cyan-500 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400'"
+                                                      x-text="req.latch_on_pass ? 'yes' : 'no'"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                </div>
+            </div>
+        </template>
+
     </div>
 </div>

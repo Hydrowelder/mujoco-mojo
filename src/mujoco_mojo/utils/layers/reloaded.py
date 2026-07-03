@@ -437,6 +437,7 @@ class MojoReloaded:
             with trial_status.record_step(step_name="pending"):
                 pass
 
+        runtime_manager: rt.RuntimeManager | None = None
         try:
             # execute generation
             start = time.time()
@@ -538,12 +539,26 @@ class MojoReloaded:
                     )
                 else:
                     mujoco.mj_forward(state.model, state.data)
+        except rt.RequirementSatisfied:
+            # a live requirement ended the run early as a success; the outcome
+            # is decided by the requirement results, then the caller prints it
+            if trial_status is not None:
+                trial_status.step = "done"
+                if runtime_manager is not None:
+                    trial_status.requirements = runtime_manager.requirement_results
+                trial_status.completion = (
+                    Completion.FAILURE
+                    if trial_status.requirements
+                    and not all(r.passed for r in trial_status.requirements)
+                    else Completion.SUCCESS
+                )
+            raise
         except (BdbQuit, KeyboardInterrupt, rt.SimulationStopped):
             raise
         except Exception:
             if trial_status is not None:
                 trial_status.step = "done"
-                trial_status.completion = Completion.FAILED
+                trial_status.completion = Completion.ERROR
             raise
         else:
             if trial_status is not None:
@@ -882,6 +897,12 @@ class MojoReloaded:
                     )
                     on_reload_callback(new_state)
                     msg = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
+                except rt.RequirementSatisfied as e:
+                    msg = f"[bold green]Run ended early, requirement satisfied: {e}[/bold green]"
+                except rt.RequirementTerminated as e:
+                    msg = (
+                        f"[bold yellow]Run terminated by requirement: {e}[/bold yellow]"
+                    )
                 except rt.SimulationStopped:
                     msg = "[bold yellow]Run stopped by user.[/bold yellow]"
                 except Exception as e:
