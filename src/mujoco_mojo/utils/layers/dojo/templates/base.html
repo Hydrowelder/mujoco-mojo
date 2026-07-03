@@ -455,7 +455,7 @@
             <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate cursor-pointer hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors duration-150"
                style="direction: rtl"
                data-copy="{{ job_status_path }}"
-               title="{{ job_status_path }} (click to copy -- pastes as a file path so editors like VS Code can jump straight to it)"
+               title="{{ job_status_path }} (click to copy: pastes as a file path so editors like VS Code can jump straight to it)"
                @click="$store.dojo.copyText($el.dataset.copy, 'job_status.json path copied')">&lrm;{{ workdir_name }}</p>
           </div>
         </div>

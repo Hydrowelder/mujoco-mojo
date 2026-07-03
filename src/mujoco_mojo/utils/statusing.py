@@ -860,7 +860,7 @@ class JobStatus(MojoBaseModel):
         """
         Reconstructs cumulative outcome counts over the job's wall-clock life, for the monitor's stacked progress histogram.
 
-        Each trial's completion time is taken as the latest recorded step end (`started + elapsed`). A trial that is still `INCOMPLETE` but has begun generating or solving counts as "running" from that start time onward rather than "pending" -- claimed-but-not-yet-started trials (only `pending.started` set) still count as pending. The axis runs from job start to now if any trial is currently running, or to the last completion event if the job is idle/abandoned (so a stalled job doesn't render a flat tail stretching to now). For each of `n_bins` evenly spaced timestamps in that range, the bin reports how many trials had succeeded, failed requirements, errored, or were running by that time; everything else is pending.
+        Each trial's completion time is taken as the latest recorded step end (`started + elapsed`). A trial that is still `INCOMPLETE` but has begun generating or solving counts as "running" from that start time onward rather than "pending"; claimed-but-not-yet-started trials (only `pending.started` set) still count as pending. The axis runs from job start to now if any trial is currently running, or to the last completion event if the job is idle/abandoned (so a stalled job doesn't render a flat tail stretching to now). For each of `n_bins` evenly spaced timestamps in that range, the bin reports how many trials had succeeded, failed requirements, errored, or were running by that time; everything else is pending.
         """
         with self._lock:
             statuses = list(self._cache.values())

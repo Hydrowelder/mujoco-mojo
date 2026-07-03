@@ -445,7 +445,7 @@ class VideoRecorder:
         logger.info(f"Video saved to {self.path}")
 
     def _open_encoder(self) -> None:
-        """Spawns the ffmpeg subprocess that frames are piped to as they're captured. Called once, from `capture_frame`, on the first frame -- so a recorder that's set up but never used never spawns a process."""
+        """Spawns the ffmpeg subprocess that frames are piped to as they're captured. Called once, from `capture_frame`, on the first frame, so a recorder that's set up but never used never spawns a process."""
         import subprocess
 
         w = self.width - (self.width % 2)  # yuv420p requires even dimensions

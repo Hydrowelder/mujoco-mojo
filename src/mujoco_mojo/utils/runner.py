@@ -607,12 +607,12 @@ class MojoRunner:
             if error_path_obj.name == "dojo.sh" and error_path_obj.parent == path:
                 logger.warning(
                     f"{error_path_obj} is still locked (likely a running `mujoco-mojo "
-                    "dojo` session) -- leaving it in place and continuing cleanup."
+                    "dojo` session); leaving it in place and continuing cleanup."
                 )
                 skipped_dojo_script = True
                 return
             if error_path_obj == path and skipped_dojo_script:
-                # path can't be rmdir'd because dojo.sh is still inside it -- expected
+                # path can't be rmdir'd because dojo.sh is still inside it. Expected
                 # once we've already decided to leave that file behind above
                 return
             raise exc
@@ -1515,7 +1515,9 @@ class MojoRunner:
         console.print(f"\t[dim]mujoco-mojo binary:[/dim] {mojo_cmd}\n")
 
         # Standard colors only for Rich compatibility
-        job_name = Prompt.ask("  [white]Job Name[/]", default="mojo-sim")
+        job_name = Prompt.ask(
+            "  [white]Job Name[/]", default=f"mojo-sim-{status_tracker.id}"
+        )
         if available_partitions:
             # Use the actual SLURM default if we found one, otherwise the first in list
             initial_default = (

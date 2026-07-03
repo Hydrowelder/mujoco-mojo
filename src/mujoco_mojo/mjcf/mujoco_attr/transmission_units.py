@@ -1,7 +1,7 @@
 """
 MuJoCo model-introspection helpers for resolving the physical quantity a joint's or actuator's generalized data represents, for use as `SignalManager` metadata defaults.
 
-Joint- and tendon-transmission actuators, and joint-referencing sensors, are restricted by MuJoCo's compiler to single-DOF (hinge/slide) joint targets -- ball/free joints are invalid targets for these (e.g. a `<motor joint=.../>` or `<jointpos joint=.../>` on a ball/free joint fails to compile), so `joint_type_metadata()` only needs to distinguish slide from "everything else", without separately handling ball/free.
+Joint- and tendon-transmission actuators, and joint-referencing sensors, are restricted by MuJoCo's compiler to single-DOF (hinge/slide) joint targets. Ball/free joints are invalid targets for these (e.g. a `<motor joint=.../>` or `<jointpos joint=.../>` on a ball/free joint fails to compile), so `joint_type_metadata()` only needs to distinguish slide from "everything else", without separately handling ball/free.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def actuator_transmission_metadata(
     state: MjState, actuator_id: int
 ) -> dict[str, dict[str, str]] | None:
     """
-    Resolves `{"length": ..., "velocity": ..., "force": ...}` metadata for a JOINT/JOINTINPARENT- or TENDON-transmission actuator. Returns None for SITE/BODY/SLIDERCRANK transmission, since the `gear` attribute lets those mean anything -- those channels stay user-injectable-only.
+    Resolves `{"length": ..., "velocity": ..., "force": ...}` metadata for a JOINT/JOINTINPARENT- or TENDON-transmission actuator. Returns None for SITE/BODY/SLIDERCRANK transmission, since the `gear` attribute lets those mean anything; those channels stay user-injectable-only.
     """
     trntype = int(state.model.actuator_trntype[actuator_id])
 

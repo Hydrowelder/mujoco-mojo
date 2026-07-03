@@ -61,8 +61,8 @@ Both styles accept the same keyword arguments:
 | `every`             | `None`: end-of-trial only. `N`: also evaluate every N steps during the simulation |
 | `terminate_on_fail` | When `every` is set, a failing live check stops the simulation (trial fails)      |
 | `terminate_on_pass` | When `every` is set, a passing live check stops the simulation (trial succeeds)   |
-| `latch_on_fail`     | When `every` is set, once the check fails it is never evaluated again (see [Latching Results](#latching-results)) |
-| `latch_on_pass`     | When `every` is set, once the check passes it is never evaluated again (see [Latching Results](#latching-results)) |
+| `latch_on_fail`     | **Defaults to `True`.** When `every` is set, once the check fails it is never evaluated again (see [Latching Results](#latching-results)) |
+| `latch_on_pass`     | Defaults to `False`. When `every` is set, once the check passes it is never evaluated again (see [Latching Results](#latching-results)) |
 | `post_result`       | Post live results to the telemetry parquet (see below)                            |
 
 ### Decorator style
@@ -100,11 +100,11 @@ By default (`every=None`), requirements are evaluated once at end of trial. Set 
 
 - `every=N`: evaluate every N steps. Useful for expensive checks or when only coarse monitoring is needed
 - `df` is always `None` during live calls; use `state` for real-time values or cache key values in your `mojo_model.user_data` object
-- Returning `None` records the undetermined verdict for that sim time (so `last_passed()` can tell "evaluated, no verdict yet" apart from "not evaluated at this exact step"), but it never posts telemetry, latches a failure, or triggers `terminate_on_fail`/`terminate_on_pass`. Use it when the check has no verdict yet (e.g. "reached the goal" before the goal is reachable), so an unfinished objective is not mistaken for a violation
+- Returning `None` records the undetermined verdict for that sim time (so `last_passed()` can tell "evaluated, no verdict yet" apart from "not evaluated at this exact step"), but it never posts telemetry, triggers the sticky-failure rule below, or triggers `terminate_on_fail`/`terminate_on_pass`. Use it when the check has no verdict yet (e.g. "reached the goal" before the goal is reachable), so an unfinished objective is not mistaken for a violation
 - Unless `post_result=False`, each `True`/`False` verdict is recorded in the telemetry parquet under the column `Requirements/{name}:result` (`1.0` = passed, `0.0` = failed), making it plottable in the Dojo alongside other signals. The last known verdict is re-posted on non-evaluation and no-verdict steps so the signal is continuous
 
 ???+ note "Note: Failed Live Requirement"
-    **A live requirement that explicitly fails (returns `False`) at any point during the run is failed for the trial**, even if it passes again by end of trial. The recorded message reports how many live checks failed, when the first failure occurred, and the end-of-trial evaluation result. `None` verdicts never trigger this latch.
+    **A live requirement that explicitly fails (returns `False`) at any point during the run is failed for the trial**, even if it passes again by end of trial. `None` verdicts never trigger this. Since `latch_on_fail` [defaults to `True`](#latching-results), the function stops being called right after that first failure, and the recorded message reads `latched failed at t=...`. Pass `latch_on_fail=False` if you'd rather keep evaluating after a failure. In this case the message instead reports how many live checks failed, when the first failure occurred, and the end-of-trial evaluation result.
 
 ### Reacting to Live Results in the Loop
 
@@ -143,12 +143,14 @@ If a failing terminator and a passing one fire on the same step, the failure win
 
 ### Latching Results
 
-Sometimes you may have an expensive requirement which is costly to keep checking after it has already passed or failed. The `latch_on_pass` and `latch_on_fail` arguments lock in a verdict the first time the check produces it -- the function is never called again afterward (neither live nor at end of trial); the locked-in result is replayed for free. Either can be enabled independently, or both together.
+Sometimes you may have an computationally expensive requirement which is costly to keep checking after it has already passed or failed. The `latch_on_pass` and `latch_on_fail` arguments lock in a verdict the first time the check produces it. The function is never called again afterward (neither live nor at end of trial); the locked-in result is replayed for free. Each can be controlled independently.
 
 They are not symmetric, though:
 
-- `latch_on_fail` is purely a compute-saving option. Any live `False` already dooms the trial for that requirement (see the note above), so locking it in changes nothing about the outcome, only how many more times `fn` gets called afterward.
-- `latch_on_pass` changes the outcome. Without it, a requirement that passes once but returns `False` on a later evaluation is still failed for the trial -- any live failure is sticky, no matter what passed beforehand. With `latch_on_pass`, the check is never run again once it passes, so that later `False` is never produced in the first place, and the requirement stays passed. This is the only way to get "once passed, stays passed" behavior without ending the whole simulation via `terminate_on_pass`.
+- `latch_on_fail`: Any live failure already dooms the trial for that requirement (see the note above), so locking it in changes nothing about the trial's outcome, only how many more times `fn` gets called afterward. Because of this, **`latch_on_fail` defaults to `True`** so live requirements latch on failure automatically. Pass `latch_on_fail=False` to opt back out (e.g. if you want the function to keep running after a failure purely for its own logging or side effects).
+- `latch_on_pass`: Without this flag, a requirement that passes once but returns *fail* on a later evaluation is still failed for the trial, no matter what passed beforehand. With `latch_on_pass`, the check is never run again once it passes, so that later *fail* is never produced in the first place, and the requirement stays passed. This is the only way to get "once passed, stays passed" behavior without ending the whole simulation via `terminate_on_pass`. Because it can hide a real later violation, **`latch_on_pass` defaults to `False`** and must be opted into explicitly.
+
+A requirement latching logs a single debug line at the moment it locks in ("requirement 'x' latched pass/fail at t=..."), not on every subsequent step that replays the cached verdict.
 
 ```python
 --8<-- "docs/user-guides/requirements_doc_examples.py:latching"

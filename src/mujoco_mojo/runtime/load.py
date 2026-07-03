@@ -1002,7 +1002,7 @@ class ActuatorControl(Load):
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
 
-        `ctrl`'s units depend on the driven actuator's transmission and `gear`/`dyntype` (the same ambiguity as `ActuatorBase.request()`'s `ctrl` channel), so no built-in metadata default is applied -- supply `metadata={"ctrl": {...}}` yourself if you know it.
+        `ctrl`'s units depend on the driven actuator's transmission and `gear`/`dyntype` (the same ambiguity as `ActuatorBase.request()`'s `ctrl` channel), so no built-in metadata default is applied. Supply `metadata={"ctrl": {...}}` yourself if you know it.
 
         Args:
             signal_manager (SignalManager): Manager to register the sampler with. If omitted, the `SignalManager` of the active `RuntimeManager` `with` block is used. If that `RuntimeManager` has no `SignalManager` configured, this is a no-op.

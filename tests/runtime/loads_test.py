@@ -745,7 +745,7 @@ def test_tension_spring_produces_force_when_extended(
     assert np.linalg.norm(force) == pytest.approx(50.0, abs=1e-4)
 
 
-# -- JointFriction fixtures and helpers --
+# JointFriction fixtures and helpers
 
 
 HINGE_XML = """
@@ -795,7 +795,7 @@ def _slide_joint() -> Joint:
     return Joint(name=JointName("slide"))
 
 
-# -- coulomb_simple --
+# coulomb_simple
 
 
 def test_coulomb_opposes_positive_velocity():
@@ -822,7 +822,7 @@ def test_coulomb_zero_at_standstill():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- viscous_simple --
+# viscous_simple
 
 
 def test_viscous_proportional_to_velocity():
@@ -842,7 +842,7 @@ def test_viscous_zero_at_standstill():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- coulomb_viscous_simple --
+# coulomb_viscous_simple
 
 
 def test_coulomb_viscous_combined():
@@ -867,7 +867,7 @@ def test_coulomb_viscous_zero_velocity_no_coulomb():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- stribeck_simple --
+# stribeck_simple
 
 
 def test_stribeck_static_greater_than_kinetic():
@@ -929,7 +929,7 @@ def test_stribeck_zero_at_standstill():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- karnopp --
+# karnopp
 
 
 DRIVEN_HINGE_XML = """
@@ -998,7 +998,7 @@ def _driven_slide_state(qpos: float = 0.0, vel: float = 0.0) -> MjState:
 
 
 def test_rt_bearing_load_hinge_uses_full_reaction_force():
-    """For a hinge, rt_bearing_load is the full cfrc_int force magnitude (no limit needed -- qfrc_constraint is zero here)."""
+    """For a hinge, rt_bearing_load is the full cfrc_int force magnitude (no limit needed since qfrc_constraint is zero here)."""
     state = _driven_hinge_state(vel=0.0)
     joint = _hinge_joint()
     assert state.data.qfrc_constraint[0] == pytest.approx(0.0)
@@ -1145,7 +1145,7 @@ def test_karnopp_named_value_runtime_mutation():
     assert state.data.qfrc_applied[0] == pytest.approx(-0.5 * bearing_load, rel=1e-6)
 
 
-# -- named value runtime mutation --
+# named value runtime mutation
 
 
 def test_coulomb_named_value_runtime_mutation():
@@ -1163,7 +1163,7 @@ def test_coulomb_named_value_runtime_mutation():
     assert state.data.qfrc_applied[0] == pytest.approx(-9.0)
 
 
-# -- active flag --
+# active flag
 
 
 def test_joint_friction_inactive_produces_no_force():
@@ -1175,7 +1175,7 @@ def test_joint_friction_inactive_produces_no_force():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-# -- telemetry --
+# telemetry
 
 
 def test_joint_friction_request_registers_sampler(tmp_path):
@@ -1306,7 +1306,7 @@ def test_joint_friction_rejects_free_joint():
         fric.resolve_ids(state)
 
 
-# -- ball joint friction --
+# ball joint friction
 
 
 def test_ball_coulomb_opposes_velocity_direction():
@@ -1360,7 +1360,7 @@ def test_ball_stribeck_opposes_velocity_direction():
     assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
 
 
-# -- custom friction_func receives state --
+# custom friction_func receives state
 
 
 def test_friction_func_receives_state():
@@ -1385,7 +1385,7 @@ def test_friction_func_receives_state():
     assert state.data.qfrc_applied[0] == pytest.approx(-3.0)
 
 
-# -- ActuatorControl --
+# ActuatorControl
 
 ACTUATED_SLIDE_XML = """
 <mujoco>

@@ -253,7 +253,7 @@ class Joint(XMLModel):
 
     def rt_bearing_load(self, state: MjState) -> float:
         """
-        Magnitude of the joint's reaction force that represents a genuine structural "squeeze" on the joint, as opposed to whatever is driving its own DOF -- suitable as a normal force for bearing/pin friction that responds to ordinary side loads, not just constraint engagement (see `rt_cfrc_int`).
+        Magnitude of the joint's reaction force that represents a genuine structural "squeeze" on the joint, as opposed to whatever is driving its own DOF. Suitable as a normal force for bearing/pin friction that responds to ordinary side loads, not just constraint engagement (see `rt_cfrc_int`).
 
         - hinge: full reaction force magnitude. Rotation is free, so all 3 translational directions (both along and perpendicular to the hinge axis) are rigid, and therefore squeeze.
         - ball: full reaction force magnitude. Rotation is free in every direction; translation is rigid, so the entire force vector is squeeze.
@@ -428,7 +428,7 @@ class Joint(XMLModel):
                         val[3:], channel=f"ang_{channel}", builtin=ang_builtin, us=u
                     )
                 else:
-                    # ball joint's qvel/qfrc_* -- always rotational (3 DOF, no translation)
+                    # ball joint's qvel/qfrc_*: always rotational (3 DOF, no translation)
                     ang_builtin = (
                         angular_rate_metadata()
                         if channel == "qvel"

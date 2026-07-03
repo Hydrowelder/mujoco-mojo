@@ -171,6 +171,8 @@ def run_with_latching(rm: RuntimeManager, state: MjState) -> None:
         return 0.0
 
     # --8<-- [start:latching]
+    # latch_on_fail=True is the default; spelled out here for symmetry with
+    # latch_on_pass, which must be opted into explicitly
     @rm.requirement(every=23, latch_on_pass=True, latch_on_fail=True)
     def check_expensive_requirement(
         mojo_model: MojoModel,

@@ -31,7 +31,7 @@ __all__ = [
 class Dimension(StrEnum):
     """
     Pint dimension expressions for physical quantities whose concrete unit depends on the
-    user's modeling scale (MuJoCo has no inherent unit system) -- use with `dim()`, which
+    user's modeling scale (MuJoCo has no inherent unit system). Use with `dim()`, which
     builds a `metadata={"dimension": ...}` entry for `SignalManager.post()`/`.track()`.
     """
 
@@ -42,7 +42,7 @@ class Dimension(StrEnum):
     ENERGY = "[mass] * [length] ** 2 / [time] ** 2"
     # Same Pint dimensionality as ENERGY (both reduce to mass*length^2/time^2). The term
     # order is deliberately different so Python's enum machinery doesn't collapse this into
-    # an alias of ENERGY -- Pint normalizes term order, so the two remain dimensionally
+    # an alias of ENERGY. Pint normalizes term order, so the two remain dimensionally
     # interchangeable. torque_metadata() adds an extra "quantity" key since Pint alone can't
     # tell torque and energy apart.
     TORQUE = "[length] ** 2 * [mass] / [time] ** 2"
@@ -84,7 +84,7 @@ def resolve_dimension_metadata(
 def dim(dimension: Dimension | str) -> dict[str, str]:
     """Builds a `dimension=`-keyed metadata entry. Accepts either a `Dimension` enum member or a Pint unit name string (e.g. `"inch"`), in which case Pint looks up the matching `Dimension` member by dimensionality."""
     if isinstance(dimension, Dimension):
-        # check Dimension first -- Dimension is a StrEnum and is also an instance of str,
+        # check Dimension first: it's a StrEnum and is also an instance of str,
         # so this must come before the str branch to avoid the Pint-lookup path running on
         # a known Dimension value (which would return the wrong enum member for TORQUE vs ENERGY)
         return {"dimension": str(dimension)}

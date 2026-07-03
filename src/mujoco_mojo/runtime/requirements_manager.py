@@ -51,7 +51,7 @@ class _RequirementSpec:
     every: int | None = None  # None = end-of-trial only; N = check every N steps (live)
     terminate_on_fail: bool = False
     terminate_on_pass: bool = False
-    latch_on_fail: bool = False
+    latch_on_fail: bool = True
     latch_on_pass: bool = False
     post_result: bool = True
 
@@ -67,7 +67,7 @@ class RequirementsManager:
     _live_cache: dict[tuple[str, float], bool | None] = field(
         default_factory=dict, init=False, repr=False
     )
-    """Every live evaluation's verdict keyed by (name, sim_time), including undetermined (`None`) ones -- so a cache hit means "evaluated at this exact time", distinct from a miss ("never evaluated at this time")."""
+    """Every live evaluation's verdict keyed by (name, sim_time), including undetermined (`None`) ones, so a cache hit means "evaluated at this exact time", distinct from a miss ("never evaluated at this time"). Stops growing for a requirement once it latches (see `_latched`); `last_passed()` and `run_end_of_trial_evaluation()` both read the latched verdict directly instead."""
     _last_live_result: dict[str, bool] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -95,7 +95,7 @@ class RequirementsManager:
         every: int | None = None,
         terminate_on_fail: bool = False,
         terminate_on_pass: bool = False,
-        latch_on_fail: bool = False,
+        latch_on_fail: bool = True,
         latch_on_pass: bool = False,
         post_result: bool = True,
     ) -> None:
@@ -108,7 +108,10 @@ class RequirementsManager:
                 logger.warning(
                     f"Requirement {resolved_name} was set to terminate the simulation but its function will only be evaluated at the end of the simulation"
                 )
-            if latch_on_fail or latch_on_pass:
+            # latch_on_fail defaults to True and is a no-op without `every`
+            # regardless (the check only ever runs once), so it's not worth
+            # warning about; latch_on_pass is still opt-in and worth flagging
+            if latch_on_pass:
                 logger.warning(
                     f"Requirement {resolved_name} was set to latch but its function will only be evaluated once, at the end of the simulation"
                 )
@@ -138,7 +141,7 @@ class RequirementsManager:
         every: int | None = None,
         terminate_on_fail: bool = False,
         terminate_on_pass: bool = False,
-        latch_on_fail: bool = False,
+        latch_on_fail: bool = True,
         latch_on_pass: bool = False,
         post_result: bool = True,
     ) -> Callable[[RequirementFn], RequirementFn]:
@@ -160,7 +163,14 @@ class RequirementsManager:
     def last_passed(
         self, name_or_fn: str | RequirementFn, state: MjState
     ) -> bool | None:
-        return self._live_cache.get((self._resolve_name(name_or_fn), state.data.time))
+        name = self._resolve_name(name_or_fn)
+        # a latched verdict applies to every sim time from the latch point
+        # onward, not just the exact tick it was replayed at, so check it
+        # first rather than relying on _live_cache to have an entry at this
+        # exact `state.data.time`
+        if (latched := self._latched.get(name)) is not None:
+            return latched[0]
+        return self._live_cache.get((name, state.data.time))
 
     def _resolve_name(self, name_or_fn: str | RequirementFn) -> str:
         if isinstance(name_or_fn, str):
@@ -191,16 +201,7 @@ class RequirementsManager:
 
             if self._step_count % spec.every == 0:
                 already_latched = self._latched.get(spec.name)
-                if already_latched is not None:
-                    # verdict already locked in: replay it instead of paying
-                    # to call (possibly expensive) fn again
-                    passed, req_msg, latch_time = already_latched
-                    logger.debug(
-                        f"requirement '{spec.name}' at t={state.data.time:.6f}: "
-                        f"replaying latched {'pass' if passed else 'fail'} from t={latch_time:.6f} "
-                        f"(evaluation skipped)"
-                    )
-                else:
+                if already_latched is None:
                     req_msg = ""
                     try:
                         passed, req_msg = spec.fn(mojo_model, state, None)
@@ -215,35 +216,50 @@ class RequirementsManager:
                         f"({req_msg or 'no message'})"
                     )
 
-                # cache every verdict, including undetermined (None), so
-                # last_passed() can tell "evaluated, no verdict yet" apart
-                # from "not evaluated at this sim time". None never latches a
-                # failure, terminates the trial, or posts telemetry, though.
-                self._live_cache[(spec.name, state.data.time)] = passed
-                if passed is not None:
-                    self._last_live_result[spec.name] = passed
-                    if not passed and spec.name not in self._first_live_failure:
-                        self._first_live_failure[spec.name] = (
-                            state.data.time,
-                            req_msg or "no message attached",
-                        )
-                    if not passed and spec.terminate_on_fail:
-                        terminate_msgs.append(
-                            f"requirement '{spec.name}' triggered early termination ({req_msg or 'no message attached'})"
-                        )
-                    if passed and spec.terminate_on_pass:
-                        satisfied_msgs.append(
-                            f"requirement '{spec.name}' was satisfied and ended the trial early ({req_msg or 'no message attached'})"
-                        )
-                    if already_latched is None and (
-                        (passed and spec.latch_on_pass)
-                        or (not passed and spec.latch_on_fail)
-                    ):
-                        self._latched[spec.name] = (
-                            passed,
-                            req_msg or "no message attached",
-                            state.data.time,
-                        )
+                    # cache every verdict, including undetermined (None), so
+                    # last_passed() can tell "evaluated, no verdict yet" apart
+                    # from "not evaluated at this sim time". None never latches
+                    # a failure, terminates the trial, or posts telemetry,
+                    # though. Once latched (see below), this stops: neither
+                    # run_end_of_trial_evaluation() nor last_passed() consult
+                    # the cache for a latched requirement anymore (both read
+                    # straight from _latched), so caching a fresh entry on
+                    # every subsequent tick would just grow the dict forever
+                    # with nothing left to read it.
+                    self._live_cache[(spec.name, state.data.time)] = passed
+                    if passed is not None:
+                        self._last_live_result[spec.name] = passed
+                        if not passed and spec.name not in self._first_live_failure:
+                            self._first_live_failure[spec.name] = (
+                                state.data.time,
+                                req_msg or "no message attached",
+                            )
+                        if not passed and spec.terminate_on_fail:
+                            terminate_msgs.append(
+                                f"requirement '{spec.name}' triggered early termination ({req_msg or 'no message attached'})"
+                            )
+                        if passed and spec.terminate_on_pass:
+                            satisfied_msgs.append(
+                                f"requirement '{spec.name}' was satisfied and ended the trial early ({req_msg or 'no message attached'})"
+                            )
+                        if (passed and spec.latch_on_pass) or (
+                            not passed and spec.latch_on_fail
+                        ):
+                            self._latched[spec.name] = (
+                                passed,
+                                req_msg or "no message attached",
+                                state.data.time,
+                            )
+                            logger.debug(
+                                f"requirement '{spec.name}' latched {'pass' if passed else 'fail'} "
+                                f"at t={state.data.time:.6f}; further evaluations will be skipped"
+                            )
+                # else: verdict already locked in. Replay it silently instead
+                # of paying to call (possibly expensive) fn again. This was
+                # already logged once, when the latch was first set above, not
+                # on every replay tick. Nothing else to do: _last_live_result
+                # already holds the latched value (telemetry below reads it
+                # unchanged), and _live_cache/_latched don't need updating.
 
             # post last known result on every step so the telemetry signal is continuous;
             # skip entirely if this requirement has never been evaluated yet.
@@ -286,7 +302,7 @@ class RequirementsManager:
 
         results: list[RequirementResult] = []
         for spec in self._requirements.values():
-            # the requirement's static configuration -- shown alongside the
+            # the requirement's static configuration, shown alongside the
             # per-trial verdict so callers can tell e.g. "this failed" apart
             # from "this failed and would have kept re-checking every 10 steps"
             config = {

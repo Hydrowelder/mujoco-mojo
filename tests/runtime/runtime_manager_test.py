@@ -543,7 +543,9 @@ def test_live_failure_marks_requirement_failed_at_end_of_trial(tmp_path: Path) -
             return next(live_results), "live check"
         return True, "recovered by end of trial"
 
-    mgr.add_requirement(flaky, name="flaky", every=1)
+    # latch_on_fail=False: this test exercises the sticky-failure-without-latching
+    # message format specifically, so keep it from latching after the first False
+    mgr.add_requirement(flaky, name="flaky", every=1, latch_on_fail=False)
 
     for sim_time in (0.1, 0.2, 0.3):
         state = MagicMock()
@@ -594,7 +596,7 @@ def test_undetermined_live_results_excluded_from_failure_count(tmp_path: Path) -
     mgr = RuntimeManager(signal_manager=sm)
     mgr._mojo_model = MagicMock()
 
-    # 5 live evaluations: None, True, False, None, True -- only the 3
+    # 5 live evaluations: None, True, False, None, True. Only the 3
     # determinate ones (True, False, True) should count as "live checks"
     live_results = iter([None, True, False, None, True])
 
@@ -603,7 +605,9 @@ def test_undetermined_live_results_excluded_from_failure_count(tmp_path: Path) -
             return next(live_results), "live check"
         return True, "recovered by end of trial"
 
-    mgr.add_requirement(flaky, name="flaky", every=1)
+    # latch_on_fail=False: keep observing all 5 evaluations rather than
+    # latching after the False, since the test is specifically about counting them
+    mgr.add_requirement(flaky, name="flaky", every=1, latch_on_fail=False)
 
     for sim_time in (0.1, 0.2, 0.3, 0.4, 0.5):
         state = MagicMock()
@@ -764,6 +768,122 @@ def test_latch_on_fail_stops_calling_fn_after_first_failure() -> None:
     assert mgr.requirements._latched["flaky"][2] == 0.3
 
 
+def test_latch_on_fail_defaults_to_true() -> None:
+    """latch_on_fail is True by default: a live requirement stops being re-evaluated after its first failure even without passing latch_on_fail explicitly, since this changes nothing about the trial's outcome (a live failure is already sticky) and only saves compute."""
+    calls: list[float] = []
+
+    def flaky(model, state, df):
+        calls.append(state.data.time)
+        return state.data.time < 0.25, "check"
+
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(flaky, name="flaky", every=1)  # latch_on_fail not passed
+
+    for sim_time in (0.1, 0.2, 0.3, 0.4):
+        state = MagicMock()
+        state.data.time = sim_time
+        mgr.requirements.step(state, signal_manager=None, mojo_model=mgr._mojo_model)
+
+    assert calls == [0.1, 0.2, 0.3]
+    assert mgr.requirements._latched["flaky"][0] is False
+
+
+def test_latch_on_fail_can_be_disabled_to_keep_observing() -> None:
+    """Passing latch_on_fail=False opts back out of the default, so fn keeps being called after a failure."""
+    calls: list[float] = []
+
+    def flaky(model, state, df):
+        calls.append(state.data.time)
+        return state.data.time < 0.25, "check"
+
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(flaky, name="flaky", every=1, latch_on_fail=False)
+
+    for sim_time in (0.1, 0.2, 0.3, 0.4):
+        state = MagicMock()
+        state.data.time = sim_time
+        mgr.requirements.step(state, signal_manager=None, mojo_model=mgr._mojo_model)
+
+    assert calls == [0.1, 0.2, 0.3, 0.4]
+    assert mgr.requirements._latched == {}
+
+
+def test_latched_requirement_stops_growing_live_cache() -> None:
+    """Once a requirement latches, _live_cache stops gaining new entries on subsequent replay ticks. Nothing reads those entries for a latched requirement, so caching them forever would just leak memory."""
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (False, "fell"), name="flaky", every=1)
+
+    for sim_time in (0.1, 0.2, 0.3, 0.4, 0.5):
+        state = MagicMock()
+        state.data.time = sim_time
+        mgr.requirements.step(state, signal_manager=None, mojo_model=mgr._mojo_model)
+
+    # latches on the very first evaluation (t=0.1); no cache entries for the
+    # 4 replay ticks that follow
+    assert len(mgr.requirements._live_cache) == 1
+    assert mgr.requirements._live_cache[("flaky", 0.1)] is False
+
+
+def test_last_passed_reflects_latched_verdict_at_any_later_time() -> None:
+    """last_passed() returns the latched verdict for any sim time after the latch point, not just the exact tick it happened at (since _live_cache is no longer written to after latching)."""
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (False, "fell"), name="flaky", every=1)
+
+    state = MagicMock()
+    state.data.time = 0.1
+    mgr.requirements.step(state, signal_manager=None, mojo_model=mgr._mojo_model)
+    assert mgr.last_passed("flaky", state) is False
+
+    # query at a time that was never an eval tick and never cached
+    later_state = MagicMock()
+    later_state.data.time = 12.345
+    assert mgr.last_passed("flaky", later_state) is False
+
+
+def test_telemetry_keeps_posting_on_replay_ticks_after_latch() -> None:
+    """The telemetry signal stays continuous after latching: signal_manager.post() keeps firing with the frozen value on every step, not just the step the latch happened on."""
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (False, "fell"), name="flaky", every=1)
+
+    sm = MagicMock(spec=SignalManager)
+    for sim_time in (0.1, 0.2, 0.3):
+        state = MagicMock()
+        state.data.time = sim_time
+        mgr.requirements.step(state, signal_manager=sm, mojo_model=mgr._mojo_model)
+
+    assert sm.post.call_count == 3
+    for call in sm.post.call_args_list:
+        assert call.kwargs["value"] == 0.0
+
+
+def test_latch_logs_once_not_on_every_replay(caplog) -> None:
+    """The 'latched' debug log fires exactly once, when the latch is first set, not again on every subsequent replayed evaluation tick."""
+    import logging
+
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (False, "fell"), name="flaky", every=1)
+
+    with caplog.at_level(
+        logging.DEBUG, logger="mujoco_mojo.runtime.requirements_manager"
+    ):
+        for sim_time in (0.1, 0.2, 0.3, 0.4, 0.5):
+            state = MagicMock()
+            state.data.time = sim_time
+            mgr.requirements.step(
+                state, signal_manager=None, mojo_model=mgr._mojo_model
+            )
+
+    latch_logs = [r.message for r in caplog.records if "latched" in r.message]
+    assert len(latch_logs) == 1
+    assert "t=0.100000" in latch_logs[0]
+
+
 def test_latch_on_pass_locks_in_success_despite_later_failure() -> None:
     """latch_on_pass=True freezes the verdict at True: later evaluations that would have failed never run at all, so the requirement stays passed for the trial (unlike the default sticky-failure behavior, where any later False would still doom it)."""
     calls: list[float] = []
@@ -813,7 +933,11 @@ def test_latched_verdict_reported_at_end_of_trial_without_calling_fn(
             raise AssertionError("fn must not be called again once latched")
         return True, "reached at this step"
 
-    mgr.add_requirement(once_only, name="latched_goal", every=1, latch_on_pass=True)
+    # latch_on_fail=False: this test isolates latch_on_pass specifically, and
+    # asserts latch_on_fail stays independently False below
+    mgr.add_requirement(
+        once_only, name="latched_goal", every=1, latch_on_pass=True, latch_on_fail=False
+    )
 
     state = MagicMock()
     state.data.time = 0.1
@@ -851,6 +975,7 @@ def test_requirement_result_decided_at_reflects_when_the_verdict_was_set(
         name="live_fail",
         every=1,
         terminate_on_fail=False,
+        latch_on_fail=False,
     )
     mgr.add_requirement(lambda m, s, df: (True, "always ok"), name="plain_check")
 

@@ -139,7 +139,7 @@ def test_with_rotation_single_row_buffer_is_writable():
     Regression test: with_rotation must work on a single-row DataFrame.
 
     Polars' to_numpy() defaults to writable=False and returns a zero-copy, read-only view
-    when the selected columns are stored contiguously as a single chunk -- the common case for
+    when the selected columns are stored contiguously as a single chunk, the common case for
     a freshly-constructed single-row frame. with_rotation previously passed that view straight
     to scipy, which raised `ValueError: buffer source array is read-only`. The current
     implementation does pure numpy arithmetic (no third-party calls requiring a writable

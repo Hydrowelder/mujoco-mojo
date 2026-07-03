@@ -30,7 +30,7 @@ def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """
     Validates the well-known `dimension`/`unit` metadata keys via Pint, leaving any other user-defined keys untouched.
 
-    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit -- the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
+    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
     """
     dimension = metadata.get("dimension")
     unit = metadata.get("unit")
@@ -62,7 +62,7 @@ def resolve_signal_manager(
     """
     Returns `signal_manager` if given, otherwise falls back to the `SignalManager` of the innermost enclosing `RuntimeManager` `with` block.
 
-    The result may still be `None` if that `RuntimeManager` simply has no `SignalManager` configured (telemetry recording disabled for this trial) -- callers should treat `None` as "nothing to record to" rather than an error. Raises only if there is no active `RuntimeManager` context at all.
+    The result may still be `None` if that `RuntimeManager` simply has no `SignalManager` configured (telemetry recording disabled for this trial). Callers should treat `None` as "nothing to record to" rather than an error. Raises only if there is no active `RuntimeManager` context at all.
     """
     if signal_manager is not None:
         return signal_manager
