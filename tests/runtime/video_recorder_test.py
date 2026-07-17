@@ -16,6 +16,18 @@ HAS_FFMPEG = shutil.which("ffmpeg") is not None
 CAM1 = CameraName("cam1")
 
 
+def _frames_visually_equal(a: np.ndarray, b: np.ndarray) -> bool:
+    """
+    True if two frames are equal modulo the ~1px anti-aliasing jitter that
+    GPU-backed renderers (e.g. macOS's glfw/Metal backend) can introduce between
+    otherwise-identical draws of the same scene. A real overlay (arrow/line/trace)
+    changes far more than a handful of pixels by a few intensity levels, so this
+    tolerance won't mask an actual gating bug.
+    """
+    diff = np.abs(a.astype(np.int16) - b.astype(np.int16))
+    return diff.max() <= 4 and int((diff.max(axis=-1) > 0).sum()) <= 4
+
+
 @pytest.fixture
 def cam_setup():
     """A minimal scene with a named camera, for VideoRecorder tests."""
@@ -181,7 +193,7 @@ class TestRenderFrameOverlayGating:
         )
         baseline = recorder._render_frame(state, [], [], [])
         disabled = recorder._render_frame(state, [arrow], [], [])
-        assert np.array_equal(baseline, disabled)
+        assert _frames_visually_equal(baseline, disabled)
 
         recorder.show_loads = True
         enabled = recorder._render_frame(state, [arrow], [], [])
@@ -196,7 +208,7 @@ class TestRenderFrameOverlayGating:
         )
         baseline = recorder._render_frame(state, [], [], [])
         disabled = recorder._render_frame(state, [], [line], [])
-        assert np.array_equal(baseline, disabled)
+        assert _frames_visually_equal(baseline, disabled)
 
         recorder.show_proximities = True
         enabled = recorder._render_frame(state, [], [line], [])
@@ -211,7 +223,7 @@ class TestRenderFrameOverlayGating:
         )
         baseline = recorder._render_frame(state, [], [], [])
         disabled = recorder._render_frame(state, [], [], [trace])
-        assert np.array_equal(baseline, disabled)
+        assert _frames_visually_equal(baseline, disabled)
 
         recorder.show_traces = True
         enabled = recorder._render_frame(state, [], [], [trace])
