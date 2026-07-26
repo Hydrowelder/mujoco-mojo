@@ -337,6 +337,7 @@ class Proximity(MojoBaseModel):
             self.geom_2._baked_manager, return_data=True
         )
         min_dist = float(result[0])  # pyright: ignore[reportIndexIssue]
+        min_dist = max(0.0, min_dist)  # clip to zero
         data = result[1]  # pyright: ignore[reportIndexIssue]
 
         assert data
