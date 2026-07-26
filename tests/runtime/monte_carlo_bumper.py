@@ -13,6 +13,9 @@ FIXED_CAMERA_NAME = mojo.CameraName("static")
 BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
+# toggled by profile() to A/B tracer overhead against an otherwise-identical run
+TRACERS_ENABLED = True
+
 
 def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
     """
@@ -614,8 +617,9 @@ def runtime(
                 show_traces=True,
             ).setup(state).register_to_rm()
 
-        rt.Tracer(target=handoff.box1_bunny, duration=1.0).register_to_rm()
-        rt.Tracer(target=handoff.box2_bunny, duration=1.0).register_to_rm()
+        if TRACERS_ENABLED:
+            rt.Tracer(target=handoff.box1_bunny, duration=1.0).register_to_rm()
+            rt.Tracer(target=handoff.box2_bunny, duration=1.0).register_to_rm()
 
         if mojo_model.is_nominal:
             rt.VideoRecorder(
@@ -686,7 +690,11 @@ def runtime(
             # a live requirement that fails at any point during the solve is
             # failed for the trial, even if it recovers by the end.
             t = state.data.time
-            if 0.5 * us.second < t < 1.0 * us.second and mojo_model.trial_num % 10 == 0:
+            if (
+                0.5 * us.second < t < 1.0 * us.second
+                and mojo_model.trial_num % 10 == 0
+                and mojo_model.trial_num != 0
+            ):
                 return False, f"inside failure window at t={t:.3f}"
             return True, f"outside failure window at t={t:.3f}"
 
@@ -718,9 +726,17 @@ def main():
     print(f"Finished with {had_fails=}")
 
 
-def profile():
+def profile(*, tracers_enabled: bool = True):
+    """
+    Profiles one Monte Carlo trial.
+
+    Run this twice - once with `tracers_enabled=True` and once with `False` - and diff the resulting `.prof` files (or the printed `tottime` tables) to see how much of the runtime is actually attributable to `Tracer`, as opposed to rendering/encoding or physics.
+    """
     import cProfile
     import pstats
+
+    global TRACERS_ENABLED
+    TRACERS_ENABLED = tracers_enabled
 
     mojo.utils.setup_logger()
 
@@ -733,14 +749,26 @@ def profile():
         config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1, resume=False),
     )
 
+    save_as = f"baseline_tracers_{tracers_enabled}.prof"
     profiler = cProfile.Profile()
-    profiler.enable()
-    had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
-    profiler.disable()
+    had_fails = None
+    try:
+        profiler.enable()
+        had_fails = runner.run(clean_workdir=True, cleanup_delay=-1)
+    finally:
+        # dump whatever was captured even on Ctrl+C or a mid-run exception, so an
+        # interrupted run still leaves a usable .prof file behind
+        profiler.disable()
+        stats = pstats.Stats(profiler)
+        stats.dump_stats(save_as)
 
-    stats = pstats.Stats(profiler).sort_stats("cumulative")
-    stats.dump_stats(save_as := "baseline.prof")
-    stats.print_callees(30, "apply_load")
+    print(f"\n--- tottime (self time) leaders, tracers_enabled={tracers_enabled} ---")
+    stats.sort_stats("tottime").print_stats(20)
+
+    print(
+        f"\n--- cumulative time inside tracer.py, tracers_enabled={tracers_enabled} ---"
+    )
+    stats.sort_stats("cumulative").print_stats(r"tracer\.py")
 
     print(f"To view results run:\n\tsnakeviz {save_as}")
     print(f"Finished with {had_fails=}")
@@ -748,4 +776,4 @@ def profile():
 
 if __name__ == "__main__":
     # main()
-    profile()
+    profile(tracers_enabled=True)
