@@ -20,6 +20,7 @@ from rich.text import Text
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import get_local_ip
@@ -395,6 +396,19 @@ if True:
             help="File which contains NamedValue overrides to use in all trials.",
         ),
     ]
+    SlurmConfigType = Annotated[
+        Path | None,
+        typer.Option(
+            "--slurm-config",
+            "-sc",
+            help=(
+                "Optional flat JSON file of extra SLURM settings, prompted for again "
+                "during the SLURM orchestration wizard. Keys prefixed 'sbatch.' become "
+                "extra #SBATCH lines (e.g. 'sbatch.account'); every other key is "
+                "exported as an environment variable in the submission script."
+            ),
+        ),
+    ]
 
     # monte carlo
     NTrialType = Annotated[
@@ -624,6 +638,7 @@ def _prepare_runner(
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
     run_kwargs: RunKwargsType,
+    slurm_config: SlurmConfigType = None,
 ):
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -657,6 +672,7 @@ def _prepare_runner(
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,
         run_kwargs=processed_run_kwargs,
+        slurm_config_path=slurm_config,
     )
 
 
@@ -680,6 +696,7 @@ def run_monte_carlo(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
+    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -732,7 +749,7 @@ def run_monte_carlo(
 
     if n_trial != 0 and trial_nums:
         logger.warning(
-            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
+            "n-trial was not set to 0 with trial IDs provided. Setting n-trial to 0 and continuing."
         )
         n_trial = 0
 
@@ -748,6 +765,7 @@ def run_monte_carlo(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
+        slurm_config=slurm_config,
     )
 
     # 2. build config
@@ -815,7 +833,6 @@ def run_single(
     generator: GeneratorType,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    n_trial: NTrialType = 1,
     n_proc: NProcType = DEFAULT_N_PROC,
     resume: ResumeType = DEFAULT_RESUME,
     seed: SeedType = DEFAULT_SEED,
@@ -824,18 +841,19 @@ def run_single(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
-    trial_nums: TrialNumsType = [],
+    trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
+    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
     """
     [bold yellow]Execute a single trial.[/bold yellow]
 
-    This command handles the directory setup, distribution salting, and execution of a single physics trial.
+    This command handles the directory setup, distribution salting, and execution of exactly one physics trial (trial 0, the nominal run, unless [bold cyan]--trial-num[/bold cyan] targets a different one).
     """
     from numpydantic import NDArray
 
@@ -879,12 +897,6 @@ def run_single(
                 f"Global NamedValue overrides had {len(global_overrides)} entries."
             )
 
-    if n_trial != 0 and trial_nums:
-        logger.warning(
-            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
-        )
-        n_trial = 0
-
     runner: MojoRunner = _prepare_runner(
         generator=generator,
         runtime=runtime,
@@ -897,13 +909,16 @@ def run_single(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
+        slurm_config=slurm_config,
     )
 
-    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
+    # a single trial is always just one trial - n_trial only exists on
+    # MonteCarloConfig for padding-width bookkeeping, it doesn't affect which
+    # trial actually runs (that's `trial_num`, passed explicitly below)
+    runner.config = MonteCarloConfig(n_trial=1, n_proc=n_proc, resume=resume)
 
-    trial_id = trial_nums[0] if trial_nums else 0
-    console.print(f"[bold magenta]Running trial {trial_id}[/bold magenta]...")
-    logger.info(f"Running trial {trial_id}...", extra={"file_only": True})
+    console.print(f"[bold magenta]Running trial {trial_num}[/bold magenta]...")
+    logger.info(f"Running trial {trial_num}...", extra={"file_only": True})
 
     had_fails = runner.run(
         global_overrides=global_overrides
@@ -911,7 +926,7 @@ def run_single(
         else NamedValueDict[NDArray](),
         clean_workdir=clean_workdir,
         execution_mode=execution_mode,
-        trial_nums=trial_nums,
+        trial_nums=[trial_num],
     )
 
     match execution_mode:
