@@ -20,6 +20,7 @@ from rich.text import Text
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import get_local_ip
@@ -395,6 +396,19 @@ if True:
             help="File which contains NamedValue overrides to use in all trials.",
         ),
     ]
+    SlurmConfigType = Annotated[
+        Path | None,
+        typer.Option(
+            "--slurm-config",
+            "-sc",
+            help=(
+                "Optional flat JSON file of extra SLURM settings, prompted for again "
+                "during the SLURM orchestration wizard. Keys prefixed 'sbatch.' become "
+                "extra #SBATCH lines (e.g. 'sbatch.account'); every other key is "
+                "exported as an environment variable in the submission script."
+            ),
+        ),
+    ]
 
     # monte carlo
     NTrialType = Annotated[
@@ -624,6 +638,7 @@ def _prepare_runner(
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
     run_kwargs: RunKwargsType,
+    slurm_config: SlurmConfigType = None,
 ):
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -657,6 +672,7 @@ def _prepare_runner(
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,
         run_kwargs=processed_run_kwargs,
+        slurm_config_path=slurm_config,
     )
 
 
@@ -680,6 +696,7 @@ def run_monte_carlo(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
+    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -732,7 +749,7 @@ def run_monte_carlo(
 
     if n_trial != 0 and trial_nums:
         logger.warning(
-            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
+            "n-trial was not set to 0 with trial IDs provided. Setting n-trial to 0 and continuing."
         )
         n_trial = 0
 
@@ -748,6 +765,7 @@ def run_monte_carlo(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
+        slurm_config=slurm_config,
     )
 
     # 2. build config
@@ -815,7 +833,6 @@ def run_single(
     generator: GeneratorType,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    n_trial: NTrialType = 1,
     n_proc: NProcType = DEFAULT_N_PROC,
     resume: ResumeType = DEFAULT_RESUME,
     seed: SeedType = DEFAULT_SEED,
@@ -824,18 +841,19 @@ def run_single(
     xml_name: XMLNameType = DEFAULT_XML_NAME,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
-    trial_nums: TrialNumsType = [],
+    trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
+    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
     """
     [bold yellow]Execute a single trial.[/bold yellow]
 
-    This command handles the directory setup, distribution salting, and execution of a single physics trial.
+    This command handles the directory setup, distribution salting, and execution of exactly one physics trial (trial 0, the nominal run, unless [bold cyan]--trial-num[/bold cyan] targets a different one).
     """
     from numpydantic import NDArray
 
@@ -879,12 +897,6 @@ def run_single(
                 f"Global NamedValue overrides had {len(global_overrides)} entries."
             )
 
-    if n_trial != 0 and trial_nums:
-        logger.warning(
-            "n-trials was not set to 0 with trial IDs provided. Setting n-trials to 0 and continuing."
-        )
-        n_trial = 0
-
     runner: MojoRunner = _prepare_runner(
         generator=generator,
         runtime=runtime,
@@ -897,13 +909,16 @@ def run_single(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
+        slurm_config=slurm_config,
     )
 
-    runner.config = MonteCarloConfig(n_trial=n_trial, n_proc=n_proc, resume=resume)
+    # a single trial is always just one trial - n_trial only exists on
+    # MonteCarloConfig for padding-width bookkeeping, it doesn't affect which
+    # trial actually runs (that's `trial_num`, passed explicitly below)
+    runner.config = MonteCarloConfig(n_trial=1, n_proc=n_proc, resume=resume)
 
-    trial_id = trial_nums[0] if trial_nums else 0
-    console.print(f"[bold magenta]Running trial {trial_id}[/bold magenta]...")
-    logger.info(f"Running trial {trial_id}...", extra={"file_only": True})
+    console.print(f"[bold magenta]Running trial {trial_num}[/bold magenta]...")
+    logger.info(f"Running trial {trial_num}...", extra={"file_only": True})
 
     had_fails = runner.run(
         global_overrides=global_overrides
@@ -911,7 +926,7 @@ def run_single(
         else NamedValueDict[NDArray](),
         clean_workdir=clean_workdir,
         execution_mode=execution_mode,
-        trial_nums=trial_nums,
+        trial_nums=[trial_num],
     )
 
     match execution_mode:
@@ -1201,6 +1216,92 @@ def settings_set_cmd(
     console.print(f"[green]Updated[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}")
 
 
+def _reloaded_worker(kwargs: dict[str, Any], verbose: int, quiet: int) -> None:
+    """
+    Child-process entry point that owns the actual reload/viewer session, run by `_run_reloaded_supervised` so that a native GUI crash (e.g. the OpenGL/GLFW viewer segfaulting on an extreme zoom) only takes down this process, not the supervising CLI command.
+    """
+    from .reloaded import MojoReloaded
+
+    _setup_cli_logging(verbose=verbose, quiet=quiet)
+    try:
+        MojoReloaded(**kwargs).run()
+    except typer.Exit as e:
+        sys.exit(e.exit_code)
+
+
+def _run_reloaded_supervised(kwargs: dict[str, Any], verbose: int, quiet: int) -> None:
+    """
+    Runs a reloaded session in a child process and, if that child is killed by a signal rather than exiting normally, offers to relaunch it.
+
+    A native GUI crash (segfault, abort, etc.) can't be caught with a Python `try`/`except` since it takes the whole process down - the only way to recover is to run the session behind a process boundary and watch for that from the outside.
+
+    Since the session is relaunched from the original CLI arguments, anything set interactively during the crashed session (`seed`, `trial`, `watch`, `record`) does not carry over; trial folders already written to disk are still picked up.
+    """
+    import multiprocessing
+    import signal
+
+    # forked directly from this process (rather than the platform-default "spawn"/
+    # "forkserver", which hand off to a separate bootstrap process) so the child
+    # reliably inherits this process's live stdin/tty, matching how the single-process
+    # session used to own the terminal directly
+    try:
+        mp_context = multiprocessing.get_context("fork")
+    except ValueError:
+        mp_context = multiprocessing.get_context()
+
+    stdin_fd: int | None = None
+    original_termios: list[Any] | None = None
+    if sys.stdin.isatty():
+        try:
+            import termios
+
+            fd = sys.stdin.fileno()
+            original_termios = termios.tcgetattr(fd)
+            stdin_fd = fd
+        except Exception:
+            stdin_fd = None
+            original_termios = None
+
+    while True:
+        process = mp_context.Process(
+            target=_reloaded_worker, args=(kwargs, verbose, quiet)
+        )
+        process.start()
+        try:
+            process.join()
+        except KeyboardInterrupt:
+            # the child is in the same foreground process group and handles its own
+            # Ctrl-C shutdown (with a brief exit animation); wait for it to finish
+            # rather than aborting the supervisor mid-shutdown
+            process.join()
+
+        # the child's own termios restore (registered via atexit) never runs if it
+        # was killed by a signal, so the terminal can be left with echo/canonical
+        # mode disabled - restore it here regardless of how the child exited
+        if stdin_fd is not None and original_termios is not None:
+            import termios
+
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, original_termios)
+
+        exitcode = process.exitcode
+        if exitcode is not None and exitcode < 0:
+            try:
+                sig_desc = signal.Signals(-exitcode).name
+            except ValueError:
+                sig_desc = f"signal {-exitcode}"
+            console.print(f"\n[bold red]Viewer crashed ({sig_desc}).[/bold red]")
+            answer = console.input("[bold yellow]Retry?[/bold yellow] [Y/n] ")
+            if answer.strip().lower() in ("", "y", "yes"):
+                console.print(
+                    "[dim yellow]Relaunching from the original command-line "
+                    "arguments - any seed/trial/watch/record changes made "
+                    "interactively before the crash are lost and will need to be "
+                    "re-entered.[/dim yellow]"
+                )
+                continue
+        break
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: ReloadedGeneratorType = None,
@@ -1229,10 +1330,6 @@ def run_reloaded(
 
     Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
     """
-    from .reloaded import MojoReloaded
-
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-
     # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
     processed_gen_args = [_smart_parse(a) for a in gen_args]
@@ -1240,7 +1337,7 @@ def run_reloaded(
     processed_run_args = [_smart_parse(a) for a in run_args]
     processed_run_kwargs = _process_kwargs(run_kwargs)
 
-    MojoReloaded(
+    kwargs = dict(
         generator=generator,
         runtime=runtime,
         workdir=workdir,
@@ -1259,7 +1356,8 @@ def run_reloaded(
         run_kwargs=processed_run_kwargs,
         host=host,
         port=port,
-    ).run()
+    )
+    _run_reloaded_supervised(kwargs, verbose=verbose, quiet=quiet)
 
 
 @cli_app.command(name="dojo")

@@ -13,7 +13,7 @@ Mojo uses a single, unified command structure for all job types. By adjusting a 
 
 ### Running a Single Trial
 
-Use `mujoco-mojo run single` when you want to execute exactly one trial. It accepts the same arguments as `run monte-carlo` and is the recommended command when running a baseline or re-running an individual trial for inspection.
+Use `mujoco-mojo run single` when you want to execute exactly one trial. It accepts a single `--trial-num` (not the list form used by `run monte-carlo`, and there's no `--n-trial` since a single run is always one trial). It's the recommended command when running a baseline, re-running an individual trial for inspection, or as the per-task command in a SLURM job array.
 
 ```bash linenums="0"
 # Run trial 0 (nominal values)
@@ -129,10 +129,40 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 
 #### The SLURM Worker
 
-Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial.
+Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial.
 
 ???+ tip "Tip: Manual Submissions"
     The generated script is saved to your workdir as `mujoco_mojo_submit.sh`. If you prefer to submit manually or need to make custom tweaks to the `#SBATCH` headers, you can simply run `sbatch mujoco_mojo_submit.sh` at any time.
+
+#### Custom SLURM Settings
+
+The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. There are two layers for supplying these, and they merge together:
+
+**Global defaults** - things about you or your cluster that rarely change (account number, email) belong in the `[slurm]` table of `~/.mujoco-mojo/settings.toml`, applied automatically to every submission:
+
+```toml title="~/.mujoco-mojo/settings.toml"
+[slurm]
+"sbatch.account" = "proj123"
+"sbatch.mail-user" = "me@cluster.edu"
+MLM_LICENSE_FILE = "27000@license.internal"
+```
+
+**Per-job overrides** - pass `--slurm-config`/`-sc` with a path to a flat JSON file (or just type the path when the wizard prompts for it) for settings specific to one submission:
+
+```json title="slurm_config.json"
+{
+    "sbatch.account": "a-different-allocation",
+    "sbatch.qos": "high"
+}
+```
+
+Both use the same convention:
+
+- Keys prefixed with `sbatch.` become extra `#SBATCH` lines (`"sbatch.account"` &rarr; `#SBATCH --account=proj123`).
+- Every other key is exported as an environment variable before the worker command runs.
+- Values must be plain strings/numbers/bools - nested objects or arrays are rejected when loaded, since this is meant to describe a flat set of settings, not a tree.
+
+If a key appears in both, the `--slurm-config` file wins - so the example above submits with `account=a-different-allocation` (overridden) but still keeps the global `mail-user` and `MLM_LICENSE_FILE`.
 
 ---
 

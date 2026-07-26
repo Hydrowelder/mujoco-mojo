@@ -507,6 +507,8 @@ class MojoRunner:
     model_config_name: str | None = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig | OptimizerConfig = field(default_factory=MonteCarloConfig)
+    slurm_config_path: Path | None = None
+    """Optional path to a flat JSON file of extra SLURM `#SBATCH` lines / environment variables. See `SlurmExtraSettings`."""
 
     gen_args: list[Any] = field(default_factory=list)
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -741,6 +743,14 @@ class MojoRunner:
     ) -> bool:
         """Generates an sbatch script and submits the job array to SLURM for a given config."""
         (self.workdir / "logs").mkdir(exist_ok=True)
+
+        from rich.console import Console
+
+        Console().print(
+            "[dim]Tip: pass --slurm-config/-sc with a flat JSON file to auto-inject extra "
+            "#SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
+            "environment variables (any other key) into the generated submission script.[/dim]"
+        )
 
         if isinstance(self.config, MonteCarloConfig):
             try:
@@ -1492,14 +1502,13 @@ class MojoRunner:
         mojo_cmd = py_bin_dir / "mujoco-mojo"
 
         cmd = (
-            f"{mojo_cmd} run monte-carlo "
+            f"{mojo_cmd} run single "
             f'--generator "{self.generator_path}" '
             f"{runtime_flag} {seed_flag} {overrides_flag} "
             f'--workdir "{self.workdir.resolve()}" '
             f"{gen_args_str} {gen_kwargs_str} "
             f"{run_args_str} {run_kwargs_str} "
-            f"--n-trials 0 "  # force to zero to prevent an expected warning
-            f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its onw trial_num
+            f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its own trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method
             f"--n-proc 1"  # A worker only needs 1 process
         )
@@ -1574,15 +1583,16 @@ class MojoRunner:
             f"  [white]Time limit[/] (HH:MM:SS) [dim](Partition Limit: {time_limit_hint})[/]",
             default="01:00:00",
         )
-        requested_seconds = self.slurm_time_to_seconds(time_limit)
-        max_seconds = self.slurm_time_to_seconds(time_limit_hint)
-        if requested_seconds > max_seconds and max_seconds != -1:  # -1 means infinite
-            console.print(
-                f"\n[bold red]WARNING:[/] Requested time ({time_limit}) exceeds "
-                f"partition MaxTime ({time_limit_hint})."
-            )
-            if not Confirm.ask("Proceed anyway?", default=False):
-                return True
+        if time_limit_hint != "<UNKNOWN>":
+            requested_seconds = self.slurm_time_to_seconds(time_limit)
+            max_seconds = self.slurm_time_to_seconds(time_limit_hint)
+            if requested_seconds > max_seconds and max_seconds != -1:  # -1 == infinite
+                console.print(
+                    f"\n[bold red]WARNING:[/] Requested time ({time_limit}) exceeds "
+                    f"partition MaxTime ({time_limit_hint})."
+                )
+                if not Confirm.ask("Proceed anyway?", default=False):
+                    return True
 
         # === get concurrency throttle ===
         max_concurrent = Prompt.ask(
@@ -1594,6 +1604,59 @@ class MojoRunner:
                 f"\n[bold red]WARNING:[/] '{max_concurrent}' is not a number. Ignoring."
             )
             max_concurrent = ""
+
+        # === get optional custom SLURM config (extra #SBATCH lines / env vars) ===
+        # global, rarely-changing defaults (account, email, ...) from
+        # ~/.mujoco-mojo/settings.toml, layered under any --slurm-config file below
+        from mujoco_mojo.settings import MujocoMojoSettings, SlurmExtraSettings
+
+        global_slurm_settings = MujocoMojoSettings().slurm
+        if global_slurm_settings.root:
+            console.print(
+                f"[dim]Applying {len(global_slurm_settings.root)} default SLURM "
+                "setting(s) from ~/.mujoco-mojo/settings.toml[/dim]"
+            )
+
+        slurm_config_default = (
+            str(self.slurm_config_path) if self.slurm_config_path else ""
+        )
+        slurm_config_input = Prompt.ask(
+            "  [white]Custom SLURM config JSON[/] "
+            "[dim](optional: extra #SBATCH lines / env vars, overrides global "
+            "defaults, blank to skip)[/]",
+            default=slurm_config_default,
+        )
+        per_job_slurm_settings = SlurmExtraSettings({})
+        if slurm_config_input:
+            slurm_config_file = Path(slurm_config_input).resolve()
+            if not slurm_config_file.exists():
+                console.print(
+                    f"\n[bold red]WARNING:[/] {slurm_config_file} does not exist. "
+                    "Skipping custom SLURM config."
+                )
+            else:
+                try:
+                    per_job_slurm_settings = SlurmExtraSettings.load(slurm_config_file)
+                except Exception as e:
+                    console.print(
+                        f"\n[bold red]Failed to parse {slurm_config_file}:[/] {e}"
+                    )
+                    if not Confirm.ask(
+                        "Continue without these custom settings?", default=True
+                    ):
+                        return True
+                    per_job_slurm_settings = SlurmExtraSettings({})
+                else:
+                    console.print(
+                        f"[green]Loaded {len(per_job_slurm_settings.root)} setting(s) "
+                        f"from {slurm_config_file}[/green]"
+                    )
+
+        merged_slurm_settings = SlurmExtraSettings.merge(
+            global_slurm_settings, per_job_slurm_settings
+        )
+        extra_sbatch_lines = merged_slurm_settings.sbatch_lines()
+        extra_env_lines = merged_slurm_settings.env_lines()
 
         current_pythonpath = os.getenv("PYTHONPATH", "")
         if str(project_root) not in current_pythonpath:
@@ -1632,6 +1695,14 @@ class MojoRunner:
             array_range += f"%{max_concurrent}"
         script_path = (self.workdir / "mujoco_mojo_submit.sh").resolve()
 
+        extra_sbatch_block = "\n".join(extra_sbatch_lines)
+        extra_env_block = (
+            "\n# Custom environment variables (global settings.toml / --slurm-config)\n"
+            + "\n".join(extra_env_lines)
+            if extra_env_lines
+            else ""
+        )
+
         sbatch_content = f"""#!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --array={array_range}
@@ -1640,10 +1711,12 @@ class MojoRunner:
 #SBATCH --mem={mem_per_node}
 #SBATCH --time={time_limit}
 {partition_line}
+{extra_sbatch_block}
 
 # Move to the project root so imports work
 cd {project_root}
 {python_path_line}
+{extra_env_block}
 
 # Avoid concurrent array tasks racing to write .pyc files into the shared venv
 export PYTHONDONTWRITEBYTECODE=1

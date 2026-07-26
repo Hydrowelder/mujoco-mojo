@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import tomli_w
-from pydantic import BaseModel, Field, SecretStr, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    RootModel,
+    SecretStr,
+    field_serializer,
+    field_validator,
+)
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -16,6 +25,10 @@ from mujoco_mojo.utils.color import Color
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
+
+SlurmScalar = str | int | float | bool
+
+_SBATCH_PREFIX = "sbatch."
 
 _COLOR_FIELDS = (
     "action_force",
@@ -97,6 +110,42 @@ class SensAISettings(BaseModel):
         return v.get_secret_value()
 
 
+class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
+    """
+    Flat key-value pairs used to extend a SLURM submission.
+
+    Keys prefixed with `sbatch.` become extra `#SBATCH` lines in the generated submission script, e.g. `"sbatch.account": "proj123"` becomes `#SBATCH --account=proj123`. Every other key is exported as an environment variable before the worker command runs, e.g. `"MLM_LICENSE_FILE": "27000@license.internal"` becomes `export MLM_LICENSE_FILE="27000@license.internal"`.
+
+    Values must be scalars (string, int, float, or bool). Nested objects or arrays are rejected at load time since this file can only ever describe a flat set of settings - used both as the shape of `MujocoMojoSettings.slurm` and as the optional `--slurm-config` per-job JSON file.
+    """
+
+    def sbatch_lines(self) -> list[str]:
+        return [
+            f"#SBATCH --{key[len(_SBATCH_PREFIX) :]}={value}"
+            for key, value in self.root.items()
+            if key.startswith(_SBATCH_PREFIX)
+        ]
+
+    def env_lines(self) -> list[str]:
+        return [
+            f'export {key}="{value}"'
+            for key, value in self.root.items()
+            if not key.startswith(_SBATCH_PREFIX)
+        ]
+
+    @classmethod
+    def load(cls, path: Path) -> SlurmExtraSettings:
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+    @classmethod
+    def merge(cls, *sources: SlurmExtraSettings) -> SlurmExtraSettings:
+        """Later sources win on key collisions (e.g. `merge(global, per_job)` lets a per-job file override a user's global defaults)."""
+        merged: dict[str, SlurmScalar] = {}
+        for source in sources:
+            merged.update(source.root)
+        return cls(merged)
+
+
 class MujocoMojoSettings(BaseSettings):
     """
     Global user-level settings persisted to ~/.mujoco-mojo/settings.toml.
@@ -115,6 +164,11 @@ class MujocoMojoSettings(BaseSettings):
 
     visualization: VisualizationSettings = Field(default_factory=VisualizationSettings)
     """Colors and visibility for simulation visual overlays."""
+
+    slurm: SlurmExtraSettings = Field(default_factory=lambda: SlurmExtraSettings({}))
+    """
+    Global default extra SLURM `#SBATCH` lines / environment variables (e.g. account number, email), applied to every SLURM submission. Edit the `[slurm]` table in `~/.mujoco-mojo/settings.toml` directly - keys prefixed `sbatch.` become `#SBATCH` lines, everything else is exported as an environment variable. A `--slurm-config` file passed at submission time is merged on top and wins on any key collision.
+    """
 
     @classmethod
     def settings_customise_sources(
