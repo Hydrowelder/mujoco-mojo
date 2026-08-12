@@ -482,7 +482,7 @@ class Inertial(XMLModel):
                 for item in input_val:
                     if isinstance(item, Distribution):
                         # sample raw, but create the NamedValue container
-                        nv = item.sample_to_named_value()
+                        nv = item.sample_to_named_value(unit_system=mojo_model.us)
                         resolved_values.append(nv.squeeze())
                         pending_named_values.append(nv)
                     else:
@@ -491,7 +491,7 @@ class Inertial(XMLModel):
 
             # case 2: single vector-level distribution
             if isinstance(input_val, Distribution):
-                nv = input_val.sample_to_named_value()
+                nv = input_val.sample_to_named_value(unit_system=mojo_model.us)
                 return nv.value.squeeze(), [nv]
 
             # case 3: raw numeric value
