@@ -1081,9 +1081,6 @@ class TextureMIME(StrEnum):
     KTX = "image/ktx"
     """Texture file is a Khronos Texture."""
 
-    VND = "image/vnd.mujoco.texture"
-    """Texture file is a vnd.mujoco.texture (whatever that is)."""
-
 
 class ActuatorInput(StrEnum):
     """Specifies the input signal semantics. (see tech note, Section 2.5)"""
