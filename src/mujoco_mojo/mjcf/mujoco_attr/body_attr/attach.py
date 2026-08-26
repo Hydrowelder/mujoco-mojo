@@ -12,7 +12,7 @@ class Attach(XMLModel):
     tag = "attach"
     attributes = ("model", "body", "prefix")
 
-    model: ModelName
+    model: ModelName | None = None
     """The sub-model from which to attach a subtree."""
 
     body: BodyName | None = None

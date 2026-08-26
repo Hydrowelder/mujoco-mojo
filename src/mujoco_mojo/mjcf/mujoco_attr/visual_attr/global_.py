@@ -64,5 +64,5 @@ class VisualGlobal(XMLModel):
     ellipsoidinertia: bool = False
     """This attribute specifies how the equivalent inertia is visualized. "false": use box, "true": use ellipsoid."""
 
-    bvactive: bool = True
+    bvactive: bool = False
     """This attribute specifies whether collision and raycasting code should mark elements of Bounding Volume Hierarchies as intersecting, for the purpose of visualization. Setting this attribute to "false" can speed up simulation for models with high-resolution meshes."""

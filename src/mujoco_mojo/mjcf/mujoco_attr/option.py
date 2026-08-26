@@ -124,7 +124,7 @@ class Option(XMLModel):
     ccd_tolerance: float = 1e-6
     """Tolerance threshold used for early termination of the convex collision algorithm."""
 
-    sleep_tolerance: float = 1e-4
+    sleep_tolerance: float = 1e-3
     """Velocity tolerance below which sleeping is allowed."""
 
     sdf_iterations: int = 10
