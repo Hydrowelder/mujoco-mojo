@@ -86,6 +86,8 @@ _geom_attr = (
     "solimp",
     "margin",
     "gap",
+    "surfacevel",
+    "adhesion",
     "fromto",
     "pose",
     "fitscale",
@@ -171,10 +173,20 @@ class GeomBase(XMLModel, ABC):
     """Constraint solver parameters for contact simulation. See Solver parameters."""
 
     margin: float = 0
-    """Distance threshold below which contacts are detected and included in the global array mjData.contact. This however does not mean that contact force will be generated. A contact is considered active only if the distance between the two geom surfaces is below margin-gap. Recall that constraint impedance can be a function of distance, as explained in Solver parameters. The quantity this function is applied to is the distance between the two geoms minus the margin plus the gap."""
+    """Geometric inflation of the geom surface for the purpose of contact force generation. When the distance between two geom surfaces is below margin, the contact is considered active and contact forces are generated. The constraint impedance can be a function of distance, as explained in Solver parameters. The quantity this function is applied to is the distance between the two geoms minus the margin. See margin and gap."""
 
     gap: float = 0
-    """This attribute is used to enable the generation of inactive contacts, i.e., contacts that are ignored by the constraint solver but are included in mjData.contact for the purpose of custom computations. When this value is positive, geom distances between margin and margin-gap correspond to such inactive contacts."""
+    """Additional contact detection buffer beyond margin. When this value is positive, contacts are detected at distance margin + gap but forces are only generated at distance margin. Contacts with distance between margin and margin + gap are included in mjData.contact as inactive contacts (with efc_address = -1). These inactive contacts can be used for custom computations, for example by adhesion actuators which use contacts in the gap zone to generate adhesive forces without producing contact forces. See margin and gap."""
+
+    surfacevel: Vec6 = np.array((0, 0, 0, 0, 0, 0))
+    """Velocity of the geom's surface as seen by contacts, given as a velocity field sigma(x) with two components: a constant velocity v (first three numbers) and a rotational field with angular velocity ω (last three numbers) about the geom frame origin pp, both expressed in the geom frame:
+
+    sigma(x)=v+ω*(x-p)
+
+    A contact with the geom observes the surface moving along this field, with the velocity projected onto the contact's tangent plane: no normal velocity is imparted. When condim is 4 or larger, the angular velocity ω also drives torsional friction. surfacevel models surfaces that move while the geom itself does not: conveyor belts, treadmills and turntables can be constructed with no degrees of freedom. Friction drives touching bodies along the motion of the surface: objects placed on a conveyor are transported at belt speed, and a turntable (angular surface velocity about the cylinder axis) imparts tangential velocity that grows with radius. Surface velocities of two touching geoms compose as relative velocity, and compose correctly with body motion (a conveyor mounted on a moving vehicle works as expected). Note that this attribute describes the geom's entire surface: a box with constant surfacevel moves all six faces. When contact points are visualized, a contact with a moving surface additionally displays an arrow along the tangential surface velocity at the contact point. This attribute can be modified at runtime."""
+
+    adhesion: float = 0
+    """Adhesive force of contacts with this geom, in units of force. Geometrically, the friction cone is translated down along the normal so that the force origin lies strictly inside it: each contact can pull with up to adhesion before breaking, and the friction budget becomes μ(f_N+adhesion). Contacts resist sliding even under zero normal force, the defining property of cohesive materials. This is useful for sticky materials (tape, gecko feet, tacky rubber) and as a physical stabilizer for grasping. The adhesion of a contact is the sum of the values of the two contacting geoms, or the value of the higher-priority geom if priorities differ; an explicit contact pair overrides both. Note that adhesion is per contact: a box face resting on a plane generates four contact points and therefore four times the pull-off force of a single-point contact. To let adhesion act across a small separation (attraction at a distance), set gap to the desired interaction range. This can be used to model magnets. Resting penetration is unaffected by adhesion (the compression behavior of the contact is unchanged; only a tensile branch is added), and mj_contactForce reports the net interface force, whose normal component can be negative under tension. The underlying model is described in the Computation chapter. For adhesion as a controlled force — switched on and off like a vacuum gripper, dividing a total force between a body's contacts and pressing the bodies together — see the adhesion actuator."""
 
     fromto: Vec6 | None = None
     """This attribute can only be used with capsule, box, cylinder and ellipsoid geoms. It provides an alternative specification of the geom length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the geom connects these two points, with the +Z axis of the geom's frame oriented from the first towards the second point, while in the perpendicular direction, the geom sizes are both equal to the first value of the size attribute. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the end points. If this attribute is specified, the remaining position and orientation-related attributes are ignored. The image on the right demonstrates use of fromto with the four supported geoms, using identical Z values. The model is here. Note that the fromto semantics of capsule are unique: the two end points specify the segment around which the radius defines the capsule surface."""

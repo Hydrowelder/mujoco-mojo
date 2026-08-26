@@ -27,6 +27,7 @@ from mujoco_mojo.typing import (
     BodyName,
     Mat3,
     SignalCategory,
+    Simple,
     Sleep,
     Vec3,
     Vec4,
@@ -77,6 +78,7 @@ _body_attr = (
     "mocap",
     "gravcomp",
     "sleep",
+    "simple",
     "user",
 )
 _body_children = (
@@ -135,6 +137,20 @@ class Body(XMLModel):
     The init sleep policy can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such models will lead to a compilation error.
 
     See implementation notes for more details."""
+
+    simple: Simple = Simple.AUTO
+    """Controls the simple body optimization. When a body qualifies as "simple", its inertial matrix block in the mass matrix is diagonal, representing independent translational and rotational degrees of freedom. The optimization omits storing of the zero-valued off-diagonal entries, reducing memory footprint and computation.
+
+    A body qualifies for this optimization if it satisfies all of the following:
+
+    - **Inertial frame alignment**: The body's inertial frame coincides with its body frame.
+    - **Kinematic root**: The body's parent is either the world body or a static body.
+    - **Leaf body**: The body is a leaf node in the kinematic tree (it has no child bodies).
+    - **Origin-centered joints**: All joints belonging to this body must reside at the body's origin.
+    - **Aligned joint axes**: Any hinge or slide joint axes must be aligned with the local coordinate axes, and at most one joint with rotational degrees of freedom (hinge or ball) is permitted.
+    - **No inertia-bearing tendons**: The body must not contain sites or geoms used as wrap objects by any tendon that has non-zero armature.
+
+    Setting this attribute to false disables the optimization for this body. This is necessary for domain randomization workflows where model parameters (such as joint/inertial offsets or angles) are perturbed dynamically during simulation and updated via mj_setConst. Because a body compiled with the simple optimization active cannot dynamically lose its simple state at runtime (which would require reallocation of sparse matrix structures), any runtime parameter change that violates the simple conditions will trigger a validation error unless `simple="false"` was explicitly declared in the XML."""
 
     user: VecN | None = None
     """See User parameters. Has length of `nbody_user`"""

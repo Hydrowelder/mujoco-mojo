@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import mujoco
 import numpy as np
+from pydantic import Field
 
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -44,6 +45,7 @@ class Light(XMLModel):
         "range",
         "attenuation",
         "cutoff",
+        "softness",
         "exponent",
         "ambient",
         "diffuse",
@@ -111,6 +113,9 @@ class Light(XMLModel):
 
     cutoff: float = 45
     """Cutoff angle for spotlights, always in degrees regardless of the global angle setting."""
+
+    softness: float = Field(default=0.2, ge=0, le=1)
+    """Edge softness for spotlights, as a fraction of the cutoff angle in [0, 1], used by physically-based lighting models. The light delivers its full intensity inside the cone, falling to zero over the outer softness fraction of the cone angle; the default corresponds to a sharp-edged cone. This is unused by the default Phong lighting model, which uses exponent."""
 
     exponent: float = 10
     """Exponent for spotlights. This setting controls the softness of the spotlight cutoff."""

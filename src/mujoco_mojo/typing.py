@@ -31,6 +31,7 @@ __all__ = [
     "CompositeJointKind",
     "CompositeType",
     "Cone",
+    "Conflict",
     "ContactExcludeName",
     "ContactPairName",
     "Coordinate",
@@ -84,6 +85,7 @@ __all__ = [
     "SensorName",
     "SensorObjectType",
     "SignalCategory",
+    "Simple",
     "SiteName",
     "Sleep",
     "Solver",
@@ -728,6 +730,16 @@ class Sleep(StrEnum):
     """Can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such models will lead to a compilation error."""
 
 
+class Simple(StrEnum):
+    """Controls the simple body optimization. When a body qualifies as "simple", its inertial matrix block in the mass matrix is diagonal, representing independent translational and rotational degrees of freedom. The optimization omits storing of the zero-valued off-diagonal entries, reducing memory footprint and computation."""
+
+    FALSE = "false"
+    """Disables the optimization for this body."""
+
+    AUTO = "auto"
+    """Does not (always) disable the optimization for this body."""
+
+
 class JointType(StrEnum):
     """Types of joints supported in MuJoCo."""
 
@@ -1195,3 +1207,16 @@ class ProximityType(IntEnum):
 
     FACE_TO_FACE = 4
     """Returned value is from a face to face test."""
+
+
+class Conflict(StrEnum):
+    """This attribute controls how conflicting global attributes (physics options, sizes, visual settings) are resolved when a child spec is attached to a parent using mjs_attach. A conflict occurs when both the parent and child specify authored values for the same field and those values differ. See Attribute Merging for details and a per-field table."""
+
+    WARNING = "warning"
+    """Parent values take precedence. When a conflict is detected, a warning is emitted but the parent value is not modified. This is the default and preserves the pre-existing attachment behavior."""
+
+    MERGE = "merge"
+    """Fields are merged using field-specific strategies (minimum, maximum, OR, or error), depending on the field's semantics. When only the child specifies an authored value, it is adopted by the parent. See the merging table for per-field details."""
+
+    ERROR = "error"
+    """Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches."""

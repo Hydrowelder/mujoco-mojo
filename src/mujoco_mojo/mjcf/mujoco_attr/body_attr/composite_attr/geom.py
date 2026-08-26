@@ -54,6 +54,8 @@ _composite_geom_attr = (
     "solref",
     "solimp",
     "margin",
+    "surfacevel",
+    "adhesion",
     "gap",
 )
 """Composite geometry XML attributes."""
