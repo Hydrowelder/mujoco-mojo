@@ -1091,11 +1091,17 @@ class ActuatorInput(StrEnum):
     VOLTAGE = "voltage"
     """The control directly sets applied motor voltage"""
 
-    POSITION = "position"
+    POSITION = "pos"
     """The PID controller uses the control as a reference setpoint relative to the joint position."""
 
-    VELOCITY = "velocity"
+    VELOCITY = "vel"
     """The PID controller uses the control as a reference setpoint relative to the joint velocity."""
+
+    FF = "ff"
+    """The control is a torque feedforward, like with pid/input."""
+
+    NONE = "none"
+    """The actuator will work as a passive device."""
 
 
 class CameraProjection(StrEnum):
