@@ -6,6 +6,8 @@ from .general import ActuatorGeneral
 from .intvelocity import ActuatorIntegratedVelocity
 from .motor import ActuatorMotor
 from .muscle import ActuatorMuscle
+from .orientation import ActuatorOrientation
+from .pid import ActuatorPid
 from .plugin import ActuatorPlugin
 from .position import ActuatorPosition
 from .velocity import ActuatorVelocity
@@ -19,6 +21,8 @@ __all__ = [
     "ActuatorIntegratedVelocity",
     "ActuatorMotor",
     "ActuatorMuscle",
+    "ActuatorOrientation",
+    "ActuatorPid",
     "ActuatorPlugin",
     "ActuatorPosition",
     "ActuatorVelocity",

@@ -586,6 +586,9 @@ class DynType(StrEnum):
     USER = "user"
     """act_dot = mjcb_act_dyn(...)"""
 
+    PID = "pid"
+    """Integrates position error (and/or the slew-limited setpoint) into act, for the pid actuator's optional integral action and setpoint rate limiting."""
+
 
 class GainType(StrEnum):
     """Gain type of actuators."""
@@ -602,6 +605,12 @@ class GainType(StrEnum):
     USER = "user"
     """gain_term = mjcb_act_gain(...)"""
 
+    PID = "pid"
+    """gain_term = gainprm[0] (ki), applied to act (the integrated position error), for the pid actuator."""
+
+    SO3 = "so3"
+    """gain_term = gainprm[0] (kp), applied to the geodesic orientation error log(q^-1 q_target), for SO(3) transmissions."""
+
 
 class BiasType(StrEnum):
     """Bias type of actuators."""
@@ -617,6 +626,9 @@ class BiasType(StrEnum):
 
     USER = "user"
     """bias_term = mjcb_act_bias(...)"""
+
+    SO3 = "so3"
+    """bias_term = biasprm[1]*log(q^-1 q_target) + biasprm[2]*omega, the geodesic analog of the affine bias for SO(3) transmissions."""
 
 
 class Inertia(StrEnum):
@@ -1111,6 +1123,16 @@ class ActuatorInput(StrEnum):
 
     NONE = "none"
     """The actuator will work as a passive device."""
+
+
+class OrientationInput(StrEnum):
+    """Chart of the commanded orientation for the orientation actuator."""
+
+    EXPMAP = "expmap"
+    """The control block is an exponential-map vector (3 controls, in radians)."""
+
+    QUAT = "quat"
+    """The control block is a quaternion (4 controls, w-first). The commanded quaternion is normalized by the servo, and the control block resets to the identity quaternion. Requires dyntype "none"."""
 
 
 class CameraProjection(StrEnum):
