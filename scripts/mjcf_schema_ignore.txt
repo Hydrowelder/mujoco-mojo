@@ -1,0 +1,25 @@
+# schema-only directives with no corresponding MJCF element to implement (mojo's
+# `mjcf.py` deliberately doesn't implement <default>/<custom> classes; the rest are
+# RST/compiler-internal constructs with no user-facing element of their own)
+unimplemented:custom
+unimplemented:default
+unimplemented:element
+unimplemented:numeric
+unimplemented:replicate
+unimplemented:text
+unimplemented:tuple
+
+# `composite` (the pre-flexcomp deformable element) is deprecated upstream -- compiling
+# `<composite type="grid" .../>` now errors with 'The "grid" composite type is
+# deprecated. Please use "flex" instead.' Not worth chasing a typing nuance (schema
+# types `initial` as a bare `string`, mojo as a `CompositeInitial` enum) on an element
+# headed for removal.
+default_mismatch:composite.initial
+
+# schema shows an explicit literal default ({1}) for these, but mojo's field is `None`
+# (omit the attribute). Confirmed equivalent, not a bug: the compiler applies that exact
+# default when the attribute is absent, so omission and the literal default produce the
+# same effective model. Same reasoning as the already-ignored `general`/`plugin`
+# `gainprm`/`biasprm`/`user` siblings in mjcf_ignore.txt (the RST-tool's ignore file).
+default_mismatch:general.dynprm
+default_mismatch:plugin.dynprm

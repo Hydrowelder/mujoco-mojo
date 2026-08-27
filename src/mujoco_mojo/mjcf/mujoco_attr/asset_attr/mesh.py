@@ -150,9 +150,21 @@ class MeshBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
-        # assert that only one or none are defined
         file_provided = self.file is not None
         vertex_provided = self.vertex is not None
+
+        # a procedural builtin shape (sphere/cone/etc.) carries its geometry via `params`,
+        # computed from its own dedicated fields -- file/vertex are mutually exclusive with
+        # `builtin` in the real schema (`exclusive builtin file`, `exclusive builtin vertex`),
+        # not required alongside it
+        if getattr(self, "builtin", "none") != "none":
+            if file_provided or vertex_provided:
+                msg = f"Mesh {self.name}: file/vertex cannot be combined with a builtin shape ({file_provided=}, {vertex_provided=})."
+                logger.error(msg)
+                raise ValueError(msg)
+            return self
+
+        # otherwise (a plain file/vertex mesh), assert that exactly one of the two is defined
         if not (file_provided ^ vertex_provided):
             msg = f"Mesh {self.name}: One of file or vertex may be provided ({file_provided=}, {vertex_provided=})."
             logger.error(msg)
@@ -514,7 +526,8 @@ class MeshSphere(MeshBase):
 
     builtin: Literal["sphere"] = "sphere"
 
-    attributes = (*_mesh_attr, "builtin", "subdivision")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("subdivision",)
 
     subdivision: int
     """integer in [0-4]: The number of subdivisions to apply to icosahedron faces."""
@@ -528,6 +541,11 @@ class MeshSphere(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int]:
+        """Packs `subdivision` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.subdivision,)
+
 
 class MeshHemisphere(MeshBase):
     """
@@ -538,7 +556,8 @@ class MeshHemisphere(MeshBase):
 
     builtin: Literal["hemisphere"] = "hemisphere"
 
-    attributes = (*_mesh_attr, "builtin", "resolution")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("resolution",)
 
     resolution: int
     """integer in [0-10]: Equator discretization of one hemisphere quadrant."""
@@ -552,6 +571,11 @@ class MeshHemisphere(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int]:
+        """Packs `resolution` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.resolution,)
+
 
 class MeshCone(MeshBase):
     """
@@ -562,7 +586,8 @@ class MeshCone(MeshBase):
 
     builtin: Literal["cone"] = "cone"
 
-    attributes = (*_mesh_attr, "builtin", "nvert", "radius")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("nvert", "radius")
 
     nvert: int
     """integer >= 3: The number of vertices in the polygon."""
@@ -588,6 +613,11 @@ class MeshCone(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int, float]:
+        """Packs `nvert`/`radius` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.nvert, self.radius)
+
 
 class MeshSupersphere(MeshBase):
     """
@@ -598,7 +628,8 @@ class MeshSupersphere(MeshBase):
 
     builtin: Literal["supersphere"] = "supersphere"
 
-    attributes = (*_mesh_attr, "builtin", "resolution", "e", "n")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("resolution", "e", "n")
 
     resolution: int
     """integer >= 3: Longitude and latitude discretization."""
@@ -627,6 +658,11 @@ class MeshSupersphere(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int, float, float]:
+        """Packs `resolution`/`e`/`n` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.resolution, self.e, self.n)
+
 
 class MeshTorus(MeshBase):
     """
@@ -635,9 +671,10 @@ class MeshTorus(MeshBase):
     <img src="https://raw.githubusercontent.com/google-deepmind/mujoco/refs/heads/main/doc/images/XMLreference/st.png" width="300" />
     """
 
-    builtin: Literal["torus"] = "torus"
+    builtin: Literal["supertorus"] = "supertorus"
 
-    attributes = (*_mesh_attr, "builtin", "resolution", "radius", "s", "t")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("resolution", "radius", "s", "t")
 
     resolution: int
     """integer >= 3: Discretization of both circumferences."""
@@ -678,6 +715,11 @@ class MeshTorus(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int, float, float, float]:
+        """Packs `resolution`/`radius`/`s`/`t` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.resolution, self.radius, self.s, self.t)
+
 
 class MeshWedge(MeshBase):
     """
@@ -688,15 +730,8 @@ class MeshWedge(MeshBase):
 
     builtin: Literal["wedge"] = "wedge"
 
-    attributes = (
-        *_mesh_attr,
-        "builtin",
-        "res_phi",
-        "res_theta",
-        "fov_phi",
-        "fov_theta",
-        "gamma",
-    )
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("res_phi", "res_theta", "fov_phi", "fov_theta", "gamma")
 
     res_phi: int
     """integer >= 0: Vertical resolution of the slice."""
@@ -749,13 +784,19 @@ class MeshWedge(MeshBase):
             raise ValueError(msg)
         return v
 
+    @property
+    def params(self) -> tuple[int, int, float, float, float]:
+        """Packs `res_phi`/`res_theta`/`fov_phi`/`fov_theta`/`gamma` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.res_phi, self.res_theta, self.fov_phi, self.fov_theta, self.gamma)
+
 
 class MeshPlate(MeshBase):
     """A rectangular plate with given resolution in each dimension. This mesh is designed to be used by the tactile sensor, which reports data at the vertices."""
 
     builtin: Literal["plate"] = "plate"
 
-    attributes = (*_mesh_attr, "builtin", "res_x", "res_y")
+    attributes = (*_mesh_attr, "builtin", "params")
+    non_xml_fields = ("res_x", "res_y")
 
     res_x: int
     """integer > 0: Horizontal resolution of the plate."""
@@ -771,6 +812,11 @@ class MeshPlate(MeshBase):
             logger.error(msg)
             raise ValueError(msg)
         return v
+
+    @property
+    def params(self) -> tuple[int, int]:
+        """Packs `res_x`/`res_y` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (self.res_x, self.res_y)
 
 
 AnyMesh = Annotated[

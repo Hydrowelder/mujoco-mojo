@@ -6,6 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     Angle,
+    Conflict,
     Coordinate,
     EulerSeq,
     InertiaFromGeom,
@@ -41,6 +42,7 @@ class Compiler(XMLModel):
         "saveinertial",
         "assetdir",
         "alignfree",
+        "conflict",
     )
     children = ("lengthrange",)
 
@@ -116,5 +118,22 @@ class Compiler(XMLModel):
 
     saveinertial: bool = False
     """If set to "true", the compiler will save explicit inertial clauses for all bodies."""
+
+    conflict: Conflict = Conflict.WARNING
+    """This attribute controls how conflicting global attributes (physics options, sizes, visual settings) are resolved when a child spec is attached to a parent using mjs_attach. A conflict occurs when both the parent and child specify authored values for the same field and those values differ. See Attribute Merging for details and a per-field table.
+
+    warning
+
+        Parent values take precedence. When a conflict is detected, a warning is emitted but the parent value is not modified. This is the default and preserves the pre-existing attachment behavior.
+
+    merge
+
+        Fields are merged using field-specific strategies (minimum, maximum, OR, or error), depending on the field's semantics. When only the child specifies an authored value, it is adopted by the parent. See the merging table for per-field details.
+
+    error
+
+        Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches.
+
+"""
 
     lengthrange: LengthRange = LengthRange()

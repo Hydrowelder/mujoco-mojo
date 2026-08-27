@@ -172,6 +172,12 @@ class ActuatorBase(XMLModel, ABC):
     _act_dims_cache: tuple[int, int] | None = PrivateAttr(default=None)
     """Cached (actadr, actnum) for this actuator's internal activation state, resolved against the compiled MuJoCo model."""
 
+    _ctrl_dims_cache: tuple[int, int] | None = PrivateAttr(default=None)
+    """Cached (ctrladr, ctrlnum) for this actuator's control block, resolved against the compiled MuJoCo model."""
+
+    _out_dims_cache: tuple[int, int] | None = PrivateAttr(default=None)
+    """Cached (outadr, outnum) for this actuator's force-output block, resolved against the compiled MuJoCo model."""
+
     def _act_dims(self, state: MjState) -> tuple[int, int]:
         """Returns (actadr, actnum) for this actuator's internal activation state. actnum is 0 for actuators without internal dynamics (dyntype=none), e.g. motor, velocity, damper, adhesion."""
         if self._act_dims_cache is not None:
@@ -184,21 +190,53 @@ class ActuatorBase(XMLModel, ABC):
         self._act_dims_cache = (actadr, actnum)
         return self._act_dims_cache
 
-    def rt_ctrl(self, state: MjState) -> float:
-        """Control input to the actuator during runtime (mjData.ctrl)."""
-        return float(state.data.ctrl[self.get_id(state.model)])
+    def _ctrl_dims(self, state: MjState) -> tuple[int, int]:
+        """Returns (ctrladr, ctrlnum) for this actuator's slice of mjData.ctrl (sized nu = sum(ctrlnum) across all actuators, not nactuator). ctrlnum is 1 for every native actuator except MIMO actuators (e.g. orientation with a quaternion input has ctrlnum 4)."""
+        if self._ctrl_dims_cache is not None:
+            return self._ctrl_dims_cache
 
-    def rt_length(self, state: MjState) -> float:
-        """Length of the actuator's transmission during runtime (mjData.actuator_length)."""
-        return float(state.data.actuator_length[self.get_id(state.model)])
+        aid = self.get_id(state.model)
+        ctrladr = int(state.model.actuator_ctrladr[aid])
+        ctrlnum = int(state.model.actuator_ctrlnum[aid])
 
-    def rt_velocity(self, state: MjState) -> float:
-        """Velocity of the actuator's transmission during runtime (mjData.actuator_velocity)."""
-        return float(state.data.actuator_velocity[self.get_id(state.model)])
+        self._ctrl_dims_cache = (ctrladr, ctrlnum)
+        return self._ctrl_dims_cache
 
-    def rt_force(self, state: MjState) -> float:
-        """Scalar force output of the actuator during runtime (mjData.actuator_force)."""
-        return float(state.data.actuator_force[self.get_id(state.model)])
+    def _out_dims(self, state: MjState) -> tuple[int, int]:
+        """Returns (outadr, outnum) for this actuator's slice of mjData.actuator_length/velocity/force (sized nout = sum(outnum) across all actuators, not nactuator). outnum is 1 for every native actuator except MIMO actuators (e.g. orientation, which always has outnum 3 regardless of its input chart)."""
+        if self._out_dims_cache is not None:
+            return self._out_dims_cache
+
+        aid = self.get_id(state.model)
+        outadr = int(state.model.actuator_outadr[aid])
+        outnum = int(state.model.actuator_outnum[aid])
+
+        self._out_dims_cache = (outadr, outnum)
+        return self._out_dims_cache
+
+    def rt_ctrl(self, state: MjState) -> float | VecN:
+        """Control input to the actuator during runtime (mjData.ctrl). Returns a scalar for single-input actuators, or a vector of length ctrlnum for MIMO actuators (e.g. orientation, pid)."""
+        ctrladr, ctrlnum = self._ctrl_dims(state)
+        vals = state.data.ctrl[ctrladr : ctrladr + ctrlnum]
+        return float(vals[0]) if ctrlnum == 1 else vals
+
+    def rt_length(self, state: MjState) -> float | VecN:
+        """Length of the actuator's transmission during runtime (mjData.actuator_length). Returns a scalar for single-output actuators, or a vector of length outnum for MIMO actuators (e.g. orientation)."""
+        outadr, outnum = self._out_dims(state)
+        vals = state.data.actuator_length[outadr : outadr + outnum]
+        return float(vals[0]) if outnum == 1 else vals
+
+    def rt_velocity(self, state: MjState) -> float | VecN:
+        """Velocity of the actuator's transmission during runtime (mjData.actuator_velocity). Returns a scalar for single-output actuators, or a vector of length outnum for MIMO actuators (e.g. orientation)."""
+        outadr, outnum = self._out_dims(state)
+        vals = state.data.actuator_velocity[outadr : outadr + outnum]
+        return float(vals[0]) if outnum == 1 else vals
+
+    def rt_force(self, state: MjState) -> float | VecN:
+        """Force output of the actuator during runtime (mjData.actuator_force). Returns a scalar for single-output actuators, or a vector of length outnum for MIMO actuators (e.g. orientation, which always reports 3 force outputs)."""
+        outadr, outnum = self._out_dims(state)
+        vals = state.data.actuator_force[outadr : outadr + outnum]
+        return float(vals[0]) if outnum == 1 else vals
 
     def rt_act(self, state: MjState) -> VecN:
         """Internal activation state(s) of the actuator during runtime (mjData.act slice for this actuator). Empty for actuators with no internal dynamics (dyntype=none), e.g. motor, velocity, damper, adhesion. Native activation dynamics (filter, filterexact, integrator, muscle, dcmotor) have exactly one element; only user-defined dynamics can have more."""
@@ -255,14 +293,16 @@ class ActuatorBase(XMLModel, ABC):
 
         | Channel    | Description                                            | Type            |
         |:-----------|:--------------------------------------------------------|:----------------|
-        | `ctrl`     | control input to the actuator                           | scalar          |
-        | `length`   | length of the actuator's transmission                   | scalar          |
-        | `velocity` | velocity of the actuator's transmission                 | scalar          |
-        | `force`    | scalar actuator force output                            | scalar          |
+        | `ctrl`     | control input to the actuator                           | scalar / vector |
+        | `length`   | length of the actuator's transmission                   | scalar / vector |
+        | `velocity` | velocity of the actuator's transmission                 | scalar / vector |
+        | `force`    | actuator force output                                   | scalar / vector |
         | `act`      | internal activation state(s), for stateful actuators    | scalar / vector |
         | `act_dot`  | time derivative of the internal activation state(s)     | scalar / vector |
 
-        `act` and `act_dot` only apply to actuators with internal dynamics (dyntype != none, e.g. position with timeconst, intvelocity, cylinder, muscle, dcmotor); for actuators without internal state these channels are silently skipped. If there is more than one activation variable (only possible with user-defined dynamics), each is posted under `subgroups=(actuator_name, channel)` with `attr` set to `0`-`N`; otherwise the single value is posted as a scalar with `attr=channel` under `subgroups=(actuator_name,)`, same as the other channels.
+        `ctrl` is a vector only for MIMO actuators whose input signature has more than one control (`ctrlnum` > 1, e.g. `orientation` with a quaternion input); `length`/`velocity`/`force` are vectors only for MIMO actuators with more than one force output (`outnum` > 1, e.g. `orientation`, which always has 3). Every other native actuator has `ctrlnum` = `outnum` = 1, so these remain scalars as before.
+
+        `act` and `act_dot` only apply to actuators with internal dynamics (dyntype != none, e.g. position with timeconst, intvelocity, cylinder, muscle, dcmotor, pid); for actuators without internal state these channels are silently skipped. Whenever any of these six channels is a vector for a given actuator, each element is posted under `subgroups=(actuator_name, channel)` with `attr` set to `0`-`N`; otherwise the single value is posted as a scalar with `attr=channel` under `subgroups=(actuator_name,)`.
 
         `length`/`velocity`/`force` are tagged with built-in `dimension`/`units` metadata resolved from the actuator's transmission target when it's a single joint or a tendon (e.g. a hinge-driving actuator's `force` is tagged as torque). For SITE/BODY/SLIDERCRANK transmission, and for `ctrl`/`act`/`act_dot` on any actuator (control-signal abstractions reinterpreted by `gear`/`dyntype`, not direct physical readouts), no built-in default is applied. Supply `channels` as a dict with the desired metadata yourself if you know it.
 

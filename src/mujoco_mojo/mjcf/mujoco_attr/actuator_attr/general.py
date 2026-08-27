@@ -37,6 +37,9 @@ class ActuatorGeneral(ActuatorBase):
         "dynprm",
         "gainprm",
         "biasprm",
+        "velrange",
+        "ffrange",
+        "input",
         "actearly",
     )
 
@@ -97,6 +100,15 @@ class ActuatorGeneral(ActuatorBase):
 
     biasprm: VecN | None = None
     """Bias parameters. The affine bias type uses three parameters. The length of this array is not enforced by the parser, so the user can enter as many parameters as needed. These defaults are not compatible with muscle actuators; see muscle below."""
+
+    velrange: Vec2 = np.array((0, 0))
+    """Range of the velocity-setpoint input of a pid actuator."""
+
+    ffrange: Vec2 = np.array((0, 0))
+    """Range of the feedforward input of a pid actuator."""
+
+    input: str | None = None
+    """Input signature of the actuator: which controls make up its control block, recorded in `mjModel.actuator_ctrlspec`. For gaintype "so3" it selects the orientation chart: "expmap" (3 controls, the default) or "quat" (4 controls); see orientation/input. For gaintypes "pid" and "dcmotor" it is a token list selecting the input subset; see pid/input and dcmotor/input."""
 
     actearly: bool = False
     """If true, force computation will use the next value of the activation variable rather than the current one. Setting this flag reduces the delay between the control and accelerations by one time-step."""

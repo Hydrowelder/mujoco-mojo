@@ -130,13 +130,24 @@ class XMLModel(MojoBaseModel):
             if value is None:
                 continue
 
-            field_info = type(self).model_fields[field]
-            annotation = field_info.annotation
-            is_literal = get_origin(annotation) is Literal
+            # `field` is usually a real pydantic field, but it can also be a plain `@property`
+            # that assembles its value from other fields (e.g. a mesh shape's `params`, packed
+            # from friendlier per-shape fields like `radius`/`nvert`). Properties have no entry
+            # in `model_fields` and no sensible "default" to exclude against, so they're always
+            # written once non-None.
+            field_info = type(self).model_fields.get(field)
+            is_literal = (
+                field_info is not None and get_origin(field_info.annotation) is Literal
+            )
 
-            if exclude_default and not is_literal and not isinstance(value, XMLModel):
+            if (
+                field_info is not None
+                and exclude_default
+                and not is_literal
+                and not isinstance(value, XMLModel)
+            ):
                 # determine default value
-                default = type(self).model_fields[field].default
+                default = field_info.default
 
                 # determine if its equal to value
                 if isinstance(value, np.ndarray):

@@ -35,6 +35,7 @@ class Flex(XMLModel):
         "texcoord",
         "elemtexcoord",
         "node",
+        "nodecoord",
         "cellcount",
         "dof",
     )
@@ -80,6 +81,9 @@ class Flex(XMLModel):
 
     node: str | None = None
     """The degrees-of-freedom of the flex. An array of MuJoCo body names (separated by white space) to which each node belongs. The number of body names should equal the number of nodes (nnode). See the flexcomp dof attribute for more details."""
+
+    nodecoord: VecN | None = None
+    """The local coordinates of the nodes within the corresponding body frames. If this attribute is omitted, all coordinates are (0,0,0) or in other words, the nodes coincide with the centers of the body frames. Nonzero coordinates are required when several nodes share a body, for example nodes pinned to a parent body."""
 
     cellcount: tuple[int, int, int] | None = None
     """When using trilinear or quadratic dofs, this specifies the number of cells in each dimension for the background interpolation grid."""

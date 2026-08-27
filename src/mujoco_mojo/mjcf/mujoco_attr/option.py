@@ -85,7 +85,7 @@ class Option(XMLModel):
     o_solimp: Vec5 = SOLIMP_DEFAULT
     """These attributes replace the solimp parameters of all active contact pairs when contact override is enabled. See Solver parameters for details."""
 
-    o_friction: Vec3 = FRICTION_DEFAULT
+    o_friction: Vec5 = FRICTION_DEFAULT
     """These attributes replace the friction parameters of all active contact pairs when contact override is enabled. See Solver parameters for details."""
 
     integrator: Integrator = Integrator.EULER
@@ -118,13 +118,13 @@ class Option(XMLModel):
     noslip_tolerance: float = 1e-6
     """Tolerance threshold used for early termination of the Noslip solver."""
 
-    ccd_iterations: int = 50
+    ccd_iterations: int = 35
     """Maximum number of iterations of the algorithm used for convex collisions. This rarely needs to be adjusted, except in situations where some geoms have very large aspect ratios."""
 
     ccd_tolerance: float = 1e-6
     """Tolerance threshold used for early termination of the convex collision algorithm."""
 
-    sleep_tolerance: float = 1e-4
+    sleep_tolerance: float = 1e-3
     """Velocity tolerance below which sleeping is allowed."""
 
     sdf_iterations: int = 10

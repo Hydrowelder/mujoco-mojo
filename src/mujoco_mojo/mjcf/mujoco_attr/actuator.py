@@ -12,6 +12,10 @@ from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.intvelocity import (
 )
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.motor import ActuatorMotor
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.muscle import ActuatorMuscle
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.orientation import (
+    ActuatorOrientation,
+)
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.pid import ActuatorPid
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.plugin import ActuatorPlugin
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.position import ActuatorPosition
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.velocity import ActuatorVelocity
@@ -37,6 +41,8 @@ class Actuator(XMLModel):
         "muscles",
         "adhesions",
         "dcmotors",
+        "pids",
+        "orientations",
         "plugins",
     )
 
@@ -99,6 +105,18 @@ class Actuator(XMLModel):
         exclude_if=is_empty_list,
     )
     """DCMotors actuator elements."""
+
+    pids: list[ActuatorPid] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Pids actuator elements."""
+
+    orientations: list[ActuatorOrientation] = Field(
+        default_factory=list,
+        exclude_if=is_empty_list,
+    )
+    """Orientations actuator elements."""
 
     plugins: list[ActuatorPlugin] = Field(
         default_factory=list,
