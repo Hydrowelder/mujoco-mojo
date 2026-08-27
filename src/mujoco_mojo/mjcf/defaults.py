@@ -17,7 +17,7 @@ SOLREF_DEFAULT: Vec2 = np.array((0.02, 1))
 """Default value of `solimp` parameters. The two numbers are `timeconst` and `dampratio`."""
 
 FRICTION_DEFAULT: Vec5 = np.array((1, 1, 0.005, 0.0001, 0.0001))
-"""Default friction definition. The values are coefficients for `sliding`, `torsion`, and `rolling`."""
+"""Default friction definition. The five values are `sliding-x`, `sliding-y`, `torsional`, `rolling-x`, and `rolling-y`: sliding and rolling are each anisotropic (two axis-specific coefficients), while torsional stays a single scalar."""
 
 DEFAULT_ANGLE = Angle.DEGREE
 """Default angle convention."""

@@ -13,8 +13,9 @@ For every schema element it reports:
 - attributes declared in the schema but not covered by any matching class's
   `attributes`/`non_xml_fields` (likely a missed field)
 - attributes whose schema default doesn't match the Python field's default value
-- attributes the schema marks `required` where the Python field has a non-required default,
-  or vice versa
+- attributes the schema marks `required` where the Python field has a non-required default
+  (the reverse direction -- python required, schema silent -- is not reported; see
+  `_default_mismatch`'s docstring for why that direction is unreliable)
 
 This is advisory, not a hard gate: the schema legitimately declares several distinct elements
 under the same XML tag depending on context (e.g. `joint` the body child vs `equality_joint`
@@ -66,9 +67,20 @@ def merge_elements_by_tag(schema: Schema) -> dict[str, Element]:
     the RST spec, and for the same reason: several schema elements share a tag by design (e.g.
     `equality_joint`/`fixed_joint`/`composite_joint` all render as `<joint>` in different
     contexts).
+
+    `default_*`-named elements (e.g. `default_equality (xml=equality)`, `default_tendon
+    (xml=tendon)`) are excluded entirely: these describe `<default>`-class attribute bundles, a
+    MuJoCo feature mojo deliberately does not implement (see the commented-out `Default`/`Custom`
+    fields in `mjcf/mujoco.py`). Without this exclusion, a bare container element like `equality`
+    or `tendon` (zero attributes of its own) gets merged with its `default_*` counterpart's full
+    attribute list, producing "missing attribute" findings for fields mojo was never going to add
+    to the container class in the first place -- confirmed as the cause of exactly that false
+    positive on both `equality` and `tendon`.
     """
     merged: dict[str, Element] = {}
     for element in schema.elements.values():
+        if element.name.startswith("default_"):
+            continue
         tag = element.xml_tag or element.name
         bucket = merged.setdefault(
             tag, Element(name=tag, struct=element.struct, line=element.line)
@@ -127,6 +139,17 @@ def _default_mismatch(attr: Attribute, cls: type, field_name: str) -> str | None
     """
     Returns a human-readable mismatch description, or None if the default checks out (or
     isn't checkable -- see `_schema_attr_default`).
+
+    One direction of required/optional disagreement is deliberately never reported: schema
+    "optional" (no `required` facet) against python "required" (no default). Checked against the
+    real engine, every instance of this direction turned out to be a false positive -- the schema
+    doesn't mark a reference attribute `required` when it's the *sole* option for a transmission
+    target or similar (enforced by hand-written compiler validation instead of the declarative
+    facet), confirmed concretely for `adhesion.body`, `pair.geom1`/`geom2`, `layer.texture`, and
+    `model.file` -- all compile-error-if-absent despite the schema staying silent. Mojo modeling
+    these as Pydantic-required is correct; asserting otherwise would be a confident false positive
+    every time. The reverse direction (schema `required`, python optional) has no such excuse and
+    stays a full finding -- also compile-tested this session (`config.key`) and confirmed real.
     """
     from check_mjcf_spec_coverage import _python_field_default
 
@@ -142,6 +165,8 @@ def _default_mismatch(attr: Attribute, cls: type, field_name: str) -> str | None
     if schema_kind == python_kind == "required":
         return None
     if schema_kind == python_kind == "optional":
+        return None
+    if schema_kind == "optional" and python_kind == "required":
         return None
     if schema_kind == "literal" and python_kind == "literal":
         assert schema_value is not None and python_value is not None

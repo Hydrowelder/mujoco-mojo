@@ -24,7 +24,7 @@ class ExtensionPluginInstanceConfig(XMLModel):
 
     attributes = ("key", "value")
 
-    key: str | None = None
+    key: str
     """Key used for plugin configuration."""
 
     value: str | None = None

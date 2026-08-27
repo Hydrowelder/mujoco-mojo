@@ -607,6 +607,7 @@ class GainType(StrEnum):
 
     DCMOTOR = "dcmotor"
     """DC motor gain (K or K/R), see dcmotor."""
+
     PID = "pid"
     """gain_term = gainprm[0] (ki), applied to act (the integrated position error), for the pid actuator."""
 
