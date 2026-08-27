@@ -669,7 +669,7 @@ class ColorSpace(StrEnum):
     LINEAR = "linear"
     """Linear color space."""
 
-    SRGB = "srgb"
+    SRGB = "sRGB"
     """SRGB color space."""
 
 

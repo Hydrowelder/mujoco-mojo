@@ -34,8 +34,7 @@ class ActuatorPid(ActuatorBase):
         | `gainprm`  | ki 0 0      |
         | `biasprm`  | 0 -kp -kv   |
 
-    `ctrlrange` doubles as `posrange`: the range of the position-setpoint input, since `pos` is always the first
-    control when present.
+    `posrange` is the range of the position-setpoint input, since `pos` is always the first control when present; it shares the same underlying storage as `ctrlrange`, so setting either one sets both.
     """
 
     tag = "pid"
@@ -49,6 +48,7 @@ class ActuatorPid(ActuatorBase):
         "imax",
         "slewmax",
         "input",
+        "posrange",
         "velrange",
         "ffrange",
         "inheritrange",
@@ -72,11 +72,11 @@ class ActuatorPid(ActuatorBase):
     slewmax: float = 0
     """Maximum rate of change of the effective position setpoint. When positive, the commanded setpoint is rate-limited through an activation state holding the effective setpoint, as for the dcmotor controller. The default value 0 means "unlimited"."""
 
-    input: tuple[ActuatorInput, ...] = (
-        ActuatorInput.POSITION,
-        ActuatorInput.VELOCITY,
-    )
+    input: tuple[ActuatorInput, ...] = (ActuatorInput.POSITION, ActuatorInput.VELOCITY)
     """Input signature: a space-separated subset of the tokens "pos", "vel" and "ff", packed in this canonical order. Absent setpoint inputs are fixed at zero, so the control vector contains no inert entries."""
+
+    posrange: Vec2 = np.array((0, 0))
+    """Range of the position-setpoint input; an alias of ctrlrange (the first input)."""
 
     velrange: Vec2 = np.array((0, 0))
     """Range of the velocity-setpoint input."""

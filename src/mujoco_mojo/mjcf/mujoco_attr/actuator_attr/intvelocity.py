@@ -6,7 +6,7 @@ import numpy as np
 from pydantic import model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.base import ActuatorBase
-from mujoco_mojo.typing import BiasType, DynType, GainType, Vec3
+from mujoco_mojo.typing import ActuatorLimited, BiasType, DynType, GainType, Vec2, Vec3
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
@@ -26,15 +26,33 @@ class ActuatorIntegratedVelocity(ActuatorBase):
         | `dyntype`    | integrator |
         | `gaintype`   | fixed      |
         | `biastype`   | affine     |
-        | `actlimited` | true       |
         | `dynprm`     | 1 0 0      |
         | `gainprm`    | kp 0 0     |
         | `biasprm`    | 0 -kp -kv  |
+
+    Activation clamping is controlled by actlimited and actrange, like any stateful actuator. On purely rotational transmissions, setpoints are interpreted on the circle, as for position; the integrated setpoint is re-anchored to a bounded representative at each timestep, so clamping is not required for winding targets.
+
     """
 
     tag = "intvelocity"
 
-    attributes = (*ActuatorBase.attributes, "kp", "kv", "dampratio", "inheritrange")
+    attributes = (
+        *ActuatorBase.attributes,
+        "actlimited",
+        "actrange",
+        "kp",
+        "kv",
+        "dampratio",
+        "inheritrange",
+    )
+
+    actlimited: ActuatorLimited = ActuatorLimited.AUTO
+    """If true, the internal state (activation) associated with this actuator is automatically clamped to actrange at runtime. If false, activation clamping is disabled. If "auto" and autolimits is set in compiler, activation clamping will automatically be set to true if actrange is defined without explicitly setting this attribute to "true". See the Activation clamping section for more details."""
+
+    actrange: Vec2 = np.array((0, 0))
+    """Range for clamping the activation state. The first value must be no greater than the second value. See the Activation clamping section for more details.
+
+    Setting this attribute without specifying actlimited is an error if autolimits is "false" in compiler."""
 
     kp: float = 1
     """Position feedback gain."""
@@ -65,15 +83,6 @@ class ActuatorIntegratedVelocity(ActuatorBase):
         !!! note "Included for reference only"
         """
         return GainType.FIXED
-
-    @property
-    def actlimited(self) -> Literal[True]:
-        """
-        If true, the internal state (activation) associated with this actuator is automatically clamped to actrange at runtime. If false, activation clamping is disabled. If "auto" and autolimits is set in compiler, activation clamping will automatically be set to true if actrange is defined without explicitly setting this attribute to "true". See the Activation clamping section for more details.
-
-        !!! note "Included for reference only"
-        """
-        return True
 
     @property
     def biastype(self) -> Literal[BiasType.AFFINE]:
