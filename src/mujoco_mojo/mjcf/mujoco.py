@@ -65,7 +65,7 @@ class Mujoco(XMLModel):
         "extensions",
     )
 
-    model: ModelName = ModelName("MuJoCo Model")
+    model: ModelName | None = None
     """The name of the model. This name is shown in the title bar of simulate.cc."""
 
     worldbody: WorldBody | None = None

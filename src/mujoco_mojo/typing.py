@@ -580,14 +580,17 @@ class DynType(StrEnum):
     FILTEREXACT = "filterexact"
     """Like filter but with exact integration"""
 
+    PID = "pid"
+    """act_dot = position error; see pid"""
+
+    DCMOTOR = "dcmotor"
+    """DC motor electrical dynamics, see dcmotor"""
+
     MUSCLE = "muscle"
     """act_dot = mju_muscleDynamics(...)"""
 
     USER = "user"
     """act_dot = mjcb_act_dyn(...)"""
-
-    PID = "pid"
-    """Integrates position error (and/or the slew-limited setpoint) into act, for the pid actuator's optional integral action and setpoint rate limiting."""
 
 
 class GainType(StrEnum):
@@ -602,14 +605,16 @@ class GainType(StrEnum):
     MUSCLE = "muscle"
     """gain_term = mju_muscleGain(...)"""
 
-    USER = "user"
-    """gain_term = mjcb_act_gain(...)"""
-
+    DCMOTOR = "dcmotor"
+    """DC motor gain (K or K/R), see dcmotor."""
     PID = "pid"
     """gain_term = gainprm[0] (ki), applied to act (the integrated position error), for the pid actuator."""
 
     SO3 = "so3"
     """gain_term = gainprm[0] (kp), applied to the geodesic orientation error log(q^-1 q_target), for SO(3) transmissions."""
+
+    USER = "user"
+    """gain_term = mjcb_act_gain(...)"""
 
 
 class BiasType(StrEnum):
@@ -624,11 +629,14 @@ class BiasType(StrEnum):
     MUSCLE = "muscle"
     """bias_term = mju_muscleBias(...)"""
 
-    USER = "user"
-    """bias_term = mjcb_act_bias(...)"""
+    DCMOTOR = "dcmotor"
+    """DC motor bias: back-EMF, cogging, LuGre friction, see dcmotor."""
 
     SO3 = "so3"
     """bias_term = biasprm[1]*log(q^-1 q_target) + biasprm[2]*omega, the geodesic analog of the affine bias for SO(3) transmissions."""
+
+    USER = "user"
+    """bias_term = mjcb_act_bias(...)"""
 
 
 class Inertia(StrEnum):
