@@ -36,7 +36,6 @@ import sys
 from pathlib import Path
 
 from check_mjcf_spec_coverage import (
-    IGNORE_FILE,
     ORIENTATION_COVERING_FIELDS,
     ORIENTATION_GROUP,
     _literals_match,
@@ -57,6 +56,8 @@ from rich.console import Console
 from rich.markup import escape
 
 console = Console(soft_wrap=True)
+
+IGNORE_FILE = Path(__file__).with_name("mjcf_schema_ignore.txt")
 
 
 def merge_elements_by_tag(schema: Schema) -> dict[str, Element]:

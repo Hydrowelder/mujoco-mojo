@@ -51,7 +51,7 @@ from rich.markup import escape
 
 SPEC_URL = "https://mujoco.readthedocs.io/en/stable/_sources/XMLreference.rst.txt"
 
-IGNORE_FILE = Path(__file__).with_name("mjcf_ignore.txt")
+IGNORE_FILE = Path(__file__).with_name("mjcf_spec_ignore.txt")
 
 # below this difflib ratio, a description is flagged as likely drifted from the spec
 DOCSTRING_SIMILARITY_THRESHOLD = 0.2
