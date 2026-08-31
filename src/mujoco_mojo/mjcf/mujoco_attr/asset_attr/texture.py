@@ -223,6 +223,8 @@ class TextureBuiltIn(TextureBase):
         "nchannel",
     )
 
+    color_fields = ("rgb1", "rgb2", "markrgb")
+
     is_builtin: Literal[True] = True
 
     builtin: TextureBuiltInType

@@ -15,6 +15,8 @@ class VisualHeadlight(XMLModel):
 
     attributes = ("ambient", "diffuse", "specular", "active")
 
+    color_fields = ("ambient", "diffuse", "specular")
+
     ambient: Vec3 = np.array((0.1, 0.1, 0.1))
     """The ambient component of the headlight, in the sense of OpenGL. The alpha component here and in the next two attributes is set to 1 and cannot be adjusted."""
 

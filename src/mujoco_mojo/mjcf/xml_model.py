@@ -89,6 +89,9 @@ class XMLModel(MojoBaseModel):
     __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
 
+    color_fields: ClassVar[tuple[str, ...]] = ("rgba",)
+    """Names of fields on this model that hold MuJoCo colors, whose components are expected in the range [0, 1] rather than [0, 255]. `warn_out_of_range_colors` checks each of these after validation and logs a warning if any component exceeds 1. Most MJCF elements only have a single color field, named `rgba`, which is the default here; override this in a subclass that has differently-named and/or multiple color fields (e.g. `VisualRGBA`, `Texture`, `Light`)."""
+
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = None
     """Attribute used to perform MjModel ID lookups."""
 
@@ -96,12 +99,13 @@ class XMLModel(MojoBaseModel):
     """MuJoCo runtime ID."""
 
     @model_validator(mode="after")
-    def warn_rgba(self) -> Self:
-        rgba: np.ndarray | None = getattr(self, "rgba", None)
-        if rgba is not None:
-            if max(rgba) > 1:
+    def warn_out_of_range_colors(self) -> Self:
+        for field in self.color_fields:
+            value = getattr(self, field, None)
+            if isinstance(value, (np.ndarray, list, tuple)) and max(value) > 1:
                 logger.warning(
-                    f"{self.__class__.__name__} {getattr(self, 'name', 'unnamed')}: MuJoCo rgba values range from 0 to 1, not 0 to 255. You entered {rgba=}."
+                    f"{self.__class__.__name__} {getattr(self, 'name', 'unnamed')}.{field}: "
+                    f"MuJoCo colors range from 0 to 1, not 0 to 255. You entered {field}={value!r}."
                 )
         return self
 

@@ -55,6 +55,8 @@ class Light(XMLModel):
         "texture",
     )
 
+    color_fields = ("diffuse", "ambient", "specular")
+
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_LIGHT
 
     name: LightName | None = None

@@ -254,11 +254,16 @@ class VideoRecorder:
         custom_traces: list[LineConfig],
     ):
         """Updates the scene for the current state and renders it to an image array."""
-        self._renderer.update_scene(
-            data=state.data,
-            camera=self.camera_name,
-            scene_option=self._vopt,
-        )
+        try:
+            self._renderer.update_scene(
+                data=state.data,
+                camera=self.camera_name,
+                scene_option=self._vopt,
+            )
+        except AttributeError as e:
+            msg = f"Failed to record frame due to an attribute error. This is likely because this video recorder was not prepared for simulation. Try using the '.setup(state)' method before simulating: {e}"
+            logger.error(msg)
+            raise AttributeError(msg)
 
         if custom_arrows and self.show_loads:
             for arrow in custom_arrows:

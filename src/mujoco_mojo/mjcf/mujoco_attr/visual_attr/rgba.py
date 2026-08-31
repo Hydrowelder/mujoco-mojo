@@ -41,6 +41,9 @@ class VisualRGBA(XMLModel):
         "bvactive",
     )
 
+    # Every attribute here is a color, so all of them get the 0-1 range check
+    color_fields = attributes
+
     fog: Vec4 = np.array((0, 0, 0, 1))
     """When fog is enabled, the color of all pixels fades towards the color specified here. The spatial extent of the fading is controlled by the fogstart and fogend attributes of the map element above."""
 

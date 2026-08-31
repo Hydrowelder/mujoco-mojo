@@ -18,7 +18,20 @@ class SubModel(XMLModel):
 
     name: str | None = None
     value: float = 0.0
-    rgba: Vec4 | None = None  # Added for warn_rgba test
+    rgba: Vec4 | None = None  # Added for warn_out_of_range_colors test
+
+
+class MultiColorModel(XMLModel):
+    """Mimics classes like Texture/Light/VisualHeadlight, whose color fields aren't named `rgba`."""
+
+    tag = "multi_color"
+    attributes = ("name", "primary", "secondary")
+    color_fields = ("primary", "secondary")
+    _mjt_obj = mujoco.mjtObj.mjOBJ_SITE
+
+    name: str | None = None
+    primary: Vec4 | None = None
+    secondary: Vec4 | None = None
 
 
 class ParentModel(XMLModel):
@@ -129,15 +142,35 @@ def test_invalid_names():
 
 
 def test_rgba_warning(caplog):
-    """Verify that warn_rgba triggers a logger warning for values > 1."""
+    """Verify that warn_out_of_range_colors triggers a logger warning for values > 1."""
     # MuJoCo uses 0-1 range. 255 should trigger the warning validator.
     rgba_255 = np.asarray([255, 0, 0, 255])
 
     # This shouldn't raise an error, just log a warning
     SubModel(name="test_geom", rgba=rgba_255)
 
-    assert "MuJoCo rgba values range from 0 to 1" in caplog.text
+    assert "MuJoCo colors range from 0 to 1" in caplog.text
     assert "You entered rgba=array([255,   0,   0, 255])" in caplog.text
+
+
+def test_color_fields_covers_non_rgba_named_fields(caplog):
+    """
+    Verify that `color_fields` generalizes the check beyond a field literally
+    named `rgba` (regression test for classes like Texture/Light/VisualHeadlight,
+    whose color fields have their own names).
+    """
+    # In range: no warning for either field
+    MultiColorModel(
+        primary=np.asarray([1, 0, 0, 1]), secondary=np.asarray([0, 1, 0, 1])
+    )
+    assert "MuJoCo colors range from 0 to 1" not in caplog.text
+
+    # Out of range: only the offending field should be named in the warning
+    MultiColorModel(
+        primary=np.asarray([255, 0, 0, 255]), secondary=np.asarray([0, 1, 0, 1])
+    )
+    assert "MultiColorModel None.primary" in caplog.text
+    assert "MultiColorModel None.secondary" not in caplog.text
 
 
 def test_exclusive_groups_none_check():
