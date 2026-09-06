@@ -156,6 +156,40 @@ def test_settings_save_writes_schema_header_on_first_save(
     assert first_line == "#:schema settings.schema.json"
 
 
+def test_settings_save_colocates_schema_and_taplo_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save() writes settings.schema.json and .taplo.toml alongside settings.toml in the same call, so a settings directory is always self-contained without a separate write_schema_files() step."""
+    toml_path = tmp_path / "settings.toml"
+    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
+    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    _isolate_project_settings(monkeypatch, tmp_path)
+
+    MujocoMojoSettings().save()
+
+    schema_path = tmp_path / "settings.schema.json"
+    assert schema_path.exists()
+    assert (tmp_path / ".taplo.toml").exists()
+    assert schema_path.as_uri() in (tmp_path / ".taplo.toml").read_text()
+
+
+def test_settings_save_writes_to_explicit_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save(directory) writes settings.toml, settings.schema.json, and .taplo.toml into the given directory instead of the global default - the same method serves both the global and project-local settings directories."""
+    monkeypatch.setattr(
+        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+    )
+    _isolate_project_settings(monkeypatch, tmp_path)
+    other_dir = tmp_path / "somewhere-else"
+
+    MujocoMojoSettings().save(other_dir)
+
+    assert (other_dir / "settings.toml").exists()
+    assert (other_dir / "settings.schema.json").exists()
+    assert (other_dir / ".taplo.toml").exists()
+
+
 def test_settings_save_preserves_hand_written_comments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -262,20 +296,14 @@ def test_settings_reset_restores_defaults_and_keeps_comments(
     assert 'action_force = "EMERALD_500"' in content
 
 
-def test_write_schema_files_writes_schema_and_taplo_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """write_schema_files() emits a valid JSON schema (with defaults folded into each field's description) and a .taplo.toml rule pointing at it."""
+def test_write_schema_files_writes_schema_and_taplo_config(tmp_path: Path) -> None:
+    """write_schema_files(directory) emits a valid JSON schema (with defaults folded into each field's description) and a .taplo.toml rule pointing at it, both colocated in the given directory."""
     import json
+
+    MujocoMojoSettings.write_schema_files(tmp_path)
 
     schema_path = tmp_path / "settings.schema.json"
     taplo_path = tmp_path / ".taplo.toml"
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_SCHEMA_FILE", schema_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_TAPLO_FILE", taplo_path)
-
-    MujocoMojoSettings.write_schema_files()
-
     assert schema_path.exists()
     schema = json.loads(schema_path.read_text())
     symlink_prop = schema["$defs"]["AssetBundlingSettings"]["properties"]["symlink"]
@@ -329,16 +357,12 @@ def test_project_settings_win_over_global_on_the_same_key(
     assert MujocoMojoSettings().visualization.action_force == "AMBER_500"
 
 
-def test_init_project_file_writes_only_schema_header(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """init_project_file() writes just the #:schema header, no keys - unlike the global file, a project file should start as a blank slate. Re-running it is a no-op once the file exists."""
-    project_path = tmp_path / "project.toml"
-    monkeypatch.setattr(
-        "mujoco_mojo.settings.project_settings_file", lambda: project_path
-    )
+def test_save_project_mode_writes_only_schema_header(tmp_path: Path) -> None:
+    """save(directory, project=True) writes just the #:schema header, no keys - unlike the global file, a project file should start as a blank slate. Re-running it leaves an existing file's contents untouched."""
+    project_dir = tmp_path / "project"
+    project_path = project_dir / "settings.toml"
 
-    returned = MujocoMojoSettings.init_project_file()
+    returned = MujocoMojoSettings.model_construct().save(project_dir, project=True)
 
     assert returned == project_path
     content = project_path.read_text()
@@ -347,15 +371,78 @@ def test_init_project_file_writes_only_schema_header(
     assert "=" not in content
 
     project_path.write_text(content + "\n[assets]\nsymlink = true\n", encoding="utf-8")
-    MujocoMojoSettings.init_project_file()
+    MujocoMojoSettings.model_construct().save(project_dir, project=True)
     assert "symlink = true" in project_path.read_text()
+
+
+def test_save_project_mode_colocates_its_own_schema(tmp_path: Path) -> None:
+    """save(directory, project=True) writes its own settings.schema.json/.taplo.toml directly in that directory and points the #:schema header at that relative filename, rather than an absolute reference into the global ~/.mujoco-mojo directory - a cross-directory reference is what broke under SSH/SSHFS setups where only the project directory is visible to the editor."""
+    project_dir = tmp_path / "project"
+    project_path = project_dir / "settings.toml"
+
+    MujocoMojoSettings.model_construct().save(project_dir, project=True)
+
+    assert project_path.read_text().splitlines()[0] == "#:schema settings.schema.json"
+
+    schema_path = project_dir / "settings.schema.json"
+    taplo_path = project_dir / ".taplo.toml"
+    assert schema_path.exists()
+    assert taplo_path.exists()
+    # the taplo rule's schema url must point at the colocated schema file,
+    # not the global ~/.mujoco-mojo/settings.schema.json
+    assert schema_path.as_uri() in taplo_path.read_text()
+
+
+def test_save_project_mode_never_writes_field_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save(directory, project=True) ignores the instance's own field values entirely, even non-default ones - unlike the global file, a project file is meant to hold only a small, deliberate diff (see set_project_value), not a full mirror of every setting."""
+    project_dir = tmp_path / "project"
+    monkeypatch.setattr(
+        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+    )
+    _isolate_project_settings(monkeypatch, tmp_path)
+
+    MujocoMojoSettings(assets=AssetBundlingSettings(symlink=True)).save(
+        project_dir, project=True
+    )
+
+    content = (project_dir / "settings.toml").read_text()
+    assert "symlink" not in content
+    assert "[assets]" not in content
+
+
+def test_save_project_mode_tolerates_an_invalid_existing_file(tmp_path: Path) -> None:
+    """save(directory, project=True) must work even when the project file already there is currently invalid (e.g. a stray top-level key from a hand-edit-in-progress) - re-running `settings init --project` is meant to be a safe, idempotent no-op, and must not require constructing a validated MujocoMojoSettings from the very file it's about to leave untouched. Regression test: an earlier version called MujocoMojoSettings.defaults(), which fully validates every settings source (including this file) before save() ever runs, defeating the whole point of the untouched-when-it-exists guarantee."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir(parents=True)
+    project_path = project_dir / "settings.toml"
+    project_path.write_text(
+        "#:schema settings.schema.json\ncustom = true\n", encoding="utf-8"
+    )
+
+    MujocoMojoSettings.model_construct().save(project_dir, project=True)
+
+    assert project_path.read_text() == "#:schema settings.schema.json\ncustom = true\n"
+
+
+def test_save_project_mode_drops_gitignore(tmp_path: Path) -> None:
+    """save(directory, project=True) drops a `.gitignore` (`*`) next to the project settings file, so machine-specific overrides aren't committed by accident - but never touches one already there."""
+    project_dir = tmp_path / "project"
+
+    MujocoMojoSettings.model_construct().save(project_dir, project=True)
+    assert (project_dir / ".gitignore").read_text() == "*\n"
+
+    (project_dir / ".gitignore").write_text("custom\n", encoding="utf-8")
+    MujocoMojoSettings.model_construct().save(project_dir, project=True)
+    assert (project_dir / ".gitignore").read_text() == "custom\n"
 
 
 def test_set_project_value_creates_file_and_auto_vivifies_tables(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """set_project_value() creates the project file (and any intermediate tables) on demand, writing only the one changed key."""
-    project_path = tmp_path / "project.toml"
+    project_path = tmp_path / "settings.toml"
     monkeypatch.setattr(
         "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
@@ -403,7 +490,7 @@ def test_set_project_value_treats_slurm_key_as_one_literal_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The slurm group is a free-form dict whose own keys legitimately contain dots (e.g. "sbatch.account"), so "slurm.sbatch.account" must set that one flat key rather than being split into three nested table levels."""
-    project_path = tmp_path / "project.toml"
+    project_path = tmp_path / "settings.toml"
     monkeypatch.setattr(
         "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )

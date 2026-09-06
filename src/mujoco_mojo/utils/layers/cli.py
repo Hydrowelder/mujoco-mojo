@@ -1016,9 +1016,9 @@ def init_project(
 
     from rich.prompt import Confirm
 
-    from mujoco_mojo.settings import SETTINGS_FILE
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE
 
-    if not SETTINGS_FILE.exists():
+    if not GLOBAL_SETTINGS_FILE.exists():
         console.print("\n[bold yellow]Global Settings[/bold yellow]")
         if Confirm.ask(
             "No user settings file found. Set one up now with defaults?", default=True
@@ -1073,53 +1073,54 @@ def settings_init(
     """
     [bold yellow]Initialize a settings file with defaults.[/bold yellow]
 
-    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema. Pass [bold]--project[/bold] to instead create an empty project-local override file at [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan] - a project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy.
+    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
     """
     from mujoco_mojo.settings import (
-        SETTINGS_FILE,
-        SETTINGS_SCHEMA_FILE,
-        SETTINGS_TAPLO_FILE,
+        SETTINGS_DIR,
         MujocoMojoSettings,
         project_settings_file,
     )
 
+    target_dir = project_settings_file().parent if project else SETTINGS_DIR
+    target = target_dir / "settings.toml"
+    already_existed = target.exists()
+
     if project:
-        target = project_settings_file()
-        already_existed = target.exists()
-        MujocoMojoSettings.init_project_file()
+        # model_construct() bypasses env/TOML loading entirely - save(project=True)
+        # never reads the instance's field values, and re-running this must work
+        # even if the existing project file (or the unrelated global one) is
+        # currently malformed, since it never touches an existing file's contents
+        MujocoMojoSettings.model_construct().save(target_dir, project=True)
         setting_msg = (
             f"[yellow]Project settings already exist:[/yellow] {target}"
             if already_existed
             else f"[green]Project settings written:[/green] {target}"
         )
-        console.print(
-            Panel(
-                f"{setting_msg}\n\n"
-                "[white]Add only the keys you want to override for this project - "
-                "it references the global schema, so no separate schema/taplo files are created here.",
-                title="[cyan]Project Settings Initialized[/cyan]",
-                expand=False,
-                border_style="cyan",
-            )
-        )
-        return
-
-    if SETTINGS_FILE.exists() and not force:
-        setting_msg = f"[yellow]Settings already exist:[/yellow] {SETTINGS_FILE} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
+        extra = "[white]Add only the keys you want to override for this project.\n\n"
+        title = "Project Settings Initialized"
+    elif already_existed and not force:
+        MujocoMojoSettings.write_schema_files(target_dir)
+        setting_msg = f"[yellow]Settings already exist:[/yellow] {target} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
+        extra = ""
+        title = "Settings Initialized"
     else:
-        MujocoMojoSettings().save()
-        setting_msg = f"[green]Settings written:[/green]       {SETTINGS_FILE}"
+        MujocoMojoSettings().save(target_dir)
+        setting_msg = f"[green]Settings written:[/green]       {target}"
+        extra = ""
+        title = "Settings Initialized"
 
-    MujocoMojoSettings.write_schema_files()
+    schema_file = target_dir / "settings.schema.json"
+    taplo_file = target_dir / ".taplo.toml"
 
     console.print(
         Panel(
             f"{setting_msg}\n"
-            f"[green]Schema:[/green]                 {SETTINGS_SCHEMA_FILE}\n"
-            f"[green]Taplo config:[/green]           {SETTINGS_TAPLO_FILE}\n\n"
+            f"[green]Schema:[/green]                 {schema_file}\n"
+            f"[green]Taplo config:[/green]           {taplo_file}\n\n"
+            f"{extra}"
             "[white]TOML intellisense is now available for any taplo-powered editor "
             "(VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
-            title="[cyan]Settings Initialized[/cyan]",
+            title=f"[cyan]{title}[/cyan]",
             expand=False,
             border_style="cyan",
         )
@@ -1177,11 +1178,13 @@ def settings_show(
     import tomlkit
     from rich.syntax import Syntax
 
-    from mujoco_mojo.settings import SETTINGS_FILE, project_settings_file
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, project_settings_file
 
     if scope is not SettingsScope.EFFECTIVE:
         target = (
-            project_settings_file() if scope is SettingsScope.PROJECT else SETTINGS_FILE
+            project_settings_file()
+            if scope is SettingsScope.PROJECT
+            else GLOBAL_SETTINGS_FILE
         )
         label = scope.value.capitalize()
         if not target.exists():
@@ -1201,7 +1204,7 @@ def settings_show(
             case SettingsScope.PROJECT:
                 target_str = str(target)
             case SettingsScope.GLOBAL:
-                target_str = SETTINGS_FILE.relative_to(Path.home()).as_posix()
+                target_str = GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
         raw_str = _pad_for_subtitle(tomlkit.dumps(doc).rstrip("\n"), target_str)
 
         console.print(
@@ -1221,12 +1224,14 @@ def settings_show(
     d = settings.model_dump(mode="json", exclude_none=True)
 
     toml_str = tomlkit.dumps(d).rstrip("\n")
-    if SETTINGS_FILE.exists():
+    if GLOBAL_SETTINGS_FILE.exists():
         try:
-            source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()).as_posix())
+            source = "~/" + str(
+                GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
+            )
         except ValueError:
             breakpoint()
-            source = str(SETTINGS_FILE)
+            source = str(GLOBAL_SETTINGS_FILE)
     else:
         source = "defaults only"
 
@@ -1281,7 +1286,7 @@ def settings_set_cmd(
     """
     from pydantic import ValidationError
 
-    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, MujocoMojoSettings
 
     parsed = _smart_parse(value)
 
@@ -1301,7 +1306,7 @@ def settings_set_cmd(
         )
         return
 
-    if not SETTINGS_FILE.exists():
+    if not GLOBAL_SETTINGS_FILE.exists():
         console.print(
             "[bold red]Error:[/bold red] No settings file found. "
             "Run [bold cyan]mujoco-mojo settings init[/bold cyan] first."
