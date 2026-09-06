@@ -1,6 +1,7 @@
 # Generate Script
 
 !!! abstract
+
     The **Generate Script** is the heartbeat of your simulation pipeline. Its job is to programmatically assemble the MuJoCo MJCF model and perform all stochastic (random) draws. By the time this function returns, the simulation should be "frozen" in its initial state, ready for the physics engine to take over.
 
     <figure markdown="span">
@@ -9,6 +10,7 @@
     </figure>
 
 !!! info "Suggested Reading: Mojo Reloaded"
+
     After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
@@ -20,6 +22,7 @@ The generate script is built around the "MojoGenerate" protocol. This function p
 It also **must** return a `mojo.MojoModel`.
 
 ???+ example "Example: MojoGenerate Handle"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-handle"
     ```
@@ -33,11 +36,13 @@ Because Mojo separates **Generation** (building the model) from **Runtime** (run
 We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these references. This keeps your generate function clean and your runtime logic strongly typed.
 
 ???+ warning "Warning: User Data Validation"
+
     Using a non-Pydantic BaseModel based `Handoff` will not be validated. If it is critical to have a validated Handoff you should use a BaseModel.
 
     Handoff objects are also not serialized when running, so it is not recommended to rely on this for future recreation of models.
 
 ??? example "Example: Handoff Class"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:handoff"
     ```
@@ -51,14 +56,17 @@ Assets like textures and materials are defined in the `mojo_model.mjcf.assets` l
 Notice in the following code how enumerations such as `mojo.TextureType.D2` and `mojo.TextureBuiltInType.CHECKER` are used instead of strings.
 
 ???+ tip "Tip: Walrus Operator (`:=`)"
+
     Notice the use of the walrus operator, this allows you to define an object and immediately keep a reference to it for later use in the script.
 
     We will be using the `grid_mat` Material in the next section!
 
 ???+ tip "Tip: Color Utilities"
+
     Mojo provides some helpful utilities like `mojo.utils.Color`. This class provides a ton of helpful shortcuts for [Tailwind CSS](https://tailwindcss.com/docs/colors) colors. This makes it really easy to customize the appearance of your model.
 
 ???+ example "Example: Assets Definition"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:assets"
     ```
@@ -74,9 +82,11 @@ Using `DepPath` is the key to portability; it tells Mojo to track the file as a 
 The `worldbody` contains your static environment and the kinematic tree of your bodies. Mojo's API mirrors the XML hierarchy exactly.
 
 ???+ note "Note: Pose"
+
     Mojo provides many ways to define a position and orientation ([pose](https://en.wikipedia.org/wiki/Pose_(computer_vision))). Shown below is a pose definition using `mojo.PoseQuat`. Other orientation options are using an axis angle, Euler angle sequence, X and Y axes, or a Z axis.
 
 ???+ example "Example: Worldbody Definition"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:worldbody"
     ```
@@ -92,14 +102,17 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 - **Overridable** (can be forced to a specific value via the CLI).
 
 ???+ note "Note: Squeezing `NamedValues`"
+
     The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.sqeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)
 
 ???+ tip "Tip: Unit Systems"
+
     The `MojoModel` provides a helpful way to define a model unit system which allows you to define values in whatever unit you want while maintaining consistent behavior while solving the dynamics.
 
     > For details on usage visit the [`stochas` documentation](https://hydrowelder.github.io/stochas/user-guides/unit-system/)
 
 ???+ example "Example: Sampling"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:sampling"
     ```
@@ -109,6 +122,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 Lets tie things up! At the end of your `generate` function, you attach your `Handoff` data to the `mojo_model.user_data` attribute. This makes it accessible to the `runtime` function later.
 
 ???+ example "Example: End of Function"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-finalizing"
     ```
@@ -122,11 +136,13 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 ---
 
 !!! success
+
     *Okay. That was kind of a lot.*
 
     Now that we have completed building the kinematic tree, defining a user data to handoff, and an introduction to using distribution sampling, we now move on to defining the [runtime behavior](runtime-script.md) of the physics engine.
 
 ??? example "Example: Full Generate Script"
+
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate"
     ```

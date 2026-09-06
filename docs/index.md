@@ -3,6 +3,7 @@ hide:
   - navigation
 #   - toc
 ---
+
 <style>
   .md-typeset h1,
   .md-content__button {
@@ -177,6 +178,7 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 - **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
 
 ??? example
+
     ```bash  linenums="0"
     mujoco-mojo reloaded \
         --generator monte_carlo_test.Experiment.generate \

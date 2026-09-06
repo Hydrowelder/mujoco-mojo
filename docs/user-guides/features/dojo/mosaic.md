@@ -1,6 +1,7 @@
 # Mosaic
 
 !!! abstract
+
     The **Mosaic** tool is the heart of the Dojo. While the Monitor tells you that a job finished, Mosaic shows you how it performed. It is a high-performance telemetry viewer designed to handle massive datasets while staying very customizable.
 
 ---
@@ -28,6 +29,7 @@ Trial Navigation
 - **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them. The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button.
 
 !!! tip "Pro Tip: Regex Filtering"
+
     The dropdowns aren't just lists; they are Regex-aware. You can use the segment buttons (like quat, ctrl, or sens) to quickly filter down hundreds of signals to just the ones you need.
 
 <figure markdown="span">
@@ -61,6 +63,7 @@ Adjust the visual style. Switch between Lines, Markers, or both. Change interpol
 **Middle-click** anywhere on the plot to drop a persistent note at the exact data coordinates of your cursor. Notes are saved into the JSON config and help you flag specific events (like "Impact Start" or "Sensor Saturation"). The editor allows you to go back and edit the note's label. Press ++esc++ to cancel an in-progress note or close the panel.
 
 ???+ tip "Tip: Clickable Buttons"
+
     You can click on a note in the editor to "focus" on the note!
 
 <figure markdown="span">
@@ -132,11 +135,13 @@ Everything you do in the UI is mirrored in this JSON block in real-time, from se
 - **Copy/Format:** A copy and format button are also provided to provide improved quality of life.
 
 ???+ tip "Tip: Drag and Drop"
+
     If you downloaded a Config JSON in the [export options menu](#export-options), you can drag and drop that file back on this page to update the JSON configuration!
 
 ---
 
 !!! success
+
     You are now an expert with MuJoCo Mojo!
 
     > Live long and prosper!

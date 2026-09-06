@@ -1,7 +1,10 @@
 # Mojo Reloaded
 
 !!! abstract
+
     **Mojo Reloaded** is the definitive rapid prototyping tool for MuJoCo Mojo. It allows you to modify your model architecture and physics logic on the fly without ever closing your visualizer. By tightening the feedback loop between code changes and visual results, Reloaded transforms the development process from "Compile and Wait" to "Save and See."
+
+    To get the most out of this feature, install Mojo with `uv add mujoco-mojo[reloaded]` or `pip install mujoco-mojo[reloaded]`!
 
 ---
 
@@ -17,20 +20,20 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument           | Shortcut | Description                                                                    |
-|:-------------------|:---------|:-------------------------------------------------------------------------------|
-| `--help`           |          | Describes all available arguments. Used on its own.                            |
-| `--generator`      | `-g`     | Import path to your `generate` function.                                       |
-| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.    |
-| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                               |
-| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                 |
-| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).      |
-| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).              |
-| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                      |
-| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.   |
-| `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                    |
-| `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.         |
-| `--port`           | `-p`     | Port for the web-based viewers (default: `8080`).                              |
+| Argument           | Shortcut | Description                                                                  |
+| :----------------- | :------- | :--------------------------------------------------------------------------- |
+| `--help`           |          | Describes all available arguments. Used on its own.                          |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                     |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.  |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                             |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).               |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).    |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).            |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                    |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws. |
+| `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                  |
+| `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.       |
+| `--port`           | `-p`     | Port for the web-based viewers (default: `8080`).                            |
 
 ---
 
@@ -39,7 +42,7 @@ The `reloaded` command is highly flexible, allowing you to specify different vie
 Once Reloaded is running, your terminal becomes an interactive command center. You can trigger reloads and control simulation speed without restarting the process.
 
 | Command              | Action                                                                                       |
-|:---------------------|:---------------------------------------------------------------------------------------------|
+| :------------------- | :------------------------------------------------------------------------------------------- |
 | `ENTER`              | Repeat the last command (perfect for rapid iteration).                                       |
 | `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
 | `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
@@ -95,4 +98,5 @@ Once the world looks right, it's time to test your forces. By providing a `--run
 ---
 
 !!! success
+
     Use the **Viser** UI (`--ui viser`, available in the `mujoco-mojo[reloaded]` dependency group) if you want to develop on one machine and view the simulation on another (such as on an SSH connection, phone, or tablet) via your local network. Reloaded will automatically display the local and mobile URLs in your terminal.

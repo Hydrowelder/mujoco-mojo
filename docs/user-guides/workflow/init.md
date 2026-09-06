@@ -1,6 +1,7 @@
 # Initializing a New Project
 
 !!! abstract
+
     The `mujoco-mojo init` command scaffolds a new project in the current directory, providing ready-to-run starter files for Monte Carlo campaigns or optimization studies.
 
 ---
@@ -19,11 +20,11 @@ With no flags, the command generates a standard Monte Carlo project. Pass `--opt
 
 Running `mujoco-mojo init` produces three files in the current directory:
 
-| File | Purpose |
-|---|---|
+| File            | Purpose                                                 |
+| --------------- | ------------------------------------------------------- |
 | `simulation.py` | Simulation stubs: `UserData`, `generate`, and `runtime` |
-| `run.sh` | Pre-configured shell script to launch the campaign |
-| `reloaded.sh` | Shell script to open the interactive viewer |
+| `run.sh`        | Pre-configured shell script to launch the campaign      |
+| `reloaded.sh`   | Shell script to open the interactive viewer             |
 
 Both shell scripts are made executable and resolve their paths relative to their own location, so they can be invoked from any working directory.
 
@@ -58,6 +59,7 @@ bash run.sh
 ```
 
 !!! tip
+
     Use `reloaded.sh` during development to get rapid visual feedback on your model without running a full campaign.
 
     ```bash linenums="0"

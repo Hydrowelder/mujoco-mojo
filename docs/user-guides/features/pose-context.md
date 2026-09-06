@@ -1,6 +1,7 @@
 # Pose Context
 
 !!! abstract
+
     MJCF poses are always relative to a parent body. **Pose Context** lets you express any element's pose relative to a frame on a different branch of the kinematic tree, without walking the chain manually.
 
 ---
@@ -26,9 +27,11 @@ For a single pose, `Mujoco.local_pose(frame, relative_to)` resolves the pose in 
 `frame` and `relative_to` accept any object that carries a `pose` attribute: `Body`, any site type, `Frame`, `Camera`, `Light`, and so on.
 
 ???+ warning "Warning: Match relative_to to the element's parent"
+
     `relative_to` must be the direct parent body of the element that will receive the resolved pose. If you assign the result to a site on `arm` but pass `relative_to=gripper`, the pose will be mathematically correct in the wrong coordinate frame and the element will appear in the wrong location.
 
 ???+ warning "Warning: Tree must be complete"
+
     Both `frame` and `relative_to` must be part of `mojo_model.mjcf.worldbody` at the time of the call. This is the same requirement MuJoCo has for compiling the model - anything not attached to the world will not appear in `MjModel`.
 
 ---
@@ -54,4 +57,5 @@ MJCF `Frame` elements are coordinate transforms that disappear at compile time, 
 ---
 
 !!! success
+
     You can now place elements precisely anywhere in the kinematic tree without manually composing transform chains. Use `local_pose` for quick one-off resolutions and `PoseRef` when you want to define the reference early and resolve it later in your generate function.
