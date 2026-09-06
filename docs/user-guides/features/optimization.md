@@ -4,6 +4,10 @@
 
     While a [Monte Carlo](../workflow/running-jobs/running-jobs.md) campaign explores the "what if" of random chance, Optimization helps answer the "what is best." Instead of drawing from static distributions, Mojo uses Optuna to intelligently navigate your design space, evolving your model parameters to minimize or maximize a specific physical outcome.
 
+!!! note "Install Required"
+
+    Optimization requires the `optuna`, `optuna-dashboard`, and `joblib` packages. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`.
+
 ---
 
 ## Design Variables vs. Distributions

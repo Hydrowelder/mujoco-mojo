@@ -39,7 +39,7 @@ flowchart TD
 
 If two different source files share a filename but have different content, such as `textures/wood/texture.png` and `textures/steel/texture.png`, Mojo does not let one silently overwrite the other. Because every destination is decided before any copying starts, it can see the whole picture and nest the conflicting files under subfolders named after their original source directories, for example:
 
-```
+```text  linenums="0" title=""
 assets/
 ├── wood/
 │   └── texture.png

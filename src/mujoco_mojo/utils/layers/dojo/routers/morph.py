@@ -3,7 +3,11 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import HTMLResponse
 
+from mujoco_mojo.utils.log import get_logger
+
 from .. import shared
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -39,8 +43,14 @@ def mount_optuna_engine(app: FastAPI, storage_url: str):
     """Mounts the Optuna Dashboard as a sub-app at /morph."""
     import warnings
 
-    import optuna
-    import optuna_dashboard
+    try:
+        import optuna
+        import optuna_dashboard
+    except ModuleNotFoundError:
+        msg = "The `optuna` and `optuna-dashboard` packages are required to view optimization jobs in the Dojo. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`"
+        logger.exception(msg)
+        raise ModuleNotFoundError(msg)
+
     from fastapi.middleware.wsgi import WSGIMiddleware
     from fastapi.staticfiles import StaticFiles
 

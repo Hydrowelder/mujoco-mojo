@@ -9,9 +9,7 @@ description = "A complete MJCF lifecycle and trial orchestration suite for MuJoC
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "coacd>=1.0.7",
     "fastapi>=0.134.0",
-    "fastparquet>=2025.12.0",
     "jinja2>=3.1.6",
     "matplotlib>=3.10.8",
     "mediapy>=1.2.6",
@@ -22,22 +20,16 @@ dependencies = [
     "pillow>=12.3.0",
     "polars>=1.39.0",
     "pyarrow>=23.0.1",
-    "pybind11-stubgen>=2.5.5",
     "pydantic>=2.12.5",
     "rich>=14.3.3",
     "scipy>=1.17.0",
-    "scipy-stubs[scipy]>=1.17.0.2",
     "stochas>=2.2.3",
     "sse-starlette>=3.3.4",
     "tabulate>=0.9.0",
     "trimesh>=4.11.2",
     "typer>=0.24.1",
     "uvicorn>=0.41.0",
-    "ipykernel>=7.2.0",
     "pip>=26.1.2",
-    "optuna>=4.8.0",
-    "joblib>=1.5.3",
-    "optuna-dashboard>=0.20.0",
     "pint>=0.25.3",
     "python-fcl>=0.7.0.11",
     "rtree>=1.4.1",
@@ -73,26 +65,37 @@ keywords = [
 
 [project.optional-dependencies]
 reloaded = ["mjviser>=0.0.11", "viser>=1.0.26", "watchfiles>=1.1.1"]
+mesh-decomp = ["coacd>=1.0.7"]
+optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
+all = ["mujoco-mojo[reloaded,mesh-decomp,optimize]"]
 # sensai = ["pydantic-ai>=1.102.0", "requests>=2.32.5"]
 
 [dependency-groups]
+# previous dependencies commented out intentionally in case I need them again
 dev = [
-    "griffe-pydantic>=1.2.0",
-    "matplotlib>=3.10.8",
+    "coacd>=1.0.7",
+    "griffe-pydantic>=1.3.1",
+    "ipykernel>=7.2.0",
+    "joblib>=1.5.3",
+    # "matplotlib>=3.10.8",
     "mkdocs>=1.6.1",
-    "mkdocs-gen-files>=0.6.0",
-    "mkdocs-glightbox>=0.5.2",
-    "mkdocs-literate-nav>=0.6.2",
-    "mkdocs-material>=9.7.1",
+    # "mkdocs-gen-files>=0.6.0",
+    # "mkdocs-glightbox>=0.5.2",
+    # "mkdocs-literate-nav>=0.6.2",
+    # "mkdocs-material>=9.7.7",
     "mkdocs-open-in-new-tab>=1.0.8",
-    "mkdocs-section-index>=0.3.10",
-    "mkdocstrings[python]>=1.0.2",
-    "pyright[nodejs]>=1.1.410",
-    "pytest>=9.0.3",
-    "ruff>=0.15.17",
-    "tabulate>=0.9.0",
-    "watchfiles>=1.1.1",
-    "zensical>=0.0.36",
+    # "mkdocs-section-index>=0.3.10",
+    "mkdocstrings[python]>=1.0.6",
+    "optuna>=4.8.0",
+    "optuna-dashboard>=0.20.0",
+    "pybind11-stubgen>=2.5.5",
+    "pyright[nodejs]>=1.1.411",
+    "pytest>=9.1.1",
+    "ruff>=0.16.6",
+    "scipy-stubs[scipy]>=1.17.0.2",
+    "tabulate>=0.10.0",
+    "watchfiles>=1.2.0",
+    "zensical>=0.0.59",
 ]
 
 [project.scripts]

@@ -14,6 +14,7 @@ from typing import Annotated, Any, Literal, overload
 import typer
 from rich.align import Align
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
@@ -1497,7 +1498,11 @@ def run_dojo(
         from mujoco_mojo.utils.layers.dojo.routers.morph import mount_optuna_engine
 
         db_path = f"sqlite:///{workdir / 'study.db'}"
-        mount_optuna_engine(dojo_app, db_path)
+        try:
+            mount_optuna_engine(dojo_app, db_path)
+        except ModuleNotFoundError as e:
+            console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            raise typer.Exit(code=1)
 
     # detect ip
     local_ip = get_local_ip()
@@ -1564,7 +1569,15 @@ def run_optimizer(
 
     This command uses Optuna to intelligently navigate the search space defined by [bold cyan]model.design_float[/bold cyan] and [bold cyan]model.design_categorical[/bold cyan] calls within your generator.
     """
-    import optuna
+    try:
+        import optuna
+    except ModuleNotFoundError:
+        console.print(
+            "[bold red]Error:[/bold red] The `optuna` package is required for optimization. "
+            r"Install with [bold]uv add mujoco-mojo\[optimize][/bold] or "
+            r"[bold]pip install mujoco-mojo\[optimize][/bold]"
+        )
+        raise typer.Exit(code=1)
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
@@ -1628,13 +1641,17 @@ def run_optimizer(
         prune_failed_trials=prune_failed_trials,
     )
 
-    had_fails = runner.run(
-        global_overrides=global_overrides
-        if global_overrides
-        else NamedValueDict[NDArray](),
-        clean_workdir=clean_workdir,
-        execution_mode=ExecutionMode.LOCAL,
-    )
+    try:
+        had_fails = runner.run(
+            global_overrides=global_overrides
+            if global_overrides
+            else NamedValueDict[NDArray](),
+            clean_workdir=clean_workdir,
+            execution_mode=ExecutionMode.LOCAL,
+        )
+    except ModuleNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+        raise typer.Exit(code=1)
 
     if had_fails:
         console.print(

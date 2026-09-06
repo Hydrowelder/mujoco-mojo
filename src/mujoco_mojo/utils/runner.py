@@ -18,9 +18,7 @@ from logging.handlers import QueueListener
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
 
-import joblib
 import numpy as np
-import optuna
 from filelock import FileLock
 from numpydantic import NDArray
 from pydantic import Field, field_validator, model_validator
@@ -70,6 +68,8 @@ from mujoco_mojo.utils.statusing import (
 from mujoco_mojo.utils.utils import write_dojo_script
 
 if TYPE_CHECKING:
+    import optuna
+
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 logger = get_logger(__name__)
@@ -241,6 +241,13 @@ class OptimizerConfig(BaseConfig):
 
     def _get_sampler(self, seed: int | None) -> optuna.samplers.BaseSampler:
         """Translates the string config into an Optuna Sampler instance."""
+        try:
+            import optuna
+        except ModuleNotFoundError:
+            msg = "The `optuna` package is required for optimization. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`"
+            logger.exception(msg)
+            raise ModuleNotFoundError(msg)
+
         match self.sampler:
             case "tpe":
                 return optuna.samplers.TPESampler(seed=seed)
@@ -1017,6 +1024,14 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
     ) -> bool:
+        try:
+            import joblib
+            import optuna
+        except ModuleNotFoundError:
+            msg = "The `optuna` and `joblib` packages are required for optimization. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`"
+            logger.exception(msg)
+            raise ModuleNotFoundError(msg)
+
         assert isinstance(self.config, OptimizerConfig)
         if self.runtime is None:
             msg = "A runtime function must be provided for optimization."
