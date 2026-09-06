@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
-import trimesh
 from pydantic import ConfigDict, Field
 
 from mujoco_mojo.mj_state import MjState
@@ -40,6 +39,8 @@ from mujoco_mojo.utils.signal_metadata import (
 )
 
 if TYPE_CHECKING:
+    import trimesh
+
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
@@ -559,6 +560,8 @@ class GeomMesh(GeomBase, ProximityMixin):
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
     def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
+        import trimesh
+
         # get mesh id and data from mujoco
         mesh_id = mj_model.geom_dataid[self.get_id(mj_model)]
 

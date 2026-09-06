@@ -17,8 +17,6 @@ from typing import (
 
 import mujoco
 import numpy as np
-import trimesh
-import trimesh.visual
 from pydantic import Field, field_validator, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
@@ -27,7 +25,9 @@ from mujoco_mojo.typing import Inertia, MaterialName, MeshName, Vec3, Vec4
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
+    import trimesh
     from trimesh.typed import BooleanEngineType
+
 logger = get_logger(__name__)
 
 __all__ = [
@@ -238,6 +238,8 @@ class MeshBase(XMLModel, ABC):
 
 
         """
+        import trimesh
+
         # make sure inputs are valid and mkdir
         if save_dir is None and not vertex:
             msg = f"Mesh {path.stem}: save_dir is required when vertex=False."
@@ -375,6 +377,9 @@ class Mesh(MeshBase):
 
         Automatically extracts vertices, faces, and (if present) normals/texcoords.
         """
+        import trimesh
+        import trimesh.visual
+
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.to_mesh()
 
@@ -438,6 +443,8 @@ class Mesh(MeshBase):
             Two frustums generated using this method. The red frustum has its wall thickness set to 0 and its bottom radius is greater than the top. The cyan frustum has a non-zero wall thickness and a larger top radius than the bottom resulting in a hollow volume. The cyan frustum has more sections than the red.
 
         """
+        import trimesh
+
         # create the outer mesh
         mesh = trimesh.creation.cylinder(radius=1.0, height=height, sections=sections)
 
@@ -497,6 +504,8 @@ class Mesh(MeshBase):
             **kwargs (MeshAttributes): Standard MuJoCo mesh attributes (name, inertia, etc.)
 
         """
+        import trimesh
+
         # outer box centered at (0, 0, 0)
         outer = trimesh.creation.box(extents=(width, depth, height))
 

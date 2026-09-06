@@ -102,7 +102,7 @@ def test_settings_save_writes_toml(
     """MujocoMojoSettings.save() persists a valid TOML file."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     settings = MujocoMojoSettings()
@@ -120,7 +120,7 @@ def test_settings_save_never_writes_a_real_secret(
     """save() never persists api_key's real value, whether it's the harmless default or something set to look like a real key - only the masked placeholder ever reaches disk."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     settings = MujocoMojoSettings(
@@ -147,7 +147,7 @@ def test_settings_save_writes_schema_header_on_first_save(
     """A freshly created settings.toml starts with a #:schema header for taplo-based editors."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     MujocoMojoSettings().save()
@@ -162,7 +162,7 @@ def test_settings_save_colocates_schema_and_taplo_files(
     """save() writes settings.schema.json and .taplo.toml alongside settings.toml in the same call, so a settings directory is always self-contained without a separate write_schema_files() step."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     MujocoMojoSettings().save()
@@ -178,7 +178,7 @@ def test_settings_save_writes_to_explicit_directory(
 ) -> None:
     """save(directory) writes settings.toml, settings.schema.json, and .taplo.toml into the given directory instead of the global default - the same method serves both the global and project-local settings directories."""
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     _isolate_project_settings(monkeypatch, tmp_path)
     other_dir = tmp_path / "somewhere-else"
@@ -196,7 +196,7 @@ def test_settings_save_preserves_hand_written_comments(
     """Re-saving over an existing settings.toml updates values in place with tomlkit, keeping any comments a user added by hand."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     toml_path.write_text(
@@ -219,7 +219,7 @@ def test_bare_constructor_does_not_reset_nested_defaults(
 ) -> None:
     """Regression guard: MujocoMojoSettings() resolves a missing nested field against the existing TOML file rather than the field's code default, so it must never be used to implement a settings reset - MujocoMojoSettings.defaults() is required instead."""
     toml_path = tmp_path / "settings.toml"
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     toml_path.write_text(
@@ -279,7 +279,7 @@ def test_settings_reset_restores_defaults_and_keeps_comments(
     """The reset command's approach - MujocoMojoSettings.defaults().save() - restores every value to its default while keeping hand-written comments."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", toml_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
 
     toml_path.write_text(
         "#:schema settings.schema.json\n"
@@ -321,7 +321,7 @@ def test_project_and_global_settings_both_contribute_distinct_keys(
     """A project file setting one field and a global file setting an unrelated field both come through in the fully resolved settings - the deep-merge across sources doesn't drop either one."""
     global_path = tmp_path / "global.toml"
     project_path = tmp_path / "project.toml"
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", global_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", global_path)
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
     )
@@ -342,7 +342,7 @@ def test_project_settings_win_over_global_on_the_same_key(
     """When both layers set the same key, the project-local value wins - workspace beats user, same as VS Code."""
     global_path = tmp_path / "global.toml"
     project_path = tmp_path / "project.toml"
-    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_FILE", global_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", global_path)
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
     )
@@ -399,7 +399,7 @@ def test_save_project_mode_never_writes_field_values(
     """save(directory, project=True) ignores the instance's own field values entirely, even non-default ones - unlike the global file, a project file is meant to hold only a small, deliberate diff (see set_project_value), not a full mirror of every setting."""
     project_dir = tmp_path / "project"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     _isolate_project_settings(monkeypatch, tmp_path)
 
@@ -444,7 +444,7 @@ def test_set_project_value_creates_file_and_auto_vivifies_tables(
     """set_project_value() creates the project file (and any intermediate tables) on demand, writing only the one changed key."""
     project_path = tmp_path / "settings.toml"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
@@ -464,7 +464,7 @@ def test_set_project_value_preserves_siblings_and_comments(
     """set_project_value() only touches the one key being set, leaving sibling keys and hand-written comments in the project file alone."""
     project_path = tmp_path / "project.toml"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
@@ -492,7 +492,7 @@ def test_set_project_value_treats_slurm_key_as_one_literal_key(
     """The slurm group is a free-form dict whose own keys legitimately contain dots (e.g. "sbatch.account"), so "slurm.sbatch.account" must set that one flat key rather than being split into three nested table levels."""
     project_path = tmp_path / "settings.toml"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
@@ -519,7 +519,7 @@ def test_set_project_value_rejects_bad_value_without_writing(
     """An invalid value (wrong type, bad color name) raises ValidationError and never touches the project file."""
     project_path = tmp_path / "project.toml"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
@@ -539,7 +539,7 @@ def test_set_project_value_rejects_unknown_path_without_writing(
     """An unrecognized top-level table raises KeyError, and an unrecognized leaf within a real table raises ValidationError (nested settings groups forbid extra keys precisely so this can't silently vanish) - neither writes anything."""
     project_path = tmp_path / "project.toml"
     monkeypatch.setattr(
-        "mujoco_mojo.settings.SETTINGS_FILE", tmp_path / "no-such-global.toml"
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-such-global.toml"
     )
     monkeypatch.setattr(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path

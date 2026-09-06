@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import numpy as np
-from pytransform3d.transform_manager import TransformManager
 
 from mujoco_mojo.mjcf.orientation import Quat
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
@@ -53,6 +52,8 @@ class PoseContext:
     """
 
     def __init__(self, worldbody: WorldBody) -> None:
+        from pytransform3d.transform_manager import TransformManager
+
         self._tm = TransformManager()
         self._registered: set[int] = set()
         self._build(worldbody)

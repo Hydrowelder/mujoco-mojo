@@ -1,3 +1,4 @@
+import contextlib
 import os
 from pathlib import Path
 
@@ -15,6 +16,17 @@ def test_copy_asset_ignores_prefer_symlinks_on_non_posix(
 ):
     """prefer_symlinks is silently ignored off POSIX; a normal copy is made instead."""
     monkeypatch.setattr("mujoco_mojo.mjcf.dependency_path.os.name", "nt")
+    # os.name is a single process-wide attribute, so patching it also fools
+    # filelock's own platform check when it builds its lock path - on Python
+    # 3.13+, pathlib refuses to instantiate a WindowsPath while actually
+    # running on POSIX, which crashes FileLock.acquire() before copy_asset's
+    # own prefer_symlinks branch (the thing this test cares about) is even
+    # reached. copy_asset's lock is an implementation detail unrelated to
+    # that branch, so it's stubbed out here rather than genuinely exercised.
+    monkeypatch.setattr(
+        "mujoco_mojo.mjcf.dependency_path.FileLock",
+        lambda *_args, **_kwargs: contextlib.nullcontext(),
+    )
 
     source = tmp_path / "source.txt"
     source.write_text("hello")
