@@ -246,9 +246,8 @@ class MeshBase(XMLModel, ABC):
 
         try:
             import coacd
-            import trimesh
         except ModuleNotFoundError:
-            msg = "The `coacd` and `trimesh` packages are required. Install with `uv add coacd trimesh` or `pip install coacd trimesh`"
+            msg = "The `coacd` package is required for mesh decomposition. Install with `uv add mujoco-mojo[mesh-decomp]` or `pip install mujoco-mojo[mesh-decomp]`"
             logger.exception(msg)
             raise ModuleNotFoundError(msg)
 
