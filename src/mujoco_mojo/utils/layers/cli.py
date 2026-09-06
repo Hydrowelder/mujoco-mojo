@@ -1030,14 +1030,21 @@ def init_project(
             border_style="cyan",
         )
     )
+    from rich.prompt import Confirm
+
     from mujoco_mojo.settings import SETTINGS_FILE
 
     if not SETTINGS_FILE.exists():
         console.print("\n[bold yellow]Global Settings[/bold yellow]")
-        console.print(
-            "No user settings file found. Initialize it with:\n"
-            "    [bold cyan]mujoco-mojo settings init[/bold cyan]"
-        )
+        if Confirm.ask(
+            "No user settings file found. Set one up now with defaults?", default=True
+        ):
+            settings_init(force=False)
+        else:
+            console.print(
+                "You can set it up later with:\n"
+                "    [bold cyan]mujoco-mojo settings init[/bold cyan]"
+            )
 
     if not Path("typings", "mujoco").exists():
         console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
@@ -1076,36 +1083,28 @@ def settings_init(
 
     Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema.
     """
-    import json
-
-    from mujoco_mojo.settings import SETTINGS_DIR, SETTINGS_FILE, MujocoMojoSettings
-
-    schema_file = SETTINGS_DIR / "settings.schema.json"
-    taplo_file = SETTINGS_DIR / ".taplo.toml"
-    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    from mujoco_mojo.settings import (
+        SETTINGS_FILE,
+        SETTINGS_SCHEMA_FILE,
+        SETTINGS_TAPLO_FILE,
+        MujocoMojoSettings,
+    )
 
     if SETTINGS_FILE.exists() and not force:
         setting_msg = f"[yellow]Settings already exist:[/yellow] {SETTINGS_FILE} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
     else:
         MujocoMojoSettings().save()
-        setting_msg = f"[green]Settings written:[/green] {SETTINGS_FILE}"
+        setting_msg = f"[green]Settings written:[/green]       {SETTINGS_FILE}"
 
-    schema = MujocoMojoSettings.model_json_schema()
-    schema_file.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-
-    # taplo requires a file:// URI for the schema url - a relative path is not supported
-    schema_uri = schema_file.as_uri()
-    taplo_file.write_text(
-        f'[[rule]]\ninclude = ["settings.toml"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
-        encoding="utf-8",
-    )
+    MujocoMojoSettings.write_schema_files()
 
     console.print(
         Panel(
-            f"{setting_msg}",
-            # f"[green]Schema:[/green]      {schema_file}\n"
-            # f"[green]Taplo config:[/green] {taplo_file}\n\n"
-            # "[white]TOML intellisense is now active for any taplo-powered editor (VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
+            f"{setting_msg}\n"
+            f"[green]Schema:[/green]                 {SETTINGS_SCHEMA_FILE}\n"
+            f"[green]Taplo config:[/green]           {SETTINGS_TAPLO_FILE}\n\n"
+            "[white]TOML intellisense is now available for any taplo-powered editor "
+            "(VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
             title="[cyan]Settings Initialized[/cyan]",
             expand=False,
             border_style="cyan",
@@ -1120,7 +1119,7 @@ def settings_show() -> None:
 
     Resolves values from all sources in priority order: environment variables, TOML file, then defaults. The API key is always masked.
     """
-    import tomli_w
+    import tomlkit
     from rich.syntax import Syntax
 
     from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
@@ -1129,11 +1128,11 @@ def settings_show() -> None:
     d = settings.model_dump()
     d["sensai"]["api_key"] = "***"
 
-    toml_str = tomli_w.dumps(d).rstrip("\n")
+    toml_str = tomlkit.dumps(d).rstrip("\n")
 
     if SETTINGS_FILE.exists():
         try:
-            source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()))
+            source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()).as_posix())
         except ValueError:
             source = str(SETTINGS_FILE)
     else:
@@ -1214,6 +1213,28 @@ def settings_set_cmd(
 
     updated.save()
     console.print(f"[green]Updated[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}")
+
+
+@settings_app.command(name="reset")
+def settings_reset() -> None:
+    """
+    [bold yellow]Reset the global settings file back to its defaults.[/bold yellow]
+
+    Overwrites every value in [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] with its default. Any comments you have added by hand are kept.
+    """
+    from rich.prompt import Confirm
+
+    from mujoco_mojo.settings import MujocoMojoSettings
+
+    if not Confirm.ask(
+        "Are you sure you want to reset all settings to their defaults?",
+        default=False,
+    ):
+        console.print("[yellow]Aborted.[/yellow] No changes made.")
+        raise typer.Exit()
+
+    MujocoMojoSettings.defaults().save()
+    console.print("[green]Settings reset to defaults.[/green]")
 
 
 @cli_app.command(name="reloaded")
