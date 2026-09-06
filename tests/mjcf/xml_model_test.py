@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from pydantic import Field
 
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel, _format_value
 from mujoco_mojo.typing import Angle, EulerSeq, Vec4
 
@@ -51,6 +52,18 @@ class ExclusiveModel(XMLModel):
     __exclusive_groups__ = (("a", "b"),)
     a: int | None = None
     b: int | None = None
+
+
+class MeshModel(XMLModel):
+    tag = "mesh"
+    attributes = ("file",)
+    file: DepPath
+
+
+class MeshContainer(XMLModel):
+    tag = "container"
+    children = ("meshes",)
+    meshes: list[MeshModel] = Field(default_factory=list)
 
 
 # --- Tests ---
@@ -182,19 +195,12 @@ def test_exclusive_groups_none_check():
 
 def test_asset_bundling(tmp_path: Path):
     """Test the asset crawler and file copying logic."""
-    from mujoco_mojo.mjcf.dependency_path import DepPath
-
     # Setup dummy asset
     asset_file = tmp_path / "mesh.stl"
     asset_file.write_text("dummy mesh data")
 
     target_dir = tmp_path / "bundle"
     rel_path = Path("assets")
-
-    class MeshModel(XMLModel):
-        tag = "mesh"
-        attributes = ("file",)
-        file: DepPath
 
     model = MeshModel(file=DepPath(asset_file))
 
@@ -205,6 +211,88 @@ def test_asset_bundling(tmp_path: Path):
     assert (target_dir / "mesh.stl").exists()
     # Check if path in model updated to the relative path
     assert model.file == rel_path / "mesh.stl"
+
+
+def test_bundle_assets_threads_symlink_setting_to_copy_asset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """bundle_assets reads MujocoMojoSettings.assets.symlink and passes it through to copy_asset, regardless of platform."""
+    import mujoco_mojo.mjcf.xml_model as xml_model_module
+
+    class _FakeAssetSettings:
+        symlink = True
+
+    class _FakeSettings:
+        assets = _FakeAssetSettings()
+
+    monkeypatch.setattr(xml_model_module, "MujocoMojoSettings", _FakeSettings)
+
+    calls: list[bool] = []
+
+    def _fake_copy_asset(source, dest_file, known_checksum=None, prefer_symlinks=False):
+        calls.append(prefer_symlinks)
+
+    monkeypatch.setattr(xml_model_module, "copy_asset", _fake_copy_asset)
+
+    asset_file = tmp_path / "mesh.stl"
+    asset_file.write_text("dummy mesh data")
+    model = MeshModel(file=DepPath(asset_file))
+
+    model.bundle_assets(tmp_path / "bundle", Path("assets"))
+
+    assert calls == [True]
+
+
+def test_asset_bundling_disambiguates_same_basename_conflicts(tmp_path: Path):
+    """Two different-content files sharing a basename get distinct, nested destinations instead of one silently overwriting the other."""
+    wood_dir = tmp_path / "textures" / "wood"
+    steel_dir = tmp_path / "textures" / "steel"
+    wood_dir.mkdir(parents=True)
+    steel_dir.mkdir(parents=True)
+    (wood_dir / "texture.png").write_text("wood content")
+    (steel_dir / "texture.png").write_text("steel content")
+
+    container = MeshContainer(
+        meshes=[
+            MeshModel(file=DepPath(wood_dir / "texture.png")),
+            MeshModel(file=DepPath(steel_dir / "texture.png")),
+        ]
+    )
+
+    target_dir = tmp_path / "bundle"
+    rel_path = Path("assets")
+    container.bundle_assets(target_dir, rel_path)
+
+    wood_file, steel_file = container.meshes[0].file, container.meshes[1].file
+    assert wood_file == rel_path / "wood" / "texture.png"
+    assert steel_file == rel_path / "steel" / "texture.png"
+    assert (target_dir / "wood" / "texture.png").read_text() == "wood content"
+    assert (target_dir / "steel" / "texture.png").read_text() == "steel content"
+
+
+def test_asset_bundling_dedupes_identical_content_same_basename(tmp_path: Path):
+    """Two byte-identical files sharing a basename collapse to one destination and one copy, rather than being treated as a conflict."""
+    dir_a, dir_b = tmp_path / "a", tmp_path / "b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    (dir_a / "texture.png").write_text("same content")
+    (dir_b / "texture.png").write_text("same content")
+
+    container = MeshContainer(
+        meshes=[
+            MeshModel(file=DepPath(dir_a / "texture.png")),
+            MeshModel(file=DepPath(dir_b / "texture.png")),
+        ]
+    )
+
+    target_dir = tmp_path / "bundle"
+    rel_path = Path("assets")
+    container.bundle_assets(target_dir, rel_path)
+
+    assert (
+        container.meshes[0].file == container.meshes[1].file == rel_path / "texture.png"
+    )
+    assert list(target_dir.rglob("*.png")) == [target_dir / "texture.png"]
 
 
 def test_subclass_validation():
