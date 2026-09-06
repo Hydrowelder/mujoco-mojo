@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, overload
 
 import numpy as np
 from pydantic import Field
-from scipy.spatial.transform import Rotation as R
 
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -14,6 +13,8 @@ from mujoco_mojo.typing import Angle, EulerSeq, Mat3, Vec3, Vec4, Vec6
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
+    from scipy.spatial.transform import Rotation as R
+
     from .pose import AnyPose, PoseAxisAngle, PoseEuler, PoseQuat, PoseXYAxes, PoseZAxis
     from .position import Pos
 
@@ -285,6 +286,8 @@ class Quat(OrientationBase):
     @classmethod
     def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs the Quat object from a 3x3 matrix."""
+        from scipy.spatial.transform import Rotation as R
+
         rot = R.from_matrix(matrix)
         q = rot.as_quat()
 
@@ -292,6 +295,8 @@ class Quat(OrientationBase):
 
     def to_rotation(self) -> R:
         # determine the subtype to make a scipy Rotation object
+        from scipy.spatial.transform import Rotation as R
+
         quat = self.quat
         x, y, z, w = quat[1], quat[2], quat[3], quat[0]
         return R.from_quat([x, y, z, w])
@@ -335,6 +340,8 @@ class AxisAngle(OrientationBase):
         return np.array_equal(self.axisangle, other.axisangle)
 
     def to_rotation(self) -> R:
+        from scipy.spatial.transform import Rotation as R
+
         axisangle = self.axisangle
         axis = axisangle[:3]
         angle = axisangle[3]
@@ -400,6 +407,8 @@ class AxisAngle(OrientationBase):
     @classmethod
     def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs the AxisAngle from a 3x3 matrix."""
+        from scipy.spatial.transform import Rotation as R
+
         rot = R.from_matrix(matrix)
         rotvec = rot.as_rotvec()
         angle_rad = np.linalg.norm(rotvec)
@@ -446,6 +455,8 @@ class Euler(OrientationBase):
         return np.array_equal(self.euler, other.euler)
 
     def to_rotation(self) -> R:
+        from scipy.spatial.transform import Rotation as R
+
         return R.from_euler(self.eulerseq, self.euler, degrees=self.is_degrees)
 
     def get_xml_value(
@@ -491,6 +502,8 @@ class Euler(OrientationBase):
     @classmethod
     def from_matrix(cls, matrix: Mat3) -> Self:
         """Reconstructs Euler angles from a 3x3 matrix."""
+        from scipy.spatial.transform import Rotation as R
+
         rot = R.from_matrix(matrix)
         is_deg = DEFAULT_ANGLE == Angle.DEGREE
 
@@ -516,6 +529,8 @@ class XYAxes(OrientationBase):
         return np.array_equal(self.xyaxes, other.xyaxes)
 
     def to_rotation(self) -> R:
+        from scipy.spatial.transform import Rotation as R
+
         vecs = self.xyaxes
         assert isinstance(vecs, np.ndarray)
         x = vecs[:3]
@@ -568,6 +583,8 @@ class ZAxis(OrientationBase):
         return np.array_equal(self.zaxis, other.zaxis)
 
     def to_rotation(self) -> R:
+        from scipy.spatial.transform import Rotation as R
+
         z = self.zaxis
         assert isinstance(z, np.ndarray)
         z = z / np.linalg.norm(z)
