@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import tomlkit
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
+    HttpUrl,
     RootModel,
     SecretStr,
     field_serializer,
@@ -33,7 +35,22 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
 SETTINGS_SCHEMA_FILE = SETTINGS_DIR / "settings.schema.json"
 SETTINGS_TAPLO_FILE = SETTINGS_DIR / ".taplo.toml"
 
+
+def project_settings_file() -> Path:
+    """
+    Path to the project-local settings file, `<cwd>/.mujoco-mojo/settings.toml`.
+
+    Computed fresh on every call rather than cached as a module-level constant, since `Path.cwd()` can legitimately differ across calls within one process (e.g. a long-running dashboard server, or tests).
+
+    Returns:
+        `Path.cwd() / ".mujoco-mojo" / "settings.toml"`.
+
+    """
+    return Path.cwd() / ".mujoco-mojo" / "settings.toml"
+
+
 SlurmScalar = str | int | float | bool
+
 
 _SBATCH_PREFIX = "sbatch."
 
@@ -49,6 +66,8 @@ _COLOR_FIELDS = (
 
 class VisualizationSettings(BaseModel):
     """Colors for force, torque, contact, and proximity overlays rendered during simulation."""
+
+    model_config = ConfigDict(extra="forbid")
 
     action_force: str | None = Field(
         default="EMERALD_500",
@@ -122,6 +141,8 @@ class VisualizationSettings(BaseModel):
 class SensAISettings(BaseModel):
     """Settings for the SensAI assistant embedded in the Dojo dashboard."""
 
+    model_config = ConfigDict(extra="forbid")
+
     model_name: str = Field(
         default="qwen2.5:0.5b",
         description="Ollama model identifier (e.g. `qwen2.5:0.5b`, `llama3.2:3b`).",
@@ -134,7 +155,7 @@ class SensAISettings(BaseModel):
 
     api_key: SecretStr = Field(
         default=SecretStr("ollama"),
-        description="API key sent with each request. For real keys prefer the `MUJOCO_MOJO_SENSAI__API_KEY` env var over storing here. Ollama ignores the value but the client requires a non-empty string.",
+        description="API key sent with each request. For security, only a masked placeholder is ever saved to a settings file - set the real value via the `MUJOCO_MOJO_DOJO__SENSAI__API_KEY` environment variable instead. Ollama ignores the value, but its client library still requires a non-empty string.",
     )
 
     enabled: bool = Field(
@@ -142,9 +163,24 @@ class SensAISettings(BaseModel):
         description="Whether SensAI is active. Opt-in; toggled from the dashboard.",
     )
 
-    @field_serializer("api_key")
-    def _serialize_api_key(self, v: SecretStr) -> str:
-        return v.get_secret_value()
+
+class DojoSettings(BaseModel):
+    """Settings for the Dojo dashboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sensai: SensAISettings = Field(
+        default_factory=SensAISettings,
+        description="Settings for the SensAI assistant.",
+    )
+
+    chime: Annotated[
+        HttpUrl | Path | None,
+        Field(union_mode="left_to_right"),
+    ] = Field(
+        default=None,
+        description="A custom sound to play on the Dojo monitor page when a job finishes, instead of the built-in chime. Set this to either a web URL (e.g. `https://example.com/sound.mp3`) or the path to a local audio file (e.g. `/home/alex/sounds/ding.wav`, or on Windows `C:/Users/alex/ding.mp3` - use forward slashes rather than backslashes, since TOML treats a backslash as the start of an escape sequence and will fail to parse a raw Windows-style path). Easiest to set safely with `mujoco-mojo settings set dojo.chime <path-or-url>`, which writes it correctly for you. Leave unset to keep the default chime.",
+    )
 
 
 class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
@@ -153,7 +189,7 @@ class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
 
     Keys prefixed with `sbatch.` become extra `#SBATCH` lines in the generated submission script, e.g. `"sbatch.account": "proj123"` becomes `#SBATCH --account=proj123`. Every other key is exported as an environment variable before the worker command runs, e.g. `"MLM_LICENSE_FILE": "27000@license.internal"` becomes `export MLM_LICENSE_FILE="27000@license.internal"`.
 
-    Values must be scalars (string, int, float, or bool). Nested objects or arrays are rejected at load time since this file can only ever describe a flat set of settings - used both as the shape of `MujocoMojoSettings.slurm` and as the optional `--slurm-config` per-job JSON file.
+    Values must be scalars (string, int, float, or bool). Nested objects or arrays are rejected at load time since this file can only ever describe a flat set of settings - the shape of `MujocoMojoSettings.slurm`, layered automatically between the global and project-local settings files (see `project_settings_file`).
     """
 
     def sbatch_lines(self) -> list[str]:
@@ -170,21 +206,11 @@ class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
             if not key.startswith(_SBATCH_PREFIX)
         ]
 
-    @classmethod
-    def load(cls, path: Path) -> SlurmExtraSettings:
-        return cls.model_validate_json(path.read_text(encoding="utf-8"))
-
-    @classmethod
-    def merge(cls, *sources: SlurmExtraSettings) -> SlurmExtraSettings:
-        """Later sources win on key collisions (e.g. `merge(global, per_job)` lets a per-job file override a user's global defaults)."""
-        merged: dict[str, SlurmScalar] = {}
-        for source in sources:
-            merged.update(source.root)
-        return cls(merged)
-
 
 class AssetBundlingSettings(BaseModel):
     """Settings for how MuJoCo Mojo bundles a model's dependency files (meshes, textures, etc.) into a shared assets folder."""
+
+    model_config = ConfigDict(extra="forbid")
 
     symlink: bool = Field(
         default=False,
@@ -237,9 +263,9 @@ class _GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
 
 class MujocoMojoSettings(BaseSettings):
     """
-    Global user-level settings persisted to ~/.mujoco-mojo/settings.toml.
+    Global user-level settings persisted to ~/.mujoco-mojo/settings.toml, layered with an optional project-local override file - the same User-settings-vs-Workspace-settings model VS Code uses.
 
-    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > TOML file > defaults. Environment variables use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_SENSAI__MODEL_NAME=llama3.2:3b`.
+    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > project settings file (`project_settings_file()`, `<cwd>/.mujoco-mojo/settings.toml`) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
     """
 
     model_config = SettingsConfigDict(
@@ -248,9 +274,9 @@ class MujocoMojoSettings(BaseSettings):
         env_nested_delimiter="__",
     )
 
-    sensai: SensAISettings = Field(
-        default_factory=SensAISettings,
-        description="Settings for the SensAI assistant.",
+    dojo: DojoSettings = Field(
+        default_factory=DojoSettings,
+        description="Settings for the Dojo dashboard.",
     )
 
     visualization: VisualizationSettings = Field(
@@ -260,7 +286,7 @@ class MujocoMojoSettings(BaseSettings):
 
     slurm: SlurmExtraSettings = Field(
         default_factory=lambda: SlurmExtraSettings({}),
-        description="Global default extra SLURM `#SBATCH` lines / environment variables (e.g. account number, email), applied to every SLURM submission. Edit the `[slurm]` table in `~/.mujoco-mojo/settings.toml` directly - keys prefixed `sbatch.` become `#SBATCH` lines, everything else is exported as an environment variable. A `--slurm-config` file passed at submission time is merged on top and wins on any key collision.",
+        description="Extra SLURM `#SBATCH` lines / environment variables (e.g. account number, email), applied to every SLURM submission. Edit the `[slurm]` table in `~/.mujoco-mojo/settings.toml` for account-wide defaults, or in `<project>/.mujoco-mojo/settings.toml` for per-project overrides - keys prefixed `sbatch.` become `#SBATCH` lines, everything else is exported as an environment variable. The project file's `[slurm]` table wins over the global one on any key collision.",
     )
 
     assets: AssetBundlingSettings = Field(
@@ -277,7 +303,12 @@ class MujocoMojoSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return (init_settings, env_settings, TomlConfigSettingsSource(settings_cls))
+        return (
+            init_settings,
+            env_settings,
+            TomlConfigSettingsSource(settings_cls, toml_file=project_settings_file()),
+            TomlConfigSettingsSource(settings_cls, toml_file=SETTINGS_FILE),
+        )
 
     @classmethod
     def defaults(cls) -> MujocoMojoSettings:
@@ -296,6 +327,103 @@ class MujocoMojoSettings(BaseSettings):
         }
         return cls(**field_defaults)
 
+    @classmethod
+    def init_project_file(cls) -> Path:
+        """
+        Creates an empty project-local settings file (just a `#:schema` header, no keys) at `project_settings_file()`, ready for the user to add whichever specific overrides they want. Does nothing if the file already exists.
+
+        Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident. Leaves an existing `.gitignore` alone rather than overwriting it.
+
+        Unlike `save()`, this never writes every field - a project settings file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting.
+
+        Returns:
+            The path the file lives at, whether newly created or already present.
+
+        """
+        path = project_settings_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        gitignore = path.parent / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text("*\n", encoding="utf-8")
+
+        if not path.exists():
+            path.write_text(
+                f"#:schema {SETTINGS_SCHEMA_FILE.as_uri()}\n", encoding="utf-8"
+            )
+        return path
+
+    @classmethod
+    def set_project_value(cls, key: str, value: Any) -> None:
+        """
+        Sets a single dotted-path setting (e.g. "assets.symlink") in the project-local settings file, creating any intermediate tables as needed, without touching anything else already there.
+
+        `key.split(".")` is ambiguous for a free-form group like `slurm` (a `RootModel[dict[str, ...]]`), whose own keys legitimately contain literal dots (e.g. `"sbatch.account"`) - `"slurm.sbatch.account"` must set that one flat key, not descend two more table levels. Resolved by walking the *declared field types* (not the current data) until a `RootModel` field is reached; everything after that point is rejoined into a single literal key instead of split further.
+
+        Validated by overlaying the new value onto the full currently-effective settings (project + global + env + defaults) and calling `model_validate` on the result - `model_config` forbids extra fields on every fixed-shape settings group, so a typo'd leaf and a wrong-typed value both raise `pydantic.ValidationError` before anything is written. The *validated and re-dumped* leaf value is what actually gets persisted, not the raw `value` argument, so e.g. the CLI's loosely-typed input string `"true"` for a `bool` field is written to TOML as a real boolean, not a quoted string. Only that one changed leaf is written into the project file, keeping it a small, deliberate diff rather than a full mirror of every setting - contrast with `save()`, which always persists every field (correct for the global file, wrong here).
+
+        Args:
+            key: Dotted path, e.g. "dojo.sensai.model_name", "assets.symlink", or "slurm.sbatch.account".
+            value: The value to set, already parsed to its target Python type.
+
+        Raises:
+            KeyError: If an intermediate segment of `key` isn't a real settings table.
+            pydantic.ValidationError: If the resulting settings are invalid (unknown leaf, wrong type, etc.).
+
+        """
+        parts = key.split(".")
+
+        # stop splitting once a free-form (RootModel) group is reached - the
+        # rest of the path is that group's own literal key, dots and all
+        model: type[BaseModel] = cls
+        for i, part in enumerate(parts[:-1]):
+            field_info = model.model_fields.get(part)
+            annotation = field_info.annotation if field_info else None
+            if not (isinstance(annotation, type) and issubclass(annotation, BaseModel)):
+                msg = f"Unknown settings path: {key}"
+                raise KeyError(msg)
+            if issubclass(annotation, RootModel):
+                parts = [*parts[: i + 1], ".".join(parts[i + 1 :])]
+                break
+            model = annotation
+
+        # mode="json" turns any SecretStr field into its masked string rather
+        # than a raw object tomlkit can't write, and exclude_none=True omits
+        # an unset Optional field entirely - see save()
+        effective = cls().model_dump(mode="json", exclude_none=True)
+        overlay = effective
+        for part in parts[:-1]:
+            nxt = overlay.get(part)
+            if not isinstance(nxt, dict):
+                msg = f"Unknown settings path: {key}"
+                raise KeyError(msg)
+            overlay = nxt
+        overlay[parts[-1]] = value
+        validated = cls.model_validate(effective).model_dump(
+            mode="json", exclude_none=True
+        )
+
+        coerced = validated
+        for part in parts[:-1]:
+            coerced = coerced[part]
+        coerced_leaf = coerced[parts[-1]]
+
+        path = project_settings_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            doc = tomlkit.parse(path.read_text(encoding="utf-8"))
+        else:
+            doc = tomlkit.parse(f"#:schema {SETTINGS_SCHEMA_FILE.as_uri()}\n")
+
+        node = doc
+        for part in parts[:-1]:
+            if part not in node or not isinstance(node[part], (Table, dict)):
+                node[part] = tomlkit.table()
+            node = node[part]
+        node[parts[-1]] = coerced_leaf
+
+        path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+
     def save(self) -> None:
         """
         Persist current settings to ~/.mujoco-mojo/settings.toml.
@@ -309,7 +437,12 @@ class MujocoMojoSettings(BaseSettings):
         else:
             doc = tomlkit.parse(f"#:schema {SETTINGS_SCHEMA_FILE.name}\n")
 
-        _merge_into_toml(doc, self.model_dump())
+        # mode="json" turns any SecretStr field (e.g. dojo.sensai.api_key) into
+        # its masked "**********" string rather than a raw object tomlkit
+        # can't write at all - the real value is never persisted by this
+        # method. exclude_none=True omits an unset Optional field (e.g.
+        # dojo.chime) entirely, since TOML has no null literal to write.
+        _merge_into_toml(doc, self.model_dump(mode="json", exclude_none=True))
         SETTINGS_FILE.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
     @classmethod

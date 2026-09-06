@@ -45,16 +45,18 @@ router = APIRouter()
 @router.get("/config")
 async def get_config() -> SensAISettings:
     """Returns the current SensAI settings."""
-    return MujocoMojoSettings().sensai
+    return MujocoMojoSettings().dojo.sensai
 
 
 @router.post("/config")
 async def post_config(body: SensAISettings) -> SensAISettings:
     """Persists updated SensAI settings to disk."""
     settings = MujocoMojoSettings()
-    updated = settings.model_copy(update={"sensai": body})
+    updated = settings.model_copy(
+        update={"dojo": settings.dojo.model_copy(update={"sensai": body})}
+    )
     updated.save()
-    return updated.sensai
+    return updated.dojo.sensai
 
 
 # ---------------------------------------------------------------------------
@@ -206,10 +208,10 @@ async def post_chat(body: ChatRequest):
     """Runs the SensAI agents and streams the response as SSE."""
     settings = MujocoMojoSettings()
 
-    if not settings.sensai.enabled:
+    if not settings.dojo.sensai.enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="SensAI is not enabled. Set sensai.enabled = true in settings.",
+            detail="SensAI is not enabled. Set dojo.sensai.enabled = true in settings.",
         )
 
     current_plot_config: PlotConfig | None = None
@@ -234,7 +236,7 @@ async def post_chat(body: ChatRequest):
         current_plot_config=current_plot_config,
     )
 
-    model = build_model(settings.sensai)
+    model = build_model(settings.dojo.sensai)
 
     message_history = _to_model_messages(body.message_history)
     context_block = _build_context_block(deps)
@@ -260,7 +262,7 @@ async def post_chat(body: ChatRequest):
         # plot path: router detected a plot change intent, skip the chat agent
         if _is_plot_intent(body.message) and deps.current_plot_config is not None:
             updated = await _run_plot_agent(
-                deps.current_plot_config, body.message, settings.sensai
+                deps.current_plot_config, body.message, settings.dojo.sensai
             )
             if updated is not None:
                 reply = f"Applied: {body.message.rstrip('.')}."
