@@ -1011,6 +1011,9 @@ def init_project(
             border_style="cyan",
         )
     )
+
+    settings_init(force=False, project=True)
+
     from rich.prompt import Confirm
 
     from mujoco_mojo.settings import SETTINGS_FILE
@@ -1215,10 +1218,9 @@ def settings_show(
     from mujoco_mojo.settings import MujocoMojoSettings
 
     settings = MujocoMojoSettings()
-    d = settings.model_dump(mode="json")
+    d = settings.model_dump(mode="json", exclude_none=True)
 
     toml_str = tomlkit.dumps(d).rstrip("\n")
-
     if SETTINGS_FILE.exists():
         try:
             source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()).as_posix())
@@ -1230,7 +1232,7 @@ def settings_show(
 
     project_file = project_settings_file()
     if project_file.exists():
-        source += f" + project overrides ({project_file.as_posix()})"
+        source += f" + {project_file.relative_to(Path.cwd()).as_posix()}"
 
     toml_str = _pad_for_subtitle(toml_str, source)
 

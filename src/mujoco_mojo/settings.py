@@ -258,7 +258,7 @@ class _GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
                     if isinstance(default, bool)
                     else str(default)
                 )
-                prop["description"] = f"{prop['description']} Default: `{rendered}`."
+                prop["description"] = f"{prop['description']}\n\nDefault: `{rendered}`."
 
 
 class MujocoMojoSettings(BaseSettings):
