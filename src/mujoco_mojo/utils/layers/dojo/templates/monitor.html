@@ -5,13 +5,13 @@
   <!-- progress bar -->
   <section class="mb-12">
     <div class="flex justify-between mb-2 items-center">
-      <span class="text-slate-500 dark:text-slate-400 text-xl font-bold">Overall Progress</span>
-      <span class="text-3xl font-black text-cyan-500"
+      <span class="text-ink-secondary text-xl font-bold">Overall Progress</span>
+      <span class="text-3xl font-black text-accent-500"
             x-text="status.progress.toFixed(1) + '%'"></span>
     </div>
 
-    <div class="w-full bg-white dark:bg-slate-800 rounded-full h-8 overflow-hidden border border-slate-400 dark:border-slate-700 shadow-md transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default">
-      <div class="h-full transition-all duration-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+    <div class="w-full bg-surface rounded-full h-8 overflow-hidden border border-line shadow-md transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default">
+      <div class="h-full transition-all duration-500 shadow-[0_0_20px_color-mix(in_srgb,var(--color-success-500)_25%,transparent)]"
            :style="`width: ${status.progress}%; background: ${progressGradient()}`"
            :title="`${status.n_success} succeeded · ${status.n_failed} failed requirements · ${status.n_error} errored`"></div>
     </div>
@@ -25,10 +25,10 @@
 
         <div>
           <div class="flex items-start justify-between mb-2">
-            <p class="text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-widest"
+            <p class="text-ink-secondary text-xs font-black uppercase tracking-widest"
                x-text="stat.label"></p>
             <div class="relative group">
-              <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 hover:text-cyan-500 dark:hover:text-cyan-400 cursor-help transition-colors duration-150"
+              <svg class="w-4 h-4 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 cursor-help transition-colors duration-150"
                    fill="none"
                    stroke="currentColor"
                    stroke-width="2"
@@ -40,7 +40,7 @@
                       stroke-linejoin="round"
                       d="M12 16v-4m0-4h.01" />
               </svg>
-              <div class="tooltip-panel right-0 w-64 text-xs font-normal normal-case tracking-normal text-slate-600 dark:text-slate-300 leading-relaxed"
+              <div class="tooltip-panel right-0 w-64 text-xs font-normal normal-case tracking-normal text-ink-body leading-relaxed"
                    x-text="stat.tooltip"></div>
             </div>
           </div>
@@ -49,9 +49,9 @@
              x-text="stat.value"></p>
         </div>
 
-        <div class="mt-4 border-t border-slate-100 dark:border-slate-700/50 pt-3 flex flex-col gap-1">
+        <div class="mt-4 border-t border-subtle dark:border-subtle/50 pt-3 flex flex-col gap-1">
           <template x-if="stat.subValue">
-            <p class="text-xs font-mono uppercase tracking-tighter text-slate-400 dark:text-slate-500 leading-tight"
+            <p class="text-xs font-mono uppercase tracking-tighter text-ink-muted leading-tight"
                x-text="stat.subValue"></p>
           </template>
         </div>
@@ -65,7 +65,7 @@
            x-show="status.timeline && status.timeline.length > 0"
            x-cloak>
     <div class="flex justify-between mb-2 items-center">
-      <span class="text-slate-500 dark:text-slate-400 text-xl font-bold">Progress Over Time</span>
+      <span class="text-ink-secondary text-xl font-bold">Progress Over Time</span>
     </div>
 
     <div class="card p-4">
@@ -78,7 +78,7 @@
   <section class="mt-8"
            x-show="status.success_tns && status.success_tns.length > 0"
            x-cloak>
-    <h2 class="text-xl font-bold text-emerald-500 mb-4 flex items-center">
+    <h2 class="text-xl font-bold text-success-500 mb-4 flex items-center">
       <svg class="w-6 h-6 mr-2 stroke-current"
            fill="none"
            viewBox="0 0 24 24"
@@ -107,7 +107,7 @@
   <section class="mt-8"
            x-show="status.failure_tns && status.failure_tns.length > 0"
            x-cloak>
-    <h2 class="text-xl font-bold text-rose-500 mb-4 flex items-center">
+    <h2 class="text-xl font-bold text-danger-500 mb-4 flex items-center">
       <svg class="w-6 h-6 mr-2 stroke-current"
            fill="none"
            viewBox="0 0 24 24"
@@ -147,7 +147,7 @@
   <section class="mt-8"
            x-show="status.error_tns && status.error_tns.length > 0"
            x-cloak>
-    <h2 class="text-xl font-bold text-amber-500 mb-4 flex items-center">
+    <h2 class="text-xl font-bold text-warning-500 mb-4 flex items-center">
       <svg class="w-6 h-6 mr-2 stroke-current"
            fill="none"
            viewBox="0 0 24 24"
@@ -188,7 +188,6 @@
          src="{{ chime_src }}"></audio>
 </div>
 {% endblock %} {% block scripts %}
-<script src="/mojo-static/vendored/plotly-3.4.0.min.js"></script>
-<script src="/mojo-static/vendored/confetti.browser.min.js"></script>
-<script src="/mojo-static/js/monitor.js"></script>
+<script type="module"
+        src="/mojo-static/dist/monitor.js"></script>
 {% endblock %}

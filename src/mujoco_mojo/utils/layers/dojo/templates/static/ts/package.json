@@ -3,20 +3,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs",
-    "watch": "node build.mjs --watch",
+    "build": "vite build",
+    "watch": "vite build --watch",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/plotly.js": "^2.35.0",
-    "alpinejs": "^3.14.0",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.8.0"
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/alpinejs": "^3.13.11",
+    "@types/canvas-confetti": "^1.9.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.8.0",
+    "vite": "^8.2.2",
+    "vite-plugin-static-copy": "^4.1.1"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/theme-one-dark": "^6.1.3",
+    "@jaames/iro": "^5.5.2",
+    "alpinejs": "^3.17.0",
+    "canvas-confetti": "^1.9.4",
     "codemirror": "^6.0.2",
-    "marked": "^18.0.4"
+    "litegraph.js": "^0.7.18",
+    "lz-string": "^1.5.0",
+    "marked": "^18.0.4",
+    "plotly.js": "^4.0.0"
   }
 }

@@ -2,6 +2,8 @@
 // chart area, ...). Persists the resulting height to localStorage and
 // restores it on the next load.
 
+import { themeColor } from "./theme-colors";
+
 export interface ResizeHandleOptions {
   /** localStorage key the resulting height (e.g. "420px") is stored under. */
   storageKey: string;
@@ -42,14 +44,14 @@ export function attachVerticalResizeHandle(
     "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
   const grip = document.createElement("div");
   grip.style.cssText =
-    "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+    `width:36px;height:4px;border-radius:2px;background:${themeColor("line")};transition:background 150ms,width 150ms;pointer-events:none;`;
   handle.appendChild(grip);
   handle.addEventListener("mouseenter", () => {
-    grip.style.background = "#06b6d4";
+    grip.style.background = themeColor("accent-500");
     grip.style.width = "52px";
   });
   handle.addEventListener("mouseleave", () => {
-    grip.style.background = "#334155";
+    grip.style.background = themeColor("line");
     grip.style.width = "36px";
   });
 

@@ -1,71 +1,20 @@
 import type { Alpine as AlpineType } from "alpinejs";
 
 declare global {
+  // Only store.ts (bundled into main.js, loaded on every page) does the
+  // real `import Alpine from "alpinejs"` and assigns it to window.Alpine --
+  // every other entry bundle (monitor.js, trial-viewer.js, ...) loads
+  // alongside main.js on the same page but is a *separate* Vite/Rollup
+  // module graph, so a second `import` there would bundle a second, disjoint
+  // copy of Alpine with its own disconnected store state. Referencing the
+  // bare `Alpine` global (typed here, actually window.Alpine set by
+  // store.ts) keeps every page sharing the one real instance, same as the
+  // vendored CDN script's global did before this migration.
   const Alpine: AlpineType;
-
-  // Minimal Plotly surface used by trial-viewer
-  const Plotly: {
-    react(
-      el: string | HTMLElement,
-      data: object[],
-      layout: object,
-      config?: object,
-    ): Promise<void>;
-    newPlot(
-      el: string | HTMLElement,
-      data: object[],
-      layout: object,
-      config?: object,
-    ): Promise<void>;
-    purge(el: string | HTMLElement): void;
-    relayout(el: string | HTMLElement, update: object): Promise<void>;
-    toImage(el: string | HTMLElement, opts: object): Promise<string>;
-    Plots: { resize(el: HTMLElement): void };
-  };
-
-  const LZString: {
-    compressToEncodedURIComponent(str: string): string;
-    decompressFromEncodedURIComponent(str: string): string | null;
-  };
-
-  const iro: {
-    ColorPicker: new (
-      el: HTMLElement,
-      options: {
-        width?: number;
-        height?: number;
-        color?: string;
-        padding?: number;
-        handleRadius?: number;
-        borderWidth?: number;
-        borderColor?: string;
-        layout?: Array<{ component: unknown; options?: object }>;
-      },
-    ) => {
-      color: { hexString: string; set(v: string): void };
-      on(event: string, callback: (color: { hexString: string }) => void): void;
-    };
-    ui: { Box: unknown; Slider: unknown };
-  };
-
-  const confetti: ((opts: object) => void) & {
-    shapeFromText(opts: {
-      text: string;
-      scalar?: number;
-      color?: string;
-    }): unknown;
-  };
-
-  // CodeMirror 6 bundle (window.CM)
-  const CM: typeof import("codemirror") &
-    typeof import("@codemirror/lang-json") &
-    typeof import("@codemirror/theme-one-dark") &
-    typeof import("@codemirror/state") &
-    typeof import("@codemirror/lint") &
-    typeof import("@codemirror/language");
 
   // Globals exposed by the compiled bundles for Alpine x-data usage
   interface Window {
+    Alpine: AlpineType;
     formatTimeAgo(seconds: number): string;
     notifTimeAgo(timestamp: number, tick?: number): string;
     trialViewer(trialId: string, externalUrl: string): object;
@@ -76,6 +25,16 @@ declare global {
     downloadSensAIHistory(): void;
     renderMarkdown(text: string): string;
     initSensAICodeBlocks(container: HTMLElement): void;
+    // iro.js color-picker construction, called from _macros.html's
+    // color_picker macro (the $watch/color:change wiring around the
+    // returned picker stays inline there since it needs Alpine's reactive
+    // scope, which can't cross into a bundled TS module cleanly)
+    mojoCreateColorPicker(
+      el: HTMLElement,
+      width: number,
+      boxHeight: number,
+      initialColor: string,
+    ): { color: { hexString: string; set(v: string): void }; on(event: string, callback: (color: { hexString: string }) => void): void };
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabSelectNodeQuat?(nodeId: number, base: string): void;

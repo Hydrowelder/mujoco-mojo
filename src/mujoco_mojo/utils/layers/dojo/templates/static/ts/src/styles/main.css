@@ -1,0 +1,254 @@
+@import "tailwindcss";
+@import "./theme.css";
+
+/* Tailwind's content scanner otherwise never reaches the Jinja templates --
+   they're siblings of this ts/ directory, not descendants of it, so nothing
+   here would be auto-detected. Same pattern flask-website's own main.css
+   uses for the same reason (a plain directory path, scanned recursively,
+   so this also picks up templates/partials/**). */
+@source "../../../../";
+
+/* Tailwind v4's `dark:` variant defaults to prefers-color-scheme; switching it
+   to a class selector lets the header toggle (see main.ts) force either mode
+   regardless of system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* plotly's built-in notifier boxes are re-surfaced as Mojo toasts (see store.ts) */
+.plotly-notifier {
+  display: none !important;
+}
+
+/* @utility (not a plain class in @layer components) is what lets other
+   custom classes below @apply these by name -- v4 only treats @utility
+   declarations as valid @apply targets, not arbitrary selectors, unlike
+   v3's Play CDN runtime this project used before. */
+@utility panel {
+  @apply bg-surface border border-line rounded-xl shadow-2xl p-4;
+}
+@utility badge {
+  @apply inline-flex items-center justify-center px-2 py-1 rounded-md font-mono text-sm;
+}
+
+@layer components {
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-surface border border-line rounded-xl shadow-md;
+  }
+  .card-hover {
+    @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default;
+  }
+
+  /* Add positioning + width classes per usage: absolute top-full mt-2 w-80 etc. */
+  .tooltip-panel {
+    @apply panel absolute top-full mt-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-300;
+  }
+
+  /* ── Signal Lab keyboard-shortcut badge (appears below toolbar buttons) ── */
+  .lab-kbd-tip {
+    @apply pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1
+           rounded-md bg-neutral text-white text-sm font-mono
+           whitespace-nowrap invisible group-hover:visible opacity-0 group-hover:opacity-100
+           transition-opacity z-800;
+  }
+
+  /* ── Header toggle buttons ─────────────────────────────────────────── */
+  .btn {
+    @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;
+  }
+  .btn-icon {
+    @apply h-9 w-9 rounded-lg border flex items-center justify-center shadow-sm;
+  }
+  .btn-primary {
+    @apply bg-accent-500 text-white border-accent-600 shadow-inner;
+  }
+  /* bg-well/text-ink-secondary, not bg-surface/text-ink-muted: at rest this
+     sits directly on a bg-surface card/header, so a same-color fill plus an
+     already-low-contrast icon/label made it read as barely there rather
+     than as a button. */
+  .btn-ghost {
+    @apply bg-well border-line text-ink-secondary;
+  }
+  .btn-sound-on {
+    @apply bg-accent-50 dark:bg-accent-900/20 border-accent-500 text-accent-500;
+  }
+
+  /* ── Sidebar action buttons (trial viewer) ─────────────────────────── */
+  /* bg-well (not bg-transparent) so the button shape itself is visible
+     against the surrounding bg-surface sidebar card at rest, not just its
+     icon; text-ink-secondary (not -muted) for the same reason. */
+  .sidebar-btn {
+    @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-well hover:bg-control text-ink-secondary hover:text-accent-500;
+  }
+
+  /* ── Trial number badges ───────────────────────────────────────────── */
+  .badge-success {
+    @apply badge bg-success-50 dark:bg-success-900/30 border border-success-400 dark:border-success-500/50 text-success-600 dark:text-success-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-success-100 dark:hover:bg-success-800/50;
+  }
+  .badge-failure {
+    @apply badge bg-danger-50 dark:bg-danger-900/30 border border-danger-400 dark:border-danger-500/50 text-danger-600 dark:text-danger-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-danger-100 dark:hover:bg-danger-800/50;
+  }
+  .badge-error {
+    @apply badge bg-warning-50 dark:bg-warning-900/30 border border-warning-400 dark:border-warning-500/50 text-warning-600 dark:text-warning-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-warning-100 dark:hover:bg-warning-800/50;
+  }
+  .badge-disabled {
+    @apply badge bg-well dark:bg-well/50 border border-control text-ink-muted cursor-not-allowed opacity-60;
+  }
+  /* mosaic / available-trial tile (larger px-3 py-2, accent hover) */
+  .badge-tile {
+    @apply inline-flex items-center justify-center px-3 py-2 bg-well dark:bg-well/50 border border-control text-ink-body rounded-md font-mono text-sm font-bold transition-all duration-200 shadow-sm hover:scale-110 hover:border-accent-500 hover:text-accent-500 active:scale-95;
+  }
+
+  /* ── Form inputs ───────────────────────────────────────────────────── */
+  /* Usage: add w-full, padding, and shadow classes per context */
+  .input-field {
+    @apply bg-surface-inset border border-inset rounded-md text-sm font-mono text-ink-strong outline-none focus:ring-1 focus:ring-accent-500;
+  }
+}
+
+/* --- 1. View Transitions (Chrome/Edge Only) --- */
+@view-transition {
+  navigation: auto;
+}
+
+/* Morph the Header Logo & Title across pages */
+.logo-link {
+  view-transition-name: mojo-logo;
+}
+
+h1 {
+  view-transition-name: mojo-title;
+}
+
+/* The Nav Pill "Slider" */
+.nav-highlight {
+  view-transition-name: active-nav-pill;
+  contain: paint;
+}
+
+/* Transition Timing Overrides */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.2s;
+}
+
+::view-transition-group(active-nav-pill) {
+  animation-duration: 0.35s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- 2. Global Defaults & Utilities --- */
+html {
+  background-color: var(--color-canvas);
+  /* Prevents layout jumping when scrollbars appear/disappear */
+  scrollbar-gutter: stable;
+}
+
+/* Native text selection, site-wide. The JSON/metadata CodeMirror editors
+   render their own selection via .cm-selectionBackground (trial-viewer.ts)
+   since CodeMirror doesn't honor ::selection, but they're set to the same
+   accent-500/40 color so selection reads consistently everywhere. */
+::selection {
+  background-color: color-mix(in srgb, var(--color-accent-500) 40%, transparent);
+}
+
+/* Prevents Alpine.js elements from flickering before they load */
+[x-cloak] {
+  display: none !important;
+}
+
+/* Standard Button Behavior */
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+/* --- 3. The Mojo Logo Style (The "Backing Tile") --- */
+.logo-style {
+  box-sizing: border-box;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background-color: var(--color-surface);
+  filter: drop-shadow(0 4px 3px color-mix(in srgb, var(--color-scrim) 7%, transparent));
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+}
+
+.dark .logo-style {
+  filter: none;
+}
+
+/* The Signature Glow Effect */
+.logo-style:hover {
+  transform: scale(1.1);
+  border-color: var(--color-accent-500) !important;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--color-accent-500) 60%, transparent)) !important;
+}
+
+/* --- 4. Custom Scrollbars (For Trial Logs) --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 10px;
+}
+
+/* --- 5. Laser Beam Adjustments --- */
+/* Ensures the laser beam doesn't get caught in the page transition fade */
+.fixed.top-0 {
+  view-transition-name: sync-laser;
+}
+
+kbd {
+  display: inline-block;
+  padding: 2px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-accent-500);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  box-shadow: 0 2px 0 var(--color-kbd-shadow);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* --- 6. Number Inputs (hide native browser spin arrows) --- */
+/* Usage: add width, padding, and text-size utilities per context */
+.number-input {
+  background: transparent;
+  text-align: center;
+  outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: var(--color-accent-500);
+  appearance: textfield;
+}
+
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  appearance: none;
+}
+
+/* Pair with .input-field to hide browser spin arrows without changing aesthetics */
+.no-spin {
+  appearance: textfield;
+}
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  appearance: none;
+}

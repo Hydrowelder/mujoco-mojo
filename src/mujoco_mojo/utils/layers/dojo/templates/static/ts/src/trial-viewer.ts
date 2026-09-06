@@ -1,5 +1,22 @@
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
+import { themeColor, themeColorAlpha } from "./lib/theme-colors";
+import Plotly from "./lib/plotly";
+import LZString from "lz-string";
+import "./lib/color-picker";
+import {
+  EditorView,
+  basicSetup,
+  EditorState,
+  json,
+  jsonParseLinter,
+  syntaxHighlighting,
+  oneDarkHighlightStyle,
+  defaultHighlightStyle,
+  Compartment,
+  linter,
+  lintGutter,
+} from "./lib/codemirror";
 import {
   DASH_STYLE_VALUES,
   PLOT_CONFIG_SCHEMA,
@@ -32,31 +49,6 @@ import type {
   UnitGroup,
   YAxisConfig,
 } from "./models";
-
-// ---------------------------------------------------------------------------
-// Tailwind offline palette - hex values matching Tailwind CSS defaults
-// ---------------------------------------------------------------------------
-const tw = {
-  slate: {
-    50: "#f8fafc",
-    100: "#f1f5f9",
-    200: "#e2e8f0",
-    300: "#cbd5e1",
-    400: "#94a3b8",
-    500: "#64748b",
-    600: "#475569",
-    700: "#334155",
-    800: "#1e293b",
-    900: "#0f172a",
-    950: "#020617",
-  },
-  cyan: { 400: "#22d3ee", 500: "#06b6d4", 600: "#0891b2" },
-  emerald: { 500: "#10b981" },
-  blue: { 500: "#3b82f6" },
-  violet: { 500: "#8b5cf6" },
-  amber: { 500: "#f59e0b" },
-  rose: { 500: "#ef4444" },
-} as const;
 
 // matches Python's logging severity ordering
 const LOG_LEVEL_SEVERITY: Record<string, number> = {
@@ -158,12 +150,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     columnMetadata: {} as Record<string, Record<string, string>>,
     discoveryId: 0,
     plotColors: [
-      tw.cyan[500],
-      tw.emerald[500],
-      tw.blue[500],
-      tw.violet[500],
-      tw.amber[500],
-      tw.rose[500],
+      themeColor("accent-500"),
+      themeColor("success"),
+      themeColor("chart-blue"),
+      themeColor("chart-violet"),
+      themeColor("warning"),
+      themeColor("danger"),
     ],
     dashStyles: DASH_STYLE_VALUES,
 
@@ -582,24 +574,24 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     stepDotClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+      if (!this.trialStatus) return "bg-control";
       const step = this.trialStatus[stepName];
-      if (this.errorStep() === stepName) return "bg-amber-500";
-      if (step.elapsed !== null) return "bg-emerald-500";
+      if (this.errorStep() === stepName) return "bg-warning-500";
+      if (step.elapsed !== null) return "bg-success-500";
       if (this.trialStatus.step === stepName)
-        return "bg-cyan-400 animate-pulse";
-      return "bg-slate-300 dark:bg-slate-600";
+        return "bg-accent-400 animate-pulse";
+      return "bg-control";
     },
 
     stepTextClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+      if (!this.trialStatus) return "text-ink-disabled";
       const step = this.trialStatus[stepName];
       if (this.errorStep() === stepName)
-        return "text-amber-500 dark:text-amber-400";
-      if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+        return "text-warning-500 dark:text-warning-400";
+      if (step.elapsed !== null) return "text-ink-secondary";
       if (this.trialStatus.step === stepName)
-        return "text-cyan-500 dark:text-cyan-400";
-      return "text-slate-400 dark:text-slate-600";
+        return "text-accent-500 dark:text-accent-400";
+      return "text-ink-disabled";
     },
 
     async fetchTrialLogs() {
@@ -674,14 +666,21 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!chartEl) return;
 
       const isDark = this.theme === "dark";
-      const bg = isDark ? "#1e293b" : "#ffffff";
-      const textColor = isDark ? "#94a3b8" : "#64748b";
-      const curveColor = isDark ? "#06b6d4" : "#0891b2";
-      const cdfColor = isDark ? "#a78bfa" : "#7c3aed";
+      const bg = themeColor("surface");
+      const textColor = themeColor("ink-muted");
+      const curveColor = isDark
+        ? themeColor("accent-500")
+        : themeColor("accent-600");
+      const cdfColor = isDark
+        ? themeColor("secondary-400")
+        : themeColor("secondary-600");
       const fillColor = isDark
-        ? "rgba(6,182,212,0.12)"
-        : "rgba(8,145,178,0.10)";
-      const sampledColor = "#ef4444";
+        ? themeColorAlpha("accent-500", 0.12)
+        : themeColorAlpha("accent-600", 0.1);
+      // matches the "sampled value" legend swatch in _distributions.html
+      // (bg-danger-500): was a hardcoded true-red hex here previously, one
+      // shade off from the rose the legend actually shows.
+      const sampledColor = themeColor("danger");
 
       const chartType = entry.chart_type;
 
@@ -757,7 +756,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               y0: 0,
               y1: 1,
               yref: "paper",
-              line: { color: "#94a3b8", width: 1.5, dash: "dot" },
+              line: { color: themeColor("ink-muted"), width: 1.5, dash: "dot" },
             });
           }
           for (const sampledValue of entry.sampled_values ?? []) {
@@ -886,7 +885,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           paramsEl.innerHTML = Object.entries(entry.params)
             .map(
               ([k, v]) =>
-                `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
+                `<span><span class="text-ink-muted">${k}:</span> ${fmt(v)}</span>`,
             )
             .join("");
         }
@@ -1342,17 +1341,17 @@ function trialViewer(trialId: string, externalUrl: string) {
     logLevelClass(level: string): string {
       switch (level) {
         case "CRITICAL":
-          return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
+          return "bg-danger-500 dark:bg-danger-900/50 text-white dark:text-white";
         case "ERROR":
-          return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
+          return "bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400";
         case "WARNING":
-          return "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400";
+          return "bg-warning-100 dark:bg-warning-900/50 text-warning-700 dark:text-warning-400";
         case "INFO":
-          return "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400";
+          return "bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400";
         case "DEBUG":
-          return "bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400";
+          return "bg-accent-100 dark:bg-accent-900/50 text-accent-700 dark:text-accent-400";
         default:
-          return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+          return "bg-chip text-ink-secondary";
       }
     },
 
@@ -2811,18 +2810,18 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (this.vsDraft.pinned.includes(tn)) {
         // keep the outcome hint on the border even while pinned
         if (this.errorTrialNums.includes(tn))
-          return "bg-cyan-500 border-amber-500 text-white";
+          return "bg-accent-500 border-warning-500 text-white";
         if (this.failureTrialNums.includes(tn))
-          return "bg-cyan-500 border-rose-500 text-white";
-        return "bg-cyan-500 border-cyan-500 text-white";
+          return "bg-accent-500 border-danger-500 text-white";
+        return "bg-accent-500 border-accent-500 text-white";
       }
       if (t === this.trialId)
-        return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
+        return "border-accent-500 text-accent-500 dark:text-accent-400 cursor-default";
       if (this.errorTrialNums.includes(tn))
-        return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
+        return "border-warning-400 dark:border-warning-500/70 text-ink-secondary hover:text-warning-500";
       if (this.failureTrialNums.includes(tn))
-        return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
-      return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+        return "border-danger-400 dark:border-danger-500/70 text-ink-secondary hover:text-danger-500";
+      return "border-subtle text-ink-secondary hover:border-accent-400 hover:text-accent-500";
     },
 
     async syncVsRange() {
@@ -3166,18 +3165,18 @@ function trialViewer(trialId: string, externalUrl: string) {
         regex,
         (match, _token, _i1, _i2, _i3, garbage: string | undefined) => {
           if (garbage)
-            return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
-          let cls = "text-slate-500 dark:text-slate-400";
+            return `<span class="text-danger-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
+          let cls = "text-ink-secondary";
           if (/^"/.test(match)) {
             cls = /:$/.test(match)
-              ? "text-cyan-600 dark:text-cyan-300"
-              : "text-emerald-600 dark:text-emerald-400";
+              ? "text-accent-600 dark:text-accent-300"
+              : "text-success-600 dark:text-success-400";
           } else if (/true|false/.test(match)) {
-            cls = "text-violet-600 dark:text-violet-400";
+            cls = "text-secondary-600 dark:text-secondary-400";
           } else if (/null/.test(match)) {
-            cls = "text-rose-500";
+            cls = "text-danger-500";
           } else if (/-?\d/.test(match)) {
-            cls = "text-amber-600 dark:text-amber-500";
+            cls = "text-warning-600 dark:text-warning-500";
           }
           return `<span class="${cls}">${match}</span>`;
         },
@@ -3381,20 +3380,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     initCodeMirror(hostEl: HTMLElement) {
-      if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
-      const {
-        EditorView,
-        basicSetup,
-        json,
-        jsonParseLinter,
-        oneDarkHighlightStyle,
-        EditorState,
-        Compartment,
-        linter,
-        lintGutter,
-        syntaxHighlighting,
-        defaultHighlightStyle,
-      } = CM;
+      if (!hostEl || _cm.editor) return;
       const self = this;
 
       // Restore persisted height before creating the editor so it sizes correctly.
@@ -3403,100 +3389,104 @@ function trialViewer(trialId: string, externalUrl: string) {
       // --- themes (base chrome only; highlight handled separately) ---
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+          "&": { backgroundColor: themeColor("slate-950"), color: themeColor("slate-300"), height: "100%" },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
-          ".cm-cursor": { borderLeftColor: "#06b6d4" },
+          ".cm-content": { padding: "1rem", caretColor: themeColor("accent-500") },
+          ".cm-cursor": { borderLeftColor: themeColor("accent-500") },
           ".cm-gutters": {
-            backgroundColor: "#0f172a",
-            color: "#475569",
-            borderRight: "1px solid #1e293b",
+            backgroundColor: themeColor("slate-900"),
+            color: themeColor("slate-600"),
+            borderRight: `1px solid ${themeColor("slate-800")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
-          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          ".cm-activeLineGutter": { backgroundColor: themeColorAlpha("slate-900", 0.6) },
+          ".cm-activeLine": { backgroundColor: themeColorAlpha("slate-900", 0.4) },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#1e293b !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+          ".cm-matchingBracket": { color: themeColor("accent-400"), fontWeight: "bold" },
           ".cm-tooltip": {
-            backgroundColor: "#1e293b",
-            border: "1px solid #334155",
-            color: "#cbd5e1",
+            backgroundColor: themeColor("slate-800"),
+            border: `1px solid ${themeColor("slate-700")}`,
+            color: themeColor("slate-300"),
           },
           ".cm-panels": {
-            backgroundColor: "#0f172a",
-            borderColor: "#1e293b",
-            color: "#cbd5e1",
+            backgroundColor: themeColor("slate-900"),
+            borderColor: themeColor("slate-800"),
+            color: themeColor("slate-300"),
           },
-          ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+          ".cm-searchMatch": { backgroundColor: themeColorAlpha("accent-400", 0.18) },
           ".cm-searchMatch.cm-searchMatch-selected": {
-            backgroundColor: "rgba(34,211,238,0.35)",
+            backgroundColor: themeColorAlpha("accent-400", 0.35),
           },
           ".cm-lintRange-error": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #ef4444 1.5px",
+            textDecoration: `underline wavy ${themeColor("danger")} 1.5px`,
             textUnderlineOffset: "3px",
           },
           ".cm-lintRange-warning": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #f59e0b 1.5px",
+            textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+          ".cm-diagnostic-error": { borderLeft: `3px solid ${themeColor("danger")}` },
         },
         { dark: true },
       );
 
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+          "&": { backgroundColor: themeColor("white"), color: themeColor("slate-900"), height: "100%" },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
-          ".cm-cursor": { borderLeftColor: "#0891b2" },
+          ".cm-content": { padding: "1rem", caretColor: themeColor("accent-600") },
+          ".cm-cursor": { borderLeftColor: themeColor("accent-600") },
           ".cm-gutters": {
-            backgroundColor: "#f8fafc",
-            color: "#94a3b8",
-            borderRight: "1px solid #e2e8f0",
+            backgroundColor: themeColor("slate-50"),
+            color: themeColor("slate-400"),
+            borderRight: `1px solid ${themeColor("slate-200")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
-          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          ".cm-activeLineGutter": { backgroundColor: themeColorAlpha("slate-100", 0.6) },
+          ".cm-activeLine": { backgroundColor: themeColorAlpha("slate-100", 0.5) },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#e2e8f0 !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+          ".cm-matchingBracket": { color: themeColor("accent-600"), fontWeight: "bold" },
           ".cm-tooltip": {
-            backgroundColor: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            color: "#0f172a",
+            backgroundColor: themeColor("slate-50"),
+            border: `1px solid ${themeColor("slate-200")}`,
+            color: themeColor("slate-900"),
           },
-          ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
-          ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+          ".cm-panels": { backgroundColor: themeColor("slate-50"), borderColor: themeColor("slate-200") },
+          ".cm-searchMatch": { backgroundColor: themeColorAlpha("accent-600", 0.15) },
           ".cm-searchMatch.cm-searchMatch-selected": {
-            backgroundColor: "rgba(8,145,178,0.3)",
+            backgroundColor: themeColorAlpha("accent-600", 0.3),
           },
           ".cm-lintRange-error": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #ef4444 1.5px",
+            textDecoration: `underline wavy ${themeColor("danger")} 1.5px`,
             textUnderlineOffset: "3px",
           },
           ".cm-lintRange-warning": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #f59e0b 1.5px",
+            textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+          ".cm-diagnostic-error": { borderLeft: `3px solid ${themeColor("danger")}` },
         },
         { dark: false },
       );
@@ -3581,50 +3571,46 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     initMetadataViewer(hostEl: HTMLElement, jsonText: string): object | null {
-      if (!hostEl || typeof CM === "undefined") return null;
-      const {
-        EditorView,
-        EditorState,
-        json,
-        syntaxHighlighting,
-        oneDarkHighlightStyle,
-        defaultHighlightStyle,
-      } = CM;
+      if (!hostEl) return null;
       const isDark = document.documentElement.classList.contains("dark");
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+          "&": { backgroundColor: themeColor("slate-950"), color: themeColor("slate-300") },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: themeColor("accent-500") },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
-          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#1e293b !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
         },
         { dark: true },
       );
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+          "&": { backgroundColor: themeColor("white"), color: themeColor("slate-900") },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: themeColor("accent-600") },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
-          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#e2e8f0 !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
         },
         { dark: false },
@@ -3693,8 +3679,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       };
       if (!el) return;
       const plotlyFormat = format === "jpg" ? "jpeg" : format;
-      const isDark = document.documentElement.classList.contains("dark");
-      const bgColor = isDark ? tw.slate[800] : "#ffffff";
+      const bgColor = themeColor("surface");
       const resW = Math.round(1280 * scale);
       const resH = Math.round(720 * scale);
       this.notify(
@@ -3900,7 +3885,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getSignalColor(index: number): string {
-      return this.plotColors[index % this.plotColors.length] ?? tw.cyan[500];
+      return (
+        this.plotColors[index % this.plotColors.length] ??
+        themeColor("accent-500")
+      );
     },
 
     // picks the lowest-index (color, dash) pair not already in use by `used`,
@@ -4925,13 +4913,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!this.data) return;
 
       const isDark = document.documentElement.classList.contains("dark");
-      const textColor = isDark ? tw.slate[400] : tw.slate[600];
-      const majorGrid = isDark ? tw.slate[950] : tw.slate[200];
-      const minorGrid = isDark ? tw.slate[900] : tw.slate[100];
-      const tooltipBg = isDark ? tw.slate[900] : "#ffffff";
-      const tooltipFont = isDark ? tw.slate[50] : tw.slate[900];
-      const tooltipBorder = tw.cyan[500];
-      const spikeColor = tw.cyan[500];
+      const textColor = themeColor("chart-text");
+      const majorGrid = themeColor("chart-grid-major");
+      const minorGrid = themeColor("chart-grid-minor");
+      const tooltipBg = themeColor("chart-tooltip-bg");
+      const tooltipFont = themeColor("chart-tooltip-font");
+      const tooltipBorder = themeColor("accent-500");
+      const spikeColor = themeColor("accent-500");
 
       const isHoverDisabled = this.config.hover === "none";
       const showX =
@@ -5193,7 +5181,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               font: {
                 family: "monospace",
                 size: 16,
-                color: isDark ? tw.slate[200] : tw.slate[800],
+                color: themeColor("chart-title"),
                 weight: "bold",
               },
               x: 0,
@@ -5248,10 +5236,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                 font: {
                   family: "monospace",
                   size: 12,
-                  color: isDark ? tw.slate[50] : tw.slate[900],
+                  color: themeColor("chart-tooltip-font"),
                 },
-                bgcolor: isDark ? tw.slate[800] : tw.slate[50],
-                bordercolor: tw.cyan[500],
+                bgcolor: themeColor("chart-annotation-bg"),
+                bordercolor: themeColor("accent-500"),
                 borderwidth: 1,
                 borderpad: 4,
               })),
@@ -5288,12 +5276,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                     yanchor,
                     font: {
                       size: 10,
-                      color: s.color || tw.cyan[500],
+                      color: s.color || themeColor("accent-500"),
                       family: "monospace",
                     },
-                    bgcolor: isDark
-                      ? tw.slate[900] + "B3"
-                      : tw.slate[50] + "B3",
+                    bgcolor: themeColorAlpha("chart-shape-label-bg", 0xb3 / 255),
                     borderpad: 2,
                   };
                 }),
@@ -5301,7 +5287,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         shapes: isPolar
           ? []
           : (this.config.shapes ?? []).map((s) => {
-              const shapeColor = s.color || tw.cyan[500];
+              const shapeColor = s.color || themeColor("accent-500");
               const base = {
                 line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
                 layer: "below",
