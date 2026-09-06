@@ -10,7 +10,6 @@ import pint
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.alias_generators import to_camel
-from scipy.signal import savgol_filter
 
 __all__ = [
     "UNIT_GROUPS",
@@ -404,6 +403,8 @@ class SavitzkyGolayFilter(BaseFilter):
         return self
 
     def apply(self, expr: pl.Expr) -> pl.Expr:
+        from scipy.signal import savgol_filter
+
         return expr.map_batches(
             lambda s: pl.Series(
                 savgol_filter(s.fill_null(0).to_numpy(), self.window, self.order)

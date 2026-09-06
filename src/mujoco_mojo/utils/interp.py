@@ -3,7 +3,6 @@ from typing import Any, Literal, Self
 import numpy as np
 from numpy.typing import ArrayLike
 from pydantic import PrivateAttr, model_validator
-from scipy.interpolate import interp1d
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.typing import VecN
@@ -38,6 +37,8 @@ class Interpolator(MojoBaseModel):
 
     @model_validator(mode="after")
     def _init_spline(self) -> Self:
+        from scipy.interpolate import interp1d
+
         self._func = interp1d(
             self.x,
             self.y,
