@@ -173,9 +173,9 @@ When running in [local mode](#local-mode-local), Mojo will create a file in your
 ???+ example "Example: Runtime Report"
     To see an example of a runtime report, see the next guide or go to [this page](MOJO_RUNTIME_REPORT.md){:target=_blank}.
 
-For more advanced reporting, see the guide on the [Dojo Dashboard](dojo.md).
+For more advanced reporting, see the guide on the [Dojo Dashboard](../../features/dojo/dojo.md).
 
 ---
 
 !!! success
-    Your job is now running! To keep an eye on your telemetry while the trials are still processing, move on to the [Dojo Dashboard](dojo.md) guide to learn about real-time monitoring and rapid data analysis.
+    Your job is now running! To keep an eye on your telemetry while the trials are still processing, move on to the [Dojo Dashboard](../../features/dojo/dojo.md) guide to learn about real-time monitoring and rapid data analysis.

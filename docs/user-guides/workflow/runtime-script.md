@@ -1,17 +1,19 @@
 # Runtime Script
 
 !!! abstract
+
     While the [Generate Script](generate-script.md) builds the world, the **Runtime Script** defines its execution. This is where you apply forces, execute control logic, and decide what data is worth saving.
 
     The beauty of Mojo is that you don't need to manage the low-level MuJoCo physics state manually; the `RuntimeManager` handles the heavy lifting, ensuring your simulation is stable and your telemetry is perfectly synchronized.
 
     <figure markdown="span">
-        ![Runtime final result](../assets/user-guides/runtime-anim.gif){ width="50%" height="auto" }
+        ![Runtime final result](../../assets/user-guides/runtime-anim.gif){ width="50%" height="auto" }
         <figcaption>The visual result of the completed runtime script: Two spring forces act between the sphere site pairs defined in the generate step. The action-reaction forces are displayed. The boxes translate away from one another while rotating due to mismatched the unequal spring force.</figcaption>
     </figure>
 
 !!! info "Suggested Reading:  Mojo Reloaded"
-    After a brief skim of this guide, you may want to take a look at [the guide](reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
+
+    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -20,8 +22,9 @@
 Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
 
 ???+ example "Example: MojoGenerate Handle"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:runtime-handle"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:runtime-handle"
     ```
 
 ---
@@ -31,6 +34,7 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 The `RuntimeManager` is the orchestrator of your simulation. It is recommended to use it as a context manager (`with runtime_manager as rm:`). This ensures that the results database is properly opened, the clocks are synchronized, and all resources are cleaned up when the trial finishes.
 
 ???+ tip "Tip: No Need to Pass `rm` Around"
+
     While inside the `with runtime_manager as rm:` block, `rm` is also available ambiently. Methods like `register_to_rm()` and `request()` will automatically find the active `RuntimeManager`/`SignalManager` if you don't pass one explicitly, e.g. `spring_force.register_to_rm()` instead of `spring_force.register_to_rm(rm)`. This means helper functions like `add_spring_force()` in the `Handoff` class don't need to accept `rm` as a parameter at all, so long as they're called from within the `with` block.
 
 ### Defining Loads
@@ -40,8 +44,9 @@ This is where the `Handoff` pattern pays off! Since we packed our site reference
 Mojo provides high-level force abstractions like `PointToPointForce`, which automatically handles the math for things like compression springs or hydraulic actuators. When providing reaction sites located on other bodies, the runtime manager also calculates the correct action-reaction forces to apply.
 
 ???+ example "Example: Applying Custom Forces"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:forces"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:forces"
     ```
 
 ???+ question "Available Load Types"
@@ -114,13 +119,15 @@ Forget about the difference between `mj_step` and `mj_forward`. Just call `rm.st
 Mojo uses a **"Request"** pattern for data logging. Instead of manually creating buffers or writing to CSVs, you simply tell the model what you are interested in.
 
 ???+ tip "Tip: Zero-Logic Logging"
+
     The `.request()` method is available on select Mojo objects. It tells the `SignalManager` to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
 
     Custom requests can also be made using the `SignalManager.post()` method!
 
 ???+ example "Example: Telemetry Requests"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:requests"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:requests"
     ```
 
 ---
@@ -130,11 +137,13 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 If you need visual proof of your simulation (or you just need something for a slide deck), the `VideoRecorder` plugin provides a method to produce high-fidelity MP4s or gifs. They integrate directly with the `RuntimeManager` and use the named cameras defined in your generator.
 
 ???+ tip "Tip: Load Debugging"
+
     The `VideoRecorder` can automatically overlay custom force vectors (like your spring forces) directly onto the video frames, making it an invaluable tool for debugging.
 
 ???+ example "Example: Video Setup"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:video"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:video"
     ```
 
 ---
@@ -146,18 +155,21 @@ The heart of the script is the humble `while` or `for` loop. Because `rm.step()`
 When the context manager for `rm` is over, all your requested telemetry and videos will be recorded!
 
 ???+ example "Example: Stepping"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:stepping"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:stepping"
     ```
 
 ---
 
 !!! success
+
     You've now mastered the "Mojo Way" of building and running simulations!
 
-    With your **Generator** and **Runtime** scripts ready, the next step is to learn how to scale these up into massive Monte Carlo jobs using the [Job Runner](running-jobs.md).
+    With your **Generator** and **Runtime** scripts ready, the next step is to learn how to scale these up into massive Monte Carlo jobs using the [Job Runner](running-jobs/running-jobs.md).
 
 ??? example "Example: Full Runtime Script"
+
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:runtime"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:runtime"
     ```

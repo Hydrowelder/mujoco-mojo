@@ -178,7 +178,6 @@ class LandingGear(mojo.UserData):
 
     @classmethod
     def new(cls, side: mojo.Body, side_id: Side) -> Self:
-
         # Make a leg with a footpad angled at the ground
         body = mojo.Body(
             name=mojo.BodyName(f"{side_id}_leg"),
@@ -522,7 +521,7 @@ def runtime(
         # randomized Monte Carlo variation
         if mojo_model.is_nominal:
             rt.VideoRecorder(
-                path=mojo_model.trial_dir / "video.mp4", camera_name=vlr_model.camera
+                path=Path(__file__).parent / "video.gif", camera_name=vlr_model.camera
             ).setup(state).register_to_rm()
         while state.data.time < 4.0:
             rm.step(state)

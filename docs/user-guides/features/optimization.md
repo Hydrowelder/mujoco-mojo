@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    While a [Monte Carlo](running-jobs.md) campaign explores the "what if" of random chance, Optimization helps answer the "what is best." Instead of drawing from static distributions, Mojo uses Optuna to intelligently navigate your design space, evolving your model parameters to minimize or maximize a specific physical outcome.
+    While a [Monte Carlo](../workflow/running-jobs/running-jobs.md) campaign explores the "what if" of random chance, Optimization helps answer the "what is best." Instead of drawing from static distributions, Mojo uses Optuna to intelligently navigate your design space, evolving your model parameters to minimize or maximize a specific physical outcome.
 
 ---
 
@@ -51,7 +51,7 @@ The **Objective Function** is the "grade" you give to a simulation. It is a stan
 ???+ example "Example: MojoObjective Handle"
 
     ```python
-    --8<-- "docs/user-guides/optimization_example.py:score-handle"
+    --8<-- "docs/user-guides/features/optimization_example.py:score-handle"
     ```
 
 A valid objective function must accept the `MojoModel`, the `Path` to the telemetry outputs requested during runtime, and an `MjState` object.
@@ -59,7 +59,7 @@ A valid objective function must accept the `MojoModel`, the `Path` to the teleme
 ???+ example "Example: Scoring Performance"
 
     ```python
-    --8<-- "docs/user-guides/optimization_example.py:score"
+    --8<-- "docs/user-guides/features/optimization_example.py:score"
     ```
 
 ---
@@ -121,5 +121,5 @@ To use this you must provide a storage database argument for you optimization jo
 
 ??? example "Example: Full Optimization Script"
     ```python
-    --8<-- "docs/user-guides/optimization_example.py"
+    --8<-- "docs/user-guides/features/optimization_example.py"
     ```
