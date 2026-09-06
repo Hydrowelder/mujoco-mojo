@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from abc import ABC
 from collections.abc import Sequence
 from pathlib import Path
@@ -16,14 +15,18 @@ from xml.etree.ElementTree import Element
 
 import mujoco
 import numpy as np
-from filelock import FileLock
 from pydantic import PrivateAttr, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
-from mujoco_mojo.mjcf.dependency_path import DepPath
+from mujoco_mojo.mjcf.dependency_path import (
+    apply_asset_destinations,
+    collect_asset_slots,
+    compute_asset_destinations,
+    copy_asset,
+)
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.typing import Angle, EulerSeq
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.utils import get_checksum
 
 logger = get_logger(__name__)
 
@@ -411,63 +414,31 @@ class XMLModel(MojoBaseModel):
     def bundle_assets(self, target_dir: Path, rel_to_xml: Path) -> None:
         """
         Crawls the entire XMLModel tree. Any attribute that is a Path object is copied to target_dir/assets and the model is updated to a relative path.
+
+        Two different source files sharing a basename (e.g. textures/wood/texture.png and textures/steel/texture.png) are disambiguated by nesting them under real parent directory names; byte-identical files sharing a basename are treated as duplicates and collapse to one destination/one copy. This only covers collisions discovered within this call - a pre-existing, unrelated file already in target_dir from an earlier bundle_assets() call keeps the existing warn-and-overwrite behavior.
         """
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # get objects in the tree
-        for obj in self._iter_tree():
-            for attr_name in obj.attributes:
-                value = getattr(obj, attr_name, None)
+        slots = collect_asset_slots(self)
+        if not slots:
+            return
 
-                is_collection = isinstance(value, (list, tuple, set))
+        plan = compute_asset_destinations(slots)
+        prefer_symlinks = MujocoMojoSettings().assets.symlink
 
-                # type is cast to list here. Will need to uncast later.
-                items = list(value) if is_collection else [value]
+        # copy once per unique destination, not once per source - true duplicates
+        # (same content, same basename) share one destination and should only be
+        # locked/hashed/copied once
+        first_source_for_dest: dict[Path, Path] = {}
+        for source, dest in plan.destinations.items():
+            first_source_for_dest.setdefault(dest, source)
 
-                new_values = []
-                changed = False
+        for dest, source in first_source_for_dest.items():
+            copy_asset(
+                source,
+                target_dir / dest,
+                known_checksum=plan.source_checksums.get(source),
+                prefer_symlinks=prefer_symlinks,
+            )
 
-                # loop over attribute as a list of items
-                for item in items:
-                    if isinstance(item, DepPath):
-                        item = item.resolve()
-                        if not item.exists():
-                            logger.error(f"Asset file not found: {item}")
-                            new_values.append(item)
-                            continue
-
-                        # copy the file
-                        dest_file = target_dir / item.name
-                        lock_path = dest_file.with_suffix(dest_file.suffix + ".lock")
-
-                        with FileLock(lock_path):
-                            needs_update = True
-                            if dest_file.exists():
-                                # files already in the destination skipped
-                                if get_checksum(item) == get_checksum(dest_file):
-                                    needs_update = False
-                                    logger.debug(
-                                        f"Dependency asset {item.resolve()} was already in the shared asset directory {target_dir.resolve()} (as identified by filename and MD5 hash) so the file will be skipped from being copied."
-                                    )
-                                else:
-                                    logger.warning(
-                                        f"Asset file {value} already in assets bundle. Old file will be overwritten."
-                                    )
-
-                            if needs_update:
-                                logger.debug(
-                                    f"Copying dependency asset from {item.resolve()} to {dest_file.resolve()}"
-                                )
-                                shutil.copy2(item, dest_file)
-
-                        new_values.append(rel_to_xml / item.name)
-                        changed = True
-                    else:
-                        new_values.append(item)
-
-                if changed:
-                    # cast back to previous type
-                    final_val = (
-                        type(value)(new_values) if is_collection else new_values[0]
-                    )
-                    setattr(obj, attr_name, final_val)
+        apply_asset_destinations(slots, plan.destinations, rel_to_xml)

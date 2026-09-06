@@ -136,9 +136,9 @@ Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task correspon
 
 #### Custom SLURM Settings
 
-The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. There are two layers for supplying these, and they merge together:
+The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. These live in the `[slurm]` table of Mojo's settings files, managed with `mujoco-mojo settings <init|show|set|reset>`, and - like every other setting - can be set globally for you, or overridden per project, with the project value winning.
 
-**Global defaults** - things about you or your cluster that rarely change (account number, email) belong in the `[slurm]` table of `~/.mujoco-mojo/settings.toml`, applied automatically to every submission:
+**Global defaults** - things about you or your cluster that rarely change (account number, email) belong in `~/.mujoco-mojo/settings.toml`, applied automatically to every submission from any project:
 
 ```toml title="~/.mujoco-mojo/settings.toml"
 [slurm]
@@ -147,22 +147,29 @@ The wizard only asks about a handful of common fields (partition, cpus, memory, 
 MLM_LICENSE_FILE = "27000@license.internal"
 ```
 
-**Per-job overrides** - pass `--slurm-config`/`-sc` with a path to a flat JSON file (or just type the path when the wizard prompts for it) for settings specific to one submission:
+**Per-project overrides** - a different allocation, a stricter QOS, or anything else specific to one project belongs in that project's local settings file instead:
 
-```json title="slurm_config.json"
-{
-    "sbatch.account": "a-different-allocation",
-    "sbatch.qos": "high"
-}
+```bash linenums="0"
+mujoco-mojo settings init --project
+mujoco-mojo settings set --project slurm.sbatch.account a-different-allocation
+mujoco-mojo settings set --project slurm.sbatch.qos high
 ```
 
-Both use the same convention:
+which writes to `./.mujoco-mojo/settings.toml`:
+
+```toml title="./.mujoco-mojo/settings.toml"
+[slurm]
+"sbatch.account" = "a-different-allocation"
+"sbatch.qos" = "high"
+```
+
+Both layers use the same convention:
 
 - Keys prefixed with `sbatch.` become extra `#SBATCH` lines (`"sbatch.account"` &rarr; `#SBATCH --account=proj123`).
 - Every other key is exported as an environment variable before the worker command runs.
-- Values must be plain strings/numbers/bools - nested objects or arrays are rejected when loaded, since this is meant to describe a flat set of settings, not a tree.
+- Values must be plain strings/numbers/bools - nested tables or arrays are rejected, since this is meant to describe a flat set of settings, not a tree.
 
-If a key appears in both, the `--slurm-config` file wins - so the example above submits with `account=a-different-allocation` (overridden) but still keeps the global `mail-user` and `MLM_LICENSE_FILE`.
+If a key appears in both layers, the project-local value wins - so the example above submits with `account=a-different-allocation` (overridden) but still keeps the global `mail-user` and `MLM_LICENSE_FILE`.
 
 ---
 

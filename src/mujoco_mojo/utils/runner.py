@@ -507,8 +507,6 @@ class MojoRunner:
     model_config_name: str | None = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig | OptimizerConfig = field(default_factory=MonteCarloConfig)
-    slurm_config_path: Path | None = None
-    """Optional path to a flat JSON file of extra SLURM `#SBATCH` lines / environment variables. See `SlurmExtraSettings`."""
 
     gen_args: list[Any] = field(default_factory=list)
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -747,8 +745,9 @@ class MojoRunner:
         from rich.console import Console
 
         Console().print(
-            "[dim]Tip: pass --slurm-config/-sc with a flat JSON file to auto-inject extra "
-            "#SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
+            "[dim]Tip: set '[slurm]' entries in ~/.mujoco-mojo/settings.toml (or a project-local "
+            "./.mujoco-mojo/settings.toml, via `mujoco-mojo settings set --project`) to auto-inject "
+            "extra #SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
             "environment variables (any other key) into the generated submission script.[/dim]"
         )
 
@@ -1605,58 +1604,20 @@ class MojoRunner:
             )
             max_concurrent = ""
 
-        # === get optional custom SLURM config (extra #SBATCH lines / env vars) ===
-        # global, rarely-changing defaults (account, email, ...) from
-        # ~/.mujoco-mojo/settings.toml, layered under any --slurm-config file below
-        from mujoco_mojo.settings import MujocoMojoSettings, SlurmExtraSettings
+        # === get SLURM extras (extra #SBATCH lines / env vars) ===
+        # already the fully-resolved project-over-global value - see
+        # MujocoMojoSettings.slurm and project_settings_file()
+        from mujoco_mojo.settings import MujocoMojoSettings
 
-        global_slurm_settings = MujocoMojoSettings().slurm
-        if global_slurm_settings.root:
+        slurm_settings = MujocoMojoSettings().slurm
+        if slurm_settings.root:
             console.print(
-                f"[dim]Applying {len(global_slurm_settings.root)} default SLURM "
-                "setting(s) from ~/.mujoco-mojo/settings.toml[/dim]"
+                f"[dim]Applying {len(slurm_settings.root)} SLURM setting(s) from "
+                "~/.mujoco-mojo/settings.toml and/or ./.mujoco-mojo/settings.toml[/dim]"
             )
 
-        slurm_config_default = (
-            str(self.slurm_config_path) if self.slurm_config_path else ""
-        )
-        slurm_config_input = Prompt.ask(
-            "  [white]Custom SLURM config JSON[/] "
-            "[dim](optional: extra #SBATCH lines / env vars, overrides global "
-            "defaults, blank to skip)[/]",
-            default=slurm_config_default,
-        )
-        per_job_slurm_settings = SlurmExtraSettings({})
-        if slurm_config_input:
-            slurm_config_file = Path(slurm_config_input).resolve()
-            if not slurm_config_file.exists():
-                console.print(
-                    f"\n[bold red]WARNING:[/] {slurm_config_file} does not exist. "
-                    "Skipping custom SLURM config."
-                )
-            else:
-                try:
-                    per_job_slurm_settings = SlurmExtraSettings.load(slurm_config_file)
-                except Exception as e:
-                    console.print(
-                        f"\n[bold red]Failed to parse {slurm_config_file}:[/] {e}"
-                    )
-                    if not Confirm.ask(
-                        "Continue without these custom settings?", default=True
-                    ):
-                        return True
-                    per_job_slurm_settings = SlurmExtraSettings({})
-                else:
-                    console.print(
-                        f"[green]Loaded {len(per_job_slurm_settings.root)} setting(s) "
-                        f"from {slurm_config_file}[/green]"
-                    )
-
-        merged_slurm_settings = SlurmExtraSettings.merge(
-            global_slurm_settings, per_job_slurm_settings
-        )
-        extra_sbatch_lines = merged_slurm_settings.sbatch_lines()
-        extra_env_lines = merged_slurm_settings.env_lines()
+        extra_sbatch_lines = slurm_settings.sbatch_lines()
+        extra_env_lines = slurm_settings.env_lines()
 
         current_pythonpath = os.getenv("PYTHONPATH", "")
         if str(project_root) not in current_pythonpath:
@@ -1697,7 +1658,7 @@ class MojoRunner:
 
         extra_sbatch_block = "\n".join(extra_sbatch_lines)
         extra_env_block = (
-            "\n# Custom environment variables (global settings.toml / --slurm-config)\n"
+            "\n# Custom environment variables (global and/or project settings.toml)\n"
             + "\n".join(extra_env_lines)
             if extra_env_lines
             else ""

@@ -396,20 +396,6 @@ if True:
             help="File which contains NamedValue overrides to use in all trials.",
         ),
     ]
-    SlurmConfigType = Annotated[
-        Path | None,
-        typer.Option(
-            "--slurm-config",
-            "-sc",
-            help=(
-                "Optional flat JSON file of extra SLURM settings, prompted for again "
-                "during the SLURM orchestration wizard. Keys prefixed 'sbatch.' become "
-                "extra #SBATCH lines (e.g. 'sbatch.account'); every other key is "
-                "exported as an environment variable in the submission script."
-            ),
-        ),
-    ]
-
     # monte carlo
     NTrialType = Annotated[
         int,
@@ -638,7 +624,6 @@ def _prepare_runner(
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
     run_kwargs: RunKwargsType,
-    slurm_config: SlurmConfigType = None,
 ):
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -672,7 +657,6 @@ def _prepare_runner(
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,
         run_kwargs=processed_run_kwargs,
-        slurm_config_path=slurm_config,
     )
 
 
@@ -696,7 +680,6 @@ def run_monte_carlo(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -765,7 +748,6 @@ def run_monte_carlo(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
-        slurm_config=slurm_config,
     )
 
     # 2. build config
@@ -846,7 +828,6 @@ def run_single(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -909,7 +890,6 @@ def run_single(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
-        slurm_config=slurm_config,
     )
 
     # a single trial is always just one trial - n_trial only exists on
@@ -1077,18 +1057,48 @@ def settings_init(
             help="Overwrite an existing settings file (will not overwrite existing settings).",
         ),
     ] = False,
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+        ),
+    ] = False,
 ) -> None:
     """
-    [bold yellow]Initialize the global settings file with defaults.[/bold yellow]
+    [bold yellow]Initialize a settings file with defaults.[/bold yellow]
 
-    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema.
+    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema. Pass [bold]--project[/bold] to instead create an empty project-local override file at [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan] - a project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy.
     """
     from mujoco_mojo.settings import (
         SETTINGS_FILE,
         SETTINGS_SCHEMA_FILE,
         SETTINGS_TAPLO_FILE,
         MujocoMojoSettings,
+        project_settings_file,
     )
+
+    if project:
+        target = project_settings_file()
+        already_existed = target.exists()
+        MujocoMojoSettings.init_project_file()
+        setting_msg = (
+            f"[yellow]Project settings already exist:[/yellow] {target}"
+            if already_existed
+            else f"[green]Project settings written:[/green] {target}"
+        )
+        console.print(
+            Panel(
+                f"{setting_msg}\n\n"
+                "[white]Add only the keys you want to override for this project - "
+                "it references the global schema, so no separate schema/taplo files are created here.",
+                title="[cyan]Project Settings Initialized[/cyan]",
+                expand=False,
+                border_style="cyan",
+            )
+        )
+        return
 
     if SETTINGS_FILE.exists() and not force:
         setting_msg = f"[yellow]Settings already exist:[/yellow] {SETTINGS_FILE} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
@@ -1112,21 +1122,99 @@ def settings_init(
     )
 
 
-@settings_app.command(name="show")
-def settings_show() -> None:
+def _pad_for_subtitle(content: str, subtitle: str) -> str:
     """
-    [bold yellow]Display the current effective settings.[/bold yellow]
+    Appends a blank line of spaces to `content` if `subtitle` is longer than `content`'s longest line, so a Rich `Panel(expand=False)` sizes itself wide enough to show the full subtitle without truncating it.
 
-    Resolves values from all sources in priority order: environment variables, TOML file, then defaults. The API key is always masked.
+    Args:
+        content: The panel's body text (e.g. TOML source).
+        subtitle: The plain subtitle text that will appear in the panel's bottom border (no Rich markup - measure the visible text, not the markup-wrapped string).
+
+    Returns:
+        `content`, with an extra padding line appended if needed.
+
+    """
+    longest_line = max((len(line) for line in content.splitlines()), default=0)
+    if len(subtitle) > longest_line:
+        content += "\n" + " " * (len(subtitle) + 1)
+    return content
+
+
+class SettingsScope(StrEnum):
+    """Which settings `settings show` should display."""
+
+    EFFECTIVE = "effective"
+    """The fully resolved, merged settings (project + global + env + defaults)."""
+
+    PROJECT = "project"
+    """The raw, unmerged contents of just the project-local settings file."""
+
+    GLOBAL = "global"
+    """The raw, unmerged contents of just the global settings file."""
+
+
+@settings_app.command(name="show")
+def settings_show(
+    scope: Annotated[
+        SettingsScope,
+        typer.Option(
+            "--scope",
+            "-s",
+            help="Which settings to display.",
+            case_sensitive=False,
+        ),
+    ] = SettingsScope.EFFECTIVE,
+) -> None:
+    """
+    [bold yellow]Display settings.[/bold yellow]
+
+    By default, resolves values from all sources in priority order (environment variables, project settings file, global settings file, then defaults) and shows the resulting effective settings, with the API key masked. Pass [bold]--scope project[/bold] or [bold]--scope global[/bold] to instead show the raw, unmerged contents of just that one file (also masked).
     """
     import tomlkit
     from rich.syntax import Syntax
 
-    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+    from mujoco_mojo.settings import SETTINGS_FILE, project_settings_file
+
+    if scope is not SettingsScope.EFFECTIVE:
+        target = (
+            project_settings_file() if scope is SettingsScope.PROJECT else SETTINGS_FILE
+        )
+        label = scope.value.capitalize()
+        if not target.exists():
+            init_cmd = (
+                "mujoco-mojo settings init --project"
+                if scope is SettingsScope.PROJECT
+                else "mujoco-mojo settings init"
+            )
+            console.print(
+                f"[yellow]No {scope.value} settings file found.[/yellow] "
+                f"Run [bold cyan]{init_cmd}[/bold cyan] to create one."
+            )
+            return
+
+        doc = tomlkit.parse(target.read_text(encoding="utf-8"))
+        match scope:
+            case SettingsScope.PROJECT:
+                target_str = str(target)
+            case SettingsScope.GLOBAL:
+                target_str = SETTINGS_FILE.relative_to(Path.home()).as_posix()
+        raw_str = _pad_for_subtitle(tomlkit.dumps(doc).rstrip("\n"), target_str)
+
+        console.print(
+            Panel(
+                Syntax(raw_str, "toml", theme="ansi_dark"),
+                title=f"[cyan]{label} Settings File[/cyan]",
+                subtitle=f"[dim]{target_str}[/dim]",
+                expand=False,
+                border_style="cyan",
+            )
+        )
+        return
+
+    from mujoco_mojo.settings import MujocoMojoSettings
 
     settings = MujocoMojoSettings()
-    d = settings.model_dump()
-    d["sensai"]["api_key"] = "***"
+    d = settings.model_dump(mode="json")
 
     toml_str = tomlkit.dumps(d).rstrip("\n")
 
@@ -1134,9 +1222,16 @@ def settings_show() -> None:
         try:
             source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()).as_posix())
         except ValueError:
+            breakpoint()
             source = str(SETTINGS_FILE)
     else:
         source = "defaults only"
+
+    project_file = project_settings_file()
+    if project_file.exists():
+        source += f" + project overrides ({project_file.as_posix()})"
+
+    toml_str = _pad_for_subtitle(toml_str, source)
 
     console.print(
         Panel(
@@ -1154,7 +1249,7 @@ def settings_set_cmd(
     key: Annotated[
         str,
         typer.Argument(
-            help="Dotted key path (e.g. [bold cyan]sensai.model_name[/bold cyan])",
+            help="Dotted key path (e.g. [bold cyan]dojo.sensai.model_name[/bold cyan])",
             show_default=False,
         ),
     ],
@@ -1165,15 +1260,43 @@ def settings_set_cmd(
             show_default=False,
         ),
     ],
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Write to the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+        ),
+    ] = False,
 ) -> None:
     """
-    [bold yellow]Update a setting in the global settings file.[/bold yellow]
+    [bold yellow]Update a setting.[/bold yellow]
 
-    Example: [bold cyan]mujoco-mojo settings set sensai.model_name llama3.1:8b[/bold cyan]
+    Example: [bold cyan]mujoco-mojo settings set dojo.sensai.model_name llama3.1:8b[/bold cyan]
+
+    Add [bold]--project[/bold] to write only the changed key into this project's local override file, leaving everything else there untouched.
     """
     from pydantic import ValidationError
 
     from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+
+    parsed = _smart_parse(value)
+
+    if project:
+        try:
+            MujocoMojoSettings.set_project_value(key, parsed)
+        except KeyError:
+            console.print(
+                f"[bold red]Error:[/bold red] Unknown settings path: [bold cyan]{key}[/bold cyan]"
+            )
+            raise typer.Exit(code=1)
+        except ValidationError as e:
+            console.print(f"[bold red]Validation error:[/bold red] {e}")
+            raise typer.Exit(code=1)
+        console.print(
+            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}"
+        )
+        return
 
     if not SETTINGS_FILE.exists():
         console.print(
@@ -1202,7 +1325,6 @@ def settings_set_cmd(
         )
         raise typer.Exit(code=1)
 
-    parsed = _smart_parse(value)
     target[leaf] = parsed
 
     try:
@@ -1216,15 +1338,41 @@ def settings_set_cmd(
 
 
 @settings_app.command(name="reset")
-def settings_reset() -> None:
+def settings_reset(
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Delete the project-local settings file (./.mujoco-mojo/settings.toml) instead of resetting the global one.",
+        ),
+    ] = False,
+) -> None:
     """
-    [bold yellow]Reset the global settings file back to its defaults.[/bold yellow]
+    [bold yellow]Reset settings back to their defaults.[/bold yellow]
 
-    Overwrites every value in [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] with its default. Any comments you have added by hand are kept.
+    Without [bold]--project[/bold]: overwrites every value in [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] with its default (comments you've added by hand are kept). With [bold]--project[/bold]: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
     """
     from rich.prompt import Confirm
 
-    from mujoco_mojo.settings import MujocoMojoSettings
+    from mujoco_mojo.settings import MujocoMojoSettings, project_settings_file
+
+    if project:
+        target = project_settings_file()
+        if not target.exists():
+            console.print(
+                "[yellow]No project settings file found.[/yellow] Nothing to reset."
+            )
+            return
+        if not Confirm.ask(
+            f"Are you sure you want to delete your project settings file ({target})?",
+            default=False,
+        ):
+            console.print("[yellow]Aborted.[/yellow] No changes made.")
+            raise typer.Exit()
+        target.unlink()
+        console.print("[green]Project settings file deleted.[/green]")
+        return
 
     if not Confirm.ask(
         "Are you sure you want to reset all settings to their defaults?",
