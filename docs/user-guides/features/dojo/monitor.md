@@ -1,6 +1,7 @@
 # Monitor
 
 !!! abstract
+
     The **Monitor** tool is your real-time oversight interface. It transforms the abstract numbers of a multi-process simulation into a dynamic dashboard. The Monitor keeps you informed of the health and progress of every single trial.
 
 ---
@@ -10,7 +11,6 @@
     ![Monitor dashboard view](../../../assets/user-guides/dark-monitor-view.jpg#only-dark){ width="85%" height="auto" }
     <figcaption>A preview of the <b>Monitor</b> page showing a completed progress bar, job statistics, and links to <b>Mosaic</b> to assess individual trials.</figcaption>
 </figure>
-
 
 ## Real-Time Oversight
 
@@ -27,14 +27,14 @@ The primary progress bar provides a high-level view of your job's timeline.
 
 The stat cards at the top of the page provide an instantaneous look at your run's integrity.
 
-| Metric                           | Description                                                         | Sub-Value                                                                                                |
-|:---------------------------------|:--------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------|
-| **Successes**                    | Trials which completed **without** generator or runtime exceptions. | The most recently completed successful trial.                                                            |
-| **Failures**                     | Trials which completed **with** generator or runtime exceptions.    | The most recently completed failed trial.                                                                |
-| **Remaining**                    | How many trials **have yet** to run.                                | How many trials per minute are being completed and how long each is taking to **successfully** complete. |
-| **Time Elapsed**                 | **Total runtime** since starting the job.                           | What time the job was started at.                                                                        |
-| **Total Done**                   | How many trials have been **completed**.                            | How many total trials the job will attempt to complete.                                                  |
-| **Est. Remaining**/**Finished**  | Prediction on how much time until job completion.                   | (Estimated) time of job completion.                                                                      |
+| Metric                          | Description                                                         | Sub-Value                                                                                                |
+| :------------------------------ | :------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------- |
+| **Successes**                   | Trials which completed **without** generator or runtime exceptions. | The most recently completed successful trial.                                                            |
+| **Failures**                    | Trials which completed **with** generator or runtime exceptions.    | The most recently completed failed trial.                                                                |
+| **Remaining**                   | How many trials **have yet** to run.                                | How many trials per minute are being completed and how long each is taking to **successfully** complete. |
+| **Time Elapsed**                | **Total runtime** since starting the job.                           | What time the job was started at.                                                                        |
+| **Total Done**                  | How many trials have been **completed**.                            | How many total trials the job will attempt to complete.                                                  |
+| **Est. Remaining**/**Finished** | Prediction on how much time until job completion.                   | (Estimated) time of job completion.                                                                      |
 
 ---
 
@@ -45,6 +45,7 @@ Below the job statistics card, lists of the successful and failed trials is show
 ---
 
 !!! success
+
     Because simulations can take hours, Mojo provides sensory cues so you don't have to keep your eyes glued. An audible bell rings when the final trial is processed. It can be muted in the top toolbar.
 
     You now know how to monitor your "fleet" of simulations. Now it’s time to look at the data itself. Head over to the [Mosaic guide](mosaic.md) to learn about data plotting, multi-trial comparison, and data sharing.

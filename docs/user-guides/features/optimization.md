@@ -75,11 +75,11 @@ Optimization jobs are launched via the `mujoco-mojo run optimize` command (inste
 ### Key Command Line Arguments
 
 | Argument                 | Shortcut | Description                                                                    |
-|:-------------------------|:---------|:-------------------------------------------------------------------------------|
+| :----------------------- | :------- | :----------------------------------------------------------------------------- |
 | `--direction`            | `-d`     | Whether to `minimize` (e.g., error) or `maximize` (e.g., efficiency).          |
 | `--sampler`              | `-sm`    | The search algorithm. `tpe` is the workhorse; `cmaes` is for local refinement. |
 | `--storage`              | `-st`    | Defines if a storage database will be placed in the workdir.                   |
-| `--evals-per-trial`      | `-ept`   | Runs the sim *N* times with different seeds and averages the score.            |
+| `--evals-per-trial`      | `-ept`   | Runs the sim _N_ times with different seeds and averages the score.            |
 | `--refine-search-factor` | `-rsf`   | **Aggressive Refinement**. On resume, shrinks bounds around the current best.  |
 
 ```bash linenums="0"
@@ -124,6 +124,7 @@ To use this you must provide a storage database argument for you optimization jo
     Whether you are filtering out physics noise with **multi-evaluation trials** or "zooming in" on a performance sweet spot with **adaptive refinement**, the Morph toolkit ensures that your final design is backed by rigorous convergence, not just a lucky seed.
 
 ??? example "Example: Full Optimization Script"
+
     ```python
     --8<-- "docs/user-guides/features/optimization_example.py"
     ```

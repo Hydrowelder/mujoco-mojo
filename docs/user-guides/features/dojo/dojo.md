@@ -1,6 +1,7 @@
 # Dojo Dashboard
 
 !!! abstract
+
     The **Dojo Dashboard** is where your data is mastered. It is a high-performance, web-based analytics suite designed from the ground up to turn raw simulation results into actionable insights.
 
     Far from being a simple static viewer, Dojo is a **collaborative platform**. It features a responsive design (mobile-ready), native light/dark mode support, and built-in security for sharing your progress with colleagues across a network.
@@ -20,11 +21,11 @@ mujoco-mojo dojo ./mojo-models
 ```
 
 | Argument     | Shortcut | Default      | Description                                                |
-|:-------------|:---------|:-------------|:-----------------------------------------------------------|
-| `workdir`    | *N/A*    | **Required** | The workspace directory containing the simulation results. |
+| :----------- | :------- | :----------- | :--------------------------------------------------------- |
+| `workdir`    | _N/A_    | **Required** | The workspace directory containing the simulation results. |
 | `--host`     | `-h`     | `127.0.0.1`  | The IP address to serve the dashboard on.                  |
 | `--port`     | `-p`     | `8000`       | The port number for the web server.                        |
-| `--password` | `-pw`    | *None*       | Enables Basic Auth protection.                             |
+| `--password` | `-pw`    | _None_       | Enables Basic Auth protection.                             |
 | `--n-proc`   | `-np`    | `1`          | Processes used for background status file processing.      |
 
 ---
@@ -92,4 +93,5 @@ Notes are persisted in the trial's saved configuration and are included when sha
 ---
 
 !!! success
+
     Dojo is now live! Now that you have the interface running, move on to the [**Monitor**](monitor.md) tool to learn how to track your job's progress in real-time.

@@ -31,6 +31,16 @@ nav:
           - Reloaded: user-guides/features/reloaded.md
           - Pose Context: user-guides/features/pose-context.md
           - Requirements: user-guides/features/requirements.md
+      - Examples:
+          - user-guides/examples/examples.md
+          - Vertically Landed Rocket:
+              - user-guides/examples/vlr/introduction.md
+              - Composing the Model: user-guides/examples/vlr/composing-the-model.md
+              - Defining a Ground Surface: user-guides/examples/vlr/ground.md
+              - Building the Rocket: user-guides/examples/vlr/rocket.md
+              - Assembling Landing Gear: user-guides/examples/vlr/landing-gear.md
+              - Runtime Behavior:  user-guides/examples/vlr/runtime.md
+
       - Developer:
           - user-guides/developer/developer.md
           - Asset Bundling: user-guides/developer/asset-bundling.md

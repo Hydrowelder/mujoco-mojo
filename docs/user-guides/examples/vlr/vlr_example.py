@@ -41,8 +41,6 @@ GEAR = 0b100
 
 
 # --8<-- [start:inputs]
-
-
 class TubeInput(mojo.UserData):
     """Physical dimensions of the rocket's cylindrical body tube."""
 
@@ -330,11 +328,7 @@ class Rocket(mojo.UserData):
 
 # --8<-- [start:ground]
 class Ground(mojo.UserData):
-    """
-    Definition of the ground plane.
-
-    Also used for setting up other parts of the world like the skybox.
-    """
+    """Definition of the ground plane."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
@@ -373,33 +367,7 @@ class Ground(mojo.UserData):
                 conaffinity=TUBE | GEAR,
             ),
         )
-        mojo_model.mjcf.worldbody.lights.append(
-            mojo.Light(
-                pos=mojo.Pos(np.array((0, 0, 10 * US.foot + INPUTS.STARTING_HEIGHT)))
-            )
-        )
 
-        # Optionally add an interesting skybox
-        # Mojo: `is_nominal` is only true for the single baseline trial, not
-        # any randomized Monte Carlo variations, so this only runs once
-        if mojo_model.is_nominal:
-            skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
-            mojo_model.mjcf.assets.append(
-                mojo.Asset(
-                    textures=[
-                        mojo.Texture(
-                            name=mojo.TextureName("skybox_texture_colors"),
-                            type=mojo.TextureType.SKYBOX,
-                            fileback=skybox_folder / "nz.png",
-                            filedown=skybox_folder / "ny.png",
-                            filefront=skybox_folder / "pz.png",
-                            fileleft=skybox_folder / "nx.png",
-                            fileright=skybox_folder / "px.png",
-                            fileup=skybox_folder / "py.png",
-                        )
-                    ]
-                ),
-            )
         return cls()
 
 
@@ -446,6 +414,34 @@ class VLRModel(mojo.UserData):
                 ),
             )
         )
+
+        mojo_model.mjcf.worldbody.lights.append(
+            mojo.Light(
+                pos=mojo.Pos(np.array((0, 0, 10 * US.foot + INPUTS.STARTING_HEIGHT)))
+            )
+        )
+
+        # Optionally add an interesting skybox
+        # Mojo: `is_nominal` is only true for the single baseline trial, not
+        # any randomized Monte Carlo variations, so this only runs once
+        if mojo_model.is_nominal:
+            skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
+            mojo_model.mjcf.assets.append(
+                mojo.Asset(
+                    textures=[
+                        mojo.Texture(
+                            name=mojo.TextureName("skybox_texture_colors"),
+                            type=mojo.TextureType.SKYBOX,
+                            fileback=skybox_folder / "nz.png",
+                            filedown=skybox_folder / "ny.png",
+                            filefront=skybox_folder / "pz.png",
+                            fileleft=skybox_folder / "nx.png",
+                            fileright=skybox_folder / "px.png",
+                            fileup=skybox_folder / "py.png",
+                        )
+                    ]
+                ),
+            )
         return cls(ground=ground, rocket=rocket, camera=camera_name)
 
 
@@ -483,7 +479,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     )
     mojo_model.mjcf.visuals.append(
         mojo.Visual(rgba=mojo.VisualRGBA(haze=np.array((0, 0, 0, 0))))
-    )  # BUG need to fix
+    )
     return mojo_model
 
 
@@ -491,7 +487,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
 
 # --8<-- [start:runtime]
-# --8<-- [start:runtime-handle]
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
@@ -508,7 +503,6 @@ def runtime(
     what forces and recorders get registered against and what actually
     advances the simulation each `rm.step()`.
     """
-    # --8<-- [end:runtime-handle]
     with runtime_manager as rm:
         vlr_model = mojo_model.get_user_data(VLRModel)
         assert mojo_model.mjcf.worldbody  # For type hinting
