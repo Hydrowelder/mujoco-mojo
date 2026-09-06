@@ -1,5 +1,5 @@
 """
-Type-checked source for every code example in `docs/user-guides/requirements.md`.
+Type-checked source for every code example in `docs/user-guides/features/requirements.md`.
 
 The documentation embeds these snippets directly via `pymdownx.snippets` section markers (`--8<-- [start:name]` / `--8<-- [end:name]`), so the examples shown to users are exactly the code that ruff and pyright validate. If a requirements API change breaks an example, the checkers fail on this file instead of the documentation silently rotting.
 """

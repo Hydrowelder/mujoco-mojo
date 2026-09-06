@@ -4,12 +4,12 @@
     The **Generate Script** is the heartbeat of your simulation pipeline. Its job is to programmatically assemble the MuJoCo MJCF model and perform all stochastic (random) draws. By the time this function returns, the simulation should be "frozen" in its initial state, ready for the physics engine to take over.
 
     <figure markdown="span">
-        ![Mosaic dashboard view](../assets/user-guides/generate-result.jpg){ width="50%" height="auto" }
+        ![Result after generation](../../assets/user-guides/generate-result.jpg){ width="50%" height="auto" }
         <figcaption>The visual result of the completed generator script: two translucent boxes with freejoints, spring attachment sites (red and blue spheres), and a central tracking site (fuchsia sphere), all set against a starry skybox.</figcaption>
     </figure>
 
 !!! info "Suggested Reading: Mojo Reloaded"
-    After a brief skim of this guide, you may want to take a look at [the guide](reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
+    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -21,7 +21,7 @@ It also **must** return a `mojo.MojoModel`.
 
 ???+ example "Example: MojoGenerate Handle"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:generate-handle"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-handle"
     ```
 
 ---
@@ -39,7 +39,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
 ??? example "Example: Handoff Class"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:handoff"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:handoff"
     ```
 
 ---
@@ -60,7 +60,7 @@ Notice in the following code how enumerations such as `mojo.TextureType.D2` and 
 
 ???+ example "Example: Assets Definition"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:assets"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:assets"
     ```
 
 Mojo uses `DepPath` to handle asset paths, ensuring that your models remain portable across different machines. They have identical properties to `pathlib.Path`. In the `MojoModel.mjcf`, wherever you would use a `Path` object, instead use a `DepPath`.
@@ -78,7 +78,7 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 
 ???+ example "Example: Worldbody Definition"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:worldbody"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:worldbody"
     ```
 
 ---
@@ -101,7 +101,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ example "Example: Sampling"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:sampling"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:sampling"
     ```
 
 ## Finalizing the Model
@@ -110,7 +110,7 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 ???+ example "Example: End of Function"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:generate-finalizing"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-finalizing"
     ```
 
 ???+ note "Note: User Data Validation"
@@ -128,5 +128,5 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 ??? example "Example: Full Generate Script"
     ```python
-    --8<-- "docs/user-guides/monte_carlo_example.py:generate"
+    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate"
     ```

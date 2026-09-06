@@ -15,22 +15,25 @@ nav:
   - Home: index.md
   - User Guide:
       - Workflow:
-          - Getting Started: user-guides/getting-started.md
-          - Initializing a Project: user-guides/init.md
-          - Generate Script: user-guides/generate-script.md
-          - Runtime Script: user-guides/runtime-script.md
+          - Getting Started: user-guides/workflow/getting-started.md
+          - Initializing a Project: user-guides/workflow/init.md
+          - Generate Script: user-guides/workflow/generate-script.md
+          - Runtime Script: user-guides/workflow/runtime-script.md
           - Running Jobs:
-              - user-guides/running-jobs.md
-              - Example Report: user-guides/MOJO_RUNTIME_REPORT.md
+              - user-guides/workflow/running-jobs/running-jobs.md
+              - Example Report: user-guides/workflow/running-jobs/MOJO_RUNTIME_REPORT.md
       - Features:
           - Dojo Dashboard:
-              - user-guides/dojo.md
-              - Monitor: user-guides/monitor.md
-              - Mosaic: user-guides/mosaic.md
-          - Optimization: user-guides/optimization.md
-          - Reloaded: user-guides/reloaded.md
-          - Pose Context: user-guides/pose-context.md
-          - Requirements: user-guides/requirements.md
+              - user-guides/features/dojo/dojo.md
+              - Monitor: user-guides/features/dojo/monitor.md
+              - Mosaic: user-guides/features/dojo/mosaic.md
+          - Optimization: user-guides/features/optimization.md
+          - Reloaded: user-guides/features/reloaded.md
+          - Pose Context: user-guides/features/pose-context.md
+          - Requirements: user-guides/features/requirements.md
+      - Developer:
+          - user-guides/developer/developer.md
+          - Asset Bundling: user-guides/developer/asset-bundling.md
   - Code Reference:
       - mujoco_mojo:
           - MojoModel: reference/mujoco_mojo/mojo_model.md

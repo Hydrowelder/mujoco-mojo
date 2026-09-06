@@ -92,4 +92,4 @@ Notes are persisted in the trial's saved configuration and are included when sha
 ---
 
 !!! success
-    Dojo is now live! Now that you have the interface running, move on to the **Monitor** tool to learn how to track your job's progress in real-time.
+    Dojo is now live! Now that you have the interface running, move on to the [**Monitor**](monitor.md) tool to learn how to track your job's progress in real-time.

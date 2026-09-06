@@ -16,7 +16,7 @@ A **requirement** is a function you register on the `RuntimeManager`. It is call
 The function signature is:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:signature"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:signature"
 ```
 
 - `mojo_model`: the `MojoModel` for the trial, giving access to `user_data`, distributions, named values, etc.
@@ -68,7 +68,7 @@ Both styles accept the same keyword arguments:
 ### Decorator style
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:decorator"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:decorator"
 ```
 
 The decorator returns the original function unchanged, so the function remains callable on its own for testing.
@@ -79,13 +79,13 @@ The decorator returns the original function unchanged, so the function remains c
 Given an end-of-trial check:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:end_of_trial_check"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:end_of_trial_check"
 ```
 
 register it with `add_requirement`:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:direct"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:direct"
 ```
 
 ---
@@ -95,7 +95,7 @@ register it with `add_requirement`:
 By default (`every=None`), requirements are evaluated once at end of trial. Set `every=N` to also run the check inside `step()` every N steps:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:live"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:live"
 ```
 
 - `every=N`: evaluate every N steps. Useful for expensive checks or when only coarse monitoring is needed
@@ -111,7 +111,7 @@ By default (`every=None`), requirements are evaluated once at end of trial. Set 
 Live results are cached by simulation time, so your control code can read the outcome of the most recent evaluation at no additional cost:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:last_passed"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:last_passed"
 ```
 
 ### Early termination
@@ -121,7 +121,7 @@ Live results are cached by simulation time, so your control code can read the ou
 Add `terminate_on_fail=True` to stop the simulation as soon as a live check fails:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:terminate_on_fail"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:terminate_on_fail"
 ```
 
 When the check fails, `RuntimeManager.step()` raises `RequirementTerminated` (a subclass of `SimulationStopped`, so existing handlers keep working), which unwinds the simulation loop. The trial is then marked `Completion.TERMINATED`. End-of-trial requirement evaluation still runs, so all requirements (including terminating ones) appear in `requirements.json`. If several terminating requirements fail on the same step, all of them are evaluated and their messages are combined into the single exception.
@@ -131,7 +131,7 @@ When the check fails, `RuntimeManager.step()` raises `RequirementTerminated` (a 
 The mirror image: add `terminate_on_pass=True` to stop the simulation as soon as a live check passes, without spending the rest of the simulation budget. Combine it with `None` verdicts so the waiting period is not counted as a failure:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:terminate_on_pass"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:terminate_on_pass"
 ```
 
 When the check passes, `RuntimeManager.step()` raises `RequirementSatisfied` (also a subclass of `SimulationStopped`). Unlike `terminate_on_fail=True`, this is a **normal completion**: end-of-trial evaluation runs as usual and the trial is marked `SUCCESS` (or `FAILURE` if some *other* requirement failed), not `TERMINATED`.
@@ -153,7 +153,7 @@ They are not symmetric, though:
 A requirement latching logs a single debug line at the moment it locks in ("requirement 'x' latched pass/fail at t=..."), not on every subsequent step that replays the cached verdict.
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:latching"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:latching"
 ```
 
 ---
@@ -165,7 +165,7 @@ A requirement latching logs a single debug line at the moment it locks in ("requ
 After the `with runtime_manager` block exits, the results are available directly on the manager:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:in_process"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:in_process"
 ```
 
 ### Per-Trial JSON
@@ -197,13 +197,13 @@ The Dojo monitor separates successes, requirement failures, and errors in its ch
 Because the `model` argument is the full `MojoModel`, you can access your handoff data to make requirements parametric per-trial. Define your handoff model:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:user_data_model"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:user_data_model"
 ```
 
 then read it back with `get_user_data` inside the check:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:user_data"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:user_data"
 ```
 
 This makes the same check automatically adapt to each trial's generated configuration.
@@ -215,7 +215,7 @@ This makes the same check automatically adapt to each trial's generated configur
 End-of-trial requirements receive the last state the simulation reached, which is useful for checking where things ended up without needing the full telemetry:
 
 ```python
---8<-- "docs/user-guides/requirements_doc_examples.py:final_state"
+--8<-- "docs/user-guides/features/requirements_doc_examples.py:final_state"
 ```
 
 ---
