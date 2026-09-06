@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pytest
 
 from mujoco_mojo.utils.interp import Interpolator
@@ -43,17 +42,16 @@ def test_nearest_neighbor():
     assert interp.lookup(8.0) == 100.0
 
 
-def test_from_series():
-    """Verify factory method using a Pandas Series."""
-    data = [10, 20, 30]
-    indices = [0, 1, 2]
-    series = pd.Series(data, index=indices)
+def test_from_arrays():
+    """Verify factory method using plain x/y array-likes."""
+    x = [0, 1, 2]
+    y = [10, 20, 30]
 
-    interp = Interpolator.from_series(series)
+    interp = Interpolator.from_arrays(x, y)
 
     assert interp.lookup(0.5) == pytest.approx(15.0)
-    assert np.array_equal(np.asarray(interp.x), indices)
-    assert np.array_equal(np.asarray(interp.y), data)
+    assert np.array_equal(np.asarray(interp.x), x)
+    assert np.array_equal(np.asarray(interp.y), y)
 
 
 def test_pydantic_validation():

@@ -1,7 +1,7 @@
 from typing import Any, Literal, Self
 
 import numpy as np
-import pandas as pd
+from numpy.typing import ArrayLike
 from pydantic import PrivateAttr, model_validator
 from scipy.interpolate import interp1d
 
@@ -50,6 +50,8 @@ class Interpolator(MojoBaseModel):
         return float(self._func(val))
 
     @classmethod
-    def from_series(cls, series: pd.Series, kind: InterpOptions = "linear") -> Self:
-        """Create an interpolator directly from a Pandas Series."""
-        return cls(x=np.asarray(series.index), y=np.asarray(series.values), kind=kind)
+    def from_arrays(
+        cls, x: ArrayLike, y: ArrayLike, kind: InterpOptions = "linear"
+    ) -> Self:
+        """Create an interpolator directly from x/y array-likes."""
+        return cls(x=np.asarray(x), y=np.asarray(y), kind=kind)
