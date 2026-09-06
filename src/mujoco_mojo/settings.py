@@ -31,7 +31,7 @@ from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.color import Color
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
-SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
+GLOBAL_SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
 SETTINGS_SCHEMA_FILE = SETTINGS_DIR / "settings.schema.json"
 SETTINGS_TAPLO_FILE = SETTINGS_DIR / ".taplo.toml"
 
@@ -269,7 +269,7 @@ class MujocoMojoSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        toml_file=SETTINGS_FILE,
+        toml_file=GLOBAL_SETTINGS_FILE,
         env_prefix="MUJOCO_MOJO_",
         env_nested_delimiter="__",
     )
@@ -307,7 +307,7 @@ class MujocoMojoSettings(BaseSettings):
             init_settings,
             env_settings,
             TomlConfigSettingsSource(settings_cls, toml_file=project_settings_file()),
-            TomlConfigSettingsSource(settings_cls, toml_file=SETTINGS_FILE),
+            TomlConfigSettingsSource(settings_cls, toml_file=GLOBAL_SETTINGS_FILE),
         )
 
     @classmethod
@@ -326,32 +326,6 @@ class MujocoMojoSettings(BaseSettings):
             for name, info in cls.model_fields.items()
         }
         return cls(**field_defaults)
-
-    @classmethod
-    def init_project_file(cls) -> Path:
-        """
-        Creates an empty project-local settings file (just a `#:schema` header, no keys) at `project_settings_file()`, ready for the user to add whichever specific overrides they want. Does nothing if the file already exists.
-
-        Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident. Leaves an existing `.gitignore` alone rather than overwriting it.
-
-        Unlike `save()`, this never writes every field - a project settings file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting.
-
-        Returns:
-            The path the file lives at, whether newly created or already present.
-
-        """
-        path = project_settings_file()
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        gitignore = path.parent / ".gitignore"
-        if not gitignore.exists():
-            gitignore.write_text("*\n", encoding="utf-8")
-
-        if not path.exists():
-            path.write_text(
-                f"#:schema {SETTINGS_SCHEMA_FILE.as_uri()}\n", encoding="utf-8"
-            )
-        return path
 
     @classmethod
     def set_project_value(cls, key: str, value: Any) -> None:
@@ -409,11 +383,16 @@ class MujocoMojoSettings(BaseSettings):
         coerced_leaf = coerced[parts[-1]]
 
         path = project_settings_file()
-        path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             doc = tomlkit.parse(path.read_text(encoding="utf-8"))
         else:
-            doc = tomlkit.parse(f"#:schema {SETTINGS_SCHEMA_FILE.as_uri()}\n")
+            # model_construct() bypasses BaseSettings' usual env/TOML-reading
+            # __init__ entirely - safe here since save(project=True) never
+            # reads the instance's field values, and this path must not
+            # require the *global* settings file (a wholly separate file) to
+            # currently be valid just to bootstrap a fresh project file
+            cls.model_construct().save(path.parent, project=True)
+            doc = tomlkit.parse(path.read_text(encoding="utf-8"))
 
         node = doc
         for part in parts[:-1]:
@@ -424,37 +403,77 @@ class MujocoMojoSettings(BaseSettings):
 
         path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
-    def save(self) -> None:
+    def save(self, directory: Path | None = None, *, project: bool = False) -> Path:
         """
-        Persist current settings to ~/.mujoco-mojo/settings.toml.
+        Persist settings to `directory` (defaults to the global settings directory, `~/.mujoco-mojo`), alongside a freshly (re)generated `settings.schema.json`/`.taplo.toml` pair (see `write_schema_files`) - one method covers both the global settings file and a project-local override file, so there's no separate `init_project_file`-style method to keep in sync with this one.
 
-        If the file already exists, its values are updated in place with `tomlkit` rather than regenerated from scratch, preserving any comments or formatting you have added by hand. A key that exists in the file but no longer has a corresponding settings value (e.g. a removed `slurm` entry) is left as-is rather than deleted. A brand-new file starts with a `#:schema` header pointing at settings.schema.json so taplo-based editors (e.g. VS Code's Even Better TOML) pick up hover hints and validation even before `write_schema_files` has been run.
+        `project=False` (the default - the global file): every field's current value is merged into `settings.toml` with `tomlkit`, preserving any comments or formatting added by hand. A key that exists in the file but no longer has a corresponding settings value (e.g. a removed `slurm` entry) is left as-is rather than deleted.
+
+        `project=True` (for `<cwd>/.mujoco-mojo/settings.toml`): `self`'s field values are never written - a project file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting (see `set_project_value`) - so an existing file's contents are left completely untouched, and a fresh one gets just the `#:schema` header. Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident.
+
+        Either way, a brand-new file starts with a `#:schema` header pointing at the colocated settings.schema.json - a bare relative filename, resolved by taplo against the TOML file's own directory, rather than a cross-directory reference to another directory's schema. The latter is what broke under SSH/SSHFS-style setups where only one of the two directories was visible to the editor - every settings directory is now self-contained.
+
+        Args:
+            directory: Where to write `settings.toml`, `settings.schema.json`, and `.taplo.toml`. Defaults to `SETTINGS_DIR` (looked up at call time, not import time, so tests can monkeypatch it).
+            project: Write the sparse project-local form described above instead of the full global one.
+
+        Returns:
+            The `settings.toml` path written to.
+
         """
-        SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+        if directory is None:
+            directory = SETTINGS_DIR
+        directory.mkdir(parents=True, exist_ok=True)
+        toml_path = directory / "settings.toml"
 
-        if SETTINGS_FILE.exists():
-            doc = tomlkit.parse(SETTINGS_FILE.read_text(encoding="utf-8"))
-        else:
-            doc = tomlkit.parse(f"#:schema {SETTINGS_SCHEMA_FILE.name}\n")
+        if project:
+            gitignore = directory / ".gitignore"
+            if not gitignore.exists():
+                gitignore.write_text("*\n", encoding="utf-8")
 
-        # mode="json" turns any SecretStr field (e.g. dojo.sensai.api_key) into
-        # its masked "**********" string rather than a raw object tomlkit
-        # can't write at all - the real value is never persisted by this
-        # method. exclude_none=True omits an unset Optional field (e.g.
-        # dojo.chime) entirely, since TOML has no null literal to write.
-        _merge_into_toml(doc, self.model_dump(mode="json", exclude_none=True))
-        SETTINGS_FILE.write_text(tomlkit.dumps(doc), encoding="utf-8")
+        if not (project and toml_path.exists()):
+            if toml_path.exists():
+                doc = tomlkit.parse(toml_path.read_text(encoding="utf-8"))
+            else:
+                doc = tomlkit.parse("#:schema settings.schema.json\n")
+
+            if not project:
+                # mode="json" turns any SecretStr field (e.g. dojo.sensai.api_key)
+                # into its masked "**********" string rather than a raw object
+                # tomlkit can't write at all - the real value is never persisted
+                # by this method. exclude_none=True omits an unset Optional field
+                # (e.g. dojo.chime) entirely, since TOML has no null literal to write.
+                _merge_into_toml(doc, self.model_dump(mode="json", exclude_none=True))
+
+            toml_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+
+        self.write_schema_files(directory)
+        return toml_path
 
     @classmethod
-    def write_schema_files(cls) -> None:
-        """Writes settings.schema.json and a companion .taplo.toml next to the settings file, so taplo-based editors (VS Code's Even Better TOML, Neovim, etc.) get hover hints and validation for ~/.mujoco-mojo/settings.toml. Safe to re-run any time, e.g. after upgrading mujoco-mojo changes the settings shape."""
-        SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    def write_schema_files(cls, directory: Path | None = None) -> None:
+        """
+        Writes settings.schema.json and a companion .taplo.toml into `directory`, so taplo-based editors (VS Code's Even Better TOML, Neovim, etc.) get hover hints and validation for whatever settings.toml lives there. Safe to re-run any time, e.g. after upgrading mujoco-mojo changes the settings shape.
+
+        The schema and taplo config are always colocated with the settings.toml they describe, rather than one directory's file referencing another's schema by absolute path - that cross-directory reference is exactly what broke under SSH/SSHFS-style setups where only one of the two directories (typically just the project one) is visible to the editor.
+
+        Args:
+            directory: Where to write `settings.schema.json` and `.taplo.toml`. Defaults to `SETTINGS_DIR` (looked up at call time, not import time, so tests can monkeypatch it).
+
+        """
+        if directory is None:
+            directory = SETTINGS_DIR
+        directory.mkdir(parents=True, exist_ok=True)
+
+        schema_file = directory / "settings.schema.json"
+        taplo_file = directory / ".taplo.toml"
+
         schema = cls.model_json_schema(schema_generator=_GenerateJsonSchemaWithDefaults)
-        SETTINGS_SCHEMA_FILE.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+        schema_file.write_text(json.dumps(schema), encoding="utf-8")
 
         # taplo requires a file:// URI for the schema url - a relative path is not supported
-        schema_uri = SETTINGS_SCHEMA_FILE.as_uri()
-        SETTINGS_TAPLO_FILE.write_text(
+        schema_uri = schema_file.as_uri()
+        taplo_file.write_text(
             f'[[rule]]\ninclude = ["settings.toml"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
             encoding="utf-8",
         )
