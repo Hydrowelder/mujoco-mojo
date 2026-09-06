@@ -17,7 +17,7 @@
         <button @mousedown.prevent="toggle()"
                 @keydown.enter.prevent="toggle()"
                 @keydown.space.prevent="toggle()"
-                class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors active:scale-100">
+                class="flex items-center gap-2 text-base font-black uppercase text-ink-muted tracking-widest hover:text-ink-body transition-colors active:scale-100">
             <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
                  :class="open ? '' : '-rotate-90'"
                  fill="none"
@@ -32,26 +32,26 @@
         </button>
         <div class="flex items-center gap-3">
             <span x-show="!isValidJson"
-                  class="text-base font-bold text-rose-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span> Syntax Error
+                  class="text-base font-bold text-danger-500 font-mono flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-danger-500 animate-pulse"></span> Syntax Error
             </span>
 
             <span x-show="isValidJson && !isValidConfig"
-                  class="text-base font-bold text-amber-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Config Error
+                  class="text-base font-bold text-warning-500 font-mono flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-warning-500"></span> Config Error
             </span>
 
             <span x-show="isValidJson && isValidConfig"
-                  class="text-base font-bold text-emerald-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live
+                  class="text-base font-bold text-success-500 font-mono flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-success-500"></span> Live
             </span>
         </div>
     </div>
 
     <template x-if="configErrors.length > 0 && isValidJson">
-        <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 mx-1">
+        <div class="bg-warning-500/10 border border-warning-500/20 rounded-lg p-2 mx-1">
             <template x-for="err in configErrors">
-                <p class="text-sm font-mono text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                <p class="text-sm font-mono text-warning-600 dark:text-warning-400 flex items-center gap-2">
                     <span>→</span> <span x-text="err"></span>
                 </p>
             </template>
@@ -65,19 +65,19 @@
          x-transition:leave="transition-opacity duration-100"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
-         class="relative rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800 transition-all overflow-hidden focus-within:border-cyan-500/50">
+         class="relative rounded-xl border border-inset shadow-2xl shadow-icon-strong/20 dark:shadow-none ring-1 ring-subtle transition-all overflow-hidden focus-within:border-accent-500/50">
 
         <div x-ref="cmHost"
-             class="min-h-[16rem]"
+             class="min-h-64"
              style="overflow: hidden;"></div>
 
         <div class="absolute right-4 bottom-4 flex gap-2 z-10">
             <button @click="copyRawConfig()"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
+                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-accent-500 hover:border-accent-500/50 transition-all shadow-sm">
                 Copy
             </button>
             <button @click="configRaw = JSON.stringify(config, null, 4)"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
+                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-accent-500 hover:border-accent-500/50 transition-all shadow-sm">
                 Format
             </button>
         </div>

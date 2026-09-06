@@ -1,5 +1,12 @@
 import { marked, type Tokens } from 'marked';
 import type { AlpineMagics } from "./types/global";
+import {
+  EditorView,
+  EditorState,
+  json,
+  syntaxHighlighting,
+  defaultHighlightStyle,
+} from "./lib/codemirror";
 
 interface SensAIMessage {
   role: "user" | "assistant";
@@ -324,7 +331,7 @@ marked.use({
       return `<div class="sensai-cm-block" data-code="${encoded}"${langAttr}></div>`;
     },
     codespan({ text }: Tokens.Codespan): string {
-      return `<code class="bg-slate-100 dark:bg-slate-800 rounded px-1 font-mono text-cyan-600 dark:text-cyan-400 text-[0.85em]">${text}</code>`;
+      return `<code class="bg-surface-sunken rounded px-1 font-mono text-accent-600 dark:text-accent-400 text-[0.85em]">${text}</code>`;
     },
   },
 });
@@ -344,17 +351,17 @@ function initSensAICodeBlocks(container: HTMLElement): void {
       const rawLang = el.getAttribute("data-lang");
       const lang = rawLang ? decodeURIComponent(rawLang) : "";
       const extensions = [
-        CM.EditorView.editable.of(false),
-        CM.EditorState.readOnly.of(true),
-        CM.syntaxHighlighting(CM.defaultHighlightStyle),
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+        syntaxHighlighting(defaultHighlightStyle),
       ];
-      if (lang === "json") extensions.unshift(CM.json());
-      new CM.EditorView({
-        state: CM.EditorState.create({ doc: code, extensions }),
+      if (lang === "json") extensions.unshift(json());
+      new EditorView({
+        state: EditorState.create({ doc: code, extensions }),
         parent: el,
       });
     });
-  } catch { /* CM not yet loaded or no blocks present */ }
+  } catch { /* no blocks present, or a block's data-code/data-lang malformed */ }
 }
 
 window.renderMarkdown = renderMarkdown;

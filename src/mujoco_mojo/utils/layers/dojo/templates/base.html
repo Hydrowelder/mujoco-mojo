@@ -16,118 +16,53 @@
         media="(prefers-color-scheme: dark)">
 
   <link rel="stylesheet"
-        href="/mojo-static/main.css" />
+        href="/mojo-static/dist/main.css" />
 
   <link rel="icon"
         type="image/svg+xml"
         href="/mojo-static/light-logo.svg">
+  <!-- Raster fallbacks for browser/OS chrome that can't use the SVG favicon
+       above -- iOS's "Add to Home Screen" (apple-touch-icon), Safari's tab
+       bar and bookmarks (which don't render SVG favicons at all), and
+       bookmarks/tab switchers that probe /favicon.ico directly regardless
+       of any <link> here. Generated from light-logo.svg at server start
+       (see favicons.py); always the light variant, since a static raster
+       file can't respond to the dark-mode toggle below. -->
+  <link rel="shortcut icon"
+        href="/favicon.ico">
+  <link rel="apple-touch-icon"
+        href="/apple-touch-icon.png">
+  <link rel="icon"
+        type="image/png"
+        sizes="32x32"
+        href="/favicon-32x32.png">
+  <link rel="icon"
+        type="image/png"
+        sizes="16x16"
+        href="/favicon-16x16.png">
 
-  <script src="/mojo-static/vendored/tailwind.min.js"></script>
-  <script>tailwind.config = { darkMode: 'class' }</script>
-  <script src="/mojo-static/js/main.js"></script>
-  <script defer
-          src="/mojo-static/vendored/alpine.min.js"></script>
-  <style>
-    /* plotly's built-in notifier boxes are re-surfaced as Mojo toasts (see store.ts) */
-    .plotly-notifier { display: none !important; }
-  </style>
-  <style type="text/tailwindcss">
-    @layer components {
-      /* ── Surfaces ──────────────────────────────────────────────────────── */
-      .card {
-        @apply bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-md;
-      }
-      .card-hover {
-        @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default;
-      }
-
-      /* ── Floating panels (tooltips, sidebar pop-outs) ──────────────────── */
-      .panel {
-        @apply bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4;
-      }
-      /* Add positioning + width classes per usage: absolute top-full mt-2 w-80 etc. */
-      .tooltip-panel {
-        @apply panel absolute top-full mt-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-[300];
-      }
-
-      /* ── Signal Lab keyboard-shortcut badge (appears below toolbar buttons) ── */
-      .lab-kbd-tip {
-        @apply pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1
-               rounded-md bg-slate-900 dark:bg-slate-700 text-white text-sm font-mono
-               whitespace-nowrap invisible group-hover:visible opacity-0 group-hover:opacity-100
-               transition-opacity z-[800];
-      }
-
-      /* ── Header toggle buttons ─────────────────────────────────────────── */
-      .btn {
-        @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;
-      }
-      .btn-icon {
-        @apply h-9 w-9 rounded-lg border flex items-center justify-center shadow-sm;
-      }
-      .btn-primary {
-        @apply bg-cyan-500 text-white border-cyan-600 shadow-inner;
-      }
-      .btn-ghost {
-        @apply bg-white dark:bg-slate-800 border-slate-400 dark:border-slate-700 text-slate-400;
-      }
-      .btn-sound-on {
-        @apply bg-cyan-50 dark:bg-cyan-900/20 border-cyan-500 text-cyan-500;
-      }
-
-      /* ── Sidebar action buttons (trial viewer) ─────────────────────────── */
-      .sidebar-btn {
-        @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-transparent hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-400 hover:text-cyan-500;
-      }
-
-      /* ── Trial number badges ───────────────────────────────────────────── */
-      .badge {
-        @apply inline-flex items-center justify-center px-2 py-1 rounded-md font-mono text-sm;
-      }
-      .badge-success {
-        @apply badge bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-400 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-emerald-100 dark:hover:bg-emerald-800/50;
-      }
-      .badge-failure {
-        @apply badge bg-rose-50 dark:bg-rose-900/30 border border-rose-400 dark:border-rose-500/50 text-rose-600 dark:text-rose-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-rose-100 dark:hover:bg-rose-800/50;
-      }
-      .badge-error {
-        @apply badge bg-amber-50 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-500/50 text-amber-600 dark:text-amber-400 transition-all duration-200 cursor-pointer origin-center shadow-md hover:scale-110 hover:shadow-xl hover:bg-amber-100 dark:hover:bg-amber-800/50;
-      }
-      .badge-disabled {
-        @apply badge bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60;
-      }
-      /* Mosaic / available-trial tile (larger px-3 py-2, cyan hover) */
-      .badge-tile {
-        @apply inline-flex items-center justify-center px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 rounded-md font-mono text-sm font-bold transition-all duration-200 shadow-sm hover:scale-110 hover:border-cyan-500 hover:text-cyan-500 active:scale-95;
-      }
-
-      /* ── Form inputs ───────────────────────────────────────────────────── */
-      /* Usage: add w-full, padding, and shadow classes per context */
-      .input-field {
-        @apply bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md text-sm font-mono text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500;
-      }
-    }
-  </style>
+  <script type="module"
+          src="/mojo-static/dist/main.js"></script>
   <script>
     // 1. BLOCKING THEME CHECK
-    tailwind.config = { darkMode: "class" };
     const isDark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
     if (isDark) {
       document.documentElement.classList.add('dark');
-      const darkPath = "/mojo-static/dark-logo.svg";
 
-      // Update all icon types at once
-      document.querySelectorAll('link[rel*="icon"], link[rel="apple-touch-icon"], link[rel="mask-icon"]')
-        .forEach(link => link.href = darkPath);
+      // Only the primary SVG favicon has a dark-mode variant -- the raster
+      // fallbacks above are rendered once from light-logo.svg and stay fixed
+      // regardless of theme, so they're deliberately left alone here.
+      const svgIcon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
+      if (svgIcon) svgIcon.href = "/mojo-static/dark-logo.svg";
     }
   </script>
   {% block extra_head %}{% endblock %}
 </head>
 
-<body class="min-h-screen bg-slate-200 dark:bg-slate-900 transition-colors duration-300">
+<body class="min-h-screen bg-canvas transition-colors duration-300">
   <!-- sync progress -->
-  <div class="fixed top-0 left-0 w-full h-1.5 z-[100] bg-transparent pointer-events-none"
+  <div class="fixed top-0 left-0 w-full h-1.5 z-100 bg-transparent pointer-events-none"
        x-data
        x-show="$store.dojo.isSyncing"
        x-transition:leave="transition opacity-100 duration-500"
@@ -137,8 +72,8 @@
     <div class="h-full transition-all duration-300 ease-out"
          :style="`
     width: ${$store.dojo.syncProgress}%;
-    background: linear-gradient(to right, transparent 0%, rgba(8, 145, 178, 0.6) 50%, #0891b2 100%);
-    box-shadow: 0 0 12px rgba(8, 145, 178, 0.6);
+    background: linear-gradient(to right, transparent 0%, color-mix(in srgb, var(--color-accent-600) 60%, transparent) 50%, var(--color-accent-600) 100%);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--color-accent-600) 60%, transparent);
     /* NEW: If we aren't syncing but progress is 100, shift the bar right */
     transform: ${!$store.dojo.isSyncing && $store.dojo.syncProgress === 100 ? 'translateX(100%)' : 'translateX(0)'};
     transition: width 0.3s ease-out, transform 0.5s ease-in, opacity 0.5s;
@@ -148,13 +83,13 @@
   <!-- header and main page contents -->
   <div x-data
        :class="$store.dojo.isFullscreen ? 'w-full px-4 py-4' : 'max-w-6xl mx-auto p-4 md:p-8'">
-    <header class="w-full flex flex-col md:flex-row justify-between items-stretch md:items-end border-b border-slate-400 dark:border-slate-700 pb-6 mb-4 gap-6">
+    <header class="w-full flex flex-col md:flex-row justify-between items-stretch md:items-end border-b border-line pb-6 mb-4 gap-6">
       <!-- logo, title, and nav selection -->
       <div class="w-full md:w-auto flex flex-col gap-4">
         <div class="flex items-center gap-3 md:gap-4 mb-2 md:mb-4">
           <a href="https://hydrowelder.github.io/mujoco-mojo/"
              target="_blank"
-             class="logo-link flex-shrink-0 transition-transform duration-300 active:scale-95">
+             class="logo-link shrink-0 transition-transform duration-300 active:scale-95">
 
             <img src="/mojo-static/light-logo.svg"
                  alt="Mojo Logo"
@@ -162,37 +97,37 @@
 
             <img src="/mojo-static/dark-logo.svg"
                  alt="Mojo Logo"
-                 class="logo-style hidden dark:block w-10 h-10 md:w-12 md:h-12 p-1.5 object-contain block" />
+                 class="logo-style hidden dark:block w-10 h-10 md:w-12 md:h-12 p-1.5 object-contain" />
 
           </a>
-          <h1 class="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-cyan-500 leading-none">
+          <h1 class="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-accent-500 leading-none">
             MUJOCO MOJO
           </h1>
         </div>
 
         {% if status_code is not defined %}
-        <nav class="relative flex p-1 bg-slate-300/50 dark:bg-slate-800/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-slate-300 dark:border-slate-700 shadow-xl">
+        <nav class="relative flex p-1 bg-control/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-control shadow-xl">
           {% set path = request.url.path %}
           <a href="/monitor"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-cyan-500 font-bold' if path.startswith('/monitor') else 'text-slate-500' }} hover:text-cyan-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/monitor') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
             Monitor
             {% if path.startswith('/monitor') %}
-            <div class="nav-highlight absolute inset-0 bg-white dark:bg-slate-700 rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
             {% endif %}
           </a>
           <a href="/mosaic"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-cyan-500 font-bold' if path.startswith('/mosaic') else 'text-slate-500' }} hover:text-cyan-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/mosaic') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
             Mosaic
             {% if path.startswith('/mosaic') %}
-            <div class="nav-highlight absolute inset-0 bg-white dark:bg-slate-700 rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
             {% endif %}
           </a>
           {% if job_type == JobType.OPTIMIZE %}
           <a href="/morph"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-cyan-500 font-bold' if path.startswith('/morph') else 'text-slate-500' }} hover:text-cyan-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/morph') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
             Morph
             {% if path.startswith('/morph') %}
-            <div class="nav-highlight absolute inset-0 bg-white dark:bg-slate-700 rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
             {% endif %}
           </a>
           {% endif %}
@@ -212,7 +147,8 @@
                   :class="$store.dojo.isAutoRefresh ? 'btn-primary' : 'btn-ghost'"
                   :title="$store.dojo.isAutoRefresh ? 'Disable Auto-refresh' : 'Enable Auto-refresh'">
             <div class="w-2 h-2 rounded-full shrink-0"
-                 :class="$store.dojo.isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-slate-400'"></div>
+                 :class="$store.dojo.isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-ink-muted'">
+            </div>
             <span class="text-sm font-black uppercase tracking-widest hidden sm:inline-block w-10 text-center"
                   x-text="$store.dojo.isAutoRefresh ? 'Auto' : 'Off'"></span>
           </button>
@@ -252,7 +188,7 @@
             <!-- set to light -->
             <button @click="setTheme('light')"
                     class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
-                    :class="theme === 'light' ? 'bg-slate-100 dark:bg-slate-700 shadow-sm text-amber-500' : 'text-slate-500'"
+                    :class="theme === 'light' ? 'bg-chip shadow-sm text-warning-500' : 'text-ink-secondary'"
                     title="Light Mode">
               <svg class="w-4 h-4"
                    fill="none"
@@ -267,7 +203,7 @@
             <!-- set to system -->
             <button @click="setTheme('system')"
                     class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
-                    :class="theme === 'system' ? 'bg-slate-100 dark:bg-slate-700 shadow-sm text-cyan-500' : 'text-slate-500'"
+                    :class="theme === 'system' ? 'bg-chip shadow-sm text-accent-500' : 'text-ink-secondary'"
                     title="Follow System Theme">
               <svg class="w-4 h-4"
                    fill="none"
@@ -282,7 +218,7 @@
             <!-- set to dark -->
             <button @click="setTheme('dark')"
                     class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
-                    :class="theme === 'dark' ? 'bg-slate-100 dark:bg-slate-700 shadow-sm text-blue-400' : 'text-slate-500'"
+                    :class="theme === 'dark' ? 'bg-chip shadow-sm text-info-400' : 'text-ink-secondary'"
                     title="Dark Mode">
               <svg class="w-4 h-4"
                    fill="none"
@@ -315,7 +251,7 @@
               </svg>
               <span x-show="$store.dojo.unreadCount > 0"
                     x-text="$store.dojo.unreadCount > 99 ? '99+' : $store.dojo.unreadCount"
-                    class="absolute -top-1 -right-1 min-w-[1.2rem] h-5 px-1 bg-cyan-500 text-white text-sm font-black rounded-full flex items-center justify-center leading-none pointer-events-none">
+                    class="absolute -top-1 -right-1 min-w-[1.2rem] h-5 px-1 bg-accent-500 text-white text-sm font-black rounded-full flex items-center justify-center leading-none pointer-events-none">
               </span>
             </button>
 
@@ -327,36 +263,36 @@
                  x-transition:leave="transition ease-in duration-150"
                  x-transition:leave-start="opacity-100 translate-y-0 scale-100"
                  x-transition:leave-end="opacity-0 -translate-y-2 scale-95"
-                 class="absolute top-full right-0 mt-2 w-80 z-[500] card rounded-xl overflow-hidden shadow-2xl origin-top-right max-sm:fixed max-sm:top-44 max-sm:left-1/2 max-sm:right-auto max-sm:-translate-x-1/2">
+                 class="absolute top-full right-0 mt-2 w-80 z-500 card rounded-xl overflow-hidden shadow-2xl origin-top-right max-sm:fixed max-sm:top-44 max-sm:left-1/2 max-sm:right-auto max-sm:-translate-x-1/2">
 
               <!-- Panel header -->
-              <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 dark:border-slate-700">
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-subtle">
                 <div class="flex items-center gap-2">
-                  <span class="text-base font-black uppercase tracking-widest text-slate-500">Notifications</span>
+                  <span class="text-base font-black uppercase tracking-widest text-ink-secondary">Notifications</span>
                   <span x-show="$store.dojo.unreadCount > 0"
                         x-text="$store.dojo.unreadCount"
-                        class="text-sm font-black bg-rose-500 text-white px-1.5 py-0.5 rounded-full leading-none"></span>
+                        class="text-sm font-black bg-danger-500 text-white px-1.5 py-0.5 rounded-full leading-none"></span>
                 </div>
                 <button @click="$store.dojo.clearNotifications()"
                         x-show="$store.dojo.notifications.length > 0"
-                        class="text-sm font-mono text-slate-400 hover:text-rose-500 transition-colors">
+                        class="text-sm font-mono text-ink-muted hover:text-danger-500 transition-colors">
                   Clear
                 </button>
               </div>
 
               <!-- Notification list -->
-              <div class="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700/50">
+              <div class="max-h-80 overflow-y-auto divide-y divide-subtle dark:divide-subtle/50">
 
                 <template x-for="notif in $store.dojo.notifications"
                           :key="notif.id">
                   <div class="flex gap-3 px-4 py-3"
-                       :class="!notif.read ? 'bg-cyan-500/5 dark:bg-cyan-500/5' : ''">
+                       :class="!notif.read ? 'bg-accent-500/5' : ''">
 
                     <div class="w-4 h-4 mt-0.5 shrink-0"
                          :class="{
-                           'text-emerald-500': notif.type === 'success',
-                           'text-rose-500':    notif.type === 'error',
-                           'text-cyan-500':    notif.type === 'info'
+                           'text-success-500': notif.type === 'success',
+                           'text-danger-500':    notif.type === 'error',
+                           'text-accent-500':    notif.type === 'info'
                          }">
                       <template x-if="notif.type === 'success'">
                         <svg fill="none"
@@ -391,20 +327,20 @@
                     </div>
 
                     <div class="flex-1 min-w-0">
-                      <p class="text-sm font-mono leading-snug break-words"
-                         :class="notif.read ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'"
+                      <p class="text-sm font-mono leading-snug wrap-break-word"
+                         :class="notif.read ? 'text-ink-secondary' : 'text-icon-strong'"
                          x-text="notif.message"></p>
-                      <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono"
+                      <p class="text-xs text-ink-muted mt-0.5 font-mono"
                          x-text="notifTimeAgo(notif.timestamp, $store.dojo.notifTick)"></p>
                     </div>
 
                     <div x-show="!notif.read"
-                         class="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-1.5 shrink-0 animate-pulse"></div>
+                         class="w-1.5 h-1.5 rounded-full bg-accent-500 mt-1.5 shrink-0 animate-pulse"></div>
                   </div>
                 </template>
 
                 <div x-show="$store.dojo.notifications.length === 0"
-                     class="py-10 text-center text-sm font-mono italic text-slate-400 dark:text-slate-600">
+                     class="py-10 text-center text-sm font-mono italic text-ink-disabled">
                   No notifications yet
                 </div>
               </div>
@@ -444,47 +380,48 @@
         {% if status_code is not defined %}
         <div class="card p-3 space-y-1 w-full">
           <div class="flex items-center gap-2">
-            <span class="text-sm uppercase font-black text-slate-500 w-auto">Owner</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate cursor-pointer hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors duration-150"
+            <span class="text-sm uppercase font-black text-ink-secondary w-auto">Owner</span>
+            <p class="font-mono text-ink-body text-sm truncate cursor-pointer hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
                data-copy="{{ owner }}"
                title="Click to copy"
                @click="$store.dojo.copyText($el.dataset.copy, 'Owner copied')">{{ owner }}</p>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-sm uppercase font-black text-slate-500 w-auto">Workdir</span>
-            <p class="font-mono text-slate-600 dark:text-slate-300 text-sm truncate cursor-pointer hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors duration-150"
+            <span class="text-sm uppercase font-black text-ink-secondary w-auto">Workdir</span>
+            <p class="font-mono text-ink-body text-sm truncate cursor-pointer hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
                style="direction: rtl"
                data-copy="{{ job_status_path }}"
                title="{{ job_status_path }} (click to copy: pastes as a file path so editors like VS Code can jump straight to it)"
-               @click="$store.dojo.copyText($el.dataset.copy, 'job_status.json path copied')">&lrm;{{ workdir_name }}</p>
+               @click="$store.dojo.copyText($el.dataset.copy, 'job_status.json path copied')">&lrm;{{ workdir_name }}
+            </p>
           </div>
         </div>
         {% endif %}
       </div>
     </header>
 
-    <main class="relative min-h-[500px]"
+    <main class="relative min-h-125"
           x-data
           @keydown.escape.window="$store.dojo.exitFullscreen()">
 
       <div x-show="!$store.dojo.isPageReady"
-           class="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl transition-all duration-300"
+           class="absolute inset-0 z-50 flex flex-col items-center justify-start pt-32 bg-canvas/60 backdrop-blur-md rounded-2xl transition-all duration-300"
            x-transition:leave="transition opacity-100 duration-300"
            x-transition:leave-start="opacity-100"
            x-transition:leave-end="opacity-0"
            x-cloak>
 
-        <div class="flex flex-col items-center gap-6 bg-white/80 dark:bg-slate-800/80 p-8 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xl w-72 sm:w-96 transition-all duration-300">
+        <div class="flex flex-col items-center gap-6 bg-surface/80 p-8 rounded-2xl border border-control shadow-xl w-72 sm:w-96 transition-all duration-300">
 
-          <div class="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
+          <div class="w-12 h-12 border-4 border-accent-500/20 border-t-accent-500 rounded-full animate-spin"></div>
 
           <div class="text-center w-full">
-            <p class="text-slate-600 dark:text-slate-200 font-black uppercase tracking-[0.3em] text-base animate-pulse mb-3">
+            <p class="text-ink-strong font-black uppercase tracking-[0.3em] text-base animate-pulse mb-3">
               Loading Dojo
             </p>
 
             <div class="h-10 flex items-center justify-center overflow-hidden">
-              <p class="text-slate-500 dark:text-slate-400 text-sm font-mono italic leading-relaxed text-center"
+              <p class="text-ink-secondary text-sm font-mono italic leading-relaxed text-center"
                  x-show="$store.dojo.showPhrase"
                  x-text="$store.dojo.loadingPhrases[$store.dojo.loadingIndex]"
                  x-transition:enter="transition ease-out duration-300"
@@ -507,31 +444,31 @@
   </div>
 
   <footer x-data
-          class="mt-6 py-6 border-t border-slate-400 dark:border-slate-700 flex flex-row-reverse justify-between items-center text-sm text-slate-400 font-mono"
+          class="mt-6 py-6 border-t border-line flex flex-row-reverse justify-between items-center text-sm text-ink-muted font-mono"
           :class="$store.dojo.isFullscreen ? 'w-full px-4' : 'max-w-6xl mx-auto px-8'">
     <div class="flex items-center gap-3"
          x-data>
       <!-- combined connection + sync pill -->
-      <div class="flex items-center bg-slate-300/50 dark:bg-slate-800/50 rounded-full border transition-all duration-300"
-           :class="$store.dojo.isConnected ? 'border-emerald-500/30' : 'border-rose-500/30'"
+      <div class="flex items-center bg-control/50 rounded-full border transition-all duration-300"
+           :class="$store.dojo.isConnected ? 'border-success-500/30' : 'border-danger-500/30'"
            :title="$store.dojo.isConnected ? 'Dojo Link Active' : 'Dojo Link Severed'">
 
         <!-- connection segment -->
         <div class="flex items-center gap-2 px-3 py-1">
           <div class="relative flex items-center justify-center">
             <span x-show="$store.dojo.isConnected"
-                  class="absolute inline-flex h-2 w-2 rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+                  class="absolute inline-flex h-2 w-2 rounded-full bg-success-400 opacity-75 animate-ping"></span>
             <span class="relative inline-flex rounded-full h-2 w-2 transition-colors duration-500"
-                  :class="$store.dojo.isConnected ? 'bg-emerald-500' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'"></span>
+                  :class="$store.dojo.isConnected ? 'bg-success-500' : 'bg-danger-500 shadow-[0_0_8px_color-mix(in_srgb,var(--color-danger-500)_50%,transparent)]'"></span>
           </div>
           <span class="text-xs uppercase font-black tracking-widest transition-colors duration-500"
-                :class="$store.dojo.isConnected ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'"
+                :class="$store.dojo.isConnected ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400'"
                 x-text="$store.dojo.isConnected ? 'Live' : 'Down'"></span>
         </div>
 
         <!-- divider -->
-        <div class="w-px h-3.5 flex-shrink-0 transition-colors duration-300"
-             :class="$store.dojo.isConnected ? 'bg-emerald-500/25' : 'bg-rose-500/25'"></div>
+        <div class="w-px h-3.5 shrink-0 transition-colors duration-300"
+             :class="$store.dojo.isConnected ? 'bg-success-500/25' : 'bg-danger-500/25'"></div>
 
         <!-- sync segment -->
         <div class="flex items-center gap-2 px-3 py-1">
@@ -542,7 +479,7 @@
                   $store.dojo.isComplete ? 'Final Data' : (!$store.dojo.lastUpdate ? 'Connecting...' : `Sync: ${formatTimeAgo($store.dojo.secondsSinceUpdate)}`)
                 {% endif %}
               "
-                :class="{% if status_code is defined %}'text-rose-500 font-bold'{% elif status_code is not defined and '$store.dojo.isComplete' %}'text-cyan-500 font-bold'{% else %}''{% endif %}">
+                :class="{% if status_code is defined %}'text-danger-500 font-bold'{% elif status_code is not defined and '$store.dojo.isComplete' %}'text-accent-500 font-bold'{% else %}''{% endif %}">
           </span>
         </div>
       </div>
@@ -550,7 +487,7 @@
       <!-- copyright -->
       <a href="https://www.david-gable.com/"
          target="_blank"
-         class="text-inherit no-underline cursor-pointer hover:text-cyan-500 transition-colors"
+         class="text-inherit no-underline cursor-pointer hover:text-accent-500 transition-colors"
          title="Visit david-gable.com">
         <span>&copy; {{ current_year }} David Gable</span>
       </a>
@@ -567,12 +504,12 @@
        x-transition:leave="transition ease-in duration-200"
        x-transition:leave-start="opacity-100 translate-y-0"
        x-transition:leave-end="opacity-0 -translate-y-12"
-       class="fixed top-10 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
+       class="fixed top-10 left-1/2 -translate-x-1/2 z-1000 pointer-events-none">
     <div class="flex items-center gap-3 px-6 py-3 rounded-full border shadow-2xl transition-colors duration-300"
          :class="{
-           'bg-cyan-500 border-cyan-500 text-white dark:text-slate-950': $store.dojo.globalToast.type === 'success',
-           'bg-rose-500 border-rose-500 text-white': $store.dojo.globalToast.type === 'error',
-           'bg-slate-700 border-slate-700 text-white': $store.dojo.globalToast.type === 'info'
+           'bg-accent-500 border-accent-500 text-white': $store.dojo.globalToast.type === 'success',
+           'bg-danger-500 border-danger-500 text-white': $store.dojo.globalToast.type === 'error',
+           'bg-neutral border-neutral text-white': $store.dojo.globalToast.type === 'info'
          }">
       <svg class="w-4 h-4 shrink-0"
            fill="none"
@@ -603,7 +540,8 @@
 
   {# {% include "partials/_sensai.html" %} #}
   {#
-  <script src="/mojo-static/js/sensai.js"></script> #}
+  <script type="module"
+          src="/mojo-static/dist/sensai.js"></script> #}
 
   {% block scripts %}{% endblock %}
 
@@ -620,13 +558,13 @@
        x-transition:leave="transition duration-100 ease-in"
        x-transition:leave-start="opacity-100"
        x-transition:leave-end="opacity-0"
-       class="fixed inset-0 z-[950] flex items-center justify-center p-4"
+       class="fixed inset-0 z-950 flex items-center justify-center p-4"
        style="display:none;"
        @keydown.escape.window="$store.dojo.dialog.cancel()"
        @keydown.enter.window.prevent="if ($store.dojo.dialog.show) $store.dojo.dialog.confirm()">
 
     <!-- backdrop -->
-    <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+    <div class="absolute inset-0 bg-scrim/60 backdrop-blur-sm"
          @click="$store.dojo.dialog.cancel()"></div>
 
     <!-- card -->
@@ -637,11 +575,11 @@
          x-transition:leave="transition duration-100 ease-in"
          x-transition:leave-start="opacity-100 scale-100"
          x-transition:leave-end="opacity-0 scale-95">
-      <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl ring-2"
+      <div class="bg-surface rounded-2xl shadow-2xl ring-2"
            :class="{
-             'ring-rose-500':  $store.dojo.dialog.variant === 'danger',
-             'ring-amber-400': $store.dojo.dialog.variant === 'warning',
-             'ring-cyan-500':  $store.dojo.dialog.variant === 'info',
+             'ring-danger-500':  $store.dojo.dialog.variant === 'danger',
+             'ring-warning-400': $store.dojo.dialog.variant === 'warning',
+             'ring-accent-500':  $store.dojo.dialog.variant === 'info',
            }">
 
         <div class="px-6 py-5 space-y-3">
@@ -651,9 +589,9 @@
             <!-- variant icon -->
             <div class="shrink-0 mt-0.5 w-8 h-8 rounded-full flex items-center justify-center"
                  :class="{
-                   'bg-rose-100  dark:bg-rose-900/30  text-rose-500':  $store.dojo.dialog.variant === 'danger',
-                   'bg-amber-100 dark:bg-amber-900/30 text-amber-500': $store.dojo.dialog.variant === 'warning',
-                   'bg-cyan-100  dark:bg-cyan-900/30  text-cyan-500':  $store.dojo.dialog.variant === 'info',
+                   'bg-danger-100  dark:bg-danger-900/30  text-danger-500':  $store.dojo.dialog.variant === 'danger',
+                   'bg-warning-100 dark:bg-warning-900/30 text-warning-500': $store.dojo.dialog.variant === 'warning',
+                   'bg-accent-100  dark:bg-accent-900/30  text-accent-500':  $store.dojo.dialog.variant === 'info',
                  }">
               <!-- danger: X -->
               <svg x-show="$store.dojo.dialog.variant === 'danger'"
@@ -691,9 +629,9 @@
             </div>
 
             <div class="min-w-0">
-              <p class="text-sm font-black uppercase tracking-widest text-slate-700 dark:text-slate-200"
+              <p class="text-sm font-black uppercase tracking-widest text-ink-strong"
                  x-text="$store.dojo.dialog.title"></p>
-              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400 leading-relaxed"
+              <p class="mt-1 text-sm text-ink-secondary leading-relaxed"
                  x-text="$store.dojo.dialog.message"></p>
             </div>
           </div>
@@ -706,20 +644,20 @@
                  x-init="$watch('$store.dojo.dialog.show', (v) => { if (v && $store.dojo.dialog.showInput) $nextTick(() => $refs.dialogInput?.focus()) })"
                  @keydown.enter.stop.prevent="$store.dojo.dialog.confirm()"
                  type="text"
-                 class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                 class="w-full rounded-lg border border-control bg-canvas px-3 py-1.5 text-sm text-ink-strong focus:outline-none focus:ring-2 focus:ring-accent-500" />
 
           <!-- buttons -->
           <div class="flex justify-end gap-2 pt-1">
             <button @click="$store.dojo.dialog.cancel()"
-                    class="btn btn-ghost text-sm text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-slate-400">
+                    class="btn btn-ghost text-sm text-ink-secondary border-control hover:border-line">
               <span x-text="$store.dojo.dialog.cancelLabel"></span>
             </button>
             <button @click="$store.dojo.dialog.confirm()"
                     class="btn text-sm text-white border-transparent"
                     :class="{
-                      'bg-rose-500  hover:bg-rose-600':  $store.dojo.dialog.variant === 'danger',
-                      'bg-amber-500 hover:bg-amber-600': $store.dojo.dialog.variant === 'warning',
-                      'bg-cyan-500  hover:bg-cyan-600':  $store.dojo.dialog.variant === 'info',
+                      'bg-danger-500  hover:bg-danger-600':  $store.dojo.dialog.variant === 'danger',
+                      'bg-warning-500 hover:bg-warning-600': $store.dojo.dialog.variant === 'warning',
+                      'bg-accent-500  hover:bg-accent-600':  $store.dojo.dialog.variant === 'info',
                     }">
               <span x-text="$store.dojo.dialog.confirmLabel"></span>
             </button>

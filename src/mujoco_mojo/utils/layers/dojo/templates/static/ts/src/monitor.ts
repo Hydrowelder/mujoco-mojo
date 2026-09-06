@@ -1,4 +1,7 @@
 import type { DojoStore, JobStatus, TimelineBin } from "./models";
+import { themeColor } from "./lib/theme-colors";
+import Plotly from "./lib/plotly";
+import confetti from "canvas-confetti";
 
 interface StatCard {
   label: string;
@@ -149,14 +152,14 @@ function monitor() {
         {
           label: "Successes",
           value: `${this.status.n_success} (${pctOfTotal(this.status.n_success)}%)`,
-          color: "text-emerald-500",
+          color: "text-success-500",
           subValue: `Last Success: Trial ${lastSuccess}`,
           tooltip: `Trials that completed and passed every registered requirement (or had none). Percentage is of all ${n_trial} trials.`,
         },
         {
           label: "Failures",
           value: `${this.status.n_failed} (${pctOfTotal(this.status.n_failed)}%)`,
-          color: "text-rose-500",
+          color: "text-danger-500",
           subValue: `Last Failure: Trial ${lastFailure}`,
           tooltip:
             "Trials that ran but failed one or more requirement checks, including early terminations triggered by a failing requirement. Not runtime errors.",
@@ -164,7 +167,7 @@ function monitor() {
         {
           label: "Errors",
           value: `${this.status.n_error} (${pctOfTotal(this.status.n_error)}%)`,
-          color: "text-amber-500",
+          color: "text-warning-500",
           subValue: `Last Error: Trial ${lastError}`,
           tooltip:
             "Trials that raised an unhandled runtime error while being processed. These runs broke; they were never judged against requirements.",
@@ -172,14 +175,14 @@ function monitor() {
         {
           label: "Time Elapsed",
           value: this.status.elapsed,
-          color: "text-slate-500",
+          color: "text-ink-secondary",
           subValue: `Started: ${this.status.start_time}`,
           tooltip: "Wall-clock time since the job started.",
         },
         {
           label: "Remaining",
           value: `${this.status.n_remaining} (${pctOfTotal(this.status.n_remaining)}%)`,
-          color: "text-cyan-500",
+          color: "text-accent-500",
           subValue: `${this.status.throughput} trials/min - ${n_trial} trials total`,
           tooltip:
             "Trials that have not finished yet. Throughput is derived from the average duration of completed trials (successes and failures; errors excluded) and the number of processors.",
@@ -189,7 +192,7 @@ function monitor() {
           value: this.status.is_complete
             ? "00:00:00"
             : this.status.time_remaining,
-          color: "text-slate-500",
+          color: "text-ink-secondary",
           subValue: this.status.is_complete
             ? `Finished: ${this.status.end_time}`
             : `ETA: ${this.status.end_time}`,
@@ -204,9 +207,9 @@ function monitor() {
     // color in the middle of each outcome's share, soft blends at boundaries
     progressGradient(): string {
       const segs = [
-        { color: "#10b981", n: this.status.n_success }, // emerald-500
-        { color: "#f43f5e", n: this.status.n_failed }, // rose-500
-        { color: "#f59e0b", n: this.status.n_error }, // amber-500
+        { color: themeColor("success"), n: this.status.n_success },
+        { color: themeColor("danger"), n: this.status.n_failed },
+        { color: themeColor("warning"), n: this.status.n_error },
       ].filter((seg) => seg.n > 0);
       if (segs.length === 0) return "transparent";
       if (segs.length === 1) return segs[0].color;
@@ -233,11 +236,16 @@ function monitor() {
       if (!el || bins.length === 0) return;
 
       const x = bins.map((b) => b.label);
-      const dark = document.documentElement.classList.contains("dark");
-      const fontColor = dark ? "#94a3b8" : "#64748b"; // slate-400 / slate-500
-      const gridColor = dark
-        ? "rgba(148, 163, 184, 0.15)"
-        : "rgba(100, 116, 139, 0.15)";
+      // same tokens trial-viewer.ts's renderPlot() uses, so this chart's
+      // chrome matches every other Plotly chart in the app instead of
+      // improvising its own: --color-ink-muted at 15% alpha (the previous
+      // approach here) is a light-to-medium gray in both themes, so blended
+      // at low alpha over a dark chart it read as a pale, washed-out grid --
+      // the opposite of --color-chart-grid-major/-minor's dedicated dark
+      // values, which are deliberately darker than the surface so gridlines
+      // sit recessed rather than glowing.
+      const fontColor = themeColor("chart-text");
+      const gridColor = themeColor("chart-grid-major");
 
       const traces = [
         {
@@ -245,35 +253,35 @@ function monitor() {
           x,
           y: bins.map((b) => b.n_success),
           type: "bar",
-          marker: { color: "#10b981" },
+          marker: { color: themeColor("success") },
         },
         {
           name: "Failure",
           x,
           y: bins.map((b) => b.n_failed),
           type: "bar",
-          marker: { color: "#f43f5e" },
+          marker: { color: themeColor("danger") },
         },
         {
           name: "Error",
           x,
           y: bins.map((b) => b.n_error),
           type: "bar",
-          marker: { color: "#f59e0b" },
+          marker: { color: themeColor("warning") },
         },
         {
           name: "Running",
           x,
           y: bins.map((b) => b.n_running),
           type: "bar",
-          marker: { color: "#6366f1" }, // indigo-500
+          marker: { color: themeColor("info") },
         },
         {
           name: "Pending",
           x,
           y: bins.map((b) => b.n_pending),
           type: "bar",
-          marker: { color: "#06b6d4" }, // cyan-500
+          marker: { color: themeColor("accent-500") },
         },
       ];
 
@@ -301,7 +309,7 @@ function monitor() {
           nticks: 8,
           showspikes: true,
           spikemode: "across",
-          spikelinecolor: "#06b6d4", // cyan-500, same as the trial viewer
+          spikelinecolor: themeColor("accent-500"),
           spikethickness: -2,
         },
         yaxis: { gridcolor: gridColor, title: { text: "trials" } },
@@ -310,10 +318,10 @@ function monitor() {
           : { orientation: "h", y: 1.15, x: 0 },
         hovermode: "x unified",
         hoverlabel: {
-          bgcolor: dark ? "#0f172a" : "#ffffff", // slate-900 / white
-          bordercolor: "#06b6d4", // cyan-500
+          bgcolor: themeColor("chart-tooltip-bg"),
+          bordercolor: themeColor("accent-500"),
           font: {
-            color: dark ? "#f8fafc" : "#0f172a", // slate-50 / slate-900
+            color: themeColor("chart-tooltip-font"),
             family: "monospace",
             size: 12,
           },
@@ -432,7 +440,7 @@ function monitor() {
       const animationEnd = Date.now() + duration;
       const colors = theme.colors ?? ["#06b6d4", "#3b82f6", "#22c55e"];
 
-      let shapes: unknown[] = ["circle", "square"];
+      let shapes: confetti.Shape[] = ["circle", "square"];
       if (theme.emojis) {
         shapes = theme.emojis.map((emoji) =>
           confetti.shapeFromText({ text: emoji, scalar: 5, color: colors[0] }),

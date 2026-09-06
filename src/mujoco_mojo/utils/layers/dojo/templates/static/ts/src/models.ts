@@ -214,6 +214,7 @@ export interface DojoStore {
   isPageReady: boolean;
   isFullscreen: boolean;
   overlayCount: number;
+  loadStartTime: number;
   isComplete: boolean;
   isMuted: boolean;
   isAutoRefresh: boolean;
@@ -229,18 +230,37 @@ export interface DojoStore {
   secondsSinceUpdate: number;
   lastUpdate: number | null;
   source: EventSource | null;
+
+  showPhrase: boolean;
+  loadingIndex: number;
+  loadingInterval: ReturnType<typeof setInterval> | null;
+  loadingPhrases: string[];
+
   notifications: NotificationEntry[];
   unreadCount: number;
   notifOpen: boolean;
   notifTick: number;
+
+  init(): void;
+  _installPlotlyLogCapture(): void;
   toast(message: string, type?: "success" | "error" | "info"): void;
   copyText(text: string, successMsg?: string): Promise<void>;
-  _installPlotlyLogCapture(): void;
   _setConnected(connected: boolean): void;
+  checkServerHealth(): Promise<void>;
+  setPageReady(val: boolean, force?: boolean): void;
+  startLoadingMessages(): void;
+  stopLoadingMessages(): void;
+  toggleFullscreen(): void;
+  exitFullscreen(): void;
+  toggleMute(): void;
+  toggleAuto(): void;
   startGlobalSync(): void;
   stopGlobalSync(): void;
-  setPageReady(val: boolean, force?: boolean): void;
+  startSync(): void;
+  setSyncProgress(val: number): void;
+  endSync(timestamp: number, isComplete: boolean): void;
   updateSync(timestamp: number, isComplete?: boolean): void;
+  _saveNotifications(): void;
   addNotification(message: string, type: "success" | "error" | "info"): void;
   openNotifications(): void;
   clearNotifications(): void;
@@ -251,6 +271,10 @@ export interface DojoStore {
     confirmLabel: string;
     cancelLabel: string;
     variant: "danger" | "warning" | "info";
+    showInput: boolean;
+    inputValue: string;
+    inputPlaceholder: string;
+    _resolve: ((v: unknown) => void) | null;
     open(opts: {
       title: string;
       message: string;
@@ -258,6 +282,15 @@ export interface DojoStore {
       cancelLabel?: string;
       variant?: "danger" | "warning" | "info";
     }): Promise<boolean>;
+    prompt(opts: {
+      title: string;
+      message?: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      variant?: "danger" | "warning" | "info";
+      placeholder?: string;
+      value?: string;
+    }): Promise<string | null>;
     confirm(): void;
     cancel(): void;
   };

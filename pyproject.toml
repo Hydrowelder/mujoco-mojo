@@ -9,6 +9,7 @@ description = "A complete MJCF lifecycle and trial orchestration suite for MuJoC
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cairosvg>=2.9.0",
     "fastapi>=0.134.0",
     "jinja2>=3.1.6",
     "matplotlib>=3.10.8",

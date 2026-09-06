@@ -19,7 +19,7 @@
         <button @mousedown.prevent="toggle()"
                 @keydown.enter.prevent="toggle()"
                 @keydown.space.prevent="toggle()"
-                class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors active:scale-100">
+                class="flex items-center gap-2 text-base font-black uppercase text-ink-muted tracking-widest hover:text-ink-body transition-colors active:scale-100">
             <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
                  :class="open ? '' : '-rotate-90'"
                  fill="none"
@@ -34,7 +34,7 @@
         </button>
 
         <!-- source file + entry count -->
-        <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+        <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full bg-chip text-ink-secondary"
               x-show="logFilename"
               x-text="logFilename + ' · ' + filteredLogEntries.length + '/' + logEntries.length"></span>
     </div>
@@ -50,14 +50,15 @@
          class="overflow-hidden">
 
         <div x-ref="logTable"
-             class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm font-mono overflow-hidden">
+             class="rounded-lg border border-subtle bg-surface dark:bg-surface/50 text-sm font-mono overflow-hidden">
 
             <!-- column headers -->
-            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs font-black tracking-wider text-slate-400">
+            <div
+                 class="flex items-stretch border-b border-subtle bg-well dark:bg-well/50 text-xs font-black tracking-wider text-ink-muted">
                 <button data-logcol-header="time"
                         @click="toggleLogSort('timestamp')"
                         :style="{ width: logColWidths.time + 'px' }"
-                        class="flex-shrink-0 flex items-center gap-1 text-left px-2 py-1.5 overflow-hidden hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                        class="shrink-0 flex items-center gap-1 text-left px-2 py-1.5 overflow-hidden hover:text-ink-body transition-colors">
                     Time
                     <svg x-show="logSortKey === 'timestamp'"
                          class="w-3 h-3 transition-transform"
@@ -71,16 +72,18 @@
                               d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                <div class="w-1.5 flex-shrink-0 cursor-col-resize relative group"
+                <div class="w-1.5 shrink-0 cursor-col-resize relative group"
                      @mousedown="startLogColResize($event, 'time')"
                      @dblclick="autoFitLogColumn('time')">
-                    <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-slate-200 dark:bg-slate-700 group-hover:bg-cyan-500 transition-colors"></div>
+                    <div
+                         class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-track group-hover:bg-accent-500 transition-colors">
+                    </div>
                 </div>
 
                 <button data-logcol-header="level"
                         @click="toggleLogSort('level')"
                         :style="{ width: logColWidths.level + 'px' }"
-                        class="flex-shrink-0 flex items-center gap-1 text-left px-2 py-1.5 overflow-hidden hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                        class="shrink-0 flex items-center gap-1 text-left px-2 py-1.5 overflow-hidden hover:text-ink-body transition-colors">
                     Level
                     <svg x-show="logSortKey === 'level'"
                          class="w-3 h-3 transition-transform"
@@ -94,39 +97,44 @@
                               d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                <div class="w-1.5 flex-shrink-0 cursor-col-resize relative group"
+                <div class="w-1.5 shrink-0 cursor-col-resize relative group"
                      @mousedown="startLogColResize($event, 'level')"
                      @dblclick="autoFitLogColumn('level')">
-                    <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-slate-200 dark:bg-slate-700 group-hover:bg-cyan-500 transition-colors"></div>
+                    <div
+                         class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-track group-hover:bg-accent-500 transition-colors">
+                    </div>
                 </div>
 
                 <span data-logcol-header="source"
                       :style="{ width: logColWidths.source + 'px' }"
-                      class="flex-shrink-0 hidden lg:flex items-center px-2 py-1.5">Source</span>
-                <div class="w-1.5 flex-shrink-0 cursor-col-resize relative group hidden lg:block"
+                      class="shrink-0 hidden lg:flex items-center px-2 py-1.5">Source</span>
+                <div class="w-1.5 shrink-0 cursor-col-resize relative group hidden lg:block"
                      @mousedown="startLogColResize($event, 'source')"
                      @dblclick="autoFitLogColumn('source')">
-                    <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-slate-200 dark:bg-slate-700 group-hover:bg-cyan-500 transition-colors"></div>
+                    <div
+                         class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px group-hover:w-0.5 bg-track group-hover:bg-accent-500 transition-colors">
+                    </div>
                 </div>
 
                 <span class="flex-1 min-w-0 flex items-center px-2 py-1.5">Message</span>
             </div>
 
             <!-- filter row (aligned to columns above) -->
-            <div class="flex items-stretch border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+            <div
+                 class="flex items-stretch border-b border-subtle bg-well/50 dark:bg-well/30">
                 <div :style="{ width: logColWidths.time + 'px' }"
-                     class="flex-shrink-0"></div>
-                <div class="w-1.5 flex-shrink-0"></div>
+                     class="shrink-0"></div>
+                <div class="w-1.5 shrink-0"></div>
 
                 <!-- criticality multiselect -->
                 <div :style="{ width: logColWidths.level + 'px' }"
-                     class="flex-shrink-0 overflow-hidden">
+                     class="shrink-0 overflow-hidden">
                     <div class="w-full px-1 py-1 relative"
                          x-data="{ menuOpen: false, menuCoords: { top: 0, left: 0 } }"
                          @click.away="menuOpen = false">
                         <button x-ref="logLevelBtn"
                                 @click="const r = $refs.logLevelBtn.getBoundingClientRect(); menuCoords = { top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX }; menuOpen = !menuOpen"
-                                class="w-full flex items-center justify-between gap-2 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 text-sm font-mono text-slate-700 dark:text-slate-200">
+                                class="w-full flex items-center justify-between gap-2 bg-well border border-control rounded-md p-1.5 text-sm font-mono text-ink-strong">
                             <span class="whitespace-nowrap"
                                   x-text="logFilterLevels.length === 0
                                   ? 'All'
@@ -150,15 +158,16 @@
                                  @click.stop
                                  @click.away="menuOpen = false"
                                  :style="`position:absolute; top:${menuCoords.top}px; left:${menuCoords.left}px;`"
-                                 class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl overflow-hidden z-[350] w-40"
+                                 class="bg-surface border border-line rounded-lg shadow-2xl overflow-hidden z-350 w-40"
                                  style="display:none;">
                                 <template x-for="level in logLevels"
                                           :key="level">
-                                    <label class="{{ dropdown_option }} flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                    <label
+                                           class="{{ dropdown_option }} flex items-center gap-2 cursor-pointer text-ink-strong hover:bg-chip">
                                         <input type="checkbox"
                                                :checked="logFilterLevels.includes(level)"
                                                @click.stop="toggleLogLevelFilter(level)"
-                                               class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800" />
+                                               class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface" />
                                         <span x-text="level"></span>
                                     </label>
                                 </template>
@@ -166,23 +175,21 @@
                         </template>
                     </div>
                 </div>
-                <div class="w-1.5 flex-shrink-0"></div>
+                <div class="w-1.5 shrink-0"></div>
 
                 <div :style="{ width: logColWidths.source + 'px' }"
-                     class="flex-shrink-0 hidden lg:block"></div>
-                <div class="w-1.5 flex-shrink-0 hidden lg:block"></div>
+                     class="shrink-0 hidden lg:block"></div>
+                <div class="w-1.5 shrink-0 hidden lg:block"></div>
 
                 <!-- message search -->
                 <div class="flex-1 min-w-0 flex items-center gap-1.5 px-1 py-1">
                     <input type="text"
                            x-model="logFilterMessage"
                            :placeholder="logFilterRegex ? 'Filter message (regex)…' : 'Filter message (contains)…'"
-                           class="flex-1 min-w-0 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-700 dark:text-slate-200" />
+                           class="flex-1 min-w-0 bg-well border border-control rounded-lg px-2 py-1 text-xs font-mono text-ink-strong" />
                     <button @click="logFilterRegex = !logFilterRegex"
-                            :class="logFilterRegex
-                                ? 'bg-cyan-500 text-white border-cyan-500'
-                                : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700'"
-                            class="border rounded-lg px-1.5 py-1 text-xs font-mono transition-colors flex-shrink-0"
+                            :class="logFilterRegex ? 'bg-accent-500 text-white border-accent-500' : 'bg-well text-ink-secondary border-control'"
+                            class="border rounded-lg px-1.5 py-1 text-xs font-mono transition-colors shrink-0"
                             title="Toggle regex matching for the message filter">
                         .*
                     </button>
@@ -190,7 +197,7 @@
             </div>
 
             <!-- rows -->
-            <div class="divide-y divide-slate-200 dark:divide-slate-700 max-h-96 overflow-y-auto custom-scrollbar">
+            <div class="divide-y divide-subtle max-h-96 overflow-y-auto custom-scrollbar">
                 <template x-for="entry in filteredLogEntries"
                           :key="entry.timestamp + '-' + entry.lineno + '-' + entry.message.length">
                     <div class="flex items-start">
@@ -198,43 +205,43 @@
                         <!-- time (relative, with absolute on hover) -->
                         <span data-logcol-content="time"
                               :style="{ width: logColWidths.time + 'px' }"
-                              class="flex-shrink-0 px-2 py-1.5 text-slate-500 dark:text-slate-400 truncate"
+                              class="shrink-0 px-2 py-1.5 text-ink-secondary truncate"
                               :title="new Date(entry.timestamp).toLocaleString()"
                               x-text="formatLogTime(entry.timestamp, $store.dojo.notifTick)"></span>
-                        <div class="w-1.5 flex-shrink-0"></div>
+                        <div class="w-1.5 shrink-0"></div>
 
                         <!-- criticality -->
                         <span :style="{ width: logColWidths.level + 'px' }"
-                              class="flex-shrink-0 px-2 py-1.5 overflow-hidden">
+                              class="shrink-0 px-2 py-1.5 overflow-hidden">
                             <span data-logcol-content="level"
                                   class="text-xs font-bold uppercase px-2 py-0.5 rounded-full"
                                   :class="logLevelClass(entry.level)"
                                   x-text="entry.level"></span>
                         </span>
-                        <div class="w-1.5 flex-shrink-0"></div>
+                        <div class="w-1.5 shrink-0"></div>
 
                         <!-- source file:line (click to copy full path:line) -->
                         <span data-logcol-content="source"
                               :style="{ width: logColWidths.source + 'px' }"
                               @click="copyToClipboard(logSourceFull(entry), 'Source location copied!')"
-                              class="flex-shrink-0 hidden lg:block px-2 py-1.5 text-slate-400 dark:text-slate-500 truncate cursor-pointer hover:text-cyan-500 hover:underline"
+                              class="shrink-0 hidden lg:block px-2 py-1.5 text-ink-muted truncate cursor-pointer hover:text-accent-500 hover:underline"
                               :title="logSourceFull(entry) + ' (click to copy)'"
                               x-text="logSourceShort(entry)"></span>
-                        <div class="w-1.5 flex-shrink-0 hidden lg:block"></div>
+                        <div class="w-1.5 shrink-0 hidden lg:block"></div>
 
                         <!-- message -->
-                        <span class="flex-1 min-w-0 px-2 py-1.5 text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words"
+                        <span class="flex-1 min-w-0 px-2 py-1.5 text-ink-strong whitespace-pre-wrap wrap-break-word"
                               x-text="entry.message"></span>
                     </div>
                 </template>
 
                 <!-- empty state -->
                 <div x-show="logEntries.length === 0"
-                     class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                     class="px-4 py-6 text-center text-ink-muted">
                     No logs found.
                 </div>
                 <div x-show="logEntries.length > 0 && filteredLogEntries.length === 0"
-                     class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">
+                     class="px-4 py-6 text-center text-ink-muted">
                     No log entries match the current filters.
                 </div>
             </div>

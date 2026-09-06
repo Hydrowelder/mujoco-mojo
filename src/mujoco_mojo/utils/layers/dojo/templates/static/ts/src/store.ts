@@ -1,12 +1,19 @@
+import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
 import type { DojoStore, NotificationEntry } from "./models";
+
+// the npm/module build doesn't auto-start itself the way the old vendored
+// CDN script did, so this is now the one place that does it explicitly --
+// see types/global.d.ts for why every other entry bundle keeps referencing
+// the bare `Alpine` global instead of importing its own separate copy.
+window.Alpine = Alpine;
 
 // Expose time helpers as globals - HTML templates call them in x-text expressions.
 window.formatTimeAgo = formatTimeAgo;
 window.notifTimeAgo = notifTimeAgo;
 
 document.addEventListener("alpine:init", () => {
-  Alpine.store("dojo", {
+  const dojoStore: DojoStore = {
     isPageReady: false,
     isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
     overlayCount: 0,
@@ -510,7 +517,8 @@ document.addEventListener("alpine:init", () => {
         this._resolve = null;
       },
     },
-  });
+  };
+  Alpine.store("dojo", dojoStore);
 
   // expose as a drop-in async alternative to the native confirm() dialog
   window.mojoConfirm = (opts) =>
@@ -554,3 +562,14 @@ document.addEventListener("alpine:init", () => {
     store.startLoadingMessages();
   }
 });
+
+// the vendored CDN build called this itself once loaded; the npm build
+// requires an explicit call. This bundle (main.js) loads in <head>, ahead of
+// the page-specific bundle (monitor.js/mosaic.js/trial-viewer.js/sensai.js)
+// which is declared at the bottom of the body and sets window.<name> for the
+// page's own x-data component -- so starting Alpine here immediately would
+// scan the DOM and evaluate e.g. x-data="monitor()" before that global
+// exists. Waiting for DOMContentLoaded defers the start until every deferred
+// <script type="module"> on the page (main.js included) has finished
+// executing, guaranteeing those globals are already in place.
+document.addEventListener("DOMContentLoaded", () => Alpine.start());
