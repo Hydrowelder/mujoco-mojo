@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 
 import mujoco
 import numpy as np
-import trimesh
 from pydantic import PrivateAttr
 
 from mujoco_mojo.base import MojoBaseModel
@@ -11,6 +10,8 @@ from mujoco_mojo.typing import MatN, ProximityType, Vec3
 from mujoco_mojo.utils.log import get_logger
 
 if TYPE_CHECKING:
+    import trimesh
+
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
 
 logger = get_logger(__name__)
@@ -70,6 +71,8 @@ class ProximityMixin(MojoBaseModel, ABC):
 
     def bake_proximity(self, mj_model: mujoco.MjModel, proximity_type: ProximityType):
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
+        import trimesh
+
         geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
 
         # cache bounding radius

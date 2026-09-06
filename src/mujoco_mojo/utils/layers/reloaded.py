@@ -1147,7 +1147,7 @@ class MojoReloaded:
 
         class ViserState(TypedDict):
             scene: ViserMujocoScene
-            arrow_handle: None | viser.LineSegmentsHandle
+            arrow_handle: viser.LineSegmentsHandle | None
 
         for name in ["websockets", "matplotlib.font_manager"]:
             _l = logging.getLogger(name)
