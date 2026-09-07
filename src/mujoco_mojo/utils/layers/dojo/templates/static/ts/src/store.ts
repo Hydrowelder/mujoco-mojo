@@ -1,7 +1,7 @@
 import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
 import { themeColor } from "./lib/theme-colors";
-import type { DojoStore, NotificationEntry } from "./models";
+import type { DojoStore, JobStatus, NotificationEntry } from "./models";
 
 // the npm/module build doesn't auto-start itself the way the old vendored
 // CDN script did, so this is now the one place that does it explicitly --
@@ -333,13 +333,14 @@ document.addEventListener("alpine:init", () => {
           const data = JSON.parse(event.data as string) as {
             type: string;
             value?: number;
-            status?: { is_complete: boolean };
+            status?: JobStatus;
           };
           if (data.type === "start") this.startSync();
           if (data.type === "progress" && data.value !== undefined)
             this.setSyncProgress(data.value);
           if (data.type === "final") {
             this.endSync(Date.now(), data.status?.is_complete ?? false);
+            this.applyJobOutcomes(data.status);
             window.dispatchEvent(
               new CustomEvent("mojo-data-updated", { detail: data.status }),
             );
@@ -395,6 +396,19 @@ document.addEventListener("alpine:init", () => {
       this.secondsSinceUpdate = 0;
       this.isComplete = isComplete;
       if (isComplete) this.stopGlobalSync();
+    },
+
+    // ── Trial outcome tracking ──────────────────────────────────────────────
+    // shared across every page that colors something by trial status
+    // (mosaic tiles, the trial-viewer versus-selector chips), so each page
+    // doesn't fetch/derive its own copy independently.
+    failureTrialNums: [] as number[],
+    errorTrialNums: [] as number[],
+
+    applyJobOutcomes(data: JobStatus | undefined) {
+      if (!data) return;
+      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+      this.errorTrialNums = (data.error_tns ?? []).map(Number);
     },
 
     // ── Notification history ───────────────────────────────────────────────

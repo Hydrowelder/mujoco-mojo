@@ -28,6 +28,16 @@
 @utility badge {
   @apply inline-flex items-center justify-center px-2 py-1 rounded-md font-mono text-sm;
 }
+/* the one shared "neutral/secondary button" treatment: bg-well + border-line
+   at rest, explicit bg-control/border-accent-500/text-accent-500 on hover
+   (not the generic `button:hover` brightness filter, which barely reads
+   against an already-dark bg-well in dark mode). @utility (not @layer
+   components) so .sidebar-btn below can @apply it alongside its own layout;
+   includes its own border width so nothing that uses it also needs a
+   separate .btn/.btn-icon/border just to make the color visible. */
+@utility btn-secondary {
+  @apply border bg-well border-line text-ink-secondary hover:bg-control hover:border-accent-500 hover:text-accent-500;
+}
 
 @layer components {
   /* ── Surfaces ──────────────────────────────────────────────────────── */
@@ -61,23 +71,15 @@
   .btn-primary {
     @apply bg-accent-500 text-white border-accent-600 shadow-inner;
   }
-  /* bg-well/text-ink-secondary, not bg-surface/text-ink-muted: at rest this
-     sits directly on a bg-surface card/header, so a same-color fill plus an
-     already-low-contrast icon/label made it read as barely there rather
-     than as a button. */
-  .btn-ghost {
-    @apply bg-well border-line text-ink-secondary;
-  }
   .btn-sound-on {
     @apply bg-accent-50 dark:bg-accent-900/20 border-accent-500 text-accent-500;
   }
 
   /* ── Sidebar action buttons (trial viewer) ─────────────────────────── */
-  /* bg-well (not bg-transparent) so the button shape itself is visible
-     against the surrounding bg-surface sidebar card at rest, not just its
-     icon; text-ink-secondary (not -muted) for the same reason. */
+  /* same secondary-button treatment as every other neutral button (see
+     btn-secondary above) plus its own vertical icon-tile layout. */
   .sidebar-btn {
-    @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 bg-well hover:bg-control text-ink-secondary hover:text-accent-500;
+    @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 btn-secondary;
   }
 
   /* ── Trial number badges ───────────────────────────────────────────── */
@@ -92,10 +94,6 @@
   }
   .badge-disabled {
     @apply badge bg-well dark:bg-well/50 border border-control text-ink-muted cursor-not-allowed opacity-60;
-  }
-  /* mosaic / available-trial tile (larger px-3 py-2, accent hover) */
-  .badge-tile {
-    @apply inline-flex items-center justify-center px-3 py-2 bg-well dark:bg-well/50 border border-control text-ink-body rounded-md font-mono text-sm font-bold transition-all duration-200 shadow-sm hover:scale-110 hover:border-accent-500 hover:text-accent-500 active:scale-95;
   }
 
   /* ── Form inputs ───────────────────────────────────────────────────── */
@@ -161,6 +159,13 @@ button {
   cursor: pointer;
   touch-action: manipulation;
   transition: all 0.2s ease;
+}
+
+/* without this, a disabled button (e.g. undo/redo with no history left)
+   still shows the pointer cursor from the plain `button` rule above,
+   suggesting it's clickable when it isn't. */
+button:disabled {
+  cursor: not-allowed;
 }
 
 button:hover {

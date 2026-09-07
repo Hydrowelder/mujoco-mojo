@@ -65,10 +65,9 @@ function monitor() {
         const resp = await fetch("/monitor/api/status/job");
         const data = (await resp.json()) as JobStatus;
         if (data && !data.error) {
-          (Alpine.store("dojo") as DojoStore).updateSync(
-            Date.now(),
-            data.is_complete,
-          );
+          const store = Alpine.store("dojo") as DojoStore;
+          store.updateSync(Date.now(), data.is_complete);
+          store.applyJobOutcomes(data);
           this.handleDataUpdate(data);
         }
       } catch (e) {

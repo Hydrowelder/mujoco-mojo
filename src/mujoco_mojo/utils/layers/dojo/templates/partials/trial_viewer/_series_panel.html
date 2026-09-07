@@ -19,7 +19,7 @@
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-ink-muted opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -99,7 +99,7 @@
                                 <template x-for="seg in getSegmentsAtDepth('x', depth)"
                                           :key="seg">
                                     <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
-                                            :class="isSegmentActive('x', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'bg-well text-ink-secondary border-transparent hover:border-control hover:bg-chip'"
+                                            :class="isSegmentActive('x', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                             class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
@@ -111,7 +111,7 @@
                             <template x-for="sfx in getAvailableSuffixes('x')"
                                       :key="sfx">
                                 <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
-                                        :class="isSegmentActive('x', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'bg-well text-ink-muted border-subtle hover:border-warning-500/40 hover:bg-warning-500/10'"
+                                        :class="isSegmentActive('x', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'btn-secondary'"
                                         class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
@@ -175,7 +175,7 @@
                 <!-- trigger button -->
                 <button @click="xfOpen = !xfOpen"
                         class="relative h-7 px-2 rounded flex items-center gap-1 border text-xs font-bold transition-all"
-                        :class="(config.xAxis?.filters?.length ?? 0) > 0 ? 'bg-accent-500/10 border-accent-500 text-accent-500' : 'bg-well border-control text-ink-muted hover:border-accent-500/50'"
+                        :class="(config.xAxis?.filters?.length ?? 0) > 0 ? 'bg-accent-500/10 border-accent-500 text-accent-500' : 'btn-secondary'"
                         title="X-Axis Filters">
                     <svg class="w-3 h-3"
                          fill="none"
@@ -205,7 +205,7 @@
                             <div class="relative"
                                  @click.away="addOpen = false">
                                 <button @click="addOpen = !addOpen"
-                                        class="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent-500/10 border border-accent-500/30 text-accent-500 hover:bg-accent-500/20 transition-colors font-mono font-bold">
+                                        class="btn-secondary flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors font-mono font-bold">
                                     <svg class="w-3 h-3"
                                          fill="none"
                                          stroke="currentColor"
@@ -580,7 +580,7 @@
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-ink-muted opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -672,7 +672,7 @@
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-ink-muted opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -765,7 +765,7 @@
                                 <template x-for="seg in getSegmentsAtDepth('y', depth)"
                                           :key="seg">
                                     <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
-                                            :class="isSegmentActive('y', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'bg-well text-ink-secondary border-transparent hover:border-control hover:bg-chip'"
+                                            :class="isSegmentActive('y', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                             class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
@@ -777,7 +777,7 @@
                             <template x-for="sfx in getAvailableSuffixes('y')"
                                       :key="sfx">
                                 <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
-                                        :class="isSegmentActive('y', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'bg-well text-ink-muted border-subtle hover:border-warning-500/40 hover:bg-warning-500/10'"
+                                        :class="isSegmentActive('y', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'btn-secondary'"
                                         class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
@@ -1212,7 +1212,7 @@
                                             <div class="relative"
                                                  @click.away="addFilterOpen = false">
                                                 <button @click="addFilterOpen = !addFilterOpen"
-                                                        class="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent-500/10 border border-accent-500/30 text-accent-500 hover:bg-accent-500/20 transition-colors font-mono font-bold">
+                                                        class="btn-secondary flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors font-mono font-bold">
                                                     <svg class="w-3 h-3"
                                                          fill="none"
                                                          stroke="currentColor"

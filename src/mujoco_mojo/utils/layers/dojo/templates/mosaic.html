@@ -28,7 +28,7 @@
                 <template x-for="trial in trials"
                           :key="trial">
                     <a :href="`/mosaic/${trial}`"
-                       class="badge-tile"
+                       :class="tileClass(trial)"
                        x-text="trial">
                     </a>
                 </template>
