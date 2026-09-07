@@ -17,6 +17,7 @@ declare global {
     Alpine: AlpineType;
     formatTimeAgo(seconds: number): string;
     notifTimeAgo(timestamp: number, tick?: number): string;
+    themeColor(name: string): string;
     trialViewer(trialId: string, externalUrl: string): object;
     monitor(): object;
     mosaic(): object;

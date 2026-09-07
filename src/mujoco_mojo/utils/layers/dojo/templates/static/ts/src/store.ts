@@ -1,5 +1,6 @@
 import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
+import { themeColor } from "./lib/theme-colors";
 import type { DojoStore, NotificationEntry } from "./models";
 
 // the npm/module build doesn't auto-start itself the way the old vendored
@@ -11,6 +12,13 @@ window.Alpine = Alpine;
 // Expose time helpers as globals - HTML templates call them in x-text expressions.
 window.formatTimeAgo = formatTimeAgo;
 window.notifTimeAgo = notifTimeAgo;
+
+// _macros.html's color_picker x-init isn't bundled TS, so it needs the same
+// hex-normalizing themeColor() every TS caller uses (see lib/theme-colors.ts)
+// rather than its own raw getComputedStyle() read, which would resolve
+// Tailwind's default palette to a lab() string in modern browsers -- a
+// format iro.js can't parse.
+window.themeColor = themeColor;
 
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {

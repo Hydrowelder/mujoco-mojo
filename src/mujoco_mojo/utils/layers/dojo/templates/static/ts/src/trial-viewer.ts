@@ -3339,6 +3339,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
     },
 
+    // Forces an immediate Plotly resize of the main chart. initChartResize's
+    // own resize handling only fires from its drag handle (a height change);
+    // this covers width changes from elsewhere, e.g. _chart.html's x-init
+    // watches $store.dojo.isFullscreen and calls this, since that toggle
+    // changes the page's own max-width rather than anything the drag handle
+    // observes. Referenced by name (not a bare `Plotly` global) because
+    // that inline Alpine expression isn't bundled TS and can't reach the
+    // module-scoped Plotly import in lib/plotly.ts.
+    resizeMainPlot() {
+      const plotEl = document.getElementById("plot-area");
+      if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+    },
+
     initChartResize(hostEl: HTMLElement | undefined) {
       if (!hostEl || hostEl.dataset.resizeAttached) return;
       hostEl.dataset.resizeAttached = "true";

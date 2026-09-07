@@ -1,2 +1,2 @@
 function e(e,t=4){if(e==null)return`-`;if(!Number.isFinite(e))return String(e);if(e===0)return`0`;let n=Math.abs(e);return n<1e-4||n>=10**t?e.toExponential(Math.max(t-1,0)).replace(/\.?0+e/,`e`):parseFloat(e.toPrecision(t)).toString()}function t(e){return e.replace(/([/:])/g,`$1​`)}function n(e){if(!e||e<60)return`${e||0}s ago`;let t=Math.floor(e/60);return t<60?`${t}m ago`:`${Math.floor(t/60)}h ago`}function r(e,t){let n=Math.floor((Date.now()-e)/1e3);if(n<60)return`Just now`;let r=Math.floor(n/60);if(r<60)return`${r}m ago`;let i=Math.floor(r/60);return i<24?`${i}h ago`:`${Math.floor(i/24)}d ago`}export{r as i,e as n,n as r,t};
-//# sourceMappingURL=format-cQUPcaym.js.map
+//# sourceMappingURL=format.js.map

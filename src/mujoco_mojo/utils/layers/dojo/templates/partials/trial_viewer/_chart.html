@@ -8,7 +8,7 @@
          ══════════════════════════════════════════════════════════════════ -->
 
 <div x-ref="chartRow"
-     x-init="initChartResize($refs.chartRow); $watch('$store.dojo.isFullscreen', () => $nextTick(() => { Plotly.Plots.resize(document.getElementById('plot-area')); requestAnimationFrame(() => { _renderFrameMarkers(); _syncOverlayVisibility(); }); }))"
+     x-init="initChartResize($refs.chartRow); $watch('$store.dojo.isFullscreen', () => $nextTick(() => { resizeMainPlot(); requestAnimationFrame(() => { _renderFrameMarkers(); _syncOverlayVisibility(); }); }))"
      class="flex flex-row gap-4 items-stretch h-150">
     <!-- ── PLOT AREA ────────────────────────────────────────────────── -->
     <div class="card flex-1 rounded-2xl shadow-2xl p-2 relative">

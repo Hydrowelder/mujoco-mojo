@@ -6,7 +6,7 @@
         $refs.{{ ref_name }},
         {{ width }},
         {{ box_h }},
-        {{ color_model }} || getComputedStyle(document.documentElement).getPropertyValue('--color-accent-500').trim(),
+        {{ color_model }} || window.themeColor('accent-500'),
     );
     $watch('{{ color_model }}', value => {
         if (value && value !== picker.color.hexString) picker.color.set(value);
