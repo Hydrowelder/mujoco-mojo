@@ -241,6 +241,13 @@ export interface DojoStore {
   notifOpen: boolean;
   notifTick: number;
 
+  // trial numbers with a failed/errored outcome, shared across every page
+  // that colors something by trial status (mosaic tiles, the trial-viewer
+  // versus-selector chips) so each doesn't independently re-derive it from
+  // its own copy of the job status payload.
+  failureTrialNums: number[];
+  errorTrialNums: number[];
+
   init(): void;
   _installPlotlyLogCapture(): void;
   toast(message: string, type?: "success" | "error" | "info"): void;
@@ -260,6 +267,7 @@ export interface DojoStore {
   setSyncProgress(val: number): void;
   endSync(timestamp: number, isComplete: boolean): void;
   updateSync(timestamp: number, isComplete?: boolean): void;
+  applyJobOutcomes(data: JobStatus | undefined): void;
   _saveNotifications(): void;
   addNotification(message: string, type: "success" | "error" | "info"): void;
   openNotifications(): void;

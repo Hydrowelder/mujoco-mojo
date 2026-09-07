@@ -1728,7 +1728,7 @@
              class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
             <!-- refresh validation -->
             <button @click="refreshLabValidation()"
-                    class="btn btn-ghost text-sm font-bold text-ink-secondary border-control hover:border-accent-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    class="btn btn-secondary text-sm font-bold uppercase flex items-center gap-1.5 shrink-0"
                     title="Refresh validation">
                 <svg class="w-3.5 h-3.5"
                      fill="none"
@@ -1743,7 +1743,7 @@
             </button>
             <!-- fit view -->
             <button @click="mojoLabFitView()"
-                    class="btn btn-ghost text-sm font-bold text-ink-secondary border-control hover:border-accent-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    class="btn btn-secondary text-sm font-bold uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Fit (⌘⇧F)' : 'Fit (Ctrl+Shift+F)'">
                 <svg class="w-3.5 h-3.5"
                      fill="none"
@@ -1758,7 +1758,7 @@
             </button>
             <!-- auto-arrange -->
             <button @click="mojoLabArrange()"
-                    class="btn btn-ghost text-sm font-bold text-ink-secondary border-control hover:border-accent-500/50 uppercase flex items-center gap-1.5 shrink-0"
+                    class="btn btn-secondary text-sm font-bold uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Arrange (⌘⇧A)' : 'Arrange (Ctrl+Shift+A)'">
                 <svg class="w-3.5 h-3.5"
                      fill="none"
@@ -1776,7 +1776,7 @@
             </button>
             <!-- clear -->
             <button @click="async () => { const ok = await window.mojoConfirm({title:'Clear graph',message:'Remove all nodes and connections?',confirmLabel:'Clear',cancelLabel:'Cancel',variant:'warning'}); if(ok){ mojoLabClear(); window.mojoLabRebaseline?.(); } }"
-                    class="btn btn-ghost text-sm font-bold text-danger-600 dark:text-danger-400 border-danger-500/40 dark:border-danger-500/30 hover:bg-danger-500/10 uppercase flex items-center gap-1.5 shrink-0"
+                    class="btn btn-secondary text-sm font-bold text-danger-600! dark:text-danger-400! border-danger-500/40! dark:border-danger-500/30! hover:bg-danger-500/10 uppercase flex items-center gap-1.5 shrink-0"
                     :title="isMac ? 'Clear (⌘C)' : 'Clear (Ctrl+C)'">
                 <svg class="w-3.5 h-3.5"
                      fill="none"
@@ -1822,7 +1822,7 @@
                        class="h-8 px-2 bg-well border border-control rounded text-sm font-mono text-ink-strong placeholder-ink-disabled focus:outline-none focus:border-accent-500 w-20 md:w-28 xl:w-44" />
                 <button @click="labName && saveLabGraph(labName, mojoLabSerialize())"
                         :disabled="!labName"
-                        class="btn btn-ghost text-sm font-bold text-accent-600 dark:text-accent-400 border-accent-500/40 dark:border-accent-500/30 hover:bg-accent-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
+                        class="btn btn-secondary text-sm font-bold text-accent-600 dark:text-accent-400 border-accent-500/40 dark:border-accent-500/30 hover:bg-accent-500/10 uppercase disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5">
                     <svg class="w-3.5 h-3.5"
                          fill="none"
                          stroke="currentColor"
@@ -1853,7 +1853,7 @@
 
         <!-- close: always visible, pinned to the right (shrink-0) -->
         <button @click="async () => { if (window.mojoLabHasUnsavedChanges?.()) { const ok = await window.mojoConfirm({title:'Unsaved changes',message:'Close the lab and discard unsaved changes?',confirmLabel:'Discard',cancelLabel:'Keep editing',variant:'warning'}); if(!ok) return; window.mojoLabRevertToSaved?.(); } labOpen=false; }"
-                class="shrink-0 btn-icon btn-ghost"
+                class="shrink-0 btn-icon btn-secondary"
                 title="Close (Esc)">
             <svg class="w-5 h-5"
                  fill="none"
@@ -1921,7 +1921,7 @@
                      "
                      @dragend="_dragId = null; _overIdx = null"
                      class="relative shrink-0 flex items-center gap-1.5 px-3 h-9 border-b-2 text-sm font-mono cursor-grab active:cursor-grabbing select-none group transition-colors"
-                     :class="[ tab.id === labActiveTabId ? 'border-accent-500 text-ink-strong bg-surface-inset cursor-default' : 'border-transparent text-ink-muted hover:text-ink-body hover:bg-surface-sunken dark:hover:bg-surface-sunken/50', _overIdx === idx && _dragId !== tab.id ? 'ring-1 ring-inset ring-accent-500' : '' ]">
+                     :class="[ tab.id === labActiveTabId ? 'border-accent-500 text-ink-strong bg-surface-inset cursor-default' : 'border-transparent text-ink-muted hover:text-accent-500 hover:bg-control', _overIdx === idx && _dragId !== tab.id ? 'ring-1 ring-inset ring-accent-500' : '' ]">
                     <!-- dirty dot -->
                     <span x-show="tab.dirty"
                           class="w-1.5 h-1.5 rounded-full bg-warning-400 shrink-0 flex-none"></span>
@@ -1952,7 +1952,7 @@
             <!-- new tab -->
             <button @click="newTab()"
                     title="New tab"
-                    class="btn btn-ghost h-7 text-sm font-bold text-ink-secondary border-control hover:border-accent-500/50 uppercase flex items-center gap-1 shrink-0">
+                    class="btn btn-secondary h-7 text-sm font-bold uppercase flex items-center gap-1 shrink-0">
                 <svg class="w-3 h-3"
                      fill="none"
                      stroke="currentColor"
@@ -1994,7 +1994,7 @@
                  x-init="$watch('labSearch', v => { try { localStorage.setItem('mojo:lab:search', v) } catch {} })"
                  @click.outside="open = false">
                 <button @click="open = !open; if(open) loadLabSchemas()"
-                        class="btn btn-ghost h-7 text-sm font-bold text-ink-secondary border-control hover:border-accent-500/50 uppercase flex items-center gap-1 shrink-0">
+                        class="btn btn-secondary h-7 text-sm font-bold uppercase flex items-center gap-1 shrink-0">
                     <svg class="w-3 h-3"
                          fill="none"
                          stroke="currentColor"
@@ -2311,7 +2311,7 @@
                         <template x-for="seg in getSegmentsAtDepth('nodeCol', depth)"
                                   :key="seg">
                             <button @click="toggleRegexSegment('nodeCol', seg, depth)"
-                                    :class="isSegmentActive('nodeCol', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'bg-surface-sunken text-ink-body border-control hover:border-accent-500/50'"
+                                    :class="isSegmentActive('nodeCol', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                     class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
                                     x-text="seg">
                             </button>
@@ -2324,7 +2324,7 @@
                     <template x-for="sfx in getAvailableSuffixes('nodeCol')"
                               :key="sfx">
                         <button @click="toggleRegexSegment('nodeCol', sfx, 'suffix')"
-                                :class="isSegmentActive('nodeCol', sfx, 'suffix') ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'bg-surface-sunken text-ink-body border-control hover:border-accent-500/50'"
+                                :class="isSegmentActive('nodeCol', sfx, 'suffix') ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                 class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
                                 x-text="sfx">
                         </button>
@@ -2408,7 +2408,7 @@
                         <template x-for="seg in getSegmentsAtDepth('nodeQuat', depth)"
                                   :key="seg">
                             <button @click="toggleRegexSegment('nodeQuat', seg, depth)"
-                                    :class="isSegmentActive('nodeQuat', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'bg-surface-sunken text-ink-body border-control hover:border-accent-500/50'"
+                                    :class="isSegmentActive('nodeQuat', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                     class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
                                     x-text="seg">
                             </button>

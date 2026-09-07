@@ -73,11 +73,11 @@
 
         <div class="absolute right-4 bottom-4 flex gap-2 z-10">
             <button @click="copyRawConfig()"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-accent-500 hover:border-accent-500/50 transition-all shadow-sm">
+                    class="btn-secondary px-3 py-1.5 text-sm font-black uppercase rounded-lg transition-all shadow-sm">
                 Copy
             </button>
             <button @click="configRaw = JSON.stringify(config, null, 4)"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-accent-500 hover:border-accent-500/50 transition-all shadow-sm">
+                    class="btn-secondary px-3 py-1.5 text-sm font-black uppercase rounded-lg transition-all shadow-sm">
                 Format
             </button>
         </div>

@@ -106,28 +106,28 @@
         </div>
 
         {% if status_code is not defined %}
-        <nav class="relative flex p-1 bg-control/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-control shadow-xl">
+        <nav class="relative flex gap-1 p-1 bg-control/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-control shadow-xl">
           {% set path = request.url.path %}
           <a href="/monitor"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/monitor') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/monitor') else 'btn-secondary' }}">
             Monitor
             {% if path.startswith('/monitor') %}
-            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
             {% endif %}
           </a>
           <a href="/mosaic"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/mosaic') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/mosaic') else 'btn-secondary' }}">
             Mosaic
             {% if path.startswith('/mosaic') %}
-            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
             {% endif %}
           </a>
           {% if job_type == JobType.OPTIMIZE %}
           <a href="/morph"
-             class="relative z-10 px-4 py-2 rounded-md transition-all {{ 'text-accent-500 font-bold' if path.startswith('/morph') else 'text-ink-secondary' }} hover:text-accent-500 transition-colors">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/morph') else 'btn-secondary' }}">
             Morph
             {% if path.startswith('/morph') %}
-            <div class="nav-highlight absolute inset-0 bg-surface dark:bg-chip rounded shadow-sm -z-10"></div>
+            <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
             {% endif %}
           </a>
           {% endif %}
@@ -144,7 +144,7 @@
           <!-- auto refresh toggle button -->
           <button @click="$store.dojo.toggleAuto()"
                   class="btn"
-                  :class="$store.dojo.isAutoRefresh ? 'btn-primary' : 'btn-ghost'"
+                  :class="$store.dojo.isAutoRefresh ? 'btn-primary' : 'btn-secondary'"
                   :title="$store.dojo.isAutoRefresh ? 'Disable Auto-refresh' : 'Enable Auto-refresh'">
             <div class="w-2 h-2 rounded-full shrink-0"
                  :class="$store.dojo.isAutoRefresh ? 'bg-white animate-pulse shadow-[0_0_8px_white]' : 'bg-ink-muted'">
@@ -156,7 +156,7 @@
           <!-- mute/unmute toggle button -->
           <button @click="$store.dojo.toggleMute()"
                   class="btn-icon"
-                  :class="$store.dojo.isMuted ? 'btn-ghost' : 'btn-sound-on'"
+                  :class="$store.dojo.isMuted ? 'btn-secondary' : 'btn-sound-on'"
                   :title="$store.dojo.isMuted ? 'Unmute completion chime' : 'Mute completion chime'">
             <svg x-show="$store.dojo.isMuted"
                  class="w-5 h-5"
@@ -184,10 +184,10 @@
 
           <!-- theme selector -->
           <div x-data="{ theme: localStorage.theme || 'system', setTheme(val) { this.theme = val; if (val === 'system') { localStorage.removeItem('theme'); document.documentElement.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches); } else { localStorage.theme = val; document.documentElement.classList.toggle('dark', val === 'dark'); } } }"
-               class="card rounded-lg shadow-sm flex h-9 p-1">
+               class="bg-well border border-line rounded-lg shadow-sm flex h-9 p-1">
             <!-- set to light -->
             <button @click="setTheme('light')"
-                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
+                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-95"
                     :class="theme === 'light' ? 'bg-chip shadow-sm text-warning-500' : 'text-ink-secondary'"
                     title="Light Mode">
               <svg class="w-4 h-4"
@@ -202,7 +202,7 @@
             </button>
             <!-- set to system -->
             <button @click="setTheme('system')"
-                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
+                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-95"
                     :class="theme === 'system' ? 'bg-chip shadow-sm text-accent-500' : 'text-ink-secondary'"
                     title="Follow System Theme">
               <svg class="w-4 h-4"
@@ -217,7 +217,7 @@
             </button>
             <!-- set to dark -->
             <button @click="setTheme('dark')"
-                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-90"
+                    class="px-2 rounded-md transition-all hover:scale-110 active:scale-95"
                     :class="theme === 'dark' ? 'bg-chip shadow-sm text-info-400' : 'text-ink-secondary'"
                     title="Dark Mode">
               <svg class="w-4 h-4"
@@ -238,7 +238,7 @@
                @click.away="$store.dojo.notifOpen = false">
 
             <button @click="$store.dojo.openNotifications()"
-                    class="btn-icon btn-ghost relative"
+                    class="btn-icon btn-secondary relative"
                     title="Notification history">
               <svg class="w-5 h-5"
                    fill="none"
@@ -349,7 +349,7 @@
 
           <!-- fullscreen toggle button -->
           <button @click="$store.dojo.toggleFullscreen()"
-                  class="btn-icon btn-ghost"
+                  class="btn-icon btn-secondary"
                   :title="$store.dojo.isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'">
             <svg x-show="!$store.dojo.isFullscreen"
                  class="w-5 h-5"
@@ -578,7 +578,7 @@
       <div class="bg-surface rounded-2xl shadow-2xl ring-2"
            :class="{
              'ring-danger-500':  $store.dojo.dialog.variant === 'danger',
-             'ring-warning-400': $store.dojo.dialog.variant === 'warning',
+             'ring-warning-500': $store.dojo.dialog.variant === 'warning',
              'ring-accent-500':  $store.dojo.dialog.variant === 'info',
            }">
 
@@ -649,7 +649,7 @@
           <!-- buttons -->
           <div class="flex justify-end gap-2 pt-1">
             <button @click="$store.dojo.dialog.cancel()"
-                    class="btn btn-ghost text-sm text-ink-secondary border-control hover:border-line">
+                    class="btn btn-secondary text-sm">
               <span x-text="$store.dojo.dialog.cancelLabel"></span>
             </button>
             <button @click="$store.dojo.dialog.confirm()"

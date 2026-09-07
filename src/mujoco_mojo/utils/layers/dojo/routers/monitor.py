@@ -178,7 +178,13 @@ async def status_stream(request: Request):
     ACTIVE_CONNECTIONS.add(client_queue)
 
     async def event_generator():
-        yield ": connected\n\n"
+        # a dict with "comment" (not a bare string) so sse_starlette emits a
+        # real SSE comment line (": connected", no data: field) instead of
+        # wrapping the string as the payload of a data: field -- yielding
+        # the string directly here previously did the latter, so the client
+        # received a literal ": connected\n\n" as event.data on every
+        # connect and failed to JSON.parse it.
+        yield {"comment": "connected"}
 
         try:
             while True:

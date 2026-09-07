@@ -140,7 +140,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     yMenuOpen: false,
     ySearch: "",
     refFrameMenuOpen: false,
-    settingsOpen: false,
+    plotConfigOpen: false,
     downloadOpen: false,
     activeFrame: null as string | null,
     dragCounter: 0,
@@ -199,8 +199,6 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- MATCHUP STATE ---
     vsDatasets: {} as Record<string, Record<string, number[]>>,
     allTrials: [] as string[],
-    failureTrialNums: [] as number[],
-    errorTrialNums: [] as number[],
     vsMenuOpen: false,
     vsLoading: false,
     vsDraft: {
@@ -220,6 +218,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     annotationsOpen: false,
     annDraft: null as Annotation | null,
     annEditIndex: null as number | null,
+    // teleported (x-teleport) popup position -- lives at this top level
+    // rather than in the sidebar button's own x-data, since the annotation
+    // editor can also be opened by middle-clicking the chart (see the
+    // mousedown listener below), which needs to set this itself rather than
+    // going through the sidebar button's own @click handler.
+    annCoords: { top: 0, left: 0 },
 
     // --- FILTER LAB ---
     labOpen: localStorage.getItem("mojo:lab:open") === "1",
@@ -525,7 +529,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y)))
             this.renderPlot();
           console.debug(
-            `Dojo Hydration [${label}]: ${i + chunk.length}/${columnList.length}`,
+            `[Dojo Hydration ${label}]: ${i + chunk.length}/${columnList.length}`,
           );
         } catch (e) {
           console.warn(`Hydration failed for ${id}`, e);
@@ -2193,6 +2197,20 @@ function trialViewer(trialId: string, externalUrl: string) {
             setTimeout(() => {
               this.annDraft = { x: xVal, y: yVal, text: "" };
               this.annEditIndex = null;
+              // same position math as the sidebar Notes button's own
+              // @click handler (_chart.html) -- popup width 288px (w-72) +
+              // 16px gap, positioned document-relative since the popup is
+              // x-teleport'd to <body>.
+              const annBtn = document.querySelector(
+                '[x-ref="annBtn"]',
+              ) as HTMLElement | null;
+              if (annBtn) {
+                const btnRect = annBtn.getBoundingClientRect();
+                this.annCoords = {
+                  top: btnRect.top + window.scrollY,
+                  left: btnRect.left + window.scrollX - 288 - 16,
+                };
+              }
               this.annotationsOpen = true;
               void this.$nextTick(() => {
                 (
@@ -2300,7 +2318,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               this.xMenuOpen ||
               this.yMenuOpen ||
               this.refFrameMenuOpen ||
-              this.settingsOpen ||
+              this.plotConfigOpen ||
               this.downloadOpen ||
               this.editorOpen ||
               this.profilesOpen ||
@@ -2317,7 +2335,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             this.annotationsOpen = false;
             this.shapesOpen = false;
             this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+            this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
             if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
@@ -2770,8 +2788,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
 
       // re-pull distribution metadata when new job data arrives
-      window.addEventListener("mojo-data-updated", (e) => {
-        this.applyJobOutcomes((e as CustomEvent<JobStatus>).detail);
+      // ($store.dojo's own SSE handler already applies trial outcomes for
+      // this event -- see startGlobalSync() in store.ts)
+      window.addEventListener("mojo-data-updated", () => {
         void this.fetchDists();
       });
 
@@ -2780,7 +2799,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       void fetch("/monitor/api/status/job")
         .then((r) => r.json())
         .then((data: JobStatus) => {
-          if (data && !data.error) this.applyJobOutcomes(data);
+          if (data && !data.error)
+            (Alpine.store("dojo") as DojoStore).applyJobOutcomes(data);
         })
         .catch(() => {});
 
@@ -2799,29 +2819,27 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // VS (comparison) mode
     // -----------------------------------------------------------------------
-    applyJobOutcomes(data: JobStatus | undefined) {
-      if (!data) return;
-      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
-      this.errorTrialNums = (data.error_tns ?? []).map(Number);
-    },
-
+    // same coloring as monitor.html's success/failed/error trial badges
+    // (badge-success/-failure/-error in main.css: a translucent tinted
+    // background + colored border/text, not a solid fill) -- their exact
+    // padding/rounding/hover-scale isn't reused here since this renders as
+    // a compact 5-column grid with its own sizing (see the static class at
+    // the _header.html call site), but the color treatment matches. Pinned
+    // trials get the same outcome color plus a ring, rather than switching
+    // to a different (previously accent) fill.
     vsChipClass(t: string): string {
       const tn = parseInt(t.split("_").pop() ?? "0");
-      if (this.vsDraft.pinned.includes(tn)) {
-        // keep the outcome hint on the border even while pinned
-        if (this.errorTrialNums.includes(tn))
-          return "bg-accent-500 border-warning-500 text-white";
-        if (this.failureTrialNums.includes(tn))
-          return "bg-accent-500 border-danger-500 text-white";
-        return "bg-accent-500 border-accent-500 text-white";
-      }
+      const store = Alpine.store("dojo") as DojoStore;
       if (t === this.trialId)
         return "border-accent-500 text-accent-500 dark:text-accent-400 cursor-default";
-      if (this.errorTrialNums.includes(tn))
-        return "border-warning-400 dark:border-warning-500/70 text-ink-secondary hover:text-warning-500";
-      if (this.failureTrialNums.includes(tn))
-        return "border-danger-400 dark:border-danger-500/70 text-ink-secondary hover:text-danger-500";
-      return "border-subtle text-ink-secondary hover:border-accent-400 hover:text-accent-500";
+      const ring = this.vsDraft.pinned.includes(tn)
+        ? " ring-2 ring-accent-500"
+        : "";
+      if (store.errorTrialNums.includes(tn))
+        return `bg-warning-50 dark:bg-warning-900/30 border-warning-400 dark:border-warning-500/50 text-warning-600 dark:text-warning-400 hover:bg-warning-100 dark:hover:bg-warning-800/50${ring}`;
+      if (store.failureTrialNums.includes(tn))
+        return `bg-danger-50 dark:bg-danger-900/30 border-danger-400 dark:border-danger-500/50 text-danger-600 dark:text-danger-400 hover:bg-danger-100 dark:hover:bg-danger-800/50${ring}`;
+      return `bg-success-50 dark:bg-success-900/30 border-success-400 dark:border-success-500/50 text-success-600 dark:text-success-400 hover:bg-success-100 dark:hover:bg-success-800/50${ring}`;
     },
 
     async syncVsRange() {
@@ -3402,29 +3420,43 @@ function trialViewer(trialId: string, externalUrl: string) {
       // --- themes (base chrome only; highlight handled separately) ---
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: themeColor("slate-950"), color: themeColor("slate-300"), height: "100%" },
+          "&": {
+            backgroundColor: themeColor("slate-950"),
+            color: themeColor("slate-300"),
+            height: "100%",
+          },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: themeColor("accent-500") },
+          ".cm-content": {
+            padding: "1rem",
+            caretColor: themeColor("accent-500"),
+          },
           ".cm-cursor": { borderLeftColor: themeColor("accent-500") },
           ".cm-gutters": {
             backgroundColor: themeColor("slate-900"),
             color: themeColor("slate-600"),
             borderRight: `1px solid ${themeColor("slate-800")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: themeColorAlpha("slate-900", 0.6) },
-          ".cm-activeLine": { backgroundColor: themeColorAlpha("slate-900", 0.4) },
+          ".cm-activeLineGutter": {
+            backgroundColor: themeColorAlpha("slate-900", 0.6),
+          },
+          ".cm-activeLine": {
+            backgroundColor: themeColorAlpha("slate-900", 0.4),
+          },
           ".cm-selectionBackground": {
             backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
           "&.cm-focused .cm-selectionBackground": {
             backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: themeColor("accent-400"), fontWeight: "bold" },
+          ".cm-matchingBracket": {
+            color: themeColor("accent-400"),
+            fontWeight: "bold",
+          },
           ".cm-tooltip": {
             backgroundColor: themeColor("slate-800"),
             border: `1px solid ${themeColor("slate-700")}`,
@@ -3435,7 +3467,9 @@ function trialViewer(trialId: string, externalUrl: string) {
             borderColor: themeColor("slate-800"),
             color: themeColor("slate-300"),
           },
-          ".cm-searchMatch": { backgroundColor: themeColorAlpha("accent-400", 0.18) },
+          ".cm-searchMatch": {
+            backgroundColor: themeColorAlpha("accent-400", 0.18),
+          },
           ".cm-searchMatch.cm-searchMatch-selected": {
             backgroundColor: themeColorAlpha("accent-400", 0.35),
           },
@@ -3449,43 +3483,64 @@ function trialViewer(trialId: string, externalUrl: string) {
             textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: `3px solid ${themeColor("danger")}` },
+          ".cm-diagnostic-error": {
+            borderLeft: `3px solid ${themeColor("danger")}`,
+          },
         },
         { dark: true },
       );
 
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: themeColor("white"), color: themeColor("slate-900"), height: "100%" },
+          "&": {
+            backgroundColor: themeColor("white"),
+            color: themeColor("slate-900"),
+            height: "100%",
+          },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: themeColor("accent-600") },
+          ".cm-content": {
+            padding: "1rem",
+            caretColor: themeColor("accent-600"),
+          },
           ".cm-cursor": { borderLeftColor: themeColor("accent-600") },
           ".cm-gutters": {
             backgroundColor: themeColor("slate-50"),
             color: themeColor("slate-400"),
             borderRight: `1px solid ${themeColor("slate-200")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: themeColorAlpha("slate-100", 0.6) },
-          ".cm-activeLine": { backgroundColor: themeColorAlpha("slate-100", 0.5) },
+          ".cm-activeLineGutter": {
+            backgroundColor: themeColorAlpha("slate-100", 0.6),
+          },
+          ".cm-activeLine": {
+            backgroundColor: themeColorAlpha("slate-100", 0.5),
+          },
           ".cm-selectionBackground": {
             backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
           "&.cm-focused .cm-selectionBackground": {
             backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: themeColor("accent-600"), fontWeight: "bold" },
+          ".cm-matchingBracket": {
+            color: themeColor("accent-600"),
+            fontWeight: "bold",
+          },
           ".cm-tooltip": {
             backgroundColor: themeColor("slate-50"),
             border: `1px solid ${themeColor("slate-200")}`,
             color: themeColor("slate-900"),
           },
-          ".cm-panels": { backgroundColor: themeColor("slate-50"), borderColor: themeColor("slate-200") },
-          ".cm-searchMatch": { backgroundColor: themeColorAlpha("accent-600", 0.15) },
+          ".cm-panels": {
+            backgroundColor: themeColor("slate-50"),
+            borderColor: themeColor("slate-200"),
+          },
+          ".cm-searchMatch": {
+            backgroundColor: themeColorAlpha("accent-600", 0.15),
+          },
           ".cm-searchMatch.cm-searchMatch-selected": {
             backgroundColor: themeColorAlpha("accent-600", 0.3),
           },
@@ -3499,7 +3554,9 @@ function trialViewer(trialId: string, externalUrl: string) {
             textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: `3px solid ${themeColor("danger")}` },
+          ".cm-diagnostic-error": {
+            borderLeft: `3px solid ${themeColor("danger")}`,
+          },
         },
         { dark: false },
       );
@@ -3588,13 +3645,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       const isDark = document.documentElement.classList.contains("dark");
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: themeColor("slate-950"), color: themeColor("slate-300") },
+          "&": {
+            backgroundColor: themeColor("slate-950"),
+            color: themeColor("slate-300"),
+          },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: themeColor("accent-500") },
+          ".cm-content": {
+            padding: "0.6rem 0.75rem",
+            caretColor: themeColor("accent-500"),
+          },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
@@ -3609,13 +3672,19 @@ function trialViewer(trialId: string, externalUrl: string) {
       );
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: themeColor("white"), color: themeColor("slate-900") },
+          "&": {
+            backgroundColor: themeColor("white"),
+            color: themeColor("slate-900"),
+          },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: themeColor("accent-600") },
+          ".cm-content": {
+            padding: "0.6rem 0.75rem",
+            caretColor: themeColor("accent-600"),
+          },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
@@ -3649,7 +3718,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           "Reset plot to factory defaults? This will clear your current view.",
         confirmLabel: "Reset",
         cancelLabel: "Cancel",
-        variant: "info",
+        variant: "danger",
       });
       if (ok) {
         localStorage.removeItem("mojo_mosaic_config");
@@ -5122,6 +5191,26 @@ function trialViewer(trialId: string, externalUrl: string) {
         ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
         : "";
 
+      // same "column (unit)" fallback the x-axis title already has (see
+      // xAxisText above), extended for the fact that the y-axis can have
+      // several signals: with exactly one, mirror the x-axis exactly;
+      // with several, fall back to just the shared unit (e.g. "N·m") if
+      // they all agree on one, since concatenating every column name
+      // doesn't read as a title. No fallback (blank) if units disagree.
+      const yCols = Object.keys(this.config.yAxes);
+      const yUnitList = yCols.map((c) => this.effectiveUnit(c));
+      const yUnitsShared =
+        yUnitList.length > 0 && yUnitList.every((u) => u && u === yUnitList[0])
+          ? yUnitList[0]
+          : null;
+      const yAxisFallback =
+        yCols.length === 1
+          ? yUnitsShared
+            ? `${yCols[0]} (${yUnitsShared.replace(/\s+/g, "")})`
+            : yCols[0]
+          : (yUnitsShared ?? "");
+      const yAxisText = this.config.yAxisTitle || yAxisFallback;
+
       const resolvedRangeY = this.resolveAxisRange(
         this.config.rangeY,
         Object.keys(this.config.yAxes),
@@ -5151,7 +5240,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.yAxisTitle + frameLabel,
+          text: yAxisText + frameLabel,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showY,
@@ -5169,7 +5258,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 gridcolor: majorGrid,
                 tickfont: { color: textColor, size: 14, family: "monospace" },
                 title: {
-                  text: this.config.yAxisTitle || "r",
+                  text: yAxisText || "r",
                   font: { size: 14, color: textColor, family: "monospace" },
                 },
               },
@@ -5207,7 +5296,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           t: this.config.title ? 60 : 30,
           r: this.config.legendPos === "right" ? 150 : 30,
           b: this.config.legendPos === "bottom" ? 80 : 50,
-          l: this.config.yAxisTitle ? 80 : 60,
+          l: yAxisText ? 80 : 60,
         },
         hovermode: isHoverDisabled ? false : this.config.hover,
         hoverlabel: {
@@ -5292,7 +5381,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                       color: s.color || themeColor("accent-500"),
                       family: "monospace",
                     },
-                    bgcolor: themeColorAlpha("chart-shape-label-bg", 0xb3 / 255),
+                    bgcolor: themeColorAlpha(
+                      "chart-shape-label-bg",
+                      0xb3 / 255,
+                    ),
                     borderpad: 2,
                   };
                 }),
@@ -5345,6 +5437,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         displaylogo: false,
         displayModeBar: true,
         modeBarButtonsToRemove: ["toImage"],
+        // plotly.js defaults this to true, adding a "Share chart..." modebar
+        // button (cloud-upload icon) that's easily confused with the
+        // sidebar's own Share button -- it also does nothing useful here
+        // since no plotlyServerURL/Chart Studio is configured.
+        showSendToCloud: false,
         doubleClick: false as const,
       };
       const plotEl = document.getElementById("plot-area");

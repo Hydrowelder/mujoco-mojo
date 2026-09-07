@@ -29,7 +29,7 @@
     <div class="flex flex-col sm:flex-row items-end sm:items-center gap-3">
         <!-- help menu -->
         <div class="relative group hidden md:block mr-1">
-            <div class="cursor-help text-ink-muted hover:text-accent-500 transition-colors">
+            <div class="cursor-help text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150">
                 <svg class="w-5 h-5"
                      fill="none"
                      stroke="currentColor"
@@ -141,7 +141,7 @@
             {% if prev_id %}
             <a href="/mosaic/{{ prev_id }}"
                id="nav-prev"
-               class="logo-style drop-shadow-none! hover:drop-shadow-none! px-2 text-sm sm:text-base font-mono font-bold text-ink-secondary hover:text-accent-500 flex items-center gap-2 transition-all">
+               class="btn-secondary rounded-lg px-2 text-sm sm:text-base font-mono font-bold flex items-center gap-2 transition-all">
                 <svg class="w-3 h-3"
                      fill="none"
                      stroke="currentColor"
@@ -187,7 +187,7 @@
             {% if next_id %}
             <a href="/mosaic/{{ next_id }}"
                id="nav-next"
-               class="logo-style drop-shadow-none! hover:drop-shadow-none! px-2 text-sm sm:text-base font-mono font-bold text-ink-secondary hover:text-accent-500 flex items-center gap-2 transition-all">
+               class="btn-secondary rounded-lg px-2 text-sm sm:text-base font-mono font-bold flex items-center gap-2 transition-all">
                 NEXT<svg class="w-3 h-3"
                      fill="none"
                      stroke="currentColor"
@@ -295,19 +295,19 @@
                 <!-- quick presets -->
                 <div class="flex gap-1.5">
                     <button @click="setVsPreset(0)"
-                            class="btn btn-ghost flex-1 justify-center font-mono font-bold text-sm hover:border-accent-500 hover:text-accent-500 transition-colors"
+                            class="btn btn-secondary flex-1 justify-center font-mono font-bold text-sm transition-colors"
                             :class="isVsPreset(0) ? 'border-accent-500! text-accent-500!' : ''">±0</button>
                     <button @click="setVsPreset(5)"
-                            class="btn btn-ghost flex-1 justify-center font-mono font-bold text-sm hover:border-accent-500 hover:text-accent-500 transition-colors"
+                            class="btn btn-secondary flex-1 justify-center font-mono font-bold text-sm transition-colors"
                             :class="isVsPreset(5) ? 'border-accent-500! text-accent-500!' : ''">±5</button>
                     <button @click="setVsPreset(10)"
-                            class="btn btn-ghost flex-1 justify-center font-mono font-bold text-sm hover:border-accent-500 hover:text-accent-500 transition-colors"
+                            class="btn btn-secondary flex-1 justify-center font-mono font-bold text-sm transition-colors"
                             :class="isVsPreset(10) ? 'border-accent-500! text-accent-500!' : ''">±10</button>
                     <button @click="setVsPreset(25)"
-                            class="btn btn-ghost flex-1 justify-center font-mono font-bold text-sm hover:border-accent-500 hover:text-accent-500 transition-colors"
+                            class="btn btn-secondary flex-1 justify-center font-mono font-bold text-sm transition-colors"
                             :class="isVsPreset(25) ? 'border-accent-500! text-accent-500!' : ''">±25</button>
                     <button @click="setVsAll()"
-                            class="btn btn-ghost flex-1 justify-center font-mono font-bold text-sm hover:border-accent-500 hover:text-accent-500 transition-colors"
+                            class="btn btn-secondary flex-1 justify-center font-mono font-bold text-sm transition-colors"
                             :class="isVsAll() ? 'border-accent-500! text-accent-500!' : ''">All</button>
                 </div>
 
@@ -409,9 +409,9 @@
                                 <button @click.stop="toggleVsPin(parseInt(t.split('_').pop() ?? '0'))"
                                         :class="vsChipClass(t)"
                                         :disabled="t === trialId"
-                                        :title="errorTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
+                                        :title="$store.dojo.errorTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
                                             ? 'Trial errored'
-                                            : failureTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
+                                            : $store.dojo.failureTrialNums.includes(parseInt(t.split('_').pop() ?? '0'))
                                                 ? 'Trial failed requirements'
                                                 : ''"
                                         class="text-sm font-mono px-1 py-0.5 rounded border transition-colors leading-tight text-center"

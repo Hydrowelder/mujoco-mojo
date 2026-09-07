@@ -60,7 +60,13 @@
     </div>
 
     <!-- ── SIDEBAR ──────────────────────────────────────────────────── -->
-    <div class="card flex flex-col gap-2 p-2 shrink-0 relative z-50">
+    <!-- overflow-y-auto so the button list scrolls instead of overflowing
+         when the chart row is dragged shorter than the buttons need;
+         overflow-x-hidden pairs with it since every popup that used to
+         render inside this box (Plot Config, Notes, Shapes, Profiles,
+         Export) is now x-teleport'd to body with JS-computed position,
+         specifically so they don't get clipped by this scroll container. -->
+    <div class="card flex flex-col gap-2 p-2 shrink-0 relative z-50 overflow-y-auto overflow-x-hidden custom-scrollbar">
         <!-- copy share link -->
         <div class="flex flex-col gap-2">
             <button @click="copyShareLink()"
@@ -82,13 +88,14 @@
         <!-- ── PLOT CONFIG: grid · line · interp · hover · legend · scale · title ── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.away="settingsOpen = false">
-                <button @click="settingsOpen = !settingsOpen"
+                 x-data="{ plotConfigCoords: { top: 0, left: 0 } }">
+                <button x-ref="plotConfigBtn"
+                        @click="const r = $refs.plotConfigBtn.getBoundingClientRect(); const w = window.innerWidth >= 640 ? 320 : window.innerWidth - 96; plotConfigCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - w - 16 }; plotConfigOpen = !plotConfigOpen"
                         class="sidebar-btn disabled:opacity-40 disabled:hover:bg-well"
-                        :class="settingsOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : 'text-ink-muted hover:text-accent-500'"
+                        :class="plotConfigOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
                         title="Edit Plot Configuration">
                     <svg class="w-5 h-5"
-                         :class="settingsOpen ? 'text-accent-500' : ''"
+                         :class="plotConfigOpen ? 'text-accent-500' : ''"
                          fill="none"
                          stroke="currentColor"
                          viewBox="0 0 24 24">
@@ -100,9 +107,14 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Plot</span>
                 </button>
 
-                <div x-show="settingsOpen"
+                <template x-teleport="body">
+                <div x-show="plotConfigOpen"
                      x-transition
-                     class="absolute right-full top-0 mr-4 w-[calc(100vw-6rem)] sm:w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200">
+                     @click.stop
+                     @click.away="plotConfigOpen = false"
+                     :style="`position:absolute;top:${plotConfigCoords.top}px;left:${plotConfigCoords.left}px;`"
+                     class="w-[calc(100vw-6rem)] sm:w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                     style="display:none;">
 
                     <p
                        class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
@@ -781,18 +793,18 @@
                         </div>
                     </div>
                 </div>
+                </template>
             </div>
         </div>
 
         <!-- ── ANNOTATION EDITOR ────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
-            <div class="relative"
-                 @click.outside="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }">
-                <button @click="annotationsOpen = !annotationsOpen"
+            <div class="relative">
+                <button x-ref="annBtn"
+                        @click="const r = $refs.annBtn.getBoundingClientRect(); annCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 288 - 16 }; annotationsOpen = !annotationsOpen"
                         class="sidebar-btn disabled:opacity-40"
                         :class="{
                     'text-accent-500 bg-accent-100/50 dark:bg-chip/50': annotationsOpen && config.plotType !== 'polar',
-                    'text-ink-muted hover:text-accent-500': config.plotType !== 'polar',
                     'opacity-30 cursor-not-allowed pointer-events-none': config.plotType === 'polar'
                 }"
                         :title="config.plotType === 'polar' ? 'Notes not available in Polar mode' : 'Manage Notes'">
@@ -813,9 +825,14 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Notes</span>
                 </button>
 
+                <template x-teleport="body">
                 <div x-show="annotationsOpen"
                      x-transition
-                     class="absolute right-full top-0 mr-4 w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200">
+                     @click.stop
+                     @click.away="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }"
+                     :style="`position:absolute;top:${annCoords.top}px;left:${annCoords.left}px;`"
+                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                     style="display:none;">
 
                     <p
                        class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
@@ -931,14 +948,16 @@
                         </template>
                     </div>
                 </div>
+                </template>
             </div>
         </div>
 
         <!-- ── SHAPE EDITOR ──────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.outside="shapesOpen = false">
-                <button @click="shapesOpen = !shapesOpen"
+                 x-data="{ shapesCoords: { top: 0, left: 0 } }">
+                <button x-ref="shapesBtn"
+                        @click="const r = $refs.shapesBtn.getBoundingClientRect(); shapesCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 288 - 16 }; shapesOpen = !shapesOpen"
                         class="sidebar-btn"
                         :class="{
                 'text-accent-500 bg-accent-100/50 dark:bg-chip/50': shapesOpen && config.plotType !== 'polar',
@@ -985,9 +1004,14 @@
                           x-text="placementMode ? placementMode : 'Shapes'"></span>
                 </button>
 
+                <template x-teleport="body">
                 <div x-show="shapesOpen"
                      x-transition
-                     class="absolute right-full top-0 mr-4 w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200">
+                     @click.stop
+                     @click.away="shapesOpen = false"
+                     :style="`position:absolute;top:${shapesCoords.top}px;left:${shapesCoords.left}px;`"
+                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                     style="display:none;">
 
                     <p
                        class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
@@ -998,10 +1022,10 @@
                     <div class="grid grid-cols-3 gap-2 mb-4">
                         <button @click="setPlacementMode('vline')"
                                 class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'vline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-control hover:border-accent-500/50'">
+                                :class="placementMode === 'vline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
 
                             <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-muted group-hover:text-accent-500'"
+                                 :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
                                  viewBox="0 0 24 24"
                                  fill="none"
                                  stroke="currentColor">
@@ -1016,10 +1040,10 @@
 
                         <button @click="setPlacementMode('hline')"
                                 class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'hline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-control hover:border-accent-500/50'">
+                                :class="placementMode === 'hline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
 
                             <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-muted group-hover:text-accent-500'"
+                                 :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
                                  viewBox="0 0 24 24"
                                  fill="none"
                                  stroke="currentColor">
@@ -1034,10 +1058,10 @@
 
                         <button @click="setPlacementMode('rect')"
                                 class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'rect' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-control hover:border-accent-500/50'">
+                                :class="placementMode === 'rect' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
 
                             <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-muted group-hover:text-accent-500'"
+                                 :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
                                  viewBox="0 0 24 24"
                                  fill="currentColor"
                                  fill-opacity="0.15"
@@ -1267,6 +1291,7 @@
                         </template>
                     </div>
                 </div>
+                </template>
             </div>
         </div>
 
@@ -1310,10 +1335,11 @@
         <!-- ── PROFILES ───────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.away="profilesOpen = false">
-                <button @click="profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
+                 x-data="{ profilesCoords: { top: 0, left: 0 } }">
+                <button x-ref="profilesBtn"
+                        @click="const r = $refs.profilesBtn.getBoundingClientRect(); profilesCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 288 - 16 }; profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
                         class="sidebar-btn"
-                        :class="profilesOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : 'text-ink-muted hover:text-accent-500'"
+                        :class="profilesOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
                         title="Saved Profiles">
                     <svg class="w-5 h-5"
                          :class="profilesOpen ? 'text-accent-500' : ''"
@@ -1332,9 +1358,14 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Profiles</span>
                 </button>
 
+                <template x-teleport="body">
                 <div x-show="profilesOpen"
                      x-transition
-                     class="absolute right-full top-0 mr-4 w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200">
+                     @click.stop
+                     @click.away="profilesOpen = false"
+                     :style="`position:absolute;top:${profilesCoords.top}px;left:${profilesCoords.left}px;`"
+                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                     style="display:none;">
 
                     <div class="flex items-center justify-between mb-4 border-b border-subtle pb-1">
                         <p class="text-base font-black uppercase text-ink-muted tracking-widest">
@@ -1342,7 +1373,7 @@
                         </p>
 
                         <div class="group cursor-help relative">
-                            <svg class="w-3.5 h-3.5 text-ink-muted opacity-50 group-hover:opacity-100 transition-opacity"
+                            <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                                  fill="none"
                                  stroke="currentColor"
                                  viewBox="0 0 24 24">
@@ -1549,16 +1580,18 @@
                         </p>
                     </div>
                 </div>
+                </template>
             </div>
         </div>
 
         <!-- ── DOWNLOAD OPTIONS ─────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 @click.away="downloadOpen = false">
-                <button @click="downloadOpen = !downloadOpen"
+                 x-data="{ downloadCoords: { top: 0, left: 0 } }">
+                <button x-ref="downloadBtn"
+                        @click="const r = $refs.downloadBtn.getBoundingClientRect(); downloadCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 192 - 16 }; downloadOpen = !downloadOpen"
                         class="sidebar-btn disabled:opacity-40 disabled:hover:bg-well"
-                        :class="downloadOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : 'text-ink-muted hover:text-accent-500'"
+                        :class="downloadOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
                         title="Download Data or Image">
                     <svg class="w-5 h-5"
                          :class="downloadOpen ? 'text-accent-500' : ''"
@@ -1573,9 +1606,14 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Export</span>
                 </button>
 
+                <template x-teleport="body">
                 <div x-show="downloadOpen"
                      x-transition
-                     class="absolute right-full top-0 mr-4 w-48 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200">
+                     @click.stop
+                     @click.away="downloadOpen = false"
+                     :style="`position:absolute;top:${downloadCoords.top}px;left:${downloadCoords.left}px;`"
+                     class="w-48 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200"
+                     style="display:none;">
 
                     <p
                        class="text-base font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
@@ -1585,7 +1623,7 @@
                         <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Capture Plot</p>
 
                         <button @click="downloadPlot('svg', 1)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control rounded transition-all flex items-center justify-between group">
+                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
                             SVG Vector
                             <span class="text-xs opacity-50 group-hover:opacity-100">INF</span>
                         </button>
@@ -1593,14 +1631,14 @@
                         <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
 
                         <button @click="downloadPlot('png', 1.5)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control rounded transition-all flex items-center justify-between group">
+                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
                             PNG Image
                             <span
                                   class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">1080p</span>
                         </button>
 
                         <button @click="downloadPlot('png', 3)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control rounded transition-all flex items-center justify-between group">
+                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
                             PNG High-DPI
                             <span
                                   class="text-xs bg-accent-500/10 text-accent-600 px-1 rounded group-hover:bg-accent-500 group-hover:text-white">4K</span>
@@ -1609,7 +1647,7 @@
                         <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
 
                         <button @click="downloadPlot('jpg', 1.5)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control rounded transition-all flex items-center justify-between group">
+                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
                             JPG Compressed
                             <span class="text-xs opacity-50">1080p</span>
                         </button>
@@ -1641,6 +1679,7 @@
                         </button> -->
                     </div>
                 </div>
+                </template>
             </div>
         </div>
 
