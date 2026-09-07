@@ -76,6 +76,16 @@ export default defineConfig({
         // these paths directly (no manifest-based resolution), same
         // convention flask-website's own Vite setup uses.
         entryFileNames: "[name].js",
+        // same reasoning extended to shared/vendor chunks (plotly, and
+        // whatever else Rollup splits out across entries): static/dist/ is
+        // committed to git (see CLAUDE.md), so a content hash here doesn't
+        // just bust CDN caches the way it would on a normal deployed site --
+        // it renames a multi-hundred-KB file on essentially every build,
+        // even ones that never touch that chunk's actual code, because the
+        // hash also shifts whenever the shared-chunk graph or build config
+        // changes elsewhere. A stable name means git only sees a real diff
+        // when the chunk's own output actually changes.
+        chunkFileNames: "assets/[name].js",
         // the CSS entry's input key can't just be "main" (the store.ts JS
         // entry already claims that key in `input` above), so it's keyed
         // "main_css" and renamed back to main.css here.
