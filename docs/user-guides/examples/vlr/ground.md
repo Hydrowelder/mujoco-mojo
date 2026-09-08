@@ -15,9 +15,9 @@
 
 The `Ground` class is (thankfully) pretty straightforward. We define three things:
 
-1. **Grid Texture**: A checkerboard texture used on the ground plane. It's technically not needed, but helpful to give things a sense of scale.
-2. **Material**: To apply a texture to a geometry (like our ground plane) we apply it via a material. This gives options for other photorealistic rendering textures, but we'll stick with the simple built in one for now.
-3. **Geometry**: A `GeomPlane` (a special built in geometry type) is used to make a contact surface for the rocket. It can be positioned in whatever orientation is needed.
+1. **Grid Texture**: A checkerboard texture used on the ground plane. It is technically not needed, but helpful to give things a sense of scale.
+2. **Material**: To apply a texture to a geometry (like our ground plane) we apply it via a material. This gives options for other photorealistic rendering textures, but we will stick with the simple built-in one for now.
+3. **Geometry**: A `GeomPlane` (a special built-in geometry type) is used to make a contact surface for the rocket. It can be positioned in whatever orientation is needed.
     - For a more complex model, you could even use a heightmap to simulate an uneven surface!
 
 ```python

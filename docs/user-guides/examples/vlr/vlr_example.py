@@ -1,5 +1,5 @@
 """
-Example: a vertically-landing rocket (VLR) with spring-damped landing gear.
+Example: a vertically landed rocket (VLR) with spring-damped landing gear.
 
 The rocket body free-falls from `Inputs.STARTING_HEIGHT`, then its four legs
 absorb the landing through a spring at each leg plus contact with the ground
@@ -94,7 +94,7 @@ class GearInput(mojo.UserData):
 
 
 class Inputs(mojo.UserData):
-    """Top-level physical inputs for the vertically-landing rocket model."""
+    """Top-level physical inputs for the vertically landed rocket model."""
 
     tube: TubeInput = Field(default_factory=TubeInput)
     """Dimensions of the rocket's body tube."""
@@ -119,8 +119,8 @@ class Side(StrEnum):
     """
 
     PX = "px"
-    PY = "py"
     MX = "mx"
+    PY = "py"
     MY = "my"
 
     @property
@@ -129,9 +129,9 @@ class Side(StrEnum):
         match self:
             case Side.PX:
                 return np.deg2rad(0)
-            case Side.PY:
-                return np.deg2rad(90)
             case Side.MX:
+                return np.deg2rad(90)
+            case Side.PY:
                 return np.deg2rad(180)
             case Side.MY:
                 return np.deg2rad(270)
@@ -151,7 +151,7 @@ class Side(StrEnum):
 # --8<-- [end:side]
 
 
-# --8<-- [start:landing_gear]
+# --8<-- [start:landing_gear_kinematics]
 class LandingGear(mojo.UserData):
     """
     A single landing gear leg: a rigid leg with a footpad at the tip, hinged
@@ -270,21 +270,21 @@ class Rocket(mojo.UserData):
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # For type hinting
 
-        # Make a cylinder to represent the body tube
-        # We use a Geom instead of a Site since it will have mass
-        body_tube = mojo.GeomCylinder(
-            size=INPUTS.tube.RADIUS,
-            fromto=np.array((0, 0, 0, 0, 0, INPUTS.tube.LENGTH)),
-            rgba=mojo.utils.Color.CYAN_500.with_alpha(0.2),
-            mass=1 * US.pound,
-        )
-
         # Make the body with the geometry
         # It is defined at STARTING_HEIGHT so that it has distance to the ground
         # and we use a FreeJoint so that it is free to move
         rocket_body = mojo.Body(
             name=mojo.BodyName("rocket"),
-            geoms=[body_tube],
+            geoms=[
+                # Make a cylinder to represent the body tube
+                # We use a Geom instead of a Site since it will have mass
+                mojo.GeomCylinder(
+                    size=INPUTS.tube.RADIUS,
+                    fromto=np.array((0, 0, 0, 0, 0, INPUTS.tube.LENGTH)),
+                    rgba=mojo.utils.Color.CYAN_500.with_alpha(0.2),
+                    mass=1 * US.pound,
+                )
+            ],
             pose=mojo.PoseEuler(
                 euler=np.array((5, 0, 0)),
                 angle=mojo.Angle.DEGREE,
