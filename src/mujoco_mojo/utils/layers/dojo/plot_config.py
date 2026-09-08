@@ -317,11 +317,15 @@ class XAxisConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    col: str = "time"
-    """Column name used as the x-axis source."""
+    col: str = Field(
+        default="time",
+        description="Column name used as the x-axis source.",
+    )
 
-    filters: list[AnyFilter] = []
-    """Ordered list of filters applied to the x-axis signal."""
+    filters: list[AnyFilter] = Field(
+        default_factory=list,
+        description="Ordered list of filters applied to the x-axis signal.",
+    )
 
 
 class YAxisConfig(BaseModel):
@@ -329,26 +333,36 @@ class YAxisConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    label: str
-    """Display label shown in the legend and tooltip."""
+    label: str = Field(
+        description="Display label shown in the legend and tooltip.",
+    )
 
-    color: str
-    """Line color as a CSS color string."""
+    color: str = Field(
+        description="Line color as a CSS color string.",
+    )
 
-    width: float = Field(gt=0)
-    """Line stroke width in pixels."""
+    width: float = Field(
+        gt=0,
+        description="Line stroke width in pixels.",
+    )
 
-    opacity: float = Field(ge=0, le=1)
-    """Line opacity from 0 (transparent) to 1 (opaque)."""
+    opacity: float = Field(
+        ge=0,
+        le=1,
+        description="Line opacity from 0 (transparent) to 1 (opaque).",
+    )
 
-    filters: list[AnyFilter]
-    """Ordered list of filters applied to this signal."""
+    filters: list[AnyFilter] = Field(
+        description="Ordered list of filters applied to this signal.",
+    )
 
-    dash: DashStyle
-    """Dash pattern for the line."""
+    dash: DashStyle = Field(
+        description="Dash pattern for the line.",
+    )
 
-    marker: MarkerSymbol
-    """Marker symbol drawn at each data point."""
+    marker: MarkerSymbol = Field(
+        description="Marker symbol drawn at each data point.",
+    )
 
 
 class Annotation(BaseModel):
@@ -356,14 +370,17 @@ class Annotation(BaseModel):
 
     model_config = camel_case_dict
 
-    x: float
-    """x-axis coordinate of the annotation anchor."""
+    x: float = Field(
+        description="x-axis coordinate of the annotation anchor.",
+    )
 
-    y: float
-    """y-axis coordinate of the annotation anchor."""
+    y: float = Field(
+        description="y-axis coordinate of the annotation anchor.",
+    )
 
-    text: str
-    """Annotation text content."""
+    text: str = Field(
+        description="Annotation text content.",
+    )
 
 
 class VlineShape(BaseModel):
@@ -371,20 +388,27 @@ class VlineShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.VLINE] = ShapeType.VLINE
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.VLINE] = Field(
+        default=ShapeType.VLINE,
+        description="Shape variant discriminator.",
+    )
 
-    x0: float
-    """X coordinate of the line."""
+    x0: float = Field(
+        description="X coordinate of the line.",
+    )
 
-    color: str
-    """Stroke color as a CSS color string."""
+    color: str = Field(
+        description="Stroke color as a CSS color string.",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the line. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the line. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        description="Short label displayed alongside the shape.",
+    )
 
 
 class HlineShape(BaseModel):
@@ -392,20 +416,27 @@ class HlineShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.HLINE] = ShapeType.HLINE
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.HLINE] = Field(
+        default=ShapeType.HLINE,
+        description="Shape variant discriminator.",
+    )
 
-    y0: float
-    """Y coordinate of the line."""
+    y0: float = Field(
+        description="Y coordinate of the line.",
+    )
 
-    color: str
-    """Stroke color as a CSS color string."""
+    color: str = Field(
+        description="Stroke color as a CSS color string.",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the line. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the line. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        description="Short label displayed alongside the shape.",
+    )
 
 
 class RectShape(BaseModel):
@@ -413,29 +444,39 @@ class RectShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.RECT] = ShapeType.RECT
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.RECT] = Field(
+        default=ShapeType.RECT,
+        description="Shape variant discriminator.",
+    )
 
-    x0: float
-    """Left x coordinate."""
+    x0: float = Field(
+        description="Left x coordinate.",
+    )
 
-    x1: float
-    """Right x coordinate."""
+    x1: float = Field(
+        description="Right x coordinate.",
+    )
 
-    y0: float
-    """Bottom y coordinate."""
+    y0: float = Field(
+        description="Bottom y coordinate.",
+    )
 
-    y1: float
-    """Top y coordinate."""
+    y1: float = Field(
+        description="Top y coordinate.",
+    )
 
-    color: str
-    """Fill/stroke color as a CSS color string."""
+    color: str = Field(
+        description="Fill/stroke color as a CSS color string.",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the rectangle border. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the rectangle border. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        description="Short label displayed alongside the shape.",
+    )
 
     @model_validator(mode="after")
     def validate_coords(self) -> RectShape:
@@ -457,83 +498,119 @@ class PlotConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    x_axis: XAxisConfig = Field(default_factory=XAxisConfig)
-    """X-axis signal selection and filter chain."""
+    x_axis: XAxisConfig = Field(
+        default_factory=XAxisConfig,
+        description="X-axis signal selection and filter chain.",
+    )
 
-    y_axes: dict[str, YAxisConfig]
-    """Mapping of signal key to y-axis configuration."""
+    y_axes: dict[str, YAxisConfig] = Field(
+        description="Mapping of signal key to y-axis configuration.",
+    )
 
-    ref_frame: str | None
-    """Reference frame used to transform signal coordinates. `None` for world frame."""
+    ref_frame: str | None = Field(
+        description="Reference frame used to transform signal coordinates. `None` for world frame.",
+    )
 
-    grid: GridMode
-    """Grid line visibility. Sets if the backing grid is visible with both major and minor ticks, major ticks only, or none at all."""
+    grid: GridMode = Field(
+        description="Grid line visibility. Sets if the backing grid is visible with both major and minor ticks, major ticks only, or none at all.",
+    )
 
-    line_mode: LineMode
-    """Whether traces render as lines, markers, or both."""
+    line_mode: LineMode = Field(
+        description="Whether traces render as lines, markers, or both.",
+    )
 
-    interp: InterpMode
-    """Interpolation method drawn between data points."""
+    interp: InterpMode = Field(
+        description="Interpolation method drawn between data points.",
+    )
 
-    hover: HoverMode
-    """Tooltip behavior on hover."""
+    hover: HoverMode = Field(
+        description="Tooltip behavior on hover.",
+    )
 
-    title: str
-    """Plot title displayed above the chart."""
+    title: str = Field(
+        description="Plot title displayed above the chart.",
+    )
 
-    x_axis_title: str
-    """Label shown along the x-axis."""
+    x_axis_title: str = Field(
+        description="Label shown along the x-axis.",
+    )
 
-    y_axis_title: str
-    """Label shown along the y-axis."""
+    y_axis_title: str = Field(
+        description="Label shown along the y-axis.",
+    )
 
-    show_spike: bool
-    """Whether to draw spike lines from the hovered point to each axis."""
+    show_spike: bool = Field(
+        description="Whether to draw spike lines from the hovered point to each axis.",
+    )
 
-    legend_pos: LegendPos
-    """Legend placement relative to the plot area."""
+    legend_pos: LegendPos = Field(
+        description="Legend placement relative to the plot area.",
+    )
 
-    range_x: Annotated[tuple[float | None, float | None], Field()] | None
-    """Fixed x-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
+    range_x: Annotated[tuple[float | None, float | None], Field()] | None = Field(
+        description="Fixed x-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side.",
+    )
 
-    range_y: Annotated[tuple[float | None, float | None], Field()] | None
-    """Fixed y-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
+    range_y: Annotated[tuple[float | None, float | None], Field()] | None = Field(
+        description="Fixed y-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side.",
+    )
 
-    x_scale: ScaleType
-    """Scale type for the x-axis."""
+    x_scale: ScaleType = Field(
+        description="Scale type for the x-axis.",
+    )
 
-    y_scale: ScaleType
-    """Scale type for the y-axis."""
+    y_scale: ScaleType = Field(
+        description="Scale type for the y-axis.",
+    )
 
-    x_log_base: float | None = Field(default=None, gt=0)
-    """Logarithm base for the x-axis. Only used when `x_scale` is `log`."""
+    x_log_base: float | None = Field(
+        default=None,
+        gt=0,
+        description="Logarithm base for the x-axis. Only used when `x_scale` is `log`.",
+    )
 
-    y_log_base: float | None = Field(default=None, gt=0)
-    """Logarithm base for the y-axis. Only used when `y_scale` is `log`."""
+    y_log_base: float | None = Field(
+        default=None,
+        gt=0,
+        description="Logarithm base for the y-axis. Only used when `y_scale` is `log`.",
+    )
 
-    plot_type: PlotType = PlotType.CARTESIAN
-    """Coordinate system used to render the plot."""
+    plot_type: PlotType = Field(
+        default=PlotType.CARTESIAN,
+        description="Coordinate system used to render the plot.",
+    )
 
-    vs_enabled: bool
-    """Whether comparison traces from other trials are shown."""
+    vs_enabled: bool = Field(
+        description="Whether comparison traces from other trials are shown.",
+    )
 
-    vs_range: Annotated[tuple[float, float], Field()]
-    """Trial number range for comparison traces as `(first, last)`."""
+    vs_range: Annotated[tuple[int, int], Field()] = Field(
+        description="Trial number range for comparison traces as `(first, last)`.",
+    )
 
-    annotations: list[Annotation]
-    """Text annotations pinned to data coordinates."""
+    annotations: list[Annotation] = Field(
+        description="Text annotations pinned to data coordinates.",
+    )
 
-    shapes: list[Shape]
-    """Geometric reference shapes drawn over the plot."""
+    shapes: list[Shape] = Field(
+        description="Geometric reference shapes drawn over the plot.",
+    )
 
-    display_unit_system: DisplayUnitSystem | None = None
-    """When set, telemetry values are converted from their logged units to this unit system before being returned. Only columns whose metadata carries a concrete `unit` key (or a `dimension` key resolvable against the target system) are converted; all others pass through unchanged."""
+    display_unit_system: DisplayUnitSystem | None = Field(
+        default=None,
+        description="When set, telemetry values are converted from their logged units to this unit system before being returned. Only columns whose metadata carries a concrete `unit` key (or a `dimension` key resolvable against the target system) are converted; all others pass through unchanged.",
+    )
 
-    max_points: int | None = Field(default=None, gt=0)
-    """Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points."""
+    max_points: int | None = Field(
+        default=None,
+        gt=0,
+        description="Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points.",
+    )
 
-    vs_pinned: list[int] = Field(default_factory=list)
-    """Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set."""
+    vs_pinned: list[int] = Field(
+        default_factory=list,
+        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
+    )
 
     @field_validator("ref_frame")
     @classmethod

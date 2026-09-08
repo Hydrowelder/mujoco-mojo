@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
@@ -327,6 +328,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
             "prev_id": prev_id,
             "next_id": next_id,
             "external_url": f"http://{server_ip}:{port}",
+            "show_quick_filters": MujocoMojoSettings().dojo.show_quick_filters,
         },
     )
 

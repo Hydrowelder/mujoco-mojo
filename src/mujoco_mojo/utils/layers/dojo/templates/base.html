@@ -109,14 +109,14 @@
         <nav class="relative flex gap-1 p-1 bg-control/50 rounded-lg w-fit font-mono text-base uppercase tracking-widest border border-control shadow-xl">
           {% set path = request.url.path %}
           <a href="/monitor"
-             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/monitor') else 'btn-secondary' }}">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'btn-primary font-bold' if path.startswith('/monitor') else 'btn-secondary' }}">
             Monitor
             {% if path.startswith('/monitor') %}
             <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
             {% endif %}
           </a>
           <a href="/mosaic"
-             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/mosaic') else 'btn-secondary' }}">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'btn-primary font-bold' if path.startswith('/mosaic') else 'btn-secondary' }}">
             Mosaic
             {% if path.startswith('/mosaic') %}
             <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
@@ -124,7 +124,7 @@
           </a>
           {% if job_type == JobType.OPTIMIZE %}
           <a href="/morph"
-             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'border-accent-600 text-white font-bold' if path.startswith('/morph') else 'btn-secondary' }}">
+             class="relative z-10 px-4 py-2 rounded-md border transition-all {{ 'btn-primary font-bold' if path.startswith('/morph') else 'btn-secondary' }}">
             Morph
             {% if path.startswith('/morph') %}
             <div class="nav-highlight absolute inset-0 bg-accent-500 rounded shadow-inner -z-10"></div>
@@ -347,6 +347,24 @@
             </div>
           </div>
 
+          <!-- settings button -->
+          <button @click="$store.dojo.openSettings()"
+                  class="btn-icon btn-secondary"
+                  title="Settings">
+            <svg class="w-5 h-5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.75"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+          </button>
+
           <!-- fullscreen toggle button -->
           <button @click="$store.dojo.toggleFullscreen()"
                   class="btn-icon btn-secondary"
@@ -552,19 +570,22 @@
        ───────────────────────────────────────────────────────────────────── -->
   <div x-data
        x-show="$store.dojo.dialog.show"
-       x-transition:enter="transition duration-150 ease-out"
-       x-transition:enter-start="opacity-0"
-       x-transition:enter-end="opacity-100"
-       x-transition:leave="transition duration-100 ease-in"
-       x-transition:leave-start="opacity-100"
-       x-transition:leave-end="opacity-0"
        class="fixed inset-0 z-950 flex items-center justify-center p-4"
        style="display:none;"
        @keydown.escape.window="$store.dojo.dialog.cancel()"
        @keydown.enter.window.prevent="if ($store.dojo.dialog.show) $store.dojo.dialog.confirm()">
 
-    <!-- backdrop -->
-    <div class="absolute inset-0 bg-scrim/60 backdrop-blur-sm"
+    <!-- backdrop: its own explicit enter/leave (styles/overlay.css's
+         .modal-backdrop), timed identically to the card below - see the
+         settings panel's identical comment for why this isn't just riding
+         this wrapper's own x-show transition anymore. -->
+    <div class="modal-backdrop"
+         x-transition:enter="transition duration-150 ease-out"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition duration-100 ease-in"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
          @click="$store.dojo.dialog.cancel()"></div>
 
     <!-- card -->
@@ -653,11 +674,11 @@
               <span x-text="$store.dojo.dialog.cancelLabel"></span>
             </button>
             <button @click="$store.dojo.dialog.confirm()"
-                    class="btn text-sm text-white border-transparent"
+                    class="btn text-sm"
                     :class="{
-                      'bg-danger-500  hover:bg-danger-600':  $store.dojo.dialog.variant === 'danger',
-                      'bg-warning-500 hover:bg-warning-600': $store.dojo.dialog.variant === 'warning',
-                      'bg-accent-500  hover:bg-accent-600':  $store.dojo.dialog.variant === 'info',
+                      'btn-danger':  $store.dojo.dialog.variant === 'danger',
+                      'btn-warning': $store.dojo.dialog.variant === 'warning',
+                      'btn-primary': $store.dojo.dialog.variant === 'info',
                     }">
               <span x-text="$store.dojo.dialog.confirmLabel"></span>
             </button>
@@ -666,6 +687,8 @@
       </div>
     </div>
   </div>
+
+  {% include "partials/_settings_panel.html" %}
 
 </body>
 

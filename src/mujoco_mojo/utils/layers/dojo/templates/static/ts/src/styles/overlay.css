@@ -1,0 +1,15 @@
+/* Modal/dialog backdrop scrim + blur, shared by every full-screen modal
+   (the confirm/prompt dialog and the settings panel in base.html /
+   _settings_panel.html, and any future one). Pair with its own explicit
+   x-transition at the call site (see those two files) rather than relying
+   on the modal wrapper's own x-show transition alone: backdrop-filter
+   doesn't interpolate as smoothly as opacity in every engine when it's
+   only riding an ancestor's opacity fade, so it previously read as a step/
+   pop that arrived after the card had already finished animating in.
+   Giving the backdrop its own enter/leave transition, timed identically to
+   the card's, makes both animate in lockstep from the same tick. */
+@layer components {
+  .modal-backdrop {
+    @apply absolute inset-0 bg-scrim/60 backdrop-blur-sm;
+  }
+}

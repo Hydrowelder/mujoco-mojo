@@ -4,7 +4,11 @@
          trialStatus is available.
          ══════════════════════════════════════════════════════════════════ -->
 
-<div class="mt-8 space-y-2"
+<!-- pt-8 (padding, not margin) on the outer div guarantees clearance
+     before the divider below, immune to margin-collapsing with whatever
+     sibling section precedes this one - see _trial_logs.html's identical
+     comment for the full reasoning. -->
+<div class="pt-6"
      x-data="{
          open: localStorage.getItem('mojo:trial-status:open') !== '0',
          toggle() {
@@ -13,187 +17,186 @@
          }
      }"
      x-show="trialStatus !== null">
+    <div class="pt-2 space-y-2 border-t border-line dark:border-subtle">
 
-    <!-- section header -->
-    <div class="flex items-center justify-between px-2">
-        <button @mousedown.prevent="toggle()"
-                @keydown.enter.prevent="toggle()"
-                @keydown.space.prevent="toggle()"
-                class="flex items-center gap-2 text-base font-black uppercase text-ink-muted tracking-widest hover:text-ink-body transition-colors active:scale-100">
-            <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
-                 :class="open ? '' : '-rotate-90'"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="2.5"
-                 viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 9l-7 7-7-7" />
-            </svg>
-            Trial Execution
-        </button>
+        <!-- section header -->
+        <div class="px-2">
+            <button @mousedown.prevent="toggle()"
+                    @keydown.enter.prevent="toggle()"
+                    @keydown.space.prevent="toggle()"
+                    class="expander-header">
+                <span class="flex items-center gap-2">
+                    <svg class="expander-chevron"
+                         :class="open ? '' : '-rotate-90'"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Trial Execution
+                </span>
 
-        <!-- completion badge -->
-        <template x-if="trialStatus">
-            <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full"
-                  :class="{ 'bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400': trialStatus.completion === 'success', 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400': trialStatus.completion === 'failure' || trialStatus.completion === 'terminated', 'bg-warning-100 dark:bg-warning-900/50 text-warning-700 dark:text-warning-400': trialStatus.completion === 'error', 'bg-chip text-ink-secondary': trialStatus.completion === 'incomplete' }"
-                  x-text="trialStatus.completion.toUpperCase()"></span>
-        </template>
-    </div>
+                <!-- completion badge -->
+                <template x-if="trialStatus">
+                    <span class="text-sm font-bold font-mono px-2 py-0.5 rounded-full"
+                          :class="{ 'bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400': trialStatus.completion === 'success', 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400': trialStatus.completion === 'failure' || trialStatus.completion === 'terminated', 'bg-warning-100 dark:bg-warning-900/50 text-warning-700 dark:text-warning-400': trialStatus.completion === 'error', 'bg-chip text-ink-secondary': trialStatus.completion === 'incomplete' }"
+                          x-text="trialStatus.completion.toUpperCase()"></span>
+                </template>
+            </button>
+        </div>
 
-    <!-- collapsible body -->
-    <div x-show="open"
-         x-transition:enter="transition-opacity duration-150"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition-opacity duration-100"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="overflow-hidden space-y-4">
+        <!-- collapsible body: grid-template-rows 0fr<->1fr "emerge" animation,
+         see .expander-body-wrap in expander.css -->
+        <div class="expander-body-wrap"
+             :class="open ? 'expander-open' : ''">
+            <div class="expander-body space-y-4">
 
-        <!-- step timing table -->
-        <template x-if="trialStatus">
-            <div
-                 class="rounded-lg border border-subtle bg-surface dark:bg-surface/50 divide-y divide-subtle text-sm font-mono overflow-hidden">
+                <!-- step timing table -->
+                <template x-if="trialStatus">
+                    <div class="rounded-lg border border-subtle bg-surface dark:bg-surface/50 divide-y divide-subtle text-sm font-mono overflow-hidden">
 
-                <!-- step rows -->
-                <template x-for="stepName in ['generating', 'solving']"
-                          :key="stepName">
-                    <div class="flex items-center gap-3 px-4 py-2.5">
+                        <!-- step rows -->
+                        <template x-for="stepName in ['generating', 'solving']"
+                                  :key="stepName">
+                            <div class="flex items-center gap-3 px-4 py-2.5">
 
-                        <!-- step indicator dot -->
-                        <span class="w-2 h-2 rounded-full shrink-0"
-                              :class="stepDotClass(stepName)">
-                        </span>
+                                <!-- step indicator dot -->
+                                <span class="w-2 h-2 rounded-full shrink-0"
+                                      :class="stepDotClass(stepName)">
+                                </span>
 
-                        <!-- step name -->
-                        <span class="w-24 text-ink-secondary capitalize"
-                              x-text="stepName"></span>
+                                <!-- step name -->
+                                <span class="w-24 text-ink-secondary capitalize"
+                                      x-text="stepName"></span>
 
-                        <!-- started date and time (local) -->
-                        <span class="flex-1 text-ink-body text-sm"
-                              x-text="trialStatus[stepName].started
+                                <!-- started date and time (local) -->
+                                <span class="flex-1 text-ink-body text-sm"
+                                      x-text="trialStatus[stepName].started
                                   ? new Date(trialStatus[stepName].started).toLocaleString()
                                   : '—'">
-                        </span>
+                                </span>
 
-                        <!-- elapsed or in-progress marker -->
-                        <span class="text-right text-sm"
-                              :class="stepTextClass(stepName)"
-                              x-text="trialStatus[stepName].elapsed !== null
+                                <!-- elapsed or in-progress marker -->
+                                <span class="text-right text-sm"
+                                      :class="stepTextClass(stepName)"
+                                      x-text="trialStatus[stepName].elapsed !== null
                                   ? trialStatus[stepName].elapsed.toFixed(2) + 's'
                                   : trialStatus.step === stepName
                                       ? 'running...'
                                       : '—'">
-                        </span>
+                                </span>
+                            </div>
+                        </template>
+
+                    </div>
+                </template>
+
+                <!-- requirements table -->
+                <template x-if="trialStatus && trialStatus.requirements && trialStatus.requirements.length > 0">
+                    <div>
+                        <div class="flex items-center justify-between px-2 mb-1.5">
+                            <span class="text-xs font-black uppercase text-ink-muted tracking-widest">Requirements</span>
+                            <span class="text-xs font-bold font-mono px-2 py-0.5 rounded-full"
+                                  :class="trialStatus.requirements_passed
+                              ? 'bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400'
+                              : 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400'"
+                                  x-text="`${trialStatus.requirements.filter(r => r.passed).length}/${trialStatus.requirements.length} PASSED`"></span>
+                        </div>
+
+                        <div class="rounded-lg border border-subtle bg-surface dark:bg-surface/50 divide-y divide-subtle text-sm font-mono overflow-hidden">
+
+                            <template x-for="req in trialStatus.requirements"
+                                      :key="req.name">
+                                <div class="flex items-start gap-3 px-4 py-2.5">
+
+                                    <!-- pass/fail indicator dot -->
+                                    <span class="w-2 h-2 rounded-full shrink-0 mt-1.5"
+                                          :class="req.passed ? 'bg-success-500' : 'bg-danger-500'">
+                                    </span>
+
+                                    <!-- requirement name -->
+                                    <span class="w-36 shrink-0 text-ink-strong font-bold wrap-break-word"
+                                          x-text="req.name"></span>
+
+                                    <!-- sim time the verdict was decided -->
+                                    <span class="w-20 shrink-0 text-ink-muted text-xs mt-0.5"
+                                          :title="'Decided at simulation time ' + req.decided_at.toFixed(6) + 's'"
+                                          x-text="`t=${req.decided_at.toFixed(3)}s`"></span>
+
+                                    <!-- message -->
+                                    <span class="flex-1 text-sm wrap-break-word"
+                                          :class="req.passed ? 'text-ink-secondary' : 'text-danger-600 dark:text-danger-400'"
+                                          x-text="req.message"></span>
+
+                                    <!-- config metadata (every/terminate/latch), shown on hover.
+                                 Teleported to <body> (not CSS group-hover) so the popover can
+                                 escape this table's overflow-hidden/rounded-corner clipping. -->
+                                    <div class="shrink-0 mt-0.5"
+                                         x-data="{ infoOpen: false, infoCoords: { top: 0, left: 0 } }">
+                                        <svg x-ref="infoIcon"
+                                             @mouseenter="const r = $refs.infoIcon.getBoundingClientRect(); infoCoords = { top: r.bottom + window.scrollY + 6, left: r.right + window.scrollX - 224 }; infoOpen = true"
+                                             @mouseleave="infoOpen = false"
+                                             class="w-4 h-4 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 cursor-help transition-colors duration-150"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="2"
+                                             viewBox="0 0 24 24">
+                                            <circle cx="12"
+                                                    cy="12"
+                                                    r="10" />
+                                            <path stroke-linecap="round"
+                                                  stroke-linejoin="round"
+                                                  d="M12 16v-4m0-4h.01" />
+                                        </svg>
+                                        <template x-teleport="body">
+                                            <div x-show="infoOpen"
+                                                 x-transition
+                                                 @mouseenter="infoOpen = true"
+                                                 @mouseleave="infoOpen = false"
+                                                 :style="`position:absolute;top:${infoCoords.top}px;left:${infoCoords.left}px;width:14rem;`"
+                                                 class="panel z-800 text-xs font-normal normal-case tracking-normal"
+                                                 style="display:none;">
+                                                <div class="space-y-1.5">
+                                                    <div class="flex justify-between items-center gap-3">
+                                                        <span class="text-ink-muted">Every</span>
+                                                        <span class="text-ink-body"
+                                                              x-text="req.every !== null ? `${req.every} steps` : 'end of trial only'"></span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center gap-3">
+                                                        <span class="text-ink-muted">Terminate on fail</span>
+                                                        <span :class="req.terminate_on_fail ? 'text-danger-500 dark:text-danger-400' : 'text-ink-secondary'"
+                                                              x-text="req.terminate_on_fail ? 'yes' : 'no'"></span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center gap-3">
+                                                        <span class="text-ink-muted">Terminate on pass</span>
+                                                        <span :class="req.terminate_on_pass ? 'text-success-500 dark:text-success-400' : 'text-ink-secondary'"
+                                                              x-text="req.terminate_on_pass ? 'yes' : 'no'"></span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center gap-3">
+                                                        <span class="text-ink-muted">Latch on fail</span>
+                                                        <span :class="req.latch_on_fail ? 'text-accent-500 dark:text-accent-400' : 'text-ink-secondary'"
+                                                              x-text="req.latch_on_fail ? 'yes' : 'no'"></span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center gap-3">
+                                                        <span class="text-ink-muted">Latch on pass</span>
+                                                        <span :class="req.latch_on_pass ? 'text-accent-500 dark:text-accent-400' : 'text-ink-secondary'"
+                                                              x-text="req.latch_on_pass ? 'yes' : 'no'"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+
+                        </div>
                     </div>
                 </template>
 
             </div>
-        </template>
-
-        <!-- requirements table -->
-        <template x-if="trialStatus && trialStatus.requirements && trialStatus.requirements.length > 0">
-            <div>
-                <div class="flex items-center justify-between px-2 mb-1.5">
-                    <span class="text-xs font-black uppercase text-ink-muted tracking-widest">Requirements</span>
-                    <span class="text-xs font-bold font-mono px-2 py-0.5 rounded-full"
-                          :class="trialStatus.requirements_passed
-                              ? 'bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400'
-                              : 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400'"
-                          x-text="`${trialStatus.requirements.filter(r => r.passed).length}/${trialStatus.requirements.length} PASSED`"></span>
-                </div>
-
-                <div
-                     class="rounded-lg border border-subtle bg-surface dark:bg-surface/50 divide-y divide-subtle text-sm font-mono overflow-hidden">
-
-                    <template x-for="req in trialStatus.requirements"
-                              :key="req.name">
-                        <div class="flex items-start gap-3 px-4 py-2.5">
-
-                            <!-- pass/fail indicator dot -->
-                            <span class="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                                  :class="req.passed ? 'bg-success-500' : 'bg-danger-500'">
-                            </span>
-
-                            <!-- requirement name -->
-                            <span class="w-36 shrink-0 text-ink-strong font-bold wrap-break-word"
-                                  x-text="req.name"></span>
-
-                            <!-- sim time the verdict was decided -->
-                            <span class="w-20 shrink-0 text-ink-muted text-xs mt-0.5"
-                                  :title="'Decided at simulation time ' + req.decided_at.toFixed(6) + 's'"
-                                  x-text="`t=${req.decided_at.toFixed(3)}s`"></span>
-
-                            <!-- message -->
-                            <span class="flex-1 text-sm wrap-break-word"
-                                  :class="req.passed ? 'text-ink-secondary' : 'text-danger-600 dark:text-danger-400'"
-                                  x-text="req.message"></span>
-
-                            <!-- config metadata (every/terminate/latch), shown on hover.
-                                 Teleported to <body> (not CSS group-hover) so the popover can
-                                 escape this table's overflow-hidden/rounded-corner clipping. -->
-                            <div class="shrink-0 mt-0.5"
-                                 x-data="{ infoOpen: false, infoCoords: { top: 0, left: 0 } }">
-                                <svg x-ref="infoIcon"
-                                     @mouseenter="const r = $refs.infoIcon.getBoundingClientRect(); infoCoords = { top: r.bottom + window.scrollY + 6, left: r.right + window.scrollX - 224 }; infoOpen = true"
-                                     @mouseleave="infoOpen = false"
-                                     class="w-4 h-4 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 cursor-help transition-colors duration-150"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     stroke-width="2"
-                                     viewBox="0 0 24 24">
-                                    <circle cx="12"
-                                            cy="12"
-                                            r="10" />
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          d="M12 16v-4m0-4h.01" />
-                                </svg>
-                                <template x-teleport="body">
-                                    <div x-show="infoOpen"
-                                         x-transition
-                                         @mouseenter="infoOpen = true"
-                                         @mouseleave="infoOpen = false"
-                                         :style="`position:absolute;top:${infoCoords.top}px;left:${infoCoords.left}px;width:14rem;`"
-                                         class="panel z-800 text-xs font-normal normal-case tracking-normal"
-                                         style="display:none;">
-                                        <div class="space-y-1.5">
-                                            <div class="flex justify-between items-center gap-3">
-                                                <span class="text-ink-muted">Every</span>
-                                                <span class="text-ink-body"
-                                                      x-text="req.every !== null ? `${req.every} steps` : 'end of trial only'"></span>
-                                            </div>
-                                            <div class="flex justify-between items-center gap-3">
-                                                <span class="text-ink-muted">Terminate on fail</span>
-                                                <span :class="req.terminate_on_fail ? 'text-danger-500 dark:text-danger-400' : 'text-ink-secondary'"
-                                                      x-text="req.terminate_on_fail ? 'yes' : 'no'"></span>
-                                            </div>
-                                            <div class="flex justify-between items-center gap-3">
-                                                <span class="text-ink-muted">Terminate on pass</span>
-                                                <span :class="req.terminate_on_pass ? 'text-success-500 dark:text-success-400' : 'text-ink-secondary'"
-                                                      x-text="req.terminate_on_pass ? 'yes' : 'no'"></span>
-                                            </div>
-                                            <div class="flex justify-between items-center gap-3">
-                                                <span class="text-ink-muted">Latch on fail</span>
-                                                <span :class="req.latch_on_fail ? 'text-accent-500 dark:text-accent-400' : 'text-ink-secondary'"
-                                                      x-text="req.latch_on_fail ? 'yes' : 'no'"></span>
-                                            </div>
-                                            <div class="flex justify-between items-center gap-3">
-                                                <span class="text-ink-muted">Latch on pass</span>
-                                                <span :class="req.latch_on_pass ? 'text-accent-500 dark:text-accent-400' : 'text-ink-secondary'"
-                                                      x-text="req.latch_on_pass ? 'yes' : 'no'"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </template>
-
-                </div>
-            </div>
-        </template>
-
+        </div>
     </div>
 </div>

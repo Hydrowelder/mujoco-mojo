@@ -1,4 +1,6 @@
+import re
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 
@@ -10,6 +12,8 @@ logger = get_logger(__name__)
 __all__ = ["Color"]
 
 rng = np.random.default_rng(seed=42)
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 class Color(StrEnum):
@@ -318,3 +322,35 @@ class Color(StrEnum):
         res = np.array(rgba, dtype=float)
         res[:3] *= 255.0
         return res
+
+    @classmethod
+    def parse(cls, v: Any) -> str | None:
+        """
+        Normalizes arbitrary color input: `None`/`""` -> `None` (hidden/unset), a member name (case-insensitive) -> its canonical uppercase name, a `#rrggbb` hex code -> its canonical member name if that exact hex matches one, otherwise its uppercase hex form. Anything else raises `ValueError`.
+
+        Returns a plain `str`, not a `Color`, since a caller (e.g. `VisualizationSettings`'s color fields) may need to store an arbitrary hex with no matching member, not just a member name - not every valid return value corresponds to an actual enum member.
+        """
+        if v is None or v == "":
+            return None
+        if not isinstance(v, str):
+            msg = f"{v!r} is not a valid Color name or hex code."
+            raise ValueError(msg)
+        if _HEX_COLOR_RE.match(v):
+            hex_upper = v.upper()
+            return _HEX_TO_COLOR_NAME.get(hex_upper, hex_upper)
+        upper = v.upper()
+        if upper in cls.__members__:
+            return upper
+        msg = f"'{v}' is not a valid Color name (e.g. 'ROSE_500') or hex code (e.g. '#F43F5E')."
+        raise ValueError(msg)
+
+
+# reverse of Color's own name->hex mapping, built once after the class body
+# closes (referenced from parse() above, which only resolves this name at
+# call time, well after module import finishes). No two members share a hex
+# value, so this is unambiguous - used to collapse a typed/picked hex that
+# happens to exactly match a named swatch back to that canonical name,
+# rather than persisting the arbitrary-looking hex alias.
+_HEX_TO_COLOR_NAME: dict[str, str] = {
+    member.value.upper(): member.name for member in Color
+}

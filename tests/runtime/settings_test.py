@@ -556,29 +556,30 @@ def test_set_project_value_rejects_unknown_path_without_writing(
 
 def test_chime_defaults_to_none() -> None:
     """dojo.chime is unset by default, so the Dojo monitor falls back to the built-in chime."""
-    assert DojoSettings().chime is None
+    assert DojoSettings().chime_source is None
 
 
 def test_chime_url_string_round_trips_as_http_url() -> None:
     """A web URL is resolved as HttpUrl rather than being mangled into a Path by pydantic's default union matching."""
-    settings = DojoSettings(chime="https://example.com/sound.mp3")  # type: ignore[arg-type]
-    assert isinstance(settings.chime, HttpUrl)
-    assert str(settings.chime) == "https://example.com/sound.mp3"
+    settings = DojoSettings(chime_source="https://example.com/sound.mp3")  # type: ignore[arg-type]
+    assert isinstance(settings.chime_source, HttpUrl)
+    assert str(settings.chime_source) == "https://example.com/sound.mp3"
 
 
 def test_chime_path_string_round_trips_as_path() -> None:
     """A plain local path string is resolved as Path, not misread as a URL."""
-    settings = DojoSettings(chime="./my-sound.mp3")  # type: ignore[arg-type]
-    assert isinstance(settings.chime, Path)
-    assert settings.chime == Path("./my-sound.mp3")
+    settings = DojoSettings(chime_source="./my-sound.mp3")  # type: ignore[arg-type]
+    assert isinstance(settings.chime_source, Path)
+    assert settings.chime_source == Path("./my-sound.mp3")
 
 
 def test_chime_serializes_as_plain_string_in_json_mode() -> None:
     """model_dump(mode="json") turns both the HttpUrl and Path branches into plain strings, so either can be written to TOML."""
-    url_settings = DojoSettings(chime="https://example.com/sound.mp3")  # type: ignore[arg-type]
+    url_settings = DojoSettings(chime_source="https://example.com/sound.mp3")  # type: ignore[arg-type]
     assert (
-        url_settings.model_dump(mode="json")["chime"] == "https://example.com/sound.mp3"
+        url_settings.model_dump(mode="json")["chime_source"]
+        == "https://example.com/sound.mp3"
     )
 
-    path_settings = DojoSettings(chime="./my-sound.mp3")  # type: ignore[arg-type]
-    assert path_settings.model_dump(mode="json")["chime"] == "my-sound.mp3"
+    path_settings = DojoSettings(chime_source="./my-sound.mp3")  # type: ignore[arg-type]
+    assert path_settings.model_dump(mode="json")["chime_source"] == "my-sound.mp3"

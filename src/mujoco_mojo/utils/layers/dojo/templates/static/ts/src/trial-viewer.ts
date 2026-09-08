@@ -1,5 +1,13 @@
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
+import {
+  buildTreeRows,
+  buildTreeRowsFromNames,
+  visibleTreeRows,
+  allTreeFolderPaths,
+  anyTreeRowVisible,
+  type TreeRow,
+} from "./lib/tree";
 import { themeColor, themeColorAlpha } from "./lib/theme-colors";
 import Plotly from "./lib/plotly";
 import LZString from "lz-string";
@@ -102,6 +110,19 @@ const _cm: {
 // miniplayer RAF state - kept outside Alpine to avoid proxy overhead
 const _mini: { rafId: number | null } = { rafId: null };
 
+// smartSort's comparator - a module-level Intl.Collator instance, reused
+// across every call rather than passing {sensitivity: "base"} straight to
+// String.prototype.localeCompare on each pairwise comparison. The two look
+// equivalent but aren't: localeCompare with an options object builds a fresh
+// collator internally on every single call, while Collator.prototype.compare
+// builds it once. For a column-tree toggle this runs an O(n log n) sort
+// (getFilteredCols -> smartSort) synchronously on every folder click across
+// however many columns are loaded - with the options-object form this was
+// slow enough to read as a real delay before the row's own CSS transition
+// even started, since the browser can't paint the class change until this
+// synchronous sort finishes.
+const _smartSortCollator = new Intl.Collator(undefined, { sensitivity: "base" });
+
 // ---------------------------------------------------------------------------
 // Lab tab state
 // ---------------------------------------------------------------------------
@@ -114,10 +135,22 @@ interface LabTab {
   viewport: { scale: number; offset: [number, number] } | null; // remembered pan/zoom
 }
 
+interface LabSchema {
+  name: string;
+  signal_in_columns: string[];
+  outputs: string[];
+  modified: number;
+  valid: boolean;
+  missing: string[];
+  is_template: boolean;
+  template_inputs: string[];
+  template_outputs: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Component factory
 // ---------------------------------------------------------------------------
-function trialViewer(trialId: string, externalUrl: string) {
+function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boolean) {
   const self = {
     // Alpine magic (injected at runtime - declared here for TS)
     ...(null as unknown as AlpineMagics),
@@ -125,6 +158,13 @@ function trialViewer(trialId: string, externalUrl: string) {
     // --- BASE STATE ---
     trialId,
     externalUrl,
+    // dojo.show_quick_filters (settings.py) - whether the X/Y-axis and
+    // reference-frame dropdowns show their regex quick-filter chip rows.
+    // Read once from the server-rendered page (routers/mosaic.py), not
+    // fetched from /settings client-side: unlike the settings PANEL's own
+    // schema-driven fields, this is a single boolean this one page needs
+    // at load time, not something rendered generically.
+    showQuickFilters,
     warpId: null as number | null,
     paddingLen: 2,
     loading: true,
@@ -140,6 +180,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     yMenuOpen: false,
     ySearch: "",
     refFrameMenuOpen: false,
+    refFrameSearch: "",
     plotConfigOpen: false,
     downloadOpen: false,
     activeFrame: null as string | null,
@@ -181,6 +222,33 @@ function trialViewer(trialId: string, externalUrl: string) {
     profileSearch: localStorage.getItem("mojo:profile:search") ?? "",
     profilesOpen: false,
     profileNameDraft: "",
+    // folder-tree view (lib/tree.ts) over `profiles` - not persisted across
+    // reloads, unlike settings-panel.ts's collapsed-sections map: profiles
+    // are refetched fresh every time this panel opens, and their folder set
+    // can change (renamed/deleted) between opens in a way settings.py's
+    // fixed schema never does, so "start fully expanded" is a simpler,
+    // always-correct default than tracking staleness in localStorage.
+    profileTreeCollapsed: {} as Record<string, boolean>,
+    get profileTreeRows(): TreeRow<{ name: string; modified: number }>[] {
+      return buildTreeRows(this.profiles);
+    },
+    get profileVisibleRows(): TreeRow<{ name: string; modified: number }>[] {
+      const q = this.profileSearch.toLowerCase();
+      return visibleTreeRows(this.profileTreeRows, this.profileTreeCollapsed, this.profileSearch, (p) =>
+        p.name.toLowerCase().includes(q),
+      );
+    },
+    toggleProfileFolder(path: string) {
+      this.profileTreeCollapsed = { ...this.profileTreeCollapsed, [path]: !this.profileTreeCollapsed[path] };
+    },
+    expandAllProfileFolders() {
+      this.profileTreeCollapsed = {};
+    },
+    collapseAllProfileFolders() {
+      this.profileTreeCollapsed = Object.fromEntries(
+        allTreeFolderPaths(this.profileTreeRows).map((p) => [p, true]),
+      );
+    },
 
     // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
     filterSchemas: [] as FilterSchema[],
@@ -236,17 +304,33 @@ function trialViewer(trialId: string, externalUrl: string) {
     nodePickingQuat: null as number | null,
     nodeQuatSearch: "" as string,
     nodePickingTemplate: null as number | null,
-    labSchemas: [] as Array<{
-      name: string;
-      signal_in_columns: string[];
-      outputs: string[];
-      modified: number;
-      valid: boolean;
-      missing: string[];
-      is_template: boolean;
-      template_inputs: string[];
-      template_outputs: string[];
-    }>,
+    labSchemas: [] as LabSchema[],
+    // lifted out of the "load into new tab" dropdown's own local x-data
+    // (where it lived before) up to top-level state - the tree getters
+    // below need it for filtering, and getters can only close over this
+    // component's own `this`, not a nested dropdown's separate scope.
+    labSearch: localStorage.getItem("mojo:lab:search") ?? "",
+    // folder-tree view (lib/tree.ts) over `labSchemas` - see
+    // profileTreeCollapsed's comment above for why this isn't persisted.
+    labTreeCollapsed: {} as Record<string, boolean>,
+    get labTreeRows(): TreeRow<LabSchema>[] {
+      return buildTreeRows(this.labSchemas);
+    },
+    get labVisibleRows(): TreeRow<LabSchema>[] {
+      const q = this.labSearch.toLowerCase();
+      return visibleTreeRows(this.labTreeRows, this.labTreeCollapsed, this.labSearch, (l) =>
+        l.name.toLowerCase().includes(q),
+      );
+    },
+    toggleLabFolder(path: string) {
+      this.labTreeCollapsed = { ...this.labTreeCollapsed, [path]: !this.labTreeCollapsed[path] };
+    },
+    expandAllLabFolders() {
+      this.labTreeCollapsed = {};
+    },
+    collapseAllLabFolders() {
+      this.labTreeCollapsed = Object.fromEntries(allTreeFolderPaths(this.labTreeRows).map((p) => [p, true]));
+    },
 
     // --- SHAPES ---
     shapesOpen: false,
@@ -1455,7 +1539,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.mediaScrubMode === "play" &&
         this.mediaFiles.length > 0 &&
         this.mediaIsScrubbable &&
-        isTimeAxis;
+        isTimeAxis &&
+        this.config.plotType !== "polar";
       if (!shouldRun || this._mediaRafId !== null) return;
       const tick = () => {
         const curTimeAxis = this.config.xAxis?.col === "time";
@@ -1463,7 +1548,10 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.mediaScrubMode !== "play" ||
           this.mediaFiles.length === 0 ||
           !this.mediaIsScrubbable ||
-          !curTimeAxis
+          !curTimeAxis ||
+          // a polar plot's _fullLayout has polar.radialaxis/angularaxis, not
+          // xaxis at all - reading fullLayout.xaxis.range below would throw
+          this.config.plotType === "polar"
         ) {
           this._mediaRafId = null;
           this._syncOverlayVisibility();
@@ -2493,6 +2581,14 @@ function trialViewer(trialId: string, externalUrl: string) {
         }
       });
 
+      this.$watch("labSearch", (val: string) => {
+        try {
+          localStorage.setItem("mojo:lab:search", val);
+        } catch {
+          /* ignore */
+        }
+      });
+
       this.$watch("mediaScrubMode", (mode: string) => {
         if (mode === "scrub") {
           (
@@ -3005,7 +3101,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const bT = b.toLowerCase() === "time";
         if (aT && !bT) return -1;
         if (!aT && bT) return 1;
-        return a.localeCompare(b, undefined, { sensitivity: "base" });
+        return _smartSortCollator.compare(a, b);
       });
     },
 
@@ -3014,7 +3110,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3032,6 +3128,64 @@ function trialViewer(trialId: string, externalUrl: string) {
           base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
         );
       }
+    },
+
+    // Folder-tree view (lib/tree.ts) over getFilteredCols(field) - a second,
+    // orthogonal way to browse the *already* quick-filter/chip-narrowed
+    // result set into "/"-delimited groups, not a replacement for the chips
+    // above (which keep doing exactly what they did before). One flat map
+    // keyed by "field:path" covers every field this dropdown pattern is
+    // used for (x, y, nodeCol, nodeQuat) rather than one Record per field.
+    // Unlike profileTreeCollapsed/labTreeCollapsed, folders here default to
+    // COLLAPSED, not expanded: a column list can run into the hundreds
+    // across many folders, where profiles/labs are typically few - starting
+    // collapsed is what actually declutters that case, so an absent entry
+    // here means "collapsed" instead of the opposite default those two use.
+    columnTreeCollapsed: {} as Record<string, boolean>,
+    // extraFilter: an additional per-column predicate beyond
+    // getFilteredCols(field) itself - the Y-axis dropdown also excludes
+    // non-rotateable columns while a reference frame is active, a
+    // condition specific to that one call site rather than something
+    // getFilteredCols itself should know about.
+    getColumnTreeRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      const cols = this.getFilteredCols(field);
+      return buildTreeRowsFromNames(extraFilter ? cols.filter(extraFilter) : cols);
+    },
+    // Single source of truth for "is this column-tree folder currently
+    // collapsed" (default true, absent an explicit entry) - used by the
+    // chevron's own rotation in the template as well as the two call sites
+    // below, so the chevron can never again show "open" for a folder
+    // getColumnVisibleRows is actually treating as collapsed (or vice
+    // versa) the way two separately-duplicated copies of this same
+    // true-when-absent fallback drifting apart once already caused.
+    isColumnFolderCollapsed(field: string, path: string): boolean {
+      const key = field + ":" + path;
+      return key in this.columnTreeCollapsed ? !!this.columnTreeCollapsed[key] : true;
+    },
+    getColumnVisibleRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      const rows = this.getColumnTreeRows(field, extraFilter);
+      const collapsed: Record<string, boolean> = {};
+      for (const row of rows) {
+        if (row.type !== "folder") continue;
+        collapsed[row.path] = this.isColumnFolderCollapsed(field, row.path);
+      }
+      return visibleTreeRows(rows, collapsed, "", () => true);
+    },
+    toggleColumnFolder(field: string, path: string) {
+      const key = field + ":" + path;
+      this.columnTreeCollapsed = { ...this.columnTreeCollapsed, [key]: !this.isColumnFolderCollapsed(field, path) };
+    },
+    expandAllColumnFolders(field: string) {
+      const prefix = field + ":";
+      const next = { ...this.columnTreeCollapsed };
+      for (const path of allTreeFolderPaths(this.getColumnTreeRows(field))) next[prefix + path] = false;
+      this.columnTreeCollapsed = next;
+    },
+    collapseAllColumnFolders(field: string) {
+      const prefix = field + ":";
+      const next = { ...this.columnTreeCollapsed };
+      for (const path of allTreeFolderPaths(this.getColumnTreeRows(field))) next[prefix + path] = true;
+      this.columnTreeCollapsed = next;
     },
 
     toggleRegexSegment(
@@ -3084,7 +3238,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3112,7 +3266,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3403,7 +3557,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         storageKey: "mojo:chart:height",
         minHeight: 300,
         onResize: resizePlot,
-        getResetHeight: () => "600px",
+        getResetHeight: () => "521.133px",
       });
 
       // Fill (or shrink to) the restored height once the plot has rendered.
@@ -3868,6 +4022,40 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // Y-axis management
     // -----------------------------------------------------------------------
+    // anchor for shift-click range-select in the Y-axis tree, below.
+    lastYRangeClick: null as string | null,
+    // Shift-click toggles every file row between the last-clicked row and
+    // this one (in the tree's current visible order) to match this click's
+    // own resulting state, the common file-manager range-select
+    // convention - not something that existed here before, but a
+    // reasonable one to add now that the flat list is a browsable tree
+    // rather than a single short column.
+    toggleYRange(row: TreeRow<string>, shiftKey: boolean) {
+      const col = row.item;
+      if (col === null) return;
+      if (shiftKey && this.lastYRangeClick !== null) {
+        const rows = this.getColumnVisibleRows(
+          "y",
+          (c) => !this.config.refFrame || this.rotateableVectors.includes(c.split(":")[0]!),
+        ).filter((r) => r.type === "file" && !r.hidden);
+        const fromIdx = rows.findIndex((r) => r.path === this.lastYRangeClick);
+        const toIdx = rows.findIndex((r) => r.path === row.path);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+          const shouldSelect = !this.config.yAxes[col];
+          for (let i = lo; i <= hi; i++) {
+            const c = rows[i]!.item!;
+            const isOn = !!this.config.yAxes[c];
+            if (shouldSelect && !isOn) this.toggleY(c);
+            else if (!shouldSelect && isOn) this.toggleY(c);
+          }
+          this.lastYRangeClick = row.path;
+          return;
+        }
+      }
+      this.toggleY(col);
+      this.lastYRangeClick = row.path;
+    },
     toggleY(col: string) {
       if (this.config.yAxes[col]) {
         const { [col]: _, ...rest } = this.config.yAxes;

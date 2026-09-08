@@ -572,6 +572,55 @@ class BodyReactionForce(SiteLoad):
             state.data.qfrc_applied,
         )
 
+    def get_visuals(self, state: MjState) -> list[ArrowConfig]:
+        """Returns a list of arrow configurations for the renderer, including the reaction force/torque this class (unlike plain `SiteLoad`) applies to `xtion_body`."""
+        if not self.active:
+            return []
+
+        visuals = super().get_visuals(state)
+
+        if self.xtion_body is None:
+            return visuals
+
+        # same position as apply_load's reaction point above - the reaction
+        # force/torque acts here but on xtion_body, not on the world at
+        # action_site the way the action force/torque above does
+        action_pos = self.action_site.rt_pos(state)
+
+        if self._last_f[3] > 1e-4 and self._vis.reaction_force:
+            visuals.append(
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=-self._last_f[:3],
+                    color=Color[self._vis.reaction_force].rgba,
+                    is_torque=False,
+                    length_scale=self.force_length_scale
+                    if self.force_length_scale is not None
+                    else self._vis.force_length_scale,
+                    width_scale=self.force_width_scale
+                    if self.force_width_scale is not None
+                    else self._vis.force_width_scale,
+                )
+            )
+
+        if self._last_t[3] > 1e-4 and self._vis.reaction_torque:
+            visuals.append(
+                ArrowConfig(
+                    pos=action_pos,
+                    vec=-self._last_t[:3],
+                    color=Color[self._vis.reaction_torque].rgba,
+                    is_torque=True,
+                    length_scale=self.torque_length_scale
+                    if self.torque_length_scale is not None
+                    else self._vis.torque_length_scale,
+                    width_scale=self.torque_width_scale
+                    if self.torque_width_scale is not None
+                    else self._vis.torque_width_scale,
+                )
+            )
+
+        return visuals
+
 
 class ScalarForce(BodyReactionForce):
     """Force along the local X-axis of `action_site`, scaled by `scalar_func` each timestep."""

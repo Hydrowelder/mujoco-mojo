@@ -18,7 +18,7 @@ declare global {
     formatTimeAgo(seconds: number): string;
     notifTimeAgo(timestamp: number, tick?: number): string;
     themeColor(name: string): string;
-    trialViewer(trialId: string, externalUrl: string): object;
+    trialViewer(trialId: string, externalUrl: string, showQuickFilters: boolean): object;
     monitor(): object;
     mosaic(): object;
     sensai(): object;
@@ -36,6 +36,25 @@ declare global {
       boxHeight: number,
       initialColor: string,
     ): { color: { hexString: string; set(v: string): void }; on(event: string, callback: (color: { hexString: string }) => void): void };
+    // _settings_panel.html's per-field color picker isn't bundled TS either
+    // (built at runtime from the schema). VisualizationSettings accepts
+    // either a Color enum member name or a raw hex code, so these are purely
+    // informational/display helpers, not value coercion: the closest named
+    // Color to an arbitrary hex, and resolving a field's current value (a
+    // name or a hex) to the hex string used to paint a swatch/the wheel.
+    mojoNearestColorName(hex: string, choices: Record<string, string>): string;
+    mojoResolveColorHex(
+      value: string | null | undefined,
+      choices: Record<string, string>,
+    ): string | null;
+    mojoIsHexColor(value: unknown): boolean;
+    // collapses a hex that exactly matches a named swatch back to that name
+    // (mirrors Color.parse's own alias-collapsing server-side), for
+    // immediate feedback rather than waiting on a save+reload round trip.
+    mojoCollapseColorAlias(
+      value: string | null | undefined,
+      choices: Record<string, string>,
+    ): string | null | undefined;
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabSelectNodeQuat?(nodeId: number, base: string): void;
