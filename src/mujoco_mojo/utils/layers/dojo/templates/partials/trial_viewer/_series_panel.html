@@ -75,7 +75,7 @@
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('x')", "collapseAllColumnFolders('x')", "getColumnTreeRows('x').some(r => r.type === 'folder')") }}
                     </div>
 
-                    <div x-show="showQuickFilters"
+                    <div x-show="$store.dojo.showQuickFilters"
                          class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('x')"
                                   :key="depth">
@@ -641,7 +641,7 @@
                          trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
                          reused as-is since refFrame already maps to availableQuats
                          there too. -->
-                    <div x-show="showQuickFilters"
+                    <div x-show="$store.dojo.showQuickFilters"
                          class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('refFrame')"
                                   :key="depth">
@@ -757,7 +757,7 @@
                         </div>
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('y')", "collapseAllColumnFolders('y')", "getColumnTreeRows('y').some(r => r.type === 'folder')") }}
                     </div>
-                    <div x-show="showQuickFilters"
+                    <div x-show="$store.dojo.showQuickFilters"
                          class="flex flex-col gap-1 mb-4">
                         <template x-for="depth in getActiveLevels('y')"
                                   :key="depth">
@@ -797,17 +797,21 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('y', row.path)", "isColumnFolderCollapsed('y', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        <label class="flex items-center gap-2 py-1 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
+                                        {# py-1 moved off the label and onto the inner span - see
+                                           tree_folder_row's comment in _macros.html for why. #}
+                                        <label class="flex items-center gap-2 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
                                                :title="row.item"
                                                @mousedown.prevent>
                                             {{ tree_indent_guides('row') }}
-                                            <input type="checkbox"
-                                                   :checked="config.yAxes[row.item]"
-                                                   @click.stop="toggleYRange(row, $event.shiftKey)"
-                                                   class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
-                                            <span class="text-sm font-mono font-bold min-w-0 flex-1 truncate"
-                                                  :class="config.yAxes[row.item] ? 'text-accent-500' : 'text-ink-secondary'"
-                                                  x-text="row.name"></span>
+                                            <span class="flex items-center gap-2 min-w-0 flex-1 py-1">
+                                                <input type="checkbox"
+                                                       :checked="config.yAxes[row.item]"
+                                                       @click.stop="toggleYRange(row, $event.shiftKey)"
+                                                       class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
+                                                <span class="text-sm font-mono font-bold min-w-0 flex-1 truncate"
+                                                      :class="config.yAxes[row.item] ? 'text-accent-500' : 'text-ink-secondary'"
+                                                      x-text="row.name"></span>
+                                            </span>
                                         </label>
                                     </template>
                                 </div>
@@ -1108,48 +1112,62 @@
                                         Apply Changes
                                     </button>
 
+                                    {% from 'partials/trial_viewer/_macros.html' import color_picker, field_help_icon, field_reset_icon_expr, range_slider_fill_style %}
                                     <div class="space-y-1">
-                                        <label class="text-sm font-bold text-ink-secondary uppercase">Legend
-                                            Label</label>
+                                        <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Legend
+                                            Label
+                                            {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'label')") }}
+                                            {{ field_reset_icon_expr("temp.label === ''", "temp.label = ''; isDirty = true") }}
+                                        </label>
                                         <input type="text"
                                                x-model="temp.label"
                                                @input="isDirty = true"
                                                :placeholder="temp.label || col"
                                                class="input-text" />
                                     </div>
-                                    {% from 'partials/trial_viewer/_macros.html' import color_picker %}
-                                    {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true')
-                                    }}
+                                    {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true',
+                                    help_expr="plotDefFieldHelp('YAxisConfig', 'color')") }}
 
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Width: <span class="text-accent-500"
-                                                      x-text="temp.width"></span></label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Width: <span class="text-accent-500"
+                                                      x-text="temp.width"></span>
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'width')") }}
+                                                {{ field_reset_icon_expr("temp.width === 3", "temp.width = 3; isDirty = true") }}
+                                            </label>
                                             <input type="range"
                                                    min="0.5"
                                                    max="8"
                                                    step="0.5"
                                                    x-model.number="temp.width"
                                                    @input="isDirty = true"
-                                                   class="w-full h-2 bg-track rounded-lg appearance-none cursor-pointer accent-accent-500" />
+                                                   :style="{{ range_slider_fill_style('temp.width', 0.5, 8) }}"
+                                                   class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-accent-500" />
                                         </div>
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Opacity: <span class="text-accent-500"
-                                                      x-text="Math.round(temp.opacity*100)+'%'"></span></label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Opacity: <span class="text-accent-500"
+                                                      x-text="Math.round(temp.opacity*100)+'%'"></span>
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'opacity')") }}
+                                                {{ field_reset_icon_expr("temp.opacity === 1", "temp.opacity = 1; isDirty = true") }}
+                                            </label>
                                             <input type="range"
                                                    min="0.1"
                                                    max="1"
                                                    step="0.05"
                                                    x-model.number="temp.opacity"
                                                    @input="isDirty = true"
-                                                   class="w-full h-2 bg-track rounded-lg appearance-none cursor-pointer accent-accent-500" />
+                                                   :style="{{ range_slider_fill_style('temp.opacity', 0.1, 1) }}"
+                                                   class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-accent-500" />
                                         </div>
                                     </div>
 
                                     <div class="grid grid-cols-2 gap-2">
                                         <div class="space-y-1 relative"
                                              x-data="{ sOpen: false }">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Style</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Style
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'dash')") }}
+                                                {{ field_reset_icon_expr("temp.dash === 'solid'", "temp.dash = 'solid'; isDirty = true") }}
+                                            </label>
                                             <button @click="sOpen = !sOpen"
                                                     @click.away="sOpen = false"
                                                     class="dropdown-trigger-sm">
@@ -1178,7 +1196,10 @@
                                         </div>
                                         <div class="space-y-1 relative"
                                              x-data="{ mOpen: false }">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Marker</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Marker
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'marker')") }}
+                                                {{ field_reset_icon_expr("temp.marker === 'none'", "temp.marker = 'none'; isDirty = true") }}
+                                            </label>
                                             <button @click="mOpen = !mOpen"
                                                     @click.away="mOpen = false"
                                                     class="dropdown-trigger-sm">
@@ -1210,7 +1231,9 @@
                                     <!-- ── FILTER STACK ── -->
                                     <div class="space-y-2 pt-2 border-t border-subtle dark:border-subtle/50">
                                         <div class="flex items-center justify-between">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight">Filters</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">Filters
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'filters')") }}
+                                            </label>
                                             <!-- add filter dropdown -->
                                             <div class="relative"
                                                  @click.away="addFilterOpen = false">

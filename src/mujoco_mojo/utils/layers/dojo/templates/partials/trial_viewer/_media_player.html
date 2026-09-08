@@ -56,8 +56,8 @@
                 <!-- miniplayer toggle -->
                 <button @click="mediaMiniplayerOpen = !mediaMiniplayerOpen"
                         :title="mediaMiniplayerOpen ? 'Close miniplayer' : 'Open miniplayer'"
-                        class="transition-colors"
-                        :class="mediaMiniplayerOpen ? 'text-accent-500' : 'text-ink-muted hover:text-accent-500'">
+                        class="transition-colors btn aspect-square"
+                        :class="mediaMiniplayerOpen ? 'btn-primary' : 'btn-secondary'">
                     <svg class="w-4 h-4"
                          fill="none"
                          stroke="currentColor"
@@ -81,16 +81,57 @@
 
                 <!-- file selector (multiple files) or filename badge (single file) -->
                 <template x-if="mediaFiles.length > 1">
-                    <select :value="selectedMedia"
-                            @change="selectedMedia = $event.target.value"
-                            class="text-sm font-mono bg-surface border border-control rounded px-2 py-0.5 text-ink-strong hover:border-accent-500 transition-colors focus:outline-none focus:border-accent-500">
-                        <template x-for="f in mediaFiles"
-                                  :key="f">
-                            <option :value="f"
-                                    :selected="f === selectedMedia"
-                                    x-text="f"></option>
-                        </template>
-                    </select>
+                    <div class="relative shrink-0"
+                         x-data="{
+                             mediaSelectOpen: false,
+                             // fixed width fit to the *widest* filename, not just
+                             // whichever is currently selected - otherwise the trigger
+                             // (and the panel, which matches its width) would resize
+                             // every time the selection changes. ch is exact here since
+                             // .dropdown-trigger/.dropdown-option are both font-mono -
+                             // every character really is the same width, so this needs
+                             // no JS text measurement. +3rem covers the button's own
+                             // padding, the label/chevron gap, the chevron itself, and
+                             // the border - see dropdown-trigger-sm/dropdown-chevron in
+                             // inputs.css for those exact values.
+                             get triggerWidth() {
+                                 const maxLen = Math.max(0, ...mediaFiles.map(f => f.length));
+                                 return `min(16rem, calc(${maxLen}ch + 3rem))`;
+                             },
+                         }"
+                         :style="`width: ${triggerWidth}`">
+                        <button @click="mediaSelectOpen = !mediaSelectOpen"
+                                @click.away="mediaSelectOpen = false"
+                                class="dropdown-trigger-sm">
+                            <span class="truncate"
+                                  x-text="selectedMedia"></span>
+                            <svg class="dropdown-chevron"
+                                 :class="mediaSelectOpen ? 'rotate-180' : ''"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div x-show="mediaSelectOpen"
+                             x-transition
+                             class="dropdown-panel max-h-52 overflow-y-auto custom-scrollbar">
+                            <template x-for="f in mediaFiles"
+                                      :key="f">
+                                <!-- break-all (not the default wrap-on-spaces) since a
+                                     filename is one long unbroken token - without it a
+                                     name wider than the panel just overflows instead of
+                                     wrapping to a second line -->
+                                <button @click="selectedMedia = f; mediaSelectOpen = false"
+                                        class="dropdown-option break-all"
+                                        :class="f === selectedMedia ? 'dropdown-option-active' : ''"
+                                        x-text="f"></button>
+                            </template>
+                        </div>
+                    </div>
                 </template>
                 <template x-if="mediaFiles.length === 1">
                     <span class="text-sm font-mono text-ink-muted"
@@ -111,16 +152,16 @@
                         <span class="text-sm font-bold uppercase tracking-widest text-ink-muted">Mode</span>
 
                         <!-- play / scrub toggle -->
-                        <div class="flex rounded-lg border border-control bg-surface overflow-hidden text-sm font-bold uppercase tracking-wide">
+                        <div class="relative flex gap-1 p-1 bg-control/50 rounded-lg w-fit text-sm font-bold uppercase tracking-widest border border-control shadow-xl">
                             <button @click="mediaScrubMode = 'play'"
-                                    class="px-3 py-1 transition-colors"
-                                    :class="mediaScrubMode === 'play' ? 'bg-accent-500 text-white' : 'text-ink-secondary hover:text-ink-strong hover:bg-chip dark:hover:bg-chip/50'">
+                                    class="relative z-10 px-3 py-1 rounded-md border transition-all "
+                                    :class="mediaScrubMode === 'play' ? 'btn-primary' : 'btn-secondary'">
                                 Play
                             </button>
                             <button @click="mediaIsScrubbable && (mediaScrubMode = 'scrub')"
                                     :disabled="!mediaIsScrubbable"
-                                    class="px-3 py-1 border-l border-control transition-colors"
-                                    :class="!mediaIsScrubbable ? 'opacity-40 cursor-not-allowed text-ink-muted' : mediaScrubMode === 'scrub' ? 'bg-accent-500 text-white' : 'text-ink-secondary hover:text-ink-strong hover:bg-chip dark:hover:bg-chip/50'">
+                                    class="relative z-10 px-3 py-1 rounded-md border transition-all "
+                                    :class="!mediaIsScrubbable ? 'opacity-40 cursor-not-allowed text-ink-muted' : mediaScrubMode === 'scrub' ? 'btn-primary' : 'btn-secondary'">
                                 Scrub
                             </button>
                         </div>
@@ -203,8 +244,8 @@
                                 <template x-for="preset in mediaSpeedPresets"
                                           :key="preset">
                                     <button @click="mediaIsScrubbable && (mediaPlaybackRate = preset)"
-                                            class="btn btn-secondary h-7 w-10 justify-center font-mono text-xs transition-colors"
-                                            :class="mediaPlaybackRate === preset ? 'border-accent-500! text-accent-500!' : ''"
+                                            class="btn h-7 w-10 justify-center font-mono text-xs transition-colors"
+                                            :class="mediaPlaybackRate === preset ? 'btn-primary' : 'btn-secondary'"
                                             x-text="preset + '&#x00d7;'">
                                     </button>
                                 </template>

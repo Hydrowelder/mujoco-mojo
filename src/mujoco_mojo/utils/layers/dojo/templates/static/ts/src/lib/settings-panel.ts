@@ -12,11 +12,16 @@ import { Marked } from "marked";
 // factors `marked` into one chunk shared between this bundle (main.js) and
 // sensai.ts's (marked.use({renderer: {code, codespan}}), rendering fenced
 // code blocks as embedded CodeMirror editors for chat responses). Sharing
-// the singleton would mean settings tooltips silently inherited that
-// renderer too, on any page where both happened to load. An instance of
-// its own can't be affected by another module's marked.use() call
-// regardless of chunking.
-const settingsMarked = new Marked();
+// the singleton would mean these tooltips silently inherited that renderer
+// too, on any page where both happened to load. An instance of its own
+// can't be affected by another module's marked.use() call regardless of
+// chunking. Named for its role (rendering any Field(description=...) text
+// this store's callers hand it), not "settings" specifically - main.js
+// loads on every Dojo page, so renderMarkdown() below is already globally
+// available via $store.dojo wherever a tooltip needs it (e.g. the Plot
+// Editor/Line Config panels' field_help_icon macro, _macros.html), not
+// just this file's own settings-panel tooltip.
+const dojoMarked = new Marked();
 
 export type SettingsWidget =
   | "toggle"
@@ -144,6 +149,15 @@ export interface SettingsPanelState {
   // from that scroll container's DOM subtree entirely.
   settingsTooltip: { show: boolean; text: string; top: number; left: number };
   _settingsSchema: SettingsSchema | null;
+  // dojo.show_quick_filters (settings.py), mirrored onto the store so
+  // trial-viewer.ts's X/Y-axis and reference-frame trees can read it live
+  // rather than only the value baked into the page at initial server
+  // render - without this, toggling the setting here while a trial-viewer
+  // tab is already open would only take effect on that tab's next full
+  // reload. Starts undefined (this store slice loads before trial-viewer.ts
+  // has had a chance to seed it with the page's own initial value) and is
+  // refreshed on every settings fetch/save/reset below.
+  showQuickFilters?: boolean;
 
   // Both methods, not getters: this whole state slice gets merged into the
   // wider dojoStore object via `{ ...createSettingsPanelState(), ... }`
@@ -172,7 +186,7 @@ export interface SettingsPanelState {
   hideSettingsTooltip(): void;
   settingsFieldOutOfRange(field: SettingsField): boolean;
   settingsFieldRangeMessage(field: SettingsField): string;
-  settingsRenderMarkdown(text: string): string;
+  renderMarkdown(text: string): string;
   _applySettingsResponse(data: SettingsGetResponse): void;
   _applySettingsWrite(data: SettingsWriteResponse): void;
 }
@@ -612,6 +626,19 @@ function notifyDojo(message: string, type: "success" | "error" | "info") {
   (Alpine.store("dojo") as { toast?: (m: string, t?: string) => void }).toast?.(message, type);
 }
 
+// Pulls dojo.show_quick_filters back out of a /settings response's raw
+// `values` tree (typed as Record<string, unknown> since it's the live
+// MujocoMojoSettings dump, not a shape this module otherwise needs to know)
+// - returns undefined rather than throwing if the shape isn't what's
+// expected, so a malformed/older response degrades to "leave the store
+// value alone" instead of clobbering it with undefined.
+function extractShowQuickFilters(values: Record<string, unknown>): boolean | undefined {
+  const dojo = values.dojo;
+  if (!dojo || typeof dojo !== "object") return undefined;
+  const v = (dojo as Record<string, unknown>).show_quick_filters;
+  return typeof v === "boolean" ? v : undefined;
+}
+
 export function createSettingsPanelState(): SettingsPanelState {
   return {
     settingsOpen: false,
@@ -625,6 +652,7 @@ export function createSettingsPanelState(): SettingsPanelState {
     settingsSearchQuery: "",
     settingsTooltip: { show: false, text: "", top: 0, left: 0 },
     _settingsSchema: null,
+    showQuickFilters: undefined,
 
     settingsHasInvalidFields() {
       return collectSettingsFields(this.settingsSections).some(isFieldOutOfRange);
@@ -642,9 +670,9 @@ export function createSettingsPanelState(): SettingsPanelState {
       return fieldRangeMessage(field);
     },
 
-    settingsRenderMarkdown(text) {
+    renderMarkdown(text) {
       try {
-        return settingsMarked.parse(text, { async: false }) as string;
+        return dojoMarked.parse(text, { async: false }) as string;
       } catch {
         return text;
       }
@@ -801,6 +829,7 @@ export function createSettingsPanelState(): SettingsPanelState {
       this.settingsColorChoices = data.color_choices;
       this.settingsIsLocalhost = data.is_localhost;
       this.settingsSections = parseSettingsSchema(data.schema, data.values, data.value_meta);
+      this.showQuickFilters = extractShowQuickFilters(data.values) ?? this.showQuickFilters;
     },
 
     _applySettingsWrite(data) {
@@ -810,6 +839,7 @@ export function createSettingsPanelState(): SettingsPanelState {
         data.values,
         data.value_meta,
       );
+      this.showQuickFilters = extractShowQuickFilters(data.values) ?? this.showQuickFilters;
     },
   };
 }

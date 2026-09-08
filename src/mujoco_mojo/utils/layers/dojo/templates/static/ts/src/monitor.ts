@@ -2,6 +2,7 @@ import type { DojoStore, JobStatus, TimelineBin } from "./models";
 import { themeColor } from "./lib/theme-colors";
 import Plotly from "./lib/plotly";
 import confetti from "canvas-confetti";
+import { fetchWithRetry } from "./lib/fetch-timeout";
 
 interface StatCard {
   label: string;
@@ -62,7 +63,7 @@ function monitor() {
       });
 
       try {
-        const resp = await fetch("/monitor/api/status/job");
+        const resp = await fetchWithRetry("/monitor/api/status/job");
         const data = (await resp.json()) as JobStatus;
         if (data && !data.error) {
           const store = Alpine.store("dojo") as DojoStore;

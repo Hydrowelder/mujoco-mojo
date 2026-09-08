@@ -4,8 +4,12 @@
 // like these are deduped natively within a bundle, so this is just for a
 // single shared import path -- not a separate build step anymore.
 export { EditorView, basicSetup } from "codemirror";
+export { hoverTooltip } from "@codemirror/view";
+export type { Tooltip } from "@codemirror/view";
 export { json, jsonParseLinter } from "@codemirror/lang-json";
 export { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
 export { EditorState, Compartment } from "@codemirror/state";
-export { linter, lintGutter } from "@codemirror/lint";
-export { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+export { linter, lintGutter, forceLinting } from "@codemirror/lint";
+export type { Diagnostic } from "@codemirror/lint";
+export { syntaxHighlighting, defaultHighlightStyle, syntaxTree } from "@codemirror/language";
+export type { SyntaxNode } from "@lezer/common";

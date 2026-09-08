@@ -9,6 +9,13 @@ import {
   type TreeRow,
 } from "./lib/tree";
 import { themeColor, themeColorAlpha } from "./lib/theme-colors";
+import { fetchWithTimeout, fetchWithRetry } from "./lib/fetch-timeout";
+import {
+  describeSchemaPath,
+  describeEnumValue,
+  describeDefField,
+  type JsonSchemaNode,
+} from "./lib/json-schema";
 import Plotly from "./lib/plotly";
 import LZString from "lz-string";
 import "./lib/color-picker";
@@ -24,16 +31,19 @@ import {
   Compartment,
   linter,
   lintGutter,
+  forceLinting,
+  hoverTooltip,
+  syntaxTree,
+  type Tooltip,
+  type SyntaxNode,
+  type Diagnostic,
 } from "./lib/codemirror";
-import {
-  DASH_STYLE_VALUES,
-  PLOT_CONFIG_SCHEMA,
-} from "./lib/plot-config.generated";
+import { DASH_STYLE_VALUES } from "./lib/plot-config.generated";
 import {
   attachVerticalResizeHandle,
   restorePersistedHeight,
 } from "./lib/resize";
-import { validateAgainstSchema } from "./lib/schema-validate";
+import { validateAgainstSchema, collectSchemaDiagnostics, type SchemaPathSegment } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
@@ -84,14 +94,33 @@ const DEFAULT_CONFIG: PlotConfig = {
   rangeY: null,
   xScale: "linear",
   yScale: "linear",
+  xLogBase: null,
+  yLogBase: null,
   plotType: "cartesian",
   vsEnabled: false,
   vsRange: [0, 10],
   vsPinned: [],
   annotations: [],
   shapes: [],
+  displayUnitSystem: null,
   maxPoints: null,
 };
+
+// Renders one DEFAULT_CONFIG value for a "Default: `X`." tooltip line
+// (plotFieldHelp above), matching the exact rendering
+// GenerateJsonSchemaWithDefaults (settings.py) uses server-side for
+// Pydantic-level defaults - "true"/"false" for booleans, str(x) otherwise,
+// which for Python's None is the literal text "None" - so a
+// frontend-sourced default reads identically to a schema-sourced one
+// rather than looking like a different kind of value. Empty string
+// (title/xAxisTitle/yAxisTitle's actual default) renders as "(empty)"
+// instead of nothing visibly between the backticks.
+function formatDefaultValue(value: unknown): string {
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return value === "" ? "(empty)" : value;
+  return JSON.stringify(value);
+}
 
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
@@ -123,6 +152,112 @@ const _mini: { rafId: number | null } = { rafId: null };
 // synchronous sort finishes.
 const _smartSortCollator = new Intl.Collator(undefined, { sensitivity: "base" });
 
+// JSON editor hover tooltips (initCodeMirror's hoverTooltip extension) - the
+// path of JSON object keys enclosing document position `pos`, read from
+// CodeMirror's own Lezer parse tree rather than any text-based/regex
+// approach, which would be fragile against nested strings, escaped quotes,
+// etc. lib/json-schema.ts's describeSchemaPath then walks
+// plotConfigSchema alongside this same path to find that field's
+// description.
+//
+// @codemirror/lang-json's grammar (@lezer/json) only names three node
+// types relevant here: "Property" (a key:value pair), "PropertyName" (a
+// Property's own key, still-quoted string), and "Array" - object keys
+// versus array items are structurally different in JSON (a key is text,
+// an index is just position), so PropertyName is read for the former and
+// a plain "" placeholder pushed for the latter; describeSchemaPath already
+// treats any segment as "descend into .items" once the schema node it's
+// standing on is itself an array, so the placeholder's actual value is
+// never read, it's a pure step-marker. Walking bottom-up from `pos` (via
+// resolveInner, which finds the innermost node covering that position)
+// through every such ancestor and prepending each is what turns, e.g.,
+// hovering the "color" in `{"yAxes": {"ax1": {"color": "#fff"}}}` into
+// the path ["yAxes", "ax1", "color"] - "ax1" is an arbitrary dict key
+// (PlotConfig.yAxes is dict[str, YAxisConfig]), captured the same way as
+// any other PropertyName even though describeSchemaPath will treat it as
+// a dict-value step rather than a fixed field lookup.
+function jsonPathAt(state: EditorState, pos: number): string[] {
+  const path: string[] = [];
+  let cur: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
+  while (cur) {
+    if (cur.name === "Property") {
+      const nameNode = cur.getChild("PropertyName");
+      if (nameNode) {
+        const raw = state.doc.sliceString(nameNode.from, nameNode.to);
+        try {
+          path.unshift(JSON.parse(raw) as string);
+        } catch {
+          path.unshift(raw.slice(1, -1));
+        }
+      }
+    } else if (cur.name === "Array") {
+      path.unshift("");
+    }
+    cur = cur.parent;
+  }
+  return path;
+}
+
+// the concrete node types @lezer/json ever uses for a JSON *value* position
+// (as opposed to punctuation like "{", ",", ":" - which are themselves
+// nodes in the tree, just not ones a value path ever points at).
+const JSON_VALUE_NODE_NAMES = new Set(["Object", "Array", "String", "Number", "True", "False", "Null"]);
+
+function decodePropertyName(state: EditorState, nameNode: SyntaxNode): string {
+  const raw = state.doc.sliceString(nameNode.from, nameNode.to);
+  try {
+    return JSON.parse(raw) as string;
+  } catch {
+    return raw.slice(1, -1);
+  }
+}
+
+// Reverse of jsonPathAt: walks a *structured* path (real object keys and
+// array indices, as produced by collectSchemaDiagnostics - not
+// jsonPathAt's own "" placeholder for an array step, which only needs to
+// know "inside some array" for a schema lookup, not which element) down
+// from the document root to the exact node it names, so a schema
+// validation error can underline the specific offending value instead of
+// just being listed as text. Returns null if the path doesn't resolve
+// (e.g. a stale diagnostic from before the day's last edit, or a key that
+// was itself renamed/removed).
+function jsonRangeForPath(
+  state: EditorState,
+  path: SchemaPathSegment[],
+): { from: number; to: number } | null {
+  let node: SyntaxNode | null = syntaxTree(state).topNode.firstChild;
+  for (const seg of path) {
+    if (!node) return null;
+    if (typeof seg === "number") {
+      if (node.name !== "Array") return null;
+      let child: SyntaxNode | null = node.firstChild;
+      let index = -1;
+      let found: SyntaxNode | null = null;
+      while (child) {
+        if (JSON_VALUE_NODE_NAMES.has(child.name)) {
+          index += 1;
+          if (index === seg) {
+            found = child;
+            break;
+          }
+        }
+        child = child.nextSibling;
+      }
+      node = found;
+    } else {
+      if (node.name !== "Object") return null;
+      const match = node
+        .getChildren("Property")
+        .find((prop) => {
+          const nameNode = prop.getChild("PropertyName");
+          return nameNode ? decodePropertyName(state, nameNode) === seg : false;
+        });
+      node = match?.lastChild ?? null;
+    }
+  }
+  return node ? { from: node.from, to: node.to } : null;
+}
+
 // ---------------------------------------------------------------------------
 // Lab tab state
 // ---------------------------------------------------------------------------
@@ -151,6 +286,22 @@ interface LabSchema {
 // Component factory
 // ---------------------------------------------------------------------------
 function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boolean) {
+  // dojo.show_quick_filters (settings.py) - whether the X/Y-axis and
+  // reference-frame dropdowns show their regex quick-filter chip rows.
+  // Seeds $store.dojo.showQuickFilters (settings-panel.ts) from the
+  // server-rendered initial value (routers/mosaic.py) the first time this
+  // page constructs its component - templates read the store property
+  // directly (not a local copy here), so if the settings panel is later
+  // opened and saved in the same tab, every X/Y-axis/refFrame dropdown
+  // picks up the change immediately instead of only on the next full
+  // reload. Store.ts's `alpine:init` registration always runs before
+  // Alpine processes this page's own x-data (see global.d.ts's comment on
+  // the bare `Alpine` global), so the store already exists here.
+  const _quickFiltersStore = Alpine.store("dojo") as { showQuickFilters?: boolean } | undefined;
+  if (_quickFiltersStore && _quickFiltersStore.showQuickFilters === undefined) {
+    _quickFiltersStore.showQuickFilters = showQuickFilters;
+  }
+
   const self = {
     // Alpine magic (injected at runtime - declared here for TS)
     ...(null as unknown as AlpineMagics),
@@ -158,13 +309,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // --- BASE STATE ---
     trialId,
     externalUrl,
-    // dojo.show_quick_filters (settings.py) - whether the X/Y-axis and
-    // reference-frame dropdowns show their regex quick-filter chip rows.
-    // Read once from the server-rendered page (routers/mosaic.py), not
-    // fetched from /settings client-side: unlike the settings PANEL's own
-    // schema-driven fields, this is a single boolean this one page needs
-    // at load time, not something rendered generically.
-    showQuickFilters,
     warpId: null as number | null,
     paddingLen: 2,
     loading: true,
@@ -263,6 +407,88 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       string,
       { draft: YAxisConfig; baseSnapshot: string }
     >,
+
+    // --- PLOT CONFIG SCHEMA (loaded from /mosaic/api/plot-config-schema on
+    // init) - PlotConfig's own JSON schema, Field descriptions included.
+    // Single source of truth for the Plot Editor's hover-info icons
+    // (_macros.html's field_help_icon, called from _chart.html) and the
+    // JSON editor's CodeMirror hover tooltips (initCodeMirror below) -
+    // both read this same schema via lib/json-schema.ts's
+    // describeSchemaPath rather than each hand-maintaining their own copy
+    // of what every field means.
+    plotConfigSchema: null as JsonSchemaNode | null,
+    // Most PlotConfig fields are *required* at the model level (a saved
+    // profile must specify everything explicitly - see plot_config.py),
+    // unlike MujocoMojoSettings where every field genuinely has a
+    // permanent default - so GenerateJsonSchemaWithDefaults (settings.py)
+    // has nothing to append to their description; only the handful of
+    // truly-optional fields (maxPoints, displayUnitSystem, plotType) get a
+    // "Default:" line from the schema itself. The real "what does a
+    // brand-new plot start with" values live in this file's own
+    // DEFAULT_CONFIG instead, so this falls back to that when the
+    // schema's description doesn't already carry a default.
+    plotFieldHelp(key: string): string {
+      const description = describeSchemaPath(this.plotConfigSchema, [key]);
+      if (!description || description.includes("\n\nDefault:")) return description;
+      if (!(key in DEFAULT_CONFIG)) return description;
+      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      return `${description}\n\nDefault: \`${formatDefaultValue(value)}\`.`;
+    },
+    // Same schema, but for one option within a dropdown (e.g. field "grid",
+    // value "all" -> GridMode.ALL's own docstring) rather than the field as
+    // a whole - see settings.py's GenerateJsonSchemaWithDefaults for where
+    // per-option "x-enum-descriptions" comes from.
+    plotEnumOptionHelp(key: string, value: string): string {
+      return describeEnumValue(this.plotConfigSchema, [key], value);
+    },
+    // For the Notes (Annotation) and Shapes editors - fields on a nested
+    // model rather than a top-level PlotConfig field, named directly (see
+    // lib/json-schema.ts's describeDefField for why the Shape editor can't
+    // just use plotFieldHelp's own path-walking here: the same field name
+    // means different things across VlineShape/HlineShape/RectShape).
+    plotDefFieldHelp(defName: string, fieldName: string): string {
+      return describeDefField(this.plotConfigSchema, defName, fieldName);
+    },
+    // Maps a shape's own "type" discriminator (ShapeType's values: "vline"/
+    // "hline"/"rect") to its $defs name, for plotDefFieldHelp calls in the
+    // Shape editor whose defName has to follow shapeDraft.type rather than
+    // being fixed per call site (fields like x0/y0/dash/color are shared
+    // across more than one shape type, each with its own description).
+    shapeDefName(type: string): string {
+      if (type === "vline") return "VlineShape";
+      if (type === "hline") return "HlineShape";
+      return "RectShape";
+    },
+    // --- PER-FIELD RESET (Plot Editor) ---
+    // Whether config[key] currently matches DEFAULT_CONFIG[key] - drives
+    // the per-field reset icon's x-show (_macros.html's field_reset_icon),
+    // the same "only show a reset affordance once there's something to
+    // reset" behavior the Dojo settings panel's own per-field reset icon
+    // uses. JSON.stringify rather than === since a couple of these
+    // (rangeX/rangeY) are small arrays, not primitives - reference
+    // equality would never match even when the values are identical.
+    plotFieldIsDefault(key: string): boolean {
+      if (!(key in DEFAULT_CONFIG)) return true;
+      const current = (this.config as unknown as Record<string, unknown>)[key];
+      const def = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      return JSON.stringify(current) === JSON.stringify(def);
+    },
+    resetPlotField(key: string) {
+      if (!(key in DEFAULT_CONFIG)) return;
+      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      // deep-clone any object/array default (rangeX/rangeY are the only
+      // such fields among the Plot Editor's own, but this stays correct
+      // if a future field needs it too) so resetting two fields back to
+      // back can never have one's reset mutate DEFAULT_CONFIG's own
+      // array/object and silently change the other's "default" out from
+      // under it.
+      const cloned =
+        typeof value === "object" && value !== null
+          ? (JSON.parse(JSON.stringify(value)) as unknown)
+          : value;
+      (this.config as unknown as Record<string, unknown>)[key] = cloned;
+      this.saveAndRender();
+    },
 
     // --- MATCHUP STATE ---
     vsDatasets: {} as Record<string, Record<string, number[]>>,
@@ -568,7 +794,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (queryStr) url += `?${queryStr}`;
       // lab-virtual columns can change value for the same URL after an
       // in-place edit + save, so always bypass the browser HTTP cache
-      const resp = await fetch(url, { cache: "no-store" });
+      const resp = await fetchWithRetry(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
@@ -2137,14 +2363,29 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       observer.observe(document.documentElement, { attributes: true });
 
       try {
-        const schemaResp = await fetch("/mosaic/api/filter-schema");
+        const schemaResp = await fetchWithTimeout("/mosaic/api/filter-schema");
         this.filterSchemas = (await schemaResp.json()) as FilterSchema[];
       } catch (e) {
         console.warn("Failed to load filter schemas", e);
       }
 
       try {
-        const statusResp = await fetch("/monitor/api/status/job");
+        const plotSchemaResp = await fetchWithTimeout("/mosaic/api/plot-config-schema");
+        this.plotConfigSchema = (await plotSchemaResp.json()) as JsonSchemaNode;
+        // the JSON editor's schema-diagnostics linter (initCodeMirror,
+        // below) reads this same field via closure but only re-runs on
+        // document edits - if the editor already mounted before this
+        // fetch resolved (a real race: _json_editor.html's own x-init
+        // fires independently of this async init()), force one lint pass
+        // now so violations show up without the user needing to type
+        // anything first.
+        if (_cm.editor) forceLinting(_cm.editor);
+      } catch (e) {
+        console.warn("Failed to load plot config schema", e);
+      }
+
+      try {
+        const statusResp = await fetchWithTimeout("/monitor/api/status/job");
         const statusData = (await statusResp.json()) as {
           error?: boolean;
           is_complete: boolean;
@@ -2193,7 +2434,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         // inject it now (before watchers are registered so this is a silent migration).
         if (this.config.refFrame) {
           const hasRotation = Object.values(this.config.yAxes).some((y) =>
-            y.filters.some((f) => f.type === "rotation"),
+            (y.filters ?? []).some((f) => f.type === "rotation"),
           );
           if (!hasRotation) this.applyRefFrame(this.config.refFrame);
         }
@@ -3031,35 +3272,50 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       }
     },
 
-    setVsPreset(delta: number) {
-      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
-      this.vsDraft.range = [cur - delta, cur + delta];
-    },
-
-    setVsAll() {
+    // shared by every vs-range preset below so "the actual set of trial
+    // numbers that exist" has exactly one computation, not one hand-rolled
+    // per caller (setVsAll/isVsAll used to each redo this independently,
+    // and setVsPreset skipped it entirely - see its own comment).
+    vsTrialBounds(): { min: number; max: number } | null {
       const nums = this.allTrials
         .map((t) => parseInt(t.split("_").pop() ?? ""))
         .filter((n) => !isNaN(n));
-      if (!nums.length) return;
-      this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+      if (!nums.length) return null;
+      return { min: Math.min(...nums), max: Math.max(...nums) };
+    },
+
+    setVsPreset(delta: number) {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const bounds = this.vsTrialBounds();
+      // clamp each edge independently to the real trial range rather than
+      // just cur +/- delta - viewing trial 0 with "+/-10" should land on
+      // [0, 10], not [-10, 10] (trial numbers can't go negative, and more
+      // generally shouldn't run past whichever trial is actually last).
+      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
+      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
+      this.vsDraft.range = [lo, hi];
+    },
+
+    setVsAll() {
+      const bounds = this.vsTrialBounds();
+      if (!bounds) return;
+      this.vsDraft.range = [bounds.min, bounds.max];
     },
 
     isVsPreset(delta: number): boolean {
       const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const bounds = this.vsTrialBounds();
+      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
+      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
       const [a, b] = this.vsDraft.range;
-      return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+      return Math.min(a, b) === lo && Math.max(a, b) === hi;
     },
 
     isVsAll(): boolean {
-      const nums = this.allTrials
-        .map((t) => parseInt(t.split("_").pop() ?? ""))
-        .filter((n) => !isNaN(n));
-      if (!nums.length) return false;
+      const bounds = this.vsTrialBounds();
+      if (!bounds) return false;
       const [a, b] = this.vsDraft.range;
-      return (
-        Math.min(a, b) === Math.min(...nums) &&
-        Math.max(a, b) === Math.max(...nums)
-      );
+      return Math.min(a, b) === bounds.min && Math.max(a, b) === bounds.max;
     },
 
     vsInRangeCount(): number {
@@ -3142,14 +3398,54 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // collapsed is what actually declutters that case, so an absent entry
     // here means "collapsed" instead of the opposite default those two use.
     columnTreeCollapsed: {} as Record<string, boolean>,
+    // Caches getColumnTreeRows' result per field, keyed on the few things
+    // that actually change it (the underlying columns array's identity,
+    // config.refFrame for the y field's rotatable-vector restriction, and
+    // that field's own search string) - NOT columnTreeCollapsed, which is
+    // deliberately excluded so a plain folder toggle can't invalidate it.
+    // Before this, every toggle re-ran getFilteredCols (regex filter +
+    // sort) and rebuilt the whole tree from scratch even though neither
+    // actually depends on which folders happen to be open - free for
+    // Profiles' handful of entries, but real, repeated O(n log n) work on
+    // a signal tree with hundreds of columns, which is what made folder
+    // expansion feel slow there specifically while staying instant on
+    // Profiles. selectableYColumns/availableQuats are getters that build a
+    // fresh array on every access, so their own reference can't be used to
+    // detect "did the underlying data actually change" - comparing
+    // this.columns (a plain, only-reassigned-not-mutated property) plus
+    // refFrame instead sidesteps that without needing to materialize
+    // either getter just to check the cache.
+    _columnTreeRowsCache: {} as Record<
+      string,
+      { colsRef: string[]; refFrame: string; search: string; rows: TreeRow<string>[] }
+    >,
     // extraFilter: an additional per-column predicate beyond
     // getFilteredCols(field) itself - the Y-axis dropdown also excludes
     // non-rotateable columns while a reference frame is active, a
     // condition specific to that one call site rather than something
     // getFilteredCols itself should know about.
     getColumnTreeRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      // 'y' is called both without extraFilter (the has-folders check
+      // driving tree_expand_collapse_buttons' x-show) and with it (actual
+      // row rendering) - two different result sets for the same field, so
+      // they need their own cache slots or one call would silently return
+      // the other's (stale, wrongly filtered or wrongly unfiltered) rows.
+      const cacheKey = extraFilter ? `${field}:filtered` : field;
+      const search = (this as unknown as Record<string, string>)[field + "Search"] ?? "";
+      const refFrame = this.config.refFrame ?? "";
+      const cached = this._columnTreeRowsCache[cacheKey];
+      if (
+        cached &&
+        cached.colsRef === this.columns &&
+        cached.refFrame === refFrame &&
+        cached.search === search
+      ) {
+        return cached.rows;
+      }
       const cols = this.getFilteredCols(field);
-      return buildTreeRowsFromNames(extraFilter ? cols.filter(extraFilter) : cols);
+      const rows = buildTreeRowsFromNames(extraFilter ? cols.filter(extraFilter) : cols);
+      this._columnTreeRowsCache[cacheKey] = { colsRef: this.columns, refFrame, search, rows };
+      return rows;
     },
     // Single source of truth for "is this column-tree folder currently
     // collapsed" (default true, absent an explicit entry) - used by the
@@ -3162,14 +3458,32 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const key = field + ":" + path;
       return key in this.columnTreeCollapsed ? !!this.columnTreeCollapsed[key] : true;
     },
+    // Last output of getColumnVisibleRows per field (same field:filtered
+    // keying as _columnTreeRowsCache, for the same reason) - fed back into
+    // visibleTreeRows as `previous` so it can hand back the exact same row
+    // reference for anything whose hidden state didn't change on this
+    // call, rather than a fresh spread copy of every row every time. See
+    // visibleTreeRows' own comment in lib/tree.ts for why that reference
+    // stability is what actually lets Alpine skip re-evaluating most of
+    // the tree's bindings on a single folder toggle.
+    _columnVisibleRowsCache: {} as Record<string, TreeRow<string>[]>,
     getColumnVisibleRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      const cacheKey = extraFilter ? `${field}:filtered` : field;
       const rows = this.getColumnTreeRows(field, extraFilter);
       const collapsed: Record<string, boolean> = {};
       for (const row of rows) {
         if (row.type !== "folder") continue;
         collapsed[row.path] = this.isColumnFolderCollapsed(field, row.path);
       }
-      return visibleTreeRows(rows, collapsed, "", () => true);
+      const result = visibleTreeRows(
+        rows,
+        collapsed,
+        "",
+        () => true,
+        this._columnVisibleRowsCache[cacheKey],
+      );
+      this._columnVisibleRowsCache[cacheKey] = result;
+      return result;
     },
     toggleColumnFolder(field: string, path: string) {
       const key = field + ":" + path;
@@ -3356,8 +3670,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     validateConfig(cfg: PlotConfig): string[] {
-      // schema-level checks (types, required fields, enums, discriminated unions, ...)
-      const errors: string[] = validateAgainstSchema(cfg, PLOT_CONFIG_SCHEMA);
+      // schema-level checks (types, required fields, enums, discriminated
+      // unions, ...) - against plotConfigSchema (fetched once from
+      // /mosaic/api/plot-config-schema, the same schema the Plot Editor's
+      // and JSON editor's hover tooltips already read), not a second copy
+      // baked into the bundle at build time. Skips this pass entirely
+      // before that fetch resolves rather than blocking on it - the
+      // hand-written semantic checks below still run regardless. The cast
+      // is just bridging two structurally-equivalent-but-nominally-
+      // different JsonSchemaNode types (this file's own, from
+      // lib/json-schema.ts, vs. validateAgainstSchema's own loosely-typed
+      // Record<string, unknown> from lib/schema-validate.ts) - not
+      // papering over a real mismatch, since both represent the same
+      // arbitrary JSON Schema object at different strictness levels.
+      const errors: string[] = this.plotConfigSchema
+        ? validateAgainstSchema(cfg, this.plotConfigSchema as Record<string, unknown>)
+        : [];
       const labsNoted = new Set<string>();
       const schemasLoaded = this.labSchemas.length > 0;
 
@@ -3724,6 +4052,80 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           dark ? oneDarkHighlightStyle : defaultHighlightStyle,
         );
 
+      // Base (theme-independent) styling for the hover tooltip's own DOM
+      // below - the surrounding .cm-tooltip chrome (background/border/text
+      // color) already comes from darkTheme/lightTheme above for free,
+      // since hoverTooltip wraps whatever create() returns in that same
+      // .cm-tooltip container; this only needs to add what's specific to
+      // this content (a readable prose font instead of the editor's own
+      // monospace, and a width cap so a long description wraps instead of
+      // stretching across the whole document).
+      const plotFieldTooltipBaseTheme = EditorView.baseTheme({
+        ".cm-plot-field-tooltip": {
+          maxWidth: "260px",
+          padding: "0.5rem 0.625rem",
+          fontSize: "0.75rem",
+          lineHeight: "1.4",
+          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+        },
+      });
+
+      // Shows a PlotConfig field's Field(description=...) (via
+      // plotConfigSchema, /mosaic/api/plot-config-schema) when hovering
+      // any JSON key or value in the document - jsonPathAt (module scope,
+      // above) walks CodeMirror's own parse tree to find which field
+      // that position is inside, including nested ones (e.g. a signal's
+      // own "color" key under "yAxes"), the same schema-path resolution
+      // the Plot Editor's own field_help_icon tooltips use
+      // (_macros.html/plotFieldHelp) - one schema, one field/description
+      // relationship, read by both UIs instead of each hand-maintaining
+      // its own copy of what a field means.
+      const plotFieldHoverTooltip = hoverTooltip((view, pos): Tooltip | null => {
+        const path = jsonPathAt(view.state, pos);
+        if (path.length === 0) return null;
+        const description = describeSchemaPath(self.plotConfigSchema, path);
+        if (!description) return null;
+        const node = syntaxTree(view.state).resolveInner(pos, -1);
+        return {
+          pos: node.from,
+          end: node.to,
+          above: true,
+          create: () => {
+            const dom = document.createElement("div");
+            dom.className = "cm-plot-field-tooltip";
+            dom.textContent = description;
+            return { dom };
+          },
+        };
+      });
+
+      // Underlines the exact JSON range for each schema violation
+      // collectSchemaDiagnostics finds (type mismatches, discriminated-
+      // union mismatches, and unknown/"extra" keys - the same
+      // extra_forbidden error the server raises for e.g. a stray leftover
+      // filter param left over from switching that filter's type). Runs
+      // alongside jsonParseLinter (which only ever catches malformed JSON
+      // text, not schema violations) rather than replacing it - CM6
+      // supports multiple linter() sources side by side. Skips entirely
+      // when the document isn't valid JSON yet (jsonParseLinter already
+      // covers that) or before plotConfigSchema has loaded (see the
+      // forceLinting call in init(), which re-runs this once it has).
+      const plotConfigSchemaLinter = linter((view): Diagnostic[] => {
+        if (!self.plotConfigSchema) return [];
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(view.state.doc.toString());
+        } catch {
+          return [];
+        }
+        return collectSchemaDiagnostics(parsed, self.plotConfigSchema as Record<string, unknown>)
+          .map(({ path, message }): Diagnostic | null => {
+            const range = jsonRangeForPath(view.state, path);
+            return range ? { ...range, severity: "error", message } : null;
+          })
+          .filter((d): d is Diagnostic => d !== null);
+      });
+
       const startState = EditorState.create({
         doc: this.configRaw,
         extensions: [
@@ -3731,8 +4133,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           json(),
           lintGutter(),
           linter(jsonParseLinter()),
+          plotConfigSchemaLinter,
           themeComp.of(makeTheme(isDark())),
           highlightComp.of(makeHighlight(isDark())),
+          plotFieldTooltipBaseTheme,
+          plotFieldHoverTooltip,
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !_cm.updating) {
               const text = update.state.doc.toString();
@@ -4063,7 +4468,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       } else {
         const usedStyles = Object.values(this.config.yAxes).map((y) => ({
           color: y.color,
-          dash: y.dash,
+          dash: y.dash ?? "solid",
         }));
         const nextStyle = this.nextAvailableStyle(usedStyles);
         const initFilters: FilterEntry[] = this.config.refFrame
@@ -4113,6 +4518,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       for (const col of Object.keys(this.config.yAxes)) {
         const yConfig = this.config.yAxes[col];
         if (!yConfig) continue;
+        yConfig.filters ??= [];
         if (frame) {
           const newEntry: FilterEntry = {
             type: "rotation",

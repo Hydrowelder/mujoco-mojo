@@ -56,6 +56,12 @@
       const svgIcon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
       if (svgIcon) svgIcon.href = "/mojo-static/dark-logo.svg";
     }
+
+    // dojo.default_to_fullscreen (settings.py) - read by store.ts when it
+    // builds isFullscreen's initial value. A plain script (not
+    // type="module") so it's guaranteed to run before main.js, same
+    // reasoning as the blocking theme check above.
+    window.__mojoDefaultToFullscreen = {{ 'true' if default_to_fullscreen() else 'false' }};
   </script>
   {% block extra_head %}{% endblock %}
 </head>

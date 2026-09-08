@@ -11,7 +11,6 @@ Writes:
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import textwrap
@@ -170,11 +169,32 @@ def _def_to_ts(
 
 
 def _top_level_interface(schema: dict, defs: dict, extra_unions: dict[str, str]) -> str:
-    """Generate the top-level model (PlotConfig) as an interface."""
+    """
+    Generate the top-level model (PlotConfig) as an interface.
+
+    Every property is treated as required here, deliberately ignoring the
+    schema's own "required" list (unlike _def_to_ts, used for nested $defs
+    like YAxisConfig/Annotation/Shape, which does honor it) - Pydantic's
+    "required" answers "must this be supplied when *constructing* a
+    PlotConfig", a validation-time concern, but the generated PlotConfig
+    interface answers a different question: "does a real, in-hand
+    PlotConfig object always have this". Those aren't the same thing once a
+    field has a server-side default (e.g. so old saved profiles missing it
+    still load) - trial-viewer.ts's own PlotConfig instances are always
+    DEFAULT_CONFIG-seeded and therefore always fully populated regardless
+    of which fields Pydantic could default on the way in, so marking a
+    defaulted field optional here would be wrong: it'd tell every ordinary
+    read site "this might be undefined" when it never actually is, not
+    "the server may fill this in". Code that genuinely needs to represent a
+    not-yet-complete config (parsing a saved/shared one that might predate
+    a newer field) already opts into that explicitly with Partial<PlotConfig>
+    at the specific call site, rather than this base type being partial by
+    default.
+    """
     name = schema.get("title", "PlotConfig")
     desc = schema.get("description", "")
     props = schema.get("properties", {})
-    required = set(schema.get("required", []))
+    required = set(props.keys())
     lines = _props_to_ts_lines(props, required, defs, extra_unions)
     body = "\n".join(lines)
     comment = f"/** {desc} */\n" if desc else ""
@@ -215,12 +235,15 @@ def main() -> None:
     for union_name, union_body in extra_unions.items():
         blocks.append(f"export type {union_name} = {union_body};\n")
 
-    # Emit the full JSON Schema document for additive client-side validation
-    # (see lib/schema-validate.ts).
-    blocks.append(
-        "/** Full JSON Schema for PlotConfig - used for additive client-side validation. */\n"
-        f"export const PLOT_CONFIG_SCHEMA: JsonSchemaNode = {json.dumps(schema, indent=2)};\n"
-    )
+    # No baked-in JSON Schema document here (there used to be one, for
+    # lib/schema-validate.ts's additive client-side validation) - it was a
+    # second, build-time-frozen copy of exactly what
+    # /mosaic/api/plot-config-schema (routers/mosaic.py) already serves at
+    # runtime, fetched once into plotConfigSchema for the Plot Editor's and
+    # JSON editor's hover tooltips (trial-viewer.ts). validateConfig now
+    # validates against that same fetched schema instead, so there's one
+    # schema source, not two that could drift out of sync with each other
+    # (only the regenerate-and-rebuild step regenerating one of them).
 
     header = textwrap.dedent("""\
         // ============================================================
@@ -228,8 +251,6 @@ def main() -> None:
         // Source: src/mujoco_mojo/utils/layers/dojo/plot_config.py
         // Regenerate: python scripts/gen_ts_models.py
         // ============================================================
-
-        import type { JsonSchemaNode } from "./schema-validate";
 
     """)
 

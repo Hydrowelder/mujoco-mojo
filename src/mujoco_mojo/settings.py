@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
+import textwrap
+from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import tomlkit
 from filelock import FileLock
@@ -19,8 +24,13 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaValue
-from pydantic_core import CoreSchema
+from pydantic.json_schema import (
+    GenerateJsonSchema,
+    JsonSchemaMode,
+    JsonSchemaValue,
+    NoDefault,
+)
+from pydantic_core import CoreSchema, core_schema
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -271,6 +281,11 @@ class DojoSettings(BaseModel):
         ),
     )
 
+    default_to_fullscreen: bool = Field(
+        default=False,
+        description="Pages in Dojo have an option to expand to fullscreen. Selecting this option will default your page load to fullscreen.",
+    )
+
     @field_validator("chime_source", mode="before")
     @classmethod
     def _empty_chime_is_unset(cls, v: Any) -> Any:
@@ -384,29 +399,134 @@ def _merge_into_toml(
             doc[key] = value
 
 
+def _enum_value_descriptions(enum_cls: type[Enum]) -> dict[str, str]:
+    """
+    Maps each member's own VALUE (not its Python attribute name) to the
+    attribute-docstring immediately following its assignment, e.g. a
+    GridMode.ALL member documented with its own docstring ("Major and minor
+    tick grid lines.") becomes `{"all": "Major and minor tick grid lines."}`.
+
+    This is the same convention `ConfigDict(use_attribute_docstrings=True)`
+    reads for model fields, applied here to plain Enum members instead -
+    that pydantic config option doesn't cover them itself, since its
+    extraction (pydantic._internal._docs_extraction) only visits
+    *annotated* assignments (`x: int = 1`), not an Enum member's bare
+    `X = 1`. Standard JSON Schema's `enum` keyword has no room for
+    per-value metadata, so `GenerateJsonSchemaWithDefaults.enum_schema`
+    below attaches this as an `x-enum-descriptions` extension instead of
+    trying to reshape `enum` into `oneOf`.
+
+    Returns {} if the source isn't available (e.g. a dynamically-built
+    enum) rather than raising - a missing per-value description just means
+    a caller's tooltip has nothing to show, not a broken schema endpoint.
+    """
+    try:
+        source = inspect.getsource(enum_cls)
+        tree = ast.parse(textwrap.dedent(source))
+    except (OSError, TypeError, SyntaxError):
+        return {}
+    class_def = tree.body[0]
+    if not isinstance(class_def, ast.ClassDef):
+        return {}
+    result: dict[str, str] = {}
+    pending_name: str | None = None
+    for node in class_def.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            pending_name = node.targets[0].id
+            continue
+        if (
+            pending_name is not None
+            and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            member = getattr(enum_cls, pending_name, None)
+            if member is not None:
+                result[str(member.value)] = inspect.cleandoc(node.value.value)
+        pending_name = None
+    return result
+
+
 class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
-    """Appends each field's default value to its `description`, so editors that only surface `description` on hover (e.g. VS Code's Even Better TOML) still show it, without hand-duplicating every `Field(default=...)` into its own description text."""
+    """
+    Appends each field's default value to its `description`, so editors that only surface `description` on hover (e.g. VS Code's Even Better TOML) still show it, without hand-duplicating every `Field(default=...)` into its own description text.
+
+    Also attaches an `x-enum-descriptions` extension (value -> that member's own attribute-docstring, via `_enum_value_descriptions` above) to every enum schema - generic to any StrEnum with attribute-docstring'd members, not specific to whichever model happens to use this generator, so a consumer like the Dojo settings panel and PlotConfig's Plot Editor/JSON editor tooltips (dojo/plot_config.py) both get per-dropdown-option descriptions for free from the same one generator, rather than each redefining this behavior in its own subclass.
+    """
 
     def generate(
         self, schema: CoreSchema, mode: JsonSchemaMode = "validation"
     ) -> JsonSchemaValue:
         json_schema = super().generate(schema, mode=mode)
-        self._append_defaults(json_schema)
-        for definition in json_schema.get("$defs", {}).values():
-            self._append_defaults(definition)
+        defs = json_schema.get("$defs", {})
+        self._append_defaults(json_schema, defs)
+        for definition in defs.values():
+            self._append_defaults(definition, defs)
         return json_schema
 
+    def get_default_value(self, schema: core_schema.WithDefaultSchema) -> Any:
+        """
+        Pydantic's own default implementation only ever surfaces a static `default=`, never a `default_factory=` result, since a factory could be expensive or side-effecting. Every `default_factory` actually used across this codebase (`dict`, `list`, `lambda: SlurmExtraSettings({})`, and the nested settings-group constructors) is cheap and side-effect-free, so calling it here is safe, and it's what lets `_append_defaults` below show a real "Default: ..." for fields like `PlotConfig.y_axes`/`annotations`/`shapes` that would otherwise silently show none.
+        """
+        default = super().get_default_value(schema)
+        if default is not NoDefault:
+            return default
+        factory = schema.get("default_factory")
+        if factory is None or schema.get("default_factory_takes_data"):
+            return NoDefault
+        # `default_factory_takes_data` being falsy is what actually
+        # guarantees the zero-argument overload at runtime; the stub's
+        # `Callable[[], Any] | Callable[[dict[str, Any]], Any]` union
+        # can't express that correlation itself.
+        no_arg_factory = cast("Callable[[], Any]", factory)
+        try:
+            return no_arg_factory()
+        except Exception:
+            return NoDefault
+
     @staticmethod
-    def _append_defaults(node: JsonSchemaValue) -> None:
+    def _append_defaults(
+        node: JsonSchemaValue, defs: dict[str, JsonSchemaValue]
+    ) -> None:
         for prop in node.get("properties", {}).values():
+            ref = prop.get("$ref")
+            if not ref:
+                all_of = prop.get("allOf")
+                if isinstance(all_of, list) and len(all_of) == 1:
+                    ref = all_of[0].get("$ref")
+            if ref and "properties" in defs.get(ref.removeprefix("#/$defs/"), {}):
+                # a field whose value is itself a nested named model (e.g.
+                # MujocoMojoSettings.dojo/visualization/assets) - that
+                # model's own leaf fields already carry their own
+                # "Default: ..." individually, so repeating the whole
+                # nested object here would just dump an unreadable wall of
+                # JSON into one description line. An enum field is also a
+                # bare $ref (e.g. YAxisConfig.dash -> #/$defs/DashStyle),
+                # but its $defs target has no "properties" key (it's an
+                # "enum"/"type" leaf, not a modeled object), so it isn't
+                # caught by this check and still gets its default appended.
+                continue
             if "default" in prop and "description" in prop:
                 default = prop["default"]
                 rendered = (
                     ("true" if default else "false")
                     if isinstance(default, bool)
+                    else "(empty)"
+                    if default == ""
                     else str(default)
                 )
-                prop["description"] = f"{prop['description']}\n\nDefault: `{rendered}`."
+                prop["description"] = f"{prop['description']}\n\nDefault: `{rendered}`"
+
+    def enum_schema(self, schema: core_schema.EnumSchema) -> JsonSchemaValue:
+        result = super().enum_schema(schema)
+        descriptions = _enum_value_descriptions(schema["cls"])
+        if descriptions:
+            result["x-enum-descriptions"] = descriptions
+        return result
 
 
 class MujocoMojoSettings(BaseSettings):

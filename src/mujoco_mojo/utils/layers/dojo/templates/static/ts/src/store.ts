@@ -40,7 +40,15 @@ document.addEventListener("alpine:init", () => {
     ...createSettingsPanelState(),
 
     isPageReady: false,
-    isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
+    // Falls back to dojo.default_to_fullscreen (settings.py, seeded onto
+    // window by base.html's own blocking <head> script) only when the user
+    // has never actually touched fullscreen in this browser - once they
+    // have (mojo_fullscreen exists in localStorage either way), that choice
+    // always wins over the server default, same as today.
+    isFullscreen:
+      localStorage.getItem("mojo_fullscreen") === null
+        ? !!window.__mojoDefaultToFullscreen
+        : localStorage.getItem("mojo_fullscreen") === "true",
     overlayCount: 0,
     loadStartTime: Date.now(),
     isComplete: false,

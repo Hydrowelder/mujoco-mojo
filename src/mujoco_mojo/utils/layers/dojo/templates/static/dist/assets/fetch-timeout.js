@@ -1,0 +1,2 @@
+async function e(e,t={},n=3e4){let r=new AbortController,i=setTimeout(()=>r.abort(),n);try{return await fetch(e,{...t,signal:r.signal})}finally{clearTimeout(i)}}async function t(t,n={},{timeoutMs:r=3e4,retryDelayMs:i=1e4,maxAttempts:a=30}={}){for(let o=1;;o+=1)try{return await e(t,n,r)}catch(e){if(o>=a)throw e;await new Promise(e=>setTimeout(e,i))}}export{e as n,t};
+//# sourceMappingURL=fetch-timeout.js.map

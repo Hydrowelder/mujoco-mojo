@@ -380,9 +380,9 @@
        moments after settingsOpen went false, whenever a new tooltip had
        last set top/left. -->
   <div x-show="$store.dojo.settingsOpen && $store.dojo.settingsTooltip.show"
-       class="panel fixed z-1000 w-72 text-xs font-normal normal-case tracking-normal text-ink-body leading-relaxed pointer-events-none [&_code]:bg-surface-sunken [&_code]:rounded [&_code]:px-1 [&_code]:font-mono [&_code]:text-accent-600 dark:[&_code]:text-accent-400 [&_code]:text-[0.9em] [&_p]:mb-2 [&_p:last-child]:mb-0"
+       class="panel fixed z-1000 w-72 text-xs font-normal normal-case tracking-normal text-ink-body leading-relaxed pointer-events-none [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
        :style="{ top: $store.dojo.settingsTooltip.top + 'px', left: $store.dojo.settingsTooltip.left + 'px' }"
-       x-html="$store.dojo.settingsRenderMarkdown($store.dojo.settingsTooltip.text)"></div>
+       x-html="$store.dojo.renderMarkdown($store.dojo.settingsTooltip.text)"></div>
 </template>
 
 <div x-data

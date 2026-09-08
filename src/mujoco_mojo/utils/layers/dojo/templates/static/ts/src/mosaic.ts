@@ -1,4 +1,5 @@
 import type { DojoStore, JobStatus, TrialManifest } from './models';
+import { fetchWithTimeout, fetchWithRetry } from './lib/fetch-timeout';
 
 function mosaic() {
   return {
@@ -7,7 +8,7 @@ function mosaic() {
 
     async init() {
       try {
-        const statusResp = await fetch('/monitor/api/status/job');
+        const statusResp = await fetchWithTimeout('/monitor/api/status/job');
         const statusData = (await statusResp.json()) as JobStatus;
         if (statusData && !statusData.error) {
           const store = Alpine.store('dojo') as DojoStore;
@@ -34,7 +35,7 @@ function mosaic() {
     async refreshTiles(showLoading = true) {
       if (showLoading) this.loading = true;
       try {
-        const resp = await fetch('/mosaic/api/trials');
+        const resp = await fetchWithRetry('/mosaic/api/trials');
         const data = (await resp.json()) as TrialManifest;
         this.trials = data.trials ?? [];
       } catch (e) {

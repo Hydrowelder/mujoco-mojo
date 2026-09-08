@@ -32,6 +32,18 @@
 @utility badge {
   @apply inline-flex items-center justify-center px-2 py-1 rounded-md font-mono text-sm;
 }
+/* Inline-code chip inside rendered markdown (Field descriptions, chat
+   responses) - one shared definition for what used to be the same long
+   utility list hand-copied in three places (sensai.ts's codespan
+   renderer, and the [&_code] descendant-selector rules on both the
+   settings panel's and the Plot/Line editors' tooltips, _settings_panel.html
+   / _macros.html), exactly the kind of drift theme.css's own header
+   comment warns about - one of the three could get tweaked without the
+   others following. Accent-tinted background (not a plain neutral gray)
+   so the whole chip reads as "this is a value", not just its text. */
+@utility md-inline-code {
+  @apply bg-accent-500/15 dark:bg-accent-400/15 text-accent-600 dark:text-accent-400 rounded px-1 font-mono text-[0.9em];
+}
 @layer components {
   /* ── Surfaces ──────────────────────────────────────────────────────── */
   .card {
