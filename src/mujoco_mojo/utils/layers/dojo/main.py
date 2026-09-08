@@ -10,6 +10,7 @@ import mujoco_mojo.utils.layers.dojo.shared as shared
 from .favicons import CACHE_DIR as FAVICON_CACHE_DIR
 from .favicons import ensure_favicons
 from .routers import monitor, morph, mosaic
+from .routers import settings as settings_router
 
 # try:
 #     from .routers import sensai as _sensai_router
@@ -169,6 +170,9 @@ dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
 dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies)
+dojo_app.include_router(
+    settings_router.router, prefix="/settings", dependencies=dependencies
+)
 if _sensai_router is not None:
     dojo_app.include_router(
         _sensai_router.router, prefix="/sensai", dependencies=dependencies

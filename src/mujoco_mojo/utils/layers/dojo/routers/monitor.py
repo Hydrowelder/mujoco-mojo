@@ -99,7 +99,8 @@ async def _emit_to_all(message_dict: dict):
 @router.get("/", response_class=HTMLResponse)
 async def get_monitor(request: Request):
     """Serves the initial monitor frame."""
-    chime = MujocoMojoSettings().dojo.chime
+    dojo_settings = MujocoMojoSettings().dojo
+    chime = dojo_settings.chime_source
     if chime is None:
         chime_src = "/mojo-static/chime.mp3"
     elif isinstance(chime, Path):
@@ -110,14 +111,19 @@ async def get_monitor(request: Request):
     return shared.templates.TemplateResponse(
         request=request,
         name="monitor.html",
-        context={"request": request, "job": shared.CURRENT_JOB, "chime_src": chime_src},
+        context={
+            "request": request,
+            "job": shared.CURRENT_JOB,
+            "chime_src": chime_src,
+            "chime_enabled": dojo_settings.chime_enabled,
+        },
     )
 
 
 @router.get("/chime")
 async def get_custom_chime():
-    """Serves the configured local chime file (dojo.chime, when it's a Path) so the browser can play it without direct filesystem access."""
-    chime = MujocoMojoSettings().dojo.chime
+    """Serves the configured local chime file (dojo.chime_source, when it's a Path) so the browser can play it without direct filesystem access."""
+    chime = MujocoMojoSettings().dojo.chime_source
     if not isinstance(chime, Path) or not chime.is_file():
         raise HTTPException(status_code=404, detail="No custom chime file configured.")
     return FileResponse(chime)

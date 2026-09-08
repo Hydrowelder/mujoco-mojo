@@ -43,10 +43,229 @@
                        {{ color_model }} = '#' + v;
                        {% if on_change %}{{ on_change }};{% endif %}
                    "
-                   class="w-full pl-7 pr-3 py-2 bg-surface-inset border border-inset rounded-md text-sm font-mono text-accent-700 dark:text-ink-strong outline-none focus:ring-1 focus:ring-accent-500" />
+                   class="input-color text-accent-700 dark:text-ink-strong" />
         </div>
         <div class="w-10 h-10 rounded-md border border-inset shadow-inner shrink-0"
              :style="'background-color: ' + ({{ color_model }})"></div>
     </div>
 </div>
+{% endmacro %}
+
+{# Search box: leading magnifying-glass icon (the exact path from the Dojo
+   settings panel's own search box, _settings_panel.html - copied verbatim
+   for a byte-identical icon everywhere, not a redrawn lookalike) + an
+   .input-search field + a trailing .input-clear-btn, shown only once
+   there's something to clear. model_expr is the Alpine model to bind (a
+   string naming it, not a value - see the folder-tree macros' own note on
+   this). extra_input_attrs is raw text inserted directly into the <input>
+   tag, for call sites that need their own @keydown handlers (tab-complete,
+   escape-to-clear, enter-to-select) alongside the shared x-model/placeholder/
+   class this macro already supplies - Jinja has no attribute-spread syntax,
+   so a raw string is the simplest way to still let each caller add exactly
+   what it needs without this macro growing a parameter per possible handler. #}
+{% macro tree_search_input(model_expr, placeholder, extra_input_attrs='') %}
+<div class="relative">
+    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none"
+         fill="none"
+         stroke="currentColor"
+         stroke-width="2"
+         viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+    </svg>
+    <input type="text"
+           x-model="{{ model_expr }}"
+           placeholder="{{ placeholder }}"
+           {{ extra_input_attrs|safe }}
+           class="input-search" />
+    <button x-show="{{ model_expr }}"
+            type="button"
+            @click="{{ model_expr }} = ''"
+            class="input-clear-btn"
+            title="Clear search">
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2.5"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>
+</div>
+{% endmacro %}
+
+{# ── Folder-tree rows (lib/tree.ts's buildTreeRows/visibleTreeRows) ──────────
+   Shared by Profiles (_chart.html), Signal Lab configs (_signal_lab.html),
+   and the X/Y-axis and node-picker signal dropdowns (_series_panel.html,
+   _signal_lab.html) - all save/list entries under "folder/sub/name"-style
+   paths with no real folder entity anywhere, and all render the same flat,
+   depth-annotated row list lib/tree.ts produces.
+   row_expr/toggle_expr/is_collapsed_expr are Alpine expression *strings*
+   (the loop variable name, and full expressions to run/evaluate where the
+   macro is called), same pattern settings_field_row (see
+   partials/_settings_panel.html) uses for its own field-row macro - a macro
+   argument here is source text, not a value, since Jinja renders this once
+   at template-compile time while the actual data only exists later at
+   runtime in the browser. toggle_expr/is_collapsed_expr are full
+   expressions rather than a bare collapsed-state Record name because the
+   column dropdowns key their collapsed-state map differently (one flat map
+   covering 4 fields, keyed "field:path") than Profiles/Labs (one Record
+   each, keyed by bare path) - a plain bracket lookup on a fixed variable
+   name couldn't express both.
+   Only the folder row is shared: file/leaf rows differ enough between
+   these callers (profiles show a warning icon; labs show validity/template
+   badges and an inline info panel; the signal dropdowns select-on-click
+   with no badges at all) that unifying them would cost more readability
+   than it'd save. #}
+
+{# Indentation for one row: `row.depth` repeated 14px slots, each with a
+   thin line CENTERED inside it (not a left-edge border) - a flat row list
+   has no container wrapping "this folder's children" the way nested markup
+   would, so there's nowhere to hang a single border that visually spans a
+   whole open folder's contents. Every visible row is (by construction: a
+   collapsed folder's descendants render with row.hidden=true, never with a
+   different DOM shape) inside only open ancestors, so each row drawing its
+   own same-position segment at every ancestor depth is what makes the
+   segments line up into one continuous line down the list, the same
+   technique VS Code's own (also flat/virtualized) explorer uses for its
+   indent guides.
+
+   Two things that broke this the first time, both fixed by wrapping the
+   slots in their own dedicated flex div rather than emitting them as bare
+   siblings of the row's other content:
+   - Every row container here uses gap-* for spacing its own icon/text
+     content, which - since a bare sibling is still just another flex
+     child - inserted that same gap *between each guide slot too*,
+     breaking them into visibly disconnected segments instead of one
+     continuous line. A dedicated wrapper with no gap of its own isolates
+     the slots from whatever gap the caller's row happens to use.
+   - An empty slot has 0 height under items-center (which every row uses
+     to vertically center its own text/icons) unless something forces it
+     to stretch; self-stretch here is what makes the line's height match
+     the row instead of collapsing to nothing.
+   Centering the line inside each 14px slot (rather than drawing it at the
+   slot's left edge) is what lets it land on a folder's chevron center
+   below/above it: tree_folder_row centers its own chevron in an identical
+   14px slot immediately after these, with no gap between the two -
+   without that, the two 14px sequences (this one, and the chevron's own)
+   would be offset from each other and the lines would end up next to the
+   chevron rather than through its middle. #}
+{% macro tree_indent_guides(row_expr) %}
+<div class="flex shrink-0 self-stretch">
+    <template x-for="_i in {{ row_expr }}.depth"
+              :key="_i">
+        <div class="w-3.5 shrink-0 flex justify-center">
+            <div class="w-px bg-line"></div>
+        </div>
+    </template>
+</div>
+{% endmacro %}
+
+{% macro tree_folder_row(row_expr, toggle_expr, is_collapsed_expr) %}
+<button @click="{{ toggle_expr }}"
+        :title="{{ row_expr }}.path"
+        class="expander-header text-xs normal-case py-1.5 pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50">
+    <span class="flex items-center min-w-0 flex-1">
+        {{ tree_indent_guides(row_expr) }}
+        <!-- chevron: same w-3.5 width as a guide slot, immediately after
+             the guides with no gap between - see tree_indent_guides'
+             comment above for why that specific adjacency is what lines a
+             child row's own guide line up with this chevron's center. -->
+        <span class="w-3.5 shrink-0 flex items-center justify-center">
+            <svg class="expander-chevron w-3 h-3"
+                 :class="({{ is_collapsed_expr }}) ? '-rotate-90' : ''"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="3"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M19 9l-7 7-7-7" />
+            </svg>
+        </span>
+        <span class="flex items-center gap-1.5 min-w-0 ml-1.5">
+            <svg class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.75"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+            </svg>
+            <span class="truncate text-ink-body"
+                  x-text="{{ row_expr }}.name"></span>
+        </span>
+    </span>
+    <span class="text-xs font-mono text-ink-muted shrink-0"
+          x-text="{{ row_expr }}.fileCount"></span>
+</button>
+{% endmacro %}
+
+{# Expand-all/collapse-all icon buttons for a folder tree above. Double-chevron
+   glyphs (plain straight diagonal lines, not a hand-typed curve) - see the
+   "no browser, no screenshots" note in CLAUDE.md for why this file avoids
+   curve paths nobody can render to check. Hidden entirely via has_folders_expr
+   when the current list has no subfolders at all, matching how the settings
+   panel's own search box only shows once there's something to search. #}
+{% macro tree_expand_collapse_buttons(expand_expr, collapse_expr, has_folders_expr) %}
+<div class="flex items-center gap-0.5 shrink-0"
+     x-show="{{ has_folders_expr }}">
+    <button type="button"
+            @click="{{ expand_expr }}"
+            title="Expand all folders"
+            class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M7 8l5 5 5-5" />
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M7 14l5 5 5-5" />
+        </svg>
+    </button>
+    <button type="button"
+            @click="{{ collapse_expr }}"
+            title="Collapse all folders"
+            class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M7 16l5-5 5 5" />
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M7 10l5-5 5 5" />
+        </svg>
+    </button>
+</div>
+{% endmacro %}
+
+{# Leaf row for the signal-selector trees (X/Y-axis and node-picker dropdowns,
+   _series_panel.html / _signal_lab.html) - select-on-click with a filled dot
+   for "currently selected", no badges. Shows just row.name (the last path
+   segment) rather than the full path breakableLabel() used to wrap in the
+   old flat list: indentation and the folder rows above already convey the
+   hierarchy, so the full path would now be redundant. #}
+{% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
+<button @click="{{ select_expr }}"
+        :title="{{ row_expr }}.item"
+        class="w-full text-left py-1.5 pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
+    {{ tree_indent_guides(row_expr) }}
+    <span class="text-sm font-mono font-bold pl-1 pr-2 min-w-0 flex-1 truncate"
+          :class="({{ is_selected_expr }}) ? 'text-accent-500' : 'text-ink-secondary'"
+          x-text="{{ row_expr }}.name"></span>
+    <span x-show="{{ is_selected_expr }}"
+          class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
+</button>
 {% endmacro %}

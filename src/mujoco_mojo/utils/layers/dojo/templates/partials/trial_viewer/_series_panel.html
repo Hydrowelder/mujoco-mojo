@@ -10,8 +10,7 @@
      x-show="!loading && data">
 
     <!-- row 1 -->
-    <div
-         class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-subtle dark:border-subtle/50 h-auto sm:h-12 py-2 sm:py-0">
+    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-subtle dark:border-subtle/50 h-auto sm:h-12 py-2 sm:py-0">
         <!-- x axis selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <span class="text-sm font-black uppercase text-ink-muted w-auto">
@@ -29,11 +28,9 @@
                           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
-                <div
-                     class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p
-                       class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         X-Axis Signal
                     </p>
 
@@ -66,32 +63,20 @@
                     </svg>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_signal_leaf_row, tree_indent_guides, tree_search_input %}
                 <div x-show="xMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-full sm:w-56 bg-surface border border-line rounded-xl shadow-2xl z-110 p-2">
+                     class="absolute top-full left-0 mt-2 w-full sm:w-80 bg-surface border border-line rounded-xl shadow-2xl z-110 p-2">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="xSearch"
-                               placeholder="Filter..."
-                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-                        <button x-show="xSearch"
-                                type="button"
-                                @mousedown.prevent="xSearch = ''"
-                                class="{{ clear_btn }}">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                    <div class="flex items-center gap-1 mb-2">
+                        <div class="flex-1">
+                            {{ tree_search_input('xSearch', 'Filter...') }}
+                        </div>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('x')", "collapseAllColumnFolders('x')", "getColumnTreeRows('x').some(r => r.type === 'folder')") }}
                     </div>
 
-                    <div class="flex flex-col gap-1 mb-2">
+                    <div x-show="showQuickFilters"
+                         class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('x')"
                                   :key="depth">
                             <div x-show="getSegmentsAtDepth('x', depth).length > 0"
@@ -118,20 +103,23 @@
                         </div>
                     </div>
 
-                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
-                        <template x-for="col in getFilteredCols('x')"
-                                  :key="col">
-                            <button @click="config.xAxis.col = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between gap-2 group border-b last:border-none border-subtle">
-                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
-                                      :class="config.xAxis.col === col ? 'text-accent-500' : 'text-ink-secondary'"
-                                      x-text="breakableLabel(col)"></span>
-                                <span x-show="config.xAxis.col === col"
-                                      class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
-                            </button>
+                    <div class="max-h-80 overflow-y-auto custom-scrollbar">
+                        <template x-for="row in getColumnVisibleRows('x')"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('x', row.path)", "isColumnFolderCollapsed('x', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {{ tree_signal_leaf_row('row', "config.xAxis.col = row.item; xMenuOpen = false; xSearch = ''; saveAndRender()", "config.xAxis.col === row.item") }}
+                                    </template>
+                                </div>
+                            </div>
                         </template>
 
-                        <div x-show="getFilteredCols('x').length === 0"
+                        <div x-show="getColumnVisibleRows('x').every(r => r.hidden)"
                              class="text-sm font-mono italic text-ink-muted p-2">
                             No matching signals...
                         </div>
@@ -256,7 +244,7 @@
                     </div>
 
                     <!-- filter stack -->
-                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                    <div class="space-y-1 max-h-80 overflow-y-auto custom-scrollbar">
                         <template x-for="(f, fi) in (temp.filters ?? [])"
                                   :key="fi">
                             <div class="rounded-md border transition-all"
@@ -392,7 +380,7 @@
                                                      @click.away="uOpen = false">
                                                     <button x-ref="uBtn"
                                                             @click="const r = $refs.uBtn.getBoundingClientRect(); uCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; uOpen = !uOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs"
                                                               x-text="f[param.name] || '- select -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -461,7 +449,7 @@
                                                      @click.away="cOpen = false">
                                                     <button x-ref="cBtn"
                                                             @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs truncate"
                                                               x-text="f[param.name] || '- none -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -514,7 +502,7 @@
                                                      @click.away="qOpen = false">
                                                     <button x-ref="qBtn"
                                                             @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs truncate"
                                                               x-text="f[param.name] || '- select -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -590,19 +578,16 @@
                           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
-                <div
-                     class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p
-                       class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         Rotation Logic
                     </p>
 
                     <div class="space-y-3">
                         <p class="text-xs text-ink-body leading-relaxed">
                             This allows for the dynamic rotation of 3D signals about specific frames.
-                            Valid frames must contain <code
-                                  class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code> components.
+                            Valid frames must contain <code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code> components.
                         </p>
 
                         <div class="bg-well dark:bg-well/50 p-2 rounded border border-subtle dark:border-subtle/50">
@@ -632,29 +617,66 @@
                     </svg>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_signal_leaf_row, tree_search_input %}
                 <div x-show="refFrameMenuOpen"
                      x-transition
                      class="absolute top-full left-0 mt-2 w-full bg-surface border border-line rounded-xl shadow-2xl z-110 p-2 sm:w-64">
 
-                    <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                    <div class="flex items-center justify-between mb-1">
                         <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
-                                class="w-full text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group border-b border-subtle">
+                                class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
                             <span class="text-sm font-mono font-bold"
                                   :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
                             <span x-show="!config.refFrame"
                                   class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
                         </button>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('refFrame')", "collapseAllColumnFolders('refFrame')", "getColumnTreeRows('refFrame').some(r => r.type === 'folder')") }}
+                    </div>
 
-                        <template x-for="q in availableQuats"
-                                  :key="q">
-                            <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between gap-2 group border-b last:border-none border-subtle">
-                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
-                                      :class="config.refFrame === q ? 'text-accent-500' : 'text-ink-secondary'"
-                                      x-text="breakableLabel(q)"></span>
-                                <span x-show="config.refFrame === q"
-                                      class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
-                            </button>
+                    <div class="mb-2">
+                        {{ tree_search_input('refFrameSearch', 'Filter...') }}
+                    </div>
+
+                    <!-- quick filters - same regex-chip mechanism as the X/Y-axis
+                         trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
+                         reused as-is since refFrame already maps to availableQuats
+                         there too. -->
+                    <div x-show="showQuickFilters"
+                         class="flex flex-col gap-1 mb-2">
+                        <template x-for="depth in getActiveLevels('refFrame')"
+                                  :key="depth">
+                            <div x-show="getSegmentsAtDepth('refFrame', depth).length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
+                                <template x-for="seg in getSegmentsAtDepth('refFrame', depth)"
+                                          :key="seg">
+                                    <button @mousedown.prevent="toggleRegexSegment('refFrame', seg, depth)"
+                                            :class="isSegmentActive('refFrame', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="seg"></button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- "world" above is a fixed pseudo-option, not part of the
+                         tree itself - availableQuats' own names are never
+                         expected to carry ":attribute" suffixes (they're
+                         stripped at the source), so there's no suffix-chip row
+                         here the way the X/Y-axis trees have one. -->
+                    <div class="max-h-48 overflow-y-auto custom-scrollbar border-t border-subtle pt-1">
+                        <template x-for="row in getColumnVisibleRows('refFrame')"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {{ tree_signal_leaf_row('row', "config.refFrame = row.item; refFrameMenuOpen = false; saveAndRender()", "config.refFrame === row.item") }}
+                                    </template>
+                                </div>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -663,8 +685,7 @@
     </div>
 
     <!-- row 2 -->
-    <div
-         class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
+    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
         <!-- y axis selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <span class="text-sm font-black uppercase text-ink-muted w-auto">
@@ -682,11 +703,9 @@
                           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
 
-                <div
-                     class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
+                <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p
-                       class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         Y-Axis Signals
                     </p>
 
@@ -729,33 +748,17 @@
 
                 <div x-show="yMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-64 bg-surface border border-line rounded-xl shadow-2xl z-100 p-2">
+                     class="absolute top-full left-0 mt-2 w-80 bg-surface border border-line rounded-xl shadow-2xl z-100 p-2">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="ySearch"
-                               placeholder="Filter..."
-                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-
-                        <button x-show="ySearch"
-                                type="button"
-                                @mousedown.prevent="ySearch = ''"
-                                class="{{ clear_btn }}"
-                                x-transition:enter="transition duration-75"
-                                x-transition:enter-start="opacity-0"
-                                x-transition:enter-end="opacity-100">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                    {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
+                    <div class="flex items-center gap-1 mb-2">
+                        <div class="flex-1">
+                            {{ tree_search_input('ySearch', 'Filter...') }}
+                        </div>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('y')", "collapseAllColumnFolders('y')", "getColumnTreeRows('y').some(r => r.type === 'folder')") }}
                     </div>
-                    <div class="flex flex-col gap-1 mb-4">
+                    <div x-show="showQuickFilters"
+                         class="flex flex-col gap-1 mb-4">
                         <template x-for="depth in getActiveLevels('y')"
                                   :key="depth">
                             <div x-show="getSegmentsAtDepth('y', depth).length > 0"
@@ -784,22 +787,31 @@
                         </div>
                     </div>
 
-                    <div
-                         class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-subtle py-2">
-                        <template x-for="col in getFilteredCols('y')"
-                                  :key="col">
-                            <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
-                                <label
-                                       class="flex items-center gap-2 px-2 py-1 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle">
-                                    <input type="checkbox"
-                                           :checked="config.yAxes[col]"
-                                           @click.stop="toggleY(col)"
-                                           class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0" />
-                                    <span class="text-sm font-mono font-bold min-w-0 flex-1"
-                                          :class="config.yAxes[col] ? 'text-accent-500' : 'text-ink-secondary'"
-                                          x-text="breakableLabel(col)"></span>
-                                </label>
-                            </template>
+                    <div class="max-h-80 overflow-y-auto custom-scrollbar border-b border-t border-subtle py-2">
+                        <template x-for="row in getColumnVisibleRows('y', (col) => !config.refFrame || rotateableVectors.includes(col.split(':')[0]))"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('y', row.path)", "isColumnFolderCollapsed('y', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        <label class="flex items-center gap-2 py-1 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
+                                               :title="row.item"
+                                               @mousedown.prevent>
+                                            {{ tree_indent_guides('row') }}
+                                            <input type="checkbox"
+                                                   :checked="config.yAxes[row.item]"
+                                                   @click.stop="toggleYRange(row, $event.shiftKey)"
+                                                   class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
+                                            <span class="text-sm font-mono font-bold min-w-0 flex-1 truncate"
+                                                  :class="config.yAxes[row.item] ? 'text-accent-500' : 'text-ink-secondary'"
+                                                  x-text="row.name"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
                         </template>
                     </div>
 
@@ -811,7 +823,7 @@
                         <button @click="clearYAxes()"
                                 x-show="Object.keys(config.yAxes).length > 0"
                                 x-transition
-                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-danger-500/10 hover:bg-danger-500 text-danger-500 hover:text-white border border-danger-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
+                                class="flex-1 btn btn-danger justify-center text-sm font-black uppercase tracking-widest group">
                             <svg class="w-3 h-3 transition-transform group-hover:scale-110"
                                  fill="none"
                                  stroke="currentColor"
@@ -1008,8 +1020,7 @@
          `"
                                  class="w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-600">
 
-                                <div
-                                     class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-surface border-t border-l border-line">
+                                <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-surface border-t border-l border-line">
                                 </div>
 
                                 <div class="relative z-10 space-y-4"
@@ -1043,8 +1054,7 @@
                                            x-text="col"></p>
                                         <div class="flex items-center gap-1 shrink-0">
                                             <!-- metadata viewer toggle -->
-                                            <template
-                                                      x-if="columnMetadata[col] && Object.keys(columnMetadata[col]).length > 0">
+                                            <template x-if="columnMetadata[col] && Object.keys(columnMetadata[col]).length > 0">
                                                 <button @click.stop="toggleMeta()"
                                                         :class="metaOpen ? 'text-accent-500' : 'text-ink-muted hover:text-accent-500'"
                                                         class="p-0.5 rounded transition-colors"
@@ -1079,10 +1089,8 @@
                                          x-transition:enter-start="opacity-0"
                                          x-transition:enter-end="opacity-100"
                                          class="rounded-lg border border-subtle overflow-hidden -mx-1">
-                                        <div
-                                             class="flex items-center justify-between px-3 py-1.5 bg-well dark:bg-well/60 border-b border-subtle">
-                                            <span
-                                                  class="text-xs font-black uppercase text-ink-muted tracking-widest">Metadata</span>
+                                        <div class="flex items-center justify-between px-3 py-1.5 bg-well dark:bg-well/60 border-b border-subtle">
+                                            <span class="text-xs font-black uppercase text-ink-muted tracking-widest">Metadata</span>
                                             <button @click="navigator.clipboard.writeText(JSON.stringify(columnMetadata[col] ?? {}, null, 2)).then(() => $store.dojo.toast('Copied', 'success'))"
                                                     class="text-xs font-bold uppercase tracking-wide text-ink-muted hover:text-accent-500 transition-colors">
                                                 Copy
@@ -1107,7 +1115,7 @@
                                                x-model="temp.label"
                                                @input="isDirty = true"
                                                :placeholder="temp.label || col"
-                                               class="input-field w-full px-3 py-2" />
+                                               class="input-text" />
                                     </div>
                                     {% from 'partials/trial_viewer/_macros.html' import color_picker %}
                                     {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true')
@@ -1115,8 +1123,7 @@
 
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Width: <span
-                                                      class="text-accent-500"
+                                            <label class="text-sm font-bold text-ink-secondary uppercase">Width: <span class="text-accent-500"
                                                       x-text="temp.width"></span></label>
                                             <input type="range"
                                                    min="0.5"
@@ -1127,8 +1134,7 @@
                                                    class="w-full h-2 bg-track rounded-lg appearance-none cursor-pointer accent-accent-500" />
                                         </div>
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-ink-secondary uppercase">Opacity: <span
-                                                      class="text-accent-500"
+                                            <label class="text-sm font-bold text-ink-secondary uppercase">Opacity: <span class="text-accent-500"
                                                       x-text="Math.round(temp.opacity*100)+'%'"></span></label>
                                             <input type="range"
                                                    min="0.1"
@@ -1146,9 +1152,8 @@
                                             <label class="text-sm font-bold text-ink-secondary uppercase">Style</label>
                                             <button @click="sOpen = !sOpen"
                                                     @click.away="sOpen = false"
-                                                    class="{{ dropdown_trigger_sm }}">
-                                                <span
-                                                      x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
+                                                    class="dropdown-trigger-sm">
+                                                <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
                                                 <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
                                                      :class="sOpen ? 'rotate-180' : ''"
                                                      fill="none"
@@ -1162,10 +1167,10 @@
                                             </button>
                                             <div x-show="sOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-310">
+                                                 class="dropdown-panel z-310">
                                                 <template x-for="opt in opts.dash">
                                                     <button @click="temp.dash = opt; isDirty = true; sOpen = false"
-                                                            class="{{ dropdown_option }}"
+                                                            class="dropdown-option"
                                                             :class="temp.dash === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
@@ -1176,9 +1181,8 @@
                                             <label class="text-sm font-bold text-ink-secondary uppercase">Marker</label>
                                             <button @click="mOpen = !mOpen"
                                                     @click.away="mOpen = false"
-                                                    class="{{ dropdown_trigger_sm }}">
-                                                <span
-                                                      x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
+                                                    class="dropdown-trigger-sm">
+                                                <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
                                                 <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
                                                      :class="mOpen ? 'rotate-180' : ''"
                                                      fill="none"
@@ -1192,10 +1196,10 @@
                                             </button>
                                             <div x-show="mOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-310 max-h-52 overflow-y-auto custom-scrollbar">
+                                                 class="dropdown-panel z-310 max-h-52 overflow-y-auto custom-scrollbar">
                                                 <template x-for="opt in opts.marker">
                                                     <button @click="temp.marker = opt; isDirty = true; mOpen = false"
-                                                            class="{{ dropdown_option }}"
+                                                            class="dropdown-option"
                                                             :class="temp.marker === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
@@ -1206,8 +1210,7 @@
                                     <!-- ── FILTER STACK ── -->
                                     <div class="space-y-2 pt-2 border-t border-subtle dark:border-subtle/50">
                                         <div class="flex items-center justify-between">
-                                            <label
-                                                   class="text-sm font-bold text-ink-secondary uppercase tracking-tight">Filters</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight">Filters</label>
                                             <!-- add filter dropdown -->
                                             <div class="relative"
                                                  @click.away="addFilterOpen = false">
@@ -1396,13 +1399,12 @@
                                                                            class="rounded accent-accent-500 w-4 h-4" />
                                                                 </template>
                                                                 <!-- UnitFilter dropdowns for fromUnit / toUnit -->
-                                                                <template
-                                                                          x-if="param.type === 'string' && f.type === 'unit'">
+                                                                <template x-if="param.type === 'string' && f.type === 'unit'">
                                                                     <div class="flex-1 relative"
                                                                          x-data="{ uOpen: false }"
                                                                          @click.away="uOpen = false">
                                                                         <button @click="uOpen = !uOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs"
                                                                                   x-text="f[param.name] || '- select -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1442,8 +1444,7 @@
                                                                     </div>
                                                                 </template>
                                                                 <!-- regular string input for non-unit params -->
-                                                                <template
-                                                                          x-if="param.type === 'string' && f.type !== 'unit'">
+                                                                <template x-if="param.type === 'string' && f.type !== 'unit'">
                                                                     <input type="text"
                                                                            :value="f[param.name]"
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
@@ -1469,7 +1470,7 @@
                                                                          @click.away="cOpen = false">
                                                                         <button x-ref="cBtn"
                                                                                 @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs truncate"
                                                                                   x-text="f[param.name] || '- none -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1491,15 +1492,13 @@
                                                                                  :style="`position:absolute;top:${cCoords.top}px;left:${cCoords.left}px;width:14rem;`"
                                                                                  class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                                                  style="display:none;">
-                                                                                <div
-                                                                                     class="p-1.5 border-b border-subtle">
+                                                                                <div class="p-1.5 border-b border-subtle">
                                                                                     <input type="text"
                                                                                            x-model="cSearch"
                                                                                            placeholder="Filter..."
                                                                                            class="input-field w-full px-2 py-1 text-xs" />
                                                                                 </div>
-                                                                                <div
-                                                                                     class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                                <div class="max-h-48 overflow-y-auto custom-scrollbar">
                                                                                     <button @click="setFilterParamOnTemp(temp, fi, param.name, null); isDirty = true; cOpen = false"
                                                                                             :class="!f[param.name] ? 'bg-accent-500 text-white font-bold' : 'text-ink-muted hover:bg-control'"
                                                                                             class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-subtle italic">
@@ -1524,7 +1523,7 @@
                                                                          @click.away="qOpen = false">
                                                                         <button x-ref="qBtn"
                                                                                 @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs truncate"
                                                                                   x-text="f[param.name] || '- select -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1546,15 +1545,13 @@
                                                                                  :style="`position:absolute;top:${qCoords.top}px;left:${qCoords.left}px;width:14rem;`"
                                                                                  class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                                                  style="display:none;">
-                                                                                <div
-                                                                                     class="p-1.5 border-b border-subtle">
+                                                                                <div class="p-1.5 border-b border-subtle">
                                                                                     <input type="text"
                                                                                            x-model="qSearch"
                                                                                            placeholder="Filter..."
                                                                                            class="input-field w-full px-2 py-1 text-xs" />
                                                                                 </div>
-                                                                                <div
-                                                                                     class="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                                <div class="max-h-48 overflow-y-auto custom-scrollbar">
                                                                                     <template x-for="c in availableQuats.filter(c => !qSearch || c.toLowerCase().includes(qSearch.toLowerCase()))"
                                                                                               :key="c">
                                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; qOpen = false"

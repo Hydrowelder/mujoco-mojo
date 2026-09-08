@@ -1,5 +1,12 @@
 import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
+import {
+  nearestColorName,
+  resolveColorHex,
+  isHexColor,
+  collapseColorAlias,
+  createSettingsPanelState,
+} from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
 import type { DojoStore, JobStatus, NotificationEntry } from "./models";
 
@@ -20,8 +27,18 @@ window.notifTimeAgo = notifTimeAgo;
 // format iro.js can't parse.
 window.themeColor = themeColor;
 
+// _settings_panel.html's color-picker wiring isn't bundled TS either (it's
+// built per-field at runtime from the schema, unlike _macros.html's
+// compile-time color_picker macro), so it needs these exposed the same way.
+window.mojoNearestColorName = nearestColorName;
+window.mojoResolveColorHex = resolveColorHex;
+window.mojoIsHexColor = isHexColor;
+window.mojoCollapseColorAlias = collapseColorAlias;
+
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {
+    ...createSettingsPanelState(),
+
     isPageReady: false,
     isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
     overlayCount: 0,

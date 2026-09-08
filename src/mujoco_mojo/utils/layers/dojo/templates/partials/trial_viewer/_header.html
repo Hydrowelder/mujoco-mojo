@@ -168,7 +168,7 @@
             {% endif %}
 
             <!-- manual -->
-            <div class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm">
+            <div class="input-number-wrap input-field-canvas">
                 <input type="text"
                        data-warp-input
                        x-model.number="warpId"
@@ -176,7 +176,7 @@
                        @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                        inputmode="numeric"
                        placeholder="#"
-                       class="number-input w-10 sm:w-12 h-6 text-sm sm:text-base" />
+                       class="input-number w-10 sm:w-12 h-6 text-sm sm:text-base" />
                 <button x-show="(warpId === 0 || warpId) && warpId != parseInt(trialId.split('_').pop())"
                         @click="warpToTrial()"
                         x-transition
@@ -226,18 +226,13 @@
                  :class="vsDraft.enabled ? 'cursor-pointer hover:border-line' : 'cursor-default'">
 
                 <div class="flex items-center gap-2 flex-1 min-w-0">
-                    <label class="relative inline-flex items-center cursor-pointer shrink-0"
-                           @click.stop>
-                        <input type="checkbox"
-                               x-model="vsDraft.enabled"
-                               @change="handleVsToggle()"
-                               class="sr-only">
-                        <div class="w-10 h-6 bg-control border-2 border-control rounded-md transition-colors duration-200"
-                             :class="vsDraft.enabled ? 'bg-accent-500/20 border-accent-500' : ''"></div>
-                        <div class="absolute left-1 top-1 w-4 h-4 rounded-sm transition-all duration-200 shadow-sm"
-                             :class="vsDraft.enabled ? 'translate-x-4 bg-accent-500' : 'translate-x-0 bg-ink-muted'">
-                        </div>
-                    </label>
+                    <button type="button"
+                            @click.stop="vsDraft.enabled = !vsDraft.enabled; handleVsToggle()"
+                            class="toggle shrink-0"
+                            :class="vsDraft.enabled ? 'toggle-on' : ''">
+                        <span class="toggle-thumb"
+                              :class="vsDraft.enabled ? 'toggle-thumb-on' : ''"></span>
+                    </button>
 
                     <span class="text-xs font-black uppercase tracking-tighter truncate"
                           :class="vsDraft.enabled ? 'text-ink-secondary' : 'text-ink-secondary/30 dark:text-ink-secondary/20'"
@@ -372,22 +367,22 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div class="space-y-1">
                         <label class="text-sm font-bold text-ink-secondary">START</label>
-                        <div class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm">
+                        <div class="input-number-wrap input-field-canvas">
                             <input type="text"
                                    x-model.number="vsDraft.range[0]"
                                    @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                    inputmode="numeric"
-                                   class="number-input w-full py-1.5 text-sm" />
+                                   class="input-number" />
                         </div>
                     </div>
                     <div class="space-y-1">
                         <label class="text-sm font-bold text-ink-secondary">END</label>
-                        <div class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm">
+                        <div class="input-number-wrap input-field-canvas">
                             <input type="text"
                                    x-model.number="vsDraft.range[1]"
                                    @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
                                    inputmode="numeric"
-                                   class="number-input w-full py-1.5 text-sm" />
+                                   class="input-number" />
                         </div>
                     </div>
                 </div>

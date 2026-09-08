@@ -183,9 +183,13 @@
     </div>
   </section>
 
-  <!-- sound the bell -->
+  <!-- sound the bell. data-chime-enabled (dojo.chime, settings.py) is read
+       by handleCompletion() (monitor.ts) to skip playing anything at all -
+       both this and any holiday sound - when the user has disabled it
+       globally, independent of the per-browser mute toggle. -->
   <audio id="chime"
-         src="{{ chime_src }}"></audio>
+         src="{{ chime_src }}"
+         data-chime-enabled="{{ 'true' if chime_enabled else 'false' }}"></audio>
 </div>
 {% endblock %} {% block scripts %}
 <script type="module"

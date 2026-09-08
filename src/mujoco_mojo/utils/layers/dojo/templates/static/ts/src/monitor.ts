@@ -362,8 +362,14 @@ function monitor() {
       );
       const theme = this.getHolidayTheme();
       const chime = document.getElementById("chime") as HTMLAudioElement | null;
+      // dojo.chime (settings.py) - a global, server-side enable/disable
+      // distinct from isMuted's per-browser toggle below. Gates the
+      // holiday sound too, not just the plain chime: from a user's
+      // perspective "disable the chime" means no completion sound at all,
+      // not "keep seasonal sounds but drop the default one."
+      const chimeEnabled = chime?.dataset.chimeEnabled !== "false";
 
-      if (!(Alpine.store("dojo") as DojoStore).isMuted) {
+      if (chimeEnabled && !(Alpine.store("dojo") as DojoStore).isMuted) {
         if (theme.audioUrl) {
           const holidaySound = new Audio(theme.audioUrl);
           holidaySound.play().catch(() => chime?.play().catch(() => {}));

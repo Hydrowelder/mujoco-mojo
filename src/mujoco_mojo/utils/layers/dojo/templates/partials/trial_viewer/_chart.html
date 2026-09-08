@@ -9,7 +9,7 @@
 
 <div x-ref="chartRow"
      x-init="initChartResize($refs.chartRow); $watch('$store.dojo.isFullscreen', () => $nextTick(() => { resizeMainPlot(); requestAnimationFrame(() => { _renderFrameMarkers(); _syncOverlayVisibility(); }); }))"
-     class="flex flex-row gap-4 items-stretch h-150">
+     class="flex flex-row gap-4 items-stretch h-133">
     <!-- ── PLOT AREA ────────────────────────────────────────────────── -->
     <div class="card flex-1 rounded-2xl shadow-2xl p-2 relative">
         <div :class="(data && Object.keys(config.yAxes).length > 0) ? 'opacity-100' : 'opacity-0 pointer-events-none'"
@@ -20,8 +20,7 @@
              class="absolute inset-0 flex items-center justify-center text-ink-muted font-mono text-base italic">
             Select Y-axis signals to begin...</div>
         <template x-if="loading">
-            <div
-                 class="absolute inset-0 bg-canvas/80 backdrop-blur-sm flex items-center justify-center">
+            <div class="absolute inset-0 bg-canvas/80 backdrop-blur-sm flex items-center justify-center">
                 <div class="w-8 h-8 border-4 border-accent-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
         </template>
@@ -108,439 +107,45 @@
                 </button>
 
                 <template x-teleport="body">
-                <div x-show="plotConfigOpen"
-                     x-transition
-                     @click.stop
-                     @click.away="plotConfigOpen = false"
-                     :style="`position:absolute;top:${plotConfigCoords.top}px;left:${plotConfigCoords.left}px;`"
-                     class="w-[calc(100vw-6rem)] sm:w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
-                     style="display:none;">
+                    <div x-show="plotConfigOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="plotConfigOpen = false"
+                         :style="`position:absolute;top:${plotConfigCoords.top}px;left:${plotConfigCoords.left}px;`"
+                         class="w-[calc(100vw-6rem)] sm:w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                         style="display:none;">
 
-                    <p
-                       class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
-                        Plot Editor
-                    </p>
+                        <p class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
+                            Plot Editor
+                        </p>
 
-                    <div class="space-y-4">
-                        <!-- row 1 -->
-                        <div class="grid grid-cols-2 gap-3 max-h-64">
-                            <!-- gridlines -->
-                            <div class="space-y-1 relative"
-                                 x-data="{ open: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Gridlines</label>
-
-                                <button @click="open = !open"
-                                        @click.away="open = false"
-                                        class="{{ dropdown_trigger }}">
-
-                                    <span class="truncate"
-                                          x-text="config.grid === 'all' ? 'Major + Minor' : (config.grid.charAt(0).toUpperCase() + config.grid.slice(1))"></span>
-
-                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                <div x-show="open"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-
-                                    <template x-for="opt in opts.grid">
-                                        <button @click="config.grid = opt; saveAndRender(); open = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="config.grid === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                            <span
-                                                  x-text="opt === 'all' ? 'Major + Minor' : (opt.charAt(0).toUpperCase() + opt.slice(1))"></span>
-                                        </button>
-                                    </template>
-                                </div>
-                            </div>
-                            <!-- linemode -->
-                            <div class="space-y-1 relative"
-                                 x-data="{ open: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Mode</label>
-
-                                <button @click="open = !open"
-                                        @click.away="open = false"
-                                        class="{{ dropdown_trigger }}">
-
-                                    <span class="truncate"
-                                          x-text="opts.lineModeLabel(config.lineMode)"></span>
-
-                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                <div x-show="open"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-
-                                    <template x-for="opt in opts.lineMode"
-                                              :key="opt.value">
-                                        <button @click="config.lineMode = opt.value; saveAndRender(); open = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="config.lineMode === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                            <span x-text="opt.label"></span>
-                                        </button>
-                                    </template>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- row 2 -->
-                        <div class="grid grid-cols-2 gap-3">
-                            <!-- interpolation -->
-                            <div class="space-y-1 relative transition-opacity duration-300"
-                                 x-data="{ open: false }"
-                                 :class="config.lineMode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
-
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Interpolation</label>
-
-                                <button @click="open = !open"
-                                        @click.away="open = false"
-                                        :disabled="config.lineMode === 'markers'"
-                                        class="{{ dropdown_trigger_disabled }}">
-
-                                    <span class="truncate"
-                                          x-text="opts.interpLabel(config.interp)"></span>
-
-                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                <div x-show="open"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-
-                                    <template x-for="opt in opts.interp"
-                                              :key="opt.value">
-                                        <button @click="config.interp = opt.value; saveAndRender(); open = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="config.interp === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                            <span x-text="opt.label"></span>
-                                        </button>
-                                    </template>
-                                </div>
-                            </div>
-                            <!-- hoverstyle -->
-                            <div class="space-y-1 relative"
-                                 x-data="{ open: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Hover</label>
-
-                                <button @click="open = !open"
-                                        @click.away="open = false"
-                                        class="{{ dropdown_trigger }}">
-
-                                    <span class="truncate"
-                                          x-text="opts.hoverLabel(config.hover)"></span>
-
-                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                <div x-show="open"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-
-                                    <template x-for="opt in opts.hover"
-                                              :key="opt.value">
-                                        <button @click="config.hover = opt.value; saveAndRender(); open = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="config.hover === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                            <span x-text="opt.label"></span>
-                                        </button>
-                                    </template>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- row 3 -->
-                        <div class="grid grid-cols-2 gap-3 items-end">
-                            <!-- legend location -->
-                            <div class="space-y-1 relative"
-                                 x-data="{ open: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Legend</label>
-
-                                <button @click="open = !open"
-                                        @click.away="open = false"
-                                        class="{{ dropdown_trigger }}">
-
-                                    <span class="truncate"
-                                          x-text="config.legendPos.charAt(0).toUpperCase() + config.legendPos.slice(1)"></span>
-
-                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="open ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                <div x-show="open"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-
-                                    <template x-for="opt in opts.legendPos"
-                                              :key="opt">
-                                        <button @click="config.legendPos = opt; saveAndRender(); open = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="config.legendPos === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                            <span x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></span>
-                                        </button>
-                                    </template>
-                                </div>
-                            </div>
-                            <!-- show spikes checkbox -->
-                            <label class="flex items-center justify-between p-2 bg-well border border-control rounded-lg group transition-all hover:border-accent-500/50 cursor-pointer"
-                                   :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
-
-                                <span
-                                      class="text-xs font-bold text-ink-secondary uppercase tracking-widest transition-colors group-hover:text-ink-strong">
-                                    Show Spikes
-                                </span>
-
-                                <div class="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox"
-                                           x-model="config.showSpike"
-                                           @change="saveAndRender()"
-                                           :disabled="config.hover === 'none'"
-                                           class="sr-only">
-
-                                    <div class="w-10 h-6 bg-control border-2 border-control rounded-md transition-colors duration-200"
-                                         :class="config.showSpike ? 'bg-accent-500/20 border-accent-500' : ''"></div>
-
-                                    <div class="absolute left-1 top-1 w-4 h-4 rounded-sm transition-all duration-200 shadow-sm"
-                                         :class="config.showSpike
-                ? 'translate-x-4 bg-accent-500'
-                : 'translate-x-0 bg-ink-muted'">
-                                    </div>
-                                </div>
-                            </label>
-                        </div>
-
-                        <!-- plot type toggle + max points -->
-                        <div class="flex items-center gap-2">
-
-                            <!-- plot type -->
-                            <div class="flex items-center p-2 bg-well border border-control rounded-lg gap-2">
-                                <span class="text-xs font-bold text-ink-secondary uppercase tracking-widest shrink-0">
-                                    Plot Type
-                                </span>
-
-                                <div class="flex rounded-md border border-control overflow-hidden shrink-0">
-                                    <button @click="config.plotType = 'cartesian'; saveAndRender()"
-                                            title="Cartesian"
-                                            class="p-1.5 transition-colors"
-                                            :class="config.plotType !== 'polar'
-                                                ? 'bg-accent-500 text-white'
-                                                : 'text-ink-muted hover:text-accent-500'">
-                                        <svg class="w-4 h-4"
-                                             viewBox="0 0 20 20"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             stroke-width="1.5">
-                                            <line x1="4"
-                                                  y1="2"
-                                                  x2="4"
-                                                  y2="18" />
-                                            <line x1="10"
-                                                  y1="2"
-                                                  x2="10"
-                                                  y2="18" />
-                                            <line x1="16"
-                                                  y1="2"
-                                                  x2="16"
-                                                  y2="18" />
-                                            <line x1="2"
-                                                  y1="4"
-                                                  x2="18"
-                                                  y2="4" />
-                                            <line x1="2"
-                                                  y1="10"
-                                                  x2="18"
-                                                  y2="10" />
-                                            <line x1="2"
-                                                  y1="16"
-                                                  x2="18"
-                                                  y2="16" />
-                                        </svg>
-                                    </button>
-                                    <button @click="config.plotType = 'polar'; saveAndRender()"
-                                            title="Polar"
-                                            class="p-1.5 border-l border-control transition-colors"
-                                            :class="config.plotType === 'polar'
-                                                ? 'bg-accent-500 text-white'
-                                                : 'text-ink-muted hover:text-accent-500'">
-                                        <svg class="w-4 h-4"
-                                             viewBox="0 0 20 20"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             stroke-width="1.5">
-                                            <circle cx="10"
-                                                    cy="10"
-                                                    r="3" />
-                                            <circle cx="10"
-                                                    cy="10"
-                                                    r="6" />
-                                            <circle cx="10"
-                                                    cy="10"
-                                                    r="9" />
-                                            <line x1="10"
-                                                  y1="1"
-                                                  x2="10"
-                                                  y2="19" />
-                                            <line x1="1"
-                                                  y1="10"
-                                                  x2="19"
-                                                  y2="10" />
-                                            <line x1="3.6"
-                                                  y1="3.6"
-                                                  x2="16.4"
-                                                  y2="16.4" />
-                                            <line x1="16.4"
-                                                  y1="3.6"
-                                                  x2="3.6"
-                                                  y2="16.4" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- max points: number input with data length as placeholder -->
-                            <div class="flex items-center p-2 bg-well border border-control rounded-lg gap-2 min-w-0">
-                                <span
-                                      class="text-xs font-bold text-ink-secondary uppercase tracking-widest shrink-0">Pts</span>
-                                <div
-                                     class="relative flex items-center bg-surface-inset border border-inset rounded-md shadow-sm w-20">
-                                    <input type="text"
-                                           inputmode="numeric"
-                                           :placeholder="dataLength || ''"
-                                           :value="config.maxPoints ?? ''"
-                                           :class="config.maxPoints !== null ? 'pr-5' : ''"
-                                           @change="
-                                               const v = parseInt($event.target.value);
-                                               config.maxPoints = isNaN(v) || v <= 0 ? null : v;
-                                               saveAndRender();
-                                           "
-                                           @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
-                                           class="number-input w-full py-1 text-sm" />
-                                    <button x-show="config.maxPoints !== null"
-                                            @click="config.maxPoints = null; saveAndRender()"
-                                            title="Remove limit"
-                                            class="absolute right-0 inset-y-0 flex items-center px-1.5 text-ink-muted hover:text-ink-body transition-colors">
-                                        <svg class="w-3 h-3"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             stroke-width="2.5"
-                                             viewBox="0 0 24 24">
-                                            <path stroke-linecap="round"
-                                                  stroke-linejoin="round"
-                                                  d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <!-- display unit system -->
-                        <div class="space-y-1 relative"
-                             x-data="{ open: false }">
-                            <label class="text-xs font-bold text-ink-secondary uppercase">Display Units</label>
-                            <button @click="open = !open"
-                                    @click.away="open = false"
-                                    class="{{ dropdown_trigger }}">
-                                <span class="truncate"
-                                      x-text="config.displayUnitSystem ? config.displayUnitSystem.toUpperCase() : 'As logged'"></span>
-                                <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
-                                     :class="open ? 'rotate-180' : ''"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     stroke-width="3"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            <div x-show="open"
-                                 x-transition
-                                 class="{{ dropdown_panel }}">
-                                <button @click="config.displayUnitSystem = null; saveAndRender(); open = false"
-                                        class="{{ dropdown_option }}"
-                                        :class="!config.displayUnitSystem ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                    As logged
-                                </button>
-                                <button @click="config.displayUnitSystem = 'si'; saveAndRender(); open = false"
-                                        class="{{ dropdown_option }}"
-                                        :class="config.displayUnitSystem === 'si' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                    SI <span class="opacity-50 text-xs font-normal">m · kg · s</span>
-                                </button>
-                                <button @click="config.displayUnitSystem = 'cgs'; saveAndRender(); open = false"
-                                        class="{{ dropdown_option }}"
-                                        :class="config.displayUnitSystem === 'cgs' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                    CGS <span class="opacity-50 text-xs font-normal">cm · g · s</span>
-                                </button>
-                                <button @click="config.displayUnitSystem = 'fps'; saveAndRender(); open = false"
-                                        class="{{ dropdown_option }}"
-                                        :class="config.displayUnitSystem === 'fps' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                    FPS <span class="opacity-50 text-xs font-normal">ft · slug · s</span>
-                                </button>
-                                <button @click="config.displayUnitSystem = 'ips'; saveAndRender(); open = false"
-                                        class="{{ dropdown_option }}"
-                                        :class="config.displayUnitSystem === 'ips' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
-                                    IPS <span class="opacity-50 text-xs font-normal">in · slinch · s</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- axis base -->
-                        <div class="space-y-3">
-
-                            <!-- x scale -->
-                            <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-4">
+                            <!-- row 1 -->
+                            <div class="grid grid-cols-2 gap-3 max-h-64">
+                                <!-- gridlines -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">X-Scale</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Gridlines</label>
+
+                                    <!-- .capture (here and on every other dropdown-trigger in this
+                                         popover): the popover's own outer wrapper has @click.stop,
+                                         to keep clicking anything inside it from also triggering
+                                         *its* own @click.away and closing the whole popover. But
+                                         Alpine's plain @click.away listens on document during the
+                                         bubble phase, so that same @click.stop was silently
+                                         swallowing every click before it ever reached that
+                                         listener - clicking elsewhere in the popover (not the
+                                         trigger, not another option) never closed an open
+                                         dropdown. .capture makes this listener fire during the
+                                         capture phase instead, which runs before any bubble-phase
+                                         stopPropagation() further down the tree can block it. -->
                                     <button @click="open = !open"
-                                            @click.away="open = false"
-                                            class="{{ dropdown_trigger }}">
-                                        <span x-text="config.xScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            @click.away.capture="open = false"
+                                            class="dropdown-trigger">
+
+                                        <span class="truncate"
+                                              x-text="config.grid === 'all' ? 'Major + Minor' : (config.grid.charAt(0).toUpperCase() + config.grid.slice(1))"></span>
+
                                         <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
                                              :class="open ? 'rotate-180' : ''"
                                              fill="none"
@@ -552,41 +157,32 @@
                                                   d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </button>
+
                                     <div x-show="open"
                                          x-transition
-                                         class="{{ dropdown_panel }}">
-                                        <template x-for="opt in opts.scale">
-                                            <button @click="config.xScale = opt; if(opt === 'log' && !config.xLogBase) config.xLogBase = 10; saveAndRender(); open = false"
-                                                    class="{{ dropdown_option }}"
-                                                    :class="config.xScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
-                                                    x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                         class="dropdown-panel">
+
+                                        <template x-for="opt in opts.grid">
+                                            <button @click="config.grid = opt; saveAndRender(); open = false"
+                                                    class="dropdown-option"
+                                                    :class="config.grid === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                                <span x-text="opt === 'all' ? 'Major + Minor' : (opt.charAt(0).toUpperCase() + opt.slice(1))"></span>
+                                            </button>
                                         </template>
                                     </div>
-                                    <div x-show="config.xScale === 'log'"
-                                         x-transition
-                                         class="mt-2 flex items-center gap-2">
-                                        <span class="text-xs font-bold text-ink-muted uppercase">Base</span>
-
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm ml-auto w-20">
-                                            <input type="text"
-                                                   x-model.number="config.xLogBase"
-                                                   @change="saveAndRender()"
-                                                   @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
-                                                   inputmode="decimal"
-                                                   class="number-input w-full py-1 text-sm" />
-                                        </div>
-                                    </div>
                                 </div>
-
-                                <!-- y scale -->
+                                <!-- linemode -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Y-Scale</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Mode</label>
+
                                     <button @click="open = !open"
-                                            @click.away="open = false"
-                                            class="{{ dropdown_trigger }}">
-                                        <span x-text="config.yScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            @click.away.capture="open = false"
+                                            class="dropdown-trigger">
+
+                                        <span class="truncate"
+                                              x-text="opts.lineModeLabel(config.lineMode)"></span>
+
                                         <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
                                              :class="open ? 'rotate-180' : ''"
                                              fill="none"
@@ -598,201 +194,593 @@
                                                   d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </button>
+
                                     <div x-show="open"
                                          x-transition
-                                         class="{{ dropdown_panel }}">
-                                        <template x-for="opt in opts.scale">
-                                            <button @click="config.yScale = opt; if(opt === 'log' && !config.yLogBase) config.yLogBase = 10; saveAndRender(); open = false"
-                                                    class="{{ dropdown_option }}"
-                                                    :class="config.yScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
-                                                    x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                         class="dropdown-panel">
+
+                                        <template x-for="opt in opts.lineMode"
+                                                  :key="opt.value">
+                                            <button @click="config.lineMode = opt.value; saveAndRender(); open = false"
+                                                    class="dropdown-option"
+                                                    :class="config.lineMode === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                                <span x-text="opt.label"></span>
+                                            </button>
                                         </template>
                                     </div>
-                                    <div x-show="config.yScale === 'log'"
-                                         x-transition
-                                         class="mt-2 flex items-center gap-2">
-                                        <span class="text-xs font-bold text-ink-muted uppercase">Base</span>
-
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm ml-auto w-20">
-                                            <input type="text"
-                                                   x-model.number="config.yLogBase"
-                                                   @change="saveAndRender()"
-                                                   @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
-                                                   inputmode="decimal"
-                                                   class="number-input w-full py-1 text-sm" />
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
 
-                            <!-- x/y range -->
+                            <!-- row 2 -->
                             <div class="grid grid-cols-2 gap-3">
+                                <!-- interpolation -->
+                                <div class="space-y-1 relative transition-opacity duration-300"
+                                     x-data="{ open: false }"
+                                     :class="config.lineMode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
+
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Interpolation</label>
+
+                                    <button @click="open = !open"
+                                            @click.away.capture="open = false"
+                                            :disabled="config.lineMode === 'markers'"
+                                            class="dropdown-trigger">
+
+                                        <span class="truncate"
+                                              x-text="opts.interpLabel(config.interp)"></span>
+
+                                        <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                             :class="open ? 'rotate-180' : ''"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="3"
+                                             viewBox="0 0 24 24">
+                                            <path stroke-linecap="round"
+                                                  stroke-linejoin="round"
+                                                  d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    <div x-show="open"
+                                         x-transition
+                                         class="dropdown-panel">
+
+                                        <template x-for="opt in opts.interp"
+                                                  :key="opt.value">
+                                            <button @click="config.interp = opt.value; saveAndRender(); open = false"
+                                                    class="dropdown-option"
+                                                    :class="config.interp === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                                <span x-text="opt.label"></span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                                <!-- hoverstyle -->
+                                <div class="space-y-1 relative"
+                                     x-data="{ open: false }">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Hover</label>
+
+                                    <button @click="open = !open"
+                                            @click.away.capture="open = false"
+                                            class="dropdown-trigger">
+
+                                        <span class="truncate"
+                                              x-text="opts.hoverLabel(config.hover)"></span>
+
+                                        <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                             :class="open ? 'rotate-180' : ''"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="3"
+                                             viewBox="0 0 24 24">
+                                            <path stroke-linecap="round"
+                                                  stroke-linejoin="round"
+                                                  d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    <div x-show="open"
+                                         x-transition
+                                         class="dropdown-panel">
+
+                                        <template x-for="opt in opts.hover"
+                                                  :key="opt.value">
+                                            <button @click="config.hover = opt.value; saveAndRender(); open = false"
+                                                    class="dropdown-option"
+                                                    :class="config.hover === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                                <span x-text="opt.label"></span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- row 3 -->
+                            <div class="grid grid-cols-2 gap-3 items-end">
+                                <!-- legend location -->
+                                <div class="space-y-1 relative"
+                                     x-data="{ open: false }">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Legend</label>
+
+                                    <button @click="open = !open"
+                                            @click.away.capture="open = false"
+                                            class="dropdown-trigger">
+
+                                        <span class="truncate"
+                                              x-text="config.legendPos.charAt(0).toUpperCase() + config.legendPos.slice(1)"></span>
+
+                                        <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                             :class="open ? 'rotate-180' : ''"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="3"
+                                             viewBox="0 0 24 24">
+                                            <path stroke-linecap="round"
+                                                  stroke-linejoin="round"
+                                                  d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    <div x-show="open"
+                                         x-transition
+                                         class="dropdown-panel">
+
+                                        <template x-for="opt in opts.legendPos"
+                                                  :key="opt">
+                                            <button @click="config.legendPos = opt; saveAndRender(); open = false"
+                                                    class="dropdown-option"
+                                                    :class="config.legendPos === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                                <span x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                                <!-- show spikes toggle -->
                                 <div class="space-y-1">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">X-Range</label>
-                                    <div class="flex items-center gap-1.5">
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
+                                    <label class="field-label">Show Spikes</label>
+                                    <div class="field-card justify-center transition-all"
+                                         :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
+                                        <button type="button"
+                                                @click="config.showSpike = !config.showSpike; saveAndRender()"
+                                                :disabled="config.hover === 'none'"
+                                                class="toggle"
+                                                :class="config.showSpike ? 'toggle-on' : ''">
+                                            <span class="toggle-thumb"
+                                                  :class="config.showSpike ? 'toggle-thumb-on' : ''"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- plot type + max points: same grid-cols-2 rhythm as the rows
+                                 above (title above, .field-card below), not a shared flex row -
+                                 that's what previously ran the Cartesian/Polar toggle out of
+                                 horizontal space in this fixed 320px popover. -->
+                            <div class="grid grid-cols-2 gap-3">
+
+                                <!-- plot type -->
+                                <div class="space-y-1">
+                                    <label class="field-label">Plot Type</label>
+                                    <div class="field-card">
+                                        <button @click="config.plotType = 'cartesian'; saveAndRender()"
+                                                title="Cartesian"
+                                                class="relative z-10 flex-1 flex items-center justify-center p-1.5 rounded-md border transition-all"
+                                                :class="config.plotType !== 'polar' ? 'btn-primary' : 'btn-secondary'">
+                                            <svg class="w-4 h-4"
+                                                 viewBox="0 0 20 20"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5">
+                                                <line x1="4"
+                                                      y1="2"
+                                                      x2="4"
+                                                      y2="18" />
+                                                <line x1="10"
+                                                      y1="2"
+                                                      x2="10"
+                                                      y2="18" />
+                                                <line x1="16"
+                                                      y1="2"
+                                                      x2="16"
+                                                      y2="18" />
+                                                <line x1="2"
+                                                      y1="4"
+                                                      x2="18"
+                                                      y2="4" />
+                                                <line x1="2"
+                                                      y1="10"
+                                                      x2="18"
+                                                      y2="10" />
+                                                <line x1="2"
+                                                      y1="16"
+                                                      x2="18"
+                                                      y2="16" />
+                                            </svg>
+                                        </button>
+                                        <button @click="config.plotType = 'polar'; saveAndRender()"
+                                                title="Polar"
+                                                class="relative z-10 flex-1 flex items-center justify-center p-1.5 rounded-md border transition-all"
+                                                :class="config.plotType === 'polar' ? 'btn-primary' : 'btn-secondary'">
+                                            <svg class="w-4 h-4"
+                                                 viewBox="0 0 20 20"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="1.5">
+                                                <circle cx="10"
+                                                        cy="10"
+                                                        r="3" />
+                                                <circle cx="10"
+                                                        cy="10"
+                                                        r="6" />
+                                                <circle cx="10"
+                                                        cy="10"
+                                                        r="9" />
+                                                <line x1="10"
+                                                      y1="1"
+                                                      x2="10"
+                                                      y2="19" />
+                                                <line x1="1"
+                                                      y1="10"
+                                                      x2="19"
+                                                      y2="10" />
+                                                <line x1="3.6"
+                                                      y1="3.6"
+                                                      x2="16.4"
+                                                      y2="16.4" />
+                                                <line x1="16.4"
+                                                      y1="3.6"
+                                                      x2="3.6"
+                                                      y2="16.4" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- max points: number input with data length as placeholder -->
+                                <div class="space-y-1 min-w-0">
+                                    <label class="field-label">Max Points</label>
+                                    <div class="field-card min-w-0">
+                                        <div class="input-number-wrap relative w-full">
                                             <input type="text"
-                                                   placeholder="Auto"
-                                                   title="Supports arithmetic: e.g. -pi, sqrt(2)"
-                                                   :value="rangeBoundValue('x', 'min')"
-                                                   @change="setRangeBound('x', 'min', $event.target.value)"
-                                                   class="number-input w-full py-1 text-sm" />
-                                        </div>
-                                        <span class="text-ink-muted text-xs">-</span>
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                            <input type="text"
-                                                   placeholder="Auto"
-                                                   title="Supports arithmetic: e.g. pi, sqrt(2)"
-                                                   :value="rangeBoundValue('x', 'max')"
-                                                   @change="setRangeBound('x', 'max', $event.target.value)"
-                                                   class="number-input w-full py-1 text-sm" />
+                                                   inputmode="numeric"
+                                                   :placeholder="dataLength || ''"
+                                                   :value="config.maxPoints ?? ''"
+                                                   :class="config.maxPoints !== null ? 'pr-5' : ''"
+                                                   @change="
+                                                   const v = parseInt($event.target.value);
+                                                   config.maxPoints = isNaN(v) || v <= 0 ? null : v;
+                                                   saveAndRender();
+                                               "
+                                                   @keydown="!/^[0-9]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                                   class="input-number" />
+                                            <button x-show="config.maxPoints !== null"
+                                                    @click="config.maxPoints = null; saveAndRender()"
+                                                    title="Remove limit"
+                                                    class="absolute right-0 inset-y-0 flex items-center px-1.5 text-ink-muted hover:text-ink-body transition-colors">
+                                                <svg class="w-3 h-3"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     stroke-width="2.5"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="space-y-1">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Y-Range</label>
-                                    <div class="flex items-center gap-1.5">
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                            <input type="text"
-                                                   placeholder="Auto"
-                                                   title="Supports arithmetic: e.g. -pi, sqrt(2)"
-                                                   :value="rangeBoundValue('y', 'min')"
-                                                   @change="setRangeBound('y', 'min', $event.target.value)"
-                                                   class="number-input w-full py-1 text-sm" />
+                            </div>
+
+                            <!-- display unit system -->
+                            <div class="space-y-1 relative"
+                                 x-data="{ open: false }">
+                                <label class="text-xs font-bold text-ink-secondary uppercase">Display Units</label>
+                                <button @click="open = !open"
+                                        @click.away.capture="open = false"
+                                        class="dropdown-trigger">
+                                    <span class="truncate"
+                                          x-text="config.displayUnitSystem ? config.displayUnitSystem.toUpperCase() : 'As logged'"></span>
+                                    <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                         :class="open ? 'rotate-180' : ''"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="3"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div x-show="open"
+                                     x-transition
+                                     class="dropdown-panel">
+                                    <button @click="config.displayUnitSystem = null; saveAndRender(); open = false"
+                                            class="dropdown-option"
+                                            :class="!config.displayUnitSystem ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                        As logged
+                                    </button>
+                                    <button @click="config.displayUnitSystem = 'si'; saveAndRender(); open = false"
+                                            class="dropdown-option"
+                                            :class="config.displayUnitSystem === 'si' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                        SI <span class="opacity-60 text-xs font-normal">m · kg · s</span>
+                                    </button>
+                                    <button @click="config.displayUnitSystem = 'cgs'; saveAndRender(); open = false"
+                                            class="dropdown-option"
+                                            :class="config.displayUnitSystem === 'cgs' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                        CGS <span class="opacity-60 text-xs font-normal">cm · g · s</span>
+                                    </button>
+                                    <button @click="config.displayUnitSystem = 'fps'; saveAndRender(); open = false"
+                                            class="dropdown-option"
+                                            :class="config.displayUnitSystem === 'fps' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                        FPS <span class="opacity-60 text-xs font-normal">ft · slug · s</span>
+                                    </button>
+                                    <button @click="config.displayUnitSystem = 'ips'; saveAndRender(); open = false"
+                                            class="dropdown-option"
+                                            :class="config.displayUnitSystem === 'ips' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
+                                        IPS <span class="opacity-60 text-xs font-normal">in · slinch · s</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- axis base -->
+                            <div class="space-y-3">
+
+                                <!-- x scale -->
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="space-y-1 relative"
+                                         x-data="{ open: false }">
+                                        <label class="text-xs font-bold text-ink-secondary uppercase">X-Scale</label>
+                                        <button @click="open = !open"
+                                                @click.away.capture="open = false"
+                                                class="dropdown-trigger">
+                                            <span x-text="config.xScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                                 :class="open ? 'rotate-180' : ''"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="3"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div x-show="open"
+                                             x-transition
+                                             class="dropdown-panel">
+                                            <template x-for="opt in opts.scale">
+                                                <button @click="config.xScale = opt; if(opt === 'log' && !config.xLogBase) config.xLogBase = 10; saveAndRender(); open = false"
+                                                        class="dropdown-option"
+                                                        :class="config.xScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                        x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                            </template>
                                         </div>
-                                        <span class="text-ink-muted text-xs">-</span>
-                                        <div
-                                             class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                            <input type="text"
-                                                   placeholder="Auto"
-                                                   title="Supports arithmetic: e.g. pi, sqrt(2)"
-                                                   :value="rangeBoundValue('y', 'max')"
-                                                   @change="setRangeBound('y', 'max', $event.target.value)"
-                                                   class="number-input w-full py-1 text-sm" />
+                                        <div x-show="config.xScale === 'log'"
+                                             x-transition
+                                             class="mt-2 flex items-center gap-2">
+                                            <span class="text-xs font-bold text-ink-muted uppercase">Base</span>
+
+                                            <div class="input-number-wrap ml-auto w-20">
+                                                <input type="text"
+                                                       x-model.number="config.xLogBase"
+                                                       @change="saveAndRender()"
+                                                       @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                                       inputmode="decimal"
+                                                       class="input-number" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- y scale -->
+                                    <div class="space-y-1 relative"
+                                         x-data="{ open: false }">
+                                        <label class="text-xs font-bold text-ink-secondary uppercase">Y-Scale</label>
+                                        <button @click="open = !open"
+                                                @click.away.capture="open = false"
+                                                class="dropdown-trigger">
+                                            <span x-text="config.yScale === 'log' ? 'Log' : 'Linear'"></span>
+                                            <svg class="w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200"
+                                                 :class="open ? 'rotate-180' : ''"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 stroke-width="3"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div x-show="open"
+                                             x-transition
+                                             class="dropdown-panel">
+                                            <template x-for="opt in opts.scale">
+                                                <button @click="config.yScale = opt; if(opt === 'log' && !config.yLogBase) config.yLogBase = 10; saveAndRender(); open = false"
+                                                        class="dropdown-option"
+                                                        :class="config.yScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                        x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                            </template>
+                                        </div>
+                                        <div x-show="config.yScale === 'log'"
+                                             x-transition
+                                             class="mt-2 flex items-center gap-2">
+                                            <span class="text-xs font-bold text-ink-muted uppercase">Base</span>
+
+                                            <div class="input-number-wrap ml-auto w-20">
+                                                <input type="text"
+                                                       x-model.number="config.yLogBase"
+                                                       @change="saveAndRender()"
+                                                       @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                                       inputmode="decimal"
+                                                       class="input-number" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- x/y range -->
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="space-y-1">
+                                        <label class="text-xs font-bold text-ink-secondary uppercase">X-Range</label>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="input-number-wrap flex-1">
+                                                <input type="text"
+                                                       placeholder="Auto"
+                                                       title="Supports arithmetic: e.g. -pi, sqrt(2)"
+                                                       :value="rangeBoundValue('x', 'min')"
+                                                       @change="setRangeBound('x', 'min', $event.target.value)"
+                                                       class="input-number" />
+                                            </div>
+                                            <span class="text-ink-muted text-xs">-</span>
+                                            <div class="input-number-wrap flex-1">
+                                                <input type="text"
+                                                       placeholder="Auto"
+                                                       title="Supports arithmetic: e.g. pi, sqrt(2)"
+                                                       :value="rangeBoundValue('x', 'max')"
+                                                       @change="setRangeBound('x', 'max', $event.target.value)"
+                                                       class="input-number" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <label class="text-xs font-bold text-ink-secondary uppercase">Y-Range</label>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="input-number-wrap flex-1">
+                                                <input type="text"
+                                                       placeholder="Auto"
+                                                       title="Supports arithmetic: e.g. -pi, sqrt(2)"
+                                                       :value="rangeBoundValue('y', 'min')"
+                                                       @change="setRangeBound('y', 'min', $event.target.value)"
+                                                       class="input-number" />
+                                            </div>
+                                            <span class="text-ink-muted text-xs">-</span>
+                                            <div class="input-number-wrap flex-1">
+                                                <input type="text"
+                                                       placeholder="Auto"
+                                                       title="Supports arithmetic: e.g. pi, sqrt(2)"
+                                                       :value="rangeBoundValue('y', 'max')"
+                                                       @change="setRangeBound('y', 'max', $event.target.value)"
+                                                       class="input-number" />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="border-t border-subtle dark:border-subtle/50 my-2"></div>
+                            <div class="border-t border-subtle dark:border-subtle/50 my-2"></div>
 
-                        <!-- titles -->
-                        <div class="space-y-3">
-                            <!-- main title -->
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Main Plot
-                                    Title</label>
-                                <div class="relative mb-2">
-                                    <input type="text"
-                                           x-model.lazy="config.title"
-                                           placeholder="Untitled Plot"
-                                           class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
+                            <!-- titles -->
+                            <div class="space-y-3">
+                                <!-- main title -->
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Main Plot
+                                        Title</label>
+                                    <div class="relative mb-2">
+                                        <input type="text"
+                                               x-model.lazy="config.title"
+                                               placeholder="Untitled Plot"
+                                               class="input-text pr-8" />
 
-                                    <button x-show="config.title"
-                                            type="button"
-                                            @mousedown.prevent="config.title = ''"
-                                            class="{{ clear_btn }}"
-                                            x-transition:enter="transition duration-75"
-                                            x-transition:enter-start="opacity-0"
-                                            x-transition:enter-end="opacity-100">
-                                        <svg class="w-3 h-3"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             viewBox="0 0 24 24">
-                                            <path stroke-linecap="round"
-                                                  stroke-linejoin="round"
-                                                  stroke-width="3"
-                                                  d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
+                                        <button x-show="config.title"
+                                                type="button"
+                                                @mousedown.prevent="config.title = ''"
+                                                class="input-clear-btn"
+                                                x-transition:enter="transition duration-75"
+                                                x-transition:enter-start="opacity-0"
+                                                x-transition:enter-end="opacity-100">
+                                            <svg class="w-3 h-3"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      stroke-width="3"
+                                                      d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- x axis label -->
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">X-Axis
+                                        Label</label>
+                                    <div class="relative mb-2">
+                                        <input type="text"
+                                               x-model.lazy="config.xAxisTitle"
+                                               :placeholder="config.xAxis.col"
+                                               class="input-text pr-8" />
+
+                                        <button x-show="config.xAxisTitle"
+                                                type="button"
+                                                @mousedown.prevent="config.xAxisTitle = ''"
+                                                class="input-clear-btn"
+                                                x-transition:enter="transition duration-75"
+                                                x-transition:enter-start="opacity-0"
+                                                x-transition:enter-end="opacity-100">
+                                            <svg class="w-3 h-3"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      stroke-width="3"
+                                                      d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- y axis label -->
+                                <div class="space-y-1">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Y-Axis
+                                        Label</label>
+                                    <div class="relative mb-2">
+                                        <input type="text"
+                                               x-model.lazy="config.yAxisTitle"
+                                               placeholder="Y-Axis Label"
+                                               class="input-text pr-8" />
+
+                                        <button x-show="config.yAxisTitle"
+                                                type="button"
+                                                @mousedown.prevent="config.yAxisTitle = ''"
+                                                class="input-clear-btn"
+                                                x-transition:enter="transition duration-75"
+                                                x-transition:enter-start="opacity-0"
+                                                x-transition:enter-end="opacity-100">
+                                            <svg class="w-3 h-3"
+                                                 fill="none"
+                                                 stroke="currentColor"
+                                                 viewBox="0 0 24 24">
+                                                <path stroke-linecap="round"
+                                                      stroke-linejoin="round"
+                                                      stroke-width="3"
+                                                      d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- x axis label -->
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">X-Axis
-                                    Label</label>
-                                <div class="relative mb-2">
-                                    <input type="text"
-                                           x-model.lazy="config.xAxisTitle"
-                                           :placeholder="config.xAxis.col"
-                                           class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-
-                                    <button x-show="config.xAxisTitle"
-                                            type="button"
-                                            @mousedown.prevent="config.xAxisTitle = ''"
-                                            class="{{ clear_btn }}"
-                                            x-transition:enter="transition duration-75"
-                                            x-transition:enter-start="opacity-0"
-                                            x-transition:enter-end="opacity-100">
-                                        <svg class="w-3 h-3"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             viewBox="0 0 24 24">
-                                            <path stroke-linecap="round"
-                                                  stroke-linejoin="round"
-                                                  stroke-width="3"
-                                                  d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
+                            <!-- reset config -->
+                            <div class="pt-2">
+                                <button @click="resetConfig()"
+                                        class="btn btn-danger w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-bold text-sm uppercase tracking-widest transition-all">
+                                    <svg class="w-3 h-3"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         viewBox="0 0 24 24">
+                                        <path stroke-linecap="round"
+                                              stroke-linejoin="round"
+                                              stroke-width="2"
+                                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Reset to Defaults
+                                </button>
                             </div>
-
-                            <!-- y axis label -->
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Y-Axis
-                                    Label</label>
-                                <div class="relative mb-2">
-                                    <input type="text"
-                                           x-model.lazy="config.yAxisTitle"
-                                           placeholder="Y-Axis Label"
-                                           class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-
-                                    <button x-show="config.yAxisTitle"
-                                            type="button"
-                                            @mousedown.prevent="config.yAxisTitle = ''"
-                                            class="{{ clear_btn }}"
-                                            x-transition:enter="transition duration-75"
-                                            x-transition:enter-start="opacity-0"
-                                            x-transition:enter-end="opacity-100">
-                                        <svg class="w-3 h-3"
-                                             fill="none"
-                                             stroke="currentColor"
-                                             viewBox="0 0 24 24">
-                                            <path stroke-linecap="round"
-                                                  stroke-linejoin="round"
-                                                  stroke-width="3"
-                                                  d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- reset config -->
-                        <div class="pt-2">
-                            <button @click="resetConfig()"
-                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-danger-500/10 hover:bg-danger-500 text-danger-500 hover:text-white border border-danger-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all">
-                                <svg class="w-3 h-3"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="2"
-                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                Reset to Defaults
-                            </button>
                         </div>
                     </div>
-                </div>
                 </template>
             </div>
         </div>
@@ -826,128 +814,124 @@
                 </button>
 
                 <template x-teleport="body">
-                <div x-show="annotationsOpen"
-                     x-transition
-                     @click.stop
-                     @click.away="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }"
-                     :style="`position:absolute;top:${annCoords.top}px;left:${annCoords.left}px;`"
-                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
-                     style="display:none;">
+                    <div x-show="annotationsOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="if ($event.button !== 1) { annotationsOpen = false; annDraft = null; annEditIndex = null; }"
+                         :style="`position:absolute;top:${annCoords.top}px;left:${annCoords.left}px;`"
+                         class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                         style="display:none;">
 
-                    <p
-                       class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
-                        Notes Editor
-                    </p>
-
-                    <!-- call to action -->
-                    <div x-show="!config.annotations.length && !annDraft"
-                         class="py-12 px-4 text-center border-2 border-dashed border-subtle rounded-xl">
-                        <p class="text-sm font-bold text-ink-muted uppercase tracking-tight leading-relaxed">
-                            No notes yet.<br>
-                            <span class="text-accent-500/80">Middle-click any point on the plot</span><br>
-                            to drop a new note.
+                        <p class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
+                            Notes Editor
                         </p>
-                    </div>
 
-                    <!-- editor -->
-                    <template x-if="annDraft">
-                        <div class="mb-6 p-3 bg-accent-500/5 border border-accent-500/20 rounded-lg">
-                            <p class="text-sm font-bold text-accent-500 uppercase mb-2">
-                                <span x-text="annEditIndex !== null ? 'Editing Note' : 'New Note'"></span>
+                        <!-- call to action -->
+                        <div x-show="!config.annotations.length && !annDraft"
+                             class="py-12 px-4 text-center border-2 border-dashed border-subtle rounded-xl">
+                            <p class="text-sm font-bold text-ink-muted uppercase tracking-tight leading-relaxed">
+                                No notes yet.<br>
+                                <span class="text-accent-500/80">Middle-click any point on the plot</span><br>
+                                to drop a new note.
                             </p>
-
-                            <div class="flex items-center gap-2 mb-2">
-                                <label class="text-xs font-mono text-ink-muted">X:</label>
-                                <div
-                                     class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                    <input type="number"
-                                           step="any"
-                                           :value="annDraft.x"
-                                           @change="annDraft.x = evalMathExpr($event.target.value) ?? annDraft.x"
-                                           @keydown.enter="saveAnnotation()"
-                                           @keydown.escape="cancelAnnDraft()"
-                                           class="number-input w-full py-1 text-sm" />
-                                </div>
-                                <label class="text-xs font-mono text-ink-muted">Y:</label>
-                                <div
-                                     class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                    <input type="number"
-                                           step="any"
-                                           :value="annDraft.y"
-                                           @change="annDraft.y = evalMathExpr($event.target.value) ?? annDraft.y"
-                                           @keydown.enter="saveAnnotation()"
-                                           @keydown.escape="cancelAnnDraft()"
-                                           class="number-input w-full py-1 text-sm" />
-                                </div>
-                            </div>
-
-                            <input type="text"
-                                   x-ref="annInput"
-                                   x-model="annDraft.text"
-                                   @keydown.enter="saveAnnotation()"
-                                   @keydown.escape="cancelAnnDraft()"
-                                   placeholder="Enter note..."
-                                   class="input-field w-full shadow-sm px-2 py-1.5" />
-
-                            <div class="flex justify-end gap-2 mt-2">
-                                <button @click="cancelAnnDraft()"
-                                        class="text-xs font-bold text-ink-muted hover:text-ink-body uppercase">Cancel</button>
-                                <button @click="saveAnnotation()"
-                                        class="text-xs font-bold text-accent-500 hover:text-accent-600 uppercase"
-                                        x-text="annEditIndex !== null ? 'Update' : 'Save'"></button>
-                            </div>
                         </div>
-                    </template>
 
-                    <!-- list view -->
-                    <div class="space-y-2 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
-                        <template x-for="(ann, index) in config.annotations"
-                                  :key="index">
-                            <div class="group bg-well dark:bg-well/40 border border-subtle rounded-lg p-2.5 hover:border-accent-500/50 transition-colors cursor-pointer"
-                                 @click="jumpToAnnotation(ann)">
-                                <div class="flex justify-between items-start gap-3">
-                                    <div class="flex-1">
-                                        <p class="text-sm font-bold text-ink-strong wrap-break-word"
-                                           x-text="ann.text"></p>
+                        <!-- editor -->
+                        <template x-if="annDraft">
+                            <div class="mb-6 p-3 bg-accent-500/5 border border-accent-500/20 rounded-lg">
+                                <p class="text-sm font-bold text-accent-500 uppercase mb-2">
+                                    <span x-text="annEditIndex !== null ? 'Editing Note' : 'New Note'"></span>
+                                </p>
 
-                                        <p class="text-xs font-mono text-ink-muted mt-1"
-                                           x-text="`X: ${formatNum(ann.x)} | Y: ${formatNum(ann.y)}`"></p>
+                                <div class="flex items-center gap-2 mb-2">
+                                    <label class="text-xs font-mono text-ink-muted">X:</label>
+                                    <div class="input-number-wrap flex-1">
+                                        <input type="number"
+                                               step="any"
+                                               :value="annDraft.x"
+                                               @change="annDraft.x = evalMathExpr($event.target.value) ?? annDraft.x"
+                                               @keydown.enter="saveAnnotation()"
+                                               @keydown.escape="cancelAnnDraft()"
+                                               class="input-number" />
                                     </div>
-
-                                    <div
-                                         class="flex items-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                                        <button @click.stop="startAnnEdit(index)"
-                                                class="p-1 hover:text-accent-500 text-ink-muted">
-                                            <svg class="w-3.5 h-3.5"
-                                                 fill="none"
-                                                 stroke="currentColor"
-                                                 viewBox="0 0 24 24">
-                                                <path stroke-width="2"
-                                                      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7">
-                                                </path>
-                                                <path stroke-width="2"
-                                                      d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z">
-                                                </path>
-                                            </svg>
-                                        </button>
-                                        <button @click.stop="deleteAnnotation(index)"
-                                                class="p-1 hover:text-danger-500 text-ink-muted">
-                                            <svg class="w-3 h-3 transition-transform hover:scale-110"
-                                                 fill="none"
-                                                 stroke="currentColor"
-                                                 viewBox="0 0 24 24">
-                                                <path stroke-linecap="round"
-                                                      stroke-linejoin="round"
-                                                      stroke-width="2.5"
-                                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+                                    <label class="text-xs font-mono text-ink-muted">Y:</label>
+                                    <div class="input-number-wrap flex-1">
+                                        <input type="number"
+                                               step="any"
+                                               :value="annDraft.y"
+                                               @change="annDraft.y = evalMathExpr($event.target.value) ?? annDraft.y"
+                                               @keydown.enter="saveAnnotation()"
+                                               @keydown.escape="cancelAnnDraft()"
+                                               class="input-number" />
                                     </div>
+                                </div>
+
+                                <input type="text"
+                                       x-ref="annInput"
+                                       x-model="annDraft.text"
+                                       @keydown.enter="saveAnnotation()"
+                                       @keydown.escape="cancelAnnDraft()"
+                                       placeholder="Enter note..."
+                                       class="input-text" />
+
+                                <div class="flex justify-end gap-2 mt-2">
+                                    <button @click="cancelAnnDraft()"
+                                            class="text-xs font-bold text-ink-muted hover:text-ink-body uppercase">Cancel</button>
+                                    <button @click="saveAnnotation()"
+                                            class="text-xs font-bold text-accent-500 hover:text-accent-600 uppercase"
+                                            x-text="annEditIndex !== null ? 'Update' : 'Save'"></button>
                                 </div>
                             </div>
                         </template>
+
+                        <!-- list view -->
+                        <div class="space-y-2 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
+                            <template x-for="(ann, index) in config.annotations"
+                                      :key="index">
+                                <div class="group bg-well dark:bg-well/40 border border-subtle rounded-lg p-2.5 hover:border-accent-500/50 transition-colors cursor-pointer"
+                                     @click="jumpToAnnotation(ann)">
+                                    <div class="flex justify-between items-start gap-3">
+                                        <div class="flex-1">
+                                            <p class="text-sm font-bold text-ink-strong wrap-break-word"
+                                               x-text="ann.text"></p>
+
+                                            <p class="text-xs font-mono text-ink-muted mt-1"
+                                               x-text="`X: ${formatNum(ann.x)} | Y: ${formatNum(ann.y)}`"></p>
+                                        </div>
+
+                                        <div class="flex items-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
+                                            <button @click.stop="startAnnEdit(index)"
+                                                    class="p-1 hover:text-accent-500 text-ink-muted">
+                                                <svg class="w-3.5 h-3.5"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-width="2"
+                                                          d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7">
+                                                    </path>
+                                                    <path stroke-width="2"
+                                                          d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z">
+                                                    </path>
+                                                </svg>
+                                            </button>
+                                            <button @click.stop="deleteAnnotation(index)"
+                                                    class="p-1 hover:text-danger-500 text-ink-muted">
+                                                <svg class="w-3 h-3 transition-transform hover:scale-110"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          stroke-width="2.5"
+                                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
-                </div>
                 </template>
             </div>
         </div>
@@ -1005,292 +989,283 @@
                 </button>
 
                 <template x-teleport="body">
-                <div x-show="shapesOpen"
-                     x-transition
-                     @click.stop
-                     @click.away="shapesOpen = false"
-                     :style="`position:absolute;top:${shapesCoords.top}px;left:${shapesCoords.left}px;`"
-                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
-                     style="display:none;">
+                    <div x-show="shapesOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="shapesOpen = false"
+                         :style="`position:absolute;top:${shapesCoords.top}px;left:${shapesCoords.left}px;`"
+                         class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                         style="display:none;">
 
-                    <p
-                       class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
-                        Shapes Editor
-                    </p>
-
-                    <!-- selector -->
-                    <div class="grid grid-cols-3 gap-2 mb-4">
-                        <button @click="setPlacementMode('vline')"
-                                class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'vline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
-
-                            <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor">
-                                <path d="M12 5v14"
-                                      stroke-width="2.5"
-                                      stroke-linecap="round" />
-                            </svg>
-
-                            <span class="text-sm font-mono font-bold uppercase tracking-tight"
-                                  :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-secondary'">V-Line</span>
-                        </button>
-
-                        <button @click="setPlacementMode('hline')"
-                                class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'hline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
-
-                            <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
-                                 viewBox="0 0 24 24"
-                                 fill="none"
-                                 stroke="currentColor">
-                                <path d="M5 12h14"
-                                      stroke-width="2.5"
-                                      stroke-linecap="round" />
-                            </svg>
-
-                            <span class="text-sm font-mono font-bold uppercase tracking-tight"
-                                  :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-secondary'">H-Line</span>
-                        </button>
-
-                        <button @click="setPlacementMode('rect')"
-                                class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
-                                :class="placementMode === 'rect' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
-
-                            <svg class="w-5 h-5 mb-1 transition-colors duration-200"
-                                 :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
-                                 viewBox="0 0 24 24"
-                                 fill="currentColor"
-                                 fill-opacity="0.15"
-                                 stroke="currentColor">
-                                <rect x="5"
-                                      y="7"
-                                      width="14"
-                                      height="10"
-                                      rx="1.5"
-                                      stroke-width="2" />
-                            </svg>
-
-                            <span class="text-sm font-mono font-bold uppercase tracking-tight"
-                                  :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-secondary'">Rect</span>
-                        </button>
-                    </div>
-
-                    <!-- cancel button -->
-                    <button x-show="placementMode"
-                            @click="placementMode = null; rectStart = null"
-                            class="w-full mb-4 p-2 bg-danger-500/10 hover:bg-danger-500 border border-danger-500/20 rounded-lg transition-all group flex items-center justify-center gap-2">
-
-                        <svg class="w-3 h-3 text-danger-500 group-hover:text-white transition-colors"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="3"
-                                  d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-
-                        <p
-                           class="text-sm font-black text-danger-500 group-hover:text-white uppercase tracking-widest transition-colors">
-                            Cancel <span x-text="placementMode"></span> Mode
+                        <p class="text-base font-black uppercase text-ink-muted mb-4 tracking-widest border-b border-subtle pb-1">
+                            Shapes Editor
                         </p>
-                    </button>
 
-                    <!-- editor -->
-                    {% from 'partials/trial_viewer/_macros.html' import color_picker %}
-                    <template x-if="shapeDraft">
-                        <div class="mb-6 p-3 bg-accent-500/5 border border-accent-500/20 rounded-lg space-y-3">
-                            <p class="text-sm font-bold text-accent-500 uppercase"
-                               x-text="shapeEditIndex !== null ? 'Edit Shape' : 'New Shape'"></p>
-                            {{ color_picker('shapeDraft.color', 'shapePicker', 'Color', width=240) }}
+                        <!-- selector -->
+                        <div class="grid grid-cols-3 gap-2 mb-4">
+                            <button @click="setPlacementMode('vline')"
+                                    class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
+                                    :class="placementMode === 'vline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
 
-                            <!-- location -->
-                            <div class="grid grid-cols-2 gap-2">
-                                <div x-show="shapeDraft.type === 'vline' || shapeDraft.type === 'rect'"
-                                     class="flex items-center gap-2">
-                                    <label class="text-xs font-mono text-ink-muted shrink-0"
-                                           x-text="shapeDraft.type === 'rect' ? 'X0:' : 'X:'"></label>
-                                    <div
-                                         class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                        <input type="number"
-                                               step="any"
-                                               :value="shapeDraft.x0"
-                                               @change="shapeDraft.x0 = evalMathExpr($event.target.value) ?? shapeDraft.x0"
-                                               @keydown.enter="saveShape()"
-                                               @keydown.escape="cancelShapeDraft()"
-                                               class="number-input w-full py-1 text-sm" />
-                                    </div>
-                                </div>
-                                <div x-show="shapeDraft.type === 'hline' || shapeDraft.type === 'rect'"
-                                     class="flex items-center gap-2">
-                                    <label class="text-xs font-mono text-ink-muted shrink-0"
-                                           x-text="shapeDraft.type === 'rect' ? 'Y0:' : 'Y:'"></label>
-                                    <div
-                                         class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                        <input type="number"
-                                               step="any"
-                                               :value="shapeDraft.y0"
-                                               @change="shapeDraft.y0 = evalMathExpr($event.target.value) ?? shapeDraft.y0"
-                                               @keydown.enter="saveShape()"
-                                               @keydown.escape="cancelShapeDraft()"
-                                               class="number-input w-full py-1 text-sm" />
-                                    </div>
-                                </div>
-                                <div x-show="shapeDraft.type === 'rect'"
-                                     class="flex items-center gap-2">
-                                    <label class="text-xs font-mono text-ink-muted shrink-0">X1:</label>
-                                    <div
-                                         class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                        <input type="number"
-                                               step="any"
-                                               :value="shapeDraft.x1"
-                                               @change="shapeDraft.x1 = evalMathExpr($event.target.value) ?? shapeDraft.x1"
-                                               @keydown.enter="saveShape()"
-                                               @keydown.escape="cancelShapeDraft()"
-                                               class="number-input w-full py-1 text-sm" />
-                                    </div>
-                                </div>
-                                <div x-show="shapeDraft.type === 'rect'"
-                                     class="flex items-center gap-2">
-                                    <label class="text-xs font-mono text-ink-muted shrink-0">Y1:</label>
-                                    <div
-                                         class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm flex-1">
-                                        <input type="number"
-                                               step="any"
-                                               :value="shapeDraft.y1"
-                                               @change="shapeDraft.y1 = evalMathExpr($event.target.value) ?? shapeDraft.y1"
-                                               @keydown.enter="saveShape()"
-                                               @keydown.escape="cancelShapeDraft()"
-                                               class="number-input w-full py-1 text-sm" />
-                                    </div>
-                                </div>
-                            </div>
+                                <svg class="w-5 h-5 mb-1 transition-colors duration-200"
+                                     :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor">
+                                    <path d="M12 5v14"
+                                          stroke-width="2.5"
+                                          stroke-linecap="round" />
+                                </svg>
 
-                            <!-- line style -->
-                            <div class="space-y-1 relative"
-                                 x-data="{ dOpen: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Line Style</label>
-                                <button @click="dOpen = !dOpen"
-                                        @click.away="dOpen = false"
-                                        class="{{ dropdown_trigger_sm }}">
-                                    <span
-                                          x-text="(shapeDraft.dash || 'solid').charAt(0).toUpperCase() + (shapeDraft.dash || 'solid').slice(1)"></span>
-                                    <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
-                                         :class="dOpen ? 'rotate-180' : ''"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         stroke-width="3"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                <div x-show="dOpen"
-                                     x-transition
-                                     class="{{ dropdown_panel }}">
-                                    <template x-for="opt in opts.dash">
-                                        <button @click="shapeDraft.dash = opt; dOpen = false"
-                                                class="{{ dropdown_option }}"
-                                                :class="(shapeDraft.dash || 'solid') === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
-                                                x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
-                                    </template>
-                                </div>
-                            </div>
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
+                                      :class="placementMode === 'vline' ? 'text-accent-500' : 'text-ink-secondary'">V-Line</span>
+                            </button>
 
-                            <input type="text"
-                                   x-model="shapeDraft.label"
-                                   placeholder="Add a label..."
-                                   @keydown.enter="saveShape()"
-                                   @keydown.escape="cancelShapeDraft()"
-                                   class="input-field w-full shadow-sm px-2 py-1.5" />
-                            <div class="flex justify-end gap-2">
-                                <button @click="cancelShapeDraft()"
-                                        class="text-xs font-bold text-ink-muted hover:text-ink-body uppercase">Cancel</button>
-                                <button @click="saveShape()"
-                                        class="text-xs font-bold text-accent-500 hover:text-accent-600 uppercase"
-                                        x-text="shapeEditIndex !== null ? 'Update' : 'Save'"></button>
-                            </div>
+                            <button @click="setPlacementMode('hline')"
+                                    class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
+                                    :class="placementMode === 'hline' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
+
+                                <svg class="w-5 h-5 mb-1 transition-colors duration-200"
+                                     :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor">
+                                    <path d="M5 12h14"
+                                          stroke-width="2.5"
+                                          stroke-linecap="round" />
+                                </svg>
+
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
+                                      :class="placementMode === 'hline' ? 'text-accent-500' : 'text-ink-secondary'">H-Line</span>
+                            </button>
+
+                            <button @click="setPlacementMode('rect')"
+                                    class="py-2.5 flex flex-col items-center bg-well border rounded-lg transition-all group"
+                                    :class="placementMode === 'rect' ? 'border-accent-500 ring-1 ring-accent-500/20' : 'border-line hover:border-accent-500 hover:bg-control'">
+
+                                <svg class="w-5 h-5 mb-1 transition-colors duration-200"
+                                     :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-secondary group-hover:text-accent-500'"
+                                     viewBox="0 0 24 24"
+                                     fill="currentColor"
+                                     fill-opacity="0.15"
+                                     stroke="currentColor">
+                                    <rect x="5"
+                                          y="7"
+                                          width="14"
+                                          height="10"
+                                          rx="1.5"
+                                          stroke-width="2" />
+                                </svg>
+
+                                <span class="text-sm font-mono font-bold uppercase tracking-tight"
+                                      :class="placementMode === 'rect' ? 'text-accent-500' : 'text-ink-secondary'">Rect</span>
+                            </button>
                         </div>
-                    </template>
 
-                    <!-- list of shapes -->
-                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                        <template x-for="(s, index) in config.shapes"
-                                  :key="index">
-                            <div
-                                 class="group bg-well dark:bg-well/40 border border-subtle rounded-lg p-2.5 transition-colors hover:border-accent-500/30">
-                                <div class="flex justify-between items-start gap-3">
-                                    <div class="flex items-start gap-3 flex-1 min-w-0">
-                                        <div class="mt-1 shrink-0"
-                                             :style="`color: ${s.color}`">
-                                            <svg class="w-4 h-4"
-                                                 fill="none"
-                                                 stroke="currentColor"
-                                                 viewBox="0 0 24 24">
-                                                <path x-show="s.type === 'vline'"
-                                                      d="M12 5v14"
-                                                      stroke-width="2.5"
-                                                      stroke-linecap="round" />
-                                                <path x-show="s.type === 'hline'"
-                                                      d="M5 12h14"
-                                                      stroke-width="2.5"
-                                                      stroke-linecap="round" />
-                                                <rect x-show="s.type === 'rect'"
-                                                      x="5"
-                                                      y="7"
-                                                      width="14"
-                                                      height="10"
-                                                      rx="1.5"
-                                                      stroke-width="2"
-                                                      fill="currentColor"
-                                                      fill-opacity="0.1" />
-                                            </svg>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-bold text-ink-strong truncate"
-                                               x-text="s.label || s.type.toUpperCase()"></p>
-                                            <p class="text-xs font-mono text-ink-muted whitespace-nowrap"
-                                               x-text="s.type === 'vline' ? `X: ${formatNum(s.x0)}` :
-           s.type === 'hline' ? `Y: ${formatNum(s.y0)}` :
-           `${formatNum(s.x0)}, ${formatNum(s.y0)} → ${formatNum(s.x1)}, ${formatNum(s.y1)}`"></p>
+                        <!-- cancel button -->
+                        <button x-show="placementMode"
+                                @click="placementMode = null; rectStart = null"
+                                class="w-full mb-4 p-2 bg-danger-500/10 hover:bg-danger-500 border border-danger-500/20 rounded-lg transition-all group flex items-center justify-center gap-2">
+
+                            <svg class="w-3 h-3 text-danger-500 group-hover:text-white transition-colors"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+
+                            <p class="text-sm font-black text-danger-500 group-hover:text-white uppercase tracking-widest transition-colors">
+                                Cancel <span x-text="placementMode"></span> Mode
+                            </p>
+                        </button>
+
+                        <!-- editor -->
+                        {% from 'partials/trial_viewer/_macros.html' import color_picker %}
+                        <template x-if="shapeDraft">
+                            <div class="mb-6 p-3 bg-accent-500/5 border border-accent-500/20 rounded-lg space-y-3">
+                                <p class="text-sm font-bold text-accent-500 uppercase"
+                                   x-text="shapeEditIndex !== null ? 'Edit Shape' : 'New Shape'"></p>
+                                {{ color_picker('shapeDraft.color', 'shapePicker', 'Color', width=240) }}
+
+                                <!-- location -->
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div x-show="shapeDraft.type === 'vline' || shapeDraft.type === 'rect'"
+                                         class="flex items-center gap-2">
+                                        <label class="text-xs font-mono text-ink-muted shrink-0"
+                                               x-text="shapeDraft.type === 'rect' ? 'X0:' : 'X:'"></label>
+                                        <div class="input-number-wrap flex-1">
+                                            <input type="number"
+                                                   step="any"
+                                                   :value="shapeDraft.x0"
+                                                   @change="shapeDraft.x0 = evalMathExpr($event.target.value) ?? shapeDraft.x0"
+                                                   @keydown.enter="saveShape()"
+                                                   @keydown.escape="cancelShapeDraft()"
+                                                   class="input-number" />
                                         </div>
                                     </div>
-
-                                    <div
-                                         class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button @click="startShapeEdit(index)"
-                                                class="p-1 hover:text-accent-500 text-ink-muted">
-                                            <svg class="w-3.5 h-3.5"
-                                                 fill="none"
-                                                 stroke="currentColor"
-                                                 viewBox="0 0 24 24">
-                                                <path stroke-width="2"
-                                                      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                            </svg>
-                                        </button>
-                                        <button @click="deleteShape(index)"
-                                                class="p-1 hover:text-danger-500 text-ink-muted">
-                                            <svg class="w-3.5 h-3.5"
-                                                 fill="none"
-                                                 stroke="currentColor"
-                                                 viewBox="0 0 24 24">
-                                                <path stroke-linecap="round"
-                                                      stroke-linejoin="round"
-                                                      stroke-width="2.5"
-                                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+                                    <div x-show="shapeDraft.type === 'hline' || shapeDraft.type === 'rect'"
+                                         class="flex items-center gap-2">
+                                        <label class="text-xs font-mono text-ink-muted shrink-0"
+                                               x-text="shapeDraft.type === 'rect' ? 'Y0:' : 'Y:'"></label>
+                                        <div class="input-number-wrap flex-1">
+                                            <input type="number"
+                                                   step="any"
+                                                   :value="shapeDraft.y0"
+                                                   @change="shapeDraft.y0 = evalMathExpr($event.target.value) ?? shapeDraft.y0"
+                                                   @keydown.enter="saveShape()"
+                                                   @keydown.escape="cancelShapeDraft()"
+                                                   class="input-number" />
+                                        </div>
                                     </div>
+                                    <div x-show="shapeDraft.type === 'rect'"
+                                         class="flex items-center gap-2">
+                                        <label class="text-xs font-mono text-ink-muted shrink-0">X1:</label>
+                                        <div class="input-number-wrap flex-1">
+                                            <input type="number"
+                                                   step="any"
+                                                   :value="shapeDraft.x1"
+                                                   @change="shapeDraft.x1 = evalMathExpr($event.target.value) ?? shapeDraft.x1"
+                                                   @keydown.enter="saveShape()"
+                                                   @keydown.escape="cancelShapeDraft()"
+                                                   class="input-number" />
+                                        </div>
+                                    </div>
+                                    <div x-show="shapeDraft.type === 'rect'"
+                                         class="flex items-center gap-2">
+                                        <label class="text-xs font-mono text-ink-muted shrink-0">Y1:</label>
+                                        <div class="input-number-wrap flex-1">
+                                            <input type="number"
+                                                   step="any"
+                                                   :value="shapeDraft.y1"
+                                                   @change="shapeDraft.y1 = evalMathExpr($event.target.value) ?? shapeDraft.y1"
+                                                   @keydown.enter="saveShape()"
+                                                   @keydown.escape="cancelShapeDraft()"
+                                                   class="input-number" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- line style -->
+                                <div class="space-y-1 relative"
+                                     x-data="{ dOpen: false }">
+                                    <label class="text-xs font-bold text-ink-secondary uppercase">Line Style</label>
+                                    <button @click="dOpen = !dOpen"
+                                            @click.away="dOpen = false"
+                                            class="dropdown-trigger-sm">
+                                        <span x-text="(shapeDraft.dash || 'solid').charAt(0).toUpperCase() + (shapeDraft.dash || 'solid').slice(1)"></span>
+                                        <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
+                                             :class="dOpen ? 'rotate-180' : ''"
+                                             fill="none"
+                                             stroke="currentColor"
+                                             stroke-width="3"
+                                             viewBox="0 0 24 24">
+                                            <path stroke-linecap="round"
+                                                  stroke-linejoin="round"
+                                                  d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    <div x-show="dOpen"
+                                         x-transition
+                                         class="dropdown-panel">
+                                        <template x-for="opt in opts.dash">
+                                            <button @click="shapeDraft.dash = opt; dOpen = false"
+                                                    class="dropdown-option"
+                                                    :class="(shapeDraft.dash || 'solid') === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                    x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <input type="text"
+                                       x-model="shapeDraft.label"
+                                       placeholder="Add a label..."
+                                       @keydown.enter="saveShape()"
+                                       @keydown.escape="cancelShapeDraft()"
+                                       class="input-text" />
+                                <div class="flex justify-end gap-2">
+                                    <button @click="cancelShapeDraft()"
+                                            class="text-xs font-bold text-ink-muted hover:text-ink-body uppercase">Cancel</button>
+                                    <button @click="saveShape()"
+                                            class="text-xs font-bold text-accent-500 hover:text-accent-600 uppercase"
+                                            x-text="shapeEditIndex !== null ? 'Update' : 'Save'"></button>
                                 </div>
                             </div>
                         </template>
+
+                        <!-- list of shapes -->
+                        <div class="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                            <template x-for="(s, index) in config.shapes"
+                                      :key="index">
+                                <div class="group bg-well dark:bg-well/40 border border-subtle rounded-lg p-2.5 transition-colors hover:border-accent-500/30">
+                                    <div class="flex justify-between items-start gap-3">
+                                        <div class="flex items-start gap-3 flex-1 min-w-0">
+                                            <div class="mt-1 shrink-0"
+                                                 :style="`color: ${s.color}`">
+                                                <svg class="w-4 h-4"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path x-show="s.type === 'vline'"
+                                                          d="M12 5v14"
+                                                          stroke-width="2.5"
+                                                          stroke-linecap="round" />
+                                                    <path x-show="s.type === 'hline'"
+                                                          d="M5 12h14"
+                                                          stroke-width="2.5"
+                                                          stroke-linecap="round" />
+                                                    <rect x-show="s.type === 'rect'"
+                                                          x="5"
+                                                          y="7"
+                                                          width="14"
+                                                          height="10"
+                                                          rx="1.5"
+                                                          stroke-width="2"
+                                                          fill="currentColor"
+                                                          fill-opacity="0.1" />
+                                                </svg>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <p class="text-sm font-bold text-ink-strong truncate"
+                                                   x-text="s.label || s.type.toUpperCase()"></p>
+                                                <p class="text-xs font-mono text-ink-muted whitespace-nowrap"
+                                                   x-text="s.type === 'vline' ? `X: ${formatNum(s.x0)}` :
+           s.type === 'hline' ? `Y: ${formatNum(s.y0)}` :
+           `${formatNum(s.x0)}, ${formatNum(s.y0)} → ${formatNum(s.x1)}, ${formatNum(s.y1)}`"></p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button @click="startShapeEdit(index)"
+                                                    class="p-1 hover:text-accent-500 text-ink-muted">
+                                                <svg class="w-3.5 h-3.5"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-width="2"
+                                                          d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                                </svg>
+                                            </button>
+                                            <button @click="deleteShape(index)"
+                                                    class="p-1 hover:text-danger-500 text-ink-muted">
+                                                <svg class="w-3.5 h-3.5"
+                                                     fill="none"
+                                                     stroke="currentColor"
+                                                     viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round"
+                                                          stroke-linejoin="round"
+                                                          stroke-width="2.5"
+                                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
-                </div>
                 </template>
             </div>
         </div>
@@ -1358,71 +1333,66 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Profiles</span>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
                 <template x-teleport="body">
-                <div x-show="profilesOpen"
-                     x-transition
-                     @click.stop
-                     @click.away="profilesOpen = false"
-                     :style="`position:absolute;top:${profilesCoords.top}px;left:${profilesCoords.left}px;`"
-                     class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
-                     style="display:none;">
+                    <div x-show="profilesOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="profilesOpen = false"
+                         :style="`position:absolute;top:${profilesCoords.top}px;left:${profilesCoords.left}px;`"
+                         class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200"
+                         style="display:none;">
 
-                    <div class="flex items-center justify-between mb-4 border-b border-subtle pb-1">
-                        <p class="text-base font-black uppercase text-ink-muted tracking-widest">
-                            Saved Profiles
-                        </p>
+                        <div class="flex items-center justify-between mb-4 border-b border-subtle pb-1">
+                            <p class="text-base font-black uppercase text-ink-muted tracking-widest">
+                                Saved Profiles
+                            </p>
 
-                        <div class="group cursor-help relative">
-                            <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="2.5"
-                                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                            <div class="group cursor-help relative">
+                                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round"
+                                          stroke-linejoin="round"
+                                          stroke-width="2.5"
+                                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
 
-                            <div class="tooltip-panel right-0 bottom-full top-auto mt-0 mb-2 w-72">
-                                <p
-                                   class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
-                                    Saved Profiles
-                                </p>
-                                <div class="space-y-2 text-xs text-ink-body leading-relaxed">
-                                    <p>
-                                        Profiles save your entire <span
-                                              class="font-bold text-icon-strong dark:text-white">plot
-                                            configuration</span>: selected signals, x-axis, display settings, zoom,
-                                        annotations, and shapes.
+                                <div class="tooltip-panel right-0 bottom-full top-auto mt-0 mb-2 w-72">
+                                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
+                                        Saved Profiles
                                     </p>
-                                    <p>
-                                        Use <code class="text-accent-500 font-mono">folder/name</code> to organise
-                                        profiles into sub-folders, e.g. <code
-                                              class="text-accent-500 font-mono">arm-reach/baseline</code>. Folders are
-                                        created automatically.
-                                    </p>
-                                    <p>
-                                        Profiles are stored globally in <code
-                                              class="text-accent-500 font-mono">~/.mujoco-mojo/profiles/</code> and are
-                                        available across all workdirs.
-                                    </p>
-                                    <p>
-                                        Loading a profile whose signals or axes are <span
-                                              class="font-bold text-danger-500">not present in the current trial</span>
-                                        will be rejected to prevent an invalid plot state.
-                                    </p>
-                                    <p class="text-ink-muted italic">
-                                        Profiles with incompatible columns are marked with a <span
-                                              class="text-warning-500 not-italic">⚠</span> warning icon.
-                                    </p>
+                                    <div class="space-y-2 text-xs text-ink-body leading-relaxed">
+                                        <p>
+                                            Profiles save your entire <span class="font-bold text-icon-strong dark:text-white">plot
+                                                configuration</span>: selected signals, x-axis, display settings, zoom,
+                                            annotations, and shapes.
+                                        </p>
+                                        <p>
+                                            Use <code class="text-accent-500 font-mono">folder/name</code> to organise
+                                            profiles into sub-folders, e.g. <code class="text-accent-500 font-mono">arm-reach/baseline</code>. Folders are
+                                            created automatically.
+                                        </p>
+                                        <p>
+                                            Profiles are stored globally in <code class="text-accent-500 font-mono">~/.mujoco-mojo/profiles/</code> and are
+                                            available across all workdirs.
+                                        </p>
+                                        <p>
+                                            Loading a profile whose signals or axes are <span class="font-bold text-danger-500">not present in the current trial</span>
+                                            will be rejected to prevent an invalid plot state.
+                                        </p>
+                                        <p class="text-ink-muted italic">
+                                            Profiles with incompatible columns are marked with a <span class="text-warning-500 not-italic">⚠</span> warning icon.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Save new profile -->
-                    <div class="mb-4"
-                         x-data="{
+                        <!-- Save new profile -->
+                        <div class="mb-4"
+                             x-data="{
                              get suggestion() {
                                  const v = profileNameDraft;
                                  if (!v) return '';
@@ -1434,35 +1404,35 @@
                              },
                              accept() { if (this.suggestion) profileNameDraft = this.suggestion; }
                          }">
-                        <div class="flex gap-2">
-                            <input id="profile-name-input"
-                                   type="text"
-                                   x-model="profileNameDraft"
-                                   @keydown.tab.prevent="accept()"
-                                   @keydown.enter.stop="saveProfile()"
-                                   @keydown.escape.stop="profileNameDraft = ''"
-                                   placeholder="name or folder/name"
-                                   class="input-field flex-1 px-2 py-1.5" />
-                            <button @click="saveProfile()"
-                                    :disabled="!profileNameDraft.trim()"
-                                    class="btn btn-primary text-xs font-black uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed">
-                                Save
-                            </button>
+                            <div class="flex gap-2">
+                                <input id="profile-name-input"
+                                       type="text"
+                                       x-model="profileNameDraft"
+                                       @keydown.tab.prevent="accept()"
+                                       @keydown.enter.stop="saveProfile()"
+                                       @keydown.escape.stop="profileNameDraft = ''"
+                                       placeholder="name or folder/name"
+                                       class="input-field flex-1 px-2 py-1.5" />
+                                <button @click="saveProfile()"
+                                        :disabled="!profileNameDraft.trim()"
+                                        class="btn btn-primary text-xs font-black uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed">
+                                    Save
+                                </button>
+                            </div>
+                            <!-- directory suggestion hint - space always reserved -->
+                            <div class="mt-1 h-4.5 flex items-center gap-1.5 text-xs font-mono"
+                                 :class="suggestion ? 'visible' : 'invisible'">
+                                <button @click="accept()"
+                                        class="text-accent-500/40 hover:text-accent-500 truncate transition-colors"
+                                        x-text="suggestion"></button>
+                                <kbd>Tab</kbd>
+                            </div>
                         </div>
-                        <!-- directory suggestion hint - space always reserved -->
-                        <div class="mt-1 h-4.5 flex items-center gap-1.5 text-xs font-mono"
-                             :class="suggestion ? 'visible' : 'invisible'">
-                            <button @click="accept()"
-                                    class="text-ink-muted hover:text-accent-500 truncate transition-colors"
-                                    x-text="suggestion"></button>
-                            <kbd>Tab</kbd>
-                        </div>
-                    </div>
 
-                    <!-- Search -->
-                    <div x-show="profiles.length > 0"
-                         class="mb-2"
-                         x-data="{
+                        <!-- Search -->
+                        <div x-show="profiles.length > 0"
+                             class="mb-2"
+                             x-data="{
                              get searchSuggestion() {
                                  const v = profileSearch;
                                  if (!v) return '';
@@ -1474,112 +1444,93 @@
                              },
                              acceptSearch() { if (this.searchSuggestion) profileSearch = this.searchSuggestion; }
                          }">
-                        <div class="relative">
-                            <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="2"
-                                      d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                            </svg>
-                            <input type="text"
-                                   x-model="profileSearch"
-                                   @keydown.tab.prevent="acceptSearch()"
-                                   @keydown.escape.stop="profileSearch = ''"
-                                   placeholder="Filter profiles..."
-                                   class="input-field w-full pl-7 pr-7 py-1.5 text-sm" />
-                            <button x-show="profileSearch"
-                                    type="button"
-                                    @click="profileSearch = ''"
-                                    class="absolute inset-y-0 right-2 flex items-center text-ink-muted hover:text-danger-500 transition-colors">
-                                <svg class="w-3.5 h-3.5"
-                                     fill="none"
-                                     stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                          stroke-width="2.5"
-                                          d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <div class="flex items-center gap-1">
+                                <div class="flex-1">
+                                    {{ tree_search_input('profileSearch', 'Filter profiles...', '@keydown.tab.prevent="acceptSearch()" @keydown.escape.stop="profileSearch = \'\'"') }}
+                                </div>
+                                {{ tree_expand_collapse_buttons('expandAllProfileFolders()', 'collapseAllProfileFolders()', "profileTreeRows.some(r => r.type === 'folder')") }}
+                            </div>
+                            <!-- filter suggestion hint - space always reserved -->
+                            <div class="mt-1 h-4.5 flex items-center gap-1.5 text-xs font-mono"
+                                 :class="searchSuggestion ? 'visible' : 'invisible'">
+                                <button type="button"
+                                        @click="acceptSearch()"
+                                        class="text-accent-500/40 hover:text-accent-500 truncate transition-colors"
+                                        x-text="searchSuggestion"></button>
+                                <kbd>Tab</kbd>
+                            </div>
                         </div>
-                        <!-- filter suggestion hint - space always reserved -->
-                        <div class="mt-1 h-4.5 flex items-center gap-1.5 text-xs font-mono"
-                             :class="searchSuggestion ? 'visible' : 'invisible'">
-                            <button type="button"
-                                    @click="acceptSearch()"
-                                    class="text-ink-muted hover:text-accent-500 truncate transition-colors"
-                                    x-text="searchSuggestion"></button>
-                            <kbd>Tab</kbd>
-                        </div>
-                    </div>
 
-                    <!-- Profile list -->
-                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
-                        <template x-for="p in profiles.filter(p => !profileSearch || p.name.toLowerCase().includes(profileSearch.toLowerCase()))"
-                                  :key="p.name">
-                            <div
-                                 class="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50 group">
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-center gap-1.5">
-                                        <p class="text-sm font-mono font-bold text-ink-strong flex items-baseline min-w-0 overflow-hidden"
-                                           :title="p.name">
-                                            <template x-if="p.name.includes('/')">
-                                                <span class="font-normal text-ink-muted truncate"
-                                                      x-text="p.name.substring(0, p.name.lastIndexOf('/') + 1)"></span>
-                                            </template>
-                                            <span class="flex-1 min-w-0 truncate"
-                                                  x-text="p.name.includes('/') ? p.name.substring(p.name.lastIndexOf('/') + 1) : p.name"></span>
-                                        </p>
-                                        <template x-if="profileWarnings[p.name]">
-                                            <span :title="'Not in this trial: ' + (profileWarnings[p.name] || []).join(', ')"
-                                                  class="text-warning-500 shrink-0 cursor-help">
-                                                <svg class="w-3.5 h-3.5"
-                                                     fill="none"
-                                                     stroke="currentColor"
-                                                     viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round"
-                                                          stroke-linejoin="round"
-                                                          stroke-width="2"
-                                                          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                </svg>
-                                            </span>
+                        <!-- Profile list: a flat, depth-annotated row list
+                             (lib/tree.ts), not nested per-folder templates -
+                             see tree_folder_row's comment in _macros.html for why. -->
+                        <div class="max-h-80 overflow-y-auto custom-scrollbar">
+                            <template x-for="row in profileVisibleRows"
+                                      :key="row.key">
+                                <div class="expander-body-wrap duration-100 ease-out"
+                                     :class="!row.hidden ? 'expander-open' : ''">
+                                    <div class="expander-body">
+                                        <template x-if="row.type === 'folder'">
+                                            {{ tree_folder_row('row', 'toggleProfileFolder(row.path)', 'profileTreeCollapsed[row.path]') }}
+                                        </template>
+                                        <template x-if="row.type === 'file'">
+                                            <div class="flex items-center gap-2 py-2 pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50 group">
+                                                {{ tree_indent_guides('row') }}
+                                                <div class="flex-1 min-w-0 pl-1">
+                                                    <div class="flex items-center gap-1.5">
+                                                        <p class="text-sm font-mono font-bold text-ink-strong truncate min-w-0"
+                                                           :title="row.item.name"
+                                                           x-text="row.name"></p>
+                                                        <template x-if="profileWarnings[row.item.name]">
+                                                            <span :title="'Not in this trial: ' + (profileWarnings[row.item.name] || []).join(', ')"
+                                                                  class="text-warning-500 shrink-0 cursor-help">
+                                                                <svg class="w-3.5 h-3.5"
+                                                                     fill="none"
+                                                                     stroke="currentColor"
+                                                                     viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round"
+                                                                          stroke-linejoin="round"
+                                                                          stroke-width="2"
+                                                                          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                                </svg>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                    <p class="text-xs text-ink-muted font-mono"
+                                                       x-text="notifTimeAgo(row.item.modified, $store.dojo.notifTick)"></p>
+                                                </div>
+                                                <button @click="loadProfile(row.item.name)"
+                                                        class="btn-secondary-sm shrink-0">
+                                                    Load
+                                                </button>
+                                                <button @click="deleteProfile(row.item.name)"
+                                                        class="text-ink-muted hover:text-danger-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                                                    <svg class="w-3.5 h-3.5"
+                                                         fill="none"
+                                                         stroke="currentColor"
+                                                         viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round"
+                                                              stroke-linejoin="round"
+                                                              stroke-width="3"
+                                                              d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </template>
                                     </div>
-                                    <p class="text-xs text-ink-muted font-mono"
-                                       x-text="notifTimeAgo(p.modified, $store.dojo.notifTick)"></p>
                                 </div>
-                                <button @click="loadProfile(p.name)"
-                                        class="text-xs px-2 py-1 rounded bg-accent-500/10 text-accent-500 hover:bg-accent-500 hover:text-white font-bold transition-colors shrink-0 uppercase">
-                                    Load
-                                </button>
-                                <button @click="deleteProfile(p.name)"
-                                        class="text-ink-muted hover:text-danger-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
-                                    <svg class="w-3.5 h-3.5"
-                                         fill="none"
-                                         stroke="currentColor"
-                                         viewBox="0 0 24 24">
-                                        <path stroke-linecap="round"
-                                              stroke-linejoin="round"
-                                              stroke-width="3"
-                                              d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </template>
+                            </template>
 
-                        <p x-show="profiles.length === 0"
-                           class="text-xs font-mono italic text-ink-disabled text-center py-4">
-                            No profiles saved yet
-                        </p>
-                        <p x-show="profiles.length > 0 && profileSearch && !profiles.some(p => p.name.toLowerCase().includes(profileSearch.toLowerCase()))"
-                           class="text-xs font-mono italic text-ink-disabled text-center py-4">
-                            No profiles match "<span x-text="profileSearch"></span>"
-                        </p>
+                            <p x-show="profiles.length === 0"
+                               class="text-xs font-mono italic text-ink-disabled text-center py-4">
+                                No profiles saved yet
+                            </p>
+                            <p x-show="profiles.length > 0 && profileSearch && profileVisibleRows.every(r => r.hidden)"
+                               class="text-xs font-mono italic text-ink-disabled text-center py-4">
+                                No profiles match "<span x-text="profileSearch"></span>"
+                            </p>
+                        </div>
                     </div>
-                </div>
                 </template>
             </div>
         </div>
@@ -1607,78 +1558,73 @@
                 </button>
 
                 <template x-teleport="body">
-                <div x-show="downloadOpen"
-                     x-transition
-                     @click.stop
-                     @click.away="downloadOpen = false"
-                     :style="`position:absolute;top:${downloadCoords.top}px;left:${downloadCoords.left}px;`"
-                     class="w-48 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200"
-                     style="display:none;">
+                    <div x-show="downloadOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="downloadOpen = false"
+                         :style="`position:absolute;top:${downloadCoords.top}px;left:${downloadCoords.left}px;`"
+                         class="w-48 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200"
+                         style="display:none;">
 
-                    <p
-                       class="text-base font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
-                        Export Options</p>
+                        <p class="text-base font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
+                            Export Options</p>
 
-                    <div class="space-y-1">
-                        <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Capture Plot</p>
+                        <div class="space-y-1">
+                            <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Capture Plot</p>
 
-                        <button @click="downloadPlot('svg', 1)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
-                            SVG Vector
-                            <span class="text-xs opacity-50 group-hover:opacity-100">INF</span>
-                        </button>
+                            <button @click="downloadPlot('svg', 1)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                SVG Vector
+                                <span class="text-xs opacity-50 group-hover:opacity-100">INF</span>
+                            </button>
 
-                        <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
+                            <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
 
-                        <button @click="downloadPlot('png', 1.5)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
-                            PNG Image
-                            <span
-                                  class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">1080p</span>
-                        </button>
+                            <button @click="downloadPlot('png', 1.5)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                PNG Image
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">1080p</span>
+                            </button>
 
-                        <button @click="downloadPlot('png', 3)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
-                            PNG High-DPI
-                            <span
-                                  class="text-xs bg-accent-500/10 text-accent-600 px-1 rounded group-hover:bg-accent-500 group-hover:text-white">4K</span>
-                        </button>
+                            <button @click="downloadPlot('png', 3)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                PNG High-DPI
+                                <span class="text-xs bg-accent-500/10 text-accent-600 px-1 rounded group-hover:bg-accent-500 group-hover:text-white">4K</span>
+                            </button>
 
-                        <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
+                            <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
 
-                        <button @click="downloadPlot('jpg', 1.5)"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
-                            JPG Compressed
-                            <span class="text-xs opacity-50">1080p</span>
-                        </button>
+                            <button @click="downloadPlot('jpg', 1.5)"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                JPG Compressed
+                                <span class="text-xs opacity-50">1080p</span>
+                            </button>
 
-                        <div class="my-2 border-t border-subtle"></div>
+                            <div class="my-2 border-t border-subtle"></div>
 
-                        <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Data</p>
-                        <button @click="downloadCSV()"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-success-600 dark:text-success-400 hover:bg-success-200 dark:hover:bg-success-900/30 rounded transition-all duration-200 flex items-center justify-between group">
-                            Filtered CSV
-                            <span
-                                  class="text-sm bg-success-500/10 group-hover:bg-success-500 group-hover:text-white px-1 rounded transition-colors">DATA</span>
-                        </button>
+                            <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Data</p>
+                            <button @click="downloadCSV()"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-success-600 dark:text-success-400 hover:bg-success-200 dark:hover:bg-success-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                Filtered CSV
+                                <span class="text-sm bg-success-500/10 group-hover:bg-success-500 group-hover:text-white px-1 rounded transition-colors">DATA</span>
+                            </button>
 
-                        <button @click="downloadJSON()"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-secondary-600 dark:text-secondary-400 hover:bg-secondary-200 dark:hover:bg-secondary-900/30 rounded transition-all duration-200 flex items-center justify-between group">
-                            Config JSON
-                            <span
-                                  class="text-sm bg-secondary-500/10 group-hover:bg-secondary-500 group-hover:text-white px-1 rounded transition-colors">CONFIG</span>
-                        </button>
+                            <button @click="downloadJSON()"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-secondary-600 dark:text-secondary-400 hover:bg-secondary-200 dark:hover:bg-secondary-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                Config JSON
+                                <span class="text-sm bg-secondary-500/10 group-hover:bg-secondary-500 group-hover:text-white px-1 rounded transition-colors">CONFIG</span>
+                            </button>
 
-                        <!-- <div class="my-2 border-t border-subtle"></div> -->
+                            <!-- <div class="my-2 border-t border-subtle"></div> -->
 
-                        <!-- <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">SensAI</p>
+                            <!-- <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">SensAI</p>
                         <button @click="downloadSensAIHistory(); downloadOpen = false"
                                 class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-accent-600 dark:text-accent-400 hover:bg-accent-200 dark:hover:bg-accent-900/30 rounded transition-all duration-200 flex items-center justify-between group">
                             Chat History
                             <span class="text-sm bg-accent-500/10 group-hover:bg-accent-500 group-hover:text-white px-1 rounded transition-colors">CHAT</span>
                         </button> -->
+                        </div>
                     </div>
-                </div>
                 </template>
             </div>
         </div>

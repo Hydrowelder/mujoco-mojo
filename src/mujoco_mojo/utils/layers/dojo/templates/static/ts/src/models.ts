@@ -14,6 +14,21 @@ export type {
   YAxisConfig,
 } from "./lib/plot-config.generated";
 
+export type {
+  SettingsDictEntry,
+  SettingsDictField,
+  SettingsField,
+  SettingsGetResponse,
+  SettingsGroup,
+  SettingsPanelState,
+  SettingsSchema,
+  SettingsSchemaNode,
+  SettingsValueMetaEntry,
+  SettingsWidget,
+  SettingsWriteResponse,
+} from "./lib/settings-panel";
+import type { SettingsPanelState } from "./lib/settings-panel";
+
 // ---------------------------------------------------------------------------
 // Backend API shapes
 // ---------------------------------------------------------------------------
@@ -210,7 +225,7 @@ export interface NotificationEntry {
 // Alpine store shape (used for typed store access across components)
 // ---------------------------------------------------------------------------
 
-export interface DojoStore {
+export interface DojoStore extends SettingsPanelState {
   isPageReady: boolean;
   isFullscreen: boolean;
   overlayCount: number;
