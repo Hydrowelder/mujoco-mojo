@@ -1,4 +1,128 @@
-{% macro color_picker(color_model, ref_name, label, on_change='', width=280) %}
+{# Small hover-info icon showing a PlotConfig field's Pydantic Field
+   description as a tooltip - used next to Plot Editor labels (_chart.html)
+   so each control's exact semantics (units, valid range, what "None" does,
+   etc.) are one hover away, sourced from the same
+   /mosaic/api/plot-config-schema the JSON editor's own CodeMirror hover
+   tooltips read (trial-viewer.ts's plotFieldHelp/describeSchemaPath), not
+   a hand-written copy that could drift from the actual field. Icon +
+   .tooltip-panel is the same pure-CSS group-hover pattern the X-Axis
+   selector's own help icon already uses (_series_panel.html) - reused
+   here as a macro since this one repeats across every field in the
+   popover rather than being written out once.
+
+   help_expr is an Alpine expression string (not a literal value, same
+   convention as this file's other macros) - typically
+   "plotFieldHelp('someKey')". x-show hides the icon until the schema's
+   loaded (a fetch on page init, not instant) rather than showing a dead
+   icon with an empty tooltip in the meantime. normal-case/tracking-normal/
+   font-normal on the tooltip's own text counteracts the uppercase/
+   tracking-widest styling every caller's <label> already has - CSS
+   text-transform inherits into this icon's tooltip since it's nested
+   inside that same label. #}
+{% macro field_help_icon(help_expr) %}
+{# peer/peer-hover (not group/group-hover) deliberately - group-hover keeps
+   the tooltip open as long as the mouse is anywhere inside the shared
+   .group ancestor, which includes the tooltip panel itself once it's
+   open, so moving the mouse onto the tooltip (or just past the icon
+   toward it) kept it stuck open instead of dismissing. peer scopes the
+   hover state to the icon element alone: the tooltip is a later sibling
+   reacting to peer-hover, not a descendant of a hovered container, so it
+   only shows while the pointer is directly over the icon.
+   pointer-events-none on the tooltip is the other half of that - without
+   it, the moment the tooltip appears under the cursor (its mt-2 offset is
+   small) the pointer can end up "over" the tooltip itself, which would
+   otherwise flicker the peer's own :hover state right at that boundary. #}
+<span class="cursor-help relative inline-flex"
+      x-show="{{ help_expr }}">
+    <svg class="peer w-3 h-3 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
+         fill="none"
+         stroke="currentColor"
+         viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    {# renderMarkdown() is the same shared $store.dojo helper the settings
+       panel's own tooltip already renders through (lib/settings-panel.ts,
+       via marked) - descriptions carry real markdown (backtick-wrapped
+       defaults like "Default: `3`.", the odd bulleted list), and it was
+       previously shown with x-text, which prints that syntax as literal
+       characters instead of formatting it. Reusing the one existing
+       renderer here instead of standing up a second one; md-inline-code
+       (main.css) mirrors _settings_panel.html's own tooltip styling so a
+       code span reads identically in both places. #}
+    <div class="tooltip-panel peer-hover:visible peer-hover:opacity-100 pointer-events-none left-1/2 -translate-x-1/2 w-56 normal-case tracking-normal font-normal text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
+         x-html="$store.dojo.renderMarkdown({{ help_expr }})"></div>
+</span>
+{% endmacro %}
+
+{# Per-field "reset to default" icon - the same affordance and icon (a
+   circular undo arrow) the Dojo settings panel's own per-field reset
+   button already uses (_settings_panel.html). Only shown once
+   is_default_expr is falsy - a reset button that's always visible even
+   when it would be a no-op just adds visual noise. Both args are raw
+   Alpine expression strings (unlike field_reset_icon(key) below, which
+   builds these two from a single PlotConfig key), so this base macro also
+   covers fields that don't live on `config` directly - e.g.
+   _series_panel.html's Y-axis line-config panel, whose fields live on a
+   local `temp` draft object instead. #}
+{% macro field_reset_icon_expr(is_default_expr, on_click_expr) %}
+<button type="button"
+        x-show="!({{ is_default_expr }})"
+        @click="{{ on_click_expr }}"
+        title="Reset to default"
+        class="shrink-0 text-ink-muted hover:text-accent-500 transition-colors">
+    <svg class="w-3 h-3"
+         fill="none"
+         stroke="currentColor"
+         stroke-width="2"
+         viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0113.9-3.5M19.5 15a8 8 0 01-13.9 3.5" />
+    </svg>
+</button>
+{% endmacro %}
+
+{# Thin wrapper for the common case: a top-level PlotConfig field, reset
+   through plotFieldIsDefault/resetPlotField (config.KEY vs. DEFAULT_CONFIG,
+   trial-viewer.ts) - every PlotConfig field genuinely has a default now
+   (see plot_config.py), so this always has something real to fall back
+   to. key is a PLAIN STRING (not an Alpine expression, unlike this file's
+   other macro args) since it's used both inside an Alpine expression
+   string (quoted below) and directly in the Jinja template - callers pass
+   it as e.g. 'grid', matching plotFieldHelp/resetPlotField's own
+   single-key form (not the Shape/Notes editors' def-field form, which
+   this macro doesn't cover since those don't have a single well-defined
+   "default" the way a top-level PlotConfig field does). #}
+{% macro field_reset_icon(key) %}
+{{ field_reset_icon_expr("plotFieldIsDefault('" ~ key ~ "')", "resetPlotField('" ~ key ~ "')") }}
+{% endmacro %}
+
+{# :style binding for a single-thumb <input type="range"> that fills its
+   own track proportionally to the current value, the way the Y-axis
+   line-config panel's Width/Opacity sliders now do - browsers only paint
+   an accent-colored *thumb* from accent-color (Firefox also fills the
+   track to its left, Chrome doesn't), so the fill itself needs an actual
+   background gradient recomputed as the value changes, split at the
+   current value's percent-of-range. Left of that split is
+   --color-accent-500 (solid, matching accent-accent-500's thumb color),
+   right of it --color-track (the same token the plain bg-track utility
+   class uses elsewhere for this exact "empty slider trough" role) - so
+   drop bg-track from the input's own class list when using this, since
+   the inline style already covers that half. value_expr/min_val/max_val
+   are all raw Alpine expressions/literals, not quoted strings - callers
+   pass e.g. ('temp.width', 0.5, 8). Not used by the versus (comparison)
+   range slider in _header.html, which fakes its own fill differently
+   since it has two thumbs (a min/max pair) rather than one value - a
+   single background gradient can't represent that, so it instead
+   overlays a separately-positioned fill <div> between the two thumbs. #}
+{% macro range_slider_fill_style(value_expr, min_val, max_val) %}
+`background: linear-gradient(to right, var(--color-accent-500) ${Math.max(0, Math.min(100, (({{ value_expr }} - {{ min_val }}) / ({{ max_val }} - {{ min_val }})) * 100))}%, var(--color-track) 0%)`
+{% endmacro %}
+
+{% macro color_picker(color_model, ref_name, label, on_change='', width=280, help_expr='') %}
 {%- set box_h = (width * 160) // 280 -%}
 <div class="space-y-2"
      x-init="$nextTick(() => {
@@ -18,7 +142,9 @@
     });
 })">
     <div class="flex items-center justify-between mb-1">
-        <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight">{{ label }}</label>
+        <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">{{ label }}
+            {% if help_expr %}{{ field_help_icon(help_expr) }}{% endif %}
+        </label>
         <div class="flex gap-1.5">
             <template x-for="color in plotColors"
                       :key="color">
@@ -165,10 +291,34 @@
 {% endmacro %}
 
 {% macro tree_folder_row(row_expr, toggle_expr, is_collapsed_expr) %}
+{# py-1.5 lives on the "icon+name" span below, a plain sibling of the
+   guide+chevron group rather than its ancestor. tree_indent_guides's
+   self-stretch fills whatever flex box directly *contains* it, which
+   excludes that box's own padding - an earlier version of this macro put
+   py-1.5 on a span that wrapped the guide, which still left a
+   padding-sized gap at every row (the guide was still nested one level
+   inside the padding, just relocated, not actually freed from it).
+   Padding on a plain sibling instead works because flexbox computes a
+   line's cross size from items' natural sizes first (the padded span,
+   being the tallest, sets the line height to content+padding), then
+   stretches self-stretch items - including the guide, now genuinely
+   outside any padded ancestor - to match that in a second pass.
+
+   The guide and chevron are wrapped together in their own no-gap,
+   self-stretch span (not left as two more direct children of the button)
+   so .expander-header's own gap-2, which now runs between this group and
+   the icon+name span, can't also land *between the guide and the
+   chevron* - they still need to sit with zero gap between them for a
+   child row's own guide line to land exactly through this chevron's
+   center (see tree_indent_guides' own comment). self-stretch is repeated
+   on this wrapper itself, not just the guide inside it: without it, the
+   wrapper wouldn't grow past its own unpadded content size either, and
+   the guide inside it would just be stretching to match ITS wrapper's
+   too-short height instead of the button's true one. #}
 <button @click="{{ toggle_expr }}"
         :title="{{ row_expr }}.path"
-        class="expander-header text-xs normal-case py-1.5 pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50">
-    <span class="flex items-center min-w-0 flex-1">
+        class="expander-header text-xs normal-case pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50">
+    <span class="flex items-center self-stretch shrink-0">
         {{ tree_indent_guides(row_expr) }}
         <!-- chevron: same w-3.5 width as a guide slot, immediately after
              the guides with no gap between - see tree_indent_guides'
@@ -186,19 +336,19 @@
                       d="M19 9l-7 7-7-7" />
             </svg>
         </span>
-        <span class="flex items-center gap-1.5 min-w-0 ml-1.5">
-            <svg class="w-3.5 h-3.5 shrink-0 text-ink-muted"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="1.75"
-                 viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-            </svg>
-            <span class="truncate text-ink-body"
-                  x-text="{{ row_expr }}.name"></span>
-        </span>
+    </span>
+    <span class="flex items-center gap-1.5 min-w-0 flex-1 py-1.5">
+        <svg class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="1.75"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+        </svg>
+        <span class="truncate text-ink-body"
+              x-text="{{ row_expr }}.name"></span>
     </span>
     <span class="text-xs font-mono text-ink-muted shrink-0"
           x-text="{{ row_expr }}.fileCount"></span>
@@ -258,14 +408,18 @@
    old flat list: indentation and the folder rows above already convey the
    hierarchy, so the full path would now be redundant. #}
 {% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
+{# py-1.5 moved off the button and onto this inner span - same reasoning
+   as tree_folder_row's own comment above. #}
 <button @click="{{ select_expr }}"
         :title="{{ row_expr }}.item"
-        class="w-full text-left py-1.5 pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
+        class="w-full text-left pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
     {{ tree_indent_guides(row_expr) }}
-    <span class="text-sm font-mono font-bold pl-1 pr-2 min-w-0 flex-1 truncate"
-          :class="({{ is_selected_expr }}) ? 'text-accent-500' : 'text-ink-secondary'"
-          x-text="{{ row_expr }}.name"></span>
-    <span x-show="{{ is_selected_expr }}"
-          class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
+    <span class="flex items-center gap-2 min-w-0 flex-1 py-1.5">
+        <span class="text-sm font-mono font-bold pl-1 pr-2 min-w-0 flex-1 truncate"
+              :class="({{ is_selected_expr }}) ? 'text-accent-500' : 'text-ink-secondary'"
+              x-text="{{ row_expr }}.name"></span>
+        <span x-show="{{ is_selected_expr }}"
+              class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
+    </span>
 </button>
 {% endmacro %}

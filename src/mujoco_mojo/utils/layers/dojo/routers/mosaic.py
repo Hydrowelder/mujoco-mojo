@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
-from mujoco_mojo.settings import MujocoMojoSettings
+from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
@@ -425,6 +425,32 @@ async def get_filter_schema():
         result.append(entry)
 
     return result
+
+
+@router.get("/api/plot-config-schema")
+async def get_plot_config_schema():
+    """
+    Returns PlotConfig's raw JSON schema, descriptions included - single
+    source of truth for the Plot Editor's and JSON editor's hover tooltips
+    (trial-viewer.ts), so a Field(description=...) change in plot_config.py
+    shows up in both without any manual sync. Properties are keyed by their
+    camelCase alias (e.g. "lineMode"), matching `config.*` in the frontend
+    and the JSON editor's own document, since PlotConfig's model_config
+    serializes by alias.
+
+    Uses GenerateJsonSchemaWithDefaults (settings.py - the same generator
+    the Dojo settings panel's own schema endpoint uses, not redefined here)
+    for two extras beyond plain model_json_schema(): each field's
+    description gets its default value appended, and each enum type in
+    $defs gets an `x-enum-descriptions` map of value -> attribute-docstring
+    (e.g. GridMode.ALL's own docstring), since standard JSON Schema's
+    `enum` keyword has no room for per-value metadata - that's what lets a
+    dropdown show a tooltip on "Major + Minor" itself, not just on the
+    Gridlines field as a whole.
+    """
+    return _PlotConfig.model_json_schema(
+        schema_generator=GenerateJsonSchemaWithDefaults
+    )
 
 
 # ---------------------------------------------------------------------------

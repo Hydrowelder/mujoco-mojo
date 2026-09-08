@@ -331,7 +331,7 @@ marked.use({
       return `<div class="sensai-cm-block" data-code="${encoded}"${langAttr}></div>`;
     },
     codespan({ text }: Tokens.Codespan): string {
-      return `<code class="bg-surface-sunken rounded px-1 font-mono text-accent-600 dark:text-accent-400 text-[0.85em]">${text}</code>`;
+      return `<code class="md-inline-code">${text}</code>`;
     },
   },
 });

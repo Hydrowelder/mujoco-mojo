@@ -15,6 +15,16 @@ declare global {
   // Globals exposed by the compiled bundles for Alpine x-data usage
   interface Window {
     Alpine: AlpineType;
+    // dojo.default_to_fullscreen (settings.py) - set by a plain inline
+    // script in base.html's <head>, read once by store.ts when it builds
+    // isFullscreen's initial value. A plain classic script (base.html's)
+    // always finishes running before any type="module" script (main.js
+    // included) even starts, since module scripts don't begin executing
+    // until the whole document has finished parsing - so this is
+    // guaranteed to be set by the time store.ts's alpine:init handler
+    // reads it, regardless of where in the document either script tag
+    // sits.
+    __mojoDefaultToFullscreen?: boolean;
     formatTimeAgo(seconds: number): string;
     notifTimeAgo(timestamp: number, tick?: number): string;
     themeColor(name: string): string;

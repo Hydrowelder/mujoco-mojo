@@ -96,6 +96,7 @@ class BaseFilter(ABC, BaseModel):
         alias_generator=to_camel,
         populate_by_name=True,
         serialize_by_alias=True,
+        use_attribute_docstrings=True,
     )
     category: ClassVar[str] = "Misc"
 
@@ -407,7 +408,13 @@ class SavitzkyGolayFilter(BaseFilter):
 
         return expr.map_batches(
             lambda s: pl.Series(
-                savgol_filter(s.fill_null(0).to_numpy(), self.window, self.order)
+                values=np.asarray(
+                    savgol_filter(
+                        s.fill_null(0).to_numpy(),
+                        self.window,
+                        self.order,
+                    )
+                )
             ),
             return_dtype=pl.Float64,
         )

@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
 __all__ = ["CURRENT_JOB", "HERE", "set_globals", "static", "templates"]
@@ -16,6 +17,17 @@ AUTH_PASSWORD: str | None = None
 # Chime sound comes from https://mixkit.co/free-sound-effects/win/
 templates = Jinja2Templates(directory=HERE / "templates")
 static = StaticFiles(directory=HERE / "templates" / "static")
+
+# base.html reads this on every page (not just the routes that already build
+# their own per-route context, e.g. mosaic.py's get_trial_viewer) to seed
+# store.ts's isFullscreen default - registered as a callable, not a plain
+# `update()` value like the ones in set_globals() below, since those are
+# fixed once at job startup while this must reflect the current
+# settings.toml on every render (e.g. right after the settings panel saves
+# a change, with no server restart in between).
+templates.env.globals["default_to_fullscreen"] = lambda: (
+    MujocoMojoSettings().dojo.default_to_fullscreen
+)
 
 
 def set_globals(workdir: Path, owner: str, job_type: JobType) -> None:

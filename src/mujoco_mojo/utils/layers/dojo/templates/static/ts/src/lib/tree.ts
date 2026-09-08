@@ -171,14 +171,42 @@ export function visibleTreeRows<T>(
   collapsed: Record<string, boolean>,
   query: string,
   matches: (item: T) => boolean,
+  previous?: TreeRow<T>[],
 ): TreeRow<T>[] {
+  // `previous` is this function's own last output (the caller re-passes
+  // it - see getColumnVisibleRows in trial-viewer.ts), not `rows`. That
+  // distinction matters: `rows` typically comes from a cache
+  // (getColumnTreeRows) that's built once and never touched again, so
+  // every row in it permanently carries hidden: false from buildTreeRows -
+  // comparing a freshly computed `hidden` against THAT would only ever
+  // match for currently-visible rows, silently never reusing a reference
+  // for anything that's actually hidden (most rows, in a big tree with
+  // most folders collapsed). Comparing against the last real OUTPUT
+  // instead - and returning that exact object when its hidden value still
+  // matches - lets Alpine's x-for skip re-evaluating a row's whole DOM
+  // subtree of bindings for it: x-for reassigns each retained key's scope
+  // via `scope.row = newRow` on a reactive proxy (module.esm.js's
+  // refreshScope), which - like any Vue-style reactive set - skips
+  // triggering dependent effects when the new value is Object.is-equal to
+  // the old one. Toggling one folder in a tree of hundreds of rows only
+  // actually changes `hidden` for that folder's own descendants; every
+  // other row keeping its exact prior reference is what keeps a click from
+  // re-evaluating the whole tree's bindings instead of just the ones that
+  // actually changed.
+  const prevByKey = new Map<string, TreeRow<T>>();
+  if (previous) for (const r of previous) prevByKey.set(r.key, r);
+  const withHidden = (row: TreeRow<T>, hidden: boolean): TreeRow<T> => {
+    const prev = prevByKey.get(row.key);
+    return prev && prev.hidden === hidden ? prev : { ...row, hidden };
+  };
+
   const q = query.trim();
   if (!q) {
     const hiddenPrefixes: string[] = [];
     return rows.map((row) => {
       const hidden = hiddenPrefixes.some((p) => row.path.startsWith(`${p}/`));
       if (!hidden && row.type === "folder" && collapsed[row.path]) hiddenPrefixes.push(row.path);
-      return { ...row, hidden };
+      return withHidden(row, hidden);
     });
   }
 
@@ -190,13 +218,13 @@ export function visibleTreeRows<T>(
     const segments = row.path.split("/");
     for (let i = 1; i < segments.length; i++) keepFolder.add(segments.slice(0, i).join("/"));
   }
-  return rows.map((row) => ({
-    ...row,
-    hidden: !(
+  return rows.map((row) => {
+    const hidden = !(
       (row.type === "folder" && keepFolder.has(row.path)) ||
       (row.type === "file" && keepFile.has(row.path))
-    ),
-  }));
+    );
+    return withHidden(row, hidden);
+  });
 }
 
 /** Every distinct folder path in `rows` - the full set an expand-all/collapse-all action needs to touch. */

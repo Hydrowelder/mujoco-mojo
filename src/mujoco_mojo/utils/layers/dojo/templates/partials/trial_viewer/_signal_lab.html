@@ -2042,11 +2042,14 @@
                             {{ tree_folder_row('row', 'toggleLabFolder(row.path)', 'labTreeCollapsed[row.path]') }}
                         </template>
                         <template x-if="row.type === 'file'">
+                            {# py-2 lives on the inner wrapper below, not this row div - see
+                               tree_folder_row's comment in _macros.html for why. #}
                             <div class="border-b border-subtle last:border-none hover:bg-surface group"
                                  x-data="{ infoOpen: false }">
-                                <div class="flex items-center justify-between py-2 pr-3"
+                                <div class="flex items-center pr-3"
                                      :class="!row.item.valid ? 'opacity-60' : ''">
                                     {{ tree_indent_guides('row') }}
+                                    <div class="flex items-center justify-between gap-2 min-w-0 flex-1 py-2">
                                     <button @click="loadLabInNewTab(row.item.name); open = false; labSearch = ''"
                                             :title="row.item.name"
                                             class="flex-1 text-left text-sm font-mono min-w-0 pl-1">
@@ -2128,6 +2131,7 @@
                                                       d="M6 18L18 6M6 6l12 12" />
                                             </svg>
                                         </button>
+                                    </div>
                                     </div>
                                 </div>
                                 <!-- inline info panel -->

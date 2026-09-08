@@ -116,7 +116,7 @@ button:disabled {
 }
 
 button:hover {
-  filter: brightness(1.1);
+  filter: brightness(0.92);
 }
 
 button:active {
@@ -131,7 +131,7 @@ button:active {
    (different property, so it composes rather than getting overridden) -
    without also correcting the filter, its brighten would partly cancel
    the darker background. */
-.dark .btn-primary:hover {
+.btn-primary:hover {
   background-color: var(--color-accent-600);
   filter: brightness(0.92);
 }

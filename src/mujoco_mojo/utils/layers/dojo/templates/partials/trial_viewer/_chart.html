@@ -106,6 +106,7 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Plot</span>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import field_help_icon, field_reset_icon %}
                 <template x-teleport="body">
                     <div x-show="plotConfigOpen"
                          x-transition
@@ -125,7 +126,10 @@
                                 <!-- gridlines -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Gridlines</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Gridlines
+                                        {{ field_help_icon("plotFieldHelp('grid')") }}
+                                        {{ field_reset_icon('grid') }}
+                                    </label>
 
                                     <!-- .capture (here and on every other dropdown-trigger in this
                                          popover): the popover's own outer wrapper has @click.stop,
@@ -164,6 +168,7 @@
 
                                         <template x-for="opt in opts.grid">
                                             <button @click="config.grid = opt; saveAndRender(); open = false"
+                                                    :title="plotEnumOptionHelp('grid', opt)"
                                                     class="dropdown-option"
                                                     :class="config.grid === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                                 <span x-text="opt === 'all' ? 'Major + Minor' : (opt.charAt(0).toUpperCase() + opt.slice(1))"></span>
@@ -174,7 +179,10 @@
                                 <!-- linemode -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Mode</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Mode
+                                        {{ field_help_icon("plotFieldHelp('lineMode')") }}
+                                        {{ field_reset_icon('lineMode') }}
+                                    </label>
 
                                     <button @click="open = !open"
                                             @click.away.capture="open = false"
@@ -202,6 +210,7 @@
                                         <template x-for="opt in opts.lineMode"
                                                   :key="opt.value">
                                             <button @click="config.lineMode = opt.value; saveAndRender(); open = false"
+                                                    :title="plotEnumOptionHelp('lineMode', opt.value)"
                                                     class="dropdown-option"
                                                     :class="config.lineMode === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                                 <span x-text="opt.label"></span>
@@ -218,7 +227,10 @@
                                      x-data="{ open: false }"
                                      :class="config.lineMode === 'markers' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
 
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Interpolation</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Interpolation
+                                        {{ field_help_icon("plotFieldHelp('interp')") }}
+                                        {{ field_reset_icon('interp') }}
+                                    </label>
 
                                     <button @click="open = !open"
                                             @click.away.capture="open = false"
@@ -247,6 +259,7 @@
                                         <template x-for="opt in opts.interp"
                                                   :key="opt.value">
                                             <button @click="config.interp = opt.value; saveAndRender(); open = false"
+                                                    :title="plotEnumOptionHelp('interp', opt.value)"
                                                     class="dropdown-option"
                                                     :class="config.interp === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                                 <span x-text="opt.label"></span>
@@ -257,7 +270,10 @@
                                 <!-- hoverstyle -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Hover</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Hover
+                                        {{ field_help_icon("plotFieldHelp('hover')") }}
+                                        {{ field_reset_icon('hover') }}
+                                    </label>
 
                                     <button @click="open = !open"
                                             @click.away.capture="open = false"
@@ -285,6 +301,7 @@
                                         <template x-for="opt in opts.hover"
                                                   :key="opt.value">
                                             <button @click="config.hover = opt.value; saveAndRender(); open = false"
+                                                    :title="plotEnumOptionHelp('hover', opt.value)"
                                                     class="dropdown-option"
                                                     :class="config.hover === opt.value ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                                 <span x-text="opt.label"></span>
@@ -299,7 +316,10 @@
                                 <!-- legend location -->
                                 <div class="space-y-1 relative"
                                      x-data="{ open: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Legend</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Legend
+                                        {{ field_help_icon("plotFieldHelp('legendPos')") }}
+                                        {{ field_reset_icon('legendPos') }}
+                                    </label>
 
                                     <button @click="open = !open"
                                             @click.away.capture="open = false"
@@ -327,6 +347,7 @@
                                         <template x-for="opt in opts.legendPos"
                                                   :key="opt">
                                             <button @click="config.legendPos = opt; saveAndRender(); open = false"
+                                                    :title="plotEnumOptionHelp('legendPos', opt)"
                                                     class="dropdown-option"
                                                     :class="config.legendPos === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                                 <span x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></span>
@@ -336,7 +357,10 @@
                                 </div>
                                 <!-- show spikes toggle -->
                                 <div class="space-y-1">
-                                    <label class="field-label">Show Spikes</label>
+                                    <label class="field-label">Show Spikes
+                                        {{ field_help_icon("plotFieldHelp('showSpike')") }}
+                                        {{ field_reset_icon('showSpike') }}
+                                    </label>
                                     <div class="field-card justify-center transition-all"
                                          :class="config.hover === 'none' ? 'opacity-30 cursor-not-allowed pointer-events-none' : ''">
                                         <button type="button"
@@ -359,10 +383,13 @@
 
                                 <!-- plot type -->
                                 <div class="space-y-1">
-                                    <label class="field-label">Plot Type</label>
+                                    <label class="field-label">Plot Type
+                                        {{ field_help_icon("plotFieldHelp('plotType')") }}
+                                        {{ field_reset_icon('plotType') }}
+                                    </label>
                                     <div class="field-card">
                                         <button @click="config.plotType = 'cartesian'; saveAndRender()"
-                                                title="Cartesian"
+                                                :title="plotEnumOptionHelp('plotType', 'cartesian') || 'Cartesian'"
                                                 class="relative z-10 flex-1 flex items-center justify-center p-1.5 rounded-md border transition-all"
                                                 :class="config.plotType !== 'polar' ? 'btn-primary' : 'btn-secondary'">
                                             <svg class="w-4 h-4"
@@ -397,7 +424,7 @@
                                             </svg>
                                         </button>
                                         <button @click="config.plotType = 'polar'; saveAndRender()"
-                                                title="Polar"
+                                                :title="plotEnumOptionHelp('plotType', 'polar') || 'Polar'"
                                                 class="relative z-10 flex-1 flex items-center justify-center p-1.5 rounded-md border transition-all"
                                                 :class="config.plotType === 'polar' ? 'btn-primary' : 'btn-secondary'">
                                             <svg class="w-4 h-4"
@@ -437,7 +464,10 @@
 
                                 <!-- max points: number input with data length as placeholder -->
                                 <div class="space-y-1 min-w-0">
-                                    <label class="field-label">Max Points</label>
+                                    <label class="field-label">Max Points
+                                        {{ field_help_icon("plotFieldHelp('maxPoints')") }}
+                                        {{ field_reset_icon('maxPoints') }}
+                                    </label>
                                     <div class="field-card min-w-0">
                                         <div class="input-number-wrap relative w-full">
                                             <input type="text"
@@ -475,7 +505,10 @@
                             <!-- display unit system -->
                             <div class="space-y-1 relative"
                                  x-data="{ open: false }">
-                                <label class="text-xs font-bold text-ink-secondary uppercase">Display Units</label>
+                                <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Display Units
+                                    {{ field_help_icon("plotFieldHelp('displayUnitSystem')") }}
+                                    {{ field_reset_icon('displayUnitSystem') }}
+                                </label>
                                 <button @click="open = !open"
                                         @click.away.capture="open = false"
                                         class="dropdown-trigger">
@@ -501,21 +534,25 @@
                                         As logged
                                     </button>
                                     <button @click="config.displayUnitSystem = 'si'; saveAndRender(); open = false"
+                                            :title="plotEnumOptionHelp('displayUnitSystem', 'si')"
                                             class="dropdown-option"
                                             :class="config.displayUnitSystem === 'si' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                         SI <span class="opacity-60 text-xs font-normal">m · kg · s</span>
                                     </button>
                                     <button @click="config.displayUnitSystem = 'cgs'; saveAndRender(); open = false"
+                                            :title="plotEnumOptionHelp('displayUnitSystem', 'cgs')"
                                             class="dropdown-option"
                                             :class="config.displayUnitSystem === 'cgs' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                         CGS <span class="opacity-60 text-xs font-normal">cm · g · s</span>
                                     </button>
                                     <button @click="config.displayUnitSystem = 'fps'; saveAndRender(); open = false"
+                                            :title="plotEnumOptionHelp('displayUnitSystem', 'fps')"
                                             class="dropdown-option"
                                             :class="config.displayUnitSystem === 'fps' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                         FPS <span class="opacity-60 text-xs font-normal">ft · slug · s</span>
                                     </button>
                                     <button @click="config.displayUnitSystem = 'ips'; saveAndRender(); open = false"
+                                            :title="plotEnumOptionHelp('displayUnitSystem', 'ips')"
                                             class="dropdown-option"
                                             :class="config.displayUnitSystem === 'ips' ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'">
                                         IPS <span class="opacity-60 text-xs font-normal">in · slinch · s</span>
@@ -530,7 +567,10 @@
                                 <div class="grid grid-cols-2 gap-3">
                                     <div class="space-y-1 relative"
                                          x-data="{ open: false }">
-                                        <label class="text-xs font-bold text-ink-secondary uppercase">X-Scale</label>
+                                        <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">X-Scale
+                                            {{ field_help_icon("plotFieldHelp('xScale')") }}
+                                            {{ field_reset_icon('xScale') }}
+                                        </label>
                                         <button @click="open = !open"
                                                 @click.away.capture="open = false"
                                                 class="dropdown-trigger">
@@ -551,6 +591,7 @@
                                              class="dropdown-panel">
                                             <template x-for="opt in opts.scale">
                                                 <button @click="config.xScale = opt; if(opt === 'log' && !config.xLogBase) config.xLogBase = 10; saveAndRender(); open = false"
+                                                        :title="plotEnumOptionHelp('xScale', opt)"
                                                         class="dropdown-option"
                                                         :class="config.xScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                         x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
@@ -575,7 +616,10 @@
                                     <!-- y scale -->
                                     <div class="space-y-1 relative"
                                          x-data="{ open: false }">
-                                        <label class="text-xs font-bold text-ink-secondary uppercase">Y-Scale</label>
+                                        <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Y-Scale
+                                            {{ field_help_icon("plotFieldHelp('yScale')") }}
+                                            {{ field_reset_icon('yScale') }}
+                                        </label>
                                         <button @click="open = !open"
                                                 @click.away.capture="open = false"
                                                 class="dropdown-trigger">
@@ -596,6 +640,7 @@
                                              class="dropdown-panel">
                                             <template x-for="opt in opts.scale">
                                                 <button @click="config.yScale = opt; if(opt === 'log' && !config.yLogBase) config.yLogBase = 10; saveAndRender(); open = false"
+                                                        :title="plotEnumOptionHelp('yScale', opt)"
                                                         class="dropdown-option"
                                                         :class="config.yScale === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                         x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
@@ -621,7 +666,10 @@
                                 <!-- x/y range -->
                                 <div class="grid grid-cols-2 gap-3">
                                     <div class="space-y-1">
-                                        <label class="text-xs font-bold text-ink-secondary uppercase">X-Range</label>
+                                        <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">X-Range
+                                            {{ field_help_icon("plotFieldHelp('rangeX')") }}
+                                            {{ field_reset_icon('rangeX') }}
+                                        </label>
                                         <div class="flex items-center gap-1.5">
                                             <div class="input-number-wrap flex-1">
                                                 <input type="text"
@@ -644,7 +692,10 @@
                                     </div>
 
                                     <div class="space-y-1">
-                                        <label class="text-xs font-bold text-ink-secondary uppercase">Y-Range</label>
+                                        <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Y-Range
+                                            {{ field_help_icon("plotFieldHelp('rangeY')") }}
+                                            {{ field_reset_icon('rangeY') }}
+                                        </label>
                                         <div class="flex items-center gap-1.5">
                                             <div class="input-number-wrap flex-1">
                                                 <input type="text"
@@ -674,8 +725,11 @@
                             <div class="space-y-3">
                                 <!-- main title -->
                                 <div class="space-y-1">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Main Plot
-                                        Title</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter flex items-center gap-1">Main Plot
+                                        Title
+                                        {{ field_help_icon("plotFieldHelp('title')") }}
+                                        {{ field_reset_icon('title') }}
+                                    </label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.title"
@@ -704,8 +758,11 @@
 
                                 <!-- x axis label -->
                                 <div class="space-y-1">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">X-Axis
-                                        Label</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter flex items-center gap-1">X-Axis
+                                        Label
+                                        {{ field_help_icon("plotFieldHelp('xAxisTitle')") }}
+                                        {{ field_reset_icon('xAxisTitle') }}
+                                    </label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.xAxisTitle"
@@ -734,8 +791,11 @@
 
                                 <!-- y axis label -->
                                 <div class="space-y-1">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter">Y-Axis
-                                        Label</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase tracking-tighter flex items-center gap-1">Y-Axis
+                                        Label
+                                        {{ field_help_icon("plotFieldHelp('yAxisTitle')") }}
+                                        {{ field_reset_icon('yAxisTitle') }}
+                                    </label>
                                     <div class="relative mb-2">
                                         <input type="text"
                                                x-model.lazy="config.yAxisTitle"
@@ -844,7 +904,9 @@
                                 </p>
 
                                 <div class="flex items-center gap-2 mb-2">
-                                    <label class="text-xs font-mono text-ink-muted">X:</label>
+                                    <label class="text-xs font-mono text-ink-muted flex items-center gap-1">X:
+                                        {{ field_help_icon("plotDefFieldHelp('Annotation', 'x')") }}
+                                    </label>
                                     <div class="input-number-wrap flex-1">
                                         <input type="number"
                                                step="any"
@@ -854,7 +916,9 @@
                                                @keydown.escape="cancelAnnDraft()"
                                                class="input-number" />
                                     </div>
-                                    <label class="text-xs font-mono text-ink-muted">Y:</label>
+                                    <label class="text-xs font-mono text-ink-muted flex items-center gap-1">Y:
+                                        {{ field_help_icon("plotDefFieldHelp('Annotation', 'y')") }}
+                                    </label>
                                     <div class="input-number-wrap flex-1">
                                         <input type="number"
                                                step="any"
@@ -866,6 +930,9 @@
                                     </div>
                                 </div>
 
+                                <label class="text-xs font-mono text-ink-muted flex items-center gap-1 mb-1">Text:
+                                    {{ field_help_icon("plotDefFieldHelp('Annotation', 'text')") }}
+                                </label>
                                 <input type="text"
                                        x-ref="annInput"
                                        x-model="annDraft.text"
@@ -1088,14 +1155,16 @@
                             <div class="mb-6 p-3 bg-accent-500/5 border border-accent-500/20 rounded-lg space-y-3">
                                 <p class="text-sm font-bold text-accent-500 uppercase"
                                    x-text="shapeEditIndex !== null ? 'Edit Shape' : 'New Shape'"></p>
-                                {{ color_picker('shapeDraft.color', 'shapePicker', 'Color', width=240) }}
+                                {{ color_picker('shapeDraft.color', 'shapePicker', 'Color', width=240, help_expr="plotDefFieldHelp(shapeDefName(shapeDraft.type), 'color')") }}
 
                                 <!-- location -->
                                 <div class="grid grid-cols-2 gap-2">
                                     <div x-show="shapeDraft.type === 'vline' || shapeDraft.type === 'rect'"
                                          class="flex items-center gap-2">
-                                        <label class="text-xs font-mono text-ink-muted shrink-0"
-                                               x-text="shapeDraft.type === 'rect' ? 'X0:' : 'X:'"></label>
+                                        <label class="text-xs font-mono text-ink-muted shrink-0 flex items-center gap-1">
+                                            <span x-text="shapeDraft.type === 'rect' ? 'X0:' : 'X:'"></span>
+                                            {{ field_help_icon("plotDefFieldHelp(shapeDefName(shapeDraft.type), 'x0')") }}
+                                        </label>
                                         <div class="input-number-wrap flex-1">
                                             <input type="number"
                                                    step="any"
@@ -1108,8 +1177,10 @@
                                     </div>
                                     <div x-show="shapeDraft.type === 'hline' || shapeDraft.type === 'rect'"
                                          class="flex items-center gap-2">
-                                        <label class="text-xs font-mono text-ink-muted shrink-0"
-                                               x-text="shapeDraft.type === 'rect' ? 'Y0:' : 'Y:'"></label>
+                                        <label class="text-xs font-mono text-ink-muted shrink-0 flex items-center gap-1">
+                                            <span x-text="shapeDraft.type === 'rect' ? 'Y0:' : 'Y:'"></span>
+                                            {{ field_help_icon("plotDefFieldHelp(shapeDefName(shapeDraft.type), 'y0')") }}
+                                        </label>
                                         <div class="input-number-wrap flex-1">
                                             <input type="number"
                                                    step="any"
@@ -1122,7 +1193,9 @@
                                     </div>
                                     <div x-show="shapeDraft.type === 'rect'"
                                          class="flex items-center gap-2">
-                                        <label class="text-xs font-mono text-ink-muted shrink-0">X1:</label>
+                                        <label class="text-xs font-mono text-ink-muted shrink-0 flex items-center gap-1">X1:
+                                            {{ field_help_icon("plotDefFieldHelp('RectShape', 'x1')") }}
+                                        </label>
                                         <div class="input-number-wrap flex-1">
                                             <input type="number"
                                                    step="any"
@@ -1135,7 +1208,9 @@
                                     </div>
                                     <div x-show="shapeDraft.type === 'rect'"
                                          class="flex items-center gap-2">
-                                        <label class="text-xs font-mono text-ink-muted shrink-0">Y1:</label>
+                                        <label class="text-xs font-mono text-ink-muted shrink-0 flex items-center gap-1">Y1:
+                                            {{ field_help_icon("plotDefFieldHelp('RectShape', 'y1')") }}
+                                        </label>
                                         <div class="input-number-wrap flex-1">
                                             <input type="number"
                                                    step="any"
@@ -1151,7 +1226,9 @@
                                 <!-- line style -->
                                 <div class="space-y-1 relative"
                                      x-data="{ dOpen: false }">
-                                    <label class="text-xs font-bold text-ink-secondary uppercase">Line Style</label>
+                                    <label class="text-xs font-bold text-ink-secondary uppercase flex items-center gap-1">Line Style
+                                        {{ field_help_icon("plotDefFieldHelp(shapeDefName(shapeDraft.type), 'dash')") }}
+                                    </label>
                                     <button @click="dOpen = !dOpen"
                                             @click.away="dOpen = false"
                                             class="dropdown-trigger-sm">
@@ -1179,6 +1256,9 @@
                                     </div>
                                 </div>
 
+                                <label class="text-xs font-mono text-ink-muted flex items-center gap-1 mb-1">Label:
+                                    {{ field_help_icon("plotDefFieldHelp(shapeDefName(shapeDraft.type), 'label')") }}
+                                </label>
                                 <input type="text"
                                        x-model="shapeDraft.label"
                                        placeholder="Add a label..."
@@ -1474,47 +1554,54 @@
                                             {{ tree_folder_row('row', 'toggleProfileFolder(row.path)', 'profileTreeCollapsed[row.path]') }}
                                         </template>
                                         <template x-if="row.type === 'file'">
-                                            <div class="flex items-center gap-2 py-2 pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50 group">
+                                            {# py-2 lives on this inner wrapper, not the outer row - see
+                                            tree_folder_row's comment in _macros.html for why: it lets the
+                                            guide line (a flex sibling of this wrapper, not its descendant)
+                                            stretch to the row's true full height instead of stopping short
+                                            by the padding's own size at each row's top/bottom. #}
+                                            <div class="flex items-center gap-2 pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50 group">
                                                 {{ tree_indent_guides('row') }}
-                                                <div class="flex-1 min-w-0 pl-1">
-                                                    <div class="flex items-center gap-1.5">
-                                                        <p class="text-sm font-mono font-bold text-ink-strong truncate min-w-0"
-                                                           :title="row.item.name"
-                                                           x-text="row.name"></p>
-                                                        <template x-if="profileWarnings[row.item.name]">
-                                                            <span :title="'Not in this trial: ' + (profileWarnings[row.item.name] || []).join(', ')"
-                                                                  class="text-warning-500 shrink-0 cursor-help">
-                                                                <svg class="w-3.5 h-3.5"
-                                                                     fill="none"
-                                                                     stroke="currentColor"
-                                                                     viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round"
-                                                                          stroke-linejoin="round"
-                                                                          stroke-width="2"
-                                                                          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                                </svg>
-                                                            </span>
-                                                        </template>
+                                                <div class="flex items-center gap-2 min-w-0 flex-1 py-2">
+                                                    <div class="flex-1 min-w-0 pl-1">
+                                                        <div class="flex items-center gap-1.5">
+                                                            <p class="text-sm font-mono font-bold text-ink-strong truncate min-w-0"
+                                                               :title="row.item.name"
+                                                               x-text="row.name"></p>
+                                                            <template x-if="profileWarnings[row.item.name]">
+                                                                <span :title="'Not in this trial: ' + (profileWarnings[row.item.name] || []).join(', ')"
+                                                                      class="text-warning-500 shrink-0 cursor-help">
+                                                                    <svg class="w-3.5 h-3.5"
+                                                                         fill="none"
+                                                                         stroke="currentColor"
+                                                                         viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round"
+                                                                              stroke-linejoin="round"
+                                                                              stroke-width="2"
+                                                                              d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                                    </svg>
+                                                                </span>
+                                                            </template>
+                                                        </div>
+                                                        <p class="text-xs text-ink-muted font-mono"
+                                                           x-text="notifTimeAgo(row.item.modified, $store.dojo.notifTick)"></p>
                                                     </div>
-                                                    <p class="text-xs text-ink-muted font-mono"
-                                                       x-text="notifTimeAgo(row.item.modified, $store.dojo.notifTick)"></p>
+                                                    <button @click="loadProfile(row.item.name)"
+                                                            class="btn-secondary-sm shrink-0">
+                                                        Load
+                                                    </button>
+                                                    <button @click="deleteProfile(row.item.name)"
+                                                            class="text-ink-muted hover:text-danger-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                                                        <svg class="w-3.5 h-3.5"
+                                                             fill="none"
+                                                             stroke="currentColor"
+                                                             viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round"
+                                                                  stroke-linejoin="round"
+                                                                  stroke-width="3"
+                                                                  d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
                                                 </div>
-                                                <button @click="loadProfile(row.item.name)"
-                                                        class="btn-secondary-sm shrink-0">
-                                                    Load
-                                                </button>
-                                                <button @click="deleteProfile(row.item.name)"
-                                                        class="text-ink-muted hover:text-danger-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100">
-                                                    <svg class="w-3.5 h-3.5"
-                                                         fill="none"
-                                                         stroke="currentColor"
-                                                         viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round"
-                                                              stroke-linejoin="round"
-                                                              stroke-width="3"
-                                                              d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
                                             </div>
                                         </template>
                                     </div>
@@ -1538,9 +1625,20 @@
         <!-- ── DOWNLOAD OPTIONS ─────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
             <div class="relative"
-                 x-data="{ downloadCoords: { top: 0, left: 0 } }">
+                 x-data="{
+                     downloadCoords: { top: 0, left: 0 },
+                     hoveredExport: null,
+                     exportDescriptions: {
+                         svg: 'Scalable vector image - editable, infinite resolution.',
+                         png1080: 'Raster image at 1080p.',
+                         png4k: 'Raster image at 4K, for print or zooming in.',
+                         jpg: 'Compressed raster image, smaller file size.',
+                         csv: 'Currently visible data, with active filters applied.',
+                         json: 'Current plot configuration, to share or restore later.',
+                     },
+                 }">
                 <button x-ref="downloadBtn"
-                        @click="const r = $refs.downloadBtn.getBoundingClientRect(); downloadCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 192 - 16 }; downloadOpen = !downloadOpen"
+                        @click="const r = $refs.downloadBtn.getBoundingClientRect(); downloadCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 256 - 16 }; downloadOpen = !downloadOpen"
                         class="sidebar-btn disabled:opacity-40 disabled:hover:bg-well"
                         :class="downloadOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
                         title="Download Data or Image">
@@ -1563,57 +1661,71 @@
                          @click.stop
                          @click.away="downloadOpen = false"
                          :style="`position:absolute;top:${downloadCoords.top}px;left:${downloadCoords.left}px;`"
-                         class="w-48 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200"
+                         class="w-64 bg-surface border border-line rounded-xl shadow-2xl p-3 z-200"
                          style="display:none;">
 
                         <p class="text-base font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                             Export Options</p>
 
                         <div class="space-y-1">
-                            <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Capture Plot</p>
 
                             <button @click="downloadPlot('svg', 1)"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
-                                SVG Vector
-                                <span class="text-xs opacity-50 group-hover:opacity-100">INF</span>
+                                    @mouseenter="hoveredExport = 'svg'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
+                                SVG
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">INF</span>
                             </button>
 
-                            <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
-
                             <button @click="downloadPlot('png', 1.5)"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                    @mouseenter="hoveredExport = 'png1080'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 PNG Image
                                 <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">1080p</span>
                             </button>
 
                             <button @click="downloadPlot('png', 3)"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                    @mouseenter="hoveredExport = 'png4k'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 PNG High-DPI
-                                <span class="text-xs bg-accent-500/10 text-accent-600 px-1 rounded group-hover:bg-accent-500 group-hover:text-white">4K</span>
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">4K</span>
                             </button>
 
-                            <div class="my-1 border-t border-subtle dark:border-subtle/50"></div>
-
                             <button @click="downloadPlot('jpg', 1.5)"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-ink-body hover:bg-control hover:text-accent-500 rounded transition-all flex items-center justify-between group">
+                                    @mouseenter="hoveredExport = 'jpg'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 JPG Compressed
-                                <span class="text-xs opacity-50">1080p</span>
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">1080p</span>
                             </button>
 
                             <div class="my-2 border-t border-subtle"></div>
 
-                            <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">Data</p>
                             <button @click="downloadCSV()"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-success-600 dark:text-success-400 hover:bg-success-200 dark:hover:bg-success-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                    @mouseenter="hoveredExport = 'csv'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 Filtered CSV
-                                <span class="text-sm bg-success-500/10 group-hover:bg-success-500 group-hover:text-white px-1 rounded transition-colors">DATA</span>
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">DATA</span>
                             </button>
 
                             <button @click="downloadJSON()"
-                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-secondary-600 dark:text-secondary-400 hover:bg-secondary-200 dark:hover:bg-secondary-900/30 rounded transition-all duration-200 flex items-center justify-between group">
+                                    @mouseenter="hoveredExport = 'json'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 Config JSON
-                                <span class="text-sm bg-secondary-500/10 group-hover:bg-secondary-500 group-hover:text-white px-1 rounded transition-colors">CONFIG</span>
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">CONFIG</span>
                             </button>
+
+                            <!-- brief description of whichever export option is currently
+                                 hovered, reserved at a fixed height so hovering different
+                                 rows (longer/shorter descriptions) doesn't resize the panel -->
+                            <div class="mt-2 pt-2 border-t border-subtle min-h-8 flex items-center px-2">
+                                <p class="text-xs text-ink-muted leading-snug"
+                                   x-text="exportDescriptions[hoveredExport] ?? ''"></p>
+                            </div>
 
                             <!-- <div class="my-2 border-t border-subtle"></div> -->
 

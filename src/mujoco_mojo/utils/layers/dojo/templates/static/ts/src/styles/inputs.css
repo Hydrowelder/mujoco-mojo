@@ -54,7 +54,7 @@
 /* Also @utility (not @layer components): .dropdown-trigger-sm below needs
    to @apply this one to build its smaller variant on top of it. */
 @utility dropdown-trigger {
-  @apply w-full flex items-center justify-between gap-2 bg-well border border-control rounded-lg p-2 text-sm font-mono text-ink-strong transition-all hover:border-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply w-full flex items-center justify-between gap-2 bg-well border border-control rounded-lg p-2 text-sm font-mono text-ink-strong transition-all hover:bg-control hover:border-accent-500 hover:text-accent-500 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @layer components {
@@ -134,7 +134,7 @@
   .input-number::placeholder,
   .input-color::placeholder,
   .input-search::placeholder {
-    @apply text-accent-500/40;
+    @apply text-accent-500/70;
   }
 
   /* ── Field (title above, card below) - the shape a "dropdown-trigger"
