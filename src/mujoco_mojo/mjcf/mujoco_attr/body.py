@@ -234,7 +234,7 @@ class Body(XMLModel):
         """
         Recursively traverses the kinematic tree to retrieve all descendant bodies.
 
-        This method performs a depth-first search (DFS) through the nested body hierarchy. It is particularly useful when called from the `worldbody` to get a flattened list of all physical entities in the simulation without including the world origin.
+        This method performs a depth-first search (DFS) through the nested body hierarchy, including bodies wrapped in `Frame`s (which disappear at compile time but still contribute their bodies to the tree). It is particularly useful when called from the `worldbody` to get a flattened list of all physical entities in the simulation without including the world origin.
 
         Args:
             include_self (bool, optional): If True, the current body is included as the first element in the returned list. Defaults to False.
@@ -247,6 +247,9 @@ class Body(XMLModel):
 
         for child in self.bodies:
             bodies.extend(child.walk_bodies(include_self=True))
+
+        for frm in self.frames:
+            bodies.extend(frm.walk_bodies())
 
         return bodies
 
@@ -658,6 +661,29 @@ class Body(XMLModel):
 
         state.data.qvel[qvel_adr : qvel_adr + 3] = v_body_linear
         state.data.qvel[qvel_adr + 3 : qvel_adr + 6] = w_world
+
+
+# Frame's body/geom/site/etc. fields are annotated with these real types, but Frame
+# can't import any of them directly - they live under `mujoco_attr`, whose package
+# __init__ imports this module, so importing them back from frame.py would be
+# circular. They're only visible there under TYPE_CHECKING; this module already
+# imports every one of them for Body's own fields, so it supplies them here once
+# they all exist, resolving Frame's deferred annotations.
+Frame.model_rebuild(
+    _types_namespace={
+        "Body": Body,
+        "Attach": Attach,
+        "Camera": Camera,
+        "Composite": Composite,
+        "FlexComp": FlexComp,
+        "FreeJoint": FreeJoint,
+        "AnyGeom": AnyGeom,
+        "Inertial": Inertial,
+        "Joint": Joint,
+        "Light": Light,
+        "AnySite": AnySite,
+    }
+)
 
 
 _temp_list = list(_body_children)

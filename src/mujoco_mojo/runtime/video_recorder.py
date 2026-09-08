@@ -178,6 +178,11 @@ class VideoRecorder:
     """Even-rounded `(width, height)` fed to ffmpeg; set once the encoder opens."""
 
     @property
+    def frame_count(self) -> int:
+        """Number of frames captured so far via `capture_frame`."""
+        return self._frame_count
+
+    @property
     def _output_fps(self) -> float:
         """Frame rate of the saved video, after applying `playback_speed` to `fps`."""
         return self.fps * self.playback_speed

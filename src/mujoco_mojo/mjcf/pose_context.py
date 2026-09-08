@@ -72,12 +72,15 @@ class PoseContext:
                 self._tm.add_transform(self._key(child), parent_key, _to_T(child))
 
     def _walk_frames(self, frm: Frame, parent_key: str) -> None:
-        """Recursively registers a Frame and its nested frames."""
+        """Recursively registers a Frame, its sites/cameras/lights, and any bodies or nested frames it wraps."""
         logger.debug(f"registering frame {getattr(frm, 'name', id(frm))}")
         frm_key = self._key(frm)
         self._tm.add_transform(frm_key, parent_key, _to_T(frm))
+        self._register_posed_children(frm, frm_key)
         for nested in frm.frames:
             self._walk_frames(nested, frm_key)
+        for body in frm.bodies:
+            self._walk(body, frm_key)
 
     def _build(self, worldbody: WorldBody) -> None:
         """Walks the full worldbody tree and registers every posed element."""

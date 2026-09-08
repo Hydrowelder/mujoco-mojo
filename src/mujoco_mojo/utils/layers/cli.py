@@ -483,7 +483,7 @@ if True:
         bool,
         typer.Option(
             "--record/--no-record",
-            help="Record telemetry to a per-trial 'telemetry.parquet' so the run can be inspected with [dim]mujoco-mojo dojo[/dim]. Off by default since interactive sessions can run indefinitely.",
+            help="Record telemetry to a per-trial 'telemetry.parquet' (so the run can be inspected with [dim]mujoco-mojo dojo[/dim]) and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.",
         ),
     ]
 

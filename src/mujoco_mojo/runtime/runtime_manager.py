@@ -83,6 +83,11 @@ class RuntimeManager:
     def requirement_results(self) -> list[RequirementResult]:
         return self.requirements.results
 
+    @property
+    def recording(self) -> bool:
+        """Whether telemetry and video frames are currently being captured (the `reloaded` `record` setting flips this via `_skip_recording`). Runtime code can check this before doing optional recording work that `step()` doesn't already gate, e.g. registering a `VideoRecorder` or calling `snapshot`."""
+        return not self._skip_recording
+
     # --- context manager ---
 
     def __enter__(self) -> Self:
@@ -129,7 +134,12 @@ class RuntimeManager:
             raise RuntimeError(msg) from None
 
     def save_recordings(self):
-        logger.info(f"Saving {len(self.video_recorders)} videos in parallel...")
+        # a recorder can be registered without ever capturing a frame (e.g. this
+        # run had recording disabled) - save()/close() below are no-ops for those,
+        # but the log shouldn't claim work was done that wasn't
+        n_with_frames = sum(1 for r in self.video_recorders if r.frame_count > 0)
+        if n_with_frames:
+            logger.info(f"Saving {n_with_frames} videos in parallel...")
 
         def _save_and_close(recorder: VideoRecorder):
             recorder.save()
@@ -139,7 +149,8 @@ class RuntimeManager:
             for recorder in self.video_recorders:
                 executor.submit(_save_and_close, recorder)
 
-        logger.info("All video encoding tasks complete.")
+        if n_with_frames:
+            logger.info("All video encoding tasks complete.")
 
     def resolve(self, state: MjState):
         """Call this once after mj_loadXML to prime the caches."""
@@ -345,7 +356,7 @@ class RuntimeManager:
                 load.apply_load(state)
 
             # record data
-            if self.signal_manager and not self._skip_recording:
+            if self.signal_manager and self.recording:
                 # invalidate first: loads may have changed qfrc_applied/xfrc_applied since the last mj_forward
                 state.invalidate_rne_post_constraint()
                 mujoco.mj_forward(state.model, state.data)
@@ -355,7 +366,8 @@ class RuntimeManager:
             all_arrows = None
             all_lines = None
             all_traces = None
-            if self.video_recorders or self._sync_hook:
+            recording_video = bool(self.video_recorders) and self.recording
+            if recording_video or self._sync_hook:
                 # gather arrows for forcing functions
                 all_arrows: list[ArrowConfig] | None = []
                 all_lines: list[LineConfig] | None = []
@@ -374,15 +386,16 @@ class RuntimeManager:
                 # (potentially thousands per second) - so only pay for it on steps where
                 # something will actually consume it. update() stays unconditional so the
                 # trail's position history doesn't lose resolution between rendered frames.
-                needs_traces = self._sync_hook is not None or any(
-                    r.is_due(state) for r in self.video_recorders
+                needs_traces = self._sync_hook is not None or (
+                    recording_video
+                    and any(r.is_due(state) for r in self.video_recorders)
                 )
                 for tracer in self.tracers:
                     tracer.update(state)
                     if needs_traces:
                         all_traces.extend(tracer.get_visuals(state))
 
-            if self.video_recorders:
+            if recording_video:
                 assert (
                     all_arrows is not None
                     and all_lines is not None
