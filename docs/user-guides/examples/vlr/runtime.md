@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    Mojo provides many tools to run MuJoCo models, in addition to building the XML files. In this section we will cover implementing
+    Mojo provides many tools to run MuJoCo models, in addition to building the XML files. In this section we will cover implementing the runtime behavior of the model: adding the shock-absorber springs and stepping the simulation.
 
 ---
 
@@ -15,9 +15,9 @@ This `rt.PointToPointForce` is created with the `ideal_spring()` helper. We prov
 1. A unique name for the spring (using the `side_id`)
 2. Between what two sites the spring acts
 3. The spring stiffness and damping coefficient
-4. The unsprung rest length by using the leg's geometry (this is just the distance between our two sites)
+4. The rest length, computed from the leg's geometry (this is just the distance between our two sites)
 
-Finally, we register this force to our `RuntimeManager` (`rm`). You'll notice we don't provide one directly since we will use the `RuntimeManager` as a context manager.
+Finally, we register this force to our `RuntimeManager` (`rm`). You will notice we do not provide one directly since we will use the `RuntimeManager` as a context manager.
 
 ```python
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:landing_gear_dynamics"
@@ -36,7 +36,7 @@ Once in the context block, we do a few things:
 1. Extract our `VLRModel` from the user data
 2. Loop over the landing gear to add the springs using our `add_spring` method
 3. Use the camera we defined to record video and take screenshots during the simulation
-    - We only do this for a special case of the code since video files can increase runtime, memory/storage space, and are generally not needed.
+    - We only do this for the nominal trial, not every randomized Monte Carlo trial, since video files can increase runtime, memory/storage space, and are generally not needed.
 4. Run the solver by looping using `rm.step(state)` (this is where `rt.PointToPointForce` will automatically be computed and applied for each timestep)
 5. Take one last screenshot when the rocket has landed
 
@@ -48,10 +48,10 @@ Once in the context block, we do a few things:
 
 ## Running One Trial
 
-Running the model can be done using `mojo.utils.MojoRunner`, providing the generator, runtime, a workdir, and configuration for how many Monte Carlo trials should be run. It then tells it to run with a clean working directory.
+Running the model can be done using `mojo.utils.MojoRunner`, providing the generator, runtime, a workdir, and configuration for how many [Monte Carlo trials](../../workflow/running-jobs/running-jobs.md#running-a-monte-carlo) should be run. It then tells it to run with a clean working directory.
 
 ```python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:runtime"
+--8<-- "docs/user-guides/examples/vlr/vlr_example.py:main"
 ```
 
 ---
@@ -66,4 +66,4 @@ Running the model can be done using `mojo.utils.MojoRunner`, providing the gener
 
 !!! success
 
-    That's pretty much it. MuJoCo Mojo provides _many_ more tools than just the ones used in this walkthrough (such as automating data output, requirements verifications, running optimization studies, data interaction through Dojo, the list could go on).
+    That is pretty much it. MuJoCo Mojo provides _many_ more tools than just the ones used in this walkthrough (such as automating data output, requirements verification, running optimization studies, and data interaction through [Dojo](../../features/dojo/dojo.md), the list could go on).
