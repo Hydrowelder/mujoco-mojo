@@ -9,6 +9,16 @@ import {
   type TreeRow,
 } from "./lib/tree";
 import { themeColor, themeColorAlpha } from "./lib/theme-colors";
+import {
+  newTabId,
+  loadTabsFromStorage,
+  persistTabsToStorage,
+  reorderTabs,
+  pickNextActiveOnClose,
+  selectRange,
+  toggleSelection,
+} from "./lib/tab-session";
+import type { PlotProfile } from "./lib/plot-profile";
 import { fetchWithTimeout, fetchWithRetry } from "./lib/fetch-timeout";
 import {
   describeSchemaPath,
@@ -76,6 +86,9 @@ const LOG_LEVEL_SEVERITY: Record<string, number> = {
   ERROR: 40,
   CRITICAL: 50,
 };
+
+// how many recently-closed plot tabs reopenLastClosedPlotTab() can recover
+const _MAX_CLOSED_PLOT_TABS = 10;
 
 const DEFAULT_CONFIG: PlotConfig = {
   xAxis: { col: "time", filters: [] },
@@ -280,6 +293,28 @@ interface LabSchema {
   is_template: boolean;
   template_inputs: string[];
   template_outputs: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Plot tab state
+// ---------------------------------------------------------------------------
+// No separate "name" field - a plot tab's label is its config.title (see
+// _macros.html's tab_strip() call in _chart.html), since a plot tab has no
+// on-disk file identity the way a saved Signal Lab graph does.
+interface PlotTab {
+  id: string;
+  config: PlotConfig;
+  data: Record<string, number[]> | null;
+  vsDatasets: Record<string, Record<string, number[]>>;
+  filterFingerprints: Record<string, string>;
+  xAxisFilterFingerprint: string;
+  historyStack: string[];
+  historyIndex: number;
+  savedSnapshot: string | null; // JSON of config as of last profile save/load; null = never saved
+  // set only while sitting in closedPlotTabs - its index in plotTabs at the
+  // moment it was closed, so reopenLastClosedPlotTab() can reinsert it back
+  // where it was rather than always appending at the end.
+  closedAtIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -525,6 +560,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     labName: "" as string,
     labTabs: [] as LabTab[],
     labActiveTabId: null as string | null,
+    // multi-select for bulk-closing/duplicating lab tabs - see the matching
+    // selectedPlotTabIds fields below for the shared semantics.
+    selectedLabTabIds: [] as string[],
+    _labTabSelectionAnchorId: null as string | null,
+
+    // --- PLOT TABS ---
+    plotTabs: [] as PlotTab[],
+    plotActiveTabId: null as string | null,
+    // most-recently-closed first, capped at _MAX_CLOSED_PLOT_TABS - lets any
+    // close (confirmed-dirty or not) be undone via reopenLastClosedPlotTab()
+    closedPlotTabs: [] as PlotTab[],
+    // multi-select for bulk-closing plot tabs (shift/ctrl-click); cleared on
+    // a plain click. Independent of plotActiveTabId - a tab can be selected
+    // without being the one currently displayed, and vice versa.
+    selectedPlotTabIds: [] as string[],
+    _plotTabSelectionAnchorId: null as string | null,
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
     nodePickingQuat: null as number | null,
@@ -1212,6 +1263,24 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (xCol && this.data[xCol]) return this.data[xCol].length;
       const first = Object.values(this.data).find((arr) => arr.length > 0);
       return first?.length ?? 0;
+    },
+
+    get currentTrialNum(): number {
+      return parseInt(this.trialId.split("_").pop() ?? "0");
+    },
+
+    // same success/failure/error outcome classification vsChipClass() uses
+    // ($store.dojo.failureTrialNums/errorTrialNums, populated from
+    // applyJobOutcomes) - for the compact pip next to the warp input.
+    // Tracks warpId (the draft trial number being typed/warped to), not
+    // just the page's own trial, falling back to the page's trial once the
+    // draft is cleared - see _header.html's pip.
+    get warpOutcomeColor(): "success" | "warning" | "danger" {
+      const store = Alpine.store("dojo") as DojoStore;
+      const num = this.warpId ?? this.currentTrialNum;
+      if (store.errorTrialNums.includes(num)) return "warning";
+      if (store.failureTrialNums.includes(num)) return "danger";
+      return "success";
     },
 
     // -----------------------------------------------------------------------
@@ -2439,6 +2508,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           if (!hasRotation) this.applyRefFrame(this.config.refFrame);
         }
 
+        // Restores a previously-saved multi-tab session (mojo:plot:tabs),
+        // superseding the single-config state the sequence above just
+        // produced - unless a shared link (?v=) was just hydrated, which
+        // always wins over whatever tabs happen to be saved on this
+        // browser. Awaited directly (not via $nextTick) so the fetch it may
+        // need to run for a restored tab's uncached columns completes
+        // before the render below ever starts.
+        await this._initPlotTabs(!!shared);
+
         void this.$nextTick(() => {
           this.pushHistory();
         });
@@ -2730,10 +2808,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             }
           }
           if ((e.metaKey || e.ctrlKey) && !isTextInput) {
-            if (e.key === "ArrowLeft") {
+            // Up/Down mirror Left/Right (increment/decrement, matching the
+            // usual numeric-stepper convention) as a second way to jog
+            // between trials one at a time.
+            if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
               e.preventDefault();
               document.getElementById("nav-prev")?.click();
-            } else if (e.key === "ArrowRight") {
+            } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
               e.preventDefault();
               document.getElementById("nav-next")?.click();
             }
@@ -3031,6 +3112,19 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.saveAndRender();
         this._syncOverlayVisibility();
         requestAnimationFrame(() => this._renderFrameMarkers());
+
+        // keep the active PlotTab's mirror (config/data/etc.) and its
+        // localStorage copy continuously in sync - without this, a whole-
+        // object reassignment of this.config (undo/redo, loadProfile,
+        // hydrateFromUrl all do `this.config = {...}` rather than mutating
+        // in place) would leave plotTabs[activeId].config pointing at the
+        // stale pre-change object until the next tab switch, which the tab
+        // strip's title (tab.config.title) would otherwise briefly show.
+        // A no-op before plotTabs is initialized (_initPlotTabs runs later
+        // in boot; _snapshotActivePlotTab just returns when there's no
+        // active tab yet to find).
+        this._snapshotActivePlotTab();
+        if (this.plotTabs.length > 0) this._persistPlotTabs();
       });
 
       // re-fetch data and column manifest when display unit system changes so the
@@ -4389,7 +4483,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     downloadJSON() {
       const link = document.createElement("a");
       link.href = URL.createObjectURL(
-        new Blob([JSON.stringify(this.config, null, 4)], {
+        new Blob([JSON.stringify(this.config)], {
           type: "application/json",
         }),
       );
@@ -4890,46 +4984,53 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     // ── tab helpers ──────────────────────────────────────────────────────────
 
-    _tabId(): string {
-      return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    _makeBlankLabTab(): LabTab {
+      return {
+        id: newTabId(),
+        name: "",
+        graph: null,
+        savedState: null,
+        viewport: null,
+        dirty: false,
+      };
     },
 
     _initTabs() {
-      try {
-        const raw = localStorage.getItem("mojo:lab:tabs");
-        if (raw) {
-          const tabs = JSON.parse(raw) as LabTab[];
-          if (Array.isArray(tabs) && tabs.length > 0) {
-            this.labTabs = tabs;
-            const activeId = localStorage.getItem("mojo:lab:activeTab") ?? "";
-            this.labActiveTabId =
-              tabs.find((t) => t.id === activeId)?.id ?? tabs[0]!.id;
-            const active = this.labTabs.find(
-              (t) => t.id === this.labActiveTabId,
-            )!;
-            this.labName = active.name;
-            this.labGraph = active.graph;
-            return;
-          }
-        }
-      } catch {}
-      // fall back to old single-lab format
-      const name = localStorage.getItem("mojo:lab:name") ?? "";
-      const graph = (() => {
-        try {
-          const s = localStorage.getItem("mojo:lab:draft");
-          return s ? (JSON.parse(s) as object) : null;
-        } catch {
-          return null;
-        }
-      })();
-      const id = this._tabId();
-      this.labTabs = [
-        { id, name, graph, savedState: null, dirty: false, viewport: null },
-      ];
-      this.labActiveTabId = id;
-      this.labName = name;
-      this.labGraph = graph;
+      const { tabs, activeId } = loadTabsFromStorage<LabTab>(
+        "mojo:lab:tabs",
+        "mojo:lab:activeTab",
+        () => {
+          // fall back to old single-lab format
+          const name = localStorage.getItem("mojo:lab:name") ?? "";
+          const graph = (() => {
+            try {
+              const s = localStorage.getItem("mojo:lab:draft");
+              return s ? (JSON.parse(s) as object) : null;
+            } catch {
+              return null;
+            }
+          })();
+          const id = newTabId();
+          return {
+            tabs: [
+              {
+                id,
+                name,
+                graph,
+                savedState: null,
+                dirty: false,
+                viewport: null,
+              },
+            ],
+            activeId: id,
+          };
+        },
+      );
+      this.labTabs = tabs;
+      this.labActiveTabId = activeId;
+      const active = tabs.find((t) => t.id === activeId)!;
+      this.labName = active.name;
+      this.labGraph = active.graph;
     },
 
     _snapshotActiveTab() {
@@ -4953,15 +5054,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _persistTabs() {
       // persist tab list to localStorage WITHOUT snapshotting the live canvas —
       // safe to call immediately after _activateTab() before mojoLabInit fires
-      try {
-        localStorage.setItem("mojo:lab:tabs", JSON.stringify(this.labTabs));
-        localStorage.setItem("mojo:lab:activeTab", this.labActiveTabId ?? "");
-      } catch {}
+      persistTabsToStorage(
+        "mojo:lab:tabs",
+        "mojo:lab:activeTab",
+        this.labTabs,
+        this.labActiveTabId ?? "",
+      );
     },
 
     _saveTabs() {
       this._snapshotActiveTab();
       this._persistTabs();
+    },
+
+    reorderLabTabs(draggedId: string, dropIndex: number) {
+      this.labTabs = reorderTabs(this.labTabs, draggedId, dropIndex);
+      this._saveTabs();
     },
 
     async _activateTab(tabId: string) {
@@ -4989,20 +5097,66 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     async newTab() {
       this._snapshotActiveTab();
-      const id = this._tabId();
-      this.labTabs.push({
-        id,
-        name: "",
-        graph: null,
-        savedState: null,
-        viewport: null,
-        dirty: false,
-      });
-      await this._activateTab(id);
+      const blank = this._makeBlankLabTab();
+      this.labTabs.push(blank);
+      await this._activateTab(blank.id);
       this._persistTabs();
     },
 
+    async duplicateLabTab(tabId: string) {
+      const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.labActiveTabId) this._snapshotActiveTab();
+      const source = this.labTabs[tabIdx]!;
+      const duplicate: LabTab = {
+        id: newTabId(),
+        name: source.name ? `${source.name} copy` : "",
+        graph: source.graph
+          ? (JSON.parse(JSON.stringify(source.graph)) as object)
+          : null,
+        // never saved under its own name yet, so it starts dirty (unless
+        // it's an empty graph, matching a blank tab's own clean baseline)
+        savedState: null,
+        dirty: !!source.graph,
+        viewport: source.viewport ? { ...source.viewport } : null,
+      };
+      this.labTabs.splice(tabIdx + 1, 0, duplicate);
+      await this._activateTab(duplicate.id);
+      this._persistTabs();
+    },
+
+    // See selectPlotTab's own comment for the shared shift/ctrl-click
+    // semantics - identical here, just against labTabs/labActiveTabId.
+    selectLabTab(tabId: string, event: MouseEvent) {
+      if (event.shiftKey && this._labTabSelectionAnchorId) {
+        this.selectedLabTabIds = selectRange(
+          this.labTabs,
+          this._labTabSelectionAnchorId,
+          tabId,
+        );
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        this.selectedLabTabIds = toggleSelection(
+          this.selectedLabTabIds,
+          tabId,
+        );
+        this._labTabSelectionAnchorId = tabId;
+        return;
+      }
+      this.selectedLabTabIds = [];
+      this._labTabSelectionAnchorId = tabId;
+      void this.switchTab(tabId);
+    },
+
     async closeTab(tabId: string) {
+      if (
+        this.selectedLabTabIds.length > 1 &&
+        this.selectedLabTabIds.includes(tabId)
+      ) {
+        await this.closeMultipleLabTabs(this.selectedLabTabIds);
+        return;
+      }
       const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
       if (tabIdx === -1) return;
       const tab = this.labTabs[tabIdx]!;
@@ -5023,25 +5177,56 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         });
         if (!ok) return;
       }
-      this.labTabs.splice(tabIdx, 1);
+      const { tabs, nextActiveId, activeChanged } = pickNextActiveOnClose(
+        this.labTabs,
+        tabIdx,
+        this.labActiveTabId ?? "",
+        () => this._makeBlankLabTab(),
+      );
+      this.labTabs = tabs;
       window.mojoLabDiscardHistory?.(tabId);
-      if (this.labTabs.length === 0) {
-        const newId = this._tabId();
-        this.labTabs.push({
-          id: newId,
-          name: "",
-          graph: null,
-          savedState: null,
-          viewport: null,
-          dirty: false,
-        });
-        await this._activateTab(newId);
-      } else if (tabId === this.labActiveTabId) {
-        const newActive =
-          this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)]!;
-        await this._activateTab(newActive.id);
+      if (activeChanged) {
+        await this._activateTab(nextActiveId);
       }
       // persist only - see switchTab for why we must not re-snapshot here
+      this._persistTabs();
+    },
+
+    // Bulk-close path for a multi-selection - one confirm dialog covering
+    // the whole group rather than one per tab, mirroring
+    // closeMultiplePlotTabs()'s dirty-count message.
+    async closeMultipleLabTabs(tabIds: string[]) {
+      const idSet = new Set(tabIds);
+      const toClose = this.labTabs.filter((t) => idSet.has(t.id));
+      if (toClose.length === 0) return;
+      const activeWasClosed = idSet.has(this.labActiveTabId ?? "");
+      if (activeWasClosed) this._snapshotActiveTab();
+      const dirtyCount = toClose.filter((t) =>
+        t.id === this.labActiveTabId
+          ? (window.mojoLabHasUnsavedChanges?.() ?? false)
+          : t.dirty,
+      ).length;
+      if (dirtyCount > 0) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: `Close ${toClose.length} tabs and discard unsaved changes in ${dirtyCount} of them?`,
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const remaining = this.labTabs.filter((t) => !idSet.has(t.id));
+      toClose.forEach((t) => window.mojoLabDiscardHistory?.(t.id));
+      this.selectedLabTabIds = [];
+      if (remaining.length === 0) {
+        const blank = this._makeBlankLabTab();
+        this.labTabs = [blank];
+        await this._activateTab(blank.id);
+      } else {
+        this.labTabs = remaining;
+        if (activeWasClosed) await this._activateTab(remaining[0]!.id);
+      }
       this._persistTabs();
     },
 
@@ -5080,7 +5265,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           }
         } else {
           this._snapshotActiveTab();
-          const id = this._tabId();
+          const id = newTabId();
           this.labTabs.push({
             id,
             name: labName,
@@ -5249,6 +5434,371 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       await this.refreshLabValidation();
     },
 
+    // ── plot tab helpers ─────────────────────────────────────────────────────
+    // config/data/vsDatasets/filterFingerprints/xAxisFilterFingerprint/
+    // historyStack/historyIndex are all mirrors of the *active* PlotTab's own
+    // fields - the same pattern labName/labGraph use for Lab tabs above. This
+    // means renderPlot(), the JSON editor, undo/redo, and every axis/filter
+    // picker keep reading/writing `this.config` etc. completely unchanged;
+    // only tab switching needs to know these are mirrors at all.
+
+    _makeBlankPlotTab(): PlotTab {
+      const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
+      return {
+        id: newTabId(),
+        config,
+        data: null,
+        vsDatasets: {},
+        filterFingerprints: {},
+        xAxisFilterFingerprint: "[]",
+        historyStack: [],
+        historyIndex: -1,
+        // baselined against its own just-created state, not null/dirty - an
+        // untouched new tab has nothing unsaved to warn about; savedSnapshot
+        // only diverges once the user actually edits something in it.
+        savedSnapshot: JSON.stringify(config),
+      };
+    },
+
+    // Shared by the tab strip's dirty dot (_plot_tabs.html) and
+    // closePlotTab()'s confirm-before-discard check, so the two can't drift.
+    _isPlotTabDirty(tab: PlotTab): boolean {
+      return (
+        !tab.savedSnapshot || JSON.stringify(tab.config) !== tab.savedSnapshot
+      );
+    },
+
+    // Called once at the end of init()'s existing config-loading sequence
+    // (after hydrateFromUrl/loadConfig and the ref-frame migration have
+    // settled this.config). Tries to restore a previously-saved multi-tab
+    // session from mojo:plot:tabs first; only when there isn't one yet does
+    // it fall back to wrapping whatever this.config/data/etc. the sequence
+    // above already produced into a single starting tab - the same
+    // legacy-format-fallback shape _initTabs() uses for Signal Lab.
+    // `skipStoredTabs` is true when a shared link (?v=) was just hydrated,
+    // which must always win over whatever tabs happen to be saved on this
+    // browser, exactly like hydrateFromUrl() already takes precedence over
+    // loadConfig() above.
+    async _initPlotTabs(skipStoredTabs: boolean) {
+      const wrapCurrentAsTab = (): { tabs: PlotTab[]; activeId: string } => {
+        const tab: PlotTab = {
+          id: newTabId(),
+          config: this.config,
+          data: this.data,
+          vsDatasets: this.vsDatasets,
+          filterFingerprints: this.filterFingerprints,
+          xAxisFilterFingerprint: this.xAxisFilterFingerprint,
+          historyStack: this.historyStack,
+          historyIndex: this.historyIndex,
+          // baselined against whatever boot already produced, not dirty by
+          // default - same reasoning as _makeBlankPlotTab()'s own baseline.
+          savedSnapshot: JSON.stringify(this.config),
+        };
+        return { tabs: [tab], activeId: tab.id };
+      };
+      const { tabs, activeId } = skipStoredTabs
+        ? wrapCurrentAsTab()
+        : loadTabsFromStorage<PlotTab>(
+            "mojo:plot:tabs",
+            "mojo:plot:activeTab",
+            wrapCurrentAsTab,
+          );
+      this.plotTabs = tabs;
+      this.plotActiveTabId = activeId;
+      try {
+        const raw = localStorage.getItem("mojo:plot:closedTabs");
+        this.closedPlotTabs = raw ? (JSON.parse(raw) as PlotTab[]) : [];
+      } catch {
+        this.closedPlotTabs = [];
+      }
+      const active = tabs.find((t) => t.id === activeId)!;
+      // active tab's fields become the live mirrors - when tabs came from
+      // storage rather than wrapCurrentAsTab(), this replaces whatever
+      // hydrateFromUrl()/loadConfig() set up above with the restored
+      // session's own state instead.
+      this.config = active.config;
+      this.data = active.data;
+      this.vsDatasets = active.vsDatasets;
+      this.filterFingerprints = active.filterFingerprints;
+      this.xAxisFilterFingerprint = active.xAxisFilterFingerprint;
+      this.historyStack = active.historyStack;
+      this.historyIndex = active.historyIndex;
+      // data/vsDatasets are never persisted (see _persistPlotTabs), so a
+      // tab restored from storage always needs its columns re-fetched here.
+      const needed = this._neededColumns(active.config, active.data);
+      if (needed.length > 0) {
+        const fetched = await this.fetchTrialData(this.trialId, needed);
+        this.data = { ...(this.data ?? {}), ...fetched.data };
+      }
+    },
+
+    _snapshotActivePlotTab() {
+      const tab = this.plotTabs.find((t) => t.id === this.plotActiveTabId);
+      if (!tab) return;
+      tab.config = this.config;
+      tab.data = this.data;
+      tab.vsDatasets = this.vsDatasets;
+      tab.filterFingerprints = this.filterFingerprints;
+      tab.xAxisFilterFingerprint = this.xAxisFilterFingerprint;
+      tab.historyStack = this.historyStack;
+      tab.historyIndex = this.historyIndex;
+    },
+
+    // Persists the tab list WITHOUT the large, always-refetchable data/
+    // vsDatasets caches - unlike a LabTab's graph (small, needed to restore
+    // the canvas), raw telemetry arrays would bloat localStorage for no
+    // benefit, so every tab's data starts null again after a page reload.
+    _persistPlotTabs() {
+      const sanitized = this.plotTabs.map((t) => ({
+        ...t,
+        data: null,
+        vsDatasets: {},
+      }));
+      persistTabsToStorage(
+        "mojo:plot:tabs",
+        "mojo:plot:activeTab",
+        sanitized,
+        this.plotActiveTabId ?? "",
+      );
+    },
+
+    _neededColumns(
+      cfg: PlotConfig,
+      cache: Record<string, number[]> | null,
+    ): string[] {
+      const needed: string[] = [];
+      if (cfg.xAxis?.col && !cache?.[cfg.xAxis.col]) needed.push(cfg.xAxis.col);
+      for (const col of Object.keys(cfg.yAxes ?? {})) {
+        if (!cache?.[col]) needed.push(col);
+      }
+      return needed;
+    },
+
+    async _activatePlotTab(tabId: string) {
+      const tab = this.plotTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      this.plotActiveTabId = tabId;
+      // order matters: data/fingerprints/history must be in place before
+      // `config` is reassigned, since the central config watcher (below)
+      // reads them synchronously and must not diff the new tab's filters
+      // against the previous tab's fingerprints.
+      this.data = tab.data;
+      this.vsDatasets = tab.vsDatasets;
+      this.filterFingerprints = tab.filterFingerprints;
+      this.xAxisFilterFingerprint = tab.xAxisFilterFingerprint;
+      this.historyStack = tab.historyStack;
+      this.historyIndex = tab.historyIndex;
+      this.config = tab.config; // fires $watch("config", ...): validates,
+      // pushes history (a no-op if unchanged), and re-fetches any columns
+      // this tab's own fingerprints mark as stale - no explicit renderPlot()
+      // call needed here for that part, exactly like undo()/redo() already
+      // rely on this watcher instead of calling it directly.
+      const needed = this._neededColumns(tab.config, tab.data);
+      if (needed.length > 0) {
+        const fetched = await this.fetchTrialData(this.trialId, needed);
+        this.data = { ...(this.data ?? {}), ...fetched.data };
+        this.renderPlot();
+      }
+    },
+
+    async switchPlotTab(tabId: string) {
+      if (tabId === this.plotActiveTabId) return;
+      this._snapshotActivePlotTab();
+      await this._activatePlotTab(tabId);
+      this._persistPlotTabs();
+    },
+
+    async newPlotTab() {
+      this._snapshotActivePlotTab();
+      const blank = this._makeBlankPlotTab();
+      this.plotTabs.push(blank);
+      await this._activatePlotTab(blank.id);
+      this._persistPlotTabs();
+    },
+
+    async duplicatePlotTab(tabId: string) {
+      const tabIdx = this.plotTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.plotActiveTabId) this._snapshotActivePlotTab();
+      const source = this.plotTabs[tabIdx]!;
+      const config = JSON.parse(JSON.stringify(source.config)) as PlotConfig;
+      if (config.title) config.title = `${config.title} copy`;
+      const duplicate: PlotTab = {
+        id: newTabId(),
+        config,
+        data: source.data ? { ...source.data } : null,
+        vsDatasets: {},
+        filterFingerprints: { ...source.filterFingerprints },
+        xAxisFilterFingerprint: source.xAxisFilterFingerprint,
+        historyStack: [],
+        historyIndex: -1,
+        savedSnapshot: null,
+      };
+      this.plotTabs.splice(tabIdx + 1, 0, duplicate);
+      await this._activatePlotTab(duplicate.id);
+      this._persistPlotTabs();
+    },
+
+    // Plain click switches tabs and clears any multi-selection. Shift-click
+    // selects the inclusive range from the last anchor to this tab
+    // (matching file-manager/list conventions); ctrl/cmd-click toggles this
+    // one tab without touching the rest. Selection only exists to drive
+    // closePlotTab()'s bulk-close check below - it's independent of which
+    // tab is active/displayed.
+    selectPlotTab(tabId: string, event: MouseEvent) {
+      if (event.shiftKey && this._plotTabSelectionAnchorId) {
+        this.selectedPlotTabIds = selectRange(
+          this.plotTabs,
+          this._plotTabSelectionAnchorId,
+          tabId,
+        );
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        this.selectedPlotTabIds = toggleSelection(
+          this.selectedPlotTabIds,
+          tabId,
+        );
+        this._plotTabSelectionAnchorId = tabId;
+        return;
+      }
+      this.selectedPlotTabIds = [];
+      this._plotTabSelectionAnchorId = tabId;
+      void this.switchPlotTab(tabId);
+    },
+
+    // Confirms before discarding a dirty tab, same as Lab tabs
+    // (window.mojoConfirm) - and any close (confirmed-dirty or not) is
+    // additionally always recoverable via reopenLastClosedPlotTab(), since
+    // every closed tab is pushed onto closedPlotTabs regardless of how it
+    // was closed. When tabId is part of a 2+ multi-selection (shift/ctrl-
+    // click via selectPlotTab, or the tab_strip's own middle-click
+    // listener), closes the whole selection instead of just this one tab -
+    // both the close button and a middle-click go through this same method.
+    async closePlotTab(tabId: string) {
+      if (
+        this.selectedPlotTabIds.length > 1 &&
+        this.selectedPlotTabIds.includes(tabId)
+      ) {
+        await this.closeMultiplePlotTabs(this.selectedPlotTabIds);
+        return;
+      }
+      const tabIdx = this.plotTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.plotActiveTabId) this._snapshotActivePlotTab();
+      const closedTab = this.plotTabs[tabIdx]!;
+      if (this._isPlotTabDirty(closedTab)) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: closedTab.config.title
+            ? `Close "${closedTab.config.title}" and discard unsaved changes?`
+            : "Close this tab and discard unsaved changes?",
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const { tabs, nextActiveId, activeChanged } = pickNextActiveOnClose(
+        this.plotTabs,
+        tabIdx,
+        this.plotActiveTabId ?? "",
+        () => this._makeBlankPlotTab(),
+      );
+      this.plotTabs = tabs;
+      // data/vsDatasets stripped same as _persistPlotTabs() - always
+      // re-fetched on reopen via _activatePlotTab()'s own needed-columns
+      // check; closedAtIndex is this tab's position before the splice above,
+      // so reopenLastClosedPlotTab() can reinsert it back where it was.
+      this.closedPlotTabs = [
+        { ...closedTab, data: null, vsDatasets: {}, closedAtIndex: tabIdx },
+        ...this.closedPlotTabs,
+      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this._persistClosedPlotTabs();
+      if (activeChanged) {
+        await this._activatePlotTab(nextActiveId);
+      }
+      this._persistPlotTabs();
+    },
+
+    // Bulk-close path for a bulk selection (see closePlotTab above) - one
+    // confirm dialog covering the whole group rather than one per tab, and
+    // each closed tab still lands on closedPlotTabs individually (with its
+    // own pre-close index) so reopenLastClosedPlotTab() can bring them back
+    // one at a time, each near where it was.
+    async closeMultiplePlotTabs(tabIds: string[]) {
+      const idSet = new Set(tabIds);
+      const indexById = new Map(this.plotTabs.map((t, i) => [t.id, i]));
+      const toClose = this.plotTabs.filter((t) => idSet.has(t.id));
+      if (toClose.length === 0) return;
+      const activeWasClosed = idSet.has(this.plotActiveTabId ?? "");
+      if (activeWasClosed) this._snapshotActivePlotTab();
+      const dirtyCount = toClose.filter((t) =>
+        this._isPlotTabDirty(t),
+      ).length;
+      if (dirtyCount > 0) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: `Close ${toClose.length} tabs and discard unsaved changes in ${dirtyCount} of them?`,
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const remaining = this.plotTabs.filter((t) => !idSet.has(t.id));
+      this.closedPlotTabs = [
+        ...toClose.map((t) => ({
+          ...t,
+          data: null,
+          vsDatasets: {},
+          closedAtIndex: indexById.get(t.id),
+        })),
+        ...this.closedPlotTabs,
+      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this._persistClosedPlotTabs();
+      this.selectedPlotTabIds = [];
+      if (remaining.length === 0) {
+        const blank = this._makeBlankPlotTab();
+        this.plotTabs = [blank];
+        await this._activatePlotTab(blank.id);
+      } else {
+        this.plotTabs = remaining;
+        if (activeWasClosed) await this._activatePlotTab(remaining[0]!.id);
+      }
+      this._persistPlotTabs();
+    },
+
+    async reopenLastClosedPlotTab() {
+      const [mostRecent, ...rest] = this.closedPlotTabs;
+      if (!mostRecent) return;
+      this.closedPlotTabs = rest;
+      this._persistClosedPlotTabs();
+      this._snapshotActivePlotTab();
+      const insertAt = Math.min(
+        mostRecent.closedAtIndex ?? this.plotTabs.length,
+        this.plotTabs.length,
+      );
+      const reopened: PlotTab = { ...mostRecent, closedAtIndex: undefined };
+      this.plotTabs.splice(insertAt, 0, reopened);
+      await this._activatePlotTab(reopened.id);
+      this._persistPlotTabs();
+    },
+
+    _persistClosedPlotTabs() {
+      try {
+        localStorage.setItem(
+          "mojo:plot:closedTabs",
+          JSON.stringify(this.closedPlotTabs),
+        );
+      } catch {}
+    },
+
+    reorderPlotTabs(draggedId: string, dropIndex: number) {
+      this.plotTabs = reorderTabs(this.plotTabs, draggedId, dropIndex);
+      this._persistPlotTabs();
+    },
+
     // -----------------------------------------------------------------------
     async loadProfiles() {
       try {
@@ -5270,15 +5820,19 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             try {
               const pr = await fetch(this._profileUrl(p.name));
               if (!pr.ok) return;
-              const cfg = (await pr.json()) as Partial<PlotConfig>;
+              const profile = (await pr.json()) as Partial<PlotProfile>;
               const w: string[] = [];
-              if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
-                w.push(`x-axis "${cfg.xAxis!.col!}"`);
-              for (const key of Object.keys(cfg.yAxes ?? {})) {
-                if (!colSet.has(key)) w.push(`"${key}"`);
-              }
-              if (cfg.refFrame && !frames.has(cfg.refFrame))
-                w.push(`frame "${cfg.refFrame}"`);
+              (profile.tabs ?? []).forEach((t, idx) => {
+                const cfg = t.config;
+                const label = cfg.title || `tab ${idx + 1}`;
+                if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
+                  w.push(`${label}: x-axis "${cfg.xAxis.col}"`);
+                for (const key of Object.keys(cfg.yAxes ?? {})) {
+                  if (!colSet.has(key)) w.push(`${label}: "${key}"`);
+                }
+                if (cfg.refFrame && !frames.has(cfg.refFrame))
+                  w.push(`${label}: frame "${cfg.refFrame}"`);
+              });
               if (w.length) warnings[p.name] = w;
             } catch {
               /* skip */
@@ -5304,22 +5858,38 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (existing) {
         const ok = await window.mojoConfirm?.({
           title: "Overwrite profile",
-          message: `"${existing.name}" already exists. Replace it with the current configuration?`,
+          message: `"${existing.name}" already exists. Replace it with the current set of plot tabs?`,
           confirmLabel: "Overwrite",
           cancelLabel: "Cancel",
           variant: "warning",
         });
         if (!ok) return;
       }
+      // a profile saves every open tab, not just the active one
+      this._snapshotActivePlotTab();
+      const activeTabIndex = Math.max(
+        0,
+        this.plotTabs.findIndex((t) => t.id === this.plotActiveTabId),
+      );
+      const payload: PlotProfile = {
+        version: 2,
+        tabs: this.plotTabs.map((t) => ({ config: t.config })),
+        activeTabIndex,
+      };
       try {
         const resp = await fetch(this._profileUrl(name), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(this.config),
+          body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error("Save failed");
         const result = (await resp.json()) as { name: string };
         this.profileNameDraft = "";
+        // the just-saved content is every tab's new clean baseline
+        this.plotTabs.forEach((t) => {
+          t.savedSnapshot = JSON.stringify(t.config);
+        });
+        this._persistPlotTabs();
         await this.loadProfiles();
         this.notify(`Profile "${result.name}" saved`, "success");
       } catch {
@@ -5336,7 +5906,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           };
           throw new Error(body.detail ?? `HTTP ${resp.status}`);
         }
-        const loaded = (await resp.json()) as Partial<PlotConfig>;
+        const profile = (await resp.json()) as PlotProfile;
 
         const colSet = new Set(this.columns);
         const frames = new Set(
@@ -5344,24 +5914,47 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             .filter((c) => c.endsWith(":w"))
             .map((c) => c.replace(":w", "")),
         );
-        // columns not present in this trial are tolerated: the profile still loads
-        // (so it can be used as a starting point), but those signals won't plot
-        // until matching columns exist.
+        // columns not present in this trial are tolerated: the profile still
+        // loads (so it can be used as a starting point), but those signals
+        // won't plot until matching columns exist.
         const missing: string[] = [];
-        if (
-          loaded.xAxis?.col &&
-          !loaded.xAxis.col.startsWith("Lab/") &&
-          !colSet.has(loaded.xAxis.col)
-        )
-          missing.push(`x-axis "${loaded.xAxis!.col!}"`);
-        for (const key of Object.keys(loaded.yAxes ?? {})) {
-          if (!key.startsWith("Lab/") && !colSet.has(key))
-            missing.push(`signal "${key}"`);
-        }
-        if (loaded.refFrame && !frames.has(loaded.refFrame))
-          missing.push(`frame "${loaded.refFrame}"`);
+        profile.tabs.forEach((t, idx) => {
+          const cfg = t.config;
+          const label = cfg.title || `tab ${idx + 1}`;
+          if (
+            cfg.xAxis?.col &&
+            !cfg.xAxis.col.startsWith("Lab/") &&
+            !colSet.has(cfg.xAxis.col)
+          )
+            missing.push(`${label}: x-axis "${cfg.xAxis.col}"`);
+          for (const key of Object.keys(cfg.yAxes ?? {})) {
+            if (!key.startsWith("Lab/") && !colSet.has(key))
+              missing.push(`${label}: signal "${key}"`);
+          }
+          if (cfg.refFrame && !frames.has(cfg.refFrame))
+            missing.push(`${label}: frame "${cfg.refFrame}"`);
+        });
 
-        this.config = { ...this.config, ...loaded };
+        // a profile is a saved workspace - loading one replaces every open
+        // tab, it doesn't patch the currently active one
+        const newTabs: PlotTab[] = profile.tabs.map((t) => ({
+          id: newTabId(),
+          config: t.config,
+          data: null,
+          vsDatasets: {},
+          filterFingerprints: {},
+          xAxisFilterFingerprint: "[]",
+          historyStack: [],
+          historyIndex: -1,
+          savedSnapshot: JSON.stringify(t.config),
+        }));
+        const activeIndex = Math.min(
+          Math.max(profile.activeTabIndex ?? 0, 0),
+          newTabs.length - 1,
+        );
+        this.plotTabs = newTabs;
+        await this._activatePlotTab(newTabs[activeIndex]!.id);
+        this._persistPlotTabs();
 
         if (missing.length) {
           this.notify(
@@ -5371,25 +5964,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         } else {
           this.notify(`Profile "${name}" loaded`, "success");
         }
-
-        // Fetch data for any columns the profile introduces that aren't cached yet.
-        const needed: string[] = [];
-        if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
-          needed.push(loaded.xAxis.col);
-        for (const col of Object.keys(loaded.yAxes ?? {})) {
-          if (!this.data?.[col]) needed.push(col);
-        }
-        if (needed.length > 0) {
-          const fetched = await this.fetchTrialData(this.trialId, needed);
-          this.data = { ...(this.data ?? {}), ...fetched.data };
-        }
-
-        void this.$nextTick(() => {
-          this.configErrors = this.validateConfig(this.config as PlotConfig);
-          this.isValidConfig = this.configErrors.length === 0;
-          this.isValidJson = true;
-          this.saveAndRender();
-        });
       } catch (e) {
         this.notify(
           `Failed to load "${name}": ${(e as Error).message}`,
