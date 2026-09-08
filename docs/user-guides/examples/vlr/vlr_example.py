@@ -30,13 +30,6 @@ import mujoco_mojo.runtime as rt
 logger = mojo.utils.get_logger(__name__)
 US = mojo.UnitSystem.si()  # Define a unit system used throughout the model
 
-# Contact groups for `contype`/`conaffinity` on the geoms below. MuJoCo only
-# generates a contact between two geoms if one's `contype` bit overlaps the
-# other's `conaffinity` bits. We use these so the ground can touch both the
-# rocket body and the legs, while the body and legs never touch each other.
-GROUND = 0b001
-TUBE = 0b010
-GEAR = 0b100
 # --8<-- [end:imports]
 
 
@@ -117,7 +110,7 @@ INPUTS = Inputs()
 # --8<-- [end:inputs]
 
 
-# --8<-- [start:landing_gear]
+# --8<-- [start:side]
 class Side(StrEnum):
     """
     One of the four positions, spaced evenly around the rocket's body tube,
@@ -126,8 +119,8 @@ class Side(StrEnum):
     """
 
     PX = "px"
-    MX = "mx"
     PY = "py"
+    MX = "mx"
     MY = "my"
 
     @property
@@ -136,10 +129,10 @@ class Side(StrEnum):
         match self:
             case Side.PX:
                 return np.deg2rad(0)
-            case Side.MX:
-                return np.deg2rad(180)
             case Side.PY:
                 return np.deg2rad(90)
+            case Side.MX:
+                return np.deg2rad(180)
             case Side.MY:
                 return np.deg2rad(270)
 
@@ -155,6 +148,10 @@ class Side(StrEnum):
         )
 
 
+# --8<-- [end:side]
+
+
+# --8<-- [start:landing_gear]
 class LandingGear(mojo.UserData):
     """
     A single landing gear leg: a rigid leg with a footpad at the tip, hinged
@@ -196,8 +193,6 @@ class LandingGear(mojo.UserData):
                     # leg unrealistically heavy. 1.24 g/cm^3 is roughly a
                     # rigid engineering plastic (e.g. ABS/nylon).
                     density=1.24 * US["gram/cm^3"],
-                    contype=GEAR,
-                    conaffinity=GROUND,
                 ),
                 # Footpad: the part of the leg that actually touches the ground
                 mojo.GeomSphere(
@@ -211,8 +206,6 @@ class LandingGear(mojo.UserData):
                     # arm from the hinge), which makes landings look far
                     # more damped than they should.
                     density=0,
-                    contype=GEAR,
-                    conaffinity=GROUND,
                 ),
             ],
             joints=[
@@ -251,6 +244,9 @@ class LandingGear(mojo.UserData):
             tube_spring_site=tube_site,
         )
 
+    # --8<-- [end:landing_gear_kinematics]
+
+    # --8<-- [start:landing_gear_dynamics]
     def add_spring(self) -> None:
         """Attach a linear spring-damper between this leg and the rocket body, acting as its shock absorber."""
         rt.PointToPointForce.ideal_spring(
@@ -262,6 +258,8 @@ class LandingGear(mojo.UserData):
             rest_length=INPUTS.gear.SPRING_INIT_LENGTH,
         ).register_to_rm()
 
+
+# --8<-- [end:landing_gear_dynamics]
 
 # --8<-- [end:landing_gear]
 
@@ -287,8 +285,6 @@ class Rocket(mojo.UserData):
             fromto=np.array((0, 0, 0, 0, 0, INPUTS.tube.LENGTH)),
             rgba=mojo.utils.Color.CYAN_500.with_alpha(0.2),
             mass=1 * US.pound,
-            contype=TUBE,
-            conaffinity=GROUND,
         )
 
         # Make the body with the geometry
@@ -296,21 +292,25 @@ class Rocket(mojo.UserData):
         # and we use a FreeJoint so that it is free to move
         rocket_body = mojo.Body(
             name=mojo.BodyName("rocket"),
-            pose=mojo.PoseQuat(pos=np.array((0, 0, INPUTS.STARTING_HEIGHT))),
-            freejoints=[mojo.FreeJoint()],
             geoms=[body_tube],
+            pose=mojo.PoseEuler(
+                euler=np.array((5, 0, 0)),
+                angle=mojo.Angle.DEGREE,
+                pos=np.array((0, 0, INPUTS.STARTING_HEIGHT)),
+            ),
+            freejoints=[mojo.FreeJoint()],
         )
         mojo_model.mjcf.worldbody.bodies.append(rocket_body)
 
+        # --8<-- [start:patterning]
         # Add 4 symmetric sides around the rocket, each mounting one landing gear leg
         landing_gear: dict[Side, LandingGear] = {}
         for side_id in Side:
-            angle = side_id.clocking_angle
             # Make a new side for clocking around
             side = mojo.Body(
                 name=mojo.BodyName(f"{side_id}_side"),
                 pose=mojo.PoseEuler(
-                    euler=np.array((0, 0, angle)),
+                    euler=np.array((0, 0, side_id.clocking_angle)),
                     angle=mojo.Angle.RADIAN,
                     pos=INPUTS.tube.RADIUS * side_id.pos,
                 ),
@@ -320,6 +320,8 @@ class Rocket(mojo.UserData):
             # We no longer need to pass mojo_model around since we will be using
             # the newly made side as our base object
             landing_gear[side_id] = LandingGear.new(side, side_id)
+
+        # --8<-- [end:patterning]
         return cls(body=rocket_body, landing_gear=landing_gear)
 
 
@@ -363,8 +365,6 @@ class Ground(mojo.UserData):
                 size=np.array([0, 0, 0.1]),
                 pose=mojo.PoseQuat(pos=np.array((0.5 * US.m, 0.5 * US.m, 0))),
                 material=grid_mat.name,
-                contype=GROUND,
-                conaffinity=TUBE | GEAR,
             ),
         )
 
@@ -386,7 +386,7 @@ class VLRModel(mojo.UserData):
     """
 
     ground: Ground
-    """The ground plane and world setup (skybox, lights)."""
+    """The ground plane and world setup."""
 
     rocket: Rocket
     """The rocket body and its four landing gear legs."""
@@ -421,27 +421,6 @@ class VLRModel(mojo.UserData):
             )
         )
 
-        # Optionally add an interesting skybox
-        # Mojo: `is_nominal` is only true for the single baseline trial, not
-        # any randomized Monte Carlo variations, so this only runs once
-        if mojo_model.is_nominal:
-            skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
-            mojo_model.mjcf.assets.append(
-                mojo.Asset(
-                    textures=[
-                        mojo.Texture(
-                            name=mojo.TextureName("skybox_texture_colors"),
-                            type=mojo.TextureType.SKYBOX,
-                            fileback=skybox_folder / "nz.png",
-                            filedown=skybox_folder / "ny.png",
-                            filefront=skybox_folder / "pz.png",
-                            fileleft=skybox_folder / "nx.png",
-                            fileright=skybox_folder / "px.png",
-                            fileup=skybox_folder / "py.png",
-                        )
-                    ]
-                ),
-            )
         return cls(ground=ground, rocket=rocket, camera=camera_name)
 
 
@@ -512,13 +491,25 @@ def runtime(
             gear.add_spring()
 
         # Mojo: only record a video for the single baseline trial, not every
-        # randomized Monte Carlo variation
+        # randomized Monte Carlo variation. `rm.recording` also lets this skip
+        # cleanly when a `reloaded` session has recording toggled off.
+        recorder = None
         if mojo_model.is_nominal:
-            rt.VideoRecorder(
-                path=Path(__file__).parent / "video.gif", camera_name=vlr_model.camera
-            ).setup(state).register_to_rm()
+            recorder = (
+                rt.VideoRecorder(
+                    path=Path(__file__).parent / "video.gif",
+                    camera_name=vlr_model.camera,
+                    fps=10,
+                )
+                .setup(state)
+                .register_to_rm()
+            )
+            recorder.snapshot(state, Path(__file__).parent / "ground.jpg")
         while state.data.time < 4.0:
             rm.step(state)
+
+        if recorder:
+            recorder.snapshot(state, Path(__file__).parent / "landed.jpg")
         # --8<-- [end:stepping]
 
     return mojo_model
@@ -535,7 +526,7 @@ if __name__ == "__main__":
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+        config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1, resume=False),
     )
 
     runner.run(clean_workdir=True)
