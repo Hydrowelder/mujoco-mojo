@@ -67,14 +67,22 @@ Install `mujoco-mojo` in your project using the following:
 === "`uv` (recommended)"
 
     ```bash  linenums="0"
-    uv add mujoco-mojo
+    uv add mujoco-mojo[all]
     ```
 
 === "`pip`"
 
     ```bash  linenums="0"
-    pip install mujoco-mojo
+    pip install mujoco-mojo[all]
     ```
+
+??? info "Optional Dependency Groups"
+
+    To get the most out of MuJoCo Mojo, select additional extras from this list (or use `[all]` to install all of them):
+
+    - `[reloaded]`: the [hot-reloading development loop](#reloaded), including its OpenGL/Viser visualizers.
+    - `[mesh-decomp]`: concave mesh decomposition via CoACD.
+    - `[optimize]`: Bayesian optimization studies powered by Optuna.
 
 ---
 

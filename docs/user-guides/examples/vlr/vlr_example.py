@@ -159,12 +159,6 @@ class LandingGear(mojo.UserData):
     absorb the landing.
     """
 
-    side_id: Side
-    """Which of the four sides this leg is mounted on."""
-
-    body: mojo.Body
-    """The leg's MJCF body, containing its geometry and hinge joint."""
-
     leg_spring_site: mojo.AnySite
     """Attachment point for the spring, on the leg."""
 
@@ -172,7 +166,7 @@ class LandingGear(mojo.UserData):
     """Attachment point for the spring, on the rocket body."""
 
     @classmethod
-    def new(cls, side: mojo.Body, side_id: Side) -> Self:
+    def new(cls, frame: mojo.Frame, side_id: Side) -> Self:
         # Make a leg with a footpad angled at the ground
         body = mojo.Body(
             name=mojo.BodyName(f"{side_id}_leg"),
@@ -217,7 +211,7 @@ class LandingGear(mojo.UserData):
                 )
             ],
         )
-        side.bodies.append(body)
+        frame.bodies.append(body)
 
         # Make a site on the leg where one end of the spring will attach
         leg_site = mojo.SiteSphere(
@@ -235,11 +229,9 @@ class LandingGear(mojo.UserData):
             size=leg_site.size,
             rgba=leg_site.rgba,
         )
-        side.sites.append(tube_site)
+        frame.sites.append(tube_site)
 
         return cls(
-            side_id=side_id,
-            body=body,
             leg_spring_site=leg_site,
             tube_spring_site=tube_site,
         )
@@ -247,10 +239,10 @@ class LandingGear(mojo.UserData):
     # --8<-- [end:landing_gear_kinematics]
 
     # --8<-- [start:landing_gear_dynamics]
-    def add_spring(self) -> None:
+    def add_spring(self, side_id: Side) -> None:
         """Attach a linear spring-damper between this leg and the rocket body, acting as its shock absorber."""
         rt.PointToPointForce.ideal_spring(
-            name=f"{self.side_id}_spring",
+            name=f"{side_id}_spring",
             action_site=self.leg_spring_site,
             xtion_site=self.tube_spring_site,
             stiffness=1e1 * US["lbf/inch"],
@@ -307,19 +299,19 @@ class Rocket(mojo.UserData):
         landing_gear: dict[Side, LandingGear] = {}
         for side_id in Side:
             # Make a new side for clocking around
-            side = mojo.Body(
-                name=mojo.BodyName(f"{side_id}_side"),
+            frame = mojo.Frame(
+                name=mojo.FrameName(f"{side_id}_side"),
                 pose=mojo.PoseEuler(
                     euler=np.array((0, 0, side_id.clocking_angle)),
                     angle=mojo.Angle.RADIAN,
                     pos=INPUTS.tube.RADIUS * side_id.pos,
                 ),
             )
-            rocket_body.bodies.append(side)
+            rocket_body.frames.append(frame)
 
             # We no longer need to pass mojo_model around since we will be using
-            # the newly made side as our base object
-            landing_gear[side_id] = LandingGear.new(side, side_id)
+            # the newly made `frame` as our base object
+            landing_gear[side_id] = LandingGear.new(frame, side_id)
 
         # --8<-- [end:patterning]
         return cls(body=rocket_body, landing_gear=landing_gear)
@@ -379,7 +371,7 @@ class VLRModel(mojo.UserData):
     """
     Root user-data container for the whole model.
 
-    Mojo: `generate()` builds this and stores it on `mojo_model.user_data`;
+    `generate()` builds this and stores it on `mojo_model.user_data`;
     `runtime()` later reads it back out via `mojo_model.get_user_data()` to
     get at the MJCF pieces (sites, bodies) it needs to attach forces to and
     step the simulation.
@@ -432,7 +424,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     """
     Generates the MJCF model and samples distributions.
 
-    Mojo: this is one of the two entry points mujoco_mojo calls for every
+    This is one of the two entry points mujoco_mojo calls for every
     trial (the other is `runtime()`, below) — it builds and returns the
     MJCF model, but doesn't step the simulation.
     """
@@ -476,7 +468,7 @@ def runtime(
     """
     Executes the physics simulation.
 
-    Mojo: the other entry point mujoco_mojo calls for every trial, after
+    The other entry point mujoco_mojo calls for every trial, after
     `generate()` has built and compiled the MJCF model. `state` wraps the
     live `mjModel`/`mjData`; `runtime_manager` (opened as `rm` below) is
     what forces and recorders get registered against and what actually
@@ -484,13 +476,12 @@ def runtime(
     """
     with runtime_manager as rm:
         vlr_model = mojo_model.get_user_data(VLRModel)
-        assert mojo_model.mjcf.worldbody  # For type hinting
 
         # Attach each leg's shock-absorber spring now that the model is compiled
-        for gear in vlr_model.rocket.landing_gear.values():
-            gear.add_spring()
+        for side_id, gear in vlr_model.rocket.landing_gear.items():
+            gear.add_spring(side_id)
 
-        # Mojo: only record a video for the single baseline trial, not every
+        # Only record a video for the single baseline trial, not every
         # randomized Monte Carlo variation. `rm.recording` also lets this skip
         # cleanly when a `reloaded` session has recording toggled off.
         recorder = None
@@ -505,12 +496,12 @@ def runtime(
                 .register_to_rm()
             )
             recorder.snapshot(state, Path(__file__).parent / "ground.jpg")
+
         while state.data.time < 4.0:
             rm.step(state)
 
         if recorder:
             recorder.snapshot(state, Path(__file__).parent / "landed.jpg")
-        # --8<-- [end:stepping]
 
     return mojo_model
 
@@ -527,7 +518,6 @@ if __name__ == "__main__":
         runtime=runtime,
         workdir=workdir,
         config=mojo.utils.MonteCarloConfig(n_trial=1, n_proc=1, resume=False),
-    )
+    ).run(clean_workdir=True)
 
-    runner.run(clean_workdir=True)
 # --8<-- [end:main]

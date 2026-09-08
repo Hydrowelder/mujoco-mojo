@@ -49,14 +49,22 @@ A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered 
 Install using `uv` (recommended):
 
 ```bash
-uv add mujoco-mojo
+uv add mujoco-mojo[all]
 ```
 
 or with `pip`:
 
 ```bash
-pip install mujoco-mojo
+pip install mujoco-mojo[all]
 ```
+
+> [!NOTE]
+>
+> To get the most out of MuJoCo Mojo, select additional extras from this list (or use `[all]` to install all of them):
+>
+> - `[reloaded]`: the [hot-reloading development loop](#reloaded), including its OpenGL/Viser > visualizers.
+> - `[mesh-decomp]`: concave mesh decomposition via CoACD.
+> - `[optimize]`: Bayesian optimization studies powered by Optuna.
 
 ---
 
@@ -170,5 +178,6 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 ---
 
 > [!NOTE]
+>
 > **MuJoCo Mojo** is an independently developed open-source toolbox. It is **not** affiliated with, sponsored by, or endorsed by **Google DeepMind** or the official **MuJoCo** development team.
 > MuJoCo® is a registered trademark of Google LLC. All MJCF schemas and MuJoCo-related terminology used within this project are for compatibility and documentation purposes only.
