@@ -307,7 +307,7 @@ def test_write_schema_files_writes_schema_and_taplo_config(tmp_path: Path) -> No
     assert schema_path.exists()
     schema = json.loads(schema_path.read_text())
     symlink_prop = schema["$defs"]["AssetBundlingSettings"]["properties"]["symlink"]
-    assert symlink_prop["description"].endswith("Default: `false`.")
+    assert symlink_prop["description"].endswith("Default: `false`")
 
     assert taplo_path.exists()
     taplo_content = taplo_path.read_text()
