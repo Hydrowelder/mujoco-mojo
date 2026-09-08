@@ -45,6 +45,7 @@ __all__ = [
     "FlexCompType",
     "FlexName",
     "FluidShape",
+    "FrameName",
     "GainType",
     "GeomGroup",
     "GeomName",

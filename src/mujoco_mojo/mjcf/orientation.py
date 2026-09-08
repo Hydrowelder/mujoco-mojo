@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, overload
 
 import numpy as np
@@ -34,15 +34,19 @@ __all__ = [
 class OrientationType(StrEnum):
     """Defines the type field for orientation types (used for discriminated union)."""
 
-    QUAT = auto()
+    QUAT = "quat"
     """Quaternion type."""
-    AXISANGLE = auto()
+
+    AXISANGLE = "axisangle"
     """Axis angle type."""
-    XYAXES = auto()
+
+    XYAXES = "xyaxes"
     """XY axes type."""
-    ZAXIS = auto()
+
+    ZAXIS = "zaxis"
     """Z axis type."""
-    EULER = auto()
+
+    EULER = "euler"
     """Euler angle type."""
 
 

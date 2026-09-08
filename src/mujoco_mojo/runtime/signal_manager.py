@@ -399,6 +399,10 @@ class SignalManager:
         self._part_paths.clear()
 
     def close(self):
+        # captured before flush()/_merge_parts() reset this state, so the log below
+        # doesn't claim data was saved when recording was disabled for this run
+        had_data = self._buffer_row_idx > 0 or bool(self._part_paths)
         self.flush()
         self._merge_parts()
-        logger.info(f"Telemetry stream closed. Data saved to {self.export_path}")
+        if had_data:
+            logger.info(f"Telemetry stream closed. Data saved to {self.export_path}")

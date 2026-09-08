@@ -120,10 +120,37 @@ def test_video_capture_with_arrows(mj_setup):
     assert len(kwargs["custom_arrows"]) == 1
 
 
+def test_video_capture_skipped_when_recording_disabled(mj_setup):
+    """`_skip_recording` must gate video frame capture the same way it gates telemetry."""
+    model, data = mj_setup
+    state = MjState(model, data)
+
+    mock_recorder = MagicMock()
+    mgr = RuntimeManager(video_recorders=[mock_recorder], _skip_recording=True)
+
+    mgr.step(state)
+
+    mock_recorder.capture_frame.assert_not_called()
+    assert mgr.recording is False
+
+
+def test_save_recordings_skips_log_when_no_frames_captured(caplog):
+    """save_recordings still saves/closes every recorder (releasing its GL context) but shouldn't claim video was saved when nothing was captured."""
+    mock_recorder = MagicMock(frame_count=0)
+    mgr = RuntimeManager(video_recorders=[mock_recorder])
+
+    with caplog.at_level("INFO"):
+        mgr.save_recordings()
+
+    mock_recorder.save.assert_called_once()
+    mock_recorder.close.assert_called_once()
+    assert not any("Saving" in r.message for r in caplog.records)
+
+
 @patch("mujoco_mojo.runtime.runtime_manager.ThreadPoolExecutor")
 def test_parallel_video_save(mock_executor_cls, rm: SignalManager):
     """Verify that save_recordings uses parallel execution."""
-    mock_recorder = MagicMock()
+    mock_recorder = MagicMock(frame_count=1)
     mgr = RuntimeManager(video_recorders=[mock_recorder])
 
     mgr.save_recordings()
@@ -206,7 +233,7 @@ def test_exit_saves_recordings_when_present(
     mock_executor_cls: MagicMock, rm: SignalManager
 ) -> None:
     """__exit__ calls save_recordings() when video_recorders is non-empty."""
-    mock_recorder = MagicMock()
+    mock_recorder = MagicMock(frame_count=1)
     with RuntimeManager(signal_manager=rm, video_recorders=[mock_recorder]):
         pass
 

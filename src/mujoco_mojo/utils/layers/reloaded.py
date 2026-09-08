@@ -633,7 +633,7 @@ class MojoReloaded:
                 "- [bold white]seed <N>[/]: Set seed to N [dim](use [bold]seed none[/bold] to clear)[/dim]\n"
                 "- [bold white]trial <N>[/]: Set trial number to N\n"
                 f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
-                f"- [bold blue]record[/bold blue]: Toggle telemetry recording for [dim]mujoco-mojo dojo[/dim] (currently {record_status})\n"
+                f"- [bold blue]record[/bold blue]: Toggle telemetry (for [dim]mujoco-mojo dojo[/dim]) and video recording (currently {record_status})\n"
                 "- [bold blue]dojo[/bold blue]: Print a command to launch the Dojo monitor for this session\n"
                 "- [bold red]stop[/bold red] / [bold red]halt[/bold red]: Abort a run in progress\n"
                 "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
