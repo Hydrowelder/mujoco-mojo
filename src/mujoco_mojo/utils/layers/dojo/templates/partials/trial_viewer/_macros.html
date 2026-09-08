@@ -1,131 +1,131 @@
 {# Small hover-info icon showing a PlotConfig field's Pydantic Field
-   description as a tooltip - used next to Plot Editor labels (_chart.html)
-   so each control's exact semantics (units, valid range, what "None" does,
-   etc.) are one hover away, sourced from the same
-   /mosaic/api/plot-config-schema the JSON editor's own CodeMirror hover
-   tooltips read (trial-viewer.ts's plotFieldHelp/describeSchemaPath), not
-   a hand-written copy that could drift from the actual field. Icon +
-   .tooltip-panel is the same pure-CSS group-hover pattern the X-Axis
-   selector's own help icon already uses (_series_panel.html) - reused
-   here as a macro since this one repeats across every field in the
-   popover rather than being written out once.
+description as a tooltip - used next to Plot Editor labels (_chart.html)
+so each control's exact semantics (units, valid range, what "None" does,
+etc.) are one hover away, sourced from the same
+/mosaic/api/plot-config-schema the JSON editor's own CodeMirror hover
+tooltips read (trial-viewer.ts's plotFieldHelp/describeSchemaPath), not
+a hand-written copy that could drift from the actual field. Icon +
+.tooltip-panel is the same pure-CSS group-hover pattern the X-Axis
+selector's own help icon already uses (_series_panel.html) - reused
+here as a macro since this one repeats across every field in the
+popover rather than being written out once.
 
-   help_expr is an Alpine expression string (not a literal value, same
-   convention as this file's other macros) - typically
-   "plotFieldHelp('someKey')". x-show hides the icon until the schema's
-   loaded (a fetch on page init, not instant) rather than showing a dead
-   icon with an empty tooltip in the meantime. normal-case/tracking-normal/
-   font-normal on the tooltip's own text counteracts the uppercase/
-   tracking-widest styling every caller's <label> already has - CSS
-   text-transform inherits into this icon's tooltip since it's nested
-   inside that same label. #}
-{% macro field_help_icon(help_expr) %}
-{# peer/peer-hover (not group/group-hover) deliberately - group-hover keeps
-   the tooltip open as long as the mouse is anywhere inside the shared
-   .group ancestor, which includes the tooltip panel itself once it's
-   open, so moving the mouse onto the tooltip (or just past the icon
-   toward it) kept it stuck open instead of dismissing. peer scopes the
-   hover state to the icon element alone: the tooltip is a later sibling
-   reacting to peer-hover, not a descendant of a hovered container, so it
-   only shows while the pointer is directly over the icon.
-   pointer-events-none on the tooltip is the other half of that - without
-   it, the moment the tooltip appears under the cursor (its mt-2 offset is
-   small) the pointer can end up "over" the tooltip itself, which would
-   otherwise flicker the peer's own :hover state right at that boundary. #}
-<span class="cursor-help relative inline-flex"
-      x-show="{{ help_expr }}">
-    <svg class="peer w-3 h-3 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
-         fill="none"
-         stroke="currentColor"
-         viewBox="0 0 24 24">
-        <path stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2.5"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-    {# renderMarkdown() is the same shared $store.dojo helper the settings
-       panel's own tooltip already renders through (lib/settings-panel.ts,
-       via marked) - descriptions carry real markdown (backtick-wrapped
-       defaults like "Default: `3`.", the odd bulleted list), and it was
-       previously shown with x-text, which prints that syntax as literal
-       characters instead of formatting it. Reusing the one existing
-       renderer here instead of standing up a second one; md-inline-code
-       (main.css) mirrors _settings_panel.html's own tooltip styling so a
-       code span reads identically in both places. #}
-    <div class="tooltip-panel peer-hover:visible peer-hover:opacity-100 pointer-events-none left-1/2 -translate-x-1/2 w-56 normal-case tracking-normal font-normal text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
-         x-html="$store.dojo.renderMarkdown({{ help_expr }})"></div>
-</span>
-{% endmacro %}
+help_expr is an Alpine expression string (not a literal value, same
+convention as this file's other macros) - typically
+"plotFieldHelp('someKey')". x-show hides the icon until the schema's
+loaded (a fetch on page init, not instant) rather than showing a dead
+icon with an empty tooltip in the meantime. normal-case/tracking-normal/
+font-normal on the tooltip's own text counteracts the uppercase/
+tracking-widest styling every caller's <label> already has - CSS
+    text-transform inherits into this icon's tooltip since it's nested
+    inside that same label. #}
+    {% macro field_help_icon(help_expr) %}
+    {# peer/peer-hover (not group/group-hover) deliberately - group-hover keeps
+    the tooltip open as long as the mouse is anywhere inside the shared
+    .group ancestor, which includes the tooltip panel itself once it's
+    open, so moving the mouse onto the tooltip (or just past the icon
+    toward it) kept it stuck open instead of dismissing. peer scopes the
+    hover state to the icon element alone: the tooltip is a later sibling
+    reacting to peer-hover, not a descendant of a hovered container, so it
+    only shows while the pointer is directly over the icon.
+    pointer-events-none on the tooltip is the other half of that - without
+    it, the moment the tooltip appears under the cursor (its mt-2 offset is
+    small) the pointer can end up "over" the tooltip itself, which would
+    otherwise flicker the peer's own :hover state right at that boundary. #}
+    <span class="cursor-help relative inline-flex"
+          x-show="{{ help_expr }}">
+        <svg class="peer w-3 h-3 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
+             fill="none"
+             stroke="currentColor"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2.5"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {# renderMarkdown() is the same shared $store.dojo helper the settings
+        panel's own tooltip already renders through (lib/settings-panel.ts,
+        via marked) - descriptions carry real markdown (backtick-wrapped
+        defaults like "Default: `3`.", the odd bulleted list), and it was
+        previously shown with x-text, which prints that syntax as literal
+        characters instead of formatting it. Reusing the one existing
+        renderer here instead of standing up a second one; md-inline-code
+        (main.css) mirrors _settings_panel.html's own tooltip styling so a
+        code span reads identically in both places. #}
+        <div class="tooltip-panel peer-hover:visible peer-hover:opacity-100 pointer-events-none left-1/2 -translate-x-1/2 w-56 normal-case tracking-normal font-normal text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
+             x-html="$store.dojo.renderMarkdown({{ help_expr }})"></div>
+    </span>
+    {% endmacro %}
 
-{# Per-field "reset to default" icon - the same affordance and icon (a
-   circular undo arrow) the Dojo settings panel's own per-field reset
-   button already uses (_settings_panel.html). Only shown once
-   is_default_expr is falsy - a reset button that's always visible even
-   when it would be a no-op just adds visual noise. Both args are raw
-   Alpine expression strings (unlike field_reset_icon(key) below, which
-   builds these two from a single PlotConfig key), so this base macro also
-   covers fields that don't live on `config` directly - e.g.
-   _series_panel.html's Y-axis line-config panel, whose fields live on a
-   local `temp` draft object instead. #}
-{% macro field_reset_icon_expr(is_default_expr, on_click_expr) %}
-<button type="button"
-        x-show="!({{ is_default_expr }})"
-        @click="{{ on_click_expr }}"
-        title="Reset to default"
-        class="shrink-0 text-ink-muted hover:text-accent-500 transition-colors">
-    <svg class="w-3 h-3"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="2"
-         viewBox="0 0 24 24">
-        <path stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0113.9-3.5M19.5 15a8 8 0 01-13.9 3.5" />
-    </svg>
-</button>
-{% endmacro %}
+    {# Per-field "reset to default" icon - the same affordance and icon (a
+    circular undo arrow) the Dojo settings panel's own per-field reset
+    button already uses (_settings_panel.html). Only shown once
+    is_default_expr is falsy - a reset button that's always visible even
+    when it would be a no-op just adds visual noise. Both args are raw
+    Alpine expression strings (unlike field_reset_icon(key) below, which
+    builds these two from a single PlotConfig key), so this base macro also
+    covers fields that don't live on `config` directly - e.g.
+    _series_panel.html's Y-axis line-config panel, whose fields live on a
+    local `temp` draft object instead. #}
+    {% macro field_reset_icon_expr(is_default_expr, on_click_expr) %}
+    <button type="button"
+            x-show="!({{ is_default_expr }})"
+            @click="{{ on_click_expr }}"
+            title="Reset to default"
+            class="shrink-0 text-ink-muted hover:text-accent-500 transition-colors">
+        <svg class="w-3 h-3"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0113.9-3.5M19.5 15a8 8 0 01-13.9 3.5" />
+        </svg>
+    </button>
+    {% endmacro %}
 
-{# Thin wrapper for the common case: a top-level PlotConfig field, reset
-   through plotFieldIsDefault/resetPlotField (config.KEY vs. DEFAULT_CONFIG,
-   trial-viewer.ts) - every PlotConfig field genuinely has a default now
-   (see plot_config.py), so this always has something real to fall back
-   to. key is a PLAIN STRING (not an Alpine expression, unlike this file's
-   other macro args) since it's used both inside an Alpine expression
-   string (quoted below) and directly in the Jinja template - callers pass
-   it as e.g. 'grid', matching plotFieldHelp/resetPlotField's own
-   single-key form (not the Shape/Notes editors' def-field form, which
-   this macro doesn't cover since those don't have a single well-defined
-   "default" the way a top-level PlotConfig field does). #}
-{% macro field_reset_icon(key) %}
-{{ field_reset_icon_expr("plotFieldIsDefault('" ~ key ~ "')", "resetPlotField('" ~ key ~ "')") }}
-{% endmacro %}
+    {# Thin wrapper for the common case: a top-level PlotConfig field, reset
+    through plotFieldIsDefault/resetPlotField (config.KEY vs. DEFAULT_CONFIG,
+    trial-viewer.ts) - every PlotConfig field genuinely has a default now
+    (see plot_config.py), so this always has something real to fall back
+    to. key is a PLAIN STRING (not an Alpine expression, unlike this file's
+    other macro args) since it's used both inside an Alpine expression
+    string (quoted below) and directly in the Jinja template - callers pass
+    it as e.g. 'grid', matching plotFieldHelp/resetPlotField's own
+    single-key form (not the Shape/Notes editors' def-field form, which
+    this macro doesn't cover since those don't have a single well-defined
+    "default" the way a top-level PlotConfig field does). #}
+    {% macro field_reset_icon(key) %}
+    {{ field_reset_icon_expr("plotFieldIsDefault('" ~ key ~ "')", "resetPlotField('" ~ key ~ "')") }}
+    {% endmacro %}
 
-{# :style binding for a single-thumb <input type="range"> that fills its
-   own track proportionally to the current value, the way the Y-axis
-   line-config panel's Width/Opacity sliders now do - browsers only paint
-   an accent-colored *thumb* from accent-color (Firefox also fills the
-   track to its left, Chrome doesn't), so the fill itself needs an actual
-   background gradient recomputed as the value changes, split at the
-   current value's percent-of-range. Left of that split is
-   --color-accent-500 (solid, matching accent-accent-500's thumb color),
-   right of it --color-track (the same token the plain bg-track utility
-   class uses elsewhere for this exact "empty slider trough" role) - so
-   drop bg-track from the input's own class list when using this, since
-   the inline style already covers that half. value_expr/min_val/max_val
-   are all raw Alpine expressions/literals, not quoted strings - callers
-   pass e.g. ('temp.width', 0.5, 8). Not used by the versus (comparison)
-   range slider in _header.html, which fakes its own fill differently
-   since it has two thumbs (a min/max pair) rather than one value - a
-   single background gradient can't represent that, so it instead
-   overlays a separately-positioned fill <div> between the two thumbs. #}
-{% macro range_slider_fill_style(value_expr, min_val, max_val) %}
-`background: linear-gradient(to right, var(--color-accent-500) ${Math.max(0, Math.min(100, (({{ value_expr }} - {{ min_val }}) / ({{ max_val }} - {{ min_val }})) * 100))}%, var(--color-track) 0%)`
-{% endmacro %}
+    {# :style binding for a single-thumb <input type="range"> that fills its
+    own track proportionally to the current value, the way the Y-axis
+    line-config panel's Width/Opacity sliders now do - browsers only paint
+    an accent-colored *thumb* from accent-color (Firefox also fills the
+    track to its left, Chrome doesn't), so the fill itself needs an actual
+    background gradient recomputed as the value changes, split at the
+    current value's percent-of-range. Left of that split is
+    --color-accent-500 (solid, matching accent-accent-500's thumb color),
+    right of it --color-track (the same token the plain bg-track utility
+    class uses elsewhere for this exact "empty slider trough" role) - so
+    drop bg-track from the input's own class list when using this, since
+    the inline style already covers that half. value_expr/min_val/max_val
+    are all raw Alpine expressions/literals, not quoted strings - callers
+    pass e.g. ('temp.width', 0.5, 8). Not used by the versus (comparison)
+    range slider in _header.html, which fakes its own fill differently
+    since it has two thumbs (a min/max pair) rather than one value - a
+    single background gradient can't represent that, so it instead
+    overlays a separately-positioned fill <div> between the two thumbs. #}
+        {% macro range_slider_fill_style(value_expr, min_val, max_val) %}
+        `background: linear-gradient(to right, var(--color-accent-500) ${Math.max(0, Math.min(100, (({{ value_expr }} - {{ min_val }}) / ({{ max_val }} - {{ min_val }})) * 100))}%, var(--color-track) 0%)`
+        {% endmacro %}
 
-{% macro color_picker(color_model, ref_name, label, on_change='', width=280, help_expr='') %}
-{%- set box_h = (width * 160) // 280 -%}
-<div class="space-y-2"
-     x-init="$nextTick(() => {
+        {% macro color_picker(color_model, ref_name, label, on_change='', width=280, help_expr='') %}
+        {%- set box_h = (width * 160) // 280 -%}
+        <div class="space-y-2"
+             x-init="$nextTick(() => {
     const picker = window.mojoCreateColorPicker(
         $refs.{{ ref_name }},
         {{ width }},
@@ -141,285 +141,492 @@
         {% if on_change %}{{ on_change }};{% endif %}
     });
 })">
-    <div class="flex items-center justify-between mb-1">
-        <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">{{ label }}
-            {% if help_expr %}{{ field_help_icon(help_expr) }}{% endif %}
-        </label>
-        <div class="flex gap-1.5">
-            <template x-for="color in plotColors"
-                      :key="color">
-                <button @click="{{ color_model }} = color{% if on_change %}; {{ on_change }}{% endif %}"
-                        class="w-5 h-5 rounded-full border border-white dark:border-canvas shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-accent-500 outline-none"
-                        :style="`background-color: ${color}`"
-                        :class="{{ color_model }} === color ? 'ring-2 ring-accent-500 scale-110' : ''">
-                </button>
-            </template>
-        </div>
-    </div>
-    <div class="flex justify-center">
-        <div x-ref="{{ ref_name }}"></div>
-    </div>
-    <div class="flex gap-2 mt-1">
-        <div class="relative flex-1">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted font-mono text-sm pointer-events-none">#</span>
-            <input type="text"
-                   :value="({{ color_model }} || '').replace('#', '')"
-                   @input="
+            <div class="flex items-center justify-between mb-1">
+                <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">{{ label }}
+                    {% if help_expr %}{{ field_help_icon(help_expr) }}{% endif %}
+                </label>
+                <div class="flex gap-1.5">
+                    <template x-for="color in plotColors"
+                              :key="color">
+                        <button @click="{{ color_model }} = color{% if on_change %}; {{ on_change }}{% endif %}"
+                                class="w-5 h-5 rounded-full border border-white dark:border-canvas shadow-sm transition-transform hover:scale-125 focus:ring-1 focus:ring-accent-500 outline-none"
+                                :style="`background-color: ${color}`"
+                                :class="{{ color_model }} === color ? 'ring-2 ring-accent-500 scale-110' : ''">
+                        </button>
+                    </template>
+                </div>
+            </div>
+            <div class="flex justify-center">
+                <div x-ref="{{ ref_name }}"></div>
+            </div>
+            <div class="flex gap-2 mt-1">
+                <div class="relative flex-1">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted font-mono text-sm pointer-events-none">#</span>
+                    <input type="text"
+                           :value="({{ color_model }} || '').replace('#', '')"
+                           @input="
                        let v = $event.target.value.replace(/[^a-fA-F0-9]/g, '').substring(0, 6);
                        {{ color_model }} = '#' + v;
                        {% if on_change %}{{ on_change }};{% endif %}
                    "
-                   class="input-color text-accent-700 dark:text-ink-strong" />
+                           class="input-color text-accent-700 dark:text-ink-strong" />
+                </div>
+                <div class="w-10 h-10 rounded-md border border-inset shadow-inner shrink-0"
+                     :style="'background-color: ' + ({{ color_model }})"></div>
+            </div>
         </div>
-        <div class="w-10 h-10 rounded-md border border-inset shadow-inner shrink-0"
-             :style="'background-color: ' + ({{ color_model }})"></div>
-    </div>
-</div>
-{% endmacro %}
+        {% endmacro %}
 
-{# Search box: leading magnifying-glass icon (the exact path from the Dojo
-   settings panel's own search box, _settings_panel.html - copied verbatim
-   for a byte-identical icon everywhere, not a redrawn lookalike) + an
-   .input-search field + a trailing .input-clear-btn, shown only once
-   there's something to clear. model_expr is the Alpine model to bind (a
-   string naming it, not a value - see the folder-tree macros' own note on
-   this). extra_input_attrs is raw text inserted directly into the <input>
-   tag, for call sites that need their own @keydown handlers (tab-complete,
-   escape-to-clear, enter-to-select) alongside the shared x-model/placeholder/
-   class this macro already supplies - Jinja has no attribute-spread syntax,
-   so a raw string is the simplest way to still let each caller add exactly
-   what it needs without this macro growing a parameter per possible handler. #}
-{% macro tree_search_input(model_expr, placeholder, extra_input_attrs='') %}
-<div class="relative">
-    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="2"
-         viewBox="0 0 24 24">
-        <path stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-    </svg>
-    <input type="text"
-           x-model="{{ model_expr }}"
-           placeholder="{{ placeholder }}"
-           {{ extra_input_attrs|safe }}
-           class="input-search" />
-    <button x-show="{{ model_expr }}"
-            type="button"
-            @click="{{ model_expr }} = ''"
-            class="input-clear-btn"
-            title="Clear search">
-        <svg class="w-3.5 h-3.5"
-             fill="none"
-             stroke="currentColor"
-             stroke-width="2.5"
-             viewBox="0 0 24 24">
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M6 18L18 6M6 6l12 12" />
-        </svg>
-    </button>
-</div>
-{% endmacro %}
-
-{# ── Folder-tree rows (lib/tree.ts's buildTreeRows/visibleTreeRows) ──────────
-   Shared by Profiles (_chart.html), Signal Lab configs (_signal_lab.html),
-   and the X/Y-axis and node-picker signal dropdowns (_series_panel.html,
-   _signal_lab.html) - all save/list entries under "folder/sub/name"-style
-   paths with no real folder entity anywhere, and all render the same flat,
-   depth-annotated row list lib/tree.ts produces.
-   row_expr/toggle_expr/is_collapsed_expr are Alpine expression *strings*
-   (the loop variable name, and full expressions to run/evaluate where the
-   macro is called), same pattern settings_field_row (see
-   partials/_settings_panel.html) uses for its own field-row macro - a macro
-   argument here is source text, not a value, since Jinja renders this once
-   at template-compile time while the actual data only exists later at
-   runtime in the browser. toggle_expr/is_collapsed_expr are full
-   expressions rather than a bare collapsed-state Record name because the
-   column dropdowns key their collapsed-state map differently (one flat map
-   covering 4 fields, keyed "field:path") than Profiles/Labs (one Record
-   each, keyed by bare path) - a plain bracket lookup on a fixed variable
-   name couldn't express both.
-   Only the folder row is shared: file/leaf rows differ enough between
-   these callers (profiles show a warning icon; labs show validity/template
-   badges and an inline info panel; the signal dropdowns select-on-click
-   with no badges at all) that unifying them would cost more readability
-   than it'd save. #}
-
-{# Indentation for one row: `row.depth` repeated 14px slots, each with a
-   thin line CENTERED inside it (not a left-edge border) - a flat row list
-   has no container wrapping "this folder's children" the way nested markup
-   would, so there's nowhere to hang a single border that visually spans a
-   whole open folder's contents. Every visible row is (by construction: a
-   collapsed folder's descendants render with row.hidden=true, never with a
-   different DOM shape) inside only open ancestors, so each row drawing its
-   own same-position segment at every ancestor depth is what makes the
-   segments line up into one continuous line down the list, the same
-   technique VS Code's own (also flat/virtualized) explorer uses for its
-   indent guides.
-
-   Two things that broke this the first time, both fixed by wrapping the
-   slots in their own dedicated flex div rather than emitting them as bare
-   siblings of the row's other content:
-   - Every row container here uses gap-* for spacing its own icon/text
-     content, which - since a bare sibling is still just another flex
-     child - inserted that same gap *between each guide slot too*,
-     breaking them into visibly disconnected segments instead of one
-     continuous line. A dedicated wrapper with no gap of its own isolates
-     the slots from whatever gap the caller's row happens to use.
-   - An empty slot has 0 height under items-center (which every row uses
-     to vertically center its own text/icons) unless something forces it
-     to stretch; self-stretch here is what makes the line's height match
-     the row instead of collapsing to nothing.
-   Centering the line inside each 14px slot (rather than drawing it at the
-   slot's left edge) is what lets it land on a folder's chevron center
-   below/above it: tree_folder_row centers its own chevron in an identical
-   14px slot immediately after these, with no gap between the two -
-   without that, the two 14px sequences (this one, and the chevron's own)
-   would be offset from each other and the lines would end up next to the
-   chevron rather than through its middle. #}
-{% macro tree_indent_guides(row_expr) %}
-<div class="flex shrink-0 self-stretch">
-    <template x-for="_i in {{ row_expr }}.depth"
-              :key="_i">
-        <div class="w-3.5 shrink-0 flex justify-center">
-            <div class="w-px bg-line"></div>
-        </div>
-    </template>
-</div>
-{% endmacro %}
-
-{% macro tree_folder_row(row_expr, toggle_expr, is_collapsed_expr) %}
-{# py-1.5 lives on the "icon+name" span below, a plain sibling of the
-   guide+chevron group rather than its ancestor. tree_indent_guides's
-   self-stretch fills whatever flex box directly *contains* it, which
-   excludes that box's own padding - an earlier version of this macro put
-   py-1.5 on a span that wrapped the guide, which still left a
-   padding-sized gap at every row (the guide was still nested one level
-   inside the padding, just relocated, not actually freed from it).
-   Padding on a plain sibling instead works because flexbox computes a
-   line's cross size from items' natural sizes first (the padded span,
-   being the tallest, sets the line height to content+padding), then
-   stretches self-stretch items - including the guide, now genuinely
-   outside any padded ancestor - to match that in a second pass.
-
-   The guide and chevron are wrapped together in their own no-gap,
-   self-stretch span (not left as two more direct children of the button)
-   so .expander-header's own gap-2, which now runs between this group and
-   the icon+name span, can't also land *between the guide and the
-   chevron* - they still need to sit with zero gap between them for a
-   child row's own guide line to land exactly through this chevron's
-   center (see tree_indent_guides' own comment). self-stretch is repeated
-   on this wrapper itself, not just the guide inside it: without it, the
-   wrapper wouldn't grow past its own unpadded content size either, and
-   the guide inside it would just be stretching to match ITS wrapper's
-   too-short height instead of the button's true one. #}
-<button @click="{{ toggle_expr }}"
-        :title="{{ row_expr }}.path"
-        class="expander-header text-xs normal-case pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50">
-    <span class="flex items-center self-stretch shrink-0">
-        {{ tree_indent_guides(row_expr) }}
-        <!-- chevron: same w-3.5 width as a guide slot, immediately after
-             the guides with no gap between - see tree_indent_guides'
-             comment above for why that specific adjacency is what lines a
-             child row's own guide line up with this chevron's center. -->
-        <span class="w-3.5 shrink-0 flex items-center justify-center">
-            <svg class="expander-chevron w-3 h-3"
-                 :class="({{ is_collapsed_expr }}) ? '-rotate-90' : ''"
+        {# Search box: leading magnifying-glass icon (the exact path from the Dojo
+        settings panel's own search box, _settings_panel.html - copied verbatim
+        for a byte-identical icon everywhere, not a redrawn lookalike) + an
+        .input-search field + a trailing .input-clear-btn, shown only once
+        there's something to clear. model_expr is the Alpine model to bind (a
+        string naming it, not a value - see the folder-tree macros' own note on
+        this). extra_input_attrs is raw text inserted directly into the <input>
+        tag, for call sites that need their own @keydown handlers (tab-complete,
+        escape-to-clear, enter-to-select) alongside the shared x-model/placeholder/
+        class this macro already supplies - Jinja has no attribute-spread syntax,
+        so a raw string is the simplest way to still let each caller add exactly
+        what it needs without this macro growing a parameter per possible handler. #}
+        {% macro tree_search_input(model_expr, placeholder, extra_input_attrs='') %}
+        <div class="relative">
+            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none"
                  fill="none"
                  stroke="currentColor"
-                 stroke-width="3"
+                 stroke-width="2"
                  viewBox="0 0 24 24">
                 <path stroke-linecap="round"
                       stroke-linejoin="round"
-                      d="M19 9l-7 7-7-7" />
+                      d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
             </svg>
-        </span>
-    </span>
-    <span class="flex items-center gap-1.5 min-w-0 flex-1 py-1.5">
-        <svg class="w-3.5 h-3.5 shrink-0 text-ink-muted"
-             fill="none"
-             stroke="currentColor"
-             stroke-width="1.75"
-             viewBox="0 0 24 24">
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-        </svg>
-        <span class="truncate text-ink-body"
-              x-text="{{ row_expr }}.name"></span>
-    </span>
-    <span class="text-xs font-mono text-ink-muted shrink-0"
-          x-text="{{ row_expr }}.fileCount"></span>
-</button>
-{% endmacro %}
+            <input type="text"
+                   x-model="{{ model_expr }}"
+                   placeholder="{{ placeholder }}"
+                   {{
+                   extra_input_attrs|safe
+                   }}
+                   class="input-search" />
+            <button x-show="{{ model_expr }}"
+                    type="button"
+                    @click="{{ model_expr }} = ''"
+                    class="input-clear-btn"
+                    title="Clear search">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2.5"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        {% endmacro %}
 
-{# Expand-all/collapse-all icon buttons for a folder tree above. Double-chevron
-   glyphs (plain straight diagonal lines, not a hand-typed curve) - see the
-   "no browser, no screenshots" note in CLAUDE.md for why this file avoids
-   curve paths nobody can render to check. Hidden entirely via has_folders_expr
-   when the current list has no subfolders at all, matching how the settings
-   panel's own search box only shows once there's something to search. #}
-{% macro tree_expand_collapse_buttons(expand_expr, collapse_expr, has_folders_expr) %}
-<div class="flex items-center gap-0.5 shrink-0"
-     x-show="{{ has_folders_expr }}">
-    <button type="button"
-            @click="{{ expand_expr }}"
-            title="Expand all folders"
-            class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
-        <svg class="w-3.5 h-3.5"
-             fill="none"
-             stroke="currentColor"
-             stroke-width="2"
-             viewBox="0 0 24 24">
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M7 8l5 5 5-5" />
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M7 14l5 5 5-5" />
-        </svg>
-    </button>
-    <button type="button"
-            @click="{{ collapse_expr }}"
-            title="Collapse all folders"
-            class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
-        <svg class="w-3.5 h-3.5"
-             fill="none"
-             stroke="currentColor"
-             stroke-width="2"
-             viewBox="0 0 24 24">
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M7 16l5-5 5 5" />
-            <path stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M7 10l5-5 5 5" />
-        </svg>
-    </button>
-</div>
-{% endmacro %}
+        {# ── Folder-tree rows (lib/tree.ts's buildTreeRows/visibleTreeRows) ──────────
+        Shared by Profiles (_chart.html), Signal Lab configs (_signal_lab.html),
+        and the X/Y-axis and node-picker signal dropdowns (_series_panel.html,
+        _signal_lab.html) - all save/list entries under "folder/sub/name"-style
+        paths with no real folder entity anywhere, and all render the same flat,
+        depth-annotated row list lib/tree.ts produces.
+        row_expr/toggle_expr/is_collapsed_expr are Alpine expression *strings*
+        (the loop variable name, and full expressions to run/evaluate where the
+        macro is called), same pattern settings_field_row (see
+        partials/_settings_panel.html) uses for its own field-row macro - a macro
+        argument here is source text, not a value, since Jinja renders this once
+        at template-compile time while the actual data only exists later at
+        runtime in the browser. toggle_expr/is_collapsed_expr are full
+        expressions rather than a bare collapsed-state Record name because the
+        column dropdowns key their collapsed-state map differently (one flat map
+        covering 4 fields, keyed "field:path") than Profiles/Labs (one Record
+        each, keyed by bare path) - a plain bracket lookup on a fixed variable
+        name couldn't express both.
+        Only the folder row is shared: file/leaf rows differ enough between
+        these callers (profiles show a warning icon; labs show validity/template
+        badges and an inline info panel; the signal dropdowns select-on-click
+        with no badges at all) that unifying them would cost more readability
+        than it'd save. #}
 
-{# Leaf row for the signal-selector trees (X/Y-axis and node-picker dropdowns,
-   _series_panel.html / _signal_lab.html) - select-on-click with a filled dot
-   for "currently selected", no badges. Shows just row.name (the last path
-   segment) rather than the full path breakableLabel() used to wrap in the
-   old flat list: indentation and the folder rows above already convey the
-   hierarchy, so the full path would now be redundant. #}
-{% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
-{# py-1.5 moved off the button and onto this inner span - same reasoning
-   as tree_folder_row's own comment above. #}
-<button @click="{{ select_expr }}"
-        :title="{{ row_expr }}.item"
-        class="w-full text-left pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
-    {{ tree_indent_guides(row_expr) }}
-    <span class="flex items-center gap-2 min-w-0 flex-1 py-1.5">
-        <span class="text-sm font-mono font-bold pl-1 pr-2 min-w-0 flex-1 truncate"
-              :class="({{ is_selected_expr }}) ? 'text-accent-500' : 'text-ink-secondary'"
-              x-text="{{ row_expr }}.name"></span>
-        <span x-show="{{ is_selected_expr }}"
-              class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
-    </span>
-</button>
-{% endmacro %}
+        {# Indentation for one row: `row.depth` repeated 14px slots, each with a
+        thin line CENTERED inside it (not a left-edge border) - a flat row list
+        has no container wrapping "this folder's children" the way nested markup
+        would, so there's nowhere to hang a single border that visually spans a
+        whole open folder's contents. Every visible row is (by construction: a
+        collapsed folder's descendants render with row.hidden=true, never with a
+        different DOM shape) inside only open ancestors, so each row drawing its
+        own same-position segment at every ancestor depth is what makes the
+        segments line up into one continuous line down the list, the same
+        technique VS Code's own (also flat/virtualized) explorer uses for its
+        indent guides.
+
+        Two things that broke this the first time, both fixed by wrapping the
+        slots in their own dedicated flex div rather than emitting them as bare
+        siblings of the row's other content:
+        - Every row container here uses gap-* for spacing its own icon/text
+        content, which - since a bare sibling is still just another flex
+        child - inserted that same gap *between each guide slot too*,
+        breaking them into visibly disconnected segments instead of one
+        continuous line. A dedicated wrapper with no gap of its own isolates
+        the slots from whatever gap the caller's row happens to use.
+        - An empty slot has 0 height under items-center (which every row uses
+        to vertically center its own text/icons) unless something forces it
+        to stretch; self-stretch here is what makes the line's height match
+        the row instead of collapsing to nothing.
+        Centering the line inside each 14px slot (rather than drawing it at the
+        slot's left edge) is what lets it land on a folder's chevron center
+        below/above it: tree_folder_row centers its own chevron in an identical
+        14px slot immediately after these, with no gap between the two -
+        without that, the two 14px sequences (this one, and the chevron's own)
+        would be offset from each other and the lines would end up next to the
+        chevron rather than through its middle. #}
+        {% macro tree_indent_guides(row_expr) %}
+        <div class="flex shrink-0 self-stretch">
+            <template x-for="_i in {{ row_expr }}.depth"
+                      :key="_i">
+                <div class="w-3.5 shrink-0 flex justify-center">
+                    <div class="w-px bg-line"></div>
+                </div>
+            </template>
+        </div>
+        {% endmacro %}
+
+        {% macro tree_folder_row(row_expr, toggle_expr, is_collapsed_expr) %}
+        {# py-1.5 lives on the "icon+name" span below, a plain sibling of the
+        guide+chevron group rather than its ancestor. tree_indent_guides's
+        self-stretch fills whatever flex box directly *contains* it, which
+        excludes that box's own padding - an earlier version of this macro put
+        py-1.5 on a span that wrapped the guide, which still left a
+        padding-sized gap at every row (the guide was still nested one level
+        inside the padding, just relocated, not actually freed from it).
+        Padding on a plain sibling instead works because flexbox computes a
+        line's cross size from items' natural sizes first (the padded span,
+        being the tallest, sets the line height to content+padding), then
+        stretches self-stretch items - including the guide, now genuinely
+        outside any padded ancestor - to match that in a second pass.
+
+        The guide and chevron are wrapped together in their own no-gap,
+        self-stretch span (not left as two more direct children of the button)
+        so .expander-header's own gap-2, which now runs between this group and
+        the icon+name span, can't also land *between the guide and the
+        chevron* - they still need to sit with zero gap between them for a
+        child row's own guide line to land exactly through this chevron's
+        center (see tree_indent_guides' own comment). self-stretch is repeated
+        on this wrapper itself, not just the guide inside it: without it, the
+        wrapper wouldn't grow past its own unpadded content size either, and
+        the guide inside it would just be stretching to match ITS wrapper's
+        too-short height instead of the button's true one. #}
+        <button @click="{{ toggle_expr }}"
+                :title="{{ row_expr }}.path"
+                class="expander-header text-xs normal-case pr-2 rounded-lg hover:bg-chip dark:hover:bg-chip/50">
+            <span class="flex items-center self-stretch shrink-0">
+                {{ tree_indent_guides(row_expr) }}
+                <!-- chevron: same w-3.5 width as a guide slot, immediately after
+             the guides with no gap between - see tree_indent_guides'
+             comment above for why that specific adjacency is what lines a
+             child row's own guide line up with this chevron's center. -->
+                <span class="w-3.5 shrink-0 flex items-center justify-center">
+                    <svg class="expander-chevron w-3 h-3"
+                         :class="({{ is_collapsed_expr }}) ? '-rotate-90' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="3"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M19 9l-7 7-7-7" />
+                    </svg>
+                </span>
+            </span>
+            <span class="flex items-center gap-1.5 min-w-0 flex-1 py-1.5">
+                <svg class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.75"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                </svg>
+                <span class="truncate text-ink-body"
+                      x-text="{{ row_expr }}.name"></span>
+            </span>
+            <span class="text-xs font-mono text-ink-muted shrink-0"
+                  x-text="{{ row_expr }}.fileCount"></span>
+        </button>
+        {% endmacro %}
+
+        {# Expand-all/collapse-all icon buttons for a folder tree above. Double-chevron
+        glyphs (plain straight diagonal lines, not a hand-typed curve) - see the
+        "no browser, no screenshots" note in CLAUDE.md for why this file avoids
+        curve paths nobody can render to check. Hidden entirely via has_folders_expr
+        when the current list has no subfolders at all, matching how the settings
+        panel's own search box only shows once there's something to search. #}
+        {% macro tree_expand_collapse_buttons(expand_expr, collapse_expr, has_folders_expr) %}
+        <div class="flex items-center gap-0.5 shrink-0"
+             x-show="{{ has_folders_expr }}">
+            <button type="button"
+                    @click="{{ expand_expr }}"
+                    title="Expand all folders"
+                    class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M7 8l5 5 5-5" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M7 14l5 5 5-5" />
+                </svg>
+            </button>
+            <button type="button"
+                    @click="{{ collapse_expr }}"
+                    title="Collapse all folders"
+                    class="p-1 text-ink-muted hover:text-accent-500 transition-colors">
+                <svg class="w-3.5 h-3.5"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M7 16l5-5 5 5" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M7 10l5-5 5 5" />
+                </svg>
+            </button>
+        </div>
+        {% endmacro %}
+
+        {# Leaf row for the signal-selector trees (X/Y-axis and node-picker dropdowns,
+        _series_panel.html / _signal_lab.html) - select-on-click with a filled dot
+        for "currently selected", no badges. Shows just row.name (the last path
+        segment) rather than the full path breakableLabel() used to wrap in the
+        old flat list: indentation and the folder rows above already convey the
+        hierarchy, so the full path would now be redundant. #}
+        {% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
+        {# py-1.5 moved off the button and onto this inner span - same reasoning
+        as tree_folder_row's own comment above. #}
+        <button @click="{{ select_expr }}"
+                :title="{{ row_expr }}.item"
+                class="w-full text-left pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
+            {{ tree_indent_guides(row_expr) }}
+            <span class="flex items-center gap-2 min-w-0 flex-1 py-1.5">
+                <span class="text-sm font-mono font-bold pl-1 pr-2 min-w-0 flex-1 truncate"
+                      :class="({{ is_selected_expr }}) ? 'text-accent-500' : 'text-ink-secondary'"
+                      x-text="{{ row_expr }}.name"></span>
+                <span x-show="{{ is_selected_expr }}"
+                      class="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0"></span>
+            </span>
+        </button>
+        {% endmacro %}
+
+        {# Generic tab bar shared by every tabbed panel in the trial viewer (Signal
+        Lab tabs, plot tabs): the bordered row, the scrollable drag-to-reorder
+        strip itself (dirty dot, close button, native middle-click-to-close via a
+        single capture-phase listener on the strip's own root - data-tab-id on
+        each tab lets that container listener find the right tab, since Alpine's
+        @mousedown.middle on x-for items is unreliable), and a shared "New tab"
+        button. Lifted out of Signal Lab's original inline tab bar
+        (_signal_lab.html) so plot tabs reuse the exact same markup with nothing
+        to keep in sync by hand - a future style change (colors, spacing, the
+        dirty dot, whatever) is one edit here, not one per feature. See
+        lib/tab-session.ts for the pure reorder/close-bookkeeping helpers this
+        macro's handlers call into via each caller's own method names.
+
+        tabs_expr/active_id_expr: Alpine expressions for the tab array and the
+        active tab's id, e.g. 'labTabs'/'labActiveTabId' or
+        'plotTabs'/'plotActiveTabId'.
+        name_expr/dirty_expr: Alpine expressions evaluated against the loop
+        variable `tab` - what "name" and "dirty" mean is feature-owned (Lab's
+        name is a saved-file name typed by the user; a plot tab's name is
+        just its config.title), so this macro never assumes where they come
+        from.
+        switch_fn/close_fn: method names taking a tab id.
+        reorder_fn: method name taking (draggedId, dropIndex) - each caller
+        wraps lib/tab-session.ts's reorderTabs() plus its own persist call,
+        since a bare imported function isn't reachable from an Alpine
+        expression the way a component method is.
+        close_event: the CustomEvent name middle-click-close dispatches, e.g.
+        'mojo:lab-close-tab' / 'mojo:plot-close-tab'.
+        new_fn/new_title: method name (no args) and title/tooltip text for the
+        shared "New tab" button.
+        renamable: when true, double-clicking a tab's name turns it into an
+        inline `x-model.lazy="{{ name_expr }}"` input instead of the plain
+        x-text label - only meaningful when name_expr is itself an assignable
+        expression (a plot tab's config.title is; a Signal Lab tab's name is
+        conceptually a saved-file name instead, renamed via its own "save as"
+        input, so Lab call sites should leave this false, the default).
+        duplicate_fn: optional method name taking a tab id - when given, adds
+        a "duplicate" icon next to the close button.
+        select_fn/selected_expr: optional multi-select support. When
+        select_fn is given, a plain click calls `{{ select_fn }}(tab.id,
+        $event)` instead of `{{ switch_fn }}(tab.id)` directly - the method
+        is expected to itself call switch_fn for a plain click, and handle
+        shift/ctrl/cmd-click range/toggle selection, since that logic needs
+        the full tab array and an anchor id this macro doesn't track.
+        selected_expr (an expression against loop var `tab`, like name_expr/
+        dirty_expr) then drives a visual ring distinct from the active tab's
+        own highlight. Leave both blank (the default) for plain single-select
+        behavior - Signal Lab has no bulk-select concept, only a single
+        active tab at a time.
+        Call with `{% call tab_strip(...) %}...{% endcall %}` (not a plain
+        `{{ tab_strip(...) }}` expression) when a caller needs extra, genuinely
+        feature-specific chips next to "New" - e.g. Signal Lab's "load a saved
+        graph into a new tab" dropdown, which has no plot-tab equivalent; the
+        block's content renders after the New button. Plain `{{ }}` calls (no
+        extra chips) work fine too - caller() is simply never invoked then. #}
+        {% macro tab_strip(tabs_expr, active_id_expr, name_expr, dirty_expr, switch_fn, close_fn, reorder_fn, close_event, new_fn, new_title='New tab', renamable=false, duplicate_fn='', select_fn='', selected_expr='') %}
+        <div class="shrink-0 flex items-stretch border-b border-subtle min-h-9">
+            <!-- scrollable tab strip -->
+            <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
+                 x-data="{ _dragId: null, _overIdx: null, _renamingTabId: null }"
+                 x-init="
+             $el.addEventListener('mousedown', e => {
+                 if (e.button !== 1) return;
+                 e.preventDefault();
+                 const tabEl = e.target.closest('[data-tab-id]');
+                 if (tabEl && tabEl.dataset.tabId)
+                     document.dispatchEvent(new CustomEvent('{{ close_event }}', { detail: { tabId: tabEl.dataset.tabId } }));
+             }, true);
+         "
+                 @{{
+                 close_event
+                 }}.document="{{ close_fn }}($event.detail.tabId)">
+                <template x-for="(tab, idx) in {{ tabs_expr }}"
+                          :key="tab.id">
+                    <div @click="{% if select_fn %}{{ select_fn }}(tab.id, $event){% else %}{{ switch_fn }}(tab.id){% endif %}"
+                         :data-tab-id="tab.id"
+                         role="button"
+                         tabindex="0"
+                         @keydown.enter="{{ switch_fn }}(tab.id)"
+                         {# draggable is disabled for whichever single tab is
+                            currently being renamed (never true for any tab
+                            when renamable=false, since _renamingTabId then
+                            never leaves null) - a plain draggable="true" on
+                            this element let its own drag-detection grab any
+                            mousedown inside it, including one meant to place
+                            a text cursor in the rename input below, which no
+                            amount of draggable="false"/stopPropagation on the
+                            input alone reliably overrode in testing; turning
+                            off dragging at the source while renaming removes
+                            the interference instead of trying to out-guard it. #}
+                         :draggable="_renamingTabId === tab.id ? 'false' : 'true'"
+                         @dragstart="
+                     _dragId = tab.id;
+                     $event.dataTransfer.effectAllowed = 'move';
+                     $event.dataTransfer.setData('text/plain', tab.id);
+                 "
+                         @dragover="
+                     if (_dragId && _dragId !== tab.id) {
+                         $event.preventDefault();
+                         _overIdx = idx;
+                         $event.dataTransfer.dropEffect = 'move';
+                     }
+                 "
+                         @dragleave="if (!$el.contains($event.relatedTarget)) _overIdx = null"
+                         @drop="
+                     if (_dragId && _dragId !== tab.id) {
+                         $event.preventDefault();
+                         {{ reorder_fn }}(_dragId, idx);
+                     }
+                     _dragId = null; _overIdx = null;
+                 "
+                         @dragend="_dragId = null; _overIdx = null;"
+                         {# native title tooltip - [UNSAVED] prefix only when
+                            dirty, no [SAVED] equivalent for the clean case. #}
+                         :title="(({{ dirty_expr }}) ? '[UNSAVED] ' : '') + (({{ name_expr }}) || 'untitled')"
+                         class="relative shrink-0 flex items-center gap-1.5 px-3 h-9 border-b-2 text-sm font-mono cursor-grab active:cursor-grabbing select-none group transition-colors rounded-t-lg"
+                         :class="[
+                             tab.id === {{ active_id_expr }} ? 'border-accent-500 text-ink-strong bg-accent-100/50 dark:bg-chip/50 font-bold cursor-default' : 'border-transparent text-ink-muted hover:text-accent-500 hover:bg-control',
+                             _overIdx === idx && _dragId !== tab.id ? 'ring-1 ring-inset ring-accent-500' : '',
+                             {% if selected_expr %}({{ selected_expr }}) ? 'ring-2 ring-inset ring-accent-400 bg-accent-400/15' : '',{% endif %}
+                         ]">
+                        <!-- dirty dot -->
+                        <span x-show="{{ dirty_expr }}"
+                              class="w-1.5 h-1.5 rounded-full bg-warning-400 shrink-0 flex-none"></span>
+                        <!-- tab name -->
+                        {% if renamable %}
+                        <template x-if="_renamingTabId !== tab.id">
+                            <span class="whitespace-nowrap"
+                                  :class="({{ name_expr }}) ? '' : 'italic opacity-50'"
+                                  x-text="({{ name_expr }}) || 'untitled'"
+                                  @dblclick.stop="_renamingTabId = tab.id; $nextTick(() => { $refs.tabNameInput?.focus(); $refs.tabNameInput?.select(); })"></span>
+                        </template>
+                        <template x-if="_renamingTabId === tab.id">
+                            <input x-ref="tabNameInput"
+                                   x-model.lazy="{{ name_expr }}"
+                                   draggable="false"
+                                   @click.stop
+                                   @mousedown.stop
+                                   @dblclick.stop
+                                   @keydown.enter="_renamingTabId = null"
+                                   @keydown.escape.stop="_renamingTabId = null"
+                                   @blur="_renamingTabId = null"
+                                   placeholder="untitled"
+                                   class="bg-transparent border-b border-accent-500 outline-none text-sm font-mono w-24 min-w-0" />
+                        </template>
+                        {% else %}
+                        <span class="whitespace-nowrap"
+                              :class="({{ name_expr }}) ? '' : 'italic opacity-50'"
+                              x-text="({{ name_expr }}) || 'untitled'"></span>
+                        {% endif %}
+                        {% if duplicate_fn %}
+                        <!-- duplicate button -->
+                        <button @click.stop="{{ duplicate_fn }}(tab.id)"
+                                title="Duplicate tab"
+                                class="shrink-0 opacity-50 group-hover:opacity-100 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-ink-muted hover:text-accent-500">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2"
+                                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-8 10h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        {% endif %}
+                        <!-- close button -->
+                        <button @click.stop="{{ close_fn }}(tab.id)"
+                                title="Close tab"
+                                class="shrink-0 opacity-50 group-hover:opacity-100 -mr-1 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-ink-muted hover:text-danger-500">
+                            <svg class="w-3 h-3"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+            </div>
+            <!-- tab action chips: shared "New" button, plus each caller's own
+         feature-specific extras passed in via a call block -->
+            <div class="shrink-0 flex items-center gap-1 px-2 border-l border-subtle">
+                <button @click="{{ new_fn }}()"
+                        title="{{ new_title }}"
+                        class="btn btn-secondary h-7 text-sm font-bold uppercase flex items-center gap-1 shrink-0">
+                    <svg class="w-3 h-3"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span class="hidden sm:inline">New</span>
+                </button>
+                {% if caller %}{{ caller() }}{% endif %}
+            </div>
+        </div>
+        {% endmacro %}

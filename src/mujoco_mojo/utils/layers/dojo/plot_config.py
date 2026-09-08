@@ -695,3 +695,39 @@ class PlotConfig(BaseModel):
             raise ValueError("y_log_base must not be 1")
 
         return self
+
+
+class PlotProfileTab(BaseModel):
+    """One tab's worth of plot state inside a saved profile."""
+
+    model_config = camel_case_dict
+
+    config: PlotConfig = Field(
+        default_factory=PlotConfig,
+        description="The tab's plot configuration.",
+    )
+
+
+class PlotProfile(BaseModel):
+    """
+    A saved profile: the full set of open plot tabs.
+
+    Replaces the old profile format (a single bare `PlotConfig` per saved
+    file) - see `routers/mosaic.py`'s `get_profile`/`save_profile` for how a
+    legacy single-config file is transparently read as a one-tab profile.
+    """
+
+    model_config = camel_case_dict
+
+    version: Literal[2] = 2
+
+    tabs: list[PlotProfileTab] = Field(
+        min_length=1,
+        description="Every open plot tab, in tab-strip order.",
+    )
+
+    active_tab_index: int = Field(
+        default=0,
+        ge=0,
+        description="Index into `tabs` of the tab that should be active when the profile is loaded.",
+    )

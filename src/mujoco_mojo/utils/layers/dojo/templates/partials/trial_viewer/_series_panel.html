@@ -6,8 +6,14 @@
          ══════════════════════════════════════════════════════════════════ -->
 
 <!-- series selections -->
+<!-- gated on !loading/!errorState (the one-time initial page boot), not on
+     `data` - data legitimately goes null for a moment whenever a plot tab
+     with nothing cached yet is activated (a new tab, or one restored from a
+     saved profile), and the axis pickers here should stay visible through
+     that so the user can pick signals for it rather than the whole panel
+     flickering away and back. -->
 <div class="card px-2 py-0 flex flex-col gap-0 w-full"
-     x-show="!loading && data">
+     x-show="!loading && !errorState">
 
     <!-- row 1 -->
     <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-subtle dark:border-subtle/50 h-auto sm:h-12 py-2 sm:py-0">

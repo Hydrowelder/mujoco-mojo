@@ -1,0 +1,42 @@
+<!-- ══════════════════════════════════════════════════════════════════
+         PLOT TABS  ·  _plot_tabs.html
+         Tab strip for the trial viewer's plot area (_series_panel.html +
+         _chart.html together) - each tab is an independent PlotConfig.
+         Rendered above the series panel, not nested inside the chart card,
+         since it selects which plot's x/y-axis choices are even in scope.
+         ══════════════════════════════════════════════════════════════════ -->
+
+{% from 'partials/trial_viewer/_macros.html' import tab_strip %}
+<div class="card px-2 py-0 w-full">
+    <!-- same tab_strip() macro Signal Lab uses (_signal_lab.html), so both
+         bars stay pixel-identical with nothing to keep in sync by hand. A
+         plot tab's name is its own config.title (no separate name field -
+         see the PlotTab interface in trial-viewer.ts), renamable=true so
+         double-clicking a tab edits config.title directly rather than only
+         through the Plot Editor's Title field. _isPlotTabDirty(tab) is the
+         same check closePlotTab() uses to decide whether to confirm before
+         discarding - accidental closes are additionally covered by
+         "Reopen", which restores the most recently closed tab
+         (mojo:plot:closedTabs). selectPlotTab handles plain/shift/ctrl-click
+         selection (trial-viewer.ts); closePlotTab() itself checks whether
+         the tab being closed is part of a multi-selection and closes the
+         whole group if so, so both the close button and a middle-click
+         (tab_strip's own listener) act on a selection the same way. -->
+    {% call tab_strip('plotTabs', 'plotActiveTabId', 'tab.config.title', '_isPlotTabDirty(tab)', 'switchPlotTab', 'closePlotTab', 'reorderPlotTabs', 'mojo:plot-close-tab', 'newPlotTab', 'New plot tab', renamable=true, duplicate_fn='duplicatePlotTab', select_fn='selectPlotTab', selected_expr='selectedPlotTabIds.includes(tab.id)') %}
+        <button @click="reopenLastClosedPlotTab()"
+                x-show="closedPlotTabs.length > 0"
+                :title="closedPlotTabs.length > 0 ? `Reopen '${closedPlotTabs[0].config.title || 'untitled'}'` : ''"
+                class="btn btn-secondary h-7 text-sm font-bold uppercase flex items-center gap-1 shrink-0">
+            <svg class="w-3 h-3"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span class="hidden sm:inline">Reopen</span>
+        </button>
+    {% endcall %}
+</div>

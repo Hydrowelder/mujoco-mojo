@@ -42,6 +42,8 @@ from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
 from ..plot_config import PlotConfig as _PlotConfig
+from ..plot_config import PlotProfile as _PlotProfile
+from ..plot_config import PlotProfileTab as _PlotProfileTab
 
 logger = get_logger(__name__)
 
@@ -508,9 +510,28 @@ async def list_profiles():
     return profiles
 
 
+def _parse_profile(data: object, name: str) -> _PlotProfile:
+    """
+    Parse a profile's JSON payload, transparently upgrading the legacy
+    single-`PlotConfig`-per-file format to a one-tab `PlotProfile`.
+
+    The `"tabs" in data` check is an explicit, cheap discriminator rather
+    than relying on `ValidationError` control flow - it's also required for
+    correctness, not just style: a bare `PlotConfig` payload would otherwise
+    validate as a (new-format) `_PlotProfile` too, silently filling in
+    defaults and dropping every field it doesn't recognize (`camel_case_dict`
+    doesn't set `extra="forbid"`), which for an old single-config file means
+    silently discarding the entire saved plot.
+    """
+    if isinstance(data, dict) and "tabs" in data:
+        return _PlotProfile.model_validate(data)
+    legacy = _PlotConfig.model_validate(data)
+    return _PlotProfile(tabs=[_PlotProfileTab(config=legacy)])
+
+
 @router.get("/api/profiles/{name:path}")
 async def get_profile(name: str):
-    """Return the PlotConfig JSON for a saved profile, validated against the schema."""
+    """Return the saved profile (tabs + active index), validated against the schema."""
     from pydantic import ValidationError
 
     path = _resolve_profile_path(name)
@@ -518,34 +539,49 @@ async def get_profile(name: str):
         raise HTTPException(status_code=404, detail="Profile not found")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        config = _PlotConfig.model_validate(data)
+        profile = _parse_profile(data, name)
     except (json.JSONDecodeError, ValidationError) as exc:
         raise HTTPException(
             status_code=422,
             detail=f"Profile '{name}' failed validation and cannot be loaded: {exc}",
         ) from exc
-    return config.model_dump()
+    return profile.model_dump()
 
 
-_PROFILE_MAX_BYTES = 512 * 1024  # 512 KB (more than enough for any real PlotConfig)
+_PROFILE_MAX_BYTES = (
+    512 * 1024
+)  # 512 KB (more than enough for any real set of plot tabs)
 
 
 @router.post("/api/profiles/{name:path}")
-async def save_profile(name: str, request: Request, body: _PlotConfig):
+async def save_profile(name: str, request: Request, body: dict):
     """
-    Save the current PlotConfig as a named profile.
+    Save the current set of plot tabs as a named profile.
 
-    FastAPI/Pydantic validates the request body structure automatically.
-    The Content-Length header is checked first as a lightweight size guard.
-    Sub-folder paths (e.g. 'project/baseline') are supported; directories
-    are created automatically.
+    `body` is a plain dict (not `_PlotProfile` directly) so the legacy-format
+    discriminator in `_parse_profile` can run before Pydantic's own request
+    validation would otherwise reject an old-shaped payload with a 422 - in
+    practice the frontend only ever POSTs the current (tabs-based) format,
+    but accepting a legacy body here too keeps this endpoint's behavior
+    symmetric with `get_profile`. The Content-Length header is checked first
+    as a lightweight size guard. Sub-folder paths (e.g. 'project/baseline')
+    are supported; directories are created automatically.
     """
+    from pydantic import ValidationError
+
     cl = request.headers.get("content-length")
     if cl and int(cl) > _PROFILE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Profile payload too large")
+    try:
+        profile = _parse_profile(body, name)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid profile payload: {exc}",
+        ) from exc
     path = _resolve_profile_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body.model_dump_json(), encoding="utf-8")
+    path.write_text(profile.model_dump_json(), encoding="utf-8")
     d = _get_profiles_dir()
     return {"name": path.relative_to(d).with_suffix("").as_posix()}
 
