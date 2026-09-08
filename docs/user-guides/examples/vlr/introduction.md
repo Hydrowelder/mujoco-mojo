@@ -31,10 +31,10 @@ This will initialize your project with a mock Python file, some helpful bash scr
 
 ## Imports
 
-Some key things will be used in this project, notably a logger, a global unit system (for easier conversions, MuJoCo tends to only play nice with SI units from my experience), and a set of contact groups (dont worry about these too much for now but these are important later).
+After declaring this projects imports, we define a logger and global unit system (for easier conversions, MuJoCo tends to only play nice with SI units from my experience).
 
 ```python
---8<-- "docs/user-guides/vlr-example/vlr_example.py:imports"
+--8<-- "docs/user-guides/examples/vlr/vlr_example.py:imports"
 ```
 
 ---
@@ -46,7 +46,7 @@ This project will also make use of an `Inputs` class. This class is used to set 
 This is also the first place where you see the use of our unit system (`US`). Since our unit system is defined as SI units, you can declare a value with any unit (a length of 3 inches is declared as `3 * US.inch`) and `US` will automatically convert the value into a dimensional equivalent in SI units.
 
 ```python
---8<-- "docs/user-guides/vlr-example/vlr_example.py:imports"
+--8<-- "docs/user-guides/examples/vlr/vlr_example.py:inputs"
 ```
 
 ---

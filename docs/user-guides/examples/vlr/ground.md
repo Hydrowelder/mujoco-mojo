@@ -4,19 +4,24 @@
 
     The rocket needs some ground to collide with, we will be defining a custom class which will contain the key elements needed to configure the ground.
 
+    <figure markdown="span">
+        ![Ground preview](./ground.jpg){ width="50%" height="auto" }
+        <figcaption>A horizontal plane acting as the ground. The ground has a checkerboard pattern and a shadow of the rocket tube (yet to be defined) cast from the light added in the previous step.</figcaption>
+    </figure>
+
 ---
 
 ## Class Definition
 
 The `Ground` class is (thankfully) pretty straightforward. We define three things:
 
-- **Grid Texture**: A checkerboard texture used on the ground plane. It's technically not needed, but helpful to give things a sense of scale.
-- **Material**: To apply a texture to a geometry (like our ground plane) we apply it via a material. This gives options for other photorealistic rendering textures, but we'll stick with the simple built in one for now.
-- **Geometry**: A `GeomPlane` (a special built in geometry type) is used to make a contact surface for the rocket. It can be positioned in whatever orientation is needed. We apply our previous contact groups to it to make sure the correct collision pairs are being used (define this body as `GROUND` with valid collisions with the rocket's `TUBE` or `GEAR`).
-  - For a more complex model, you could even use a heightmap to simulate an uneven surface!
+1. **Grid Texture**: A checkerboard texture used on the ground plane. It's technically not needed, but helpful to give things a sense of scale.
+2. **Material**: To apply a texture to a geometry (like our ground plane) we apply it via a material. This gives options for other photorealistic rendering textures, but we'll stick with the simple built in one for now.
+3. **Geometry**: A `GeomPlane` (a special built in geometry type) is used to make a contact surface for the rocket. It can be positioned in whatever orientation is needed.
+    - For a more complex model, you could even use a heightmap to simulate an uneven surface!
 
 ```python
---8<-- "docs/user-guides/vlr-example/vlr_example.py:ground"
+--8<-- "docs/user-guides/examples/vlr/vlr_example.py:ground"
 ```
 
 ---

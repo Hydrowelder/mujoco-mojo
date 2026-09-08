@@ -39,7 +39,7 @@ nav:
               - Defining a Ground Surface: user-guides/examples/vlr/ground.md
               - Building the Rocket: user-guides/examples/vlr/rocket.md
               - Assembling Landing Gear: user-guides/examples/vlr/landing-gear.md
-              - Runtime Behavior:  user-guides/examples/vlr/runtime.md
+              - Runtime Behavior: user-guides/examples/vlr/runtime.md
 
       - Developer:
           - user-guides/developer/developer.md
@@ -159,6 +159,7 @@ plugins:
             - https://mkdocstrings.github.io/griffe/objects.inv
             - https://docs.pydantic.dev/latest/objects.inv
             - https://numpy.org/doc/stable/objects.inv
+            - https://hydrowelder.github.io/stochas/objects.inv
 
 markdown_extensions:
   - abbr
