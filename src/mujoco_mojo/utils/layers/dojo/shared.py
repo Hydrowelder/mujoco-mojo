@@ -29,6 +29,29 @@ templates.env.globals["default_to_fullscreen"] = lambda: (
     MujocoMojoSettings().dojo.default_to_fullscreen
 )
 
+# same rationale as default_to_fullscreen above - read live on every render,
+# only ever seed a browser's localStorage value the first time (see
+# store.ts/trial-viewer.ts's own comments on the window.__mojoDefault*
+# fallback pattern for why a value the user already set always wins).
+templates.env.globals["default_hide_invalid_profiles"] = lambda: (
+    MujocoMojoSettings().dojo.hide_invalid_profiles
+)
+templates.env.globals["default_profile_sort_mode"] = lambda: (
+    MujocoMojoSettings().dojo.profile_sort_mode.value
+)
+templates.env.globals["default_profile_sort_dir"] = lambda: (
+    MujocoMojoSettings().dojo.profile_sort_dir.value
+)
+templates.env.globals["default_hide_invalid_labs"] = lambda: (
+    MujocoMojoSettings().dojo.hide_invalid_labs
+)
+templates.env.globals["default_lab_sort_mode"] = lambda: (
+    MujocoMojoSettings().dojo.lab_sort_mode.value
+)
+templates.env.globals["default_lab_sort_dir"] = lambda: (
+    MujocoMojoSettings().dojo.lab_sort_dir.value
+)
+
 
 def set_globals(workdir: Path, owner: str, job_type: JobType) -> None:
     global WORKDIR

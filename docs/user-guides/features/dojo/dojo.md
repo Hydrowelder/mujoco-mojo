@@ -20,13 +20,15 @@ To start the dashboard, simply provide the path to your work directory:
 mujoco-mojo dojo ./mojo-models
 ```
 
-| Argument     | Shortcut | Default      | Description                                                |
-| :----------- | :------- | :----------- | :--------------------------------------------------------- |
-| `workdir`    | _N/A_    | **Required** | The workspace directory containing the simulation results. |
-| `--host`     | `-h`     | `127.0.0.1`  | The IP address to serve the dashboard on.                  |
-| `--port`     | `-p`     | `8000`       | The port number for the web server.                        |
-| `--password` | `-pw`    | _None_       | Enables Basic Auth protection.                             |
-| `--n-proc`   | `-np`    | `1`          | Processes used for background status file processing.      |
+| Argument     | Shortcut | Default         | Description                                                |
+| :----------- | :------- | :-------------- | :--------------------------------------------------------- |
+| `workdir`    | _N/A_    | **Required**    | The workspace directory containing the simulation results. |
+| `--host`     | `-h`     | `127.0.0.1`[^1] | The IP address to serve the dashboard on.                  |
+| `--port`     | `-p`     | `8000`[^1]      | The port number for the web server. If it's already in use, the next free port is selected automatically. |
+| `--password` | `-pw`    | _None_[^1]      | Enables Basic Auth protection.                             |
+| `--n-proc`   | `-np`    | `1`[^1]         | Processes used for background status file processing.      |
+
+[^1]: Reads from your settings (`mujoco-mojo settings show`) if you've set one; the value shown is the out-of-the-box default.
 
 ---
 

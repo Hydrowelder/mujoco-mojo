@@ -7,27 +7,22 @@
    ─────────────────────────────────────────────────────────────────────── #}
 
 {% macro settings_field_row(field_expr) %}
-<div class="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-4">
+<!-- hint: shows this field's description in the panel's reserved bottom
+     hint bar (see the bottom of this file) the moment the mouse is
+     anywhere over this row, OR a control inside it gains focus (so
+     keyboard/tab navigation and "currently editing" both count, not just
+     hover) - not just on a small (i) icon like this used to be.
+     @focusin/@focusout (not @focus/@blur) since focus doesn't bubble but
+     these do, letting one listener on the row cover every input/button
+     inside it. -->
+<div class="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4"
+     @mouseenter="$store.dojo.showSettingsHint({{ field_expr }}.description)"
+     @mouseleave="$store.dojo.hideSettingsHint()"
+     @focusin="$store.dojo.showSettingsHint({{ field_expr }}.description)"
+     @focusout="$store.dojo.hideSettingsHint()">
   <div class="min-w-0 flex-1 flex items-center gap-1.5">
     <label class="text-sm font-bold text-ink-strong"
            x-text="{{ field_expr }}.title"></label>
-
-    <!-- tooltip: fires the shared, teleported tooltip (see the bottom of
-         this file) rather than a locally-positioned .tooltip-panel - the
-         latter's box still counts toward this scroll container's
-         scrollable content size even while invisible/opacity-0, inflating
-         the panel's height by however tall the longest description is -->
-    <svg class="w-3.5 h-3.5 text-ink-muted hover:text-accent-500 cursor-help shrink-0"
-         @mouseenter="$store.dojo.showSettingsTooltip($event.currentTarget, {{ field_expr }}.description)"
-         @mouseleave="$store.dojo.hideSettingsTooltip()"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="2"
-         viewBox="0 0 24 24">
-      <path stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
 
     <!-- reset-to-default -->
     <button x-show="{{ field_expr }}.widget !== 'secret' && {{ field_expr }}.value !== {{ field_expr }}.default"
@@ -62,16 +57,45 @@
     <!-- select (fixed enum choices): the same custom trigger/panel/option
          dropdown as the Plot Editor (partials/trial_viewer/_chart.html),
          not a native <select> - a native select's own open menu renders
-         outside the page's control, so it can't be styled to match. -->
+         outside the page's control, so it can't be styled to match.
+
+         The panel is teleported to <body> and manually positioned from the
+         trigger's own getBoundingClientRect(), rather than a plain
+         `absolute` child of this row (the Plot Editor's own version of this
+         same widget uses `absolute` since its dropdowns live in a
+         non-scrolling toolbar) - this row sits inside the settings panel's
+         scrollable content pane (overflow-y-auto), which clips any
+         descendant that visually extends past its box. A field near the
+         bottom of a long enum list would otherwise have its lower options
+         clipped off right at the pane's edge, which (since the hint bar
+         sits directly below that edge) reads as the missing options having
+         gone "behind" the hint bar rather than merely being cut off.
+         Teleporting out to <body> escapes that clipping entirely, the same
+         technique already used for the Plot Editor's y-axis unit/column
+         dropdowns (_series_panel.html) and _chart.html's own version of
+         this exact widget. z-960 - above the settings modal's own z-950
+         backdrop (base.html), so the now-top-level panel still paints over
+         the modal it visually belongs to, but below the z-1000 toast
+         layer. -->
     <template x-if="{{ field_expr }}.widget === 'select'">
       <div class="relative w-full"
-           x-data="{ open: false }">
+           x-data="{ open: false, coords: { top: 0, left: 0, width: 0 } }"
+           @click.away="open = false">
         <button type="button"
-                @click="open = !open"
-                @click.away="open = false"
+                x-ref="trigger"
+                @click="const r = $refs.trigger.getBoundingClientRect(); coords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; open = !open"
                 :disabled="!$store.dojo.settingsIsLocalhost"
                 class="dropdown-trigger">
-          <span class="truncate"
+          <!-- capitalize: enum values are plain lowercase wire values
+               (settings.py's StrEnum members, e.g. Direction.MINIMIZE =
+               "minimize") - display-only formatting, never affects what's
+               actually stored/posted. Reads fine for the plain-English
+               values (minimize/maximize, name/modified); acronym-style
+               sampler names (tpe, cmaes, nsgaii...) just get their first
+               letter capitalized too (Tpe, Cmaes) rather than their
+               proper all-caps form - an accepted, minor imperfection
+               rather than a per-value display-name table for one field. -->
+          <span class="truncate capitalize"
                 x-text="{{ field_expr }}.value"></span>
           <svg class="dropdown-chevron"
                :class="open ? 'rotate-180' : ''"
@@ -84,19 +108,36 @@
                   d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        <div x-show="open"
-             x-transition
-             class="dropdown-panel">
-          <template x-for="opt in {{ field_expr }}.enumOptions"
-                    :key="opt">
-            <button type="button"
-                    @click="$store.dojo.updateField({{ field_expr }}.path, opt); open = false"
-                    class="dropdown-option"
-                    :class="opt === {{ field_expr }}.value ? 'dropdown-option-active' : ''">
-              <span x-text="opt"></span>
-            </button>
-          </template>
-        </div>
+        <template x-teleport="body">
+          <div x-show="open"
+               x-transition
+               @click.stop
+               @click.away="open = false"
+               :style="`position:absolute;top:${coords.top}px;left:${coords.left}px;width:${coords.width}px;`"
+               class="dropdown-panel z-960"
+               style="display:none;">
+            <template x-for="opt in {{ field_expr }}.enumOptions"
+                      :key="opt">
+              <!-- per-option hint: falls back to the field's own
+                   description when this particular value has no docstring
+                   of its own - every enum field's StrEnum class currently
+                   documents all of its members (typing.py), but this keeps
+                   a future member added without one from going blank on
+                   hover instead of silently degrading. -->
+              <button type="button"
+                      @click="$store.dojo.updateField({{ field_expr }}.path, opt); open = false"
+                      @mouseenter="$store.dojo.showSettingsHint({{ field_expr }}.enumDescriptions?.[opt] ?? {{ field_expr }}.description)"
+                      @mouseleave="$store.dojo.hideSettingsHint()"
+                      @focus="$store.dojo.showSettingsHint({{ field_expr }}.enumDescriptions?.[opt] ?? {{ field_expr }}.description)"
+                      @blur="$store.dojo.hideSettingsHint()"
+                      class="dropdown-option"
+                      :class="opt === {{ field_expr }}.value ? 'dropdown-option-active' : ''">
+                <span class="capitalize"
+                      x-text="opt"></span>
+              </button>
+            </template>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -240,6 +281,80 @@
 </div>
 {% endmacro %}
 
+{# Renders one group's own content - its leaf fields, its subgroups (each
+   still its own independently-collapsible mini-accordion), and its dict
+   field, if any - with no outer per-group header/collapse-toggle of its
+   own. Shared by both places a single group's content needs to render:
+   the search-results view (one call per matching group, each wrapped in
+   its own collapsible header there) and the left-nav "active section" view
+   (exactly one call, for whichever section is currently selected, with no
+   header/toggle needed since it's already the only thing shown). #}
+{% macro settings_group_body(group_expr) %}
+<template x-for="field in {{ group_expr }}.fields"
+          :key="field.path">
+  {{ settings_field_row('field') }}
+</template>
+
+<template x-for="sub in {{ group_expr }}.subgroups"
+          :key="sub.path">
+  <div class="pt-3 pb-1 pl-3 border-l-2 border-subtle">
+    <!-- hint trigger lives on the header button alone, not this whole
+         wrapper - the wrapper also contains this subgroup's own fields
+         below, each with their own row-level hint trigger
+         (settings_field_row), and mouseenter fires on every ancestor
+         boundary a pointer crosses (unlike click, it doesn't just bubble
+         from one target) - putting it here too would fight each field's
+         own hint as the mouse moves between them. -->
+    <button @mousedown.prevent="$store.dojo.toggleSettingsSection(sub.path)"
+            @mouseenter="$store.dojo.showSettingsHint(sub.description)"
+            @mouseleave="$store.dojo.hideSettingsHint()"
+            @focus="$store.dojo.showSettingsHint(sub.description)"
+            @blur="$store.dojo.hideSettingsHint()"
+            class="expander-header w-full normal-case text-xs mb-1">
+      <svg x-show="sub.icon"
+           x-html="sub.icon"
+           class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="1.75"
+           viewBox="0 0 24 24"></svg>
+      <p class="min-w-0"
+         x-text="sub.title"></p>
+      <svg class="expander-chevron w-3.5 h-3.5 ml-auto"
+           :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[sub.path] ? '-rotate-90' : ''"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="2"
+           viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+
+    <!-- same x-show + duration-matched x-transition backstop as the
+         group-level wrapper (search-results view) uses - see its comment. -->
+    <div class="expander-body-wrap"
+         x-show="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery"
+         x-transition.duration.200ms
+         :class="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
+    <div class="expander-body divide-y divide-subtle dark:divide-subtle/50">
+      <template x-for="field in sub.fields"
+                :key="field.path">
+        {{ settings_field_row('field') }}
+      </template>
+    </div>
+    </div>
+  </div>
+</template>
+
+<template x-if="{{ group_expr }}.dictField">
+  <div class="pt-3">
+    {{ settings_dict_rows(group_expr) }}
+  </div>
+</template>
+{% endmacro %}
+
 {% macro settings_dict_rows(group_expr) %}
 <div class="space-y-2">
   <template x-for="(entry, idx) in {{ group_expr }}.dictField.entries"
@@ -339,52 +454,6 @@
 </div>
 {% endmacro %}
 
-<!-- shared settings-panel tooltip, teleported to <body> so its box is never
-     a descendant of the sections list's scrollable container - see the
-     comment on the info-icon triggers above (settings_field_row, and the
-     section/subgroup headers below) for why that matters. One node reused
-     by every trigger rather than one per field/section.
-
-     x-data is required directly on this template even though all the state
-     it reads is in $store (nothing local) - Alpine only processes
-     directives (x-teleport included) within some x-data-rooted component;
-     a bare <template x-teleport> with no x-data ancestor at all is never
-     initialized, so neither the teleport nor the div's x-show/x-html inside
-     it ever activates.
-
-     Visibility is `settingsOpen && settingsTooltip.show`, not
-     settingsTooltip.show alone - deliberately not relying on some other
-     action (closeSettings(), a mouseleave, a $watch) to explicitly flip
-     settingsTooltip.show back off on close, each of which turned out to
-     have a way to miss: the panel's own closing transition keeps its
-     content visible/hoverable for ~100ms after settingsOpen flips false, so
-     a mouseenter can still land on an info icon mid-fade and reopen a
-     tooltip after an explicit hide already ran, and a mouseleave never
-     fires at all for an icon whose element is display:none'd out from
-     under the cursor rather than the cursor actually moving away.
-     Combining both conditions directly in the binding is correct
-     regardless of whichever of those already-hides/already-guards did or
-     didn't fire - the moment settingsOpen is false this re-evaluates to
-     false unconditionally, every time, with nothing separate that needs to
-     remember to run. -->
-<template x-data
-          x-teleport="body">
-  <!-- :style takes an object here, not a template-string - a string value
-       replaces the whole style attribute wholesale on every re-evaluation
-       (whenever top/left change, i.e. every time a tooltip opens), which
-       can stomp the display:none x-show had just set, since both directives
-       are fighting over the same attribute. Object syntax sets/removes each
-       property (top, left) individually, so it can never touch display at
-       all - this is what was actually causing the stuck-open tooltip: not
-       a logic bug in when we hide it, but this apply clobbering that hide
-       moments after settingsOpen went false, whenever a new tooltip had
-       last set top/left. -->
-  <div x-show="$store.dojo.settingsOpen && $store.dojo.settingsTooltip.show"
-       class="panel fixed z-1000 w-72 text-xs font-normal normal-case tracking-normal text-ink-body leading-relaxed pointer-events-none [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
-       :style="{ top: $store.dojo.settingsTooltip.top + 'px', left: $store.dojo.settingsTooltip.left + 'px' }"
-       x-html="$store.dojo.renderMarkdown($store.dojo.settingsTooltip.text)"></div>
-</template>
-
 <div x-data
      x-show="$store.dojo.settingsOpen"
      class="fixed inset-0 z-950 flex items-center justify-center p-4"
@@ -410,8 +479,11 @@
 
   <!-- card: a fixed h-[85vh] (not max-h) so the panel's footprint stays put
        regardless of which sections are collapsed/expanded - only the
-       sections list scrolls internally, the modal itself never resizes -->
-  <div class="relative w-full max-w-2xl h-[85vh] flex flex-col"
+       sections list scrolls internally, the modal itself never resizes.
+       max-w-3xl (wider than the old max-w-2xl) makes room for the left nav
+       column without squeezing field labels against the fixed w-72 control
+       column in settings_field_row. -->
+  <div class="relative w-full max-w-3xl h-[85vh] flex flex-col"
        x-transition:enter="transition duration-150 ease-out"
        x-transition:enter-start="opacity-0 scale-95"
        x-transition:enter-end="opacity-100 scale-100"
@@ -523,121 +595,91 @@
         </div>
       </div>
 
-      <!-- sections -->
-      <!-- min-h-0 is required alongside flex-1 + overflow-y-auto here: a
-           flex item's default min-height is auto (its content size), which
-           in some browsers makes a flex:1 + overflow:auto child claim the
-           full available height even when its actual content (e.g. just
-           the one-field Assets section, everything else collapsed) is much
-           shorter, leaving a block of empty space above the footer instead
-           of shrinking to fit. -->
+      <!-- body: left nav (one entry per top-level section, click = GOTO
+           that section) + a content pane showing either the active
+           section alone, or - while a search query is active - every
+           matching section stacked (the panel's original behavior, kept
+           for "find something regardless of where it lives"). overflow-
+           hidden on this row keeps the nav and content pane's own
+           independent vertical scrollbars from spilling into each other;
+           each gets min-h-0 for the same flex:1+overflow:auto reason
+           documented below. -->
       <div x-show="!$store.dojo.settingsLoading"
-           class="px-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
-        <div x-show="$store.dojo.settingsSearchQuery && $store.dojo.settingsFilteredSections().length === 0"
-             class="py-10 text-center text-sm font-mono text-ink-muted">
-          No settings match "<span x-text="$store.dojo.settingsSearchQuery"></span>"
-        </div>
-        <template x-for="group in $store.dojo.settingsFilteredSections()"
-                  :key="group.path">
-          <div class="border-b border-line dark:border-subtle last:border-0">
-            <!-- header: .expander-header/.expander-chevron (styles/expander.css)
-                 - the exact same classes as partials/trial_viewer/_trial_logs.html
-                 and _distributions.html use, not just a lookalike copy.
-                 normal-case overrides the shared class's uppercase (dynamic
-                 titles like "SensAI" need their real casing, unlike a
-                 static page-header label); w-full/ml-auto/py-3/text-sm are
-                 this usage's own layout, same compositional pattern as
-                 .btn-secondary + per-call-site sizing elsewhere. -->
-            <button @mousedown.prevent="$store.dojo.toggleSettingsSection(group.path)"
-                    class="expander-header w-full normal-case text-sm py-3">
+           class="flex-1 min-h-0 flex overflow-hidden">
+        <!-- nav -->
+        <div class="w-44 shrink-0 min-h-0 overflow-y-auto custom-scrollbar border-r border-line dark:border-subtle py-2 px-2 space-y-0.5">
+          <template x-for="group in $store.dojo.settingsSections"
+                    :key="group.path">
+            <button @click="$store.dojo.selectSettingsSection(group.path)"
+                    class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-left transition-colors"
+                    :class="!$store.dojo.settingsSearchQuery && group.path === $store.dojo.settingsActiveSectionPath
+                      ? 'bg-accent-100/50 dark:bg-chip/50 text-ink-strong font-bold'
+                      : 'text-ink-muted hover:text-ink-body hover:bg-control'">
               <svg x-show="group.icon"
                    x-html="group.icon"
-                   class="w-4 h-4 shrink-0 text-ink-muted"
+                   class="w-4 h-4 shrink-0"
                    fill="none"
                    stroke="currentColor"
                    stroke-width="1.75"
                    viewBox="0 0 24 24"></svg>
-              <p class="min-w-0"
-                 x-text="group.title"></p>
-              <svg x-show="group.description"
-                   @mousedown.stop
-                   @mouseenter="$store.dojo.showSettingsTooltip($event.currentTarget, group.description)"
-                   @mouseleave="$store.dojo.hideSettingsTooltip()"
-                   class="w-3.5 h-3.5 hover:text-accent-500 cursor-help shrink-0"
-                   fill="none"
-                   stroke="currentColor"
-                   stroke-width="2"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <svg class="expander-chevron ml-auto"
-                   :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[group.path] ? '-rotate-90' : ''"
-                   fill="none"
-                   stroke="currentColor"
-                   stroke-width="2"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 9l-7 7-7-7" />
-              </svg>
+              <span class="truncate"
+                    x-text="group.title"></span>
             </button>
+          </template>
+        </div>
 
-            <!-- expander-open whenever this section isn't collapsed, OR a
-                 search is active - a query result would otherwise still be
-                 hidden inside a section the user had previously collapsed.
-                 x-show + duration-matched x-transition is a hard display:none
-                 backstop on top of the grid animation below, not a
-                 replacement for it: nested grid-template-rows:0fr accordions
-                 (a group containing a subgroup, both using this same
-                 pattern) aren't reliably collapsed to true zero height by
-                 the CSS trick alone in every engine, which let a collapsed
-                 group's fields stay hit-testable/selectable (and, in some
-                 cases, faintly visible) even though the track had shrunk.
-                 x-transition.duration here just delays Alpine's display:none
-                 until the CSS transition finishes, so the visual animation
-                 is unchanged - display:none is what actually guarantees
-                 full removal once it lands. -->
-            <div class="expander-body-wrap"
-                 x-show="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery"
-                 x-transition.duration.200ms
-                 :class="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
-            <div class="expander-body pb-4 divide-y divide-subtle dark:divide-subtle/50">
-              <template x-for="field in group.fields"
-                        :key="field.path">
-                {{ settings_field_row('field') }}
-              </template>
-
-              <template x-for="sub in group.subgroups"
-                        :key="sub.path">
-                <div class="pt-3 pb-1 pl-3 border-l-2 border-subtle">
-                  <button @mousedown.prevent="$store.dojo.toggleSettingsSection(sub.path)"
-                          class="expander-header w-full normal-case text-xs mb-1">
-                    <svg x-show="sub.icon"
-                         x-html="sub.icon"
-                         class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+        <!-- content pane -->
+        <!-- min-h-0 is required alongside flex-1 + overflow-y-auto here: a
+             flex item's default min-height is auto (its content size), which
+             in some browsers makes a flex:1 + overflow:auto child claim the
+             full available height even when its actual content (e.g. just
+             the one-field Assets section) is much shorter, leaving a block
+             of empty space above the footer instead of shrinking to fit. -->
+        <div class="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar px-6">
+          <!-- search mode: every matching section, stacked and still
+               individually collapsible - unchanged from this panel's
+               original single-column behavior. -->
+          <template x-if="$store.dojo.settingsSearchQuery">
+            <div>
+              <div x-show="$store.dojo.settingsFilteredSections().length === 0"
+                   class="py-10 text-center text-sm font-mono text-ink-muted">
+                No settings match "<span x-text="$store.dojo.settingsSearchQuery"></span>"
+              </div>
+              <template x-for="group in $store.dojo.settingsFilteredSections()"
+                        :key="group.path">
+                <div class="border-b border-line dark:border-subtle last:border-0">
+                  <!-- header: .expander-header/.expander-chevron (styles/expander.css)
+                       - the exact same classes as partials/trial_viewer/_trial_logs.html
+                       and _distributions.html use, not just a lookalike copy.
+                       normal-case overrides the shared class's uppercase (dynamic
+                       titles like "SensAI" need their real casing, unlike a
+                       static page-header label); w-full/ml-auto/py-3/text-sm are
+                       this usage's own layout, same compositional pattern as
+                       .btn-secondary + per-call-site sizing elsewhere. -->
+                  <!-- hint trigger lives on this header button alone, not a
+                       wrapping element - the group's own fields render
+                       below (settings_group_body) each with their own
+                       row-level hint trigger, and mouseenter fires on
+                       every ancestor boundary a pointer crosses, so a
+                       wrapper-level trigger here would fight each field's
+                       own hint as the mouse moves between them. -->
+                  <button @mousedown.prevent="$store.dojo.toggleSettingsSection(group.path)"
+                          @mouseenter="$store.dojo.showSettingsHint(group.description)"
+                          @mouseleave="$store.dojo.hideSettingsHint()"
+                          @focus="$store.dojo.showSettingsHint(group.description)"
+                          @blur="$store.dojo.hideSettingsHint()"
+                          class="expander-header w-full normal-case text-sm py-3">
+                    <svg x-show="group.icon"
+                         x-html="group.icon"
+                         class="w-4 h-4 shrink-0 text-ink-muted"
                          fill="none"
                          stroke="currentColor"
                          stroke-width="1.75"
                          viewBox="0 0 24 24"></svg>
                     <p class="min-w-0"
-                       x-text="sub.title"></p>
-                    <svg x-show="sub.description"
-                         @mousedown.stop
-                         @mouseenter="$store.dojo.showSettingsTooltip($event.currentTarget, sub.description)"
-                         @mouseleave="$store.dojo.hideSettingsTooltip()"
-                         class="w-3 h-3 hover:text-accent-500 cursor-help shrink-0"
-                         fill="none"
-                         stroke="currentColor"
-                         stroke-width="2"
-                         viewBox="0 0 24 24">
-                      <path stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <svg class="expander-chevron w-3.5 h-3.5 ml-auto"
-                         :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[sub.path] ? '-rotate-90' : ''"
+                       x-text="group.title"></p>
+                    <svg class="expander-chevron ml-auto"
+                         :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[group.path] ? '-rotate-90' : ''"
                          fill="none"
                          stroke="currentColor"
                          stroke-width="2"
@@ -648,31 +690,102 @@
                     </svg>
                   </button>
 
-                  <!-- same x-show + duration-matched x-transition backstop as the
-                       group-level wrapper above - see its comment. -->
+                  <!-- expander-open whenever this section isn't collapsed, OR a
+                       search is active - a query result would otherwise still be
+                       hidden inside a section the user had previously collapsed.
+                       x-show + duration-matched x-transition is a hard display:none
+                       backstop on top of the grid animation below, not a
+                       replacement for it: nested grid-template-rows:0fr accordions
+                       (a group containing a subgroup, both using this same
+                       pattern) aren't reliably collapsed to true zero height by
+                       the CSS trick alone in every engine, which let a collapsed
+                       group's fields stay hit-testable/selectable (and, in some
+                       cases, faintly visible) even though the track had shrunk.
+                       x-transition.duration here just delays Alpine's display:none
+                       until the CSS transition finishes, so the visual animation
+                       is unchanged - display:none is what actually guarantees
+                       full removal once it lands. -->
                   <div class="expander-body-wrap"
-                       x-show="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery"
+                       x-show="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery"
                        x-transition.duration.200ms
-                       :class="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
-                  <div class="expander-body divide-y divide-subtle dark:divide-subtle/50">
-                    <template x-for="field in sub.fields"
-                              :key="field.path">
-                      {{ settings_field_row('field') }}
-                    </template>
+                       :class="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
+                  <div class="expander-body pb-4 divide-y divide-subtle dark:divide-subtle/50">
+                    {{ settings_group_body('group') }}
                   </div>
                   </div>
                 </div>
               </template>
+            </div>
+          </template>
 
-              <template x-if="group.dictField">
-                <div class="pt-3">
-                  {{ settings_dict_rows('group') }}
-                </div>
-              </template>
+          <!-- normal mode: just the left nav's active section - no
+               collapse toggle on it, since it's already the only section
+               shown (its subgroups, if any, keep their own toggle inside
+               settings_group_body). -->
+          <template x-if="!$store.dojo.settingsSearchQuery && $store.dojo.settingsActiveGroup()">
+            <div class="py-4">
+              <div class="flex items-center gap-2 mb-3"
+                   @mouseenter="$store.dojo.showSettingsHint($store.dojo.settingsActiveGroup().description)"
+                   @mouseleave="$store.dojo.hideSettingsHint()">
+                <svg x-show="$store.dojo.settingsActiveGroup().icon"
+                     x-html="$store.dojo.settingsActiveGroup().icon"
+                     class="w-5 h-5 shrink-0 text-ink-muted"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.75"
+                     viewBox="0 0 24 24"></svg>
+                <p class="text-base font-bold text-ink-strong"
+                   x-text="$store.dojo.settingsActiveGroup().title"></p>
+              </div>
+              <div class="divide-y divide-subtle dark:divide-subtle/50">
+                {{ settings_group_body('$store.dojo.settingsActiveGroup()') }}
+              </div>
             </div>
-            </div>
-          </div>
-        </template>
+          </template>
+        </div>
+      </div>
+
+      <!-- hint bar: reserved space for whichever field or section's
+           description the mouse is currently over (or a control within is
+           focused/being edited) - showSettingsHint/hideSettingsHint,
+           wired on every row/header above. Always present (not x-show'd
+           away) so moving between settings never reflows the panel the
+           way a floating tooltip popping in and out used to risk. No
+           max-height/scroll here at all - unlike a normal scrollable
+           area, this one could never actually be scrolled in practice:
+           reaching a scrollbar down here means moving the mouse off
+           whatever row is being hovered, which immediately clears the
+           hint via mouseleave before the scroll would even matter.
+
+           min-h-32 is load-bearing, not decorative: without a floor, this
+           box starts short (its one-line empty-state text) and grows the
+           instant a longer description shows up. Since it's a flex sibling
+           of the scrollable content pane above it (both children of the
+           fixed-height card), growing it shrinks that pane's available
+           height in the same frame - which, if the row you're currently
+           hovering happens to be the last one visible, pulls the pane's
+           own bottom edge up past your cursor and right into the space the
+           hint bar just claimed. That reads as "the hint bar covered the
+           row I was pointing at," even though nothing is actually
+           positioned on top of anything else - it's the adjacent box
+           resizing out from under a stationary mouse. A fixed floor tall
+           enough for the worst case this panel can actually produce (every
+           description is capped at 200 chars by
+           settings_test.py::test_no_description_is_too_long_for_the_settings_panel_hint_bar,
+           but a multi-paragraph one like chime_enabled's plus the
+           auto-appended "Default: ..." line can still reach ~4-5 wrapped
+           lines) means the box's height no longer depends on which row is
+           hovered, so hovering the last row never moves the pane's edge
+           out from under it. Still allowed to grow past this floor for
+           some future outlier - it's min-h, not h - just never shorter. -->
+      <div class="px-6 py-2.5 border-t border-line dark:border-subtle shrink-0 min-h-32">
+        <p x-show="$store.dojo.settingsHintText"
+           class="text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-1 [&_p:last-child]:mb-0"
+           x-html="$store.dojo.renderMarkdown($store.dojo.settingsHintText)"></p>
+        <p x-show="!$store.dojo.settingsHintText"
+           class="text-xs italic text-ink-disabled">
+          Hover over or edit a setting to see more info here.
+        </p>
       </div>
 
       <!-- footer -->

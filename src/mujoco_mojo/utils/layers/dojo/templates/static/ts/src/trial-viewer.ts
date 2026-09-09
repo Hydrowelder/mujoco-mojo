@@ -418,10 +418,19 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // above), unlike the collapse map, since they're a standing preference
     // rather than session-local navigation state.
     profileSortMode: (localStorage.getItem("mojo:profile:sort") ??
+      window.__mojoDefaultProfileSort ??
       "modified") as TreeSortMode,
     profileSortDir: (localStorage.getItem("mojo:profile:sortDir") ??
+      window.__mojoDefaultProfileSortDir ??
       "desc") as TreeSortDirection,
-    hideInvalidProfiles: localStorage.getItem("mojo:profile:hideInvalid") === "1",
+    // falls back to dojo.hide_invalid_profiles (settings.py, seeded onto
+    // window by base.html) only when the browser has never touched this
+    // preference - once it has, that choice always wins, same pattern as
+    // store.ts's isFullscreen.
+    hideInvalidProfiles:
+      localStorage.getItem("mojo:profile:hideInvalid") === null
+        ? !!window.__mojoDefaultHideInvalidProfiles
+        : localStorage.getItem("mojo:profile:hideInvalid") === "1",
     get profileTreeRows(): TreeRow<{ name: string; modified: number }>[] {
       // folders follow the same order as their contents in "modified" mode
       // (a folder holding the most/least recently changed profile bubbles
@@ -660,10 +669,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // profileSortMode's own comment above for why (a standing preference,
     // not session-local navigation state like the collapse map).
     labSortMode: (localStorage.getItem("mojo:lab:sort") ??
+      window.__mojoDefaultLabSort ??
       "modified") as TreeSortMode,
     labSortDir: (localStorage.getItem("mojo:lab:sortDir") ??
+      window.__mojoDefaultLabSortDir ??
       "desc") as TreeSortDirection,
-    hideInvalidLabs: localStorage.getItem("mojo:lab:hideInvalid") === "1",
+    // see hideInvalidProfiles's own comment above
+    hideInvalidLabs:
+      localStorage.getItem("mojo:lab:hideInvalid") === null
+        ? !!window.__mojoDefaultHideInvalidLabs
+        : localStorage.getItem("mojo:lab:hideInvalid") === "1",
     get labTreeRows(): TreeRow<LabSchema>[] {
       // see profileTreeRows's own comment on folderOrder
       return buildTreeRows(

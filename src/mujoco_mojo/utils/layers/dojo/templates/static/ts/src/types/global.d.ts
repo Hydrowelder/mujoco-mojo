@@ -25,6 +25,14 @@ declare global {
     // reads it, regardless of where in the document either script tag
     // sits.
     __mojoDefaultToFullscreen?: boolean;
+    // dojo settings (settings.py) - seeded by base.html, same
+    // seed-once-then-let-localStorage-win pattern as __mojoDefaultToFullscreen.
+    __mojoDefaultHideInvalidProfiles?: boolean;
+    __mojoDefaultProfileSort?: string;
+    __mojoDefaultProfileSortDir?: string;
+    __mojoDefaultHideInvalidLabs?: boolean;
+    __mojoDefaultLabSort?: string;
+    __mojoDefaultLabSortDir?: string;
     formatTimeAgo(seconds: number): string;
     notifTimeAgo(timestamp: number, tick?: number): string;
     themeColor(name: string): string;

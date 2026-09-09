@@ -62,6 +62,18 @@
     // type="module") so it's guaranteed to run before main.js, same
     // reasoning as the blocking theme check above.
     window.__mojoDefaultToFullscreen = {{ 'true' if default_to_fullscreen() else 'false' }};
+
+    // dojo.hide_invalid_*/*_sort_mode/*_sort_dir (settings.py) - read by
+    // trial-viewer.ts as a fallback only when a browser has never touched
+    // that preference (no matching localStorage key yet). Enum values are a
+    // fixed, hardcoded set (never user input), so plain string interpolation
+    // here is safe.
+    window.__mojoDefaultHideInvalidProfiles = {{ 'true' if default_hide_invalid_profiles() else 'false' }};
+    window.__mojoDefaultProfileSort = "{{ default_profile_sort_mode() }}";
+    window.__mojoDefaultProfileSortDir = "{{ default_profile_sort_dir() }}";
+    window.__mojoDefaultHideInvalidLabs = {{ 'true' if default_hide_invalid_labs() else 'false' }};
+    window.__mojoDefaultLabSort = "{{ default_lab_sort_mode() }}";
+    window.__mojoDefaultLabSortDir = "{{ default_lab_sort_dir() }}";
   </script>
   {% block extra_head %}{% endblock %}
 </head>
@@ -573,10 +585,24 @@
        Triggered via window.mojoConfirm({ title, message, confirmLabel,
        cancelLabel, variant }) which returns a Promise<boolean>.
        State lives in $store.dojo.dialog.
-       ───────────────────────────────────────────────────────────────────── -->
+
+       z-980, not z-950: this dialog is a shared, page-wide utility any
+       caller can invoke on top of its own already-open modal (e.g. the
+       settings panel's "Restore Defaults" button - see
+       resetAllToDefaults() in lib/settings-panel.ts) - the settings modal
+       itself uses z-950 (partials/_settings_panel.html), and two fixed,
+       same-z-index siblings fall back to DOM order, where this dialog's
+       markup (declared earlier in this file) loses to the settings
+       panel's include lower down the page and renders underneath it
+       instead of on top. z-980 keeps this dialog above every such
+       per-page modal/dropdown (including the settings panel's own
+       teleported z-960 select dropdowns) regardless of DOM position,
+       while staying below the z-1000 toast layer - a toast (e.g. a save
+       error) should still be seen over a confirmation prompt, not hidden
+       behind it. -->
   <div x-data
        x-show="$store.dojo.dialog.show"
-       class="fixed inset-0 z-950 flex items-center justify-center p-4"
+       class="fixed inset-0 z-980 flex items-center justify-center p-4"
        style="display:none;"
        @keydown.escape.window="$store.dojo.dialog.cancel()"
        @keydown.enter.window.prevent="if ($store.dojo.dialog.show) $store.dojo.dialog.confirm()">

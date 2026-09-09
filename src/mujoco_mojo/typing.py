@@ -81,6 +81,7 @@ __all__ = [
     "PluginName",
     "ProximityType",
     "RangefinderData",
+    "Sampler",
     "SensorAttachableName",
     "SensorInterp",
     "SensorName",
@@ -411,6 +412,77 @@ class LayerRole(StrEnum):
 
     RGBA = "rgba"
     """4 channels. packed 4 channel [red, green, blue, alpha]."""
+
+
+class UserInterface(StrEnum):
+    """Which viewer backend `mujoco-mojo reloaded` renders with."""
+
+    OPENGL = "opengl"
+    """Native OpenGL window. Requires X11 forwarding over SSH, but is ideal for local development."""
+
+    MJVISER = "mjviser"
+    """Browser-based viewer built on `mjviser`. Requires the `mujoco-mojo[reloaded]` extra."""
+
+    VISER = "viser"
+    """Browser-based viewer built directly on `viser`. Requires the `mujoco-mojo[reloaded]` extra."""
+
+
+class Direction(StrEnum):
+    """Optimization goal for `mujoco-mojo run optimization`."""
+
+    MINIMIZE = "minimize"
+    """Search for design parameters that minimize the objective score."""
+
+    MAXIMIZE = "maximize"
+    """Search for design parameters that maximize the objective score."""
+
+
+class Sampler(StrEnum):
+    """Optuna search algorithm for `mujoco-mojo run optimization`."""
+
+    TPE = "tpe"
+    """Tree-structured Parzen Estimator. Optuna's default, and generally the best choice for noisy physics simulations."""
+
+    CMAES = "cmaes"
+    """Covariance Matrix Adaptation Evolution Strategy - a robust evolutionary algorithm for continuous parameters."""
+
+    RANDOM = "random"
+    """Uniform random sampling. A useful baseline for comparison."""
+
+    NSGAII = "nsgaii"
+    """Genetic algorithm suited to multi-objective optimization."""
+
+    NSGAIII = "nsgaiii"
+    """Built for 3+ objectives, but also works as a robust single-objective genetic algorithm."""
+
+    QMC = "qmc"
+    """Quasi-Monte Carlo sampling. Low-discrepancy sequences for even coverage of the design space."""
+
+    GP = "gp"
+    """Gaussian Process. Best for very expensive simulations where only a few dozen trials are affordable."""
+
+    BRUTE = "brute"
+    """Exhaustive grid search over the entire space. Does not support a random seed."""
+
+
+class SortMode(StrEnum):
+    """How the Dojo file-explorer trees (saved profiles, saved labs) are sorted."""
+
+    NAME = "name"
+    """Alphabetical by name."""
+
+    MODIFIED = "modified"
+    """By last-modified time."""
+
+
+class SortDirection(StrEnum):
+    """Sort direction paired with a `SortMode`."""
+
+    ASC = "asc"
+    """Ascending."""
+
+    DESC = "desc"
+    """Descending."""
 
 
 class GeomType(StrEnum):

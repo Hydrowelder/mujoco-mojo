@@ -79,3 +79,35 @@ def get_local_ip():
     finally:
         s.close()
     return ip
+
+
+def find_free_port(host: str, start_port: int, max_tries: int = 50) -> int:
+    """
+    Returns the first free port at or after `start_port` on `host`.
+
+    Binds a throwaway socket per candidate port and closes it immediately, returning the first one that accepted a bind. Deliberately does not set `SO_REUSEADDR` - on Windows that option would let a probe bind succeed against a port another process is still actively listening on, which is exactly the false "it's free" reading this function must not give. This is a probe, not a reservation: nothing stops another process from grabbing the same port between this call returning and the real bind that follows - acceptable here since the only realistic collision is a second `mujoco-mojo` command started moments earlier on the same machine, not an adversarial race.
+
+    Args:
+        host: Host/interface to probe on (e.g. `"127.0.0.1"`, `"0.0.0.0"`).
+        start_port: First port to try.
+        max_tries: How many consecutive ports to try before giving up.
+
+    Returns:
+        The first port in `[start_port, start_port + max_tries)` that accepted a bind.
+
+    Raises:
+        RuntimeError: If no port in that range was free.
+
+    """
+    for port in range(start_port, start_port + max_tries):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind((host, port))
+        except OSError:
+            continue
+        else:
+            return port
+        finally:
+            s.close()
+    msg = f"No free port found in [{start_port}, {start_port + max_tries}) on {host}"
+    raise RuntimeError(msg)

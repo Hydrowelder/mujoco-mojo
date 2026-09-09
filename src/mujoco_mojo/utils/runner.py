@@ -16,7 +16,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
 import numpy as np
 from filelock import FileLock
@@ -33,6 +33,7 @@ from mujoco_mojo.stochas import (
     NamedValueDict,
     ValueName,
 )
+from mujoco_mojo.typing import Direction, Sampler
 from mujoco_mojo.utils.defaults import (
     DEFAULT_MC_N_TRIAL,
     DEFAULT_MODEL_CONFIG_NAME,
@@ -53,7 +54,6 @@ from mujoco_mojo.utils.defaults import (
     NAMED_VALUES_FNAME,
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
-    SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, get_trial_log_handler, worker_init
 from mujoco_mojo.utils.statusing import (
@@ -198,7 +198,7 @@ class OptimizerConfig(BaseConfig):
     study_name: str = DEFAULT_OP_STUDY_NAME
     """Unique identifier for the Optuna study."""
 
-    direction: Literal["minimize", "maximize"]
+    direction: Direction
     """Whether we want to find the lowest or highest objective value."""
 
     timeout: float | None = DEFAULT_OP_TIMEOUT
@@ -207,7 +207,7 @@ class OptimizerConfig(BaseConfig):
     storage: str | None = DEFAULT_OP_STORAGE
     """Database URL (e.g., 'sqlite:///study.db') for multi-node persistence."""
 
-    sampler: SamplerOptions = DEFAULT_OP_SAMPLER
+    sampler: Sampler = DEFAULT_OP_SAMPLER
     """The search algorithm. TPE is generally best for noisy physics."""
 
     evals_per_trial: int = Field(default=DEFAULT_OP_EVALS_PER_TRIAL, ge=1)
@@ -1141,7 +1141,7 @@ class MojoRunner:
                         status_tracker.update_trial(status=iteration_status)
                         return (
                             float("inf")
-                            if self.config.direction == "minimize"
+                            if self.config.direction == Direction.MINIMIZE
                             else float("-inf")
                         )
                     continue
