@@ -6,7 +6,10 @@ import {
   visibleTreeRows,
   allTreeFolderPaths,
   anyTreeRowVisible,
+  sortTreeItems,
   type TreeRow,
+  type TreeSortMode,
+  type TreeSortDirection,
 } from "./lib/tree";
 import { themeColor, themeColorAlpha } from "./lib/theme-colors";
 import {
@@ -110,9 +113,6 @@ const DEFAULT_CONFIG: PlotConfig = {
   xLogBase: null,
   yLogBase: null,
   plotType: "cartesian",
-  vsEnabled: false,
-  vsRange: [0, 10],
-  vsPinned: [],
   annotations: [],
   shapes: [],
   displayUnitSystem: null,
@@ -305,7 +305,6 @@ interface PlotTab {
   id: string;
   config: PlotConfig;
   data: Record<string, number[]> | null;
-  vsDatasets: Record<string, Record<string, number[]>>;
   filterFingerprints: Record<string, string>;
   xAxisFilterFingerprint: string;
   historyStack: string[];
@@ -362,6 +361,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     refFrameSearch: "",
     plotConfigOpen: false,
     downloadOpen: false,
+    shareOpen: false,
+    mergeLinkDraft: "" as string,
     activeFrame: null as string | null,
     dragCounter: 0,
     editorOpen: false,
@@ -400,6 +401,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     profileWarnings: {} as Record<string, string[]>,
     profileSearch: localStorage.getItem("mojo:profile:search") ?? "",
     profilesOpen: false,
+    // page-level (not a local x-data on the Profiles button) so the Ctrl+S
+    // shortcut below can position the popup too, not just a direct click -
+    // it lives in this component's own keydown handler, a different Alpine
+    // scope than a button-local x-data could ever reach.
+    profilesCoords: { top: 0, left: 0 },
     profileNameDraft: "",
     // folder-tree view (lib/tree.ts) over `profiles` - not persisted across
     // reloads, unlike settings-panel.ts's collapsed-sections map: profiles
@@ -408,14 +414,64 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // fixed schema never does, so "start fully expanded" is a simpler,
     // always-correct default than tracking staleness in localStorage.
     profileTreeCollapsed: {} as Record<string, boolean>,
+    // sort/filter preferences persist across reloads (like profileSearch
+    // above), unlike the collapse map, since they're a standing preference
+    // rather than session-local navigation state.
+    profileSortMode: (localStorage.getItem("mojo:profile:sort") ??
+      "modified") as TreeSortMode,
+    profileSortDir: (localStorage.getItem("mojo:profile:sortDir") ??
+      "desc") as TreeSortDirection,
+    hideInvalidProfiles: localStorage.getItem("mojo:profile:hideInvalid") === "1",
     get profileTreeRows(): TreeRow<{ name: string; modified: number }>[] {
-      return buildTreeRows(this.profiles);
+      // folders follow the same order as their contents in "modified" mode
+      // (a folder holding the most/least recently changed profile bubbles
+      // like that profile itself would) but stay alphabetical-by-name in
+      // "name" mode - see buildTreeRows's own comment on folderOrder.
+      return buildTreeRows(
+        sortTreeItems(this.profiles, this.profileSortMode, this.profileSortDir),
+        this.profileSortMode === "modified" ? "input" : "alpha",
+      );
+    },
+    // a profile is invalid when loadProfiles() found it referencing columns/
+    // frames not present in this trial (profileWarnings, populated there)
+    get hasInvalidProfiles(): boolean {
+      return this.profiles.some((p) => (this.profileWarnings[p.name]?.length ?? 0) > 0);
     },
     get profileVisibleRows(): TreeRow<{ name: string; modified: number }>[] {
       const q = this.profileSearch.toLowerCase();
-      return visibleTreeRows(this.profileTreeRows, this.profileTreeCollapsed, this.profileSearch, (p) =>
-        p.name.toLowerCase().includes(q),
+      return visibleTreeRows(
+        this.profileTreeRows,
+        this.profileTreeCollapsed,
+        this.profileSearch,
+        (p) => p.name.toLowerCase().includes(q),
+        undefined,
+        (p) => (this.profileWarnings[p.name]?.length ?? 0) === 0,
+        this.hideInvalidProfiles,
       );
+    },
+    // Re-clicking the already-active sort mode reverses its direction
+    // instead of doing nothing; switching to the other mode resets to that
+    // mode's own natural default direction (see sortTreeItems's comment).
+    setProfileSortMode(mode: TreeSortMode) {
+      if (this.profileSortMode === mode) {
+        this.profileSortDir = this.profileSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.profileSortMode = mode;
+        this.profileSortDir = mode === "name" ? "asc" : "desc";
+      }
+      try {
+        localStorage.setItem("mojo:profile:sort", this.profileSortMode);
+        localStorage.setItem("mojo:profile:sortDir", this.profileSortDir);
+      } catch {}
+    },
+    toggleHideInvalidProfiles() {
+      this.hideInvalidProfiles = !this.hideInvalidProfiles;
+      try {
+        localStorage.setItem(
+          "mojo:profile:hideInvalid",
+          this.hideInvalidProfiles ? "1" : "0",
+        );
+      } catch {}
     },
     toggleProfileFolder(path: string) {
       this.profileTreeCollapsed = { ...this.profileTreeCollapsed, [path]: !this.profileTreeCollapsed[path] };
@@ -526,6 +582,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     // --- MATCHUP STATE ---
+    // Page-level/workspace-wide, shared by every plot tab - which trials
+    // you're comparing against isn't a single plot's concern (see
+    // syncVsRange()). `vs` is the committed/applied setting; `vsDraft` below
+    // is the header VS selector's own editable buffer, pushed into `vs` by
+    // syncVsRange() when the user hits Apply.
+    vs: {
+      enabled: false,
+      range: [0, 10] as [number, number],
+      pinned: [] as number[],
+    },
     vsDatasets: {} as Record<string, Record<string, number[]>>,
     allTrials: [] as string[],
     vsMenuOpen: false,
@@ -590,14 +656,54 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // folder-tree view (lib/tree.ts) over `labSchemas` - see
     // profileTreeCollapsed's comment above for why this isn't persisted.
     labTreeCollapsed: {} as Record<string, boolean>,
+    // sort/filter preferences persist across reloads - see
+    // profileSortMode's own comment above for why (a standing preference,
+    // not session-local navigation state like the collapse map).
+    labSortMode: (localStorage.getItem("mojo:lab:sort") ??
+      "modified") as TreeSortMode,
+    labSortDir: (localStorage.getItem("mojo:lab:sortDir") ??
+      "desc") as TreeSortDirection,
+    hideInvalidLabs: localStorage.getItem("mojo:lab:hideInvalid") === "1",
     get labTreeRows(): TreeRow<LabSchema>[] {
-      return buildTreeRows(this.labSchemas);
+      // see profileTreeRows's own comment on folderOrder
+      return buildTreeRows(
+        sortTreeItems(this.labSchemas, this.labSortMode, this.labSortDir),
+        this.labSortMode === "modified" ? "input" : "alpha",
+      );
+    },
+    get hasInvalidLabs(): boolean {
+      return this.labSchemas.some((l) => !l.valid);
     },
     get labVisibleRows(): TreeRow<LabSchema>[] {
       const q = this.labSearch.toLowerCase();
-      return visibleTreeRows(this.labTreeRows, this.labTreeCollapsed, this.labSearch, (l) =>
-        l.name.toLowerCase().includes(q),
+      return visibleTreeRows(
+        this.labTreeRows,
+        this.labTreeCollapsed,
+        this.labSearch,
+        (l) => l.name.toLowerCase().includes(q),
+        undefined,
+        (l) => l.valid,
+        this.hideInvalidLabs,
       );
+    },
+    // see setProfileSortMode's own comment for the re-click-reverses rule
+    setLabSortMode(mode: TreeSortMode) {
+      if (this.labSortMode === mode) {
+        this.labSortDir = this.labSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.labSortMode = mode;
+        this.labSortDir = mode === "name" ? "asc" : "desc";
+      }
+      try {
+        localStorage.setItem("mojo:lab:sort", this.labSortMode);
+        localStorage.setItem("mojo:lab:sortDir", this.labSortDir);
+      } catch {}
+    },
+    toggleHideInvalidLabs() {
+      this.hideInvalidLabs = !this.hideInvalidLabs;
+      try {
+        localStorage.setItem("mojo:lab:hideInvalid", this.hideInvalidLabs ? "1" : "0");
+      } catch {}
     },
     toggleLabFolder(path: string) {
       this.labTreeCollapsed = { ...this.labTreeCollapsed, [path]: !this.labTreeCollapsed[path] };
@@ -2486,18 +2592,43 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
         const params = new URLSearchParams(window.location.search);
         const shared = params.get("v");
+        let useSharedLink = !!shared;
         if (shared) {
-          this.hydrateFromUrl(shared);
-          this.vsDraft.enabled = this.config.vsEnabled;
-          this.vsDraft.range = [...this.config.vsRange];
-          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
-          this.config.vsEnabled = false;
+          // A ?v= link left in the address bar survives a plain page
+          // refresh - without asking first, every such refresh would
+          // silently blow away whatever tab session is already saved in
+          // this browser, which is exactly what happened here. Only
+          // prompt when there's actually something to lose.
+          let hasStoredTabs = false;
+          try {
+            hasStoredTabs = !!localStorage.getItem("mojo:plot:tabs");
+          } catch {}
+          if (hasStoredTabs) {
+            const ok = await window.mojoConfirm?.({
+              title: "Open shared link?",
+              message:
+                "This link will replace the plot tabs you already have open in this browser. Replace them, or keep what you have?",
+              confirmLabel: "Replace my tabs",
+              cancelLabel: "Keep my tabs",
+              variant: "warning",
+            });
+            useSharedLink = ok ?? false;
+          }
+          // Strip ?v= from the address bar regardless of the choice above,
+          // so a later refresh doesn't re-ask (or silently reapply it)
+          // for a link that's already been handled once.
+          const url = new URL(window.location.href);
+          url.searchParams.delete("v");
+          window.history.replaceState(null, "", url.toString());
+        }
+        if (useSharedLink) {
+          this.hydrateFromUrl(shared!);
         } else {
           this.loadConfig();
-          this.vsDraft.enabled = this.config.vsEnabled;
-          this.vsDraft.range = [...this.config.vsRange];
-          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
         }
+        // VS is page-level now, not part of config/the shared-link payload -
+        // same init path regardless of which branch above ran.
+        this._initVsState();
 
         // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
         // inject it now (before watchers are registered so this is a silent migration).
@@ -2510,12 +2641,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
         // Restores a previously-saved multi-tab session (mojo:plot:tabs),
         // superseding the single-config state the sequence above just
-        // produced - unless a shared link (?v=) was just hydrated, which
-        // always wins over whatever tabs happen to be saved on this
-        // browser. Awaited directly (not via $nextTick) so the fetch it may
-        // need to run for a restored tab's uncached columns completes
+        // produced - unless a shared link was just hydrated (useSharedLink,
+        // set above only after confirming it's OK to replace an existing
+        // session). Awaited directly (not via $nextTick) so the fetch it
+        // may need to run for a restored tab's uncached columns completes
         // before the render below ever starts.
-        await this._initPlotTabs(!!shared);
+        await this._initPlotTabs(useSharedLink);
 
         void this.$nextTick(() => {
           this.pushHistory();
@@ -2794,6 +2925,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 nameEl?.setSelectionRange(0, 0);
               }
             } else if (!isTextInput) {
+              this._computeProfilesCoords();
               this.profilesOpen = true;
               void this.loadProfiles();
               void this.$nextTick(() => {
@@ -2875,8 +3007,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           .filter((n) => !isNaN(n));
         const minFleet = Math.min(...ids);
         const maxFleet = Math.max(...ids);
-        if (this.config.vsRange[0] === 0 && this.config.vsRange[1] === 0) {
-          this.config.vsRange = [minFleet, maxFleet];
+        if (this.vs.range[0] === 0 && this.vs.range[1] === 0) {
+          this.vs.range = [minFleet, maxFleet];
           this.vsDraft.range = [minFleet, maxFleet];
         }
       }
@@ -3059,8 +3191,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           } catch {}
         }
         if (
-          this.config.vsEnabled &&
-          oldValue?.vsEnabled &&
+          this.vs.enabled &&
           (value.xAxis!.col! !== oldValue?.xAxis?.col ||
             Object.keys(value.yAxes).length !==
               Object.keys(oldValue.yAxes ?? {}).length)
@@ -3106,7 +3237,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           this.vsDatasets = {};
           const resp = await this.fetchTrialData(this.trialId, colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
-          if (this.config.vsEnabled) await this.syncVsRange();
+          if (this.vs.enabled) await this.syncVsRange();
         }
 
         this.saveAndRender();
@@ -3250,6 +3381,50 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // -----------------------------------------------------------------------
     // VS (comparison) mode
     // -----------------------------------------------------------------------
+    // Restores a VS comparison range/pinned selection WITHOUT ever
+    // auto-enabling comparison mode - this is intentional, not an
+    // oversight: turning VS on can pull a large amount of trial data
+    // (every trial in range × every active column), so re-enabling it is
+    // always an explicit user action (toggle + Apply in the header), never
+    // implied by restoring a remembered range - whether that range came
+    // from localStorage on a fresh page load or from a saved profile that
+    // happened to have comparison mode on when it was saved.
+    _restoreVsRange(range: [number, number], pinned: number[]) {
+      this.vs.enabled = false;
+      this.vs.range = range;
+      this.vs.pinned = pinned;
+      this.vsDatasets = {};
+      this.vsDraft.enabled = false;
+      this.vsDraft.range = [...range];
+      this.vsDraft.pinned = [...pinned];
+    },
+
+    _initVsState() {
+      let range = this.vs.range;
+      let pinned = this.vs.pinned;
+      try {
+        const raw = localStorage.getItem("mojo:plot:vs");
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            range?: [number, number];
+            pinned?: number[];
+          };
+          if (parsed.range) range = parsed.range;
+          if (parsed.pinned) pinned = parsed.pinned;
+        }
+      } catch {}
+      this._restoreVsRange(range, pinned);
+    },
+
+    _persistVsState() {
+      try {
+        localStorage.setItem(
+          "mojo:plot:vs",
+          JSON.stringify({ range: this.vs.range, pinned: this.vs.pinned }),
+        );
+      } catch {}
+    },
+
     // same coloring as monitor.html's success/failed/error trial badges
     // (badge-success/-failure/-error in main.css: a translucent tinted
     // background + colored border/text, not a solid fill) -- their exact
@@ -3283,8 +3458,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       }
 
       if (!this.vsDraft.enabled) {
-        this.config.vsEnabled = false;
+        this.vs.enabled = false;
         this.vsDatasets = {};
+        this._persistVsState();
         return;
       }
 
@@ -3344,9 +3520,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         );
 
         this.vsDatasets = { ...this.vsDatasets };
-        this.config.vsRange = [start, end];
-        this.config.vsPinned = [...this.vsDraft.pinned];
-        this.config.vsEnabled = true;
+        this.vs.range = [start, end];
+        this.vs.pinned = [...this.vsDraft.pinned];
+        this.vs.enabled = true;
+        this._persistVsState();
         if (targetIds.length > 0) {
           this.notify(
             `Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`,
@@ -3360,8 +3537,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     handleVsToggle() {
       if (!this.vsDraft.enabled) {
-        this.config.vsEnabled = false;
+        this.vs.enabled = false;
         this.vsDatasets = {};
+        this._persistVsState();
         this.renderPlot();
       }
     },
@@ -3814,8 +3992,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       } else {
         Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
       }
-      if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
-        errors.push("Comparison range start cannot be greater than end.");
       return errors;
     },
 
@@ -3860,8 +4036,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as Partial<PlotConfig>;
-          const { vsEnabled: _vs, ...rest } = parsed;
-          this.config = { ...this.config, ...rest };
+          this.config = { ...this.config, ...parsed };
         } catch {
           console.error("Stored config corrupt");
         }
@@ -3931,6 +4106,62 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     copyRawConfig() {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
+    },
+
+    // Accepts either a bare shared-link code (the ?v= value alone) or a
+    // full URL containing one, so pasting the whole copied link just
+    // works without the user having to trim it down themselves.
+    _extractShareBlob(input: string): string | null {
+      const trimmed = input.trim();
+      if (!trimmed) return null;
+      try {
+        const url = new URL(trimmed);
+        const v = url.searchParams.get("v");
+        if (v) return v;
+      } catch {
+        // not a parseable URL - fall through and treat it as a bare code
+      }
+      return trimmed;
+    },
+
+    // Adds a shared link as a NEW tab instead of replacing the session the
+    // way opening a ?v= link in a fresh page load does (hydrateFromUrl) -
+    // lets several links get combined into one browser window one at a
+    // time, e.g. pasting a colleague's link alongside your own tabs.
+    async addTabFromShareLink(input: string) {
+      const blob = this._extractShareBlob(input);
+      if (!blob) {
+        this.notify("Paste a shared link first", "error");
+        return;
+      }
+      try {
+        const decoded = LZString.decompressFromEncodedURIComponent(blob);
+        if (!decoded) throw new Error("Decompression failed");
+        const parsed = JSON.parse(decoded) as Partial<PlotConfig>;
+        const config = {
+          ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
+          ...parsed,
+        };
+        this._snapshotActivePlotTab();
+        const newTab: PlotTab = {
+          id: newTabId(),
+          config,
+          data: null,
+          filterFingerprints: {},
+          xAxisFilterFingerprint: "[]",
+          historyStack: [],
+          historyIndex: -1,
+          savedSnapshot: null,
+        };
+        this.plotTabs.push(newTab);
+        await this._activatePlotTab(newTab.id);
+        this._persistPlotTabs();
+        this.mergeLinkDraft = "";
+        this.shareOpen = false;
+        this.notify("Tab added from shared link", "success");
+      } catch {
+        this.notify("Failed to decode shared link", "error");
+      }
     },
 
     // Forces an immediate Plotly resize of the main chart. initChartResize's
@@ -5435,12 +5666,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     // ── plot tab helpers ─────────────────────────────────────────────────────
-    // config/data/vsDatasets/filterFingerprints/xAxisFilterFingerprint/
-    // historyStack/historyIndex are all mirrors of the *active* PlotTab's own
-    // fields - the same pattern labName/labGraph use for Lab tabs above. This
-    // means renderPlot(), the JSON editor, undo/redo, and every axis/filter
-    // picker keep reading/writing `this.config` etc. completely unchanged;
-    // only tab switching needs to know these are mirrors at all.
+    // config/data/filterFingerprints/xAxisFilterFingerprint/historyStack/
+    // historyIndex are all mirrors of the *active* PlotTab's own fields - the
+    // same pattern labName/labGraph use for Lab tabs above. This means
+    // renderPlot(), the JSON editor, undo/redo, and every axis/filter picker
+    // keep reading/writing `this.config` etc. completely unchanged; only tab
+    // switching needs to know these are mirrors at all. vsDatasets is NOT
+    // part of this mirror set - VS (comparison-trial) settings and their
+    // fetched data are page-level/shared across every tab (see the `vs`
+    // field and syncVsRange()), not per-tab.
 
     _makeBlankPlotTab(): PlotTab {
       const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
@@ -5448,7 +5682,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         id: newTabId(),
         config,
         data: null,
-        vsDatasets: {},
         filterFingerprints: {},
         xAxisFilterFingerprint: "[]",
         historyStack: [],
@@ -5475,17 +5708,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // it fall back to wrapping whatever this.config/data/etc. the sequence
     // above already produced into a single starting tab - the same
     // legacy-format-fallback shape _initTabs() uses for Signal Lab.
-    // `skipStoredTabs` is true when a shared link (?v=) was just hydrated,
-    // which must always win over whatever tabs happen to be saved on this
-    // browser, exactly like hydrateFromUrl() already takes precedence over
-    // loadConfig() above.
+    // `skipStoredTabs` is true when a shared link (?v=) was just hydrated
+    // AND the caller confirmed it's OK to replace whatever tabs happen to
+    // be saved on this browser (see init()'s useSharedLink) - a link left
+    // in the address bar shouldn't silently wipe an existing session on
+    // every plain page refresh.
     async _initPlotTabs(skipStoredTabs: boolean) {
       const wrapCurrentAsTab = (): { tabs: PlotTab[]; activeId: string } => {
         const tab: PlotTab = {
           id: newTabId(),
           config: this.config,
           data: this.data,
-          vsDatasets: this.vsDatasets,
           filterFingerprints: this.filterFingerprints,
           xAxisFilterFingerprint: this.xAxisFilterFingerprint,
           historyStack: this.historyStack,
@@ -5518,13 +5751,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // session's own state instead.
       this.config = active.config;
       this.data = active.data;
-      this.vsDatasets = active.vsDatasets;
       this.filterFingerprints = active.filterFingerprints;
       this.xAxisFilterFingerprint = active.xAxisFilterFingerprint;
       this.historyStack = active.historyStack;
       this.historyIndex = active.historyIndex;
-      // data/vsDatasets are never persisted (see _persistPlotTabs), so a
-      // tab restored from storage always needs its columns re-fetched here.
+      // data is never persisted (see _persistPlotTabs), so a tab restored
+      // from storage always needs its columns re-fetched here.
       const needed = this._neededColumns(active.config, active.data);
       if (needed.length > 0) {
         const fetched = await this.fetchTrialData(this.trialId, needed);
@@ -5537,22 +5769,20 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (!tab) return;
       tab.config = this.config;
       tab.data = this.data;
-      tab.vsDatasets = this.vsDatasets;
       tab.filterFingerprints = this.filterFingerprints;
       tab.xAxisFilterFingerprint = this.xAxisFilterFingerprint;
       tab.historyStack = this.historyStack;
       tab.historyIndex = this.historyIndex;
     },
 
-    // Persists the tab list WITHOUT the large, always-refetchable data/
-    // vsDatasets caches - unlike a LabTab's graph (small, needed to restore
-    // the canvas), raw telemetry arrays would bloat localStorage for no
+    // Persists the tab list WITHOUT the large, always-refetchable data
+    // cache - unlike a LabTab's graph (small, needed to restore the
+    // canvas), raw telemetry arrays would bloat localStorage for no
     // benefit, so every tab's data starts null again after a page reload.
     _persistPlotTabs() {
       const sanitized = this.plotTabs.map((t) => ({
         ...t,
         data: null,
-        vsDatasets: {},
       }));
       persistTabsToStorage(
         "mojo:plot:tabs",
@@ -5583,7 +5813,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // reads them synchronously and must not diff the new tab's filters
       // against the previous tab's fingerprints.
       this.data = tab.data;
-      this.vsDatasets = tab.vsDatasets;
       this.filterFingerprints = tab.filterFingerprints;
       this.xAxisFilterFingerprint = tab.xAxisFilterFingerprint;
       this.historyStack = tab.historyStack;
@@ -5627,7 +5856,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         id: newTabId(),
         config,
         data: source.data ? { ...source.data } : null,
-        vsDatasets: {},
         filterFingerprints: { ...source.filterFingerprints },
         xAxisFilterFingerprint: source.xAxisFilterFingerprint,
         historyStack: [],
@@ -5706,12 +5934,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         () => this._makeBlankPlotTab(),
       );
       this.plotTabs = tabs;
-      // data/vsDatasets stripped same as _persistPlotTabs() - always
-      // re-fetched on reopen via _activatePlotTab()'s own needed-columns
-      // check; closedAtIndex is this tab's position before the splice above,
-      // so reopenLastClosedPlotTab() can reinsert it back where it was.
+      // data stripped same as _persistPlotTabs() - always re-fetched on
+      // reopen via _activatePlotTab()'s own needed-columns check;
+      // closedAtIndex is this tab's position before the splice above, so
+      // reopenLastClosedPlotTab() can reinsert it back where it was.
       this.closedPlotTabs = [
-        { ...closedTab, data: null, vsDatasets: {}, closedAtIndex: tabIdx },
+        { ...closedTab, data: null, closedAtIndex: tabIdx },
         ...this.closedPlotTabs,
       ].slice(0, _MAX_CLOSED_PLOT_TABS);
       this._persistClosedPlotTabs();
@@ -5751,7 +5979,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         ...toClose.map((t) => ({
           ...t,
           data: null,
-          vsDatasets: {},
           closedAtIndex: indexById.get(t.id),
         })),
         ...this.closedPlotTabs,
@@ -5797,6 +6024,20 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     reorderPlotTabs(draggedId: string, dropIndex: number) {
       this.plotTabs = reorderTabs(this.plotTabs, draggedId, dropIndex);
       this._persistPlotTabs();
+    },
+
+    // Shared by the Profiles button's own @click (_chart.html) and the
+    // Ctrl+S shortcut below, so the popup lands in the right place
+    // regardless of which one opened it - both need this, since Ctrl+S
+    // can't reach a coords value scoped to the button's own local x-data.
+    _computeProfilesCoords() {
+      const btn = document.getElementById("profiles-btn");
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      this.profilesCoords = {
+        top: r.top + window.scrollY,
+        left: r.left + window.scrollX - 288 - 16,
+      };
     },
 
     // -----------------------------------------------------------------------
@@ -5875,6 +6116,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         version: 2,
         tabs: this.plotTabs.map((t) => ({ config: t.config })),
         activeTabIndex,
+        // VS is workspace-level - saved once for the whole profile, not per tab
+        vsEnabled: this.vs.enabled,
+        vsRange: this.vs.range,
+        vsPinned: this.vs.pinned,
       };
       try {
         const resp = await fetch(this._profileUrl(name), {
@@ -5941,7 +6186,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           id: newTabId(),
           config: t.config,
           data: null,
-          vsDatasets: {},
           filterFingerprints: {},
           xAxisFilterFingerprint: "[]",
           historyStack: [],
@@ -5955,6 +6199,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.plotTabs = newTabs;
         await this._activatePlotTab(newTabs[activeIndex]!.id);
         this._persistPlotTabs();
+        // a profile's saved comparison range/pinned trials carry over, but
+        // (like page load) VS mode itself never auto-enables from this -
+        // pulling comparison data is only ever a deliberate toggle+Apply,
+        // even if the profile happened to be saved with it on.
+        this._restoreVsRange(profile.vsRange ?? [0, 10], profile.vsPinned ?? []);
+        this._persistVsState();
 
         if (missing.length) {
           this.notify(
@@ -6035,9 +6285,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       let globalMax = -Infinity;
       const activeDatasets: Array<Record<string, number[]>> = [this.data ?? {}];
 
-      if (this.config.vsEnabled) {
-        const [start, end] = this.config.vsRange;
-        const pinnedSet = new Set(this.config.vsPinned ?? []);
+      if (this.vs.enabled) {
+        const [start, end] = this.vs.range;
+        const pinnedSet = new Set(this.vs.pinned ?? []);
         Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
           if ((n >= start && n <= end) || pinnedSet.has(n))
@@ -6246,9 +6496,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         })
         .filter((t): t is NonNullable<typeof t> => t !== null);
 
-      if (this.config.vsEnabled) {
-        const [start, end] = this.config.vsRange;
-        const pinnedSet = new Set(this.config.vsPinned ?? []);
+      if (this.vs.enabled) {
+        const [start, end] = this.vs.range;
+        const pinnedSet = new Set(this.vs.pinned ?? []);
         const legendTracker = new Set<string>();
         const sortedVsIds = Object.keys(this.vsDatasets).sort(
           (a, b) =>

@@ -66,22 +66,82 @@
          Export) is now x-teleport'd to body with JS-computed position,
          specifically so they don't get clipped by this scroll container. -->
     <div class="card flex flex-col gap-2 p-2 shrink-0 relative z-50 overflow-y-auto overflow-x-hidden custom-scrollbar">
-        <!-- copy share link -->
+        <!-- share: copy a link to the current tab, or paste one in to add
+             it as a new tab (merges another link's plot into this session
+             instead of replacing it, the way opening a ?v= link fresh does) -->
         <div class="flex flex-col gap-2">
-            <button @click="copyShareLink()"
-                    class="sidebar-btn disabled:opacity-40 disabled:hover:bg-well"
-                    title="Copy Share Link">
-                <svg class="w-5 h-5"
-                     fill="none"
-                     stroke="currentColor"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                <span class="text-xs font-black uppercase tracking-tighter">Share</span>
-            </button>
+            <div class="relative"
+                 x-data="{ shareCoords: { top: 0, left: 0 } }">
+                <button x-ref="shareBtn"
+                        @click="const r = $refs.shareBtn.getBoundingClientRect(); const w = window.innerWidth >= 640 ? 288 : window.innerWidth - 96; shareCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - w - 16 }; shareOpen = !shareOpen"
+                        class="sidebar-btn disabled:opacity-40 disabled:hover:bg-well"
+                        :class="shareOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
+                        title="Share">
+                    <svg class="w-5 h-5"
+                         :class="shareOpen ? 'text-accent-500' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    <span class="text-xs font-black uppercase tracking-tighter">Share</span>
+                </button>
+
+                <template x-teleport="body">
+                    <div x-show="shareOpen"
+                         x-transition
+                         @click.stop
+                         @click.away="shareOpen = false"
+                         :style="`position:absolute;top:${shareCoords.top}px;left:${shareCoords.left}px;`"
+                         class="w-72 bg-surface border border-line rounded-xl shadow-2xl p-4 z-200 space-y-4"
+                         style="display:none;">
+
+                        <div class="border-b border-subtle pb-1">
+                            <p class="text-base font-black uppercase text-ink-muted tracking-widest">
+                                Share</p>
+                        </div>
+
+                        <!-- copy: this tab only -->
+                        <div>
+                            <button @click="copyShareLink()"
+                                    class="btn btn-secondary w-full justify-center text-sm font-bold uppercase">
+                                Copy link to this tab
+                            </button>
+                            <p class="text-xs text-ink-muted mt-1.5 leading-relaxed">
+                                Copies the current tab's plot only, not the whole workspace - use
+                                <span class="font-bold text-icon-strong dark:text-white">Profiles</span> to share every open tab at once.
+                            </p>
+                        </div>
+
+                        <div class="border-t border-subtle"></div>
+
+                        <!-- paste: add as a new tab -->
+                        <div>
+                            <p class="text-sm font-bold text-ink-secondary uppercase tracking-tight mb-1.5">
+                                Add tab from link</p>
+                            <div class="flex gap-1.5">
+                                <input type="text"
+                                       x-model="mergeLinkDraft"
+                                       @keydown.enter="addTabFromShareLink(mergeLinkDraft)"
+                                       placeholder="Paste a shared link…"
+                                       class="input-text flex-1" />
+                                <button @click="addTabFromShareLink(mergeLinkDraft)"
+                                        :disabled="!mergeLinkDraft.trim()"
+                                        class="btn btn-primary text-sm font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
+                                    Add
+                                </button>
+                            </div>
+                            <p class="text-xs text-ink-muted mt-1.5 leading-relaxed">
+                                Merges someone else's shared link into this session as a new tab,
+                                alongside whatever's already open here.
+                            </p>
+                        </div>
+                    </div>
+                </template>
+            </div>
         </div>
 
         <!-- ── PLOT CONFIG: grid · line · interp · hover · legend · scale · title ── -->
@@ -1389,10 +1449,15 @@
 
         <!-- ── PROFILES ───────────────────────────────────────────────── -->
         <div class="flex flex-col gap-2">
-            <div class="relative"
-                 x-data="{ profilesCoords: { top: 0, left: 0 } }">
-                <button x-ref="profilesBtn"
-                        @click="const r = $refs.profilesBtn.getBoundingClientRect(); profilesCoords = { top: r.top + window.scrollY, left: r.left + window.scrollX - 288 - 16 }; profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
+            <div class="relative">
+                {# profilesCoords lives on the main component, not a local
+                   x-data here - it also needs to be computed from the
+                   Ctrl+S shortcut (trial-viewer.ts), a different Alpine
+                   scope that a button-local value would be unreachable
+                   from. id (not just x-ref) so that keydown handler can
+                   find this exact button via plain DOM lookup. #}
+                <button id="profiles-btn"
+                        @click="_computeProfilesCoords(); profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
                         class="sidebar-btn"
                         :class="profilesOpen ? 'text-accent-500 bg-accent-100/50 dark:bg-chip/50' : ''"
                         title="Saved Profiles">
@@ -1413,7 +1478,7 @@
                     <span class="text-xs font-black uppercase tracking-tighter">Profiles</span>
                 </button>
 
-                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input, tree_sort_controls %}
                 <template x-teleport="body">
                     <div x-show="profilesOpen"
                          x-transition
@@ -1539,6 +1604,7 @@
                                         x-text="searchSuggestion"></button>
                                 <kbd>Tab</kbd>
                             </div>
+                            {{ tree_sort_controls("profileSortMode", "profileSortDir", "setProfileSortMode('name')", "setProfileSortMode('modified')", "hideInvalidProfiles", "toggleHideInvalidProfiles()", "hasInvalidProfiles") }}
                         </div>
 
                         <!-- Profile list: a flat, depth-annotated row list

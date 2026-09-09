@@ -302,13 +302,10 @@ export interface PlotConfig {
   xLogBase: number | null;
   yLogBase: number | null;
   plotType: PlotType;
-  vsEnabled: boolean;
-  vsRange: [number, number];
   annotations: Annotation[];
   shapes: Shape[];
   displayUnitSystem: DisplayUnitSystem | null;
   maxPoints: number | null;
-  vsPinned: number[];
 }
 
 export type Shape = VlineShape | HlineShape | RectShape;

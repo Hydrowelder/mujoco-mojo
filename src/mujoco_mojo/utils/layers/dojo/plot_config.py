@@ -618,16 +618,6 @@ class PlotConfig(BaseModel):
         description="Coordinate system used to render the plot.",
     )
 
-    vs_enabled: bool = Field(
-        default=False,
-        description="Whether comparison traces from other trials are shown.",
-    )
-
-    vs_range: Annotated[tuple[int, int], Field()] = Field(
-        default=(0, 10),
-        description="Trial number range for comparison traces as `(first, last)`.",
-    )
-
     annotations: list[Annotation] = Field(
         default_factory=list,
         description="Text annotations pinned to data coordinates.",
@@ -647,11 +637,6 @@ class PlotConfig(BaseModel):
         default=None,
         gt=0,
         description="Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points.",
-    )
-
-    vs_pinned: list[int] = Field(
-        default_factory=list,
-        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
     )
 
     @field_validator("ref_frame")
@@ -678,9 +663,6 @@ class PlotConfig(BaseModel):
             and self.range_y[0] >= self.range_y[1]
         ):
             self.range_y = self.range_y[1], self.range_y[0]
-
-        if self.vs_range[0] > self.vs_range[1]:
-            self.vs_range = self.vs_range[1], self.vs_range[0]
 
         if self.x_scale == ScaleType.LOG and self.x_log_base is None:
             raise ValueError("x_log_base is required when x_scale is log")
@@ -731,3 +713,24 @@ class PlotProfile(BaseModel):
         ge=0,
         description="Index into `tabs` of the tab that should be active when the profile is loaded.",
     )
+
+    vs_enabled: bool = Field(
+        default=False,
+        description="Whether comparison traces from other trials are shown.",
+    )
+
+    vs_range: Annotated[tuple[int, int], Field()] = Field(
+        default=(0, 10),
+        description="Trial number range for comparison traces as `(first, last)`.",
+    )
+
+    vs_pinned: list[int] = Field(
+        default_factory=list,
+        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
+    )
+
+    @model_validator(mode="after")
+    def validate_vs_range(self) -> Self:
+        if self.vs_range[0] > self.vs_range[1]:
+            self.vs_range = self.vs_range[1], self.vs_range[0]
+        return self

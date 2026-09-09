@@ -14,4 +14,9 @@ export interface PlotProfile {
   version: 2;
   tabs: PlotProfileTab[];
   activeTabIndex: number;
+  // workspace-level VS (comparison-trial overlay) settings - shared across
+  // every tab in the profile, not nested in any one tab's PlotConfig.
+  vsEnabled: boolean;
+  vsRange: [number, number];
+  vsPinned: number[];
 }
