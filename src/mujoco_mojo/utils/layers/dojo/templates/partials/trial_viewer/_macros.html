@@ -403,6 +403,61 @@ tracking-widest styling every caller's <label> already has - CSS
         </div>
         {% endmacro %}
 
+        {# Sort-mode toggle + "hide invalid" toggle for a folder tree above
+        (Saved Profiles in _chart.html, saved Labs in _signal_lab.html's
+        Load dropdown) - text labels rather than icons, same "no browser,
+        no screenshots" reasoning tree_expand_collapse_buttons' own comment
+        gives for sticking to straight-line paths only: a sort/clock glyph
+        needs curves to read clearly, so a word is the safer bet here
+        without a way to render and check it.
+
+        sort_mode_expr/sort_dir_expr: Alpine expressions for the current
+        TreeSortMode ('name' | 'modified') and TreeSortDirection ('asc' |
+        'desc'). set_name_expr/set_modified_expr/toggle_hide_invalid_expr:
+        full call expressions (parens and any args included, same
+        convention as expand_expr/collapse_expr above - e.g.
+        "setProfileSortMode('name')"), not bare method names, since the two
+        sort buttons call the same method with different arguments rather
+        than two different no-arg methods; that same method call also
+        reverses sort_dir_expr when clicked while already active (see
+        setProfileSortMode's own comment in trial-viewer.ts). hide_invalid_expr:
+        expression for whether invalid entries are currently hidden.
+        has_invalid_expr: expression for whether there's at least one
+        invalid entry to hide - the toggle only renders when true, matching
+        has_folders_expr's own "don't show a control with nothing to do"
+        precedent above. #}
+        {% macro tree_sort_controls(sort_mode_expr, sort_dir_expr, set_name_expr, set_modified_expr, hide_invalid_expr, toggle_hide_invalid_expr, has_invalid_expr) %}
+        <div class="flex items-center justify-between gap-2 mt-1.5">
+            <div class="flex items-center gap-0.5 text-xs font-mono">
+                <button type="button"
+                        @click="{{ set_name_expr }}"
+                        title="Click again to reverse"
+                        class="px-1.5 py-0.5 rounded font-bold uppercase transition-colors"
+                        :class="({{ sort_mode_expr }}) === 'name' ? 'text-accent-500 bg-chip' : 'text-ink-muted hover:text-accent-500'">
+                    A-Z
+                    <span x-show="({{ sort_mode_expr }}) === 'name'"
+                          x-text="({{ sort_dir_expr }}) === 'asc' ? '↑' : '↓'"></span>
+                </button>
+                <button type="button"
+                        @click="{{ set_modified_expr }}"
+                        title="Click again to reverse"
+                        class="px-1.5 py-0.5 rounded font-bold uppercase transition-colors"
+                        :class="({{ sort_mode_expr }}) === 'modified' ? 'text-accent-500 bg-chip' : 'text-ink-muted hover:text-accent-500'">
+                    Recent
+                    <span x-show="({{ sort_mode_expr }}) === 'modified'"
+                          x-text="({{ sort_dir_expr }}) === 'asc' ? '↑' : '↓'"></span>
+                </button>
+            </div>
+            <button type="button"
+                    x-show="{{ has_invalid_expr }}"
+                    @click="{{ toggle_hide_invalid_expr }}"
+                    class="px-1.5 py-0.5 rounded text-xs font-mono font-bold uppercase transition-colors"
+                    :class="({{ hide_invalid_expr }}) ? 'text-accent-500 bg-chip' : 'text-ink-muted hover:text-accent-500'">
+                Hide invalid
+            </button>
+        </div>
+        {% endmacro %}
+
         {# Leaf row for the signal-selector trees (X/Y-axis and node-picker dropdowns,
         _series_panel.html / _signal_lab.html) - select-on-click with a filled dot
         for "currently selected", no badges. Shows just row.name (the last path
@@ -559,15 +614,29 @@ tracking-widest styling every caller's <label> already has - CSS
                                   @dblclick.stop="_renamingTabId = tab.id; $nextTick(() => { $refs.tabNameInput?.focus(); $refs.tabNameInput?.select(); })"></span>
                         </template>
                         <template x-if="_renamingTabId === tab.id">
+                            {# Deliberately :value (one-way) + an explicit
+                               commit on Enter/blur, not x-model.lazy. .lazy
+                               commits on the native `change` event, which a
+                               plain text input only reliably fires on blur -
+                               but every exit path here (Enter, Escape, blur
+                               itself) sets _renamingTabId to null, which
+                               immediately tears the element out of the DOM
+                               via this x-if (unlike the x-show this used to
+                               be). Removing a focused element doesn't
+                               reliably replay the same native blur→change
+                               sequence a CSS-hide does, so .lazy's commit
+                               silently never fired - reading $event.target.
+                               value ourselves makes the commit deterministic
+                               regardless of that timing. #}
                             <input x-ref="tabNameInput"
-                                   x-model.lazy="{{ name_expr }}"
+                                   :value="{{ name_expr }}"
                                    draggable="false"
                                    @click.stop
                                    @mousedown.stop
                                    @dblclick.stop
-                                   @keydown.enter="_renamingTabId = null"
+                                   @keydown.enter="{{ name_expr }} = $event.target.value; _renamingTabId = null"
                                    @keydown.escape.stop="_renamingTabId = null"
-                                   @blur="_renamingTabId = null"
+                                   @blur="{{ name_expr }} = $event.target.value; _renamingTabId = null"
                                    placeholder="untitled"
                                    class="bg-transparent border-b border-accent-500 outline-none text-sm font-mono w-24 min-w-0" />
                         </template>
