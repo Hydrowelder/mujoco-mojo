@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -5,11 +6,15 @@ from pydantic import BaseModel, Field, HttpUrl, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict, TomlConfigSettingsSource
 
 from mujoco_mojo.settings import (
-    AssetBundlingSettings,
     DojoSettings,
+    GeneralSettings,
     MujocoMojoSettings,
     SensAISettings,
     VisualizationSettings,
+)
+from mujoco_mojo.utils.layers.dojo.routers.settings import (
+    _dojo_settings_schema,
+    _settings_payload,
 )
 
 
@@ -88,6 +93,22 @@ def test_sensai_api_key_never_reveals_plaintext_on_dump() -> None:
     assert s.api_key.get_secret_value() == "my-secret-key"
 
 
+def test_dojo_password_never_reveals_plaintext_on_dump() -> None:
+    """dojo.password masks the same way api_key does on a mode='json' dump, while staying None by default (unlike api_key, which always has a placeholder value) so 'no password set' round-trips correctly."""
+    assert DojoSettings().password is None
+
+    d = DojoSettings(password="hunter2")  # type: ignore[arg-type]
+
+    dumped = d.model_dump()
+    assert isinstance(dumped["password"], SecretStr)
+
+    dumped_json = d.model_dump(mode="json")
+    assert dumped_json["password"] == "**********"
+
+    assert d.password is not None
+    assert d.password.get_secret_value() == "hunter2"
+
+
 def _isolate_project_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Points project_settings_file() at a guaranteed-nonexistent path, so a test controlling only the global file isn't accidentally affected by a real project settings file in whatever directory the test happens to run from."""
     monkeypatch.setattr(
@@ -139,6 +160,46 @@ def test_settings_save_never_writes_a_real_secret(
         settings.dojo.sensai.api_key.get_secret_value()
         == "sk-not-a-real-key-but-pretend"
     )
+
+
+def test_settings_save_never_writes_a_real_dojo_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save() never persists dojo.password's real value - only the masked placeholder ever reaches disk, same guarantee as dojo.sensai.api_key."""
+    toml_path = tmp_path / "settings.toml"
+    monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
+    monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
+    _isolate_project_settings(monkeypatch, tmp_path)
+
+    settings = MujocoMojoSettings(
+        dojo=DojoSettings(password="hunter2")  # type: ignore[arg-type]
+    )
+    settings.save()
+
+    content = toml_path.read_text()
+    assert "hunter2" not in content
+    assert 'password = "**********"' in content
+
+    assert settings.dojo.password is not None
+    assert settings.dojo.password.get_secret_value() == "hunter2"
+
+
+def test_dojo_web_response_never_mentions_secret_fields_at_all() -> None:
+    """
+    The schema and values payload the Dojo web settings panel actually receives (`_dojo_settings_schema`/`_settings_payload`, as served by `GET/POST /settings`) must not contain the literal field names `password`/`api_key` anywhere - not just mask their values - since the frontend has no legitimate need to know these fields exist. Regression test for two bugs found while building this: a nested-model field's schema entry re-embeds a whole-object copy of its default one level up (leaking a secret field's name back in after removing it from `properties`), and a value-based `isinstance(value, SecretStr)` check misses `password`, whose default is `None`, not a `SecretStr` instance.
+    """
+    settings = MujocoMojoSettings(
+        dojo=DojoSettings(
+            password="SUPER_SECRET_VALUE",  # type: ignore[arg-type]
+            sensai=SensAISettings(api_key="ANOTHER_SECRET_VALUE"),  # type: ignore[arg-type]
+        )
+    )
+    combined = json.dumps(
+        {"schema": _dojo_settings_schema(), **_settings_payload(settings)}
+    )
+
+    for needle in ("password", "api_key", "SUPER_SECRET_VALUE", "ANOTHER_SECRET_VALUE"):
+        assert needle not in combined
 
 
 def test_settings_save_writes_schema_header_on_first_save(
@@ -201,13 +262,13 @@ def test_settings_save_preserves_hand_written_comments(
 
     toml_path.write_text(
         "#:schema settings.schema.json\n"
-        "[assets]\n"
+        "[general]\n"
         "# I turned this on for my cluster, please don't revert it\n"
         "symlink = false\n",
         encoding="utf-8",
     )
 
-    MujocoMojoSettings(assets=AssetBundlingSettings(symlink=True)).save()
+    MujocoMojoSettings(general=GeneralSettings(symlink=True)).save()
 
     content = toml_path.read_text()
     assert "# I turned this on for my cluster, please don't revert it" in content
@@ -306,13 +367,111 @@ def test_write_schema_files_writes_schema_and_taplo_config(tmp_path: Path) -> No
     taplo_path = tmp_path / ".taplo.toml"
     assert schema_path.exists()
     schema = json.loads(schema_path.read_text())
-    symlink_prop = schema["$defs"]["AssetBundlingSettings"]["properties"]["symlink"]
+    symlink_prop = schema["$defs"]["GeneralSettings"]["properties"]["symlink"]
     assert symlink_prop["description"].endswith("Default: `false`")
 
     assert taplo_path.exists()
     taplo_content = taplo_path.read_text()
     assert 'include = ["settings.toml"]' in taplo_content
     assert schema_path.as_uri() in taplo_content
+
+
+def test_enum_field_schema_has_no_ref_and_carries_its_own_default(
+    tmp_path: Path,
+) -> None:
+    """A `StrEnum`-typed field (e.g. dojo.profile_sort_mode) must not be left as a bare `$ref` (or allOf-wrapped `$ref`) with `default`/`description` as sibling keys - not every schema consumer honors sibling keywords next to a `$ref` (taplo notably doesn't, showing only the enum type's own generic description instead). The enum definition's `enum`/`type`/`x-enum-descriptions` must be inlined directly onto the property instead, so every consumer sees the field's own appended "Default: ..." line and value descriptions with no ref resolution needed at all - the same self-contained shape a plain (non-shared) Literal-typed field already gets for free."""
+    import json
+
+    MujocoMojoSettings.write_schema_files(tmp_path)
+    schema = json.loads((tmp_path / "settings.schema.json").read_text())
+
+    prop = schema["$defs"]["DojoSettings"]["properties"]["profile_sort_mode"]
+    assert "$ref" not in prop
+    assert "allOf" not in prop
+    assert prop["default"] == "modified"
+    assert prop["description"].endswith("Default: `modified`")
+    assert set(prop["enum"]) == {"name", "modified"}
+    assert "x-enum-descriptions" in prop
+
+    # the shared $defs entry itself is untouched - other tooling that reads
+    # $defs directly (or a future property that does need the shared ref)
+    # still finds the full, un-mutated enum definition there
+    assert schema["$defs"]["SortMode"]["enum"] == ["name", "modified"]
+
+
+def test_dict_shaped_settings_section_keeps_its_ref(tmp_path: Path) -> None:
+    """Regression guard: a dict-shaped RootModel section (slurm) also lacks a "properties" key, same as an enum leaf - checking for "not an object with properties" alone isn't enough to identify an inlinable enum, since that also matches slurm and would strip its $ref, losing the section's own title/x-icon/additionalProperties in the Dojo settings panel. Only a target that actually has an "enum" key gets inlined."""
+    import json
+
+    MujocoMojoSettings.write_schema_files(tmp_path)
+    schema = json.loads((tmp_path / "settings.schema.json").read_text())
+
+    slurm_prop = schema["properties"]["slurm"]
+    assert slurm_prop["$ref"] == "#/$defs/SlurmExtraSettings"
+
+    slurm_def = schema["$defs"]["SlurmExtraSettings"]
+    assert "x-icon" in slurm_def
+    assert "title" in slurm_def
+
+
+# The Dojo settings panel shows a field/section's own `description` in a
+# hint bar that grows to fit its content, with no max-height or scrolling -
+# scrolling turned out to be useless there anyway, since reaching a
+# scrollbar means moving the mouse off whatever row is being hovered, which
+# immediately hides the hint before the scroll would matter (settings-panel.ts,
+# showSettingsHint/hideSettingsHint). A too-long description doesn't error
+# or get clipped, it just quietly makes that hint bar (and the panel around
+# it) awkwardly tall - the SlurmExtraSettings field description originally
+# shipped at ~500 characters across three paragraphs before being trimmed
+# for exactly this reason. This threshold is a soft guard against the same
+# mistake happening again on some other field, not a hard technical limit -
+# 200 characters is roughly 2-3 lines at the hint bar's actual rendered
+# width (see settings_field_row / the hint bar markup, _settings_panel.html).
+_MAX_DESCRIPTION_LENGTH = 200
+
+
+def _collect_schema_descriptions(schema: dict) -> dict[str, str]:
+    """Maps a dotted path (e.g. "MujocoMojoSettings.slurm" or "$defs.SlurmExtraSettings") to its `description`, for every property across the top-level schema and every named definition - the two places settings-panel.ts (buildGroup/buildField) ever reads a description from. The schema's own root-level description (MujocoMojoSettings' class docstring) is deliberately excluded - parseSettingsSchema only ever reads `schema.properties`, never `schema.description` itself, so nothing in the settings panel can ever show it."""
+    descriptions: dict[str, str] = {}
+
+    def walk(node: dict, prefix: str, *, include_self: bool = True) -> None:
+        if include_self:
+            description = node.get("description")
+            if description:
+                descriptions[prefix] = description
+        for name, prop in node.get("properties", {}).items():
+            walk(prop, f"{prefix}.{name}")
+
+    walk(schema, "MujocoMojoSettings", include_self=False)
+    for def_name, definition in schema.get("$defs", {}).items():
+        walk(definition, f"$defs.{def_name}")
+
+    return descriptions
+
+
+def test_no_description_is_too_long_for_the_settings_panel_hint_bar() -> None:
+    """Regression guard for the SlurmExtraSettings incident: every field/section description across the whole settings schema stays under a length that comfortably fits the Dojo settings panel's fixed-to-content hint bar, so a future overly-long Field(description=...) or class docstring gets caught here instead of silently making that hint bar (and the panel around it) awkwardly tall the next time someone hovers it."""
+    from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults
+
+    schema = MujocoMojoSettings.model_json_schema(
+        schema_generator=GenerateJsonSchemaWithDefaults
+    )
+    descriptions = _collect_schema_descriptions(schema)
+
+    # the generator appends "\n\nDefault: `...`" to a leaf field's own
+    # description (see GenerateJsonSchemaWithDefaults._append_defaults) -
+    # strip that back off before measuring, since it isn't part of the
+    # docstring/Field(description=...) text a settings.py author actually
+    # controls the length of.
+    offenders = {
+        path: len(text.split("\n\nDefault:")[0])
+        for path, text in descriptions.items()
+        if len(text.split("\n\nDefault:")[0]) > _MAX_DESCRIPTION_LENGTH
+    }
+    assert not offenders, (
+        f"These descriptions exceed {_MAX_DESCRIPTION_LENGTH} characters and should be "
+        f"trimmed so the settings panel's hint bar doesn't grow awkwardly tall: {offenders}"
+    )
 
 
 def test_project_and_global_settings_both_contribute_distinct_keys(
@@ -329,11 +488,11 @@ def test_project_and_global_settings_both_contribute_distinct_keys(
     global_path.write_text(
         '[visualization]\naction_force = "CYAN_400"\n', encoding="utf-8"
     )
-    project_path.write_text("[assets]\nsymlink = true\n", encoding="utf-8")
+    project_path.write_text("[general]\nsymlink = true\n", encoding="utf-8")
 
     settings = MujocoMojoSettings()
     assert settings.visualization.action_force == "CYAN_400"
-    assert settings.assets.symlink is True
+    assert settings.general.symlink is True
 
 
 def test_project_settings_win_over_global_on_the_same_key(
@@ -370,7 +529,7 @@ def test_save_project_mode_writes_only_schema_header(tmp_path: Path) -> None:
     assert content.startswith("#:schema ")
     assert "=" not in content
 
-    project_path.write_text(content + "\n[assets]\nsymlink = true\n", encoding="utf-8")
+    project_path.write_text(content + "\n[general]\nsymlink = true\n", encoding="utf-8")
     MujocoMojoSettings.model_construct().save(project_dir, project=True)
     assert "symlink = true" in project_path.read_text()
 
@@ -403,13 +562,13 @@ def test_save_project_mode_never_writes_field_values(
     )
     _isolate_project_settings(monkeypatch, tmp_path)
 
-    MujocoMojoSettings(assets=AssetBundlingSettings(symlink=True)).save(
+    MujocoMojoSettings(general=GeneralSettings(symlink=True)).save(
         project_dir, project=True
     )
 
     content = (project_dir / "settings.toml").read_text()
     assert "symlink" not in content
-    assert "[assets]" not in content
+    assert "[general]" not in content
 
 
 def test_save_project_mode_tolerates_an_invalid_existing_file(tmp_path: Path) -> None:
@@ -450,12 +609,12 @@ def test_set_project_value_creates_file_and_auto_vivifies_tables(
         "mujoco_mojo.settings.project_settings_file", lambda: project_path
     )
 
-    MujocoMojoSettings.set_project_value("assets.symlink", True)
+    MujocoMojoSettings.set_project_value("general.symlink", True)
 
     content = project_path.read_text()
-    assert "[assets]" in content
+    assert "[general]" in content
     assert "symlink = true" in content
-    assert MujocoMojoSettings().assets.symlink is True
+    assert MujocoMojoSettings().general.symlink is True
 
 
 def test_set_project_value_preserves_siblings_and_comments(

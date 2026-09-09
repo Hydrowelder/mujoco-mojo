@@ -33,7 +33,7 @@ The `reloaded` command is highly flexible, allowing you to specify different vie
 | `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws. |
 | `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                  |
 | `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.       |
-| `--port`           | `-p`     | Port for the web-based viewers (default: `8080`).                            |
+| `--port`           | `-p`     | Port for the web-based viewers. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
 
 ---
 

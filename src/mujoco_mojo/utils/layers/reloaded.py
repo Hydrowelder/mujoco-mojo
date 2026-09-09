@@ -23,6 +23,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
+from mujoco_mojo.typing import UserInterface
 from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     NAMED_VALUES_FNAME,
@@ -43,8 +44,6 @@ from mujoco_mojo.utils.statusing import (
 )
 from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
-
-from .cli import UserInterface
 
 logger = get_logger(__name__)
 console = Console()
@@ -1269,7 +1268,7 @@ class MojoReloaded:
                 name="mojo_arrows",
                 points=points_batch,
                 colors=colors_batch,
-                line_width=line_width,
+                thickness=line_width,
             )
 
         def update_scene(s: MjState):

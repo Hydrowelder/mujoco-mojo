@@ -257,8 +257,8 @@ if __name__ == "__main__":
         config=mojo.utils.OptimizerConfig(
             n_trial=200,
             n_proc=4,
-            direction="minimize",
-            sampler="tpe",
+            direction=mojo.Direction.MINIMIZE,
+            sampler=mojo.Sampler.TPE,
             storage=f"sqlite:///{workdir / 'study.db'}",
             resume=True,
         ),

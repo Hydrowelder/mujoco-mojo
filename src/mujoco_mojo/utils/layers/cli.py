@@ -9,7 +9,7 @@ from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, Literal, overload
+from typing import Annotated, Any, Final, Literal, overload
 
 import typer
 from rich.align import Align
@@ -21,34 +21,38 @@ from rich.text import Text
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
+from mujoco_mojo.typing import Direction, Sampler, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
-from mujoco_mojo.utils.utils import get_local_ip
+from mujoco_mojo.utils.utils import find_free_port, get_local_ip
 
 from ..defaults import (
     DEFAULT_MC_N_TRIAL,
-    DEFAULT_MODEL_CONFIG_NAME,
-    DEFAULT_N_PROC,
-    DEFAULT_OP_DIRECTION,
-    DEFAULT_OP_EVALS_PER_TRIAL,
     DEFAULT_OP_N_TRIAL,
-    DEFAULT_OP_PRUNE_FAILED_TRIALS,
-    DEFAULT_OP_REFINE_SEARCH_FACTOR,
-    DEFAULT_OP_SAMPLER,
-    DEFAULT_OP_STUDY_NAME,
-    DEFAULT_OP_TIMEOUT,
-    DEFAULT_RESUME,
     DEFAULT_RUNTIME,
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
-    DEFAULT_XML_NAME,
-    SamplerOptions,
 )
 
 console = Console()
 
 VERSION = version("mujoco-mojo")
+
+# Loaded once, at CLI startup - every mujoco-mojo invocation is a fresh
+# process, so "once at import time" already means "current settings.toml as
+# of this run," the same freshness a per-command MujocoMojoSettings() call
+# would give. Referencing its fields directly as each promoted option's
+# literal default (instead of a None sentinel resolved inside the command
+# body) is what lets `--help` show the real effective value for that flag,
+# exactly like every other default in this file already does - a None
+# sentinel would otherwise just show up as "None" in --help, hiding the
+# value a user would actually get. `Final` (pyright-enforced, not a runtime
+# guard) so a stray `_SETTINGS = ...` typo'd into some command body later
+# can't silently shadow/reassign the one shared instance every command's
+# defaults were already computed from at import time.
+_SETTINGS: Final = MujocoMojoSettings()
 
 
 # "MUJOCO" and "MOJO" in the ANSI Shadow figlet font
@@ -305,8 +309,7 @@ if True:
     CleanWorkdirType = Annotated[
         bool,
         typer.Option(
-            "--clean-workdir",
-            "-cw",
+            "--clean-workdir/--no-clean-workdir",
             help="Delete the workdir before running (mutually exclusive with --resume)",
         ),
     ]
@@ -436,7 +439,7 @@ if True:
         typer.Option(
             "--port",
             "-p",
-            help="Port number to use to serve the process.",
+            help="Port number to use to serve the process. Auto-selects the next free port at or after this one if it's already taken.",
         ),
     ]
     DojoPassword = Annotated[
@@ -465,11 +468,6 @@ if True:
             help="Path to generator (e.g. 'sim.gen')",
         ),
     ]
-
-    class UserInterface(StrEnum):
-        OPENGL = "opengl"
-        MJVISER = "mjviser"
-        VISER = "viser"
 
     WatchType = Annotated[
         bool,
@@ -510,15 +508,16 @@ if True:
         ),
     ]
     DirectionType = Annotated[
-        Literal["minimize", "maximize"],
+        Direction,
         typer.Option(
             "--direction",
             "-d",
-            help="The optimization goal. Either 'minimize' or 'maximize'.",
+            help="The optimization goal.",
+            case_sensitive=False,
         ),
     ]
     SamplerType = Annotated[
-        SamplerOptions,
+        Sampler,
         typer.Option(
             "--sampler",
             "-sm",
@@ -528,8 +527,7 @@ if True:
     StorageType = Annotated[
         bool,
         typer.Option(
-            "--storage",
-            "-st",
+            "--storage/--no-storage",
             help="Whether or not to use database storage. Required for multi-process optimization.",
         ),
     ]
@@ -620,7 +618,7 @@ def _prepare_runner(
     workdir: WorkdirType,
     model_config_name: ModelConfigNameType,
     seed: SeedType,
-    xml_name: XMLNameType,
+    xml_name: str,
     gen_args: GenArgsType,
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
@@ -668,12 +666,12 @@ def run_monte_carlo(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    resume: ResumeType = _SETTINGS.run.monte_carlo.resume,
     seed: SeedType = DEFAULT_SEED,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.monte_carlo.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_nums: TrialNumsType = [],
@@ -694,7 +692,10 @@ def run_monte_carlo(
     from mujoco_mojo.stochas import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     print_logo()
 
@@ -816,12 +817,12 @@ def run_single(
     generator: GeneratorType,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    resume: ResumeType = _SETTINGS.run.single.resume,
     seed: SeedType = DEFAULT_SEED,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.single.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
@@ -842,7 +843,10 @@ def run_single(
     from mujoco_mojo.stochas import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     print_logo()
 
@@ -1398,23 +1402,23 @@ def run_reloaded(
     generator: ReloadedGeneratorType = None,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    ui: UIType = UserInterface.OPENGL,
+    ui: UIType = _SETTINGS.reloaded.ui,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
     config_path: ConfigPathFileType = None,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
-    watch: WatchType = True,
-    record: RecordType = True,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
+    watch: WatchType = _SETTINGS.reloaded.watch,
+    record: RecordType = _SETTINGS.reloaded.record,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    host: HostType = "127.0.0.1",
-    port: PortType = 8080,
-    verbose: int = 0,
-    quiet: int = 0,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
 ) -> None:
     """
     [bold yellow]Run a development session with the native OpenGL viewer or a web browser based GUI.[/bold yellow]
@@ -1423,7 +1427,12 @@ def run_reloaded(
     """
     from .reloaded import MojoReloaded
 
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    port = find_free_port(host, port)
+
+    _logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
@@ -1458,9 +1467,12 @@ def run_reloaded(
 def run_dojo(
     ctx: typer.Context,
     workdir: DojoWorkdirType,
-    host: HostType = "127.0.0.1",
-    port: PortType = 8000,
-    n_proc: NProcType = 1,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    # deliberately kept as a None sentinel, unlike every other option above -
+    # baking the resolved settings value in as a literal default here would
+    # print the real password in plaintext every time --help runs.
     password: DojoPassword = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
@@ -1470,11 +1482,18 @@ def run_dojo(
 
     This command reads status files in the workdir to give live updates.
     """
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-
     import warnings
 
     import uvicorn
+
+    if password is None and _SETTINGS.dojo.password is not None:
+        password = _SETTINGS.dojo.password.get_secret_value()
+    port = find_free_port(host, port)
+
+    _logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     # fastmcp (a transitive dependency of the sensai agent) pulls in key_value.aio,
     # which calls beartype_this_package() on itself. beartype then trips over
@@ -1549,20 +1568,20 @@ def run_optimizer(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     n_trial: NTrialType = DEFAULT_OP_N_TRIAL,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    timeout: TimeoutType = DEFAULT_OP_TIMEOUT,
-    study_name: StudyNameType = DEFAULT_OP_STUDY_NAME,
-    direction: DirectionType = DEFAULT_OP_DIRECTION,
-    sampler: SamplerType = DEFAULT_OP_SAMPLER,
-    storage: StorageType = True,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    timeout: TimeoutType = _SETTINGS.run.optimize.timeout,
+    study_name: StudyNameType = _SETTINGS.run.optimize.study_name,
+    direction: DirectionType = _SETTINGS.run.optimize.direction,
+    sampler: SamplerType = _SETTINGS.run.optimize.sampler,
+    storage: StorageType = _SETTINGS.run.optimize.storage,
+    resume: ResumeType = _SETTINGS.run.optimize.resume,
     seed: SeedType = DEFAULT_SEED,
-    evals_per_trial: EvalsPerTrialType = DEFAULT_OP_EVALS_PER_TRIAL,
-    refine_search_factor: RefineSearchFactorType = DEFAULT_OP_REFINE_SEARCH_FACTOR,
-    prune_failed_trials: PruneFailedTrialsType = DEFAULT_OP_PRUNE_FAILED_TRIALS,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    evals_per_trial: EvalsPerTrialType = _SETTINGS.run.optimize.evals_per_trial,
+    refine_search_factor: RefineSearchFactorType = _SETTINGS.run.optimize.refine_search_factor,
+    prune_failed_trials: PruneFailedTrialsType = _SETTINGS.run.optimize.prune_failed_trials,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.optimize.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     overrides: OverridesType = None,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
@@ -1592,7 +1611,10 @@ def run_optimizer(
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
     print_logo()
 
     workdir = workdir.resolve()

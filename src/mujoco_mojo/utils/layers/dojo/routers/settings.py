@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import AnyUrl, BaseModel, RootModel, SecretStr, ValidationError
@@ -103,21 +103,94 @@ def _validate_replacing[ModelT: BaseModel](
     return model_cls.model_construct(**validated)
 
 
+def _is_secret_annotation(annotation: Any) -> bool:
+    """Whether `annotation` is `SecretStr`, possibly wrapped in `Optional`/a union (e.g. `SecretStr | None`) - unwrapped via `get_args` rather than checking a runtime value, since a field's declared type doesn't depend on whatever it's currently set to (unlike an `isinstance(value, SecretStr)` check, which misses a field like `password` whose default is `None`)."""
+    args = get_args(annotation)
+    candidates = args if args else (annotation,)
+    return any(isinstance(a, type) and issubclass(a, SecretStr) for a in candidates)
+
+
+def _secret_exclude_spec(model_cls: type[BaseModel]) -> dict[str, Any]:
+    """
+    Recursively builds a pydantic-style nested `exclude` spec marking every `SecretStr`-typed field anywhere in `model_cls` - e.g. `{"dojo": {"password": True, "sensai": {"api_key": True}}}` - suitable for `model_dump(exclude=...)`.
+
+    Type-based (via `_is_secret_annotation`) rather than value-based, so a field defaulting to `None` (like `dojo.password`) is still caught.
+    """
+    spec: dict[str, Any] = {}
+    for name, info in model_cls.model_fields.items():
+        annotation = info.annotation
+        if _is_secret_annotation(annotation):
+            spec[name] = True
+            continue
+        args = get_args(annotation)
+        candidates = args if args else (annotation,)
+        for candidate in candidates:
+            if (
+                isinstance(candidate, type)
+                and issubclass(candidate, BaseModel)
+                and not issubclass(candidate, RootModel)
+            ):
+                nested = _secret_exclude_spec(candidate)
+                if nested:
+                    spec[name] = nested
+                break
+    return spec
+
+
+def _flatten_exclude_spec(spec: dict[str, Any]) -> set[str]:
+    """The leaf field names marked `True` in a nested exclude spec (e.g. `{"password", "api_key"}`) - not the intermediate keys used purely to recurse (e.g. `"dojo"`, `"sensai"`), which aren't themselves secret fields and must not be stripped from the schema."""
+    names: set[str] = set()
+    for key, value in spec.items():
+        if value is True:
+            names.add(key)
+        elif isinstance(value, dict):
+            names |= _flatten_exclude_spec(value)
+    return names
+
+
+def _strip_keys_recursively(node: Any, keys: set[str]) -> Any:
+    """Recursively deletes any dict key in `keys`, anywhere in `node` (a JSON-like tree of dicts/lists), in place. Safe to apply blanket-wide here since `keys` only ever holds this model's own SecretStr field names (`password`, `api_key`) - not general-purpose enough to reuse for anything that isn't this specific "these names must never appear in a browser-facing payload" guarantee."""
+    if isinstance(node, dict):
+        for key in list(node.keys()):
+            if key in keys:
+                del node[key]
+            else:
+                _strip_keys_recursively(node[key], keys)
+    elif isinstance(node, list):
+        for item in node:
+            _strip_keys_recursively(item, keys)
+    return node
+
+
+_SECRET_EXCLUDE_SPEC = _secret_exclude_spec(MujocoMojoSettings)
+_SECRET_FIELD_NAMES = _flatten_exclude_spec(_SECRET_EXCLUDE_SPEC)
+
+
+def _dojo_settings_schema() -> dict[str, Any]:
+    """
+    The JSON Schema served to the Dojo web settings panel - every `SecretStr` field name (`password`, `api_key`) deleted entirely, wherever it appears anywhere in the schema tree (property definitions in `$defs`, and any nested-model field's whole-object `default` that would otherwise re-embed it), for the same "the browser has no need to know" reason as `_settings_payload` below.
+
+    Deliberately separate from `write_schema_files`'s `settings.schema.json` (used for local TOML/taplo editor intellisense) - that file is never served over a network and a user has every reason to see `password`/`api_key` there to configure them by hand, so it keeps the full, unmodified schema.
+    """
+    schema = MujocoMojoSettings.model_json_schema(
+        schema_generator=GenerateJsonSchemaWithDefaults
+    )
+    return _strip_keys_recursively(schema, _SECRET_FIELD_NAMES)
+
+
 def _settings_payload(settings: MujocoMojoSettings) -> dict[str, Any]:
     return {
-        "values": settings.model_dump(mode="json"),
+        "values": settings.model_dump(mode="json", exclude=_SECRET_EXCLUDE_SPEC),
         "value_meta": _walk_value_meta(settings),
     }
 
 
 @router.get("")
 async def get_settings(request: Request) -> dict[str, Any]:
-    """Returns the current settings, their JSON Schema, per-leaf display metadata, the Color name-to-hex table, and whether this request is allowed to edit them."""
+    """Returns the current settings, their JSON Schema, per-leaf display metadata, the Color name-to-hex table, and whether this request is allowed to edit them. Every SecretStr field (dojo.password, dojo.sensai.api_key) is stripped entirely from both the schema and the values - not masked, removed - since the Dojo web frontend has no legitimate need to know these fields exist at all."""
     settings = MujocoMojoSettings()
     return {
-        "schema": MujocoMojoSettings.model_json_schema(
-            schema_generator=GenerateJsonSchemaWithDefaults
-        ),
+        "schema": _dojo_settings_schema(),
         "color_choices": {member.name: member.value for member in Color},
         "is_localhost": _is_localhost(request),
         **_settings_payload(settings),

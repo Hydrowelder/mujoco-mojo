@@ -420,7 +420,7 @@ class XMLModel(MojoBaseModel):
             return
 
         plan = compute_asset_destinations(slots)
-        prefer_symlinks = MujocoMojoSettings().assets.symlink
+        prefer_symlinks = MujocoMojoSettings().general.symlink
 
         # copy once per unique destination, not once per source - true duplicates
         # (same content, same basename) share one destination and should only be

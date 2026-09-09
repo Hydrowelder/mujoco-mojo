@@ -40,6 +40,13 @@ from pydantic_settings import (
 from tomlkit.items import Table
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.typing import (
+    Direction,
+    Sampler,
+    SortDirection,
+    SortMode,
+    UserInterface,
+)
 from mujoco_mojo.utils.color import Color
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
@@ -78,6 +85,7 @@ class VisualizationSettings(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
+        frozen=True,
         title="Visualization",
         # x-icon: inner SVG markup (no outer <svg> tag - the Dojo settings
         # panel supplies that, with its own viewBox/stroke) shown next to
@@ -91,65 +99,76 @@ class VisualizationSettings(BaseModel):
 
     action_force: str | None = Field(
         default="EMERALD_500",
+        title="Action Force Color",
         description='Color of action-site force arrows. Set to `""` to disable.',
         json_schema_extra={"x-widget": "color"},
     )
 
     reaction_force: str | None = Field(
         default="ROSE_500",
+        title="Reaction Force Color",
         description='Color of reaction-site force arrows. Set to `""` to disable.',
         json_schema_extra={"x-widget": "color"},
     )
 
     torque: str | None = Field(
         default="AMBER_500",
+        title="Torque Color",
         description='Color of torque arrows. Set to `""` to disable.',
         json_schema_extra={"x-widget": "color"},
     )
 
     reaction_torque: str | None = Field(
         default="FUCHSIA_500",
-        description='Color of reaction-site torque arrows. Set to `""` to disable. `PointToPointForce` has no torque component (it\'s a scalar force along the line of action between two sites), so this only ever applies to `BodyReactionForce`-derived loads (`ScalarTorque`, `VectorTorque`, `GeneralLoad`).',
+        title="Reaction Torque Color",
+        description='Color of reaction-site torque arrows. Set to `""` to disable. Only applies to `BodyReactionForce` loads (`ScalarTorque`, `VectorTorque`, `GeneralLoad`) - `PointToPointForce` has no torque.',
         json_schema_extra={"x-widget": "color"},
     )
 
     contact: str | None = Field(
         default="CYAN_400",
+        title="Contact Color",
         description='Color of contact force arrows. Set to `""` to disable.',
         json_schema_extra={"x-widget": "color"},
     )
 
     clearance_line: str | None = Field(
         default="WHITE",
+        title="Clearance Line Color",
         description='Color of proximity clearance lines. Set to `""` to disable.',
         json_schema_extra={"x-widget": "color"},
     )
 
     trace_line: str | None = Field(
         default="VIOLET_500",
+        title="Trace Line Color",
         description='Default color of `Tracer` trails. Set to `""` to disable. Overridden per-`Tracer` by passing `color`.',
         json_schema_extra={"x-widget": "color"},
     )
 
     force_length_scale: float = Field(
         default=1.0,
+        title="Force Length Scale",
         description="Default length multiplier for action/reaction force arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `force_length_scale`.",
     )
 
     force_width_scale: float = Field(
         default=1.0,
         ge=0,
+        title="Force Width Scale",
         description="Default width multiplier for action/reaction force arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `force_width_scale`.",
     )
 
     torque_length_scale: float = Field(
         default=1.0,
+        title="Torque Length Scale",
         description="Default length multiplier for torque arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `torque_length_scale`.",
     )
 
     torque_width_scale: float = Field(
         default=1.0,
         ge=0,
+        title="Torque Width Scale",
         description="Default width multiplier for torque arrows, on top of MuJoCo's native scaling. Overridden per-`Load` by `torque_width_scale`.",
     )
 
@@ -185,6 +204,7 @@ class SensAISettings(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
+        frozen=True,
         title="SensAI",
         # the exact sparkles path from _sensai.html's own FAB button (the
         # chat window's open/close toggle), copied verbatim rather than
@@ -202,27 +222,26 @@ class SensAISettings(BaseModel):
 
     enabled: bool = Field(
         default=False,
+        title="Enabled",
         description="Whether or not to activate AI features.",
     )
 
     model_name: str = Field(
         default="qwen2.5:0.5b",
+        title="Model Name",
         description="Model identifier (e.g. `qwen2.5:0.5b`, `llama3.2:3b`).",
     )
 
     base_url: str = Field(
         default="http://localhost:11434/v1",
+        title="Base URL",
         description="Base URL for the OpenAI-compatible endpoint.",
     )
 
     api_key: SecretStr = Field(
         default=SecretStr("ollama"),
-        description="\n\n".join(
-            (
-                "API key sent with each request.",
-                "For security, only a masked placeholder is ever saved to a settings file - set the real value via the `MUJOCO_MOJO_DOJO__SENSAI__API_KEY` environment variable instead. Ollama ignores the value, but its client library still requires a non-empty string.",
-            )
-        ),
+        title="API Key",
+        description="API key sent with each request. Only a masked placeholder is ever saved - set the real value via `MUJOCO_MOJO_DOJO__SENSAI__API_KEY` instead. Ollama ignores it but still requires a non-empty string.",
     )
 
 
@@ -231,6 +250,7 @@ class DojoSettings(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
+        frozen=True,
         title="Dojo",
         # globe: simple primitives (circle + a vertical ellipse meridian +
         # a horizontal equator line), not a hand-typed curve path - see
@@ -249,6 +269,7 @@ class DojoSettings(BaseModel):
 
     chime_enabled: bool = Field(
         default=True,
+        title="Chime Enabled",
         description="\n\n".join(
             (
                 "Whether to play a sound on the Dojo monitor page when a job finishes.",
@@ -262,28 +283,62 @@ class DojoSettings(BaseModel):
         Field(union_mode="left_to_right"),
     ] = Field(
         default=None,
-        description="\n\n".join(
-            (
-                "A custom sound to play on the Dojo monitor page when a job finishes, instead of the built-in chime. Only takes effect when `chime_enabled` above is enabled.",
-                "Set this to either a web URL (e.g. `https://example.com/sound.mp3`) or the path to a local audio file (e.g. `/home/alex/sounds/ding.wav`, or on Windows `C:/Users/alex/ding.mp3` - use forward slashes rather than backslashes.",
-                "Easiest to set safely with `mujoco-mojo settings set dojo.chime_source <path-or-url>`, which writes it correctly for you. Leave unset to keep the default chime.",
-            )
-        ),
+        title="Chime Source",
+        description="Custom sound for the job-finished chime on the Dojo monitor page (needs `chime_enabled` on) - a web URL or local file path. Set safely with `mujoco-mojo settings set dojo.chime_source <path-or-url>`.",
     )
 
     show_quick_filters: bool = Field(
         default=True,
-        description="\n\n".join(
-            (
-                "For the X-axis, Y-axis, and reference frame selectors, this setting will show or hide the quick filter chips.",
-                "This can be helpful for a more interactive way to search, but takes up some space in the selection element.",
-            )
-        ),
+        title="Show Quick Filters",
+        description="Show quick filter chips on the X-axis, Y-axis, and reference frame selectors - faster searching, at the cost of some extra space in the selection element.",
     )
 
     default_to_fullscreen: bool = Field(
         default=False,
+        title="Default to Fullscreen",
         description="Pages in Dojo have an option to expand to fullscreen. Selecting this option will default your page load to fullscreen.",
+    )
+
+    password: SecretStr | None = Field(
+        default=None,
+        title="Password",
+        description="Password for the Dojo dashboard's HTTP Basic Auth (username ignored). Applies every launch unless `--password` overrides it. Only a masked placeholder is saved - see `MUJOCO_MOJO_DOJO__PASSWORD`.",
+    )
+
+    hide_invalid_profiles: bool = Field(
+        default=False,
+        title="Hide Invalid Profiles",
+        description="Hide saved plot profiles that reference columns not present in the current trial, in the Profiles file browser.",
+    )
+
+    profile_sort_mode: SortMode = Field(
+        default=SortMode.MODIFIED,
+        title="Profile Sort Mode",
+        description="How the Profiles file browser sorts saved profiles.",
+    )
+
+    profile_sort_dir: SortDirection = Field(
+        default=SortDirection.DESC,
+        title="Profile Sort Direction",
+        description="Sort direction for the Profiles file browser.",
+    )
+
+    hide_invalid_labs: bool = Field(
+        default=False,
+        title="Hide Invalid Labs",
+        description="Hide saved Signal Lab graphs that reference columns not present in the current trial, in the Signal Lab file browser.",
+    )
+
+    lab_sort_mode: SortMode = Field(
+        default=SortMode.MODIFIED,
+        title="Lab Sort Mode",
+        description="How the Signal Lab file browser sorts saved labs.",
+    )
+
+    lab_sort_dir: SortDirection = Field(
+        default=SortDirection.DESC,
+        title="Lab Sort Direction",
+        description="Sort direction for the Signal Lab file browser.",
     )
 
     @field_validator("chime_source", mode="before")
@@ -301,16 +356,20 @@ class DojoSettings(BaseModel):
 
 
 class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
-    """
-    Flat key-value pairs used to extend a SLURM submission.
-
-    Keys prefixed with `sbatch.` become extra `#SBATCH` lines in the generated submission script, e.g. `"sbatch.account": "proj123"` becomes `#SBATCH --account=proj123`. Every other key is exported as an environment variable before the worker command runs, e.g. `"MLM_LICENSE_FILE": "27000@license.internal"` becomes `export MLM_LICENSE_FILE="27000@license.internal"`.
-
-    Values must be scalars (string, int, float, or bool). Nested objects or arrays are rejected at load time since this file can only ever describe a flat set of settings - the shape of `MujocoMojoSettings.slurm`, layered automatically between the global and project-local settings files (see `project_settings_file`).
-    """
+    # e.g. `"sbatch.account": "proj123"` becomes `#SBATCH --account=proj123`;
+    # `"MLM_LICENSE_FILE": "27000@license.internal"` becomes
+    # `export MLM_LICENSE_FILE="27000@license.internal"`. Nested objects/arrays
+    # are rejected at load time - this can only ever describe a flat set of
+    # settings, the shape of `MujocoMojoSettings.slurm`, layered automatically
+    # between the global and project-local settings files (see
+    # `project_settings_file`). Kept out of the docstring below (unlike this
+    # comment, that becomes the JSON schema description shown in the Dojo
+    # settings panel's hint bar - see settings_test.py's length-guard test.)
+    """Flat key-value pairs used to extend a SLURM submission. `sbatch.`-prefixed keys become `#SBATCH` lines; everything else becomes an exported environment variable. Values must be scalars."""
 
     model_config = ConfigDict(
         title="Slurm",
+        frozen=True,
         # An approximation, not a traced reproduction of the real Slurm
         # wordmark/logo - a hexagon (cluster/node motif, thematically
         # fitting for an HPC scheduler) with a center dot. This repo's Dojo
@@ -338,12 +397,13 @@ class SlurmExtraSettings(RootModel[dict[str, SlurmScalar]]):
         ]
 
 
-class AssetBundlingSettings(BaseModel):
-    """Settings for how MuJoCo Mojo bundles a model's dependency files (meshes, textures, etc.) into a shared assets folder."""
+class GeneralSettings(BaseModel):
+    """General-purpose defaults shared across `mujoco-mojo`'s CLI commands, plus asset-bundling behavior."""
 
     model_config = ConfigDict(
         extra="forbid",
-        title="Assets",
+        frozen=True,
+        title="General",
         # stacked boxes: two overlapping rounded squares, offset diagonally.
         json_schema_extra={
             "x-icon": '<rect x="3" y="9" width="12" height="12" rx="1.5"/><rect x="8" y="3" width="12" height="12" rx="1.5"/>',
@@ -352,14 +412,236 @@ class AssetBundlingSettings(BaseModel):
 
     symlink: bool = Field(
         default=False,
-        description="\n\n".join(
-            (
-                "Link to the source file instead of copying its bytes.",
-                "This saves disk space and is instant regardless of file size, but the bundle is no longer self-contained or immutable: moving/sharing the bundle directory without its original source files breaks it, and editing a source file after bundling silently changes every trial that linked to it.",
-                "Only takes effect on POSIX (Linux, macOS); Windows does not reliably allow unprivileged symlink creation, so this setting is ignored there and a normal copy is always made.",
-            )
-        ),
+        title="Symlink",
+        description="Link to dependency files instead of copying when bundling - saves disk space, but the bundle is no longer self-contained (breaks if moved without its sources). Ignored on Windows (always copies).",
     )
+
+    verbose: int = Field(
+        default=0,
+        ge=0,
+        title="Verbose",
+        description="Baseline verbosity, added to however many times `-v`/`--verbose` is repeated on the command line.",
+    )
+
+    quiet: int = Field(
+        default=0,
+        ge=0,
+        title="Quiet",
+        description="Baseline quietness, added to however many times `-q`/`--quiet` is repeated on the command line.",
+    )
+
+    model_config_name: str | None = Field(
+        default=None,
+        title="Model Config Name",
+        description="Default file name for a dumped model config (e.g. `model_config.json`). Leave unset to not dump one.",
+    )
+
+    xml_name: str = Field(
+        default="model.xml",
+        title="XML Name",
+        description="Default file name for the generated MJCF XML file.",
+    )
+
+    n_proc: int = Field(
+        default=1,
+        ge=1,
+        title="Parallel Processes",
+        description="Default number of parallel processes for Monte Carlo/optimization trials and Dojo's status-file rescanning.",
+    )
+
+    default_host: str = Field(
+        default="127.0.0.1",
+        title="Default Host",
+        description="Default host IP for `mujoco-mojo dojo` and `mujoco-mojo reloaded`'s web-based viewers.",
+    )
+
+    default_port: int = Field(
+        default=8000,
+        ge=1,
+        le=65535,
+        title="Default Port",
+        description="Starting port for `dojo`/`reloaded`'s web viewers - both probe upward and bind the first free one, so running both with no `--port` never collides.",
+    )
+
+
+class ReloadedSettings(BaseModel):
+    """Settings for `mujoco-mojo reloaded`."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        title="Reloaded",
+        # a reload/refresh arrow: two arcs forming a broken circle with an
+        # arrowhead, built from primitives (a path arc + a small triangle)
+        # rather than a hand-traced icon-font glyph.
+        json_schema_extra={
+            "x-icon": '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><polygon points="18,3 18,8 13,8"/><polygon points="6,21 6,16 11,16"/>',
+        },
+    )
+
+    ui: UserInterface = Field(
+        default=UserInterface.OPENGL,
+        title="UI Backend",
+        description="Which viewer backend to use.",
+    )
+
+    watch: bool = Field(
+        default=True,
+        title="Watch",
+        description="Automatically reload when `*.py` source files change.",
+    )
+
+    record: bool = Field(
+        default=False,
+        title="Record",
+        description="Record telemetry to a per-trial `telemetry.parquet` and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.",
+    )
+
+
+class _RunDefaults(BaseModel):
+    """Fields shared by every `mujoco-mojo run` subcommand."""
+
+    # inherited by every subclass below (MonteCarloRunSettings, etc.) - a
+    # subclass's own model_config only overrides the keys it explicitly
+    # sets, so this one doesn't need repeating on each of them.
+    model_config = ConfigDict(frozen=True)
+
+    resume: bool = Field(
+        default=True,
+        title="Resume",
+        description="Resume from previous state on disk.",
+    )
+
+    clean_workdir: bool = Field(
+        default=False,
+        title="Clean Working Directory",
+        description="Delete the workdir before running (mutually exclusive with `resume`).",
+    )
+
+
+class MonteCarloRunSettings(_RunDefaults):
+    """Settings for `mujoco-mojo run monte-carlo`."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        title="Monte Carlo",
+        # a die face: a rounded square with a five-pip pattern.
+        json_schema_extra={
+            "x-icon": '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.2" fill="currentColor" stroke="none"/>',
+        },
+    )
+
+
+class SingleRunSettings(_RunDefaults):
+    """Settings for `mujoco-mojo run single`."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        title="Single",
+        # a plain box.
+        json_schema_extra={
+            "x-icon": '<rect x="4" y="4" width="16" height="16" rx="2"/>',
+        },
+    )
+
+
+class OptimizeRunSettings(_RunDefaults):
+    """Settings for `mujoco-mojo run optimization`."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        title="Optimize",
+        # a small network graph: three nodes joined by two edges.
+        json_schema_extra={
+            "x-icon": '<circle cx="12" cy="4" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="6" x2="6" y2="17.3"/><line x1="12" y1="6" x2="18" y2="17.3"/>',
+        },
+    )
+
+    study_name: str = Field(
+        default="mojo-study",
+        title="Study Name",
+        description="Unique identifier for the Optuna study. Useful for resuming or tracking in a database.",
+    )
+
+    sampler: Sampler = Field(
+        default=Sampler.TPE,
+        title="Sampler",
+        description="The search algorithm to use.",
+    )
+
+    direction: Direction = Field(
+        default=Direction.MINIMIZE,
+        title="Direction",
+        description="The optimization goal.",
+    )
+
+    storage: bool = Field(
+        default=True,
+        title="Storage",
+        description="Whether to use database storage. Required for multi-process optimization.",
+    )
+
+    timeout: float | None = Field(
+        default=None,
+        title="Timeout",
+        description="Stop searching for new design parameters after this many seconds have elapsed. Leave unset to run without a timeout.",
+    )
+
+    evals_per_trial: int = Field(
+        default=1,
+        ge=1,
+        title="Evaluations per Trial",
+        description="Number of evaluations (different seeds) per trial to average.",
+    )
+
+    refine_search_factor: float | None = Field(
+        default=None,
+        title="Refine Search Factor",
+        description="Shrink search bounds by this factor on resume (0.1 = aggressive). Leave unset to disable.",
+    )
+
+    prune_failed_trials: bool = Field(
+        default=True,
+        title="Prune Failed Trials",
+        description="Immediately stop trials that hit physics instabilities.",
+    )
+
+
+class RunSettings(BaseModel):
+    """Settings for `mujoco-mojo run`'s subcommands."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        title="Run",
+        # a solid running-figure silhouette, unlike every other icon here -
+        # a user-supplied glyph (SVG Repo, fill-based) rather than a
+        # hand-drawn stroke primitive, so it's reproduced verbatim
+        # (`d` untouched) instead of hand-traced. Its native viewBox
+        # ("-48 0 512 512") doesn't match the 0-24 viewBox every x-icon
+        # renders into (base.html's wrapping <svg>), so a `transform`
+        # remaps it instead of hand-editing its coordinates: `translate(48,
+        # 0)` first shifts x from [-48, 464] to [0, 512] (y is already
+        # [0, 512]), then `scale(24/512)` fits that into [0, 24] on both
+        # axes - transforms apply right-to-left, so translate runs before
+        # scale. `fill="currentColor" stroke="none"` overrides the wrapping
+        # <svg>'s own `fill="none" stroke="currentColor"` locally, since
+        # this glyph (unlike this file's other icons) is a filled
+        # silhouette, not line art. Verified by rendering the exact
+        # transformed markup, wrapped exactly as the frontend wraps it, to
+        # a PNG at both full size and this icon's actual ~20px display
+        # size, and inspecting both directly.
+        json_schema_extra={
+            "x-icon": '<path d="M272 96c26.51 0 48-21.49 48-48S298.51 0 272 0s-48 21.49-48 48 21.49 48 48 48zM113.69 317.47l-14.8 34.52H32c-17.67 0-32 14.33-32 32s14.33 32 32 32h77.45c19.25 0 36.58-11.44 44.11-29.09l8.79-20.52-10.67-6.3c-17.32-10.23-30.06-25.37-37.99-42.61zM384 223.99h-44.03l-26.06-53.25c-12.5-25.55-35.45-44.23-61.78-50.94l-71.08-21.14c-28.3-6.8-57.77-.55-80.84 17.14l-39.67 30.41c-14.03 10.75-16.69 30.83-5.92 44.86s30.84 16.66 44.86 5.92l39.69-30.41c7.67-5.89 17.44-8 25.27-6.14l14.7 4.37-37.46 87.39c-12.62 29.48-1.31 64.01 26.3 80.31l84.98 50.17-27.47 87.73c-5.28 16.86 4.11 34.81 20.97 40.09 3.19 1 6.41 1.48 9.58 1.48 13.61 0 26.23-8.77 30.52-22.45l31.64-101.06c5.91-20.77-2.89-43.08-21.64-54.39l-61.24-36.14 31.31-78.28 20.27 41.43c8 16.34 24.92 26.89 43.11 26.89H384c17.67 0 32-14.33 32-32s-14.33-31.99-32-31.99z" fill="currentColor" stroke="none" transform="scale(0.046875) translate(48,0)"/>',
+        },
+    )
+
+    monte_carlo: MonteCarloRunSettings = Field(default_factory=MonteCarloRunSettings)
+    single: SingleRunSettings = Field(default_factory=SingleRunSettings)
+    optimize: OptimizeRunSettings = Field(default_factory=OptimizeRunSettings)
 
 
 def _merge_into_toml(
@@ -492,13 +774,14 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
     def _append_defaults(
         node: JsonSchemaValue, defs: dict[str, JsonSchemaValue]
     ) -> None:
-        for prop in node.get("properties", {}).values():
+        for prop_name, prop in node.get("properties", {}).items():
             ref = prop.get("$ref")
             if not ref:
                 all_of = prop.get("allOf")
                 if isinstance(all_of, list) and len(all_of) == 1:
                     ref = all_of[0].get("$ref")
-            if ref and "properties" in defs.get(ref.removeprefix("#/$defs/"), {}):
+            target = defs.get(ref.removeprefix("#/$defs/")) if ref else None
+            if target is not None and "properties" in target:
                 # a field whose value is itself a nested named model (e.g.
                 # MujocoMojoSettings.dojo/visualization/assets) - that
                 # model's own leaf fields already carry their own
@@ -508,7 +791,8 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
                 # bare $ref (e.g. YAxisConfig.dash -> #/$defs/DashStyle),
                 # but its $defs target has no "properties" key (it's an
                 # "enum"/"type" leaf, not a modeled object), so it isn't
-                # caught by this check and still gets its default appended.
+                # caught by this check and still gets its default appended
+                # (and inlined below).
                 continue
             if "default" in prop and "description" in prop:
                 default = prop["default"]
@@ -520,6 +804,47 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
                     else str(default)
                 )
                 prop["description"] = f"{prop['description']}\n\nDefault: `{rendered}`"
+            if target is not None and "enum" in target:
+                # an enum field ends up here as a bare `$ref` (or
+                # allOf-wrapped `$ref`) with `default`/`description` as
+                # sibling keys next to it, since it isn't caught by the
+                # nested-model check above (checking "not an object with
+                # properties" alone isn't enough to mean "is an enum" - a
+                # dict-shaped RootModel like SlurmExtraSettings also lacks
+                # "properties" but must keep its $ref, since the settings
+                # panel resolves that ref for the section's own title/
+                # x-icon/additionalProperties; checking for "enum" directly
+                # is what actually distinguishes the two). JSON Schema
+                # 2020-12 (what pydantic emits) allows sibling keywords next
+                # to a $ref, but not every consumer of this schema honors
+                # them - taplo in particular resolves the ref and shows only
+                # the enum type's own generic description, silently
+                # dropping this property's freshly-appended "Default: ..."
+                # line (and every other per-field override) instead of
+                # merging them. Inlining the enum definition's own `enum`/
+                # `type`/`x-enum-descriptions` directly into the property
+                # and dropping the `$ref`/`allOf` indirection entirely
+                # removes the ambiguity for every consumer at once - the
+                # same shape a plain (non-shared) `Literal`-typed field
+                # already gets for free, since pydantic never gives those a
+                # `$ref` to begin with. The enum type's own title (e.g.
+                # "SortMode") is deliberately NOT copied here: pydantic
+                # never generates a title for a bare-$ref property itself
+                # (a plain field like n_proc gets one, but not this kind),
+                # relying on a consumer resolving the $ref and using the
+                # target's title instead - which is exactly what dropping
+                # the $ref here breaks. Backfilling from the field name
+                # below (the same naive field_name.replace("_", " ").title()
+                # algorithm pydantic itself uses for a plain field) is what
+                # actually replaces what was lost, instead of leaving the
+                # frontend's raw-snake_case-key fallback as the only option.
+                prop.pop("$ref", None)
+                prop.pop("allOf", None)
+                for key in ("type", "enum", "x-enum-descriptions"):
+                    if key in target and key not in prop:
+                        prop[key] = target[key]
+                if "title" not in prop:
+                    prop["title"] = prop_name.replace("_", " ").title()
 
     def enum_schema(self, schema: core_schema.EnumSchema) -> JsonSchemaValue:
         result = super().enum_schema(schema)
@@ -540,6 +865,12 @@ class MujocoMojoSettings(BaseSettings):
         toml_file=GLOBAL_SETTINGS_FILE,
         env_prefix="MUJOCO_MOJO_",
         env_nested_delimiter="__",
+        frozen=True,
+    )
+
+    general: GeneralSettings = Field(
+        default_factory=GeneralSettings,
+        description="General-purpose CLI defaults, plus settings for how dependency files get bundled into a shared assets folder.",
     )
 
     visualization: VisualizationSettings = Field(
@@ -547,25 +878,24 @@ class MujocoMojoSettings(BaseSettings):
         description="Colors and visibility for simulation visual overlays.",
     )
 
-    assets: AssetBundlingSettings = Field(
-        default_factory=AssetBundlingSettings,
-        description="Settings for how dependency files get bundled into a shared assets folder.",
-    )
-
     dojo: DojoSettings = Field(
         default_factory=DojoSettings,
         description="Settings for the Dojo dashboard.",
     )
 
+    reloaded: ReloadedSettings = Field(
+        default_factory=ReloadedSettings,
+        description="Settings for `mujoco-mojo reloaded`.",
+    )
+
+    run: RunSettings = Field(
+        default_factory=RunSettings,
+        description="Settings for `mujoco-mojo run`'s subcommands.",
+    )
+
     slurm: SlurmExtraSettings = Field(
         default_factory=lambda: SlurmExtraSettings({}),
-        description="\n\n".join(
-            (
-                "Extra SLURM `#SBATCH` lines / environment variables (e.g. account number, email), applied to every SLURM submission.",
-                "Edit the global settings and/or project settings for per-project overrides. The project file's `[slurm]` table wins over the global one on any key collision.",
-                "Keys prefixed `sbatch.` become `#SBATCH` lines, everything else is exported as an environment variable.",
-            )
-        ),
+        description="Extra SLURM `#SBATCH` lines / env vars for every submission. `sbatch.`-prefixed keys (e.g. `sbatch.account`) become `#SBATCH` lines; everything else is an exported environment variable.",
     )
 
     @classmethod

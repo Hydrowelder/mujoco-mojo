@@ -41,6 +41,14 @@ export interface SettingsField {
   default: string | number | boolean | null;
   value: string | number | boolean | null;
   enumOptions?: string[];
+  // per-option help text, keyed by the option's own wire value - e.g.
+  // {"modified": "By last-modified time."} for SortMode - sourced from the
+  // enum class's own attribute-docstrings (settings.py's
+  // GenerateJsonSchemaWithDefaults.enum_schema, via typing.py's
+  // SortMode/SortDirection/Direction/UserInterface member docstrings).
+  // Shown in the hint bar while a specific dropdown option is
+  // hovered/focused, in place of the field's own top-level description.
+  enumDescriptions?: Record<string, string>;
   minimum?: number;
   maximum?: number;
   nullable: boolean;
@@ -105,6 +113,7 @@ export interface SettingsSchemaNode {
   format?: string;
   "x-widget"?: string;
   "x-icon"?: string;
+  "x-enum-descriptions"?: Record<string, string>;
 }
 
 export interface SettingsSchema extends SettingsSchemaNode {
@@ -137,17 +146,19 @@ export interface SettingsPanelState {
   settingsSections: SettingsGroup[];
   settingsColorChoices: Record<string, string>;
   settingsCollapsed: Record<string, boolean>;
+  // which top-level section the left nav currently shows (settings.py's
+  // general/visualization/dojo/reloaded/run/slurm) - independent of
+  // settingsCollapsed, which still separately tracks each *subgroup's* own
+  // expand/collapse state within whichever section is active.
+  settingsActiveSectionPath: string;
   settingsSearchQuery: string;
-  // a single shared tooltip, teleported to <body> (see _settings_panel.html)
-  // rather than one absolutely-positioned node per field/section - overflow
-  // scroll containers still count an absolutely-positioned descendant's box
-  // toward their scrollable content size even while invisible/opacity-0, so
-  // a per-field tooltip living *inside* the settings panel's scrollable
-  // list inflated its height by however tall the longest one was (most
-  // visible on the one-field Assets section, whose "symlink" tooltip is one
-  // of the longest descriptions in the whole model). Teleporting removes it
-  // from that scroll container's DOM subtree entirely.
-  settingsTooltip: { show: boolean; text: string; top: number; left: number };
+  // description text for whichever field/section row the mouse is
+  // currently over or a control within is focused - shown in the panel's
+  // reserved hint bar at the bottom (see _settings_panel.html), replacing
+  // an earlier design where this only appeared in a floating tooltip on
+  // hovering a small (i) icon. "" means nothing is hovered/focused right
+  // now - the bar shows a neutral placeholder instead.
+  settingsHintText: string;
   _settingsSchema: SettingsSchema | null;
   // dojo.show_quick_filters (settings.py), mirrored onto the store so
   // trial-viewer.ts's X/Y-axis and reference-frame trees can read it live
@@ -170,6 +181,7 @@ export interface SettingsPanelState {
   // (spread copies function values by reference just fine) and simply
   // recomputes on every call.
   settingsFilteredSections(): SettingsGroup[];
+  settingsActiveGroup(): SettingsGroup | null;
   settingsHasInvalidFields(): boolean;
 
   openSettings(): Promise<void>;
@@ -179,11 +191,12 @@ export interface SettingsPanelState {
   resetAllToDefaults(): Promise<void>;
   saveSettings(): Promise<void>;
   toggleSettingsSection(path: string): void;
+  selectSettingsSection(path: string): void;
   openOnLocalhost(): void;
   addDictEntry(groupPath: string): void;
   removeDictEntry(groupPath: string, index: number): void;
-  showSettingsTooltip(el: HTMLElement, text: string): void;
-  hideSettingsTooltip(): void;
+  showSettingsHint(text: string): void;
+  hideSettingsHint(): void;
   settingsFieldOutOfRange(field: SettingsField): boolean;
   settingsFieldRangeMessage(field: SettingsField): string;
   renderMarkdown(text: string): string;
@@ -221,13 +234,21 @@ interface LeafDescription {
   minimum?: number;
   maximum?: number;
   enumOptions?: string[];
+  enumDescriptions?: Record<string, string>;
 }
 
 function describeLeaf(node: SettingsSchemaNode): LeafDescription {
   if (node["x-widget"] === "color") return { widget: "color", nullable: true };
   if (node.type === "boolean") return { widget: "toggle", nullable: false };
   if (node.writeOnly) return { widget: "secret", nullable: false };
-  if (node.enum) return { widget: "select", nullable: false, enumOptions: node.enum.map(String) };
+  if (node.enum) {
+    return {
+      widget: "select",
+      nullable: false,
+      enumOptions: node.enum.map(String),
+      enumDescriptions: node["x-enum-descriptions"],
+    };
+  }
 
   const branches = node.anyOf ?? [node];
   const nonNull = branches.filter((b) => b.type !== "null");
@@ -255,7 +276,7 @@ function buildField(
   valueMeta: Record<string, SettingsValueMetaEntry>,
 ): SettingsField {
   const node = resolveRef(schema, rawNode);
-  const { widget, nullable, minimum, maximum, enumOptions } = describeLeaf(node);
+  const { widget, nullable, minimum, maximum, enumOptions, enumDescriptions } = describeLeaf(node);
   const isSecret = widget === "secret";
   const rawValue = value as string | number | boolean | null | undefined;
 
@@ -268,6 +289,7 @@ function buildField(
     default: (node.default ?? null) as string | number | boolean | null,
     value: isSecret ? "" : (rawValue ?? null),
     enumOptions,
+    enumDescriptions,
     minimum,
     maximum,
     nullable,
@@ -320,6 +342,23 @@ function buildGroup(
     const propPath = `${path}.${propKey}`;
     const propNode = resolveRef(schema, propRawNode);
     const propValue = objectValue[propKey];
+    if (propNode.writeOnly) {
+      // SecretStr fields (dojo.password, dojo.sensai.api_key) never reach
+      // this point in practice anymore - the Dojo backend
+      // (routers/settings.py's _dojo_settings_schema) deletes any
+      // writeOnly property from the schema entirely before it's ever
+      // served, on the principle that this panel has no legitimate need
+      // to even know a secret field exists, let alone render something
+      // for it. This check is a defense-in-depth backstop, not the actual
+      // guard: browsers also flag any type="password" input on a plain
+      // http:// page (Dojo's normal serving mode) as a credential-theft
+      // risk, so if a future field somehow slips past the backend strip,
+      // this still keeps it from being rendered. Set these via
+      // `mujoco-mojo settings set` or the documented environment-variable
+      // escape hatch instead (see each field's own description in
+      // settings.py).
+      continue;
+    }
     if (isDictNode(propNode)) {
       dictField = buildDictField(propPath, propKey, propNode, propValue);
     } else if (isObjectNode(propNode)) {
@@ -598,6 +637,15 @@ function loadCollapsedSections(): Record<string, boolean> {
   }
 }
 
+/** Falls back to "" (resolved to the first available section by settingsActiveGroup()) rather than a hardcoded section key - a stored path from a since-renamed/removed section degrades the same way as one that was simply never set, instead of pointing at nothing. */
+function loadActiveSectionPath(): string {
+  try {
+    return localStorage.getItem("mojo:settings:active-section") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 async function settingsErrorDetail(resp: Response): Promise<string> {
   try {
     const data = (await resp.json()) as { detail?: unknown };
@@ -649,8 +697,9 @@ export function createSettingsPanelState(): SettingsPanelState {
     settingsSections: [],
     settingsColorChoices: {},
     settingsCollapsed: loadCollapsedSections(),
+    settingsActiveSectionPath: loadActiveSectionPath(),
     settingsSearchQuery: "",
-    settingsTooltip: { show: false, text: "", top: 0, left: 0 },
+    settingsHintText: "",
     _settingsSchema: null,
     showQuickFilters: undefined,
 
@@ -660,6 +709,19 @@ export function createSettingsPanelState(): SettingsPanelState {
 
     settingsFilteredSections() {
       return filterSettingsSections(this.settingsSections, this.settingsSearchQuery);
+    },
+
+    // deliberately reads the *unfiltered* settingsSections, not
+    // settingsFilteredSections() - the left nav always lists every section
+    // regardless of an active search query (only the content pane's
+    // search-results view is filtered), and a stored/previously-selected
+    // path that no longer exists (a since-renamed section, or simply never
+    // set yet) falls back to the first section rather than showing nothing.
+    settingsActiveGroup() {
+      const found = this.settingsSections.find(
+        (g) => g.path === this.settingsActiveSectionPath,
+      );
+      return found ?? this.settingsSections[0] ?? null;
     },
 
     settingsFieldOutOfRange(field) {
@@ -701,32 +763,25 @@ export function createSettingsPanelState(): SettingsPanelState {
     closeSettings() {
       this.settingsOpen = false;
       document.body.style.overflow = "";
-      this.hideSettingsTooltip();
+      this.hideSettingsHint();
       this.settingsSearchQuery = "";
     },
 
-    showSettingsTooltip(el, text) {
+    showSettingsHint(text) {
       // the panel's own closing transition keeps its content visible (and
-      // hoverable) for ~100ms after settingsOpen flips false, so a
-      // mouseenter can still land on an info icon mid-fade - closeSettings()
-      // already hides any currently-open tooltip synchronously, but that
-      // can't stop a *later* mouseenter from reopening one afterward, and
-      // nothing would then be left to hide it again. Guarding here (rather
+      // hoverable/focusable) for ~100ms after settingsOpen flips false, so
+      // a mouseenter/focusin can still land on a row mid-fade -
+      // closeSettings() already clears the hint synchronously, but that
+      // can't stop a *later* hover/focus from setting it again afterward,
+      // and nothing would then be left to clear it. Guarding here (rather
       // than only reacting to the close) closes that race outright: no
-      // tooltip can newly open once the panel isn't.
-      if (!text || !this.settingsOpen) return;
-      const rect = el.getBoundingClientRect();
-      const tooltipWidth = 288; // matches the tooltip's w-72
-      this.settingsTooltip = {
-        show: true,
-        text,
-        top: rect.bottom + 8,
-        left: Math.min(rect.left, window.innerWidth - tooltipWidth - 16),
-      };
+      // hint can newly show once the panel isn't open.
+      if (!this.settingsOpen) return;
+      this.settingsHintText = text;
     },
 
-    hideSettingsTooltip() {
-      this.settingsTooltip = { ...this.settingsTooltip, show: false };
+    hideSettingsHint() {
+      this.settingsHintText = "";
     },
 
     updateField(path, value) {
@@ -802,6 +857,21 @@ export function createSettingsPanelState(): SettingsPanelState {
           "mojo:settings:collapsed-sections",
           JSON.stringify(this.settingsCollapsed),
         );
+      } catch {
+        /* quota exceeded - ignore */
+      }
+    },
+
+    // clears any active search query on select - a nav click is a "take me
+    // to this section" GOTO, so it should always land on a normal,
+    // un-filtered view of that section rather than leaving stale search
+    // results shown underneath a now-highlighted (but not actually
+    // rendered) nav item.
+    selectSettingsSection(path) {
+      this.settingsActiveSectionPath = path;
+      this.settingsSearchQuery = "";
+      try {
+        localStorage.setItem("mojo:settings:active-section", path);
       } catch {
         /* quota exceeded - ignore */
       }

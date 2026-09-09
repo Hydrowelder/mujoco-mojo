@@ -9,6 +9,17 @@ import {
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
 import type { DojoStore, JobStatus, NotificationEntry } from "./models";
+// window.mojoCreateColorPicker (used by both _settings_panel.html below and
+// _macros.html's color_picker macro) was only ever registered as a side
+// effect of trial-viewer.ts importing this module - fine for the Plot
+// Editor's color pickers, which only ever render on the trial-viewer page
+// anyway, but the Settings panel is a global, every-page feature (opened
+// from base.html's gear icon), so its color-widget wheel silently never
+// rendered at all on any page that doesn't also load trial-viewer.js (e.g.
+// Monitor, Mosaic). Importing it here too - main.js loads on every page -
+// fixes that; ES modules are idempotent, so trial-viewer.ts keeping its own
+// import as well is harmless, not a double-registration.
+import "./lib/color-picker";
 
 // the npm/module build doesn't auto-start itself the way the old vendored
 // CDN script did, so this is now the one place that does it explicitly --

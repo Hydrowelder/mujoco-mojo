@@ -287,7 +287,7 @@ def copy_asset(
         source: Absolute path of the file to copy.
         dest_file: Destination path within the bundle's target directory.
         known_checksum: `get_checksum(source)` if already computed by the caller, to avoid rehashing the source; computed on demand if `None`.
-        prefer_symlinks: Requests a symlink instead of a copy. See `MujocoMojoSettings.assets.symlink`.
+        prefer_symlinks: Requests a symlink instead of a copy. See `MujocoMojoSettings.general.symlink`.
 
     """
     dest_file.parent.mkdir(parents=True, exist_ok=True)

@@ -183,14 +183,14 @@ def test_asset_bundling(tmp_path: Path):
 def test_bundle_assets_threads_symlink_setting_to_copy_asset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """bundle_assets reads MujocoMojoSettings.assets.symlink and passes it through to copy_asset, regardless of platform."""
+    """bundle_assets reads MujocoMojoSettings.general.symlink and passes it through to copy_asset, regardless of platform."""
     import mujoco_mojo.mjcf.xml_model as xml_model_module
 
-    class _FakeAssetSettings:
+    class _FakeGeneralSettings:
         symlink = True
 
     class _FakeSettings:
-        assets = _FakeAssetSettings()
+        general = _FakeGeneralSettings()
 
     monkeypatch.setattr(xml_model_module, "MujocoMojoSettings", _FakeSettings)
 
