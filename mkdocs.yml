@@ -13,6 +13,7 @@ watch:
 
 nav:
   - Home: index.md
+  - Changelog: changelog.md
   - User Guide:
       - Workflow:
           - Getting Started: user-guides/workflow/getting-started.md
