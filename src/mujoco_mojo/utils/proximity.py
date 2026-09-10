@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 import mujoco
 import numpy as np
-from pydantic import PrivateAttr, field_validator, model_validator
+from pydantic import Discriminator, PrivateAttr, Tag, field_validator, model_validator
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import GeomMesh
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteMesh
 from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
@@ -29,6 +30,22 @@ logger = get_logger(__name__)
 
 __all__ = ["Proximity"]
 
+
+def _proximityable_discriminator(v: Any) -> str:
+    """
+    Distinguishes `GeomMesh` from `SiteMesh` for `Proximityable`'s discriminated union.
+
+    Both classes declare `type: Literal[GeomType.MESH]` - it's the only way either spells "I'm the mesh variant" - so they share the exact same discriminator value, and a plain `Field(discriminator="type")` can't tell them apart: pydantic requires each union member to map to a unique tag, and raises at schema-build time otherwise. This checks the actual Python type instead. Only handles already-constructed instances, matching how `Proximity` is actually used throughout the codebase - direct object construction, never raw dict/JSON validation.
+
+    """
+    return "site" if isinstance(v, SiteMesh) else "geom"
+
+
+Proximityable = Annotated[
+    Annotated[GeomMesh, Tag("geom")] | Annotated[SiteMesh, Tag("site")],
+    Discriminator(_proximityable_discriminator),
+]
+
 _REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
     "dist": dim(Dimension.LENGTH),
     "fromto": dim(Dimension.LENGTH),
@@ -39,11 +56,11 @@ _REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
 class Proximity(MojoBaseModel):
     """Provide high-precision triangle-level distance queries."""
 
-    geom_1: Proximityable
-    """First geometry to perform proximity calculations for."""
+    volume_1: Proximityable
+    """First volume to perform proximity calculations for."""
 
-    geom_2: Proximityable
-    """Second geometry to perform proximity calculations for."""
+    volume_2: Proximityable
+    """Second volume to perform proximity calculations for."""
 
     dist_max: float
     """The 'cutoff' distance. If objects are further than this (as estimated by a sphere to sphere test), the sphere to sphere estimate will be returned and exit early."""
@@ -67,19 +84,19 @@ class Proximity(MojoBaseModel):
 
     _last_prox_type: ProximityType | None = PrivateAttr(default=None)
 
-    @field_validator("geom_1", "geom_2")
+    @field_validator("volume_1", "volume_2")
     @classmethod
-    def validate_geom_named(cls, v: Proximityable) -> Proximityable:
+    def validate_volume_named(cls, v: Proximityable) -> Proximityable:
         if v.name is None:
-            msg = "Unable to determine proximity to since geometry is unamed"
+            msg = "Unable to determine proximity to since volume is unamed"
             logger.error(msg)
             raise ValueError(msg)
         return v
 
     @model_validator(mode="after")
     def validate_names(self) -> Self:
-        if self.geom_1.name == self.geom_2.name:
-            msg = "Unable to determine proximity to geometry (geom_1 and geom_2 have the same name)"
+        if self.volume_1.name == self.volume_2.name:
+            msg = "Unable to determine proximity to volume (volume_1 and volume_2 have the same name)"
             logger.error(msg)
             raise ValueError(msg)
         return self
@@ -100,53 +117,53 @@ class Proximity(MojoBaseModel):
         state: MjState,
     ) -> tuple[float, Vec3, Vec3, bool]:
         """
-        Calculates the shortest distance between two geometries using their bounding spheres.
+        Calculates the shortest distance between two volumes using their bounding spheres.
 
         Args:
             state: The paired MuJoCo model and data instance.
 
         Returns:
-            tuple[float, Vec3, Vec3, bool]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and if the estimated distance exceeds dist_max.
+            tuple[float, Vec3, Vec3, bool]: Unsigned (`>= 0`) minimum distance from volume_1 to volume_2, world location of minimum distance on volume_1, world location of minimum distance on volume_2, and if the estimated distance exceeds dist_max.
 
         """
         # get world orientations and origins
-        origin_geom_1 = self.geom_1.rt_pos(state)
-        mat_geom_1 = self.geom_1.rt_xmat(state)
+        origin_volume_1 = self.volume_1.rt_pos(state)
+        mat_volume_1 = self.volume_1.rt_xmat(state)
 
-        origin_geom_2 = self.geom_2.rt_pos(state)
-        mat_geom_2 = self.geom_2.rt_xmat(state)
+        origin_volume_2 = self.volume_2.rt_pos(state)
+        mat_volume_2 = self.volume_2.rt_xmat(state)
 
-        if np.isnan(self.geom_1._rad):
-            self.geom_1._rad, self.geom_1._local_centroid = self.geom_1.vertex_max_norm(
-                state.model
+        if np.isnan(self.volume_1._rad):
+            self.volume_1._rad, self.volume_1._local_centroid = (
+                self.volume_1.vertex_max_norm(state.model)
             )
 
-        if np.isnan(self.geom_2._rad):
-            self.geom_2._rad, self.geom_2._local_centroid = self.geom_2.vertex_max_norm(
-                state.model
+        if np.isnan(self.volume_2._rad):
+            self.volume_2._rad, self.volume_2._local_centroid = (
+                self.volume_2.vertex_max_norm(state.model)
             )
 
         # shift centers to pre-calculated centroids
-        pos_geom_1 = origin_geom_1 + (mat_geom_1 @ self.geom_1._local_centroid)
-        pos_geom_2 = origin_geom_2 + (mat_geom_2 @ self.geom_2._local_centroid)
+        pos_volume_1 = origin_volume_1 + (mat_volume_1 @ self.volume_1._local_centroid)
+        pos_volume_2 = origin_volume_2 + (mat_volume_2 @ self.volume_2._local_centroid)
 
-        rad_geom_1 = self.geom_1._rad
-        rad_geom_2 = self.geom_2._rad
+        rad_volume_1 = self.volume_1._rad
+        rad_volume_2 = self.volume_2._rad
 
-        vec_geom_1_to_geom_2 = pos_geom_2 - pos_geom_1
-        d_centers = float(np.linalg.norm(vec_geom_1_to_geom_2))
-        dist = d_centers - (rad_geom_1 + rad_geom_2)
+        vec_volume_1_to_volume_2 = pos_volume_2 - pos_volume_1
+        d_centers = float(np.linalg.norm(vec_volume_1_to_volume_2))
+        dist = d_centers - (rad_volume_1 + rad_volume_2)
 
         dist = max(0.0, dist)  # clip to zero
         exceeds_dist_max = dist > self.dist_max
 
         if d_centers > 1e-9:
-            unit_vec = vec_geom_1_to_geom_2 / d_centers
-            p1 = pos_geom_1 + (unit_vec * rad_geom_1)
-            p2 = pos_geom_2 - (unit_vec * rad_geom_2)
+            unit_vec = vec_volume_1_to_volume_2 / d_centers
+            p1 = pos_volume_1 + (unit_vec * rad_volume_1)
+            p2 = pos_volume_2 - (unit_vec * rad_volume_2)
         else:
-            p1 = pos_geom_1
-            p2 = pos_geom_2
+            p1 = pos_volume_1
+            p2 = pos_volume_2
 
         self.update_last(p1, p2, state)
         return dist, p1, p2, exceeds_dist_max
@@ -156,26 +173,34 @@ class Proximity(MojoBaseModel):
         state: MjState,
     ) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
-        Calculates the shortest distance between two geometries using their convex hull.
+        Calculates the shortest distance between two volumes using their convex hull.
 
         Args:
             state: The paired MuJoCo model and data instance.
 
         Returns:
-            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from volume_1 to volume_2, world location of minimum distance on volume_1, world location of minimum distance on volume_2, and which phase the exit occurred in.
+
+        Raises:
+            TypeError: If either volume is a `SiteMesh` and the broadphase sphere-to-sphere check doesn't already resolve the query. The narrowphase below is MuJoCo's native `mj_geomDistance`, which only operates on geoms - it indexes `mjModel`'s geom arrays by geom id, a completely separate namespace from a site's id. Use `ProximityType.VERTEX_TO_FACE` or `FACE_TO_FACE` instead, which compute distance via mojo's own trimesh-based BVH query rather than this native call.
 
         """
         # ========== BROADPHASE ==========
-        if self.geom_1._proximity_configured_for != ProximityType.CONVEX_HULL:
-            self.geom_1.bake_proximity(state.model, ProximityType.CONVEX_HULL)
+        if self.volume_1._proximity_configured_for != ProximityType.CONVEX_HULL:
+            self.volume_1.bake_proximity(state.model, ProximityType.CONVEX_HULL)
 
-        if self.geom_2._proximity_configured_for != ProximityType.CONVEX_HULL:
-            self.geom_2.bake_proximity(state.model, ProximityType.CONVEX_HULL)
+        if self.volume_2._proximity_configured_for != ProximityType.CONVEX_HULL:
+            self.volume_2.bake_proximity(state.model, ProximityType.CONVEX_HULL)
 
         d_est, p1, p2, skip = self.get_sphere_to_sphere_proximity(state)
 
         if skip:
             return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
+
+        if isinstance(self.volume_1, SiteMesh) or isinstance(self.volume_2, SiteMesh):
+            msg = "CONVEX_HULL proximity's narrowphase uses MuJoCo's native mj_geomDistance, which only supports geoms, not sites. Use ProximityType.VERTEX_TO_FACE or FACE_TO_FACE instead for a SiteMesh."
+            logger.error(msg)
+            raise TypeError(msg)
 
         # ========== NARROWPHASE ==========
         # temp buffer for MuJoCo's 6-element output [x1,y1,z1, x2,y2,z2]
@@ -183,8 +208,8 @@ class Proximity(MojoBaseModel):
         min_dist = mujoco.mj_geomDistance(
             m=state.model,
             d=state.data,
-            geom1=self.geom_1.get_id(state.model),
-            geom2=self.geom_2.get_id(state.model),
+            geom1=self.volume_1.get_id(state.model),
+            geom2=self.volume_2.get_id(state.model),
             distmax=self.dist_max,
             fromto=mj_fromto,
         )
@@ -212,19 +237,19 @@ class Proximity(MojoBaseModel):
             state: The paired MuJoCo model and data instance.
 
         Returns:
-            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from volume_1 to volume_2, world location of minimum distance on volume_1, world location of minimum distance on volume_2, and which phase the exit occurred in.
 
         """
-        if self.geom_1._proximity_configured_for != ProximityType.VERTEX_TO_FACE:
-            self.geom_1.bake_proximity(state.model, ProximityType.VERTEX_TO_FACE)
+        if self.volume_1._proximity_configured_for != ProximityType.VERTEX_TO_FACE:
+            self.volume_1.bake_proximity(state.model, ProximityType.VERTEX_TO_FACE)
 
-        if self.geom_2._proximity_configured_for != ProximityType.VERTEX_TO_FACE:
-            self.geom_2.bake_proximity(state.model, ProximityType.VERTEX_TO_FACE)
+        if self.volume_2._proximity_configured_for != ProximityType.VERTEX_TO_FACE:
+            self.volume_2.bake_proximity(state.model, ProximityType.VERTEX_TO_FACE)
 
-        assert self.geom_1._baked_query and self.geom_2._baked_query
+        assert self.volume_1._baked_query and self.volume_2._baked_query
         assert (
-            self.geom_2._local_verts is not None
-            and self.geom_2._local_verts is not None
+            self.volume_2._local_verts is not None
+            and self.volume_2._local_verts is not None
         )
 
         # ========== BROADPHASE: Sphere-Sphere check ==========
@@ -234,32 +259,32 @@ class Proximity(MojoBaseModel):
             return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== COORDINATE TRANSFORMATION ==========
-        pos_geom_1 = self.geom_1.rt_pos(state)
-        pos_geom_2 = self.geom_2.rt_pos(state)
+        pos_volume_1 = self.volume_1.rt_pos(state)
+        pos_volume_2 = self.volume_2.rt_pos(state)
 
-        mat_geom_1 = self.geom_1.rt_xmat(state)  # already Mat3 (3x3)
-        mat_geom_2 = self.geom_2.rt_xmat(state)
-        rel_pos = pos_geom_2 - pos_geom_1
+        mat_volume_1 = self.volume_1.rt_xmat(state)  # already Mat3 (3x3)
+        mat_volume_2 = self.volume_2.rt_xmat(state)
+        rel_pos = pos_volume_2 - pos_volume_1
 
-        # ========== NARROWPHASE A: Geom_1-Surface vs. Geom_2-Vertices ==========
+        # ========== NARROWPHASE A: Volume_1-Surface vs. Volume_2-Vertices ==========
         # trimesh uses a BVH internall here (Mid-phase) to find closest triangles
-        # combine transforms from geom_1 to geom_2: V_local_geom_1 = R_geom_1.T @ (R_geom_2 @ V_local_geom_2 + p_geom_2 - p_geom_1)
-        geom_2_v_in_geom_1 = (
-            self.geom_2._local_verts @ mat_geom_2.T + rel_pos
-        ) @ mat_geom_1
-        pts_on_geom_1, dist_a, _ = self.geom_1._baked_query.on_surface(
-            geom_2_v_in_geom_1
+        # combine transforms from volume_1 to volume_2: V_local_volume_1 = R_volume_1.T @ (R_volume_2 @ V_local_volume_2 + p_volume_2 - p_volume_1)
+        volume_2_v_in_volume_1 = (
+            self.volume_2._local_verts @ mat_volume_2.T + rel_pos
+        ) @ mat_volume_1
+        pts_on_volume_1, dist_a, _ = self.volume_1._baked_query.on_surface(
+            volume_2_v_in_volume_1
         )
         idx_a = np.argmin(dist_a)
         min_a = dist_a[idx_a]
 
-        # ========== NARROWPHASE B: Geom_1-Vertices vs. Geom_2-Surface  ==========
-        # transform geom_1 vertices into geom_2's local frame
-        geom_1_v_in_geom_2 = (
-            self.geom_1._local_verts @ mat_geom_1.T - rel_pos
-        ) @ mat_geom_2
-        pts_on_geom_2, dist_b, _ = self.geom_2._baked_query.on_surface(
-            geom_1_v_in_geom_2
+        # ========== NARROWPHASE B: Volume_1-Vertices vs. Volume_2-Surface  ==========
+        # transform volume_1 vertices into volume_2's local frame
+        volume_1_v_in_volume_2 = (
+            self.volume_1._local_verts @ mat_volume_1.T - rel_pos
+        ) @ mat_volume_2
+        pts_on_volume_2, dist_b, _ = self.volume_2._baked_query.on_surface(
+            volume_1_v_in_volume_2
         )
         idx_b = np.argmin(dist_b)
         min_b = dist_b[idx_b]
@@ -268,17 +293,17 @@ class Proximity(MojoBaseModel):
         # find global min
         if min_a < min_b:
             min_dist = float(min_a)
-            p1 = (pts_on_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
-            p2 = (geom_2_v_in_geom_1[idx_a] @ mat_geom_1.T) + pos_geom_1
+            p1 = (pts_on_volume_1[idx_a] @ mat_volume_1.T) + pos_volume_1
+            p2 = (volume_2_v_in_volume_1[idx_a] @ mat_volume_1.T) + pos_volume_1
 
             self.update_last(p1, p2, state)
             return min_dist, p1, p2, ProximityType.VERTEX_TO_FACE
         else:
             min_dist = float(min_b)
 
-            # pt_on_geom_2 was calculated in geom_2's local frame
-            p2 = (pts_on_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
-            p1 = (geom_1_v_in_geom_2[idx_b] @ mat_geom_2.T) + pos_geom_2
+            # pt_on_volume_2 was calculated in volume_2's local frame
+            p2 = (pts_on_volume_2[idx_b] @ mat_volume_2.T) + pos_volume_2
+            p1 = (volume_1_v_in_volume_2[idx_b] @ mat_volume_2.T) + pos_volume_2
 
             self.update_last(p1, p2, state)
             return min_dist, p1, p2, ProximityType.VERTEX_TO_FACE
@@ -301,16 +326,16 @@ class Proximity(MojoBaseModel):
             state: The paired MuJoCo model and data instance.
 
         Returns:
-            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from geom_1 to geom_2, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which phase the exit occurred in.
+            tuple[float, Vec3, Vec3, ProximityType]: Unsigned (`>= 0`) minimum distance from volume_1 to volume_2, world location of minimum distance on volume_1, world location of minimum distance on volume_2, and which phase the exit occurred in.
 
         """
-        if self.geom_1._proximity_configured_for != ProximityType.FACE_TO_FACE:
-            self.geom_1.bake_proximity(state.model, ProximityType.FACE_TO_FACE)
+        if self.volume_1._proximity_configured_for != ProximityType.FACE_TO_FACE:
+            self.volume_1.bake_proximity(state.model, ProximityType.FACE_TO_FACE)
 
-        if self.geom_2._proximity_configured_for != ProximityType.FACE_TO_FACE:
-            self.geom_2.bake_proximity(state.model, ProximityType.FACE_TO_FACE)
+        if self.volume_2._proximity_configured_for != ProximityType.FACE_TO_FACE:
+            self.volume_2.bake_proximity(state.model, ProximityType.FACE_TO_FACE)
 
-        assert self.geom_1._baked_manager and self.geom_2._baked_manager
+        assert self.volume_1._baked_manager and self.volume_2._baked_manager
 
         # ========== BROADPHASE: Sphere-Sphere check ==========
 
@@ -320,36 +345,36 @@ class Proximity(MojoBaseModel):
             return d_est, p1, p2, ProximityType.SPHERE_TO_SPHERE
 
         # ========== NARROWPHASE ==========
-        # set the other transformation relative to geom_1's local frame
-        t_geom_1 = np.eye(4)
-        t_geom_1[:3, :3] = self.geom_1.rt_xmat(state)
-        t_geom_1[:3, 3] = self.geom_1.rt_pos(state)
+        # set the other transformation relative to volume_1's local frame
+        t_volume_1 = np.eye(4)
+        t_volume_1[:3, :3] = self.volume_1.rt_xmat(state)
+        t_volume_1[:3, 3] = self.volume_1.rt_pos(state)
 
-        t_geom_2 = np.eye(4)
-        t_geom_2[:3, :3] = self.geom_2.rt_xmat(state)
-        t_geom_2[:3, 3] = self.geom_2.rt_pos(state)
+        t_volume_2 = np.eye(4)
+        t_volume_2[:3, :3] = self.volume_2.rt_xmat(state)
+        t_volume_2[:3, 3] = self.volume_2.rt_pos(state)
 
-        self.geom_1._baked_manager.set_transform(self.geom_1.name, t_geom_1)
-        self.geom_2._baked_manager.set_transform(self.geom_2.name, t_geom_2)
+        self.volume_1._baked_manager.set_transform(self.volume_1.name, t_volume_1)
+        self.volume_2._baked_manager.set_transform(self.volume_2.name, t_volume_2)
 
         # CollisionManager returns distance and the two closest points
-        result = self.geom_1._baked_manager.min_distance_other(
-            self.geom_2._baked_manager, return_data=True
+        result = self.volume_1._baked_manager.min_distance_other(
+            self.volume_2._baked_manager, return_data=True
         )
         min_dist = float(result[0])  # pyright: ignore[reportIndexIssue]
         min_dist = max(0.0, min_dist)  # clip to zero
         data = result[1]  # pyright: ignore[reportIndexIssue]
 
         assert data
-        p1 = data.point(self.geom_1.name)  # pyright: ignore[reportAttributeAccessIssue]
-        p2 = data.point(self.geom_2.name)  # pyright: ignore[reportAttributeAccessIssue]
+        p1 = data.point(self.volume_1.name)  # pyright: ignore[reportAttributeAccessIssue]
+        p2 = data.point(self.volume_2.name)  # pyright: ignore[reportAttributeAccessIssue]
 
         self.update_last(p1, p2, state)
         return min_dist, p1, p2, ProximityType.FACE_TO_FACE
 
     def get_proximity(self, state: MjState) -> tuple[float, Vec3, Vec3, ProximityType]:
         """
-        Calculates the shortest distance between two geometries using the specified proximity algorithm.
+        Calculates the shortest distance between two volumes using the specified proximity algorithm.
 
         This is a general dispatcher method that routes to different proximity calculation algorithms based on the `algorithm` parameter. Each mode offers different tradeoffs between speed and precision:
 
@@ -369,7 +394,7 @@ class Proximity(MojoBaseModel):
         Returns:
             tuple[float, ProximityType]: If fromto=False, returns the unsigned (`>= 0`) minimum distance and which algorithm produced the result.
 
-            tuple[tuple[float, Vec3, Vec3], ProximityType]: If fromto=True, returns the minimum distance, world location of minimum distance on geom_1, world location of minimum distance on geom_2, and which algorithm produced the result.
+            tuple[tuple[float, Vec3, Vec3], ProximityType]: If fromto=True, returns the minimum distance, world location of minimum distance on volume_1, world location of minimum distance on volume_2, and which algorithm produced the result.
 
         The result is cached per-timestep (keyed on `state.data.time`), so calling this more than once during the same step (e.g. once from `request()`'s telemetry sampler and again from a user-defined runtime input/Load that reads the same `Proximity` instance) only pays for the underlying calculation once.
 
@@ -451,7 +476,7 @@ class Proximity(MojoBaseModel):
 
     @property
     def pair_name(self) -> str:
-        return f"{self.geom_1.name}_to_{self.geom_2.name}"
+        return f"{self.volume_1.name}_to_{self.volume_2.name}"
 
     def request(
         self,
@@ -467,14 +492,14 @@ class Proximity(MojoBaseModel):
 
         | Channel     | Description                                                            | Type   |
         |:------------|:-----------------------------------------------------------------------|:-------|
-        | `dist`      | minimum distance between the geom pair, per the proximity algorithm    | scalar |
-        | `fromto`    | world coordinates of the nearest point on each geom                    | xyz    |
+        | `dist`      | minimum distance between the volume pair, per the proximity algorithm  | scalar |
+        | `fromto`    | world coordinates of the nearest point on each volume                  | xyz    |
         | `prox_type` | the `ProximityType` used to compute `dist` and `fromto`, as an integer | scalar |
 
-        Each channel is posted under `subgroups=(pair_name,)`, where `pair_name` is `f"{geom_1.name}_to_{geom_2.name}"`.
+        Each channel is posted under `subgroups=(pair_name,)`, where `pair_name` is `f"{volume_1.name}_to_{volume_2.name}"`.
 
         * A `scalar` is posted as a single value with `attr=channel`.
-        * An `xyz` is a cartesian vector without a magnitude component, posted as 3 values (`x`, `y`, `z`). `fromto` posts one `xyz` for each geom in the pair, under `subgroups=(pair_name, "fromto", geom_name)`.
+        * An `xyz` is a cartesian vector without a magnitude component, posted as 3 values (`x`, `y`, `z`). `fromto` posts one `xyz` for each volume in the pair, under `subgroups=(pair_name, "fromto", volume_name)`.
 
         Only the computations required by the requested channels are performed each timestep.
 
@@ -537,7 +562,7 @@ class Proximity(MojoBaseModel):
                             signal_manager.post(
                                 value=float(p1[i]),
                                 category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, channel, str(self.geom_1.name)),
+                                subgroups=(pair_name, channel, str(self.volume_1.name)),
                                 attr=attr,
                                 metadata=meta,
                             )
@@ -545,7 +570,7 @@ class Proximity(MojoBaseModel):
                             signal_manager.post(
                                 value=float(p2[i]),
                                 category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, channel, str(self.geom_2.name)),
+                                subgroups=(pair_name, channel, str(self.volume_2.name)),
                                 attr=attr,
                                 metadata=meta,
                             )

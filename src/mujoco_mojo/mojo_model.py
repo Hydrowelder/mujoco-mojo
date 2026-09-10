@@ -81,3 +81,6 @@ class MojoModel(MojoBaseModel, StochasBase):
             for geom in body.geoms:
                 if isinstance(geom, ProximityMixin):
                     geom.clear_unpickleable()
+            for site in body.sites:
+                if isinstance(site, ProximityMixin):
+                    site.clear_unpickleable()

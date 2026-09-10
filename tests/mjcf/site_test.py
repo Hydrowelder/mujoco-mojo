@@ -5,9 +5,13 @@ import numpy as np
 import pytest
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteSphere
+from mujoco_mojo.mjcf.mujoco import Mujoco
+from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
+from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import Mesh
+from mujoco_mojo.mjcf.mujoco_attr.body import Body, WorldBody
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteMesh, SiteSphere
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.typing import SiteName
+from mujoco_mojo.typing import BodyName, MeshName, SiteName
 
 
 @pytest.fixture
@@ -229,3 +233,39 @@ def test_request_metadata_override(
         "dimension": "[length]",
         "display_name": "Site Position",
     }
+
+
+# --- SiteMesh (MuJoCo 3.13.0: <site type="mesh" mesh="..."/>) ---
+
+
+def test_site_mesh_round_trips_and_compiles(tmp_path: Path) -> None:
+    """A SiteMesh serializes to `type="mesh" mesh="..."` and compiles against the real engine."""
+    mesh_name = MeshName("tri_mesh")
+    model = Mujoco(
+        worldbody=WorldBody(
+            bodies=[
+                Body(
+                    name=BodyName("b1"),
+                    sites=[SiteMesh(name=SiteName("s1"), mesh=mesh_name)],
+                )
+            ]
+        ),
+        assets=[
+            Asset(
+                meshes=[
+                    Mesh(
+                        name=mesh_name,
+                        vertex=((0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                    )
+                ]
+            )
+        ],
+    )
+
+    xml = model.write_xml(tmp_path / "site_mesh.xml")
+    assert 'type="mesh"' in xml
+    assert f'mesh="{mesh_name}"' in xml
+
+    mj_model = mujoco.MjModel.from_xml_string(xml)
+    assert mj_model.nsite == 1
+    assert mj_model.site_dataid[0] == 0

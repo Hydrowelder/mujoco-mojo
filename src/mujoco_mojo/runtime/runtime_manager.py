@@ -168,14 +168,14 @@ class RuntimeManager:
 
     def add_proximity(self, proximity: Proximity):
         # check if the pair is already being checked
-        assert proximity.geom_1.name and proximity.geom_2.name
+        assert proximity.volume_1.name and proximity.volume_2.name
 
-        search = sorted([proximity.geom_1.name, proximity.geom_2.name])
+        search = sorted([proximity.volume_1.name, proximity.volume_2.name])
         for p in self.proximities:
-            assert p.geom_1.name and p.geom_2.name
-            if search == sorted([p.geom_1.name, p.geom_2.name]):
+            assert p.volume_1.name and p.volume_2.name
+            if search == sorted([p.volume_1.name, p.volume_2.name]):
                 logger.warning(
-                    f"Proximities for {proximity.geom_1.name} and {proximity.geom_2.name} have already been registered"
+                    f"Proximities for {proximity.volume_1.name} and {proximity.volume_2.name} have already been registered"
                 )
 
         self.proximities.append(proximity)

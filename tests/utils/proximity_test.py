@@ -29,6 +29,8 @@ class ModelWithGeoms:
     bunny_below_cup_geom: mojo.GeomMesh
     ball_above_cup_geom: mojo.GeomMesh
     cup_geom: mojo.GeomMesh
+    ball_above_cup_site: mojo.SiteMesh
+    """A SiteMesh sharing ball_above_cup_geom's mesh - exercises Proximityable's GeomMesh | SiteMesh union (MuJoCo 3.13.0's <site type="mesh"> support) alongside the existing GeomMesh-only cases."""
 
     def compile(self) -> mojo.MjState:
         # copy assets to shared dir
@@ -159,6 +161,12 @@ def _model_with_geoms(
                 rgba=mojo.utils.Color.EMERALD_500.rgba,
             )
         ],
+        sites=[
+            ball_above_cup_site := mojo.SiteMesh(
+                name=mojo.SiteName("ball_above_cup_site"),
+                mesh=ball_mesh.name,
+            )
+        ],
     )
 
     mujoco_mjcf = mojo.Mujoco(
@@ -204,6 +212,7 @@ def _model_with_geoms(
         bunny_below_cup_geom=bunny_below_cup_geom,
         ball_above_cup_geom=ball_above_cup_geom,
         cup_geom=cup_geom,
+        ball_above_cup_site=ball_above_cup_site,
     )
 
 
@@ -253,8 +262,8 @@ def force_sphere_to_sphere(
     compiled_model: CompiledModel, algorithm: mojo.ProximityType
 ):
     dist, _p1, _p2, prox_type = mojo.utils.Proximity(
-        geom_1=compiled_model.cup_geom,
-        geom_2=compiled_model.bunny_in_cup_geom,
+        volume_1=compiled_model.cup_geom,
+        volume_2=compiled_model.bunny_in_cup_geom,
         dist_max=-np.inf,
         algorithm=algorithm,
     ).get_proximity(compiled_model.state)
@@ -266,8 +275,8 @@ def force_sphere_to_sphere(
 def test_convex_hull_proximity(compiled_model: CompiledModel):
     """Test convex hull proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=1.0,
     )
 
@@ -279,11 +288,50 @@ def test_convex_hull_proximity(compiled_model: CompiledModel):
     assert prox_type == mojo.ProximityType.CONVEX_HULL
 
 
+def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel):
+    """CONVEX_HULL's narrowphase uses MuJoCo's native mj_geomDistance, which only supports geoms (a SiteMesh's id lives in a separate namespace) - it should raise rather than silently measure against the wrong geom."""
+    proximity = mojo.utils.Proximity(
+        volume_1=compiled_model.cup_geom,
+        volume_2=compiled_model.ball_above_cup_site,
+        # large enough that the sphere-to-sphere broadphase can't short-circuit
+        # before reaching the geom-only narrowphase this is actually testing
+        dist_max=10.0,
+    )
+
+    with pytest.raises(TypeError, match="mj_geomDistance"):
+        proximity.get_convex_hull_proximity(compiled_model.state)
+
+
+def test_vertex_to_face_proximity_with_site_mesh_matches_equivalent_geom(
+    compiled_model: CompiledModel,
+):
+    """A SiteMesh gives the same VERTEX_TO_FACE distance as a GeomMesh at the identical pose/mesh (ball_above_cup_geom and ball_above_cup_site share a body, mesh, and default pose) - proves the trimesh-based narrowphase (unlike CONVEX_HULL's) is actually correct for sites, not just shape-checked."""
+    geom_proximity = mojo.utils.Proximity(
+        volume_1=compiled_model.cup_geom,
+        volume_2=compiled_model.ball_above_cup_geom,
+        dist_max=10.0,
+    )
+    site_proximity = mojo.utils.Proximity(
+        volume_1=compiled_model.cup_geom,
+        volume_2=compiled_model.ball_above_cup_site,
+        dist_max=10.0,
+    )
+
+    geom_dist, _, _, _ = geom_proximity.get_vertex_to_face_proximity(
+        compiled_model.state
+    )
+    site_dist, _, _, _ = site_proximity.get_vertex_to_face_proximity(
+        compiled_model.state
+    )
+
+    assert site_dist == pytest.approx(geom_dist, abs=1e-6)
+
+
 def test_vertex_to_face_proximity(compiled_model: CompiledModel):
     """Test vertex-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=1.0,
     )
 
@@ -301,8 +349,8 @@ def test_vertex_to_face_proximity(compiled_model: CompiledModel):
 def test_face_to_face_proximity(compiled_model: CompiledModel):
     """Test face-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=1.0,
     )
 
@@ -317,8 +365,8 @@ def test_face_to_face_proximity(compiled_model: CompiledModel):
 def test_sphere_to_sphere_proximity(compiled_model: CompiledModel):
     """Test sphere-to-sphere (broadphase only) proximity calculation."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=1.0,
         algorithm=mojo.ProximityType.SPHERE_TO_SPHERE,
     )
@@ -336,8 +384,8 @@ def test_get_proximity_dispatcher(compiled_model: CompiledModel):
     # Test each algorithm type returns correct mojo.ProximityType
     for algo in list(mojo.ProximityType):
         proximity = mojo.utils.Proximity(
-            geom_1=compiled_model.bunny_in_cup_geom,
-            geom_2=compiled_model.cup_geom,
+            volume_1=compiled_model.bunny_in_cup_geom,
+            volume_2=compiled_model.cup_geom,
             dist_max=1.0,
             algorithm=algo,
         )
@@ -360,16 +408,16 @@ def test_proximity_reciprocity(compiled_model: CompiledModel):
     for algo in list(mojo.ProximityType):
         # Query A to B
         dist_ab, p1_ab, p2_ab, _ = mojo.utils.Proximity(
-            geom_1=geom_a,
-            geom_2=geom_b,
+            volume_1=geom_a,
+            volume_2=geom_b,
             dist_max=10.0,
             algorithm=algo,
         ).get_proximity(compiled_model.state)
 
         # Query B to A
         dist_ba, p1_ba, p2_ba, _ = mojo.utils.Proximity(
-            geom_1=geom_b,
-            geom_2=geom_a,
+            volume_1=geom_b,
+            volume_2=geom_a,
             dist_max=10.0,
             algorithm=algo,
         ).get_proximity(compiled_model.state)
@@ -416,8 +464,8 @@ def test_algorithm_distance_ordering(compiled_model: CompiledModel):
     results: dict[mojo.ProximityType, float] = {}
     for algo in list(mojo.ProximityType):
         dist, p1, p2, prox_type = mojo.utils.Proximity(
-            geom_1=compiled_model.bunny_below_cup_geom,
-            geom_2=compiled_model.bunny_in_cup_geom,
+            volume_1=compiled_model.bunny_below_cup_geom,
+            volume_2=compiled_model.bunny_in_cup_geom,
             dist_max=10.0,
             algorithm=algo,
         ).get_proximity(compiled_model.state)
@@ -446,8 +494,8 @@ def test_fromto_returns_valid_points(compiled_model: CompiledModel):
     # Test each algorithm with fromto=True
     for algo in list(mojo.ProximityType):
         dist, p1, p2, prox_type = mojo.utils.Proximity(
-            geom_1=compiled_model.bunny_below_cup_geom,
-            geom_2=compiled_model.cup_geom,
+            volume_1=compiled_model.bunny_below_cup_geom,
+            volume_2=compiled_model.cup_geom,
             dist_max=np.inf,
             algorithm=algo,
         ).get_proximity(compiled_model.state)
@@ -529,8 +577,8 @@ def test_baked_mesh_properties(compiled_model: CompiledModel):
 def test_proximity_caching(compiled_model: CompiledModel):
     """Test that proximity calculations are cached properly."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=10.0,
     )
     # First call should bake
@@ -550,8 +598,8 @@ def test_proximity_caching(compiled_model: CompiledModel):
 def test_get_proximity_caches_per_timestep(compiled_model: CompiledModel):
     """get_proximity() should only run the underlying calculation once per timestep, regardless of how many times it's called (e.g. once for telemetry, once as a runtime input)."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=10.0,
         algorithm=mojo.ProximityType.CONVEX_HULL,
     )
@@ -611,8 +659,8 @@ def test_radius_caching(compiled_model: CompiledModel):
 def test_get_visuals_returns_line_config(compiled_model: CompiledModel):
     """get_visuals() returns a LineConfig between the closest points on two geoms."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=10.0,
         visualize=True,
     )
@@ -631,8 +679,8 @@ def test_get_visuals_returns_line_config(compiled_model: CompiledModel):
 def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel):
     """get_visuals() returns None when visualize=False."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=10.0,
         visualize=False,
     )
@@ -643,8 +691,8 @@ def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel):
 def test_get_visuals_uses_cached_result_on_same_timestep(compiled_model: CompiledModel):
     """get_visuals() reuses the cached proximity result within the same timestep."""
     proximity = mojo.utils.Proximity(
-        geom_1=compiled_model.bunny_in_cup_geom,
-        geom_2=compiled_model.cup_geom,
+        volume_1=compiled_model.bunny_in_cup_geom,
+        volume_2=compiled_model.cup_geom,
         dist_max=10.0,
         visualize=True,
     )
@@ -722,8 +770,8 @@ def _separated_state() -> MjState:
 
 def _cube_proximity(dist_max: float = 10.0) -> Proximity:
     return Proximity(
-        geom_1=mojo.GeomMesh(name=mojo.GeomName("g1"), mesh=mojo.MeshName("cube")),
-        geom_2=mojo.GeomMesh(name=mojo.GeomName("g2"), mesh=mojo.MeshName("cube")),
+        volume_1=mojo.GeomMesh(name=mojo.GeomName("g1"), mesh=mojo.MeshName("cube")),
+        volume_2=mojo.GeomMesh(name=mojo.GeomName("g2"), mesh=mojo.MeshName("cube")),
         dist_max=dist_max,
     )
 

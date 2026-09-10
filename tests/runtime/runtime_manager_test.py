@@ -182,8 +182,8 @@ def test_add_proximity_warns_on_duplicate_pair(caplog):
     g1 = GeomMesh(name=GeomName("geom_a"), mesh=MeshName("mesh_a"))
     g2 = GeomMesh(name=GeomName("geom_b"), mesh=MeshName("mesh_b"))
 
-    p1 = Proximity(geom_1=g1, geom_2=g2, dist_max=1.0)
-    p2 = Proximity(geom_1=g1, geom_2=g2, dist_max=1.0)
+    p1 = Proximity(volume_1=g1, volume_2=g2, dist_max=1.0)
+    p2 = Proximity(volume_1=g1, volume_2=g2, dist_max=1.0)
 
     mgr.add_proximity(p1)
     with caplog.at_level("WARNING"):

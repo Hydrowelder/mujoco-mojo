@@ -89,7 +89,7 @@ class Option(XMLModel):
     """These attributes replace the friction parameters of all active contact pairs when contact override is enabled. See Solver parameters for details."""
 
     integrator: Integrator = Integrator.EULER
-    """This attribute selects the numerical integrator to be used. Currently the available integrators are the semi-implicit Euler method, the fixed-step 4-th order Runge Kutta method, the Implicit-in-velocity Euler method, and implicitfast, which drops the Coriolis and centrifugal terms. See Numerical Integration for more details."""
+    """This attribute selects the numerical integrator to be used. Currently the available integrators are the semi-implicit Euler method, the fixed-step 4th-order Runge-Kutta method, the implicit-in-velocity Euler method, implicitfast, which drops the Coriolis and centrifugal terms, and discrete, a velocity-stepping integrator which unifies constraint solving and implicit position/velocity updates in an effective inertia metric. See Numerical Integration for more details."""
 
     cone: Cone = Cone.PYRAMIDAL
     """The type of contact friction cone. Elliptic cones are a better model of the physical reality, but pyramidal cones sometimes make the solver faster and more robust."""

@@ -128,8 +128,8 @@ def runtime(
             ).setup(state).register_to_rm(rm)
 
         prox = mojo.utils.Proximity(
-            geom_1=handoff.ball_geom,
-            geom_2=handoff.cup_geom,
+            volume_1=handoff.ball_geom,
+            volume_2=handoff.cup_geom,
             dist_max=1.5,
             algorithm=ALGORITHM,
         ).register_to_rm(rm)
