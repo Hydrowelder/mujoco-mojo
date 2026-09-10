@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import re
 import socket
 import tempfile
@@ -69,6 +70,18 @@ _UNIT_SYSTEMS: dict[str, _UnitSystem] = {
     "ips": _UnitSystem.ips(),
     "fff": _UnitSystem.fff(),
 }
+
+
+def _json_safe_list(series: pl.Series) -> list:
+    """
+    Converts a polars `Series` to a plain Python list, replacing any `NaN`/`Infinity`/`-Infinity` with `None`.
+
+    Starlette's `JSONResponse.render()` calls `json.dumps(..., allow_nan=False)`, which raises `ValueError: Out of range float values are not JSON compliant` for any of those three - unlike Python's own `json.dumps` default, which would otherwise silently emit the (strictly invalid) literal tokens `NaN`/`Infinity`/`-Infinity` rather than erroring. A non-float column (e.g. a string or bool signal) is returned via a plain `to_list()`, skipping the per-value scan entirely.
+    """
+    if not series.dtype.is_float():
+        return series.to_list()
+    values = series.fill_nan(None).to_list()
+    return [None if v is not None and math.isinf(v) else v for v in values]
 
 
 def _downsample(data: dict[str, list], max_points: int) -> dict[str, list]:
@@ -1075,7 +1088,7 @@ async def get_trial_data(
                                 s = outputs[output_label].rename(full_col)
                                 new_series.append(s)
                                 if full_col in lab_cols_set:
-                                    data[full_col] = s.to_list()
+                                    data[full_col] = _json_safe_list(s)
                         if new_series:
                             exec_df = MojoDataFrame.from_pl(exec_df.hstack(new_series))
                         del remaining[lab_name]
@@ -1102,7 +1115,7 @@ async def get_trial_data(
                             tmp = pl.DataFrame({col: series})
                             tmp = tmp.with_columns(f.apply(pl.col(col)).alias(col))
                             series = tmp[col]
-                    data[col] = series.to_list()
+                    data[col] = _json_safe_list(series)
                 continue
             if col not in df.columns:
                 continue
@@ -1120,7 +1133,7 @@ async def get_trial_data(
                         tmp = pl.DataFrame({col: series})
                         tmp = tmp.with_columns(f.apply(pl.col(col)).alias(col))
                         series = tmp[col]
-            data[col] = series.to_list()
+            data[col] = _json_safe_list(series)
 
         if max_points is not None:
             data = _downsample(data, max_points)

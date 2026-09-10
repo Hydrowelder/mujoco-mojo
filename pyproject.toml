@@ -37,6 +37,7 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "pytransform3d>=3.15.0",
     "tomlkit>=0.15.1",
+    "python-dotenv>=1.2.3",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -67,8 +68,8 @@ keywords = [
 reloaded = ["mjviser>=0.0.11", "viser>=1.0.26", "watchfiles>=1.1.1"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
-all = ["mujoco-mojo[reloaded,mesh-decomp,optimize]"]
-# sensai = ["pydantic-ai>=1.102.0", "requests>=2.32.5"]
+sensai = ["pydantic-ai>=1.102.0", "requests>=2.32.5"]
+all = ["mujoco-mojo[reloaded,mesh-decomp,optimize,sensai]"]
 
 [dependency-groups]
 # previous dependencies commented out intentionally in case I need them again
@@ -154,6 +155,15 @@ stubPath = "./typings"
 venvPath = ".."
 venv = ".venv"
 ignore = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",
+    # key_value (a pydantic-ai dependency) declares a class using
+    # nptyping.NDArray in a way beartype's import hook can't introspect at
+    # decoration time
+    "ignore::beartype.roar.BeartypeClawDecorWarning",
+]
 
 [project.urls]
 Homepage = "https://github.com/Hydrowelder/mujoco-mojo"

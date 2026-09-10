@@ -26,6 +26,7 @@ interface SensAIResultPayload {
   plot_config_update?: object | null;
   routed_to?: string;
   detail?: string;
+  label?: string;
 }
 
 const STORAGE_KEY = "sensai-messages";
@@ -36,11 +37,14 @@ function sensai() {
     loading: false,
     streaming: false,
     streamingContent: "",
+    thinkingLabel: null as string | null,
     enabled: null as boolean | null,
     messages: [] as SensAIMessage[],
     input: "",
     atBottom: true,
     hasNewResponse: false,
+    _revealQueue: "",
+    _revealTimer: null as number | null,
 
     async init() {
       this._loadMessages();
@@ -57,6 +61,15 @@ function sensai() {
       } catch {
         this.enabled = false;
       }
+
+      // keeps this FAB in sync with dojo.sensai.enabled if the user flips it
+      // in the settings panel without reloading the page - see settings-panel.ts's
+      // _applySettingsWrite for the dispatch side.
+      window.addEventListener("mojo-settings-saved", (e) => {
+        const detail = (e as CustomEvent<{ dojo?: { sensai?: { enabled?: boolean } } }>).detail;
+        const next = detail?.dojo?.sensai?.enabled;
+        if (typeof next === "boolean") this.enabled = next;
+      });
     },
 
     toggle() {
@@ -85,6 +98,7 @@ function sensai() {
       this.loading = true;
       this.streaming = false;
       this.streamingContent = "";
+      this.thinkingLabel = null;
       await (this as unknown as AlpineMagics).$nextTick();
       this._scrollToBottom();
 
@@ -132,6 +146,8 @@ function sensai() {
         this.loading = false;
         this.streaming = false;
         this.streamingContent = "";
+        this.thinkingLabel = null;
+        this._flushReveal();
         window.dispatchEvent(new CustomEvent("sensai-remeasure"));
         if (!this.open || !this.atBottom) {
           this.hasNewResponse = true;
@@ -152,14 +168,17 @@ function sensai() {
         } else if (trimmed.startsWith("data: ")) {
           try {
             const payload = JSON.parse(trimmed.slice(6)) as SensAIResultPayload & { delta?: string };
-            if (eventType === "text_delta" && typeof payload.delta === "string") {
+            if (eventType === "tool_call" && typeof payload.label === "string") {
+              this.thinkingLabel = payload.label;
+            } else if (eventType === "text_delta" && typeof payload.delta === "string") {
               if (!this.streaming) {
                 this.streaming = true;
+                this.thinkingLabel = null;
               }
-              this.streamingContent += payload.delta;
-              if (this.open && this.atBottom) this._scrollToBottom();
-              await new Promise<void>(resolve => setTimeout(resolve, 25));
+              this._revealQueue += payload.delta;
+              this._startReveal();
             } else if (eventType === "result") {
+              this._flushReveal();
               const content = typeof payload.message === "string"
                 ? payload.message || this.streamingContent || "(no response)"
                 : this.streamingContent || "(no response)";
@@ -178,15 +197,18 @@ function sensai() {
               if (payload.routed_to === "undo") {
                 window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
               }
+              this.thinkingLabel = null;
               this.streaming = false;
               this.streamingContent = "";
             } else if (eventType === "error") {
+              this._flushReveal();
               this.messages.push({
                 role: "assistant",
                 content: payload.detail ?? "An error occurred.",
                 error: true,
                 ts: Date.now(),
               });
+              this.thinkingLabel = null;
               this.streaming = false;
               this.streamingContent = "";
             }
@@ -265,6 +287,36 @@ function sensai() {
         const el = (this as unknown as AlpineMagics).$refs["messages"];
         if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       });
+    },
+
+    // Reveals streamingContent a few characters at a time on a fixed interval,
+    // decoupled from how large each network chunk actually was - the model
+    // (especially Gemini) often streams only a couple of large bursts per
+    // reply rather than per-token, and dumping each straight into
+    // streamingContent looked like it was appearing in big jumps. The step
+    // size grows with the backlog so a large burst still drains in well
+    // under a second instead of trailing behind the rest of the stream.
+    _startReveal() {
+      if (this._revealTimer !== null) return;
+      this._revealTimer = window.setInterval(() => {
+        if (this._revealQueue.length === 0) {
+          window.clearInterval(this._revealTimer!);
+          this._revealTimer = null;
+          return;
+        }
+        const step = Math.max(1, Math.ceil(this._revealQueue.length / 30));
+        this.streamingContent += this._revealQueue.slice(0, step);
+        this._revealQueue = this._revealQueue.slice(step);
+        if (this.open && this.atBottom) this._scrollToBottom();
+      }, 16);
+    },
+
+    _flushReveal() {
+      if (this._revealTimer !== null) {
+        window.clearInterval(this._revealTimer);
+        this._revealTimer = null;
+      }
+      this._revealQueue = "";
     },
 
     clear() {

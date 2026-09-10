@@ -1451,11 +1451,11 @@
         <div class="flex flex-col gap-2">
             <div class="relative">
                 {# profilesCoords lives on the main component, not a local
-                   x-data here - it also needs to be computed from the
-                   Ctrl+S shortcut (trial-viewer.ts), a different Alpine
-                   scope that a button-local value would be unreachable
-                   from. id (not just x-ref) so that keydown handler can
-                   find this exact button via plain DOM lookup. #}
+                x-data here - it also needs to be computed from the
+                Ctrl+S shortcut (trial-viewer.ts), a different Alpine
+                scope that a button-local value would be unreachable
+                from. id (not just x-ref) so that keydown handler can
+                find this exact button via plain DOM lookup. #}
                 <button id="profiles-btn"
                         @click="_computeProfilesCoords(); profilesOpen = !profilesOpen; if (profilesOpen) loadProfiles()"
                         class="sidebar-btn"
@@ -1701,6 +1701,7 @@
                          jpg: 'Compressed raster image, smaller file size.',
                          csv: 'Currently visible data, with active filters applied.',
                          json: 'Current plot configuration, to share or restore later.',
+                         chat: 'Full chat history with SensAI assistant.',
                      },
                  }">
                 <button x-ref="downloadBtn"
@@ -1785,6 +1786,13 @@
                                 <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">CONFIG</span>
                             </button>
 
+                            <button @click="downloadSensAIHistory(); downloadOpen = false"
+                                    @mouseenter="hoveredExport = 'json'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
+                                Chat History
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">CHAT</span>
+                            </button>
                             <!-- brief description of whichever export option is currently
                                  hovered, reserved at a fixed height so hovering different
                                  rows (longer/shorter descriptions) doesn't resize the panel -->
@@ -1793,14 +1801,8 @@
                                    x-text="exportDescriptions[hoveredExport] ?? ''"></p>
                             </div>
 
-                            <!-- <div class="my-2 border-t border-subtle"></div> -->
+                            <div class="my-2 border-t border-subtle"></div>
 
-                            <!-- <p class="text-sm font-bold text-ink-secondary uppercase px-2 mb-1">SensAI</p>
-                        <button @click="downloadSensAIHistory(); downloadOpen = false"
-                                class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold text-accent-600 dark:text-accent-400 hover:bg-accent-200 dark:hover:bg-accent-900/30 rounded transition-all duration-200 flex items-center justify-between group">
-                            Chat History
-                            <span class="text-sm bg-accent-500/10 group-hover:bg-accent-500 group-hover:text-white px-1 rounded transition-colors">CHAT</span>
-                        </button> -->
                         </div>
                     </div>
                 </template>

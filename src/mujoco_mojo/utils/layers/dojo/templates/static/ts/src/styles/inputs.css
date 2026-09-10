@@ -130,6 +130,7 @@
        field but not another. Same accent-500/40 dim tone main.css's
        ::selection already uses, so "this is a hint, not a value" reads
        consistently everywhere rather than varying per browser/field. */
+  .input-field::placeholder,
   .input-text::placeholder,
   .input-number::placeholder,
   .input-color::placeholder,
