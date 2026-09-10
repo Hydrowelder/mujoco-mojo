@@ -40,7 +40,7 @@ jobs:
 
       - name: Run unit tests
         # Explicitly tells uv which python version to use for the test environment
-        run: uv run --python ${{ matrix.python-version }} --group dev pytest
+        run: uv run --python ${{ matrix.python-version }} --group dev --extra all pytest
   publish:
     name: "Build and Publish"
     needs: [test]
