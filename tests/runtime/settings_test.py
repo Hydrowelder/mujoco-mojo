@@ -9,7 +9,6 @@ from mujoco_mojo.settings import (
     DojoSettings,
     GeneralSettings,
     MujocoMojoSettings,
-    SensAISettings,
     VisualizationSettings,
 )
 from mujoco_mojo.utils.layers.dojo.routers.settings import (
@@ -76,23 +75,6 @@ def test_color_value_serializes_as_string() -> None:
     assert dumped["action_force"] == "ROSE_500"
 
 
-def test_sensai_api_key_never_reveals_plaintext_on_dump() -> None:
-    """api_key has no custom field_serializer (there used to be one that explicitly unwrapped it - that was the actual leak), so both dump modes stay masked, while .get_secret_value() on the live instance still returns the real value for actual API calls."""
-    s = SensAISettings(api_key="my-secret-key")  # type: ignore[arg-type]
-
-    # plain model_dump() keeps the SecretStr wrapper, never the raw string
-    dumped = s.model_dump()
-    assert isinstance(dumped["api_key"], SecretStr)
-
-    # mode="json" (used by save()/set_project_value() before writing to disk)
-    # masks it to a fixed placeholder, never the real value
-    dumped_json = s.model_dump(mode="json")
-    assert dumped_json["api_key"] == "**********"
-
-    # the real value is still reachable where it's actually needed: the live field
-    assert s.api_key.get_secret_value() == "my-secret-key"
-
-
 def test_dojo_password_never_reveals_plaintext_on_dump() -> None:
     """dojo.password masks the same way api_key does on a mode='json' dump, while staying None by default (unlike api_key, which always has a placeholder value) so 'no password set' round-trips correctly."""
     assert DojoSettings().password is None
@@ -138,28 +120,24 @@ def test_settings_save_writes_toml(
 def test_settings_save_never_writes_a_real_secret(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """save() never persists api_key's real value, whether it's the harmless default or something set to look like a real key - only the masked placeholder ever reaches disk."""
+    """save() never persists password's real value, whether it's the harmless default or something set to look like a real one - only the masked placeholder ever reaches disk."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
     monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
     _isolate_project_settings(monkeypatch, tmp_path)
 
     settings = MujocoMojoSettings(
-        dojo=DojoSettings(
-            sensai=SensAISettings(api_key="sk-not-a-real-key-but-pretend")  # type: ignore[arg-type]
-        )
+        dojo=DojoSettings(password="hunter2-but-pretend")  # type: ignore[arg-type]
     )
     settings.save()
 
     content = toml_path.read_text()
-    assert "sk-not-a-real-key-but-pretend" not in content
-    assert 'api_key = "**********"' in content
+    assert "hunter2-but-pretend" not in content
+    assert 'password = "**********"' in content
 
     # confirm the live object still has the real value, for actual API calls
-    assert (
-        settings.dojo.sensai.api_key.get_secret_value()
-        == "sk-not-a-real-key-but-pretend"
-    )
+    assert settings.dojo.password is not None
+    assert settings.dojo.password.get_secret_value() == "hunter2-but-pretend"
 
 
 def test_settings_save_never_writes_a_real_dojo_password(
@@ -186,19 +164,16 @@ def test_settings_save_never_writes_a_real_dojo_password(
 
 def test_dojo_web_response_never_mentions_secret_fields_at_all() -> None:
     """
-    The schema and values payload the Dojo web settings panel actually receives (`_dojo_settings_schema`/`_settings_payload`, as served by `GET/POST /settings`) must not contain the literal field names `password`/`api_key` anywhere - not just mask their values - since the frontend has no legitimate need to know these fields exist. Regression test for two bugs found while building this: a nested-model field's schema entry re-embeds a whole-object copy of its default one level up (leaking a secret field's name back in after removing it from `properties`), and a value-based `isinstance(value, SecretStr)` check misses `password`, whose default is `None`, not a `SecretStr` instance.
+    The schema and values payload the Dojo web settings panel actually receives (`_dojo_settings_schema`/`_settings_payload`, as served by `GET/POST /settings`) must not contain the literal field name `password` anywhere - not just mask its value - since the frontend has no legitimate need to know this field exists. Regression test for two bugs found while building this: a nested-model field's schema entry re-embeds a whole-object copy of its default one level up (leaking a secret field's name back in after removing it from `properties`), and a value-based `isinstance(value, SecretStr)` check misses `password`, whose default is `None`, not a `SecretStr` instance.
     """
     settings = MujocoMojoSettings(
-        dojo=DojoSettings(
-            password="SUPER_SECRET_VALUE",  # type: ignore[arg-type]
-            sensai=SensAISettings(api_key="ANOTHER_SECRET_VALUE"),  # type: ignore[arg-type]
-        )
+        dojo=DojoSettings(password="SUPER_SECRET_VALUE")  # type: ignore[arg-type]
     )
     combined = json.dumps(
         {"schema": _dojo_settings_schema(), **_settings_payload(settings)}
     )
 
-    for needle in ("password", "api_key", "SUPER_SECRET_VALUE", "ANOTHER_SECRET_VALUE"):
+    for needle in ("password", "SUPER_SECRET_VALUE"):
         assert needle not in combined
 
 
@@ -633,7 +608,7 @@ def test_set_project_value_preserves_siblings_and_comments(
         "#:schema settings.schema.json\n"
         "[dojo.sensai]\n"
         "# pinned for this project's demo\n"
-        'model_name = "llama3.2:3b"\n',
+        'base_url = "http://localhost:9999/v1"\n',
         encoding="utf-8",
     )
 
@@ -641,7 +616,7 @@ def test_set_project_value_preserves_siblings_and_comments(
 
     content = project_path.read_text()
     assert "# pinned for this project's demo" in content
-    assert 'model_name = "llama3.2:3b"' in content
+    assert 'base_url = "http://localhost:9999/v1"' in content
     assert "enabled = true" in content
 
 

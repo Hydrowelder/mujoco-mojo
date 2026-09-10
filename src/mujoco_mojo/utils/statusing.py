@@ -50,17 +50,31 @@ REQUIREMENTS_FNAME = "requirements.json"
 
 
 class JobType(StrEnum):
+    """Which `mujoco-mojo run` subcommand (or the reloaded viewer) produced a job."""
+
     MONTE_CARLO = "monte_carlo"
+    """A `mujoco-mojo run monte_carlo` job: many trials sampled from randomized parameters."""
+
     OPTIMIZE = "optimize"
+    """A `mujoco-mojo run optimize` job: trials driven by a parameter search/optimizer."""
+
     RELOADED = "reloaded"
+    """A `mujoco-mojo reloaded` job: interactive live-reload viewer, not a batch of trials."""
 
 
 class ExecutionMode(StrEnum):
+    """Where a job's trials actually run."""
+
     LOCAL = "local"
+    """Trials run as local processes/threads on the machine that launched the job."""
+
     SLURM = "slurm"
+    """Trials are submitted as SLURM jobs to a cluster scheduler."""
 
 
 class Completion(StrEnum):
+    """How a trial ended, from "still running" through the different ways it can finish."""
+
     INCOMPLETE = "incomplete"
     """Neither completed nor failed. Indicates the process is ongoing."""
 
@@ -477,12 +491,18 @@ class JobStatus(MojoBaseModel):
         totals["total"] = sum(totals.values())
         return totals  # pyright: ignore[reportReturnType]
 
+    def get_trial_nums_with_status(
+        self, *status: Completion, invert: bool = False
+    ) -> list[int]:
+        """Returns a list of trial numbers which have the provided status. If invert is True it will provide trial numbers which do not match."""
+        to_check = [m for m in Completion if m not in status] if invert else status
+
+        return sorted([tn for tn, comp in self._registry.items() if comp in to_check])
+
     @property
     def pending_trial_nums(self) -> list[int]:
         """Returns trial numbers which are either missing or marked as incomplete."""
-        return [
-            tn for tn, comp in self._registry.items() if comp == Completion.INCOMPLETE
-        ]
+        return self.get_trial_nums_with_status(Completion.INCOMPLETE)
 
     @property
     def time_remaining_wall_clock(self) -> timedelta:
@@ -558,49 +578,39 @@ class JobStatus(MojoBaseModel):
 
     @property
     def n_success(self) -> int:
-        return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
+        return len(self.success_trial_nums)
 
     @property
     def n_failed(self) -> int:
         """Number of done trials that failed one or more requirements (`FAILURE` or `TERMINATED`). Errored trials are counted separately in `n_error`."""
-        return sum(1 for c in self._registry.values() if c in _FAILED_COMPLETIONS)
+        return len(self.failed_trial_nums)
 
     @property
     def n_error(self) -> int:
         """Number of trials that raised an unhandled exception (`ERROR`)."""
-        return sum(1 for c in self._registry.values() if c == Completion.ERROR)
+        return len(self.get_trial_nums_with_status(Completion.ERROR))
 
     @property
     def success_trial_nums(self) -> list[int]:
-        tns = []
-        for tn in self._registry.keys():
-            if self._registry[tn] == Completion.SUCCESS:
-                tns.append(tn)
-        return sorted(tns)
+        return self.get_trial_nums_with_status(Completion.SUCCESS)
 
     @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
         """Trials that completed but failed one or more requirements (`FAILURE` or `TERMINATED`)."""
-        return sorted(
-            tn for tn, comp in self._registry.items() if comp in _FAILED_COMPLETIONS
-        )
+        return self.get_trial_nums_with_status(*_FAILED_COMPLETIONS)
 
     @computed_field
     @property
     def error_trial_nums(self) -> list[int]:
         """Trials that raised an unhandled exception (`ERROR`)."""
-        return sorted(
-            tn for tn, comp in self._registry.items() if comp == Completion.ERROR
-        )
+        return self.get_trial_nums_with_status(Completion.ERROR)
 
     @property
     def unsuccessful_trial_nums(self) -> list[int]:
         """Union of failed and errored trials, for anything-went-wrong checks like process exit codes."""
-        return sorted(
-            tn
-            for tn, comp in self._registry.items()
-            if comp not in {Completion.SUCCESS, Completion.INCOMPLETE}
+        return self.get_trial_nums_with_status(
+            Completion.SUCCESS, Completion.INCOMPLETE, invert=True
         )
 
     def update_trial(self, status: TrialStatus, save: bool = True):

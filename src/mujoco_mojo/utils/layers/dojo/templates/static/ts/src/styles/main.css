@@ -133,6 +133,14 @@ html {
   background-color: color-mix(in srgb, var(--color-accent-500) 40%, transparent);
 }
 
+/* An accent-500-tinted highlight is invisible painted over an already-solid
+   accent-500 background (e.g. the SensAI chat panel's own user-message
+   bubble, _sensai.html) - a white-tinted highlight instead keeps selected
+   text distinguishable there without needing a per-component override. */
+.bg-accent-500 ::selection {
+  background-color: color-mix(in srgb, white 35%, transparent);
+}
+
 /* Prevents Alpine.js elements from flickering before they load */
 [x-cloak] {
   display: none !important;

@@ -23,6 +23,19 @@ import { Marked } from "marked";
 // just this file's own settings-panel tooltip.
 const dojoMarked = new Marked();
 
+// crypto.randomUUID() only exists in a secure context (HTTPS, or localhost) -
+// the Dojo dashboard is routinely reached over plain HTTP from another
+// machine on the network, where `crypto` itself still exists but this one
+// method doesn't, throwing "crypto.randomUUID is not a function". Every
+// caller here only needs a string that's unique for this browser session
+// (see SettingsListItem's doc comment on why), not a real UUID, so a counter
+// plus a little randomness for good measure works everywhere `randomUUID`
+// would have and never depends on the page's origin.
+let _uniqueIdCounter = 0;
+function uniqueId(): string {
+  return `${Date.now().toString(36)}-${(_uniqueIdCounter++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export type SettingsWidget =
   | "toggle"
   | "select"
@@ -78,6 +91,38 @@ export interface SettingsDictField {
   entries: SettingsDictEntry[];
 }
 
+// One row in a SettingsListField (a fixed-shape object, e.g. SensAIModelEntry)
+// - each row's fields are real SettingsField objects (not a lighter bespoke
+// shape), so the exact same widget rendering, updateField/resetField, and
+// hint-bar wiring already built for a normal field row works unmodified for
+// a row's fields too. A field's `.path` is a synthetic client-side id
+// (`${listField.path}.${crypto.randomUUID()}.${propKey}`, not a real dotted
+// settings path the backend recognizes) - it only has to be unique enough
+// for updateField/findSettingsField to address this one field unambiguously
+// for the lifetime of this row, since the actual POST payload is rebuilt
+// from `.fields`/`.key` (listFieldValue below), not from this path string.
+// (`crypto.randomUUID()` would read more naturally there, but it only
+// exists in a secure context - see uniqueId() above.)
+export interface SettingsListItem {
+  fields: SettingsField[];
+}
+
+export interface SettingsListField {
+  path: string;
+  key: string;
+  title: string;
+  description: string;
+  // the item schema's own title (e.g. "Model" for SensAIModelEntry),
+  // used to label the "+ Add ..." button.
+  itemTitle: string;
+  // a blank row's fields, built once from the item schema at parse time
+  // (see buildListField) - addListItem below deep-clones this (with fresh
+  // paths) rather than re-deriving the item schema from scratch every time
+  // a row is added.
+  itemTemplate: SettingsField[];
+  items: SettingsListItem[];
+}
+
 export interface SettingsGroup {
   path: string;
   key: string;
@@ -86,6 +131,7 @@ export interface SettingsGroup {
   fields: SettingsField[];
   subgroups: SettingsGroup[];
   dictField: SettingsDictField | null;
+  listFields: SettingsListField[];
   // inner SVG markup (<path>/<rect>/<circle> elements, no outer <svg> tag)
   // shown next to the section title. Sourced from the schema's own
   // x-icon (model_config's json_schema_extra, settings.py), the same
@@ -103,6 +149,7 @@ export interface SettingsSchemaNode {
   anyOf?: SettingsSchemaNode[];
   properties?: Record<string, SettingsSchemaNode>;
   additionalProperties?: SettingsSchemaNode | boolean;
+  items?: SettingsSchemaNode;
   enum?: (string | number)[];
   description?: string;
   title?: string;
@@ -195,6 +242,8 @@ export interface SettingsPanelState {
   openOnLocalhost(): void;
   addDictEntry(groupPath: string): void;
   removeDictEntry(groupPath: string, index: number): void;
+  addListItem(listPath: string): void;
+  removeListItem(listPath: string, index: number): void;
   showSettingsHint(text: string): void;
   hideSettingsHint(): void;
   settingsFieldOutOfRange(field: SettingsField): boolean;
@@ -226,6 +275,15 @@ function isDictNode(node: SettingsSchemaNode): boolean {
 
 function isObjectNode(node: SettingsSchemaNode): boolean {
   return node.type === "object" && !!node.properties;
+}
+
+// a `list[SomeModel]` field (e.g. SensAISettings.models: list[SensAIModelEntry])
+// - as opposed to a plain scalar array, which describeLeaf below falls back
+// to rendering as a "text" field (harmless for a field type that doesn't
+// otherwise exist in this schema today, but not this function's job to guard
+// against).
+function isObjectListNode(schema: SettingsSchema, node: SettingsSchemaNode): boolean {
+  return node.type === "array" && !!node.items && isObjectNode(resolveRef(schema, node.items));
 }
 
 interface LeafDescription {
@@ -324,6 +382,52 @@ function buildDictField(
   };
 }
 
+// one row's worth of fields, built with real values (an existing row loaded
+// from `values`) or as a template (no `rawValues`, used once per
+// SettingsListField to seed addListItem's clones) - either way each
+// property becomes a genuine SettingsField via buildField, so it renders
+// and updates exactly like any other field.
+function buildListItemFields(
+  schema: SettingsSchema,
+  path: string,
+  itemNode: SettingsSchemaNode,
+  rawValues: Record<string, unknown>,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsField[] {
+  return Object.entries(itemNode.properties ?? {}).map(([propKey, propRawNode]) =>
+    buildField(schema, `${path}.${propKey}`, propKey, propRawNode, rawValues[propKey], valueMeta),
+  );
+}
+
+function buildListField(
+  schema: SettingsSchema,
+  path: string,
+  key: string,
+  node: SettingsSchemaNode,
+  value: unknown,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsListField {
+  const itemNode = resolveRef(schema, node.items ?? {});
+  const rawItems = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+  return {
+    path,
+    key,
+    title: node.title ?? key,
+    description: node.description ?? "",
+    itemTitle: itemNode.title ?? "Item",
+    itemTemplate: buildListItemFields(schema, `${path}.__template__`, itemNode, {}, valueMeta),
+    items: rawItems.map((raw) => ({
+      fields: buildListItemFields(
+        schema,
+        `${path}.${uniqueId()}`,
+        itemNode,
+        raw ?? {},
+        valueMeta,
+      ),
+    })),
+  };
+}
+
 function buildGroup(
   schema: SettingsSchema,
   path: string,
@@ -336,6 +440,7 @@ function buildGroup(
   const objectValue = (value ?? {}) as Record<string, unknown>;
   const fields: SettingsField[] = [];
   const subgroups: SettingsGroup[] = [];
+  const listFields: SettingsListField[] = [];
   let dictField: SettingsDictField | null = null;
 
   for (const [propKey, propRawNode] of Object.entries(node.properties ?? {})) {
@@ -343,7 +448,7 @@ function buildGroup(
     const propNode = resolveRef(schema, propRawNode);
     const propValue = objectValue[propKey];
     if (propNode.writeOnly) {
-      // SecretStr fields (dojo.password, dojo.sensai.api_key) never reach
+      // SecretStr fields (dojo.password) never reach
       // this point in practice anymore - the Dojo backend
       // (routers/settings.py's _dojo_settings_schema) deletes any
       // writeOnly property from the schema entirely before it's ever
@@ -361,6 +466,8 @@ function buildGroup(
     }
     if (isDictNode(propNode)) {
       dictField = buildDictField(propPath, propKey, propNode, propValue);
+    } else if (isObjectListNode(schema, propNode)) {
+      listFields.push(buildListField(schema, propPath, propKey, propNode, propValue, valueMeta));
     } else if (isObjectNode(propNode)) {
       subgroups.push(buildGroup(schema, propPath, propKey, propRawNode, propValue, valueMeta));
     } else {
@@ -376,6 +483,7 @@ function buildGroup(
     fields,
     subgroups,
     dictField,
+    listFields,
     icon: node["x-icon"] ?? "",
   };
 }
@@ -398,6 +506,7 @@ export function parseSettingsSchema(
         fields: [],
         subgroups: [],
         dictField: buildDictField(key, key, node, value),
+        listFields: [],
         icon: node["x-icon"] ?? "",
       });
     } else {
@@ -415,6 +524,12 @@ export function findSettingsField(groups: SettingsGroup[], path: string): Settin
   for (const g of groups) {
     const direct = g.fields.find((f) => f.path === path);
     if (direct) return direct;
+    for (const listField of g.listFields) {
+      for (const item of listField.items) {
+        const found = item.fields.find((f) => f.path === path);
+        if (found) return found;
+      }
+    }
     const nested = findSettingsField(g.subgroups, path);
     if (nested) return nested;
   }
@@ -430,10 +545,43 @@ export function findSettingsGroup(groups: SettingsGroup[], path: string): Settin
   return null;
 }
 
+export function findSettingsListField(groups: SettingsGroup[], path: string): SettingsListField | null {
+  for (const g of groups) {
+    const direct = g.listFields.find((l) => l.path === path);
+    if (direct) return direct;
+    const nested = findSettingsListField(g.subgroups, path);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+/** A sensible starting value for a freshly added row's field - the schema declares no `default` for either of SensAIModelEntry's fields (both are required), so a bare clone of the template would otherwise start every new row on `null`, which is invalid for both a select (no enum value) and a plain string field. */
+function blankFieldValue(field: SettingsField): string | number | boolean | null {
+  if (field.default !== null) return field.default;
+  if (field.widget === "select") return field.enumOptions?.[0] ?? null;
+  if (field.widget === "toggle") return false;
+  if (field.widget === "number") return field.minimum ?? 0;
+  return "";
+}
+
+/** Deep-clones a SettingsListField's blank itemTemplate into a fresh row, giving each field a new unique path so it doesn't collide with any other row's (added-then-removed rows can leave gaps, but never reused paths - see SettingsListItem's own doc comment on why that matters for findSettingsField/updateField). */
+function cloneListItemTemplate(listField: SettingsListField): SettingsListItem {
+  return {
+    fields: listField.itemTemplate.map((templateField) => ({
+      ...templateField,
+      path: `${listField.path}.${uniqueId()}.${templateField.key}`,
+      value: blankFieldValue(templateField),
+    })),
+  };
+}
+
 function collectSettingsFields(groups: SettingsGroup[]): SettingsField[] {
   const out: SettingsField[] = [];
   for (const g of groups) {
     out.push(...g.fields);
+    for (const listField of g.listFields) {
+      for (const item of listField.items) out.push(...item.fields);
+    }
     out.push(...collectSettingsFields(g.subgroups));
   }
   return out;
@@ -460,6 +608,14 @@ function dictFieldValue(dictField: SettingsDictField): Record<string, unknown> {
   return Object.fromEntries(dictField.entries.map((e) => [e.key, e.value]));
 }
 
+function listFieldValue(listField: SettingsListField): Record<string, unknown>[] {
+  return listField.items.map((item) => {
+    const out: Record<string, unknown> = {};
+    for (const field of item.fields) out[field.key] = serializeFieldValue(field);
+    return out;
+  });
+}
+
 function serializeFieldValue(field: SettingsField): unknown {
   if (field.widget === "secret") return field.value ? field.value : (field.secretOriginal ?? "");
   if (field.nullable && field.value === "") return null;
@@ -478,6 +634,7 @@ function groupValue(group: SettingsGroup): unknown {
   const out: Record<string, unknown> = {};
   for (const field of group.fields) out[field.key] = serializeFieldValue(field);
   for (const sub of group.subgroups) out[sub.key] = groupValue(sub);
+  for (const listField of group.listFields) out[listField.key] = listFieldValue(listField);
   if (group.dictField) out[group.dictField.key] = dictFieldValue(group.dictField);
   return out;
 }
@@ -894,6 +1051,17 @@ export function createSettingsPanelState(): SettingsPanelState {
       group?.dictField?.entries.splice(index, 1);
     },
 
+    addListItem(listPath) {
+      const listField = findSettingsListField(this.settingsSections, listPath);
+      if (!listField) return;
+      listField.items.push(cloneListItemTemplate(listField));
+    },
+
+    removeListItem(listPath, index) {
+      const listField = findSettingsListField(this.settingsSections, listPath);
+      listField?.items.splice(index, 1);
+    },
+
     _applySettingsResponse(data) {
       this._settingsSchema = data.schema;
       this.settingsColorChoices = data.color_choices;
@@ -910,6 +1078,10 @@ export function createSettingsPanelState(): SettingsPanelState {
         data.value_meta,
       );
       this.showQuickFilters = extractShowQuickFilters(data.values) ?? this.showQuickFilters;
+      // lets other Alpine components on the page (e.g. sensai()) react to a
+      // settings save/reset without a full page reload - see mojo-data-updated
+      // and mojo-sensai-plot-config for the same window-event pattern.
+      window.dispatchEvent(new CustomEvent("mojo-settings-saved", { detail: data.values }));
     },
   };
 }

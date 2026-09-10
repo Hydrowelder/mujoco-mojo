@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated, Any, cast
 
 import tomlkit
+from dotenv import find_dotenv, load_dotenv
 from filelock import FileLock
 from pydantic import (
     BaseModel,
@@ -42,6 +43,7 @@ from tomlkit.items import Table
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.typing import (
     Direction,
+    ModelProvider,
     Sampler,
     SortDirection,
     SortMode,
@@ -53,6 +55,25 @@ SETTINGS_DIR = MUJOCO_MOJO_DIR
 GLOBAL_SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
 SETTINGS_SCHEMA_FILE = SETTINGS_DIR / "settings.schema.json"
 SETTINGS_TAPLO_FILE = SETTINGS_DIR / ".taplo.toml"
+
+# resolved once, by walking up from *this file's own location* (not the
+# process's current working directory) until a .env is found - "" if none
+# exists anywhere above this file. A bare relative env_file=".env" (what
+# MujocoMojoSettings used to pass to pydantic-settings below) only ever
+# resolves against CWD with no upward search, so it silently found nothing
+# whenever a command ran from anywhere other than the exact directory
+# holding the .env file - e.g. this package's own src/ layout puts
+# settings.py several directories below a repo-root .env.
+_DOTENV_PATH = find_dotenv()
+
+# populates the *real* process environment (os.environ) from that file, in
+# addition to (not instead of) MujocoMojoSettings' own dotenv_settings
+# source below. The two solve different problems: dotenv_settings only ever
+# feeds values into this class's own MUJOCO_MOJO_-prefixed fields, while
+# something like a pydantic_ai provider's GOOGLE_API_KEY/ANTHROPIC_API_KEY/etc.
+# lookup calls os.getenv() directly, with no idea MujocoMojoSettings exists -
+# only a real load_dotenv() call makes a plain .env entry visible there.
+load_dotenv(_DOTENV_PATH)
 
 
 def project_settings_file() -> Path:
@@ -199,6 +220,22 @@ class VisualizationSettings(BaseModel):
         return data
 
 
+class SensAIModelEntry(BaseModel):
+    """One entry in `SensAISettings.models` - a provider paired with that provider's own model identifier."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="Model")
+
+    provider: ModelProvider = Field(
+        title="Provider",
+        description="Which pydantic_ai provider to route this entry through.",
+    )
+
+    model_name: str = Field(
+        title="Model Name",
+        description="That provider's own identifier for the model, e.g. `gemini-3.5-flash-lite` for Google.",
+    )
+
+
 class SensAISettings(BaseModel):
     """Settings for the SensAI assistant embedded in the Dojo dashboard."""
 
@@ -226,22 +263,16 @@ class SensAISettings(BaseModel):
         description="Whether or not to activate AI features.",
     )
 
-    model_name: str = Field(
-        default="qwen2.5:0.5b",
-        title="Model Name",
-        description="Model identifier (e.g. `qwen2.5:0.5b`, `llama3.2:3b`).",
+    models: list[SensAIModelEntry] = Field(
+        default_factory=list,
+        title="Models",
+        description="Models to fall back through, in priority order: earlier entries are tried first. Each provider reads its own credentials from its own environment variable (see each option above).",
     )
 
     base_url: str = Field(
         default="http://localhost:11434/v1",
         title="Base URL",
-        description="Base URL for the OpenAI-compatible endpoint.",
-    )
-
-    api_key: SecretStr = Field(
-        default=SecretStr("ollama"),
-        title="API Key",
-        description="API key sent with each request. Only a masked placeholder is ever saved - set the real value via `MUJOCO_MOJO_DOJO__SENSAI__API_KEY` instead. Ollama ignores it but still requires a non-empty string.",
+        description="Only needed if one of the models above uses the Ollama provider. Ollama has no built-in localhost default, unlike every other provider here. Ignored otherwise.",
     )
 
 
@@ -644,6 +675,21 @@ class RunSettings(BaseModel):
     optimize: OptimizeRunSettings = Field(default_factory=OptimizeRunSettings)
 
 
+_SCHEMA_HEADER = "#:schema settings.schema.json"
+
+
+def _ensure_schema_header(text: str) -> str:
+    """
+    Prepends the `#:schema settings.schema.json` header to raw TOML `text` if its first line isn't already that header, so a settings.toml written before schema support existed - or hand-edited to drop the line - gets it back on the next save.
+
+    Operates on the raw text rather than a parsed `tomlkit` document because `tomlkit.Container` keeps a private key->index map alongside its body list; splicing an item into `doc.body` directly (as opposed to through `Container.__setitem__`/`add`) leaves that map's indices stale and corrupts later in-place edits.
+    """
+    lines = text.splitlines()
+    if lines and lines[0].strip() == _SCHEMA_HEADER:
+        return text
+    return f"{_SCHEMA_HEADER}\n\n{text}"
+
+
 def _merge_into_toml(
     doc: tomlkit.TOMLDocument | Table,
     data: dict[str, Any],
@@ -849,6 +895,21 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
     def enum_schema(self, schema: core_schema.EnumSchema) -> JsonSchemaValue:
         result = super().enum_schema(schema)
         descriptions = _enum_value_descriptions(schema["cls"])
+        if schema["cls"] is ModelProvider:
+            # ModelProvider has no attribute-docstrings of its own (nothing worth
+            # saying statically beyond the provider's name) - what's useful here,
+            # each member's environment variable, only exists as a computed
+            # property (see ModelProvider.env_var_name's own docstring for why
+            # it can't be a lookup table), so it's merged in here instead of
+            # written by hand into descriptions above.
+            descriptions = {
+                **descriptions,
+                **{
+                    member.value: f"Set via the `{env_var}` environment variable."
+                    for member in ModelProvider
+                    if (env_var := member.env_var_name) is not None
+                },
+            }
         if descriptions:
             result["x-enum-descriptions"] = descriptions
         return result
@@ -858,7 +919,7 @@ class MujocoMojoSettings(BaseSettings):
     """
     Global user-level settings persisted to ~/.mujoco-mojo/settings.toml, layered with an optional project-local override file - the same User-settings-vs-Workspace-settings model VS Code uses.
 
-    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > project settings file (`project_settings_file()`, `<cwd>/.mujoco-mojo/settings.toml`) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
+    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, `<cwd>/.mujoco-mojo/settings.toml`) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
     """
 
     model_config = SettingsConfigDict(
@@ -866,6 +927,20 @@ class MujocoMojoSettings(BaseSettings):
         env_prefix="MUJOCO_MOJO_",
         env_nested_delimiter="__",
         frozen=True,
+        # an absolute path (not a bare ".env") so this resolves the same way
+        # regardless of the process's current working directory - see
+        # _DOTENV_PATH's own comment above for why a relative one doesn't.
+        env_file=_DOTENV_PATH or None,
+        env_file_encoding="utf-8",
+        # a .env file is often shared with other tools, so it may well carry
+        # secrets (e.g. GITHUB_TOKEN) that have nothing to do with mujoco-mojo -
+        # BaseSettings otherwise defaults to extra="forbid", and pydantic-settings'
+        # DotEnvSettingsSource stuffs every unmatched .env key into the data dict
+        # regardless of prefix, so without this an unrelated secret would crash
+        # settings loading entirely. Nested settings models (DojoSettings,
+        # SensAISettings, etc.) keep their own extra="forbid", so a typo inside an
+        # actual mujoco-mojo table is still caught.
+        extra="ignore",
     )
 
     general: GeneralSettings = Field(
@@ -910,6 +985,7 @@ class MujocoMojoSettings(BaseSettings):
         return (
             init_settings,
             env_settings,
+            dotenv_settings,
             TomlConfigSettingsSource(settings_cls, toml_file=project_settings_file()),
             TomlConfigSettingsSource(settings_cls, toml_file=GLOBAL_SETTINGS_FILE),
         )
@@ -941,7 +1017,7 @@ class MujocoMojoSettings(BaseSettings):
         Validated by overlaying the new value onto the full currently-effective settings (project + global + env + defaults) and calling `model_validate` on the result - `model_config` forbids extra fields on every fixed-shape settings group, so a typo'd leaf and a wrong-typed value both raise `pydantic.ValidationError` before anything is written. The *validated and re-dumped* leaf value is what actually gets persisted, not the raw `value` argument, so e.g. the CLI's loosely-typed input string `"true"` for a `bool` field is written to TOML as a real boolean, not a quoted string. Only that one changed leaf is written into the project file, keeping it a small, deliberate diff rather than a full mirror of every setting - contrast with `save()`, which always persists every field (correct for the global file, wrong here).
 
         Args:
-            key: Dotted path, e.g. "dojo.sensai.model_name", "assets.symlink", or "slurm.sbatch.account".
+            key: Dotted path, e.g. "dojo.sensai.base_url", "assets.symlink", or "slurm.sbatch.account".
             value: The value to set, already parsed to its target Python type.
 
         Raises:
@@ -1015,7 +1091,7 @@ class MujocoMojoSettings(BaseSettings):
 
         `project=True` (for `<cwd>/.mujoco-mojo/settings.toml`): `self`'s field values are never written - a project file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting (see `set_project_value`) - so an existing file's contents are left completely untouched, and a fresh one gets just the `#:schema` header. Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident.
 
-        Either way, a brand-new file starts with a `#:schema` header pointing at the colocated settings.schema.json - a bare relative filename, resolved by taplo against the TOML file's own directory, rather than a cross-directory reference to another directory's schema. The latter is what broke under SSH/SSHFS-style setups where only one of the two directories was visible to the editor - every settings directory is now self-contained.
+        Either way, a brand-new file starts with a `#:schema` header pointing at the colocated settings.schema.json - a bare relative filename, resolved by taplo against the TOML file's own directory, rather than a cross-directory reference to another directory's schema. The latter is what broke under SSH/SSHFS-style setups where only one of the two directories was visible to the editor - every settings directory is now self-contained. An existing file that's missing that header (written before schema support existed, or hand-edited to drop the line) gets it prepended on the next save too, except for the already-exists project-file case just above, which skips reading the file at all.
 
         Args:
             directory: Where to write `settings.toml`, `settings.schema.json`, and `.taplo.toml`. Defaults to `SETTINGS_DIR` (looked up at call time, not import time, so tests can monkeypatch it).
@@ -1042,12 +1118,13 @@ class MujocoMojoSettings(BaseSettings):
             lock_path = toml_path.with_suffix(toml_path.suffix + ".lock")
             with FileLock(lock_path):
                 if toml_path.exists():
-                    doc = tomlkit.parse(toml_path.read_text(encoding="utf-8"))
+                    text = _ensure_schema_header(toml_path.read_text(encoding="utf-8"))
+                    doc = tomlkit.parse(text)
                 else:
                     doc = tomlkit.parse("#:schema settings.schema.json\n")
 
                 if not project:
-                    # mode="json" turns any SecretStr field (e.g. dojo.sensai.api_key)
+                    # mode="json" turns any SecretStr field (e.g. dojo.password)
                     # into its masked "**********" string rather than a raw object
                     # tomlkit can't write at all - the real value is never persisted
                     # by this method. exclude_none=True omits an unset Optional field

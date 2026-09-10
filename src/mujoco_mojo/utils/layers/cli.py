@@ -1261,7 +1261,7 @@ def settings_set_cmd(
     key: Annotated[
         str,
         typer.Argument(
-            help="Dotted key path (e.g. [bold cyan]dojo.sensai.model_name[/bold cyan])",
+            help="Dotted key path (e.g. [bold cyan]dojo.sensai.enabled[/bold cyan])",
             show_default=False,
         ),
     ],
@@ -1284,7 +1284,7 @@ def settings_set_cmd(
     """
     [bold yellow]Update a setting.[/bold yellow]
 
-    Example: [bold cyan]mujoco-mojo settings set dojo.sensai.model_name llama3.1:8b[/bold cyan]
+    Example: [bold cyan]mujoco-mojo settings set dojo.sensai.enabled true[/bold cyan]
 
     Add [bold]--project[/bold] to write only the changed key into this project's local override file, leaving everything else there untouched.
     """
