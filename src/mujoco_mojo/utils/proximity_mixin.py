@@ -14,14 +14,14 @@ from mujoco_mojo.utils.log import get_logger
 if TYPE_CHECKING:
     import trimesh
 
-    from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import Proximityable
+    from mujoco_mojo.utils.proximity import Proximityable
 
 logger = get_logger(__name__)
 
 
 class ProximityMixin(MojoBaseModel, ABC):
     _baked_mesh: trimesh.Trimesh | None = PrivateAttr(default=None)
-    """Internal trimesh representation of the geometry."""
+    """Internal trimesh representation of the volume."""
 
     _baked_query: trimesh.proximity.ProximityQuery | None = PrivateAttr(default=None)
     """Pre-computed BVH query object for fast distance lookups."""
@@ -38,6 +38,10 @@ class ProximityMixin(MojoBaseModel, ABC):
 
     _proximity_configured_for: ProximityType | None = PrivateAttr(default=None)
 
+    @abstractmethod
+    def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
+        """The compiled model's mesh-asset index for this element (`mj_model.geom_dataid` for a `GeomMesh`, `site_dataid` for a `SiteMesh`), or -1 if none is associated."""
+
     def vertex_max_norm(self, mj_model: mujoco.MjModel) -> tuple[float, Vec3]:
         """
         Calculates the tightest sphere that encompasses all vertices, centered at the mesh's bounding box center.
@@ -46,17 +50,17 @@ class ProximityMixin(MojoBaseModel, ABC):
             tuple[float, Vec3]: Tight radius and the local centroid offset.
 
         """
-        geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
+        volume_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
         if self._local_verts is None:
-            mesh_id = mj_model.geom_dataid[geom_self.get_id(mj_model)]
+            mesh_id = volume_self._mesh_dataid(mj_model)
             if mesh_id == -1:
-                raise TypeError(f"Geom '{geom_self.name}' does not have mesh data.")
+                raise TypeError(f"Volume '{volume_self.name}' does not have mesh data.")
 
             adr = mj_model.mesh_vertadr[mesh_id]
             num = mj_model.mesh_vertnum[mesh_id]
             self._local_verts = mj_model.mesh_vert[adr : adr + num].copy()
 
-        # find the centroid of the geom
+        # find the centroid of the volume
         v_min = np.asarray(np.min(self._local_verts, axis=0))
         v_max = np.asarray(np.max(self._local_verts, axis=0))
         centroid = (v_min + v_max) / 2
@@ -75,11 +79,11 @@ class ProximityMixin(MojoBaseModel, ABC):
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
         import trimesh
 
-        geom_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
+        volume_self: Proximityable = self  # pyright: ignore[reportAssignmentType]
 
         # cache bounding radius
-        # self._rad = geom_self.rbound(mj_model)
-        self._rad, self._local_centroid = geom_self.vertex_max_norm(mj_model)
+        # self._rad = volume_self.rbound(mj_model)
+        self._rad, self._local_centroid = volume_self.vertex_max_norm(mj_model)
 
         match proximity_type:
             case ProximityType.SPHERE_TO_SPHERE | ProximityType.CONVEX_HULL:
@@ -94,17 +98,17 @@ class ProximityMixin(MojoBaseModel, ABC):
 
         match proximity_type:
             case ProximityType.FACE_TO_FACE:
-                if not geom_self.name:
-                    msg = "To perform face to face proximity calculations, geom must have a name"
+                if not volume_self.name:
+                    msg = "To perform face to face proximity calculations, volume must have a name"
                     logger.error(msg)
                     raise ValueError(msg)
                 self._baked_manager = trimesh.collision.CollisionManager()
-                self._baked_manager.add_object(geom_self.name, self._baked_mesh)
+                self._baked_manager.add_object(volume_self.name, self._baked_mesh)
             case _:
                 self._baked_query = trimesh.proximity.ProximityQuery(self._baked_mesh)
 
         logger.debug(
-            f"Baked proximity mesh for {geom_self.name} ({len(self._local_faces)} faces)"
+            f"Baked proximity mesh for {volume_self.name} ({len(self._local_faces)} faces)"
         )
 
     def clear_unpickleable(self):

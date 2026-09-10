@@ -559,11 +559,14 @@ class GeomMesh(GeomBase, ProximityMixin):
     mesh: MeshName
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
+    def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
+        return mj_model.geom_dataid[self.get_id(mj_model)]
+
     def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
         import trimesh
 
         # get mesh id and data from mujoco
-        mesh_id = mj_model.geom_dataid[self.get_id(mj_model)]
+        mesh_id = self._mesh_dataid(mj_model)
 
         if mesh_id == -1:
             msg = "Exact proximity mesh tool is not currently supported for geoms of this type. Please use the `SPHERE_TO_SPHERE`/`CONVEX_HULL` algorithm, or convert the Geom to a GeomMesh."
@@ -608,5 +611,3 @@ AnyGeom = Annotated[
     | GeomSDF,
     Field(discriminator="type"),
 ]
-
-Proximityable = Annotated[GeomMesh, Field(discriminator="type")]

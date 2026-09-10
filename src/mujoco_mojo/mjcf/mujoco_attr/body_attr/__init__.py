@@ -38,6 +38,7 @@ from .site import (
     SiteCapsule,
     SiteCylinder,
     SiteEllipsoid,
+    SiteMesh,
     SiteSphere,
 )
 
@@ -73,5 +74,6 @@ __all__ = [
     "SiteCapsule",
     "SiteCylinder",
     "SiteEllipsoid",
+    "SiteMesh",
     "SiteSphere",
 ]

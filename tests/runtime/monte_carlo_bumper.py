@@ -641,8 +641,8 @@ def runtime(
         handoff.add_spring_force("mz")
 
         proximity = mojo.utils.Proximity(
-            geom_1=handoff.box1_bunny,
-            geom_2=handoff.box2_bunny,
+            volume_1=handoff.box1_bunny,
+            volume_2=handoff.box2_bunny,
             dist_max=3 * us.meter,
             algorithm=mojo.ProximityType.CONVEX_HULL,
         ).register_to_rm()

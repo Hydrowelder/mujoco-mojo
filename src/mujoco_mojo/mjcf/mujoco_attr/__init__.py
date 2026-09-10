@@ -63,6 +63,7 @@ from .body_attr import (
     SiteCapsule,
     SiteCylinder,
     SiteEllipsoid,
+    SiteMesh,
     SiteSphere,
 )
 from .compiler import Compiler
@@ -291,6 +292,7 @@ __all__ = [
     "SiteCapsule",
     "SiteCylinder",
     "SiteEllipsoid",
+    "SiteMesh",
     "SiteSphere",
     "Size",
     "Spatial",

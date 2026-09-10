@@ -14,6 +14,7 @@ from mujoco_mojo.typing import (
     GeomType,
     Mat3,
     MaterialName,
+    MeshName,
     SignalCategory,
     SiteName,
     Vec2,
@@ -23,6 +24,7 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.proximity_mixin import ProximityMixin
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
     angular_rate_metadata,
@@ -32,6 +34,8 @@ from mujoco_mojo.utils.signal_metadata import (
 )
 
 if TYPE_CHECKING:
+    import trimesh
+
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 logger = get_logger(__name__)
@@ -52,6 +56,7 @@ __all__ = [
     "SiteCapsule",
     "SiteCylinder",
     "SiteEllipsoid",
+    "SiteMesh",
     "SiteSphere",
 ]
 
@@ -62,7 +67,6 @@ _site_attr = (
     "group",
     "pose",
     "material",
-    "size",
     "rgba",
     "user",
 )
@@ -686,7 +690,7 @@ class SiteSphere(SiteBase):
         "size",
     )
     type: Literal[GeomType.SPHERE] = GeomType.SPHERE
-    """Type of geometric shape. The keywords have the following meaning:
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors. The keywords have the following meaning:
 
     The `sphere` type defines a sphere. This and the next four types correspond to built-in geometric primitives. These primitives are treated as analytic surfaces for collision detection purposes, in many cases relying on custom pair- wise collision routines. Models including only planes, spheres, capsules and boxes are the most efficient in terms of collision detection. Other geom types invoke the general-purpose convex collider. The sphere is centered at the geom's position. Only one size parameter is used, specifying the radius of the sphere. Rendering of geometric primitives is done with automatically generated meshes whose density can be adjusted via quality. The sphere mesh is triangulated along the lines of latitude and longitude, with the Z axis passing through the north and south pole. This can be useful in wireframe mode for visualizing frame orientation."""
 
@@ -702,7 +706,7 @@ class SiteCapsule(SiteBase):
 
     attributes = (*_site_attr, "size", "fromto")
     type: Literal[GeomType.CAPSULE] = GeomType.CAPSULE
-    """Type of geometric shape.
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors.
 
     The `capsule` type defines a capsule, which is a cylinder capped with two half-spheres. It is oriented along the Z axis of the geom's frame. When the geom frame is specified in the usual way, two size parameters are required: the radius of the capsule followed by the half-height of the cylinder part. However capsules as well as cylinders can also be thought of as connectors, allowing an alternative specification with the fromto attribute below. In that case only one size parameter is required, namely the radius of the capsule.
     """
@@ -722,7 +726,7 @@ class SiteEllipsoid(SiteBase):
 
     attributes = (*_site_attr, "size", "fromto")
     type: Literal[GeomType.ELLIPSOID] = GeomType.ELLIPSOID
-    """Type of geometric shape.
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors.
 
     The `ellipsoid` type defines a ellipsoid. This is a sphere scaled separately along the X, Y and Z axes of the local frame. It requires three size parameters, corresponding to the three radii. Note that even though ellipsoids are smooth, their collisions are handled via the general-purpose convex collider. The only exception are plane-ellipsoid collisions which are computed analytically.
     """
@@ -742,7 +746,7 @@ class SiteCylinder(SiteBase):
 
     attributes = (*_site_attr, "size", "fromto")
     type: Literal[GeomType.CYLINDER] = GeomType.CYLINDER
-    """Type of geometric shape.
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors.
 
     The `cylinder` type defines a cylinder. It requires two size parameters: the radius and half-height of the cylinder. The cylinder is oriented along the Z axis of the geom's frame. It can alternatively be specified with the fromto attribute below.
     """
@@ -762,7 +766,7 @@ class SiteBox(SiteBase):
 
     attributes = (*_site_attr, "size", "fromto")
     type: Literal[GeomType.BOX] = GeomType.BOX
-    """Type of geometric shape.
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors.
 
     The `box` type defines a box. Three size parameters are required, corresponding to the half-sizes of the box along the X, Y and Z axes of the geom's frame. Note that box-box collisions can generate up to 8 contact points.
     """
@@ -777,7 +781,52 @@ class SiteBox(SiteBase):
     """This attribute can only be used with capsule, cylinder, ellipsoid and box sites. It provides an alternative specification of the site length as well as the frame position and orientation. The six numbers are the 3D coordinates of one point followed by the 3D coordinates of another point. The elongated part of the site connects these two points, with the +Z axis of the site's frame oriented from the first towards the second point. The frame orientation is obtained with the same procedure as the zaxis attribute described in Frame orientations. The frame position is in the middle between the two points. If this attribute is specified, the remaining position and orientation-related attributes are ignored."""
 
 
+class SiteMesh(SiteBase, ProximityMixin):
+    """This element creates a mesh site."""
+
+    attributes = (
+        *_site_attr,
+        "mesh",
+    )
+    type: Literal[GeomType.MESH] = GeomType.MESH
+    """Type of geometric shape. This is used for rendering, and also determines the active sensor zone for touch sensors."""
+
+    mesh: MeshName
+    """Mesh asset name.
+    """
+
+    def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
+        return mj_model.site_dataid[self.get_id(mj_model)]
+
+    def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
+        import trimesh
+
+        # get mesh id and data from mujoco
+        mesh_id = self._mesh_dataid(mj_model)
+
+        if mesh_id == -1:
+            msg = "Exact proximity mesh tool is not currently supported for sites of this type. Please use the `SPHERE_TO_SPHERE`/`CONVEX_HULL` algorithm, or convert the Site to a SiteMesh."
+            logger.error(msg)
+            raise TypeError(msg)
+
+        # extract vertices and faces
+        if self._local_verts is None:
+            adr = mj_model.mesh_vertadr[mesh_id]
+            num = mj_model.mesh_vertnum[mesh_id]
+            self._local_verts = mj_model.mesh_vert[adr : adr + num].copy()
+
+        f_adr = mj_model.mesh_faceadr[mesh_id]
+        f_num = mj_model.mesh_facenum[mesh_id]
+        self._local_faces = mj_model.mesh_face[f_adr : f_adr + f_num].copy()
+
+        # create a trimesh and its proximity query
+        self._baked_mesh = trimesh.Trimesh(
+            vertices=self._local_verts, faces=self._local_faces
+        )
+        return self._baked_mesh
+
+
 AnySite = Annotated[
-    SiteSphere | SiteCapsule | SiteEllipsoid | SiteCylinder | SiteBox,
+    SiteSphere | SiteCapsule | SiteEllipsoid | SiteCylinder | SiteBox | SiteMesh,
     Field(discriminator="type"),
 ]
