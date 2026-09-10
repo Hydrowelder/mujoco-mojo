@@ -38,7 +38,6 @@ MODULES: list[tuple[str, str]] = [
     ("mujoco_mojo.utils.runner", "mujoco_mojo/utils/runner.md"),
     ("mujoco_mojo.utils.proximity", "mujoco_mojo/utils/proximity.md"),
     ("mujoco_mojo.utils.filters", "mujoco_mojo/utils/filters.md"),
-    ("mujoco_mojo.utils.interp", "mujoco_mojo/utils/interp.md"),
     ("mujoco_mojo.utils.dataframe", "mujoco_mojo/utils/dataframe.md"),
 ]
 
