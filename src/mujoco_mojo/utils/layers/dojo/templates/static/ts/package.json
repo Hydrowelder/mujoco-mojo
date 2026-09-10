@@ -26,6 +26,9 @@
     "litegraph.js": "^0.7.18",
     "lz-string": "^1.5.0",
     "marked": "^18.0.4",
-    "plotly.js": "^4.0.0"
+    "plotly.js": "^4.1.0"
+  },
+  "overrides": {
+    "maplibre-gl": ">=6.4.1"
   }
 }
