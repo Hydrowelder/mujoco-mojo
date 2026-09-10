@@ -5,7 +5,7 @@
 {% block content %}
 <div class="flex flex-col items-center justify-center py-20 text-center"
      x-init="$store.dojo.isPageReady = true">
-    <div class="p-6 bg-rose-500/10 rounded-full text-rose-500 mb-6 border border-rose-500/20 shadow-xl">
+    <div class="p-6 bg-danger-500/10 rounded-full text-danger-500 mb-6 border border-danger-500/20 shadow-xl">
         <svg class="w-16 h-16"
              fill="none"
              stroke="currentColor"
@@ -23,17 +23,17 @@
         </svg>
     </div>
 
-    <h2 class="text-5xl font-black text-slate-800 dark:text-white uppercase tracking-tighter mb-2">
+    <h2 class="text-5xl font-black text-ink-strong dark:text-white uppercase tracking-tighter mb-2">
         {{ title }}
     </h2>
 
-    <p class="text-slate-500 dark:text-slate-400 font-mono text-lg max-w-md mx-auto mb-8">
+    <p class="text-ink-secondary font-mono text-lg max-w-md mx-auto mb-8">
         {{ message }}
     </p>
 
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
         <button onclick="window.history.back()"
-                class="w-full sm:w-auto px-8 py-4 bg-slate-300 dark:bg-slate-800 hover:bg-slate-400 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                class="w-full sm:w-auto px-8 py-4 bg-control hover:bg-control text-ink-strong font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2">
             <svg class="w-5 h-5"
                  fill="none"
                  stroke="currentColor"
@@ -47,7 +47,7 @@
         </button>
 
         <a href="/"
-           class="w-full sm:w-auto px-8 py-4 bg-cyan-500 hover:bg-cyan-600 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-cyan-500/20 transition-all active:scale-95">
+           class="w-full sm:w-auto px-8 py-4 bg-accent-500 hover:bg-accent-600 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-accent-500/20 transition-all active:scale-95">
             {{ button_text or 'Return to Dojo' }}
         </a>
     </div>

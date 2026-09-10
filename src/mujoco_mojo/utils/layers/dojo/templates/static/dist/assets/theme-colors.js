@@ -1,0 +1,2 @@
+var e;function t(t){if(!t)return t;if(e===void 0){let t=document.createElement(`canvas`);t.width=1,t.height=1,e=t.getContext(`2d`,{willReadFrequently:!0})}if(!e)return t;e.fillStyle=t,e.fillRect(0,0,1,1);let[n,r,i]=e.getImageData(0,0,1,1).data,a=e=>e.toString(16).padStart(2,`0`);return`#${a(n)}${a(r)}${a(i)}`}function n(e){return t(getComputedStyle(document.documentElement).getPropertyValue(`--color-${e}`).trim())}function r(e,t){let r=Math.round(t*255).toString(16).padStart(2,`0`);return`${n(e)}${r}`}export{r as n,n as t};
+//# sourceMappingURL=theme-colors.js.map

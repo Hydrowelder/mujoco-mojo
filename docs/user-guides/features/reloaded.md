@@ -1,0 +1,102 @@
+# Mojo Reloaded
+
+!!! abstract
+
+    **Mojo Reloaded** is the definitive rapid prototyping tool for MuJoCo Mojo. It allows you to modify your model architecture and physics logic on the fly without ever closing your visualizer. By tightening the feedback loop between code changes and visual results, Reloaded transforms the development process from "Compile and Wait" to "Save and See."
+
+    To get the most out of this feature, install Mojo with `uv add mujoco-mojo[reloaded]` or `pip install mujoco-mojo[reloaded]`!
+
+---
+
+## Getting Started
+
+To launch a development session, use the `reloaded` command from the CLI. You must provide the module path to your generator function.
+
+```bash linenums="0"
+mujoco-mojo reloaded --generator my_sim.Experiment.generate
+```
+
+### Command Interface
+
+The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
+
+| Argument           | Shortcut | Description                                                                  |
+| :----------------- | :------- | :--------------------------------------------------------------------------- |
+| `--help`           |          | Describes all available arguments. Used on its own.                          |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                     |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.  |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                             |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).               |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).    |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).            |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                    |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws. |
+| `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                  |
+| `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.       |
+| `--port`           | `-p`     | Port for the web-based viewers. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
+
+---
+
+## Interactive Controls
+
+Once Reloaded is running, your terminal becomes an interactive command center. You can trigger reloads and control simulation speed without restarting the process.
+
+| Command              | Action                                                                                       |
+| :------------------- | :------------------------------------------------------------------------------------------- |
+| `ENTER`              | Repeat the last command (perfect for rapid iteration).                                       |
+| `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
+| `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
+| `exit`               | Safely close the server and visualizer.                                                      |
+
+---
+
+## Loading a Saved Model Config
+
+As an alternative to calling a generator function, Reloaded can load a previously saved `model_config.json` directly using `--config`. This is useful when you want to inspect the exact model that was used in a specific trial without running any Python generation logic.
+
+```bash linenums="0"
+mujoco-mojo reloaded --config ./results/trial_0042/model_config.json
+```
+
+This mode is mutually exclusive with `--generator`.
+
+---
+
+## Inspecting a Specific Trial
+
+When iterating on a stochastic simulation, it is often necessary to reproduce the exact random state of a particular trial. Pass `--trial-num` to seed the session with that trial's distribution draws.
+
+```bash linenums="0"
+# Open trial 42 in the viewer, using the same seed and random draws as the original campaign
+mujoco-mojo reloaded -g sim.generate -r sim.runtime --seed 123 --trial-num 42
+```
+
+Combined with `--overrides`, you can also lock specific named values to fixed quantities while keeping everything else stochastic, which helps isolate the effect of individual parameters.
+
+---
+
+## Workflow
+
+### MJCF Prototyping
+
+When you are first building your model, you likely don't care about the physics behavior yet, you just want to see if your bodies are aligned and your textures are loading.
+
+1. Launch with only a generator: `mujoco-mojo reloaded --generator my_mod.generate`.
+2. Modify your `generate` function (e.g., change a body's `pos`).
+3. Enter `gen` in the terminal.
+4. The model regenerates, the module hot-reloads, and the viewer snaps to the new state instantly.
+
+### Physics Prototyping
+
+Once the world looks right, it's time to test your forces. By providing a `--runtime`, you can move from static snapshots to dynamic testing.
+
+1. Launch with both: `mujoco-mojo reloaded --generator my_mod.gen --runtime my_mod.run`.
+2. Modify your physics logic (e.g., increase a spring's stiffness).
+3. Enter a speed like `1.0` (Real-time) or `0.5` (Slow-motion).
+4. Watch the physics play out. If it’s not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
+
+---
+
+!!! success
+
+    Use the **Viser** UI (`--ui viser`, available in the `mujoco-mojo[reloaded]` dependency group) if you want to develop on one machine and view the simulation on another (such as on an SSH connection, phone, or tablet) via your local network. Reloaded will automatically display the local and mobile URLs in your terminal.

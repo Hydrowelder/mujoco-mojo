@@ -6,19 +6,25 @@
          ══════════════════════════════════════════════════════════════════ -->
 
 <!-- series selections -->
+<!-- gated on !loading/!errorState (the one-time initial page boot), not on
+     `data` - data legitimately goes null for a moment whenever a plot tab
+     with nothing cached yet is activated (a new tab, or one restored from a
+     saved profile), and the axis pickers here should stay visible through
+     that so the user can pick signals for it rather than the whole panel
+     flickering away and back. -->
 <div class="card px-2 py-0 flex flex-col gap-0 w-full"
-     x-show="!loading && data">
+     x-show="!loading && !errorState">
 
     <!-- row 1 -->
-    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-slate-100 dark:border-slate-700/50 h-auto sm:h-12 py-2 sm:py-0">
+    <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 border-b border-subtle dark:border-subtle/50 h-auto sm:h-12 py-2 sm:py-0">
         <!-- x axis selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+            <span class="text-sm font-black uppercase text-ink-muted w-auto">
                 X-Axis
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -30,13 +36,17 @@
 
                 <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         X-Axis Signal
                     </p>
 
                     <div class="space-y-3">
-                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            Determines the <span class="font-bold text-slate-900 dark:text-white">independent variable</span> for the plot. While <code class="text-cyan-500 font-mono">time</code> is the default, any telemetry signal can be mapped here to create phase-space or correlation plots.
+                        <p class="text-xs text-ink-body leading-relaxed">
+                            Determines the <span class="font-bold text-icon-strong dark:text-white">independent
+                                variable</span> for the plot. While <code class="text-accent-500 font-mono">time</code>
+                            is
+                            the default, any telemetry signal can be mapped here to create phase-space or correlation
+                            plots.
                         </p>
                     </div>
                 </div>
@@ -46,7 +56,7 @@
             <div class="relative flex-1 sm:flex-none"
                  @click.away="xMenuOpen = false">
                 <button @click="xMenuOpen = !xMenuOpen"
-                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[120px]">
+                        class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-30">
                     <span x-text="config.xAxis.col"
                           class="truncate"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
@@ -59,42 +69,28 @@
                     </svg>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_signal_leaf_row, tree_indent_guides, tree_search_input %}
                 <div x-show="xMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-full sm:w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2">
+                     class="absolute top-full left-0 mt-2 w-full sm:w-80 bg-surface border border-line rounded-xl shadow-2xl z-110 p-2">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="xSearch"
-                               placeholder="Filter..."
-                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-                        <button x-show="xSearch"
-                                type="button"
-                                @mousedown.prevent="xSearch = ''"
-                                class="{{ clear_btn }}">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                    <div class="flex items-center gap-1 mb-2">
+                        <div class="flex-1">
+                            {{ tree_search_input('xSearch', 'Filter...') }}
+                        </div>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('x')", "collapseAllColumnFolders('x')", "getColumnTreeRows('x').some(r => r.type === 'folder')") }}
                     </div>
 
-                    <div class="flex flex-col gap-1 mb-2">
+                    <div x-show="$store.dojo.showQuickFilters"
+                         class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('x')"
                                   :key="depth">
                             <div x-show="getSegmentsAtDepth('x', depth).length > 0"
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
                                 <template x-for="seg in getSegmentsAtDepth('x', depth)"
                                           :key="seg">
                                     <button @mousedown.prevent="toggleRegexSegment('x', seg, depth)"
-                                            :class="isSegmentActive('x', seg, depth)
-            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                            :class="isSegmentActive('x', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                             class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
@@ -106,30 +102,31 @@
                             <template x-for="sfx in getAvailableSuffixes('x')"
                                       :key="sfx">
                                 <button @mousedown.prevent="toggleRegexSegment('x', sfx, 'suffix')"
-                                        :class="isSegmentActive('x', sfx, 'suffix')
-            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                        :class="isSegmentActive('x', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'btn-secondary'"
                                         class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
                         </div>
                     </div>
 
-                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
-                        <template x-for="col in getFilteredCols('x')"
-                                  :key="col">
-                            <button @click="config.xAxis.col = col; xMenuOpen = false; xSearch = ''; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between gap-2 group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
-                                      :class="config.xAxis.col === col ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="breakableLabel(col)"></span>
-                                <span x-show="config.xAxis.col === col"
-                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
-                            </button>
+                    <div class="max-h-80 overflow-y-auto custom-scrollbar">
+                        <template x-for="row in getColumnVisibleRows('x')"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('x', row.path)", "isColumnFolderCollapsed('x', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {{ tree_signal_leaf_row('row', "config.xAxis.col = row.item; xMenuOpen = false; xSearch = ''; saveAndRender()", "config.xAxis.col === row.item") }}
+                                    </template>
+                                </div>
+                            </div>
                         </template>
 
-                        <div x-show="getFilteredCols('x').length === 0"
-                             class="text-sm font-mono italic text-slate-400 p-2">
+                        <div x-show="getColumnVisibleRows('x').every(r => r.hidden)"
+                             class="text-sm font-mono italic text-ink-muted p-2">
                             No matching signals...
                         </div>
                     </div>
@@ -172,9 +169,7 @@
                 <!-- trigger button -->
                 <button @click="xfOpen = !xfOpen"
                         class="relative h-7 px-2 rounded flex items-center gap-1 border text-xs font-bold transition-all"
-                        :class="(config.xAxis?.filters?.length ?? 0) > 0
-                            ? 'bg-cyan-500/10 border-cyan-500 text-cyan-500'
-                            : 'bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-400 hover:border-cyan-500/50'"
+                        :class="(config.xAxis?.filters?.length ?? 0) > 0 ? 'bg-accent-500/10 border-accent-500 text-accent-500' : 'btn-secondary'"
                         title="X-Axis Filters">
                     <svg class="w-3 h-3"
                          fill="none"
@@ -193,18 +188,18 @@
                 <!-- panel -->
                 <div x-show="xfOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-1 w-64 panel z-[200] space-y-3"
+                     class="absolute top-full left-0 mt-1 w-64 panel z-200 space-y-3"
                      style="display:none;">
 
                     <!-- header: title + add + apply -->
-                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-                        <p class="text-sm font-black uppercase text-slate-400 tracking-widest">X-Axis Filters</p>
+                    <div class="flex items-center justify-between border-b border-subtle pb-2">
+                        <p class="text-sm font-black uppercase text-ink-muted tracking-widest">X-Axis Filters</p>
                         <div class="flex items-center gap-2">
                             <!-- add dropdown -->
                             <div class="relative"
                                  @click.away="addOpen = false">
                                 <button @click="addOpen = !addOpen"
-                                        class="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/20 transition-colors font-mono font-bold">
+                                        class="btn-secondary flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors font-mono font-bold">
                                     <svg class="w-3 h-3"
                                          fill="none"
                                          stroke="currentColor"
@@ -218,24 +213,26 @@
                                 </button>
                                 <div x-show="addOpen"
                                      x-transition
-                                     class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[700] max-h-72 overflow-y-auto custom-scrollbar">
+                                     class="absolute right-0 top-full mt-1 w-64 bg-surface border border-line rounded-lg shadow-2xl z-700 max-h-72 overflow-y-auto custom-scrollbar">
                                     <template x-for="group in groupedFilterSchemas"
                                               :key="group.category">
                                         <div>
-                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-ink-muted bg-well sticky top-0"
                                                  x-text="group.category"></div>
                                             <template x-for="schema in group.schemas"
                                                       :key="schema.type">
                                                 <button @click="addFilterToTemp(temp, schema.type); isDirty = true; addOpen = false; expandedIdx = (temp.filters ?? []).length - 1"
                                                         :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
-                                                    <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-control'"
+                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-subtle">
+                                                    <span class="block text-xs font-mono font-black text-accent-500 uppercase mb-0.5"
                                                           x-text="schema.type.replace(/_/g, ' ')"></span>
-                                                    <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
+                                                    <span class="block text-xs text-ink-secondary leading-snug"
                                                           x-text="schema.description"></span>
                                                     <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                          class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
+                                                          class="block text-xs text-danger-500 font-mono mt-0.5">Only
+                                                        one
+                                                        per stack (use the Lab for multiple)</span>
                                                 </button>
                                             </template>
                                         </div>
@@ -245,9 +242,7 @@
                             <!-- apply button -->
                             <button @click="config.xAxis = JSON.parse(JSON.stringify(temp)); saveAndRender(); isDirty = false; tempSnapshot = JSON.stringify(temp.filters)"
                                     :disabled="!isDirty"
-                                    :class="isDirty
-                                        ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-md'
-                                        : 'bg-slate-300 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
+                                    :class="isDirty ? 'bg-accent-500 hover:bg-accent-600 text-white shadow-md' : 'bg-control text-ink-muted cursor-not-allowed grayscale-50'"
                                     class="text-xs px-2 py-1 rounded-md font-bold uppercase tracking-widest transition-all">
                                 Apply
                             </button>
@@ -255,17 +250,17 @@
                     </div>
 
                     <!-- filter stack -->
-                    <div class="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                    <div class="space-y-1 max-h-80 overflow-y-auto custom-scrollbar">
                         <template x-for="(f, fi) in (temp.filters ?? [])"
                                   :key="fi">
                             <div class="rounded-md border transition-all"
-                                 :class="f.enabled !== false ? 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30' : 'border-slate-200 dark:border-slate-800 opacity-40'">
+                                 :class="f.enabled !== false ? 'border-control bg-well dark:bg-well/30' : 'border-subtle opacity-40'">
                                 <!-- row -->
                                 <div class="flex items-center gap-1.5 px-2 py-1.5">
                                     <div class="flex flex-col shrink-0">
                                         <button @click="moveFilterInTemp(temp, fi, -1); isDirty = true"
                                                 :disabled="fi === 0"
-                                                class="text-slate-500 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-end justify-center">
+                                                class="text-ink-secondary hover:text-accent-500 disabled:opacity-20 transition-colors h-3.5 flex items-end justify-center">
                                             <svg class="w-3 h-3"
                                                  fill="none"
                                                  stroke="currentColor"
@@ -278,7 +273,7 @@
                                         </button>
                                         <button @click="moveFilterInTemp(temp, fi, 1); isDirty = true"
                                                 :disabled="fi >= (temp.filters ?? []).length - 1"
-                                                class="text-slate-500 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-start justify-center">
+                                                class="text-ink-secondary hover:text-accent-500 disabled:opacity-20 transition-colors h-3.5 flex items-start justify-center">
                                             <svg class="w-3 h-3"
                                                  fill="none"
                                                  stroke="currentColor"
@@ -290,14 +285,14 @@
                                             </svg>
                                         </button>
                                     </div>
-                                    <span class="text-xs font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 uppercase shrink-0"
+                                    <span class="text-xs font-mono font-black px-1.5 py-0.5 rounded bg-accent-500/10 text-accent-500 uppercase shrink-0"
                                           x-text="f.type.replace(/_/g, ' ')"></span>
-                                    <span class="flex-1 text-xs font-mono text-slate-500 truncate min-w-0"
+                                    <span class="flex-1 text-xs font-mono text-ink-secondary truncate min-w-0"
                                           x-text="getFilterSummary(f)"></span>
                                     <button @click="expandedIdx = (expandedIdx === fi) ? null : fi"
                                             x-show="(getFilterSchema(f.type)?.params ?? []).length > 0"
-                                            :class="expandedIdx === fi ? 'text-cyan-500' : 'text-slate-500'"
-                                            class="hover:text-cyan-500 transition-colors shrink-0">
+                                            :class="expandedIdx === fi ? 'text-accent-500' : 'text-ink-secondary'"
+                                            class="hover:text-accent-500 transition-colors shrink-0">
                                         <svg class="w-3.5 h-3.5 transition-transform"
                                              :class="expandedIdx === fi ? 'rotate-180' : ''"
                                              fill="none"
@@ -310,7 +305,7 @@
                                         </svg>
                                     </button>
                                     <button @click="f.enabled = (f.enabled !== false) ? false : true; isDirty = true"
-                                            :class="f.enabled !== false ? 'text-cyan-500' : 'text-slate-400'"
+                                            :class="f.enabled !== false ? 'text-accent-500' : 'text-ink-muted'"
                                             class="transition-colors shrink-0">
                                         <svg class="w-3.5 h-3.5"
                                              viewBox="0 0 24 24"
@@ -324,7 +319,7 @@
                                         </svg>
                                     </button>
                                     <button @click="duplicateFilterInTemp(temp, fi); isDirty = true; expandedIdx = fi + 1"
-                                            class="text-slate-500 hover:text-cyan-500 transition-colors shrink-0">
+                                            class="text-ink-secondary hover:text-accent-500 transition-colors shrink-0">
                                         <svg class="w-3.5 h-3.5"
                                              fill="none"
                                              stroke="currentColor"
@@ -342,7 +337,7 @@
                                         </svg>
                                     </button>
                                     <button @click="removeFilterFromTemp(temp, fi); isDirty = true; if(expandedIdx === fi) expandedIdx = null"
-                                            class="text-slate-500 hover:text-rose-500 transition-colors shrink-0">
+                                            class="text-ink-secondary hover:text-danger-500 transition-colors shrink-0">
                                         <svg class="w-3.5 h-3.5"
                                              fill="none"
                                              stroke="currentColor"
@@ -357,11 +352,11 @@
                                 <!-- param editor -->
                                 <div x-show="expandedIdx === fi"
                                      x-transition
-                                     class="px-3 pb-2 pt-1 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                                     class="px-3 pb-2 pt-1 border-t border-subtle space-y-2">
                                     <template x-for="param in (getFilterSchema(f.type)?.params ?? [])"
                                               :key="param.name">
                                         <div class="flex items-center gap-2">
-                                            <span class="text-xs font-mono text-slate-500 uppercase tracking-wide w-20 shrink-0"
+                                            <span class="text-xs font-mono text-ink-secondary uppercase tracking-wide w-20 shrink-0"
                                                   x-text="param.name"></span>
                                             <template x-if="param.type === 'int'">
                                                 <input type="text"
@@ -383,7 +378,7 @@
                                                 <input type="checkbox"
                                                        :checked="f[param.name]"
                                                        @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.checked); isDirty = true"
-                                                       class="rounded accent-cyan-500 w-4 h-4" />
+                                                       class="rounded accent-accent-500 w-4 h-4" />
                                             </template>
                                             <template x-if="param.type === 'string' && f.type === 'unit'">
                                                 <div class="flex-1"
@@ -391,7 +386,7 @@
                                                      @click.away="uOpen = false">
                                                     <button x-ref="uBtn"
                                                             @click="const r = $refs.uBtn.getBoundingClientRect(); uCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; uOpen = !uOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs"
                                                               x-text="f[param.name] || '- select -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -411,22 +406,22 @@
                                                              @click.stop
                                                              @click.away="uOpen = false"
                                                              :style="`position:absolute;top:${uCoords.top}px;left:${uCoords.left}px;width:14rem;`"
-                                                             class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-72 overflow-y-auto custom-scrollbar"
+                                                             class="bg-surface border border-line rounded-lg shadow-2xl z-800 max-h-72 overflow-y-auto custom-scrollbar"
                                                              style="display:none;">
                                                             <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
-                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-subtle text-ink-muted hover:bg-control">
                                                                 - select -
                                                             </button>
                                                             <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'], columnMetadata[config.xAxis.col]?.dimension)"
                                                                       :key="group.label">
                                                                 <div>
-                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 dark:text-slate-300 tracking-widest bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-ink-secondary tracking-widest bg-well sticky top-0"
                                                                          x-text="group.label"></div>
                                                                     <template x-for="unit in group.units"
                                                                               :key="unit">
                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, unit); isDirty = true; uOpen = false"
-                                                                                :class="f[param.name] === unit ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700"
+                                                                                :class="f[param.name] === unit ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle"
                                                                                 x-text="unit">
                                                                         </button>
                                                                     </template>
@@ -445,7 +440,7 @@
                                             <template x-if="param.type === 'select'">
                                                 <select :value="f[param.name]"
                                                         @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
-                                                        class="input-field flex-1 px-2 py-1 text-xs bg-white dark:bg-slate-800">
+                                                        class="input-field flex-1 px-2 py-1 text-xs bg-surface">
                                                     <template x-for="opt in (param.options ?? [])"
                                                               :key="opt">
                                                         <option :value="opt"
@@ -460,7 +455,7 @@
                                                      @click.away="cOpen = false">
                                                     <button x-ref="cBtn"
                                                             @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs truncate"
                                                               x-text="f[param.name] || '- none -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -480,9 +475,9 @@
                                                              @click.stop
                                                              @click.away="cOpen = false"
                                                              :style="`position:absolute;top:${cCoords.top}px;left:${cCoords.left}px;width:14rem;`"
-                                                             class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                             class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                              style="display:none;">
-                                                            <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                            <div class="p-1.5 border-b border-subtle">
                                                                 <input type="text"
                                                                        x-model="cSearch"
                                                                        placeholder="Filter..."
@@ -490,15 +485,15 @@
                                                             </div>
                                                             <div class="max-h-48 overflow-y-auto custom-scrollbar">
                                                                 <button @click="setFilterParamOnTemp(temp, fi, param.name, null); isDirty = true; cOpen = false"
-                                                                        :class="!f[param.name] ? 'bg-cyan-500 text-white font-bold' : 'text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                        class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-slate-200 dark:border-slate-700 italic">
+                                                                        :class="!f[param.name] ? 'bg-accent-500 text-white font-bold' : 'text-ink-muted hover:bg-control'"
+                                                                        class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-subtle italic">
                                                                     - none (use dt) -
                                                                 </button>
                                                                 <template x-for="c in [...columns.filter(c => !cSearch || c.toLowerCase().includes(cSearch.toLowerCase()))].sort((a,b) => a==='time' ? -1 : b==='time' ? 1 : 0)"
                                                                           :key="c">
                                                                     <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; cOpen = false"
-                                                                            :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                            :class="f[param.name] === c ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle truncate"
                                                                             x-text="c">
                                                                     </button>
                                                                 </template>
@@ -513,7 +508,7 @@
                                                      @click.away="qOpen = false">
                                                     <button x-ref="qBtn"
                                                             @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
-                                                            class="{{ dropdown_trigger_sm }}">
+                                                            class="dropdown-trigger-sm">
                                                         <span class="text-xs truncate"
                                                               x-text="f[param.name] || '- select -'"></span>
                                                         <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -533,9 +528,9 @@
                                                              @click.stop
                                                              @click.away="qOpen = false"
                                                              :style="`position:absolute;top:${qCoords.top}px;left:${qCoords.left}px;width:14rem;`"
-                                                             class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                             class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                              style="display:none;">
-                                                            <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                            <div class="p-1.5 border-b border-subtle">
                                                                 <input type="text"
                                                                        x-model="qSearch"
                                                                        placeholder="Filter..."
@@ -545,13 +540,14 @@
                                                                 <template x-for="c in availableQuats.filter(c => !qSearch || c.toLowerCase().includes(qSearch.toLowerCase()))"
                                                                           :key="c">
                                                                     <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; qOpen = false"
-                                                                            :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                            :class="f[param.name] === c ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                            class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle truncate"
                                                                             x-text="c">
                                                                     </button>
                                                                 </template>
                                                                 <p x-show="availableQuats.length === 0"
-                                                                   class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">No quaternions available</p>
+                                                                   class="px-3 py-2 text-xs font-mono italic text-ink-secondary">
+                                                                    No quaternions available</p>
                                                             </div>
                                                         </div>
                                                     </template>
@@ -563,7 +559,7 @@
                             </div>
                         </template>
                         <p x-show="(temp.filters?.length ?? 0) === 0"
-                           class="text-xs font-mono italic text-slate-500 dark:text-slate-500 text-center py-2 border border-dashed border-slate-300 dark:border-slate-700 rounded-md">
+                           class="text-xs font-mono italic text-ink-secondary text-center py-2 border border-dashed border-control rounded-md">
                             No filters - raw signal
                         </p>
                     </div>
@@ -573,12 +569,12 @@
 
         <!-- rotation selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+            <span class="text-sm font-black uppercase text-ink-muted w-auto">
                 Ref. Frame
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -590,19 +586,20 @@
 
                 <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         Rotation Logic
                     </p>
 
                     <div class="space-y-3">
-                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <p class="text-xs text-ink-body leading-relaxed">
                             This allows for the dynamic rotation of 3D signals about specific frames.
-                            Valid frames must contain <code class="text-cyan-500 font-mono font-bold">quat:w,x,y,z</code> components.
+                            Valid frames must contain <code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code> components.
                         </p>
 
-                        <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
-                            <p class="text-xs text-slate-500 dark:text-slate-400 italic">
-                                <strong class="text-cyan-600 dark:text-cyan-400 not-italic uppercase text-xs">Filter Active:</strong>
+                        <div class="bg-well dark:bg-well/50 p-2 rounded border border-subtle dark:border-subtle/50">
+                            <p class="text-xs text-ink-secondary italic">
+                                <strong class="text-accent-600 dark:text-accent-400 not-italic uppercase text-xs">Filter
+                                    Active:</strong>
                                 Y-Axis selection is restricted to 3D vectors when a reference frame is selected.
                             </p>
                         </div>
@@ -613,7 +610,7 @@
             <div class="relative flex-1 sm:flex-none"
                  @click.away="refFrameMenuOpen = false">
                 <button @click="refFrameMenuOpen = !refFrameMenuOpen"
-                        class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2 hover:border-cyan-500 transition-all min-w-[140px]">
+                        class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-35">
                     <span x-text="config.refFrame || 'world'"
                           class="truncate"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
@@ -626,29 +623,66 @@
                     </svg>
                 </button>
 
+                {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_signal_leaf_row, tree_search_input %}
                 <div x-show="refFrameMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-full sm:w-48 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[110] p-2 sm:w-64">
+                     class="absolute top-full left-0 mt-2 w-full bg-surface border border-line rounded-xl shadow-2xl z-110 p-2 sm:w-64">
 
-                    <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+                    <div class="flex items-center justify-between mb-1">
                         <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
-                                class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between group border-b border-slate-100 dark:border-slate-700">
+                                class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
                             <span class="text-sm font-mono font-bold"
-                                  :class="!config.refFrame ? 'text-cyan-500' : 'text-slate-400'">world</span>
+                                  :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
                             <span x-show="!config.refFrame"
-                                  class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                                  class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
                         </button>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('refFrame')", "collapseAllColumnFolders('refFrame')", "getColumnTreeRows('refFrame').some(r => r.type === 'folder')") }}
+                    </div>
 
-                        <template x-for="q in availableQuats"
-                                  :key="q">
-                            <button @click="config.refFrame = q; refFrameMenuOpen = false; saveAndRender()"
-                                    class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center justify-between gap-2 group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                <span class="text-sm font-mono font-bold pr-2 min-w-0 flex-1"
-                                      :class="config.refFrame === q ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                      x-text="breakableLabel(q)"></span>
-                                <span x-show="config.refFrame === q"
-                                      class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
-                            </button>
+                    <div class="mb-2">
+                        {{ tree_search_input('refFrameSearch', 'Filter...') }}
+                    </div>
+
+                    <!-- quick filters - same regex-chip mechanism as the X/Y-axis
+                         trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
+                         reused as-is since refFrame already maps to availableQuats
+                         there too. -->
+                    <div x-show="$store.dojo.showQuickFilters"
+                         class="flex flex-col gap-1 mb-2">
+                        <template x-for="depth in getActiveLevels('refFrame')"
+                                  :key="depth">
+                            <div x-show="getSegmentsAtDepth('refFrame', depth).length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
+                                <template x-for="seg in getSegmentsAtDepth('refFrame', depth)"
+                                          :key="seg">
+                                    <button @mousedown.prevent="toggleRegexSegment('refFrame', seg, depth)"
+                                            :class="isSegmentActive('refFrame', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="seg"></button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- "world" above is a fixed pseudo-option, not part of the
+                         tree itself - availableQuats' own names are never
+                         expected to carry ":attribute" suffixes (they're
+                         stripped at the source), so there's no suffix-chip row
+                         here the way the X/Y-axis trees have one. -->
+                    <div class="max-h-48 overflow-y-auto custom-scrollbar border-t border-subtle pt-1">
+                        <template x-for="row in getColumnVisibleRows('refFrame')"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {{ tree_signal_leaf_row('row', "config.refFrame = row.item; refFrameMenuOpen = false; saveAndRender()", "config.refFrame === row.item") }}
+                                    </template>
+                                </div>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -660,12 +694,12 @@
     <div class="relative flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-4 w-full min-w-0 h-auto sm:h-12 py-2 sm:py-0">
         <!-- y axis selector -->
         <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <span class="text-sm font-black uppercase text-slate-400 w-auto">
+            <span class="text-sm font-black uppercase text-ink-muted w-auto">
                 Y-Axes
             </span>
 
             <div class="group cursor-help sm:relative">
-                <svg class="w-3.5 h-3.5 text-slate-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                <svg class="w-3.5 h-3.5 text-ink-muted group-hover:text-accent-500 dark:group-hover:text-accent-400 transition-colors duration-150"
                      fill="none"
                      stroke="currentColor"
                      viewBox="0 0 24 24">
@@ -677,22 +711,25 @@
 
                 <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
-                    <p class="text-sm font-black uppercase text-slate-400 mb-3 tracking-widest border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
                         Y-Axis Signals
                     </p>
 
                     <div class="space-y-3">
-                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            Represents the <span class="font-bold text-slate-900 dark:text-white">dependent variables</span>. You can select multiple signals to overlay them on the same plot area.
+                        <p class="text-xs text-ink-body leading-relaxed">
+                            Represents the <span class="font-bold text-icon-strong dark:text-white">dependent
+                                variables</span>. You can select multiple signals to overlay them on the same plot area.
                         </p>
 
-                        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                            Use the arrows on the active signal chips to reorder them. The sequence in the ribbon determines the <span class="text-cyan-500 font-bold">color mapping</span> and legend order.
+                        <p class="text-xs text-ink-body leading-relaxed">
+                            Use the arrows on the active signal chips to reorder them. The sequence in the ribbon
+                            determines the <span class="text-accent-500 font-bold">color mapping</span> and legend
+                            order.
                         </p>
 
-                        <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700/50">
-                            <p class="text-xs text-slate-500 dark:text-slate-400 italic text-xs">
-                                <strong class="text-cyan-500 not-italic uppercase">Pro Tip:</strong>
+                        <div class="bg-well dark:bg-well/50 p-2 rounded border border-subtle dark:border-subtle/50">
+                            <p class="text-xs text-ink-secondary italic">
+                                <strong class="text-accent-500 not-italic uppercase">Pro Tip:</strong>
                                 Shift+Click the arrows to shift a signal immediately to the start or end of the list.
                             </p>
                         </div>
@@ -703,7 +740,7 @@
             <div class="relative"
                  @click.away="yMenuOpen = false">
                 <button @click="yMenuOpen = !yMenuOpen"
-                        class="shrink-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 hover:border-cyan-500 transition-all">
+                        class="shrink-0 bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center gap-2 hover:border-accent-500 transition-all">
                     <span x-text="Object.keys(config.yAxes).length"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
                          :class="yMenuOpen ? 'rotate-180' : ''"
@@ -717,45 +754,27 @@
 
                 <div x-show="yMenuOpen"
                      x-transition
-                     class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl z-[100] p-2">
+                     class="absolute top-full left-0 mt-2 w-80 bg-surface border border-line rounded-xl shadow-2xl z-100 p-2">
 
-                    <div class="relative mb-2">
-                        <input type="text"
-                               x-model="ySearch"
-                               placeholder="Filter..."
-                               class="input-field w-full shadow-sm px-2 pr-8 py-1.5" />
-
-                        <button x-show="ySearch"
-                                type="button"
-                                @mousedown.prevent="ySearch = ''"
-                                class="{{ clear_btn }}"
-                                x-transition:enter="transition duration-75"
-                                x-transition:enter-start="opacity-0"
-                                x-transition:enter-end="opacity-100">
-                            <svg class="w-3 h-3"
-                                 fill="none"
-                                 stroke="currentColor"
-                                 viewBox="0 0 24 24">
-                                <path stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      stroke-width="3"
-                                      d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                    {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
+                    <div class="flex items-center gap-1 mb-2">
+                        <div class="flex-1">
+                            {{ tree_search_input('ySearch', 'Filter...') }}
+                        </div>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('y')", "collapseAllColumnFolders('y')", "getColumnTreeRows('y').some(r => r.type === 'folder')") }}
                     </div>
-                    <div class="flex flex-col gap-1 mb-4">
+                    <div x-show="$store.dojo.showQuickFilters"
+                         class="flex flex-col gap-1 mb-4">
                         <template x-for="depth in getActiveLevels('y')"
                                   :key="depth">
                             <div x-show="getSegmentsAtDepth('y', depth).length > 0"
                                  x-transition
-                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-slate-100 dark:border-slate-800/40 last:border-none">
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
 
                                 <template x-for="seg in getSegmentsAtDepth('y', depth)"
                                           :key="seg">
                                     <button @mousedown.prevent="toggleRegexSegment('y', seg, depth)"
-                                            :class="isSegmentActive('y', seg, depth)
-            ? 'bg-cyan-500 text-white border-cyan-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-300'"
+                                            :class="isSegmentActive('y', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
                                             class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                             x-text="seg"></button>
                                 </template>
@@ -767,41 +786,54 @@
                             <template x-for="sfx in getAvailableSuffixes('y')"
                                       :key="sfx">
                                 <button @mousedown.prevent="toggleRegexSegment('y', sfx, 'suffix')"
-                                        :class="isSegmentActive('y', sfx, 'suffix')
-            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-            : 'bg-slate-100 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800 hover:border-amber-500/40'"
+                                        :class="isSegmentActive('y', sfx, 'suffix') ? 'bg-warning-500 text-white border-warning-500 shadow-sm' : 'btn-secondary'"
                                         class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
                                         x-text="sfx"></button>
                             </template>
                         </div>
                     </div>
 
-                    <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 border-b border-t border-slate-100 dark:border-slate-700 py-2">
-                        <template x-for="col in getFilteredCols('y')"
-                                  :key="col">
-                            <template x-if="!config.refFrame || rotateableVectors.includes(col.split(':')[0])">
-                                <label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer group border-b last:border-none border-slate-100 dark:border-slate-700">
-                                    <input type="checkbox"
-                                           :checked="config.yAxes[col]"
-                                           @click.stop="toggleY(col)"
-                                           class="rounded text-cyan-500 w-3 h-3 border-slate-300 dark:border-slate-600 accent-cyan-500 bg-white dark:bg-slate-800 shrink-0" />
-                                    <span class="text-sm font-mono font-bold min-w-0 flex-1"
-                                          :class="config.yAxes[col] ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                          x-text="breakableLabel(col)"></span>
-                                </label>
-                            </template>
+                    <div class="max-h-80 overflow-y-auto custom-scrollbar border-b border-t border-subtle py-2">
+                        <template x-for="row in getColumnVisibleRows('y', (col) => !config.refFrame || rotateableVectors.includes(col.split(':')[0]))"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('y', row.path)", "isColumnFolderCollapsed('y', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {# py-1 moved off the label and onto the inner span - see
+                                           tree_folder_row's comment in _macros.html for why. #}
+                                        <label class="flex items-center gap-2 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
+                                               :title="row.item"
+                                               @mousedown.prevent>
+                                            {{ tree_indent_guides('row') }}
+                                            <span class="flex items-center gap-2 min-w-0 flex-1 py-1">
+                                                <input type="checkbox"
+                                                       :checked="config.yAxes[row.item]"
+                                                       @click.stop="toggleYRange(row, $event.shiftKey)"
+                                                       class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
+                                                <span class="text-sm font-mono font-bold min-w-0 flex-1 truncate"
+                                                      :class="config.yAxes[row.item] ? 'text-accent-500' : 'text-ink-secondary'"
+                                                      x-text="row.name"></span>
+                                            </span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </div>
                         </template>
                     </div>
 
                     <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
-                        <span class="text-xs font-black uppercase text-slate-400 tracking-tighter shrink-0"
+                        <span class="text-xs font-black uppercase text-ink-muted tracking-tighter shrink-0"
                               x-text="`${getFilteredCols('y').length} Signals`"
                               x-show="getFilteredCols('y').length > 0"></span>
 
                         <button @click="clearYAxes()"
                                 x-show="Object.keys(config.yAxes).length > 0"
                                 x-transition
-                                class="flex-1 flex items-center justify-center gap-2 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-lg text-sm font-black uppercase tracking-widest transition-all group">
+                                class="flex-1 btn btn-danger justify-center text-sm font-black uppercase tracking-widest group">
                             <svg class="w-3 h-3 transition-transform group-hover:scale-110"
                                  fill="none"
                                  stroke="currentColor"
@@ -996,9 +1028,10 @@
             top: ${coords.top + 12}px;
             left: ${Math.max(10, coords.left - (320/2) + (coords.width/2))}px;
          `"
-                                 class="w-80 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-xl shadow-2xl p-4 z-[600]">
+                                 class="w-80 bg-surface border border-line rounded-xl shadow-2xl p-4 z-600">
 
-                                <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-white dark:bg-slate-800 border-t border-l border-slate-400 dark:border-slate-700"></div>
+                                <div class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-surface border-t border-l border-line">
+                                </div>
 
                                 <div class="relative z-10 space-y-4"
                                      x-data="{
@@ -1027,13 +1060,13 @@
     $watch('open', v => { if (v) _refreshMeta(); });
 ">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-black uppercase text-slate-500 tracking-tight truncate max-w-[180px]"
+                                        <p class="text-sm font-black uppercase text-ink-secondary tracking-tight truncate max-w-45"
                                            x-text="col"></p>
                                         <div class="flex items-center gap-1 shrink-0">
                                             <!-- metadata viewer toggle -->
                                             <template x-if="columnMetadata[col] && Object.keys(columnMetadata[col]).length > 0">
                                                 <button @click.stop="toggleMeta()"
-                                                        :class="metaOpen ? 'text-cyan-500' : 'text-slate-400 hover:text-cyan-500'"
+                                                        :class="metaOpen ? 'text-accent-500' : 'text-ink-muted hover:text-accent-500'"
                                                         class="p-0.5 rounded transition-colors"
                                                         title="Metadata">
                                                     <svg class="w-4 h-4"
@@ -1048,7 +1081,7 @@
                                                 </button>
                                             </template>
                                             <button @click="open = false"
-                                                    class="text-slate-400 hover:text-rose-500 transition-colors">
+                                                    class="text-ink-muted hover:text-danger-500 transition-colors">
                                                 <svg class="w-5 h-5"
                                                      fill="none"
                                                      stroke="currentColor"
@@ -1065,72 +1098,87 @@
                                          x-transition:enter="transition-opacity duration-150"
                                          x-transition:enter-start="opacity-0"
                                          x-transition:enter-end="opacity-100"
-                                         class="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden -mx-1">
-                                        <div class="flex items-center justify-between px-3 py-1.5 bg-slate-100 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700">
-                                            <span class="text-xs font-black uppercase text-slate-400 tracking-widest">Metadata</span>
+                                         class="rounded-lg border border-subtle overflow-hidden -mx-1">
+                                        <div class="flex items-center justify-between px-3 py-1.5 bg-well dark:bg-well/60 border-b border-subtle">
+                                            <span class="text-xs font-black uppercase text-ink-muted tracking-widest">Metadata</span>
                                             <button @click="navigator.clipboard.writeText(JSON.stringify(columnMetadata[col] ?? {}, null, 2)).then(() => $store.dojo.toast('Copied', 'success'))"
-                                                    class="text-xs font-bold uppercase tracking-wide text-slate-400 hover:text-cyan-500 transition-colors">
+                                                    class="text-xs font-bold uppercase tracking-wide text-ink-muted hover:text-accent-500 transition-colors">
                                                 Copy
                                             </button>
                                         </div>
                                         <div x-ref="metaHost"
-                                             x-effect="if (_cmMeta && metaOpen) { const _j = JSON.stringify(columnMetadata[col] ?? {}, null, 2); _cmMeta.dispatch({ changes: { from: 0, to: _cmMeta.state.doc.length, insert: _j } }); }"></div>
+                                             x-effect="if (_cmMeta && metaOpen) { const _j = JSON.stringify(columnMetadata[col] ?? {}, null, 2); _cmMeta.dispatch({ changes: { from: 0, to: _cmMeta.state.doc.length, insert: _j } }); }">
+                                        </div>
                                     </div>
 
                                     <button @click="console.debug('[mojo] applying changes for:', col, JSON.parse(JSON.stringify(temp))); applySignalConfig(col, temp); isDirty = false;"
                                             :disabled="JSON.stringify(temp) === tempSnapshot"
-                                            :class="JSON.stringify(temp) !== tempSnapshot
-                        ? 'bg-cyan-500 hover:bg-cyan-600 text-white shadow-md'
-                        : 'bg-slate-300 dark:bg-slate-700 text-slate-400 cursor-not-allowed grayscale-[50%]'"
+                                            :class="JSON.stringify(temp) !== tempSnapshot ? 'bg-accent-500 hover:bg-accent-600 text-white shadow-md' : 'bg-control text-ink-muted cursor-not-allowed grayscale-50'"
                                             class="w-full py-2 rounded-md font-bold uppercase text-xs tracking-widest transition-all">
                                         Apply Changes
                                     </button>
 
+                                    {% from 'partials/trial_viewer/_macros.html' import color_picker, field_help_icon, field_reset_icon_expr, range_slider_fill_style %}
                                     <div class="space-y-1">
-                                        <label class="text-sm font-bold text-slate-500 uppercase">Legend Label</label>
+                                        <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Legend
+                                            Label
+                                            {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'label')") }}
+                                            {{ field_reset_icon_expr("temp.label === ''", "temp.label = ''; isDirty = true") }}
+                                        </label>
                                         <input type="text"
                                                x-model="temp.label"
                                                @input="isDirty = true"
                                                :placeholder="temp.label || col"
-                                               class="input-field w-full px-3 py-2" />
+                                               class="input-text" />
                                     </div>
-                                    {% from 'partials/trial_viewer/_macros.html' import color_picker %}
-                                    {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true') }}
+                                    {{ color_picker('temp.color', 'seriesPicker', 'Color', on_change='isDirty = true',
+                                    help_expr="plotDefFieldHelp('YAxisConfig', 'color')") }}
 
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Width: <span class="text-cyan-500"
-                                                      x-text="temp.width"></span></label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Width: <span class="text-accent-500"
+                                                      x-text="temp.width"></span>
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'width')") }}
+                                                {{ field_reset_icon_expr("temp.width === 3", "temp.width = 3; isDirty = true") }}
+                                            </label>
                                             <input type="range"
                                                    min="0.5"
                                                    max="8"
                                                    step="0.5"
                                                    x-model.number="temp.width"
                                                    @input="isDirty = true"
-                                                   class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                                   :style="{{ range_slider_fill_style('temp.width', 0.5, 8) }}"
+                                                   class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-accent-500" />
                                         </div>
                                         <div class="space-y-1">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Opacity: <span class="text-cyan-500"
-                                                      x-text="Math.round(temp.opacity*100)+'%'"></span></label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Opacity: <span class="text-accent-500"
+                                                      x-text="Math.round(temp.opacity*100)+'%'"></span>
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'opacity')") }}
+                                                {{ field_reset_icon_expr("temp.opacity === 1", "temp.opacity = 1; isDirty = true") }}
+                                            </label>
                                             <input type="range"
                                                    min="0.1"
                                                    max="1"
                                                    step="0.05"
                                                    x-model.number="temp.opacity"
                                                    @input="isDirty = true"
-                                                   class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                                   :style="{{ range_slider_fill_style('temp.opacity', 0.1, 1) }}"
+                                                   class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-accent-500" />
                                         </div>
                                     </div>
 
                                     <div class="grid grid-cols-2 gap-2">
                                         <div class="space-y-1 relative"
                                              x-data="{ sOpen: false }">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Style</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Style
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'dash')") }}
+                                                {{ field_reset_icon_expr("temp.dash === 'solid'", "temp.dash = 'solid'; isDirty = true") }}
+                                            </label>
                                             <button @click="sOpen = !sOpen"
                                                     @click.away="sOpen = false"
-                                                    class="{{ dropdown_trigger_sm }}">
+                                                    class="dropdown-trigger-sm">
                                                 <span x-text="(temp.dash || 'solid').charAt(0).toUpperCase() + (temp.dash || 'solid').slice(1)"></span>
-                                                <svg class="w-3 h-3 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                                <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
                                                      :class="sOpen ? 'rotate-180' : ''"
                                                      fill="none"
                                                      stroke="currentColor"
@@ -1143,23 +1191,26 @@
                                             </button>
                                             <div x-show="sOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-[310]">
+                                                 class="dropdown-panel z-310">
                                                 <template x-for="opt in opts.dash">
                                                     <button @click="temp.dash = opt; isDirty = true; sOpen = false"
-                                                            class="{{ dropdown_option }}"
-                                                            :class="temp.dash === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                            class="dropdown-option"
+                                                            :class="temp.dash === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
                                             </div>
                                         </div>
                                         <div class="space-y-1 relative"
                                              x-data="{ mOpen: false }">
-                                            <label class="text-sm font-bold text-slate-500 uppercase">Marker</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase flex items-center gap-1">Marker
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'marker')") }}
+                                                {{ field_reset_icon_expr("temp.marker === 'none'", "temp.marker = 'none'; isDirty = true") }}
+                                            </label>
                                             <button @click="mOpen = !mOpen"
                                                     @click.away="mOpen = false"
-                                                    class="{{ dropdown_trigger_sm }}">
+                                                    class="dropdown-trigger-sm">
                                                 <span x-text="(temp.marker || 'none').charAt(0).toUpperCase() + (temp.marker || 'none').slice(1)"></span>
-                                                <svg class="w-3 h-3 text-slate-900 dark:text-slate-100 shrink-0 transition-transform duration-200"
+                                                <svg class="w-3 h-3 text-icon-strong shrink-0 transition-transform duration-200"
                                                      :class="mOpen ? 'rotate-180' : ''"
                                                      fill="none"
                                                      stroke="currentColor"
@@ -1172,11 +1223,11 @@
                                             </button>
                                             <div x-show="mOpen"
                                                  x-transition
-                                                 class="{{ dropdown_panel }} z-[310] max-h-52 overflow-y-auto custom-scrollbar">
+                                                 class="dropdown-panel z-310 max-h-52 overflow-y-auto custom-scrollbar">
                                                 <template x-for="opt in opts.marker">
                                                     <button @click="temp.marker = opt; isDirty = true; mOpen = false"
-                                                            class="{{ dropdown_option }}"
-                                                            :class="temp.marker === opt ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
+                                                            class="dropdown-option"
+                                                            :class="temp.marker === opt ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
                                                             x-text="opt.charAt(0).toUpperCase() + opt.slice(1)"></button>
                                                 </template>
                                             </div>
@@ -1184,14 +1235,16 @@
                                     </div>
 
                                     <!-- ── FILTER STACK ── -->
-                                    <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                                    <div class="space-y-2 pt-2 border-t border-subtle dark:border-subtle/50">
                                         <div class="flex items-center justify-between">
-                                            <label class="text-sm font-bold text-slate-500 uppercase tracking-tight">Filters</label>
+                                            <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">Filters
+                                                {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'filters')") }}
+                                            </label>
                                             <!-- add filter dropdown -->
                                             <div class="relative"
                                                  @click.away="addFilterOpen = false">
                                                 <button @click="addFilterOpen = !addFilterOpen"
-                                                        class="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/20 transition-colors font-mono font-bold">
+                                                        class="btn-secondary flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors font-mono font-bold">
                                                     <svg class="w-3 h-3"
                                                          fill="none"
                                                          stroke="currentColor"
@@ -1205,24 +1258,25 @@
                                                 </button>
                                                 <div x-show="addFilterOpen"
                                                      x-transition
-                                                     class="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[700] max-h-72 overflow-y-auto custom-scrollbar">
+                                                     class="absolute right-0 top-full mt-1 w-72 bg-surface border border-line rounded-lg shadow-2xl z-700 max-h-72 overflow-y-auto custom-scrollbar">
                                                     <template x-for="group in groupedFilterSchemas"
                                                               :key="group.category">
                                                         <div>
-                                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                                            <div class="px-3 py-1 text-sm font-bold uppercase tracking-widest text-ink-muted bg-well sticky top-0"
                                                                  x-text="group.category"></div>
                                                             <template x-for="schema in group.schemas"
                                                                       :key="schema.type">
                                                                 <button @click="addFilterToTemp(temp, schema.type, col); isDirty = true; addFilterOpen = false; expandedFilterIdx = (temp.filters ?? []).length - 1"
                                                                         :disabled="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-slate-200 dark:border-slate-700">
-                                                                    <span class="block text-xs font-mono font-black text-cyan-500 uppercase mb-0.5"
+                                                                        :class="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation') ? 'opacity-40 cursor-not-allowed' : 'hover:bg-control'"
+                                                                        class="w-full text-left px-3 py-2.5 border-b last:border-none border-subtle">
+                                                                    <span class="block text-xs font-mono font-black text-accent-500 uppercase mb-0.5"
                                                                           x-text="schema.type.replace(/_/g, ' ')"></span>
-                                                                    <span class="block text-xs text-slate-500 dark:text-slate-400 leading-snug"
+                                                                    <span class="block text-xs text-ink-secondary leading-snug"
                                                                           x-text="schema.description"></span>
                                                                     <span x-show="schema.type === 'rotation' && (temp.filters ?? []).some(f => f.type === 'rotation')"
-                                                                          class="block text-xs text-rose-500 font-mono mt-0.5">Only one per stack (use the Lab for multiple)</span>
+                                                                          class="block text-xs text-danger-500 font-mono mt-0.5">Only
+                                                                        one per stack (use the Lab for multiple)</span>
                                                                 </button>
                                                             </template>
                                                         </div>
@@ -1236,14 +1290,14 @@
                                             <template x-for="(f, fi) in (temp.filters ?? [])"
                                                       :key="fi">
                                                 <div class="rounded-md border transition-all"
-                                                     :class="f.enabled !== false ? 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30' : 'border-slate-200 dark:border-slate-800 opacity-40'">
+                                                     :class="f.enabled !== false ? 'border-control bg-well dark:bg-well/30' : 'border-subtle opacity-40'">
                                                     <!-- header row -->
                                                     <div class="flex items-center gap-1.5 px-2 py-1.5">
                                                         <!-- reorder -->
                                                         <div class="flex flex-col shrink-0">
                                                             <button @click="moveFilterInTemp(temp, fi, -1); isDirty = true"
                                                                     :disabled="fi === 0"
-                                                                    class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-end justify-center">
+                                                                    class="text-ink-secondary hover:text-accent-500 disabled:opacity-20 transition-colors h-3.5 flex items-end justify-center">
                                                                 <svg class="w-3 h-3"
                                                                      fill="none"
                                                                      stroke="currentColor"
@@ -1256,7 +1310,7 @@
                                                             </button>
                                                             <button @click="moveFilterInTemp(temp, fi, 1); isDirty = true"
                                                                     :disabled="fi >= (temp.filters ?? []).length - 1"
-                                                                    class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 disabled:opacity-20 transition-colors h-3.5 flex items-start justify-center">
+                                                                    class="text-ink-secondary hover:text-accent-500 disabled:opacity-20 transition-colors h-3.5 flex items-start justify-center">
                                                                 <svg class="w-3 h-3"
                                                                      fill="none"
                                                                      stroke="currentColor"
@@ -1269,16 +1323,16 @@
                                                             </button>
                                                         </div>
                                                         <!-- type badge -->
-                                                        <span class="text-xs font-mono font-black px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 uppercase shrink-0"
+                                                        <span class="text-xs font-mono font-black px-1.5 py-0.5 rounded bg-accent-500/10 text-accent-500 dark:text-accent-400 uppercase shrink-0"
                                                               x-text="f.type.replace(/_/g, ' ')"></span>
                                                         <!-- param summary -->
-                                                        <span class="flex-1 text-xs font-mono text-slate-500 dark:text-slate-400 truncate min-w-0"
+                                                        <span class="flex-1 text-xs font-mono text-ink-secondary truncate min-w-0"
                                                               x-text="getFilterSummary(f)"></span>
                                                         <!-- expand params -->
                                                         <button @click="expandedFilterIdx = (expandedFilterIdx === fi) ? null : fi"
                                                                 x-show="(getFilterSchema(f.type)?.params ?? []).length > 0"
-                                                                :class="expandedFilterIdx === fi ? 'text-cyan-500' : 'text-slate-500 dark:text-slate-400'"
-                                                                class="hover:text-cyan-500 transition-colors shrink-0">
+                                                                :class="expandedFilterIdx === fi ? 'text-accent-500' : 'text-ink-secondary'"
+                                                                class="hover:text-accent-500 transition-colors shrink-0">
                                                             <svg class="w-3.5 h-3.5 transition-transform"
                                                                  :class="expandedFilterIdx === fi ? 'rotate-180' : ''"
                                                                  fill="none"
@@ -1292,7 +1346,7 @@
                                                         </button>
                                                         <!-- enable toggle -->
                                                         <button @click="f.enabled = (f.enabled !== false) ? false : true; isDirty = true"
-                                                                :class="f.enabled !== false ? 'text-cyan-500' : 'text-slate-400 dark:text-slate-600'"
+                                                                :class="f.enabled !== false ? 'text-accent-500' : 'text-ink-disabled'"
                                                                 :title="f.enabled !== false ? 'Disable filter' : 'Enable filter'"
                                                                 class="transition-colors shrink-0">
                                                             <svg class="w-3.5 h-3.5"
@@ -1309,7 +1363,7 @@
                                                         <!-- duplicate -->
                                                         <button @click="duplicateFilterInTemp(temp, fi); isDirty = true; expandedFilterIdx = fi + 1"
                                                                 title="Duplicate filter"
-                                                                class="text-slate-500 dark:text-slate-400 hover:text-cyan-500 transition-colors shrink-0">
+                                                                class="text-ink-secondary hover:text-accent-500 transition-colors shrink-0">
                                                             <svg class="w-3.5 h-3.5"
                                                                  fill="none"
                                                                  stroke="currentColor"
@@ -1328,7 +1382,7 @@
                                                         </button>
                                                         <!-- delete -->
                                                         <button @click="removeFilterFromTemp(temp, fi); isDirty = true; if(expandedFilterIdx === fi) expandedFilterIdx = null"
-                                                                class="text-slate-500 dark:text-slate-400 hover:text-rose-500 transition-colors shrink-0">
+                                                                class="text-ink-secondary hover:text-danger-500 transition-colors shrink-0">
                                                             <svg class="w-3.5 h-3.5"
                                                                  fill="none"
                                                                  stroke="currentColor"
@@ -1343,11 +1397,11 @@
                                                     <!-- param editor -->
                                                     <div x-show="expandedFilterIdx === fi"
                                                          x-transition
-                                                         class="px-3 pb-2 pt-1 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                                                         class="px-3 pb-2 pt-1 border-t border-subtle space-y-2">
                                                         <template x-for="param in (getFilterSchema(f.type)?.params ?? [])"
                                                                   :key="param.name">
                                                             <div class="flex items-center gap-2">
-                                                                <span class="text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wide w-20 shrink-0"
+                                                                <span class="text-xs font-mono text-ink-secondary uppercase tracking-wide w-20 shrink-0"
                                                                       x-text="param.name"></span>
                                                                 <!-- float / int -->
                                                                 <template x-if="param.type === 'int'">
@@ -1371,7 +1425,7 @@
                                                                     <input type="checkbox"
                                                                            :checked="f[param.name]"
                                                                            @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.checked); isDirty = true"
-                                                                           class="rounded accent-cyan-500 w-4 h-4" />
+                                                                           class="rounded accent-accent-500 w-4 h-4" />
                                                                 </template>
                                                                 <!-- UnitFilter dropdowns for fromUnit / toUnit -->
                                                                 <template x-if="param.type === 'string' && f.type === 'unit'">
@@ -1379,7 +1433,7 @@
                                                                          x-data="{ uOpen: false }"
                                                                          @click.away="uOpen = false">
                                                                         <button @click="uOpen = !uOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs"
                                                                                   x-text="f[param.name] || '- select -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1395,21 +1449,21 @@
                                                                         </button>
                                                                         <div x-show="uOpen"
                                                                              x-transition
-                                                                             class="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800] max-h-72 overflow-y-auto custom-scrollbar">
+                                                                             class="absolute right-0 top-full mt-1 w-56 bg-surface border border-line rounded-lg shadow-2xl z-800 max-h-72 overflow-y-auto custom-scrollbar">
                                                                             <button @click="setFilterParamOnTemp(temp, fi, param.name, ''); isDirty = true; uOpen = false"
-                                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700">
+                                                                                    class="w-full text-left px-3 py-1 text-xs font-mono italic border-b border-subtle text-ink-muted hover:bg-control">
                                                                                 - select -
                                                                             </button>
                                                                             <template x-for="group in getUnitOptions(getFilterSchema('unit')?.unit_groups, param.name === 'toUnit' ? f['fromUnit'] : f['toUnit'], columnMetadata[col]?.dimension)"
                                                                                       :key="group.label">
                                                                                 <div>
-                                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-slate-500 dark:text-slate-300 tracking-widest bg-slate-100 dark:bg-slate-900 sticky top-0"
+                                                                                    <div class="px-2 pt-1.5 pb-0.5 text-sm font-black uppercase text-ink-secondary tracking-widest bg-well sticky top-0"
                                                                                          x-text="group.label"></div>
                                                                                     <template x-for="unit in group.units"
                                                                                               :key="unit">
                                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, unit); isDirty = true; uOpen = false"
-                                                                                                :class="f[param.name] === unit ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700"
+                                                                                                :class="f[param.name] === unit ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle"
                                                                                                 x-text="unit">
                                                                                         </button>
                                                                                     </template>
@@ -1429,7 +1483,7 @@
                                                                 <template x-if="param.type === 'select'">
                                                                     <select :value="f[param.name]"
                                                                             @change="setFilterParamOnTemp(temp, fi, param.name, $event.target.value); isDirty = true"
-                                                                            class="input-field flex-1 px-2 py-1 text-xs bg-white dark:bg-slate-800">
+                                                                            class="input-field flex-1 px-2 py-1 text-xs bg-surface">
                                                                         <template x-for="opt in (param.options ?? [])"
                                                                                   :key="opt">
                                                                             <option :value="opt"
@@ -1445,7 +1499,7 @@
                                                                          @click.away="cOpen = false">
                                                                         <button x-ref="cBtn"
                                                                                 @click="const r = $refs.cBtn.getBoundingClientRect(); cCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; cOpen = !cOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs truncate"
                                                                                   x-text="f[param.name] || '- none -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1465,9 +1519,9 @@
                                                                                  @click.stop
                                                                                  @click.away="cOpen = false"
                                                                                  :style="`position:absolute;top:${cCoords.top}px;left:${cCoords.left}px;width:14rem;`"
-                                                                                 class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                                                 class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                                                  style="display:none;">
-                                                                                <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                                <div class="p-1.5 border-b border-subtle">
                                                                                     <input type="text"
                                                                                            x-model="cSearch"
                                                                                            placeholder="Filter..."
@@ -1475,15 +1529,15 @@
                                                                                 </div>
                                                                                 <div class="max-h-48 overflow-y-auto custom-scrollbar">
                                                                                     <button @click="setFilterParamOnTemp(temp, fi, param.name, null); isDirty = true; cOpen = false"
-                                                                                            :class="!f[param.name] ? 'bg-cyan-500 text-white font-bold' : 'text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                            class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-slate-200 dark:border-slate-700 italic">
+                                                                                            :class="!f[param.name] ? 'bg-accent-500 text-white font-bold' : 'text-ink-muted hover:bg-control'"
+                                                                                            class="w-full text-left px-3 py-1.5 text-xs font-mono border-b border-subtle italic">
                                                                                         - none (use dt) -
                                                                                     </button>
                                                                                     <template x-for="c in [...columns.filter(c => !cSearch || c.toLowerCase().includes(cSearch.toLowerCase()))].sort((a,b) => a==='time' ? -1 : b==='time' ? 1 : 0)"
                                                                                               :key="c">
                                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; cOpen = false"
-                                                                                                :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                                                :class="f[param.name] === c ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle truncate"
                                                                                                 x-text="c">
                                                                                         </button>
                                                                                     </template>
@@ -1498,7 +1552,7 @@
                                                                          @click.away="qOpen = false">
                                                                         <button x-ref="qBtn"
                                                                                 @click="const r = $refs.qBtn.getBoundingClientRect(); qCoords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; qOpen = !qOpen"
-                                                                                class="{{ dropdown_trigger_sm }}">
+                                                                                class="dropdown-trigger-sm">
                                                                             <span class="text-xs truncate"
                                                                                   x-text="f[param.name] || '- select -'"></span>
                                                                             <svg class="w-2.5 h-2.5 shrink-0 transition-transform"
@@ -1518,9 +1572,9 @@
                                                                                  @click.stop
                                                                                  @click.away="qOpen = false"
                                                                                  :style="`position:absolute;top:${qCoords.top}px;left:${qCoords.left}px;width:14rem;`"
-                                                                                 class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[800]"
+                                                                                 class="bg-surface border border-line rounded-lg shadow-2xl z-800"
                                                                                  style="display:none;">
-                                                                                <div class="p-1.5 border-b border-slate-200 dark:border-slate-700">
+                                                                                <div class="p-1.5 border-b border-subtle">
                                                                                     <input type="text"
                                                                                            x-model="qSearch"
                                                                                            placeholder="Filter..."
@@ -1530,13 +1584,14 @@
                                                                                     <template x-for="c in availableQuats.filter(c => !qSearch || c.toLowerCase().includes(qSearch.toLowerCase()))"
                                                                                               :key="c">
                                                                                         <button @click="setFilterParamOnTemp(temp, fi, param.name, c); isDirty = true; qOpen = false"
-                                                                                                :class="f[param.name] === c ? 'bg-cyan-500 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'"
-                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-slate-200 dark:border-slate-700 truncate"
+                                                                                                :class="f[param.name] === c ? 'bg-accent-500 text-white font-bold' : 'text-ink-body hover:bg-control'"
+                                                                                                class="w-full text-left px-3 py-1 text-xs font-mono border-b last:border-none border-subtle truncate"
                                                                                                 x-text="c">
                                                                                         </button>
                                                                                     </template>
                                                                                     <p x-show="availableQuats.length === 0"
-                                                                                       class="px-3 py-2 text-xs font-mono italic text-slate-500 dark:text-slate-500">No quaternions available</p>
+                                                                                       class="px-3 py-2 text-xs font-mono italic text-ink-secondary">
+                                                                                        No quaternions available</p>
                                                                                 </div>
                                                                             </div>
                                                                         </template>
@@ -1549,7 +1604,7 @@
                                             </template>
                                             <!-- empty state -->
                                             <p x-show="(temp.filters ?? []).length === 0"
-                                               class="text-xs font-mono italic text-slate-500 dark:text-slate-500 text-center py-2 border border-dashed border-slate-300 dark:border-slate-700 rounded-md">
+                                               class="text-xs font-mono italic text-ink-secondary text-center py-2 border border-dashed border-control rounded-md">
                                                 No filters - raw signal
                                             </p>
                                         </div>
@@ -1561,7 +1616,8 @@
                 </template>
 
                 <template x-if="Object.keys(config.yAxes).length === 0">
-                    <span class="text-sm font-mono italic text-slate-400 dark:text-slate-600 pl-1">No signals active...</span>
+                    <span class="text-sm font-mono italic text-ink-disabled pl-1">No signals
+                        active...</span>
                 </template>
             </div>
         </div>

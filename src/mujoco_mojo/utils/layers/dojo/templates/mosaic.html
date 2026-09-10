@@ -2,7 +2,8 @@
 {% block title %}Mosaic | MuJoCo Mojo{% endblock %}
 
 {% block extra_head %}
-<script src="/mojo-static/js/mosaic.js"></script>
+<script type="module"
+        src="/mojo-static/dist/mosaic.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -10,7 +11,7 @@
      class="space-y-8"
      x-cloak>
     <section x-show="trials.length > 0">
-        <h2 class="text-xl font-black text-cyan-500 mb-4 flex items-center uppercase tracking-tight">
+        <h2 class="text-xl font-black text-accent-500 mb-4 flex items-center uppercase tracking-tight">
             <svg class="w-6 h-6 mr-2 stroke-current"
                  fill="none"
                  viewBox="0 0 24 24"
@@ -27,7 +28,7 @@
                 <template x-for="trial in trials"
                           :key="trial">
                     <a :href="`/mosaic/${trial}`"
-                       class="badge-tile"
+                       :class="tileClass(trial)"
                        x-text="trial">
                     </a>
                 </template>
@@ -36,8 +37,8 @@
     </section>
 
     <template x-if="!loading && trials.length === 0">
-        <div class="p-12 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl text-center bg-white/50 dark:bg-slate-800/50">
-            <p class="text-slate-500 font-mono italic">No telemetry.parquet files found in any trial directories.</p>
+        <div class="p-12 border-2 border-dashed border-control rounded-2xl text-center bg-surface/50">
+            <p class="text-ink-secondary font-mono italic">No telemetry.parquet files found in any trial directories.</p>
         </div>
     </template>
 </div>

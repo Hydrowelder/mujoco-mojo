@@ -16,11 +16,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
-import joblib
 import numpy as np
-import optuna
 from filelock import FileLock
 from numpydantic import NDArray
 from pydantic import Field, field_validator, model_validator
@@ -35,6 +33,7 @@ from mujoco_mojo.stochas import (
     NamedValueDict,
     ValueName,
 )
+from mujoco_mojo.typing import Direction, Sampler
 from mujoco_mojo.utils.defaults import (
     DEFAULT_MC_N_TRIAL,
     DEFAULT_MODEL_CONFIG_NAME,
@@ -55,7 +54,6 @@ from mujoco_mojo.utils.defaults import (
     NAMED_VALUES_FNAME,
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
-    SamplerOptions,
 )
 from mujoco_mojo.utils.log import get_logger, get_trial_log_handler, worker_init
 from mujoco_mojo.utils.statusing import (
@@ -70,6 +68,8 @@ from mujoco_mojo.utils.statusing import (
 from mujoco_mojo.utils.utils import write_dojo_script
 
 if TYPE_CHECKING:
+    import optuna
+
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
 logger = get_logger(__name__)
@@ -198,7 +198,7 @@ class OptimizerConfig(BaseConfig):
     study_name: str = DEFAULT_OP_STUDY_NAME
     """Unique identifier for the Optuna study."""
 
-    direction: Literal["minimize", "maximize"]
+    direction: Direction
     """Whether we want to find the lowest or highest objective value."""
 
     timeout: float | None = DEFAULT_OP_TIMEOUT
@@ -207,7 +207,7 @@ class OptimizerConfig(BaseConfig):
     storage: str | None = DEFAULT_OP_STORAGE
     """Database URL (e.g., 'sqlite:///study.db') for multi-node persistence."""
 
-    sampler: SamplerOptions = DEFAULT_OP_SAMPLER
+    sampler: Sampler = DEFAULT_OP_SAMPLER
     """The search algorithm. TPE is generally best for noisy physics."""
 
     evals_per_trial: int = Field(default=DEFAULT_OP_EVALS_PER_TRIAL, ge=1)
@@ -241,6 +241,13 @@ class OptimizerConfig(BaseConfig):
 
     def _get_sampler(self, seed: int | None) -> optuna.samplers.BaseSampler:
         """Translates the string config into an Optuna Sampler instance."""
+        try:
+            import optuna
+        except ModuleNotFoundError:
+            msg = "The `optuna` package is required for optimization. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`"
+            logger.exception(msg)
+            raise ModuleNotFoundError(msg)
+
         match self.sampler:
             case "tpe":
                 return optuna.samplers.TPESampler(seed=seed)
@@ -507,8 +514,6 @@ class MojoRunner:
     model_config_name: str | None = DEFAULT_MODEL_CONFIG_NAME
     xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig | OptimizerConfig = field(default_factory=MonteCarloConfig)
-    slurm_config_path: Path | None = None
-    """Optional path to a flat JSON file of extra SLURM `#SBATCH` lines / environment variables. See `SlurmExtraSettings`."""
 
     gen_args: list[Any] = field(default_factory=list)
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -747,8 +752,9 @@ class MojoRunner:
         from rich.console import Console
 
         Console().print(
-            "[dim]Tip: pass --slurm-config/-sc with a flat JSON file to auto-inject extra "
-            "#SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
+            "[dim]Tip: set '[slurm]' entries in ~/.mujoco-mojo/settings.toml (or a project-local "
+            "./.mujoco-mojo/settings.toml, via `mujoco-mojo settings set --project`) to auto-inject "
+            "extra #SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
             "environment variables (any other key) into the generated submission script.[/dim]"
         )
 
@@ -1018,6 +1024,14 @@ class MojoRunner:
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
     ) -> bool:
+        try:
+            import joblib
+            import optuna
+        except ModuleNotFoundError:
+            msg = "The `optuna` and `joblib` packages are required for optimization. Install with `uv add mujoco-mojo[optimize]` or `pip install mujoco-mojo[optimize]`"
+            logger.exception(msg)
+            raise ModuleNotFoundError(msg)
+
         assert isinstance(self.config, OptimizerConfig)
         if self.runtime is None:
             msg = "A runtime function must be provided for optimization."
@@ -1127,7 +1141,7 @@ class MojoRunner:
                         status_tracker.update_trial(status=iteration_status)
                         return (
                             float("inf")
-                            if self.config.direction == "minimize"
+                            if self.config.direction == Direction.MINIMIZE
                             else float("-inf")
                         )
                     continue
@@ -1605,58 +1619,20 @@ class MojoRunner:
             )
             max_concurrent = ""
 
-        # === get optional custom SLURM config (extra #SBATCH lines / env vars) ===
-        # global, rarely-changing defaults (account, email, ...) from
-        # ~/.mujoco-mojo/settings.toml, layered under any --slurm-config file below
-        from mujoco_mojo.settings import MujocoMojoSettings, SlurmExtraSettings
+        # === get SLURM extras (extra #SBATCH lines / env vars) ===
+        # already the fully-resolved project-over-global value - see
+        # MujocoMojoSettings.slurm and project_settings_file()
+        from mujoco_mojo.settings import MujocoMojoSettings
 
-        global_slurm_settings = MujocoMojoSettings().slurm
-        if global_slurm_settings.root:
+        slurm_settings = MujocoMojoSettings().slurm
+        if slurm_settings.root:
             console.print(
-                f"[dim]Applying {len(global_slurm_settings.root)} default SLURM "
-                "setting(s) from ~/.mujoco-mojo/settings.toml[/dim]"
+                f"[dim]Applying {len(slurm_settings.root)} SLURM setting(s) from "
+                "~/.mujoco-mojo/settings.toml and/or ./.mujoco-mojo/settings.toml[/dim]"
             )
 
-        slurm_config_default = (
-            str(self.slurm_config_path) if self.slurm_config_path else ""
-        )
-        slurm_config_input = Prompt.ask(
-            "  [white]Custom SLURM config JSON[/] "
-            "[dim](optional: extra #SBATCH lines / env vars, overrides global "
-            "defaults, blank to skip)[/]",
-            default=slurm_config_default,
-        )
-        per_job_slurm_settings = SlurmExtraSettings({})
-        if slurm_config_input:
-            slurm_config_file = Path(slurm_config_input).resolve()
-            if not slurm_config_file.exists():
-                console.print(
-                    f"\n[bold red]WARNING:[/] {slurm_config_file} does not exist. "
-                    "Skipping custom SLURM config."
-                )
-            else:
-                try:
-                    per_job_slurm_settings = SlurmExtraSettings.load(slurm_config_file)
-                except Exception as e:
-                    console.print(
-                        f"\n[bold red]Failed to parse {slurm_config_file}:[/] {e}"
-                    )
-                    if not Confirm.ask(
-                        "Continue without these custom settings?", default=True
-                    ):
-                        return True
-                    per_job_slurm_settings = SlurmExtraSettings({})
-                else:
-                    console.print(
-                        f"[green]Loaded {len(per_job_slurm_settings.root)} setting(s) "
-                        f"from {slurm_config_file}[/green]"
-                    )
-
-        merged_slurm_settings = SlurmExtraSettings.merge(
-            global_slurm_settings, per_job_slurm_settings
-        )
-        extra_sbatch_lines = merged_slurm_settings.sbatch_lines()
-        extra_env_lines = merged_slurm_settings.env_lines()
+        extra_sbatch_lines = slurm_settings.sbatch_lines()
+        extra_env_lines = slurm_settings.env_lines()
 
         current_pythonpath = os.getenv("PYTHONPATH", "")
         if str(project_root) not in current_pythonpath:
@@ -1697,7 +1673,7 @@ class MojoRunner:
 
         extra_sbatch_block = "\n".join(extra_sbatch_lines)
         extra_env_block = (
-            "\n# Custom environment variables (global settings.toml / --slurm-config)\n"
+            "\n# Custom environment variables (global and/or project settings.toml)\n"
             + "\n".join(extra_env_lines)
             if extra_env_lines
             else ""

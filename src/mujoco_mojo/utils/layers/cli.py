@@ -9,45 +9,50 @@ from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, Literal, overload
+from typing import Annotated, Any, Final, Literal, overload
 
 import typer
 from rich.align import Align
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
+from mujoco_mojo.typing import Direction, Sampler, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
-from mujoco_mojo.utils.utils import get_local_ip
+from mujoco_mojo.utils.utils import find_free_port, get_local_ip
 
 from ..defaults import (
     DEFAULT_MC_N_TRIAL,
-    DEFAULT_MODEL_CONFIG_NAME,
-    DEFAULT_N_PROC,
-    DEFAULT_OP_DIRECTION,
-    DEFAULT_OP_EVALS_PER_TRIAL,
     DEFAULT_OP_N_TRIAL,
-    DEFAULT_OP_PRUNE_FAILED_TRIALS,
-    DEFAULT_OP_REFINE_SEARCH_FACTOR,
-    DEFAULT_OP_SAMPLER,
-    DEFAULT_OP_STUDY_NAME,
-    DEFAULT_OP_TIMEOUT,
-    DEFAULT_RESUME,
     DEFAULT_RUNTIME,
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
-    DEFAULT_XML_NAME,
-    SamplerOptions,
 )
 
 console = Console()
 
 VERSION = version("mujoco-mojo")
+
+# Loaded once, at CLI startup - every mujoco-mojo invocation is a fresh
+# process, so "once at import time" already means "current settings.toml as
+# of this run," the same freshness a per-command MujocoMojoSettings() call
+# would give. Referencing its fields directly as each promoted option's
+# literal default (instead of a None sentinel resolved inside the command
+# body) is what lets `--help` show the real effective value for that flag,
+# exactly like every other default in this file already does - a None
+# sentinel would otherwise just show up as "None" in --help, hiding the
+# value a user would actually get. `Final` (pyright-enforced, not a runtime
+# guard) so a stray `_SETTINGS = ...` typo'd into some command body later
+# can't silently shadow/reassign the one shared instance every command's
+# defaults were already computed from at import time.
+_SETTINGS: Final = MujocoMojoSettings()
 
 
 # "MUJOCO" and "MOJO" in the ANSI Shadow figlet font
@@ -304,8 +309,7 @@ if True:
     CleanWorkdirType = Annotated[
         bool,
         typer.Option(
-            "--clean-workdir",
-            "-cw",
+            "--clean-workdir/--no-clean-workdir",
             help="Delete the workdir before running (mutually exclusive with --resume)",
         ),
     ]
@@ -396,20 +400,6 @@ if True:
             help="File which contains NamedValue overrides to use in all trials.",
         ),
     ]
-    SlurmConfigType = Annotated[
-        Path | None,
-        typer.Option(
-            "--slurm-config",
-            "-sc",
-            help=(
-                "Optional flat JSON file of extra SLURM settings, prompted for again "
-                "during the SLURM orchestration wizard. Keys prefixed 'sbatch.' become "
-                "extra #SBATCH lines (e.g. 'sbatch.account'); every other key is "
-                "exported as an environment variable in the submission script."
-            ),
-        ),
-    ]
-
     # monte carlo
     NTrialType = Annotated[
         int,
@@ -449,7 +439,7 @@ if True:
         typer.Option(
             "--port",
             "-p",
-            help="Port number to use to serve the process.",
+            help="Port number to use to serve the process. Auto-selects the next free port at or after this one if it's already taken.",
         ),
     ]
     DojoPassword = Annotated[
@@ -479,11 +469,6 @@ if True:
         ),
     ]
 
-    class UserInterface(StrEnum):
-        OPENGL = "opengl"
-        MJVISER = "mjviser"
-        VISER = "viser"
-
     WatchType = Annotated[
         bool,
         typer.Option(
@@ -496,7 +481,7 @@ if True:
         bool,
         typer.Option(
             "--record/--no-record",
-            help="Record telemetry to a per-trial 'telemetry.parquet' so the run can be inspected with [dim]mujoco-mojo dojo[/dim]. Off by default since interactive sessions can run indefinitely.",
+            help="Record telemetry to a per-trial 'telemetry.parquet' (so the run can be inspected with [dim]mujoco-mojo dojo[/dim]) and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.",
         ),
     ]
 
@@ -523,15 +508,16 @@ if True:
         ),
     ]
     DirectionType = Annotated[
-        Literal["minimize", "maximize"],
+        Direction,
         typer.Option(
             "--direction",
             "-d",
-            help="The optimization goal. Either 'minimize' or 'maximize'.",
+            help="The optimization goal.",
+            case_sensitive=False,
         ),
     ]
     SamplerType = Annotated[
-        SamplerOptions,
+        Sampler,
         typer.Option(
             "--sampler",
             "-sm",
@@ -541,8 +527,7 @@ if True:
     StorageType = Annotated[
         bool,
         typer.Option(
-            "--storage",
-            "-st",
+            "--storage/--no-storage",
             help="Whether or not to use database storage. Required for multi-process optimization.",
         ),
     ]
@@ -633,12 +618,11 @@ def _prepare_runner(
     workdir: WorkdirType,
     model_config_name: ModelConfigNameType,
     seed: SeedType,
-    xml_name: XMLNameType,
+    xml_name: str,
     gen_args: GenArgsType,
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
     run_kwargs: RunKwargsType,
-    slurm_config: SlurmConfigType = None,
 ):
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -672,7 +656,6 @@ def _prepare_runner(
         gen_kwargs=processed_gen_kwargs,
         run_args=processed_run_args,
         run_kwargs=processed_run_kwargs,
-        slurm_config_path=slurm_config,
     )
 
 
@@ -683,12 +666,12 @@ def run_monte_carlo(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     n_trial: NTrialType = DEFAULT_MC_N_TRIAL,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    resume: ResumeType = _SETTINGS.run.monte_carlo.resume,
     seed: SeedType = DEFAULT_SEED,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.monte_carlo.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_nums: TrialNumsType = [],
@@ -696,7 +679,6 @@ def run_monte_carlo(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -710,7 +692,10 @@ def run_monte_carlo(
     from mujoco_mojo.stochas import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     print_logo()
 
@@ -765,7 +750,6 @@ def run_monte_carlo(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
-        slurm_config=slurm_config,
     )
 
     # 2. build config
@@ -833,12 +817,12 @@ def run_single(
     generator: GeneratorType,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    resume: ResumeType = _SETTINGS.run.single.resume,
     seed: SeedType = DEFAULT_SEED,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.single.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
@@ -846,7 +830,6 @@ def run_single(
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    slurm_config: SlurmConfigType = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -860,7 +843,10 @@ def run_single(
     from mujoco_mojo.stochas import NamedValueDict
     from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     print_logo()
 
@@ -909,7 +895,6 @@ def run_single(
         gen_kwargs=gen_kwargs,
         run_args=run_args,
         run_kwargs=run_kwargs,
-        slurm_config=slurm_config,
     )
 
     # a single trial is always just one trial - n_trial only exists on
@@ -1030,14 +1015,24 @@ def init_project(
             border_style="cyan",
         )
     )
-    from mujoco_mojo.settings import SETTINGS_FILE
 
-    if not SETTINGS_FILE.exists():
+    settings_init(force=False, project=True)
+
+    from rich.prompt import Confirm
+
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE
+
+    if not GLOBAL_SETTINGS_FILE.exists():
         console.print("\n[bold yellow]Global Settings[/bold yellow]")
-        console.print(
-            "No user settings file found. Initialize it with:\n"
-            "    [bold cyan]mujoco-mojo settings init[/bold cyan]"
-        )
+        if Confirm.ask(
+            "No user settings file found. Set one up now with defaults?", default=True
+        ):
+            settings_init(force=False)
+        else:
+            console.print(
+                "You can set it up later with:\n"
+                "    [bold cyan]mujoco-mojo settings init[/bold cyan]"
+            )
 
     if not Path("typings", "mujoco").exists():
         console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
@@ -1070,74 +1065,185 @@ def settings_init(
             help="Overwrite an existing settings file (will not overwrite existing settings).",
         ),
     ] = False,
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+        ),
+    ] = False,
 ) -> None:
     """
-    [bold yellow]Initialize the global settings file with defaults.[/bold yellow]
+    [bold yellow]Initialize a settings file with defaults.[/bold yellow]
 
-    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] and generates a JSON schema for TOML editor intellisense. Safe to re-run to regenerate the schema.
+    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
     """
-    import json
-
-    from mujoco_mojo.settings import SETTINGS_DIR, SETTINGS_FILE, MujocoMojoSettings
-
-    schema_file = SETTINGS_DIR / "settings.schema.json"
-    taplo_file = SETTINGS_DIR / ".taplo.toml"
-    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
-
-    if SETTINGS_FILE.exists() and not force:
-        setting_msg = f"[yellow]Settings already exist:[/yellow] {SETTINGS_FILE} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
-    else:
-        MujocoMojoSettings().save()
-        setting_msg = f"[green]Settings written:[/green] {SETTINGS_FILE}"
-
-    schema = MujocoMojoSettings.model_json_schema()
-    schema_file.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-
-    # taplo requires a file:// URI for the schema url - a relative path is not supported
-    schema_uri = schema_file.as_uri()
-    taplo_file.write_text(
-        f'[[rule]]\ninclude = ["settings.toml"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
-        encoding="utf-8",
+    from mujoco_mojo.settings import (
+        SETTINGS_DIR,
+        MujocoMojoSettings,
+        project_settings_file,
     )
+
+    target_dir = project_settings_file().parent if project else SETTINGS_DIR
+    target = target_dir / "settings.toml"
+    already_existed = target.exists()
+
+    if project:
+        # model_construct() bypasses env/TOML loading entirely - save(project=True)
+        # never reads the instance's field values, and re-running this must work
+        # even if the existing project file (or the unrelated global one) is
+        # currently malformed, since it never touches an existing file's contents
+        MujocoMojoSettings.model_construct().save(target_dir, project=True)
+        setting_msg = (
+            f"[yellow]Project settings already exist:[/yellow] {target}"
+            if already_existed
+            else f"[green]Project settings written:[/green] {target}"
+        )
+        extra = "[white]Add only the keys you want to override for this project.\n\n"
+        title = "Project Settings Initialized"
+    elif already_existed and not force:
+        MujocoMojoSettings.write_schema_files(target_dir)
+        setting_msg = f"[yellow]Settings already exist:[/yellow] {target} [dim](Pass [bold]--force[/bold] to overwrite.)[/dim]"
+        extra = ""
+        title = "Settings Initialized"
+    else:
+        MujocoMojoSettings().save(target_dir)
+        setting_msg = f"[green]Settings written:[/green]       {target}"
+        extra = ""
+        title = "Settings Initialized"
+
+    schema_file = target_dir / "settings.schema.json"
+    taplo_file = target_dir / ".taplo.toml"
 
     console.print(
         Panel(
-            f"{setting_msg}",
-            # f"[green]Schema:[/green]      {schema_file}\n"
-            # f"[green]Taplo config:[/green] {taplo_file}\n\n"
-            # "[white]TOML intellisense is now active for any taplo-powered editor (VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
-            title="[cyan]Settings Initialized[/cyan]",
+            f"{setting_msg}\n"
+            f"[green]Schema:[/green]                 {schema_file}\n"
+            f"[green]Taplo config:[/green]           {taplo_file}\n\n"
+            f"{extra}"
+            "[white]TOML intellisense is now available for any taplo-powered editor "
+            "(VS Code Even Better TOML, Neovim, etc.) with no additional configuration.",
+            title=f"[cyan]{title}[/cyan]",
             expand=False,
             border_style="cyan",
         )
     )
 
 
-@settings_app.command(name="show")
-def settings_show() -> None:
+def _pad_for_subtitle(content: str, subtitle: str) -> str:
     """
-    [bold yellow]Display the current effective settings.[/bold yellow]
+    Appends a blank line of spaces to `content` if `subtitle` is longer than `content`'s longest line, so a Rich `Panel(expand=False)` sizes itself wide enough to show the full subtitle without truncating it.
 
-    Resolves values from all sources in priority order: environment variables, TOML file, then defaults. The API key is always masked.
+    Args:
+        content: The panel's body text (e.g. TOML source).
+        subtitle: The plain subtitle text that will appear in the panel's bottom border (no Rich markup - measure the visible text, not the markup-wrapped string).
+
+    Returns:
+        `content`, with an extra padding line appended if needed.
+
     """
-    import tomli_w
+    longest_line = max((len(line) for line in content.splitlines()), default=0)
+    if len(subtitle) > longest_line:
+        content += "\n" + " " * (len(subtitle) + 1)
+    return content
+
+
+class SettingsScope(StrEnum):
+    """Which settings `settings show` should display."""
+
+    EFFECTIVE = "effective"
+    """The fully resolved, merged settings (project + global + env + defaults)."""
+
+    PROJECT = "project"
+    """The raw, unmerged contents of just the project-local settings file."""
+
+    GLOBAL = "global"
+    """The raw, unmerged contents of just the global settings file."""
+
+
+@settings_app.command(name="show")
+def settings_show(
+    scope: Annotated[
+        SettingsScope,
+        typer.Option(
+            "--scope",
+            "-s",
+            help="Which settings to display.",
+            case_sensitive=False,
+        ),
+    ] = SettingsScope.EFFECTIVE,
+) -> None:
+    """
+    [bold yellow]Display settings.[/bold yellow]
+
+    By default, resolves values from all sources in priority order (environment variables, project settings file, global settings file, then defaults) and shows the resulting effective settings, with the API key masked. Pass [bold]--scope project[/bold] or [bold]--scope global[/bold] to instead show the raw, unmerged contents of just that one file (also masked).
+    """
+    import tomlkit
     from rich.syntax import Syntax
 
-    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, project_settings_file
+
+    if scope is not SettingsScope.EFFECTIVE:
+        target = (
+            project_settings_file()
+            if scope is SettingsScope.PROJECT
+            else GLOBAL_SETTINGS_FILE
+        )
+        label = scope.value.capitalize()
+        if not target.exists():
+            init_cmd = (
+                "mujoco-mojo settings init --project"
+                if scope is SettingsScope.PROJECT
+                else "mujoco-mojo settings init"
+            )
+            console.print(
+                f"[yellow]No {scope.value} settings file found.[/yellow] "
+                f"Run [bold cyan]{init_cmd}[/bold cyan] to create one."
+            )
+            return
+
+        doc = tomlkit.parse(target.read_text(encoding="utf-8"))
+        match scope:
+            case SettingsScope.PROJECT:
+                target_str = str(target)
+            case SettingsScope.GLOBAL:
+                target_str = GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
+        raw_str = _pad_for_subtitle(tomlkit.dumps(doc).rstrip("\n"), target_str)
+
+        console.print(
+            Panel(
+                Syntax(raw_str, "toml", theme="ansi_dark"),
+                title=f"[cyan]{label} Settings File[/cyan]",
+                subtitle=f"[dim]{target_str}[/dim]",
+                expand=False,
+                border_style="cyan",
+            )
+        )
+        return
+
+    from mujoco_mojo.settings import MujocoMojoSettings
 
     settings = MujocoMojoSettings()
-    d = settings.model_dump()
-    d["sensai"]["api_key"] = "***"
+    d = settings.model_dump(mode="json", exclude_none=True)
 
-    toml_str = tomli_w.dumps(d).rstrip("\n")
-
-    if SETTINGS_FILE.exists():
+    toml_str = tomlkit.dumps(d).rstrip("\n")
+    if GLOBAL_SETTINGS_FILE.exists():
         try:
-            source = "~/" + str(SETTINGS_FILE.relative_to(Path.home()))
+            source = "~/" + str(
+                GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
+            )
         except ValueError:
-            source = str(SETTINGS_FILE)
+            breakpoint()
+            source = str(GLOBAL_SETTINGS_FILE)
     else:
         source = "defaults only"
+
+    project_file = project_settings_file()
+    if project_file.exists():
+        source += f" + {project_file.relative_to(Path.cwd()).as_posix()}"
+
+    toml_str = _pad_for_subtitle(toml_str, source)
 
     console.print(
         Panel(
@@ -1155,7 +1261,7 @@ def settings_set_cmd(
     key: Annotated[
         str,
         typer.Argument(
-            help="Dotted key path (e.g. [bold cyan]sensai.model_name[/bold cyan])",
+            help="Dotted key path (e.g. [bold cyan]dojo.sensai.enabled[/bold cyan])",
             show_default=False,
         ),
     ],
@@ -1166,17 +1272,45 @@ def settings_set_cmd(
             show_default=False,
         ),
     ],
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Write to the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+        ),
+    ] = False,
 ) -> None:
     """
-    [bold yellow]Update a setting in the global settings file.[/bold yellow]
+    [bold yellow]Update a setting.[/bold yellow]
 
-    Example: [bold cyan]mujoco-mojo settings set sensai.model_name llama3.1:8b[/bold cyan]
+    Example: [bold cyan]mujoco-mojo settings set dojo.sensai.enabled true[/bold cyan]
+
+    Add [bold]--project[/bold] to write only the changed key into this project's local override file, leaving everything else there untouched.
     """
     from pydantic import ValidationError
 
-    from mujoco_mojo.settings import SETTINGS_FILE, MujocoMojoSettings
+    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, MujocoMojoSettings
 
-    if not SETTINGS_FILE.exists():
+    parsed = _smart_parse(value)
+
+    if project:
+        try:
+            MujocoMojoSettings.set_project_value(key, parsed)
+        except KeyError:
+            console.print(
+                f"[bold red]Error:[/bold red] Unknown settings path: [bold cyan]{key}[/bold cyan]"
+            )
+            raise typer.Exit(code=1)
+        except ValidationError as e:
+            console.print(f"[bold red]Validation error:[/bold red] {e}")
+            raise typer.Exit(code=1)
+        console.print(
+            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}"
+        )
+        return
+
+    if not GLOBAL_SETTINGS_FILE.exists():
         console.print(
             "[bold red]Error:[/bold red] No settings file found. "
             "Run [bold cyan]mujoco-mojo settings init[/bold cyan] first."
@@ -1203,7 +1337,6 @@ def settings_set_cmd(
         )
         raise typer.Exit(code=1)
 
-    parsed = _smart_parse(value)
     target[leaf] = parsed
 
     try:
@@ -1216,28 +1349,76 @@ def settings_set_cmd(
     console.print(f"[green]Updated[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}")
 
 
+@settings_app.command(name="reset")
+def settings_reset(
+    project: Annotated[
+        bool,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Delete the project-local settings file (./.mujoco-mojo/settings.toml) instead of resetting the global one.",
+        ),
+    ] = False,
+) -> None:
+    """
+    [bold yellow]Reset settings back to their defaults.[/bold yellow]
+
+    Without [bold]--project[/bold]: overwrites every value in [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] with its default (comments you've added by hand are kept). With [bold]--project[/bold]: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
+    """
+    from rich.prompt import Confirm
+
+    from mujoco_mojo.settings import MujocoMojoSettings, project_settings_file
+
+    if project:
+        target = project_settings_file()
+        if not target.exists():
+            console.print(
+                "[yellow]No project settings file found.[/yellow] Nothing to reset."
+            )
+            return
+        if not Confirm.ask(
+            f"Are you sure you want to delete your project settings file ({target})?",
+            default=False,
+        ):
+            console.print("[yellow]Aborted.[/yellow] No changes made.")
+            raise typer.Exit()
+        target.unlink()
+        console.print("[green]Project settings file deleted.[/green]")
+        return
+
+    if not Confirm.ask(
+        "Are you sure you want to reset all settings to their defaults?",
+        default=False,
+    ):
+        console.print("[yellow]Aborted.[/yellow] No changes made.")
+        raise typer.Exit()
+
+    MujocoMojoSettings.defaults().save()
+    console.print("[green]Settings reset to defaults.[/green]")
+
+
 @cli_app.command(name="reloaded")
 def run_reloaded(
     generator: ReloadedGeneratorType = None,
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
-    ui: UIType = UserInterface.OPENGL,
+    ui: UIType = _SETTINGS.reloaded.ui,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
     config_path: ConfigPathFileType = None,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
-    watch: WatchType = True,
-    record: RecordType = True,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
+    watch: WatchType = _SETTINGS.reloaded.watch,
+    record: RecordType = _SETTINGS.reloaded.record,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
     run_kwargs: RunKwargsType = [],
-    host: HostType = "127.0.0.1",
-    port: PortType = 8080,
-    verbose: int = 0,
-    quiet: int = 0,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
 ) -> None:
     """
     [bold yellow]Run a development session with the native OpenGL viewer or a web browser based GUI.[/bold yellow]
@@ -1246,7 +1427,12 @@ def run_reloaded(
     """
     from .reloaded import MojoReloaded
 
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    port = find_free_port(host, port)
+
+    _logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
@@ -1281,9 +1467,12 @@ def run_reloaded(
 def run_dojo(
     ctx: typer.Context,
     workdir: DojoWorkdirType,
-    host: HostType = "127.0.0.1",
-    port: PortType = 8000,
-    n_proc: NProcType = 1,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    # deliberately kept as a None sentinel, unlike every other option above -
+    # baking the resolved settings value in as a literal default here would
+    # print the real password in plaintext every time --help runs.
     password: DojoPassword = None,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
@@ -1293,11 +1482,18 @@ def run_dojo(
 
     This command reads status files in the workdir to give live updates.
     """
-    _logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
-
     import warnings
 
     import uvicorn
+
+    if password is None and _SETTINGS.dojo.password is not None:
+        password = _SETTINGS.dojo.password.get_secret_value()
+    port = find_free_port(host, port)
+
+    _logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
 
     # fastmcp (a transitive dependency of the sensai agent) pulls in key_value.aio,
     # which calls beartype_this_package() on itself. beartype then trips over
@@ -1328,7 +1524,11 @@ def run_dojo(
         from mujoco_mojo.utils.layers.dojo.routers.morph import mount_optuna_engine
 
         db_path = f"sqlite:///{workdir / 'study.db'}"
-        mount_optuna_engine(dojo_app, db_path)
+        try:
+            mount_optuna_engine(dojo_app, db_path)
+        except ModuleNotFoundError as e:
+            console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            raise typer.Exit(code=1)
 
     # detect ip
     local_ip = get_local_ip()
@@ -1368,20 +1568,20 @@ def run_optimizer(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     n_trial: NTrialType = DEFAULT_OP_N_TRIAL,
-    n_proc: NProcType = DEFAULT_N_PROC,
-    timeout: TimeoutType = DEFAULT_OP_TIMEOUT,
-    study_name: StudyNameType = DEFAULT_OP_STUDY_NAME,
-    direction: DirectionType = DEFAULT_OP_DIRECTION,
-    sampler: SamplerType = DEFAULT_OP_SAMPLER,
-    storage: StorageType = True,
-    resume: ResumeType = DEFAULT_RESUME,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    timeout: TimeoutType = _SETTINGS.run.optimize.timeout,
+    study_name: StudyNameType = _SETTINGS.run.optimize.study_name,
+    direction: DirectionType = _SETTINGS.run.optimize.direction,
+    sampler: SamplerType = _SETTINGS.run.optimize.sampler,
+    storage: StorageType = _SETTINGS.run.optimize.storage,
+    resume: ResumeType = _SETTINGS.run.optimize.resume,
     seed: SeedType = DEFAULT_SEED,
-    evals_per_trial: EvalsPerTrialType = DEFAULT_OP_EVALS_PER_TRIAL,
-    refine_search_factor: RefineSearchFactorType = DEFAULT_OP_REFINE_SEARCH_FACTOR,
-    prune_failed_trials: PruneFailedTrialsType = DEFAULT_OP_PRUNE_FAILED_TRIALS,
-    clean_workdir: CleanWorkdirType = False,
-    model_config_name: ModelConfigNameType = DEFAULT_MODEL_CONFIG_NAME,
-    xml_name: XMLNameType = DEFAULT_XML_NAME,
+    evals_per_trial: EvalsPerTrialType = _SETTINGS.run.optimize.evals_per_trial,
+    refine_search_factor: RefineSearchFactorType = _SETTINGS.run.optimize.refine_search_factor,
+    prune_failed_trials: PruneFailedTrialsType = _SETTINGS.run.optimize.prune_failed_trials,
+    clean_workdir: CleanWorkdirType = _SETTINGS.run.optimize.clean_workdir,
+    model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
+    xml_name: XMLNameType = _SETTINGS.general.xml_name,
     overrides: OverridesType = None,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
@@ -1395,7 +1595,15 @@ def run_optimizer(
 
     This command uses Optuna to intelligently navigate the search space defined by [bold cyan]model.design_float[/bold cyan] and [bold cyan]model.design_categorical[/bold cyan] calls within your generator.
     """
-    import optuna
+    try:
+        import optuna
+    except ModuleNotFoundError:
+        console.print(
+            "[bold red]Error:[/bold red] The `optuna` package is required for optimization. "
+            r"Install with [bold]uv add mujoco-mojo\[optimize][/bold] or "
+            r"[bold]pip install mujoco-mojo\[optimize][/bold]"
+        )
+        raise typer.Exit(code=1)
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
@@ -1403,7 +1611,10 @@ def run_optimizer(
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    logger = _setup_cli_logging(verbose=verbose, quiet=quiet)
+    logger = _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
     print_logo()
 
     workdir = workdir.resolve()
@@ -1459,13 +1670,17 @@ def run_optimizer(
         prune_failed_trials=prune_failed_trials,
     )
 
-    had_fails = runner.run(
-        global_overrides=global_overrides
-        if global_overrides
-        else NamedValueDict[NDArray](),
-        clean_workdir=clean_workdir,
-        execution_mode=ExecutionMode.LOCAL,
-    )
+    try:
+        had_fails = runner.run(
+            global_overrides=global_overrides
+            if global_overrides
+            else NamedValueDict[NDArray](),
+            clean_workdir=clean_workdir,
+            execution_mode=ExecutionMode.LOCAL,
+        )
+    except ModuleNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+        raise typer.Exit(code=1)
 
     if had_fails:
         console.print(

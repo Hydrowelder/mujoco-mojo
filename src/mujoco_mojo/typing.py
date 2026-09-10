@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import importlib.util
+import re
 from enum import IntEnum, StrEnum, unique
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Annotated,
+    Any,
     NewType,
 )
 
@@ -11,6 +15,7 @@ import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import Field
 
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = [
@@ -45,6 +50,7 @@ __all__ = [
     "FlexCompType",
     "FlexName",
     "FluidShape",
+    "FrameName",
     "GainType",
     "GeomGroup",
     "GeomName",
@@ -80,6 +86,7 @@ __all__ = [
     "PluginName",
     "ProximityType",
     "RangefinderData",
+    "Sampler",
     "SensorAttachableName",
     "SensorInterp",
     "SensorName",
@@ -104,6 +111,8 @@ __all__ = [
     "Vec9",
     "VecN",
 ]
+
+logger = get_logger(__name__)
 
 MeshName = NewType("MeshName", str)
 """Alias of string. Used to type hint a field is the name of a Mesh."""
@@ -410,6 +419,77 @@ class LayerRole(StrEnum):
 
     RGBA = "rgba"
     """4 channels. packed 4 channel [red, green, blue, alpha]."""
+
+
+class UserInterface(StrEnum):
+    """Which viewer backend `mujoco-mojo reloaded` renders with."""
+
+    OPENGL = "opengl"
+    """Native OpenGL window. Requires X11 forwarding over SSH, but is ideal for local development."""
+
+    MJVISER = "mjviser"
+    """Browser-based viewer built on `mjviser`. Requires the `mujoco-mojo[reloaded]` extra."""
+
+    VISER = "viser"
+    """Browser-based viewer built directly on `viser`. Requires the `mujoco-mojo[reloaded]` extra."""
+
+
+class Direction(StrEnum):
+    """Optimization goal for `mujoco-mojo run optimization`."""
+
+    MINIMIZE = "minimize"
+    """Search for design parameters that minimize the objective score."""
+
+    MAXIMIZE = "maximize"
+    """Search for design parameters that maximize the objective score."""
+
+
+class Sampler(StrEnum):
+    """Optuna search algorithm for `mujoco-mojo run optimization`."""
+
+    TPE = "tpe"
+    """Tree-structured Parzen Estimator. Optuna's default, and generally the best choice for noisy physics simulations."""
+
+    CMAES = "cmaes"
+    """Covariance Matrix Adaptation Evolution Strategy - a robust evolutionary algorithm for continuous parameters."""
+
+    RANDOM = "random"
+    """Uniform random sampling. A useful baseline for comparison."""
+
+    NSGAII = "nsgaii"
+    """Genetic algorithm suited to multi-objective optimization."""
+
+    NSGAIII = "nsgaiii"
+    """Built for 3+ objectives, but also works as a robust single-objective genetic algorithm."""
+
+    QMC = "qmc"
+    """Quasi-Monte Carlo sampling. Low-discrepancy sequences for even coverage of the design space."""
+
+    GP = "gp"
+    """Gaussian Process. Best for very expensive simulations where only a few dozen trials are affordable."""
+
+    BRUTE = "brute"
+    """Exhaustive grid search over the entire space. Does not support a random seed."""
+
+
+class SortMode(StrEnum):
+    """How the Dojo file-explorer trees (saved profiles, saved labs) are sorted."""
+
+    NAME = "name"
+    """Alphabetical by name."""
+
+    MODIFIED = "modified"
+    """By last-modified time."""
+
+
+class SortDirection(StrEnum):
+    """Sort direction paired with a `SortMode`."""
+
+    ASC = "asc"
+    """Ascending."""
+
+    DESC = "desc"
+    """Descending."""
 
 
 class GeomType(StrEnum):
@@ -1251,3 +1331,135 @@ class Conflict(StrEnum):
 
     ERROR = "error"
     """Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches."""
+
+
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
+    from pydantic_ai.providers import Provider
+
+_ENV_VAR_NAME_PATTERN = re.compile(r"`([A-Z][A-Z0-9_]*)`\s+environment variable")
+
+
+class ModelProvider(StrEnum):
+    OPEN_AI = "OpenAI"
+    ANTHROPIC = "Anthropic"
+    GOOGLE = "Google"
+    GOOGLE_CLOUD = "Google Cloud"
+    X_AI = "xAI"
+    BEDROCK = "Bedrock"
+    CEREBRAS = "Cerebras"
+    COHERE = "Cohere"
+    CRUSOE = "Crusoe"
+    GITHUB_COPILOT = "GitHub Copilot"
+    GROQ = "Groq"
+    HUGGING_FACE = "Hugging Face"
+    MISTRAL = "Mistral"
+    OLLAMA = "Ollama"
+    OPEN_AI_CODEX = "OpenAI Codex"
+    OPEN_ROUTER = "OpenRouter"
+    SNOWFLAKE_CORTEX = "Snowflake Cortex"
+    Z_AI = "Z.AI"
+
+    def build_model(self, model_name: str, *, base_url: str | None = None) -> Model:
+        """
+        Builds a live `pydantic_ai` `Model` for this provider and `model_name`.
+
+        Delegates to `pydantic_ai.models.infer_model` - the same `provider:model` resolution `Agent('google:gemini-3-flash')` uses internally - instead of hand-mapping every provider to its own `Provider`/`Model` class pair here. `infer_model` already owns that mapping (and every provider's exact `Model` subclass) and pydantic_ai keeps it current as it adds providers, so re-deriving it in a `match` statement here only gives us a second copy that can drift out of sync. The provider is otherwise constructed exactly as `Agent('provider:model')` would build it - reading whatever environment variable that provider looks for by default (see `env_var_name`).
+
+        `base_url` only matters for `OLLAMA` (or another self-hosted OpenAI-compatible server pointed at a nonstandard host/port) - `pydantic_ai`'s `OllamaProvider`, unlike most others, has no built-in localhost default and raises without one. Pass it there; leave it `None` for every other provider, since a provider that *does* accept `base_url` (e.g. Google) would silently redirect its real endpoint to whatever's passed. A provider whose constructor doesn't accept `base_url` at all falls back to its own default construction instead, logged as a warning.
+
+        Raises:
+            ImportError: If the optional package this provider's SDK needs isn't installed - caught broadly rather than narrowed to `ModuleNotFoundError`, since some `pydantic_ai` provider modules (e.g. xAI) catch that themselves and re-raise a plain `ImportError` with a friendlier "pip install ..." message, which a `ModuleNotFoundError`-only handler would miss entirely.
+            NotImplementedError: If this member has no `pydantic_ai` provider mapped - every current member does; this only guards a future member added to the enum without a matching `_MODEL_PROVIDER_IDS` entry.
+
+        """
+        from pydantic_ai.models import infer_model
+        from pydantic_ai.providers import infer_provider, infer_provider_class
+
+        provider_id = _MODEL_PROVIDER_IDS.get(self)
+        if provider_id is None:
+            msg = f"No pydantic_ai provider is mapped for {self.value!r}."
+            logger.error(msg)
+            raise NotImplementedError(msg)
+
+        def _provider_factory(name: str) -> Provider[Any]:
+            if base_url is None:
+                return infer_provider(name)
+            provider_cls = infer_provider_class(name)
+            try:
+                # see build_model's own **kwargs note in the api_key removal history:
+                # not every Provider subclass's __init__ declares base_url, so this is
+                # checked dynamically via the except below, not something a static
+                # signature could confirm.
+                return provider_cls(**{"base_url": base_url})
+            except TypeError:
+                msg = f"{self.value}'s pydantic_ai provider doesn't accept base_url directly; falling back to its own default construction."
+                logger.warning(msg)
+                return infer_provider(name)
+
+        try:
+            return infer_model(
+                f"{provider_id}:{model_name}", provider_factory=_provider_factory
+            )
+        except ImportError as exc:
+            msg = f"The pydantic_ai provider for {self.value!r} needs an optional package that isn't installed: {exc}"
+            logger.error(msg)
+            raise ImportError(msg) from exc
+
+    @property
+    def env_var_name(self) -> str | None:
+        """
+        Best-effort: the primary environment variable this provider's own `pydantic_ai` module documents for its credentials (e.g. `GOOGLE_API_KEY`, or `AWS_ACCESS_KEY_ID` for Bedrock), or `None` if it doesn't use one this way - OpenAI Codex uses an OAuth device-code flow instead of any single env var.
+
+        `pydantic_ai` has no structured "get this provider's env var" API - every provider module only ever states it as prose, in its own `__init__` docstring and error message. Rather than hand-copying eighteen of those into a lookup table here (exactly the "second copy that can drift out of sync" problem `build_model` above avoids), this reads that provider's own `pydantic_ai.providers.<name>` source file directly and looks for its "`X_Y_Z` environment variable" phrasing - never importing/executing that module, so this works whether or not the provider's optional SDK is installed. Best-effort because it's pattern-matching prose, not calling a documented API: a `pydantic_ai` wording change could stop matching, in which case this returns `None` rather than something wrong.
+
+        """
+        provider_id = _MODEL_PROVIDER_IDS.get(self)
+        if provider_id is None:
+            return None
+
+        spec = importlib.util.find_spec(
+            f"pydantic_ai.providers.{provider_id.replace('-', '_')}"
+        )
+        if spec is None or spec.origin is None:
+            return None
+        try:
+            source = Path(spec.origin).read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+        # the first hit is usually a `base_url` env var (documented before `api_key`
+        # in most providers' __init__ docstrings), which isn't a credential - skip
+        # those rather than trying to anchor on the "api_key" parameter specifically,
+        # since a few providers (Bedrock, Snowflake) don't have one at all.
+        return next(
+            (
+                match
+                for match in _ENV_VAR_NAME_PATTERN.findall(source)
+                if not match.endswith("BASE_URL")
+            ),
+            None,
+        )
+
+
+_MODEL_PROVIDER_IDS: dict[ModelProvider, str] = {
+    ModelProvider.OPEN_AI: "openai",
+    ModelProvider.ANTHROPIC: "anthropic",
+    ModelProvider.GOOGLE: "google",
+    ModelProvider.GOOGLE_CLOUD: "google-cloud",
+    ModelProvider.X_AI: "xai",
+    ModelProvider.BEDROCK: "bedrock",
+    ModelProvider.CEREBRAS: "cerebras",
+    ModelProvider.COHERE: "cohere",
+    ModelProvider.CRUSOE: "crusoe",
+    ModelProvider.GITHUB_COPILOT: "github-copilot",
+    ModelProvider.GROQ: "groq",
+    ModelProvider.HUGGING_FACE: "huggingface",
+    ModelProvider.MISTRAL: "mistral",
+    ModelProvider.OLLAMA: "ollama",
+    ModelProvider.OPEN_AI_CODEX: "openai-codex",
+    ModelProvider.OPEN_ROUTER: "openrouter",
+    ModelProvider.SNOWFLAKE_CORTEX: "snowflake",
+    ModelProvider.Z_AI: "zai",
+}
+"""Maps each `ModelProvider` member to the provider-id token `pydantic_ai` expects in a `provider:model` string (see `infer_provider_class`) - distinct from the member's own (human-display) `.value`."""

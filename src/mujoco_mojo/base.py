@@ -2,13 +2,15 @@ import threading
 from pathlib import Path
 
 from filelock import FileLock
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 _IO_LOCK = threading.Lock()
 
 
 class MojoBaseModel(BaseModel):
     """Base model for all MuJoCo Mojo classes."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
 
     def dump_to_path(
         self, path: Path, indent: int | None = None, encoding: str = "utf-8"

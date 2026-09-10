@@ -1,14 +1,62 @@
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
 import {
-  DASH_STYLE_VALUES,
-  PLOT_CONFIG_SCHEMA,
-} from "./lib/plot-config.generated";
+  buildTreeRows,
+  buildTreeRowsFromNames,
+  visibleTreeRows,
+  allTreeFolderPaths,
+  anyTreeRowVisible,
+  sortTreeItems,
+  type TreeRow,
+  type TreeSortMode,
+  type TreeSortDirection,
+} from "./lib/tree";
+import { themeColor, themeColorAlpha } from "./lib/theme-colors";
+import {
+  newTabId,
+  loadTabsFromStorage,
+  persistTabsToStorage,
+  reorderTabs,
+  pickNextActiveOnClose,
+  selectRange,
+  toggleSelection,
+} from "./lib/tab-session";
+import type { PlotProfile } from "./lib/plot-profile";
+import { fetchWithTimeout, fetchWithRetry } from "./lib/fetch-timeout";
+import {
+  describeSchemaPath,
+  describeEnumValue,
+  describeDefField,
+  type JsonSchemaNode,
+} from "./lib/json-schema";
+import Plotly from "./lib/plotly";
+import LZString from "lz-string";
+import "./lib/color-picker";
+import {
+  EditorView,
+  basicSetup,
+  EditorState,
+  json,
+  jsonParseLinter,
+  syntaxHighlighting,
+  oneDarkHighlightStyle,
+  defaultHighlightStyle,
+  Compartment,
+  linter,
+  lintGutter,
+  forceLinting,
+  hoverTooltip,
+  syntaxTree,
+  type Tooltip,
+  type SyntaxNode,
+  type Diagnostic,
+} from "./lib/codemirror";
+import { DASH_STYLE_VALUES } from "./lib/plot-config.generated";
 import {
   attachVerticalResizeHandle,
   restorePersistedHeight,
 } from "./lib/resize";
-import { validateAgainstSchema } from "./lib/schema-validate";
+import { validateAgainstSchema, collectSchemaDiagnostics, type SchemaPathSegment } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
@@ -33,31 +81,6 @@ import type {
   YAxisConfig,
 } from "./models";
 
-// ---------------------------------------------------------------------------
-// Tailwind offline palette - hex values matching Tailwind CSS defaults
-// ---------------------------------------------------------------------------
-const tw = {
-  slate: {
-    50: "#f8fafc",
-    100: "#f1f5f9",
-    200: "#e2e8f0",
-    300: "#cbd5e1",
-    400: "#94a3b8",
-    500: "#64748b",
-    600: "#475569",
-    700: "#334155",
-    800: "#1e293b",
-    900: "#0f172a",
-    950: "#020617",
-  },
-  cyan: { 400: "#22d3ee", 500: "#06b6d4", 600: "#0891b2" },
-  emerald: { 500: "#10b981" },
-  blue: { 500: "#3b82f6" },
-  violet: { 500: "#8b5cf6" },
-  amber: { 500: "#f59e0b" },
-  rose: { 500: "#ef4444" },
-} as const;
-
 // matches Python's logging severity ordering
 const LOG_LEVEL_SEVERITY: Record<string, number> = {
   DEBUG: 10,
@@ -66,6 +89,9 @@ const LOG_LEVEL_SEVERITY: Record<string, number> = {
   ERROR: 40,
   CRITICAL: 50,
 };
+
+// how many recently-closed plot tabs reopenLastClosedPlotTab() can recover
+const _MAX_CLOSED_PLOT_TABS = 10;
 
 const DEFAULT_CONFIG: PlotConfig = {
   xAxis: { col: "time", filters: [] },
@@ -84,14 +110,30 @@ const DEFAULT_CONFIG: PlotConfig = {
   rangeY: null,
   xScale: "linear",
   yScale: "linear",
+  xLogBase: null,
+  yLogBase: null,
   plotType: "cartesian",
-  vsEnabled: false,
-  vsRange: [0, 10],
-  vsPinned: [],
   annotations: [],
   shapes: [],
+  displayUnitSystem: null,
   maxPoints: null,
 };
+
+// Renders one DEFAULT_CONFIG value for a "Default: `X`." tooltip line
+// (plotFieldHelp above), matching the exact rendering
+// GenerateJsonSchemaWithDefaults (settings.py) uses server-side for
+// Pydantic-level defaults - "true"/"false" for booleans, str(x) otherwise,
+// which for Python's None is the literal text "None" - so a
+// frontend-sourced default reads identically to a schema-sourced one
+// rather than looking like a different kind of value. Empty string
+// (title/xAxisTitle/yAxisTitle's actual default) renders as "(empty)"
+// instead of nothing visibly between the backticks.
+function formatDefaultValue(value: unknown): string {
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return value === "" ? "(empty)" : value;
+  return JSON.stringify(value);
+}
 
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
@@ -110,6 +152,125 @@ const _cm: {
 // miniplayer RAF state - kept outside Alpine to avoid proxy overhead
 const _mini: { rafId: number | null } = { rafId: null };
 
+// smartSort's comparator - a module-level Intl.Collator instance, reused
+// across every call rather than passing {sensitivity: "base"} straight to
+// String.prototype.localeCompare on each pairwise comparison. The two look
+// equivalent but aren't: localeCompare with an options object builds a fresh
+// collator internally on every single call, while Collator.prototype.compare
+// builds it once. For a column-tree toggle this runs an O(n log n) sort
+// (getFilteredCols -> smartSort) synchronously on every folder click across
+// however many columns are loaded - with the options-object form this was
+// slow enough to read as a real delay before the row's own CSS transition
+// even started, since the browser can't paint the class change until this
+// synchronous sort finishes.
+const _smartSortCollator = new Intl.Collator(undefined, { sensitivity: "base" });
+
+// JSON editor hover tooltips (initCodeMirror's hoverTooltip extension) - the
+// path of JSON object keys enclosing document position `pos`, read from
+// CodeMirror's own Lezer parse tree rather than any text-based/regex
+// approach, which would be fragile against nested strings, escaped quotes,
+// etc. lib/json-schema.ts's describeSchemaPath then walks
+// plotConfigSchema alongside this same path to find that field's
+// description.
+//
+// @codemirror/lang-json's grammar (@lezer/json) only names three node
+// types relevant here: "Property" (a key:value pair), "PropertyName" (a
+// Property's own key, still-quoted string), and "Array" - object keys
+// versus array items are structurally different in JSON (a key is text,
+// an index is just position), so PropertyName is read for the former and
+// a plain "" placeholder pushed for the latter; describeSchemaPath already
+// treats any segment as "descend into .items" once the schema node it's
+// standing on is itself an array, so the placeholder's actual value is
+// never read, it's a pure step-marker. Walking bottom-up from `pos` (via
+// resolveInner, which finds the innermost node covering that position)
+// through every such ancestor and prepending each is what turns, e.g.,
+// hovering the "color" in `{"yAxes": {"ax1": {"color": "#fff"}}}` into
+// the path ["yAxes", "ax1", "color"] - "ax1" is an arbitrary dict key
+// (PlotConfig.yAxes is dict[str, YAxisConfig]), captured the same way as
+// any other PropertyName even though describeSchemaPath will treat it as
+// a dict-value step rather than a fixed field lookup.
+function jsonPathAt(state: EditorState, pos: number): string[] {
+  const path: string[] = [];
+  let cur: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
+  while (cur) {
+    if (cur.name === "Property") {
+      const nameNode = cur.getChild("PropertyName");
+      if (nameNode) {
+        const raw = state.doc.sliceString(nameNode.from, nameNode.to);
+        try {
+          path.unshift(JSON.parse(raw) as string);
+        } catch {
+          path.unshift(raw.slice(1, -1));
+        }
+      }
+    } else if (cur.name === "Array") {
+      path.unshift("");
+    }
+    cur = cur.parent;
+  }
+  return path;
+}
+
+// the concrete node types @lezer/json ever uses for a JSON *value* position
+// (as opposed to punctuation like "{", ",", ":" - which are themselves
+// nodes in the tree, just not ones a value path ever points at).
+const JSON_VALUE_NODE_NAMES = new Set(["Object", "Array", "String", "Number", "True", "False", "Null"]);
+
+function decodePropertyName(state: EditorState, nameNode: SyntaxNode): string {
+  const raw = state.doc.sliceString(nameNode.from, nameNode.to);
+  try {
+    return JSON.parse(raw) as string;
+  } catch {
+    return raw.slice(1, -1);
+  }
+}
+
+// Reverse of jsonPathAt: walks a *structured* path (real object keys and
+// array indices, as produced by collectSchemaDiagnostics - not
+// jsonPathAt's own "" placeholder for an array step, which only needs to
+// know "inside some array" for a schema lookup, not which element) down
+// from the document root to the exact node it names, so a schema
+// validation error can underline the specific offending value instead of
+// just being listed as text. Returns null if the path doesn't resolve
+// (e.g. a stale diagnostic from before the day's last edit, or a key that
+// was itself renamed/removed).
+function jsonRangeForPath(
+  state: EditorState,
+  path: SchemaPathSegment[],
+): { from: number; to: number } | null {
+  let node: SyntaxNode | null = syntaxTree(state).topNode.firstChild;
+  for (const seg of path) {
+    if (!node) return null;
+    if (typeof seg === "number") {
+      if (node.name !== "Array") return null;
+      let child: SyntaxNode | null = node.firstChild;
+      let index = -1;
+      let found: SyntaxNode | null = null;
+      while (child) {
+        if (JSON_VALUE_NODE_NAMES.has(child.name)) {
+          index += 1;
+          if (index === seg) {
+            found = child;
+            break;
+          }
+        }
+        child = child.nextSibling;
+      }
+      node = found;
+    } else {
+      if (node.name !== "Object") return null;
+      const match = node
+        .getChildren("Property")
+        .find((prop) => {
+          const nameNode = prop.getChild("PropertyName");
+          return nameNode ? decodePropertyName(state, nameNode) === seg : false;
+        });
+      node = match?.lastChild ?? null;
+    }
+  }
+  return node ? { from: node.from, to: node.to } : null;
+}
+
 // ---------------------------------------------------------------------------
 // Lab tab state
 // ---------------------------------------------------------------------------
@@ -122,10 +283,59 @@ interface LabTab {
   viewport: { scale: number; offset: [number, number] } | null; // remembered pan/zoom
 }
 
+interface LabSchema {
+  name: string;
+  signal_in_columns: string[];
+  outputs: string[];
+  modified: number;
+  valid: boolean;
+  missing: string[];
+  is_template: boolean;
+  template_inputs: string[];
+  template_outputs: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Plot tab state
+// ---------------------------------------------------------------------------
+// No separate "name" field - a plot tab's label is its config.title (see
+// _macros.html's tab_strip() call in _chart.html), since a plot tab has no
+// on-disk file identity the way a saved Signal Lab graph does.
+interface PlotTab {
+  id: string;
+  config: PlotConfig;
+  data: Record<string, number[]> | null;
+  filterFingerprints: Record<string, string>;
+  xAxisFilterFingerprint: string;
+  historyStack: string[];
+  historyIndex: number;
+  savedSnapshot: string | null; // JSON of config as of last profile save/load; null = never saved
+  // set only while sitting in closedPlotTabs - its index in plotTabs at the
+  // moment it was closed, so reopenLastClosedPlotTab() can reinsert it back
+  // where it was rather than always appending at the end.
+  closedAtIndex?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Component factory
 // ---------------------------------------------------------------------------
-function trialViewer(trialId: string, externalUrl: string) {
+function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boolean) {
+  // dojo.show_quick_filters (settings.py) - whether the X/Y-axis and
+  // reference-frame dropdowns show their regex quick-filter chip rows.
+  // Seeds $store.dojo.showQuickFilters (settings-panel.ts) from the
+  // server-rendered initial value (routers/mosaic.py) the first time this
+  // page constructs its component - templates read the store property
+  // directly (not a local copy here), so if the settings panel is later
+  // opened and saved in the same tab, every X/Y-axis/refFrame dropdown
+  // picks up the change immediately instead of only on the next full
+  // reload. Store.ts's `alpine:init` registration always runs before
+  // Alpine processes this page's own x-data (see global.d.ts's comment on
+  // the bare `Alpine` global), so the store already exists here.
+  const _quickFiltersStore = Alpine.store("dojo") as { showQuickFilters?: boolean } | undefined;
+  if (_quickFiltersStore && _quickFiltersStore.showQuickFilters === undefined) {
+    _quickFiltersStore.showQuickFilters = showQuickFilters;
+  }
+
   const self = {
     // Alpine magic (injected at runtime - declared here for TS)
     ...(null as unknown as AlpineMagics),
@@ -148,8 +358,11 @@ function trialViewer(trialId: string, externalUrl: string) {
     yMenuOpen: false,
     ySearch: "",
     refFrameMenuOpen: false,
-    settingsOpen: false,
+    refFrameSearch: "",
+    plotConfigOpen: false,
     downloadOpen: false,
+    shareOpen: false,
+    mergeLinkDraft: "" as string,
     activeFrame: null as string | null,
     dragCounter: 0,
     editorOpen: false,
@@ -158,12 +371,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     columnMetadata: {} as Record<string, Record<string, string>>,
     discoveryId: 0,
     plotColors: [
-      tw.cyan[500],
-      tw.emerald[500],
-      tw.blue[500],
-      tw.violet[500],
-      tw.amber[500],
-      tw.rose[500],
+      themeColor("accent-500"),
+      themeColor("success"),
+      themeColor("chart-blue"),
+      themeColor("chart-violet"),
+      themeColor("warning"),
+      themeColor("danger"),
     ],
     dashStyles: DASH_STYLE_VALUES,
 
@@ -188,7 +401,98 @@ function trialViewer(trialId: string, externalUrl: string) {
     profileWarnings: {} as Record<string, string[]>,
     profileSearch: localStorage.getItem("mojo:profile:search") ?? "",
     profilesOpen: false,
+    // page-level (not a local x-data on the Profiles button) so the Ctrl+S
+    // shortcut below can position the popup too, not just a direct click -
+    // it lives in this component's own keydown handler, a different Alpine
+    // scope than a button-local x-data could ever reach.
+    profilesCoords: { top: 0, left: 0 },
     profileNameDraft: "",
+    // folder-tree view (lib/tree.ts) over `profiles` - not persisted across
+    // reloads, unlike settings-panel.ts's collapsed-sections map: profiles
+    // are refetched fresh every time this panel opens, and their folder set
+    // can change (renamed/deleted) between opens in a way settings.py's
+    // fixed schema never does, so "start fully expanded" is a simpler,
+    // always-correct default than tracking staleness in localStorage.
+    profileTreeCollapsed: {} as Record<string, boolean>,
+    // sort/filter preferences persist across reloads (like profileSearch
+    // above), unlike the collapse map, since they're a standing preference
+    // rather than session-local navigation state.
+    profileSortMode: (localStorage.getItem("mojo:profile:sort") ??
+      window.__mojoDefaultProfileSort ??
+      "modified") as TreeSortMode,
+    profileSortDir: (localStorage.getItem("mojo:profile:sortDir") ??
+      window.__mojoDefaultProfileSortDir ??
+      "desc") as TreeSortDirection,
+    // falls back to dojo.hide_invalid_profiles (settings.py, seeded onto
+    // window by base.html) only when the browser has never touched this
+    // preference - once it has, that choice always wins, same pattern as
+    // store.ts's isFullscreen.
+    hideInvalidProfiles:
+      localStorage.getItem("mojo:profile:hideInvalid") === null
+        ? !!window.__mojoDefaultHideInvalidProfiles
+        : localStorage.getItem("mojo:profile:hideInvalid") === "1",
+    get profileTreeRows(): TreeRow<{ name: string; modified: number }>[] {
+      // folders follow the same order as their contents in "modified" mode
+      // (a folder holding the most/least recently changed profile bubbles
+      // like that profile itself would) but stay alphabetical-by-name in
+      // "name" mode - see buildTreeRows's own comment on folderOrder.
+      return buildTreeRows(
+        sortTreeItems(this.profiles, this.profileSortMode, this.profileSortDir),
+        this.profileSortMode === "modified" ? "input" : "alpha",
+      );
+    },
+    // a profile is invalid when loadProfiles() found it referencing columns/
+    // frames not present in this trial (profileWarnings, populated there)
+    get hasInvalidProfiles(): boolean {
+      return this.profiles.some((p) => (this.profileWarnings[p.name]?.length ?? 0) > 0);
+    },
+    get profileVisibleRows(): TreeRow<{ name: string; modified: number }>[] {
+      const q = this.profileSearch.toLowerCase();
+      return visibleTreeRows(
+        this.profileTreeRows,
+        this.profileTreeCollapsed,
+        this.profileSearch,
+        (p) => p.name.toLowerCase().includes(q),
+        undefined,
+        (p) => (this.profileWarnings[p.name]?.length ?? 0) === 0,
+        this.hideInvalidProfiles,
+      );
+    },
+    // Re-clicking the already-active sort mode reverses its direction
+    // instead of doing nothing; switching to the other mode resets to that
+    // mode's own natural default direction (see sortTreeItems's comment).
+    setProfileSortMode(mode: TreeSortMode) {
+      if (this.profileSortMode === mode) {
+        this.profileSortDir = this.profileSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.profileSortMode = mode;
+        this.profileSortDir = mode === "name" ? "asc" : "desc";
+      }
+      try {
+        localStorage.setItem("mojo:profile:sort", this.profileSortMode);
+        localStorage.setItem("mojo:profile:sortDir", this.profileSortDir);
+      } catch {}
+    },
+    toggleHideInvalidProfiles() {
+      this.hideInvalidProfiles = !this.hideInvalidProfiles;
+      try {
+        localStorage.setItem(
+          "mojo:profile:hideInvalid",
+          this.hideInvalidProfiles ? "1" : "0",
+        );
+      } catch {}
+    },
+    toggleProfileFolder(path: string) {
+      this.profileTreeCollapsed = { ...this.profileTreeCollapsed, [path]: !this.profileTreeCollapsed[path] };
+    },
+    expandAllProfileFolders() {
+      this.profileTreeCollapsed = {};
+    },
+    collapseAllProfileFolders() {
+      this.profileTreeCollapsed = Object.fromEntries(
+        allTreeFolderPaths(this.profileTreeRows).map((p) => [p, true]),
+      );
+    },
 
     // --- FILTER SCHEMAS (loaded from /mosaic/api/filter-schema on init) ---
     filterSchemas: [] as FilterSchema[],
@@ -204,11 +508,101 @@ function trialViewer(trialId: string, externalUrl: string) {
       { draft: YAxisConfig; baseSnapshot: string }
     >,
 
+    // --- PLOT CONFIG SCHEMA (loaded from /mosaic/api/plot-config-schema on
+    // init) - PlotConfig's own JSON schema, Field descriptions included.
+    // Single source of truth for the Plot Editor's hover-info icons
+    // (_macros.html's field_help_icon, called from _chart.html) and the
+    // JSON editor's CodeMirror hover tooltips (initCodeMirror below) -
+    // both read this same schema via lib/json-schema.ts's
+    // describeSchemaPath rather than each hand-maintaining their own copy
+    // of what every field means.
+    plotConfigSchema: null as JsonSchemaNode | null,
+    // Most PlotConfig fields are *required* at the model level (a saved
+    // profile must specify everything explicitly - see plot_config.py),
+    // unlike MujocoMojoSettings where every field genuinely has a
+    // permanent default - so GenerateJsonSchemaWithDefaults (settings.py)
+    // has nothing to append to their description; only the handful of
+    // truly-optional fields (maxPoints, displayUnitSystem, plotType) get a
+    // "Default:" line from the schema itself. The real "what does a
+    // brand-new plot start with" values live in this file's own
+    // DEFAULT_CONFIG instead, so this falls back to that when the
+    // schema's description doesn't already carry a default.
+    plotFieldHelp(key: string): string {
+      const description = describeSchemaPath(this.plotConfigSchema, [key]);
+      if (!description || description.includes("\n\nDefault:")) return description;
+      if (!(key in DEFAULT_CONFIG)) return description;
+      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      return `${description}\n\nDefault: \`${formatDefaultValue(value)}\`.`;
+    },
+    // Same schema, but for one option within a dropdown (e.g. field "grid",
+    // value "all" -> GridMode.ALL's own docstring) rather than the field as
+    // a whole - see settings.py's GenerateJsonSchemaWithDefaults for where
+    // per-option "x-enum-descriptions" comes from.
+    plotEnumOptionHelp(key: string, value: string): string {
+      return describeEnumValue(this.plotConfigSchema, [key], value);
+    },
+    // For the Notes (Annotation) and Shapes editors - fields on a nested
+    // model rather than a top-level PlotConfig field, named directly (see
+    // lib/json-schema.ts's describeDefField for why the Shape editor can't
+    // just use plotFieldHelp's own path-walking here: the same field name
+    // means different things across VlineShape/HlineShape/RectShape).
+    plotDefFieldHelp(defName: string, fieldName: string): string {
+      return describeDefField(this.plotConfigSchema, defName, fieldName);
+    },
+    // Maps a shape's own "type" discriminator (ShapeType's values: "vline"/
+    // "hline"/"rect") to its $defs name, for plotDefFieldHelp calls in the
+    // Shape editor whose defName has to follow shapeDraft.type rather than
+    // being fixed per call site (fields like x0/y0/dash/color are shared
+    // across more than one shape type, each with its own description).
+    shapeDefName(type: string): string {
+      if (type === "vline") return "VlineShape";
+      if (type === "hline") return "HlineShape";
+      return "RectShape";
+    },
+    // --- PER-FIELD RESET (Plot Editor) ---
+    // Whether config[key] currently matches DEFAULT_CONFIG[key] - drives
+    // the per-field reset icon's x-show (_macros.html's field_reset_icon),
+    // the same "only show a reset affordance once there's something to
+    // reset" behavior the Dojo settings panel's own per-field reset icon
+    // uses. JSON.stringify rather than === since a couple of these
+    // (rangeX/rangeY) are small arrays, not primitives - reference
+    // equality would never match even when the values are identical.
+    plotFieldIsDefault(key: string): boolean {
+      if (!(key in DEFAULT_CONFIG)) return true;
+      const current = (this.config as unknown as Record<string, unknown>)[key];
+      const def = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      return JSON.stringify(current) === JSON.stringify(def);
+    },
+    resetPlotField(key: string) {
+      if (!(key in DEFAULT_CONFIG)) return;
+      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
+      // deep-clone any object/array default (rangeX/rangeY are the only
+      // such fields among the Plot Editor's own, but this stays correct
+      // if a future field needs it too) so resetting two fields back to
+      // back can never have one's reset mutate DEFAULT_CONFIG's own
+      // array/object and silently change the other's "default" out from
+      // under it.
+      const cloned =
+        typeof value === "object" && value !== null
+          ? (JSON.parse(JSON.stringify(value)) as unknown)
+          : value;
+      (this.config as unknown as Record<string, unknown>)[key] = cloned;
+      this.saveAndRender();
+    },
+
     // --- MATCHUP STATE ---
+    // Page-level/workspace-wide, shared by every plot tab - which trials
+    // you're comparing against isn't a single plot's concern (see
+    // syncVsRange()). `vs` is the committed/applied setting; `vsDraft` below
+    // is the header VS selector's own editable buffer, pushed into `vs` by
+    // syncVsRange() when the user hits Apply.
+    vs: {
+      enabled: false,
+      range: [0, 10] as [number, number],
+      pinned: [] as number[],
+    },
     vsDatasets: {} as Record<string, Record<string, number[]>>,
     allTrials: [] as string[],
-    failureTrialNums: [] as number[],
-    errorTrialNums: [] as number[],
     vsMenuOpen: false,
     vsLoading: false,
     vsDraft: {
@@ -228,6 +622,12 @@ function trialViewer(trialId: string, externalUrl: string) {
     annotationsOpen: false,
     annDraft: null as Annotation | null,
     annEditIndex: null as number | null,
+    // teleported (x-teleport) popup position -- lives at this top level
+    // rather than in the sidebar button's own x-data, since the annotation
+    // editor can also be opened by middle-clicking the chart (see the
+    // mousedown listener below), which needs to set this itself rather than
+    // going through the sidebar button's own @click handler.
+    annCoords: { top: 0, left: 0 },
 
     // --- FILTER LAB ---
     labOpen: localStorage.getItem("mojo:lab:open") === "1",
@@ -235,22 +635,100 @@ function trialViewer(trialId: string, externalUrl: string) {
     labName: "" as string,
     labTabs: [] as LabTab[],
     labActiveTabId: null as string | null,
+    // multi-select for bulk-closing/duplicating lab tabs - see the matching
+    // selectedPlotTabIds fields below for the shared semantics.
+    selectedLabTabIds: [] as string[],
+    _labTabSelectionAnchorId: null as string | null,
+
+    // --- PLOT TABS ---
+    plotTabs: [] as PlotTab[],
+    plotActiveTabId: null as string | null,
+    // most-recently-closed first, capped at _MAX_CLOSED_PLOT_TABS - lets any
+    // close (confirmed-dirty or not) be undone via reopenLastClosedPlotTab()
+    closedPlotTabs: [] as PlotTab[],
+    // multi-select for bulk-closing plot tabs (shift/ctrl-click); cleared on
+    // a plain click. Independent of plotActiveTabId - a tab can be selected
+    // without being the one currently displayed, and vice versa.
+    selectedPlotTabIds: [] as string[],
+    _plotTabSelectionAnchorId: null as string | null,
     nodePickingColumn: null as number | null,
     nodeColSearch: "" as string,
     nodePickingQuat: null as number | null,
     nodeQuatSearch: "" as string,
     nodePickingTemplate: null as number | null,
-    labSchemas: [] as Array<{
-      name: string;
-      signal_in_columns: string[];
-      outputs: string[];
-      modified: number;
-      valid: boolean;
-      missing: string[];
-      is_template: boolean;
-      template_inputs: string[];
-      template_outputs: string[];
-    }>,
+    labSchemas: [] as LabSchema[],
+    // lifted out of the "load into new tab" dropdown's own local x-data
+    // (where it lived before) up to top-level state - the tree getters
+    // below need it for filtering, and getters can only close over this
+    // component's own `this`, not a nested dropdown's separate scope.
+    labSearch: localStorage.getItem("mojo:lab:search") ?? "",
+    // folder-tree view (lib/tree.ts) over `labSchemas` - see
+    // profileTreeCollapsed's comment above for why this isn't persisted.
+    labTreeCollapsed: {} as Record<string, boolean>,
+    // sort/filter preferences persist across reloads - see
+    // profileSortMode's own comment above for why (a standing preference,
+    // not session-local navigation state like the collapse map).
+    labSortMode: (localStorage.getItem("mojo:lab:sort") ??
+      window.__mojoDefaultLabSort ??
+      "modified") as TreeSortMode,
+    labSortDir: (localStorage.getItem("mojo:lab:sortDir") ??
+      window.__mojoDefaultLabSortDir ??
+      "desc") as TreeSortDirection,
+    // see hideInvalidProfiles's own comment above
+    hideInvalidLabs:
+      localStorage.getItem("mojo:lab:hideInvalid") === null
+        ? !!window.__mojoDefaultHideInvalidLabs
+        : localStorage.getItem("mojo:lab:hideInvalid") === "1",
+    get labTreeRows(): TreeRow<LabSchema>[] {
+      // see profileTreeRows's own comment on folderOrder
+      return buildTreeRows(
+        sortTreeItems(this.labSchemas, this.labSortMode, this.labSortDir),
+        this.labSortMode === "modified" ? "input" : "alpha",
+      );
+    },
+    get hasInvalidLabs(): boolean {
+      return this.labSchemas.some((l) => !l.valid);
+    },
+    get labVisibleRows(): TreeRow<LabSchema>[] {
+      const q = this.labSearch.toLowerCase();
+      return visibleTreeRows(
+        this.labTreeRows,
+        this.labTreeCollapsed,
+        this.labSearch,
+        (l) => l.name.toLowerCase().includes(q),
+        undefined,
+        (l) => l.valid,
+        this.hideInvalidLabs,
+      );
+    },
+    // see setProfileSortMode's own comment for the re-click-reverses rule
+    setLabSortMode(mode: TreeSortMode) {
+      if (this.labSortMode === mode) {
+        this.labSortDir = this.labSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.labSortMode = mode;
+        this.labSortDir = mode === "name" ? "asc" : "desc";
+      }
+      try {
+        localStorage.setItem("mojo:lab:sort", this.labSortMode);
+        localStorage.setItem("mojo:lab:sortDir", this.labSortDir);
+      } catch {}
+    },
+    toggleHideInvalidLabs() {
+      this.hideInvalidLabs = !this.hideInvalidLabs;
+      try {
+        localStorage.setItem("mojo:lab:hideInvalid", this.hideInvalidLabs ? "1" : "0");
+      } catch {}
+    },
+    toggleLabFolder(path: string) {
+      this.labTreeCollapsed = { ...this.labTreeCollapsed, [path]: !this.labTreeCollapsed[path] };
+    },
+    expandAllLabFolders() {
+      this.labTreeCollapsed = {};
+    },
+    collapseAllLabFolders() {
+      this.labTreeCollapsed = Object.fromEntries(allTreeFolderPaths(this.labTreeRows).map((p) => [p, true]));
+    },
 
     // --- SHAPES ---
     shapesOpen: false,
@@ -488,7 +966,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (queryStr) url += `?${queryStr}`;
       // lab-virtual columns can change value for the same URL after an
       // in-place edit + save, so always bypass the browser HTTP cache
-      const resp = await fetch(url, { cache: "no-store" });
+      const resp = await fetchWithRetry(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
@@ -533,7 +1011,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y)))
             this.renderPlot();
           console.debug(
-            `Dojo Hydration [${label}]: ${i + chunk.length}/${columnList.length}`,
+            `[Dojo Hydration ${label}]: ${i + chunk.length}/${columnList.length}`,
           );
         } catch (e) {
           console.warn(`Hydration failed for ${id}`, e);
@@ -582,24 +1060,24 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     stepDotClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "bg-slate-300 dark:bg-slate-600";
+      if (!this.trialStatus) return "bg-control";
       const step = this.trialStatus[stepName];
-      if (this.errorStep() === stepName) return "bg-amber-500";
-      if (step.elapsed !== null) return "bg-emerald-500";
+      if (this.errorStep() === stepName) return "bg-warning-500";
+      if (step.elapsed !== null) return "bg-success-500";
       if (this.trialStatus.step === stepName)
-        return "bg-cyan-400 animate-pulse";
-      return "bg-slate-300 dark:bg-slate-600";
+        return "bg-accent-400 animate-pulse";
+      return "bg-control";
     },
 
     stepTextClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "text-slate-400 dark:text-slate-600";
+      if (!this.trialStatus) return "text-ink-disabled";
       const step = this.trialStatus[stepName];
       if (this.errorStep() === stepName)
-        return "text-amber-500 dark:text-amber-400";
-      if (step.elapsed !== null) return "text-slate-500 dark:text-slate-400";
+        return "text-warning-500 dark:text-warning-400";
+      if (step.elapsed !== null) return "text-ink-secondary";
       if (this.trialStatus.step === stepName)
-        return "text-cyan-500 dark:text-cyan-400";
-      return "text-slate-400 dark:text-slate-600";
+        return "text-accent-500 dark:text-accent-400";
+      return "text-ink-disabled";
     },
 
     async fetchTrialLogs() {
@@ -674,14 +1152,21 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!chartEl) return;
 
       const isDark = this.theme === "dark";
-      const bg = isDark ? "#1e293b" : "#ffffff";
-      const textColor = isDark ? "#94a3b8" : "#64748b";
-      const curveColor = isDark ? "#06b6d4" : "#0891b2";
-      const cdfColor = isDark ? "#a78bfa" : "#7c3aed";
+      const bg = themeColor("surface");
+      const textColor = themeColor("ink-muted");
+      const curveColor = isDark
+        ? themeColor("accent-500")
+        : themeColor("accent-600");
+      const cdfColor = isDark
+        ? themeColor("secondary-400")
+        : themeColor("secondary-600");
       const fillColor = isDark
-        ? "rgba(6,182,212,0.12)"
-        : "rgba(8,145,178,0.10)";
-      const sampledColor = "#ef4444";
+        ? themeColorAlpha("accent-500", 0.12)
+        : themeColorAlpha("accent-600", 0.1);
+      // matches the "sampled value" legend swatch in _distributions.html
+      // (bg-danger-500): was a hardcoded true-red hex here previously, one
+      // shade off from the rose the legend actually shows.
+      const sampledColor = themeColor("danger");
 
       const chartType = entry.chart_type;
 
@@ -757,7 +1242,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               y0: 0,
               y1: 1,
               yref: "paper",
-              line: { color: "#94a3b8", width: 1.5, dash: "dot" },
+              line: { color: themeColor("ink-muted"), width: 1.5, dash: "dot" },
             });
           }
           for (const sampledValue of entry.sampled_values ?? []) {
@@ -886,7 +1371,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           paramsEl.innerHTML = Object.entries(entry.params)
             .map(
               ([k, v]) =>
-                `<span><span class="text-slate-400 dark:text-slate-500">${k}:</span> ${fmt(v)}</span>`,
+                `<span><span class="text-ink-muted">${k}:</span> ${fmt(v)}</span>`,
             )
             .join("");
         }
@@ -899,6 +1384,24 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (xCol && this.data[xCol]) return this.data[xCol].length;
       const first = Object.values(this.data).find((arr) => arr.length > 0);
       return first?.length ?? 0;
+    },
+
+    get currentTrialNum(): number {
+      return parseInt(this.trialId.split("_").pop() ?? "0");
+    },
+
+    // same success/failure/error outcome classification vsChipClass() uses
+    // ($store.dojo.failureTrialNums/errorTrialNums, populated from
+    // applyJobOutcomes) - for the compact pip next to the warp input.
+    // Tracks warpId (the draft trial number being typed/warped to), not
+    // just the page's own trial, falling back to the page's trial once the
+    // draft is cleared - see _header.html's pip.
+    get warpOutcomeColor(): "success" | "warning" | "danger" {
+      const store = Alpine.store("dojo") as DojoStore;
+      const num = this.warpId ?? this.currentTrialNum;
+      if (store.errorTrialNums.includes(num)) return "warning";
+      if (store.failureTrialNums.includes(num)) return "danger";
+      return "success";
     },
 
     // -----------------------------------------------------------------------
@@ -1342,17 +1845,17 @@ function trialViewer(trialId: string, externalUrl: string) {
     logLevelClass(level: string): string {
       switch (level) {
         case "CRITICAL":
-          return "bg-rose-500 dark:bg-rose-900/50 text-white dark:text-white";
+          return "bg-danger-500 dark:bg-danger-900/50 text-white dark:text-white";
         case "ERROR":
-          return "bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400";
+          return "bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400";
         case "WARNING":
-          return "bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400";
+          return "bg-warning-100 dark:bg-warning-900/50 text-warning-700 dark:text-warning-400";
         case "INFO":
-          return "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400";
+          return "bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400";
         case "DEBUG":
-          return "bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400";
+          return "bg-accent-100 dark:bg-accent-900/50 text-accent-700 dark:text-accent-400";
         default:
-          return "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+          return "bg-chip text-ink-secondary";
       }
     },
 
@@ -1452,7 +1955,8 @@ function trialViewer(trialId: string, externalUrl: string) {
         this.mediaScrubMode === "play" &&
         this.mediaFiles.length > 0 &&
         this.mediaIsScrubbable &&
-        isTimeAxis;
+        isTimeAxis &&
+        this.config.plotType !== "polar";
       if (!shouldRun || this._mediaRafId !== null) return;
       const tick = () => {
         const curTimeAxis = this.config.xAxis?.col === "time";
@@ -1460,7 +1964,10 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.mediaScrubMode !== "play" ||
           this.mediaFiles.length === 0 ||
           !this.mediaIsScrubbable ||
-          !curTimeAxis
+          !curTimeAxis ||
+          // a polar plot's _fullLayout has polar.radialaxis/angularaxis, not
+          // xaxis at all - reading fullLayout.xaxis.range below would throw
+          this.config.plotType === "polar"
         ) {
           this._mediaRafId = null;
           this._syncOverlayVisibility();
@@ -2046,14 +2553,29 @@ function trialViewer(trialId: string, externalUrl: string) {
       observer.observe(document.documentElement, { attributes: true });
 
       try {
-        const schemaResp = await fetch("/mosaic/api/filter-schema");
+        const schemaResp = await fetchWithTimeout("/mosaic/api/filter-schema");
         this.filterSchemas = (await schemaResp.json()) as FilterSchema[];
       } catch (e) {
         console.warn("Failed to load filter schemas", e);
       }
 
       try {
-        const statusResp = await fetch("/monitor/api/status/job");
+        const plotSchemaResp = await fetchWithTimeout("/mosaic/api/plot-config-schema");
+        this.plotConfigSchema = (await plotSchemaResp.json()) as JsonSchemaNode;
+        // the JSON editor's schema-diagnostics linter (initCodeMirror,
+        // below) reads this same field via closure but only re-runs on
+        // document edits - if the editor already mounted before this
+        // fetch resolved (a real race: _json_editor.html's own x-init
+        // fires independently of this async init()), force one lint pass
+        // now so violations show up without the user needing to type
+        // anything first.
+        if (_cm.editor) forceLinting(_cm.editor);
+      } catch (e) {
+        console.warn("Failed to load plot config schema", e);
+      }
+
+      try {
+        const statusResp = await fetchWithTimeout("/monitor/api/status/job");
         const statusData = (await statusResp.json()) as {
           error?: boolean;
           is_complete: boolean;
@@ -2085,27 +2607,61 @@ function trialViewer(trialId: string, externalUrl: string) {
 
         const params = new URLSearchParams(window.location.search);
         const shared = params.get("v");
+        let useSharedLink = !!shared;
         if (shared) {
-          this.hydrateFromUrl(shared);
-          this.vsDraft.enabled = this.config.vsEnabled;
-          this.vsDraft.range = [...this.config.vsRange];
-          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
-          this.config.vsEnabled = false;
+          // A ?v= link left in the address bar survives a plain page
+          // refresh - without asking first, every such refresh would
+          // silently blow away whatever tab session is already saved in
+          // this browser, which is exactly what happened here. Only
+          // prompt when there's actually something to lose.
+          let hasStoredTabs = false;
+          try {
+            hasStoredTabs = !!localStorage.getItem("mojo:plot:tabs");
+          } catch {}
+          if (hasStoredTabs) {
+            const ok = await window.mojoConfirm?.({
+              title: "Open shared link?",
+              message:
+                "This link will replace the plot tabs you already have open in this browser. Replace them, or keep what you have?",
+              confirmLabel: "Replace my tabs",
+              cancelLabel: "Keep my tabs",
+              variant: "warning",
+            });
+            useSharedLink = ok ?? false;
+          }
+          // Strip ?v= from the address bar regardless of the choice above,
+          // so a later refresh doesn't re-ask (or silently reapply it)
+          // for a link that's already been handled once.
+          const url = new URL(window.location.href);
+          url.searchParams.delete("v");
+          window.history.replaceState(null, "", url.toString());
+        }
+        if (useSharedLink) {
+          this.hydrateFromUrl(shared!);
         } else {
           this.loadConfig();
-          this.vsDraft.enabled = this.config.vsEnabled;
-          this.vsDraft.range = [...this.config.vsRange];
-          this.vsDraft.pinned = [...(this.config.vsPinned ?? [])];
         }
+        // VS is page-level now, not part of config/the shared-link payload -
+        // same init path regardless of which branch above ran.
+        this._initVsState();
 
         // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
         // inject it now (before watchers are registered so this is a silent migration).
         if (this.config.refFrame) {
           const hasRotation = Object.values(this.config.yAxes).some((y) =>
-            y.filters.some((f) => f.type === "rotation"),
+            (y.filters ?? []).some((f) => f.type === "rotation"),
           );
           if (!hasRotation) this.applyRefFrame(this.config.refFrame);
         }
+
+        // Restores a previously-saved multi-tab session (mojo:plot:tabs),
+        // superseding the single-config state the sequence above just
+        // produced - unless a shared link was just hydrated (useSharedLink,
+        // set above only after confirming it's OK to replace an existing
+        // session). Awaited directly (not via $nextTick) so the fetch it
+        // may need to run for a restored tab's uncached columns completes
+        // before the render below ever starts.
+        await this._initPlotTabs(useSharedLink);
 
         void this.$nextTick(() => {
           this.pushHistory();
@@ -2194,6 +2750,20 @@ function trialViewer(trialId: string, externalUrl: string) {
             setTimeout(() => {
               this.annDraft = { x: xVal, y: yVal, text: "" };
               this.annEditIndex = null;
+              // same position math as the sidebar Notes button's own
+              // @click handler (_chart.html) -- popup width 288px (w-72) +
+              // 16px gap, positioned document-relative since the popup is
+              // x-teleport'd to <body>.
+              const annBtn = document.querySelector(
+                '[x-ref="annBtn"]',
+              ) as HTMLElement | null;
+              if (annBtn) {
+                const btnRect = annBtn.getBoundingClientRect();
+                this.annCoords = {
+                  top: btnRect.top + window.scrollY,
+                  left: btnRect.left + window.scrollX - 288 - 16,
+                };
+              }
               this.annotationsOpen = true;
               void this.$nextTick(() => {
                 (
@@ -2301,7 +2871,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               this.xMenuOpen ||
               this.yMenuOpen ||
               this.refFrameMenuOpen ||
-              this.settingsOpen ||
+              this.plotConfigOpen ||
               this.downloadOpen ||
               this.editorOpen ||
               this.profilesOpen ||
@@ -2318,7 +2888,7 @@ function trialViewer(trialId: string, externalUrl: string) {
             this.annotationsOpen = false;
             this.shapesOpen = false;
             this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
-            this.settingsOpen = this.downloadOpen = this.editorOpen = false;
+            this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
             if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
@@ -2370,6 +2940,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 nameEl?.setSelectionRange(0, 0);
               }
             } else if (!isTextInput) {
+              this._computeProfilesCoords();
               this.profilesOpen = true;
               void this.loadProfiles();
               void this.$nextTick(() => {
@@ -2384,10 +2955,13 @@ function trialViewer(trialId: string, externalUrl: string) {
             }
           }
           if ((e.metaKey || e.ctrlKey) && !isTextInput) {
-            if (e.key === "ArrowLeft") {
+            // Up/Down mirror Left/Right (increment/decrement, matching the
+            // usual numeric-stepper convention) as a second way to jog
+            // between trials one at a time.
+            if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
               e.preventDefault();
               document.getElementById("nav-prev")?.click();
-            } else if (e.key === "ArrowRight") {
+            } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
               e.preventDefault();
               document.getElementById("nav-next")?.click();
             }
@@ -2448,8 +3022,8 @@ function trialViewer(trialId: string, externalUrl: string) {
           .filter((n) => !isNaN(n));
         const minFleet = Math.min(...ids);
         const maxFleet = Math.max(...ids);
-        if (this.config.vsRange[0] === 0 && this.config.vsRange[1] === 0) {
-          this.config.vsRange = [minFleet, maxFleet];
+        if (this.vs.range[0] === 0 && this.vs.range[1] === 0) {
+          this.vs.range = [minFleet, maxFleet];
           this.vsDraft.range = [minFleet, maxFleet];
         }
       }
@@ -2471,6 +3045,14 @@ function trialViewer(trialId: string, externalUrl: string) {
       this.$watch("profileSearch", (val: string) => {
         try {
           localStorage.setItem("mojo:profile:search", val);
+        } catch {
+          /* ignore */
+        }
+      });
+
+      this.$watch("labSearch", (val: string) => {
+        try {
+          localStorage.setItem("mojo:lab:search", val);
         } catch {
           /* ignore */
         }
@@ -2624,8 +3206,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           } catch {}
         }
         if (
-          this.config.vsEnabled &&
-          oldValue?.vsEnabled &&
+          this.vs.enabled &&
           (value.xAxis!.col! !== oldValue?.xAxis?.col ||
             Object.keys(value.yAxes).length !==
               Object.keys(oldValue.yAxes ?? {}).length)
@@ -2671,12 +3252,25 @@ function trialViewer(trialId: string, externalUrl: string) {
           this.vsDatasets = {};
           const resp = await this.fetchTrialData(this.trialId, colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
-          if (this.config.vsEnabled) await this.syncVsRange();
+          if (this.vs.enabled) await this.syncVsRange();
         }
 
         this.saveAndRender();
         this._syncOverlayVisibility();
         requestAnimationFrame(() => this._renderFrameMarkers());
+
+        // keep the active PlotTab's mirror (config/data/etc.) and its
+        // localStorage copy continuously in sync - without this, a whole-
+        // object reassignment of this.config (undo/redo, loadProfile,
+        // hydrateFromUrl all do `this.config = {...}` rather than mutating
+        // in place) would leave plotTabs[activeId].config pointing at the
+        // stale pre-change object until the next tab switch, which the tab
+        // strip's title (tab.config.title) would otherwise briefly show.
+        // A no-op before plotTabs is initialized (_initPlotTabs runs later
+        // in boot; _snapshotActivePlotTab just returns when there's no
+        // active tab yet to find).
+        this._snapshotActivePlotTab();
+        if (this.plotTabs.length > 0) this._persistPlotTabs();
       });
 
       // re-fetch data and column manifest when display unit system changes so the
@@ -2771,8 +3365,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       });
 
       // re-pull distribution metadata when new job data arrives
-      window.addEventListener("mojo-data-updated", (e) => {
-        this.applyJobOutcomes((e as CustomEvent<JobStatus>).detail);
+      // ($store.dojo's own SSE handler already applies trial outcomes for
+      // this event -- see startGlobalSync() in store.ts)
+      window.addEventListener("mojo-data-updated", () => {
         void this.fetchDists();
       });
 
@@ -2781,7 +3376,8 @@ function trialViewer(trialId: string, externalUrl: string) {
       void fetch("/monitor/api/status/job")
         .then((r) => r.json())
         .then((data: JobStatus) => {
-          if (data && !data.error) this.applyJobOutcomes(data);
+          if (data && !data.error)
+            (Alpine.store("dojo") as DojoStore).applyJobOutcomes(data);
         })
         .catch(() => {});
 
@@ -2800,29 +3396,71 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // VS (comparison) mode
     // -----------------------------------------------------------------------
-    applyJobOutcomes(data: JobStatus | undefined) {
-      if (!data) return;
-      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
-      this.errorTrialNums = (data.error_tns ?? []).map(Number);
+    // Restores a VS comparison range/pinned selection WITHOUT ever
+    // auto-enabling comparison mode - this is intentional, not an
+    // oversight: turning VS on can pull a large amount of trial data
+    // (every trial in range × every active column), so re-enabling it is
+    // always an explicit user action (toggle + Apply in the header), never
+    // implied by restoring a remembered range - whether that range came
+    // from localStorage on a fresh page load or from a saved profile that
+    // happened to have comparison mode on when it was saved.
+    _restoreVsRange(range: [number, number], pinned: number[]) {
+      this.vs.enabled = false;
+      this.vs.range = range;
+      this.vs.pinned = pinned;
+      this.vsDatasets = {};
+      this.vsDraft.enabled = false;
+      this.vsDraft.range = [...range];
+      this.vsDraft.pinned = [...pinned];
     },
 
+    _initVsState() {
+      let range = this.vs.range;
+      let pinned = this.vs.pinned;
+      try {
+        const raw = localStorage.getItem("mojo:plot:vs");
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            range?: [number, number];
+            pinned?: number[];
+          };
+          if (parsed.range) range = parsed.range;
+          if (parsed.pinned) pinned = parsed.pinned;
+        }
+      } catch {}
+      this._restoreVsRange(range, pinned);
+    },
+
+    _persistVsState() {
+      try {
+        localStorage.setItem(
+          "mojo:plot:vs",
+          JSON.stringify({ range: this.vs.range, pinned: this.vs.pinned }),
+        );
+      } catch {}
+    },
+
+    // same coloring as monitor.html's success/failed/error trial badges
+    // (badge-success/-failure/-error in main.css: a translucent tinted
+    // background + colored border/text, not a solid fill) -- their exact
+    // padding/rounding/hover-scale isn't reused here since this renders as
+    // a compact 5-column grid with its own sizing (see the static class at
+    // the _header.html call site), but the color treatment matches. Pinned
+    // trials get the same outcome color plus a ring, rather than switching
+    // to a different (previously accent) fill.
     vsChipClass(t: string): string {
       const tn = parseInt(t.split("_").pop() ?? "0");
-      if (this.vsDraft.pinned.includes(tn)) {
-        // keep the outcome hint on the border even while pinned
-        if (this.errorTrialNums.includes(tn))
-          return "bg-cyan-500 border-amber-500 text-white";
-        if (this.failureTrialNums.includes(tn))
-          return "bg-cyan-500 border-rose-500 text-white";
-        return "bg-cyan-500 border-cyan-500 text-white";
-      }
+      const store = Alpine.store("dojo") as DojoStore;
       if (t === this.trialId)
-        return "border-cyan-500 text-cyan-500 dark:text-cyan-400 cursor-default";
-      if (this.errorTrialNums.includes(tn))
-        return "border-amber-400 dark:border-amber-500/70 text-slate-500 dark:text-slate-400 hover:text-amber-500";
-      if (this.failureTrialNums.includes(tn))
-        return "border-rose-400 dark:border-rose-500/70 text-slate-500 dark:text-slate-400 hover:text-rose-500";
-      return "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-cyan-400 hover:text-cyan-500";
+        return "border-accent-500 text-accent-500 dark:text-accent-400 cursor-default";
+      const ring = this.vsDraft.pinned.includes(tn)
+        ? " ring-2 ring-accent-500"
+        : "";
+      if (store.errorTrialNums.includes(tn))
+        return `bg-warning-50 dark:bg-warning-900/30 border-warning-400 dark:border-warning-500/50 text-warning-600 dark:text-warning-400 hover:bg-warning-100 dark:hover:bg-warning-800/50${ring}`;
+      if (store.failureTrialNums.includes(tn))
+        return `bg-danger-50 dark:bg-danger-900/30 border-danger-400 dark:border-danger-500/50 text-danger-600 dark:text-danger-400 hover:bg-danger-100 dark:hover:bg-danger-800/50${ring}`;
+      return `bg-success-50 dark:bg-success-900/30 border-success-400 dark:border-success-500/50 text-success-600 dark:text-success-400 hover:bg-success-100 dark:hover:bg-success-800/50${ring}`;
     },
 
     async syncVsRange() {
@@ -2835,8 +3473,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       }
 
       if (!this.vsDraft.enabled) {
-        this.config.vsEnabled = false;
+        this.vs.enabled = false;
         this.vsDatasets = {};
+        this._persistVsState();
         return;
       }
 
@@ -2896,9 +3535,10 @@ function trialViewer(trialId: string, externalUrl: string) {
         );
 
         this.vsDatasets = { ...this.vsDatasets };
-        this.config.vsRange = [start, end];
-        this.config.vsPinned = [...this.vsDraft.pinned];
-        this.config.vsEnabled = true;
+        this.vs.range = [start, end];
+        this.vs.pinned = [...this.vsDraft.pinned];
+        this.vs.enabled = true;
+        this._persistVsState();
         if (targetIds.length > 0) {
           this.notify(
             `Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`,
@@ -2912,41 +3552,57 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     handleVsToggle() {
       if (!this.vsDraft.enabled) {
-        this.config.vsEnabled = false;
+        this.vs.enabled = false;
         this.vsDatasets = {};
+        this._persistVsState();
         this.renderPlot();
       }
     },
 
-    setVsPreset(delta: number) {
-      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
-      this.vsDraft.range = [cur - delta, cur + delta];
-    },
-
-    setVsAll() {
+    // shared by every vs-range preset below so "the actual set of trial
+    // numbers that exist" has exactly one computation, not one hand-rolled
+    // per caller (setVsAll/isVsAll used to each redo this independently,
+    // and setVsPreset skipped it entirely - see its own comment).
+    vsTrialBounds(): { min: number; max: number } | null {
       const nums = this.allTrials
         .map((t) => parseInt(t.split("_").pop() ?? ""))
         .filter((n) => !isNaN(n));
-      if (!nums.length) return;
-      this.vsDraft.range = [Math.min(...nums), Math.max(...nums)];
+      if (!nums.length) return null;
+      return { min: Math.min(...nums), max: Math.max(...nums) };
+    },
+
+    setVsPreset(delta: number) {
+      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const bounds = this.vsTrialBounds();
+      // clamp each edge independently to the real trial range rather than
+      // just cur +/- delta - viewing trial 0 with "+/-10" should land on
+      // [0, 10], not [-10, 10] (trial numbers can't go negative, and more
+      // generally shouldn't run past whichever trial is actually last).
+      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
+      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
+      this.vsDraft.range = [lo, hi];
+    },
+
+    setVsAll() {
+      const bounds = this.vsTrialBounds();
+      if (!bounds) return;
+      this.vsDraft.range = [bounds.min, bounds.max];
     },
 
     isVsPreset(delta: number): boolean {
       const cur = parseInt(this.trialId.split("_").pop() ?? "0");
+      const bounds = this.vsTrialBounds();
+      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
+      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
       const [a, b] = this.vsDraft.range;
-      return Math.min(a, b) === cur - delta && Math.max(a, b) === cur + delta;
+      return Math.min(a, b) === lo && Math.max(a, b) === hi;
     },
 
     isVsAll(): boolean {
-      const nums = this.allTrials
-        .map((t) => parseInt(t.split("_").pop() ?? ""))
-        .filter((n) => !isNaN(n));
-      if (!nums.length) return false;
+      const bounds = this.vsTrialBounds();
+      if (!bounds) return false;
       const [a, b] = this.vsDraft.range;
-      return (
-        Math.min(a, b) === Math.min(...nums) &&
-        Math.max(a, b) === Math.max(...nums)
-      );
+      return Math.min(a, b) === bounds.min && Math.max(a, b) === bounds.max;
     },
 
     vsInRangeCount(): number {
@@ -2988,7 +3644,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         const bT = b.toLowerCase() === "time";
         if (aT && !bT) return -1;
         if (!aT && bT) return 1;
-        return a.localeCompare(b, undefined, { sensitivity: "base" });
+        return _smartSortCollator.compare(a, b);
       });
     },
 
@@ -2997,7 +3653,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3015,6 +3671,122 @@ function trialViewer(trialId: string, externalUrl: string) {
           base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
         );
       }
+    },
+
+    // Folder-tree view (lib/tree.ts) over getFilteredCols(field) - a second,
+    // orthogonal way to browse the *already* quick-filter/chip-narrowed
+    // result set into "/"-delimited groups, not a replacement for the chips
+    // above (which keep doing exactly what they did before). One flat map
+    // keyed by "field:path" covers every field this dropdown pattern is
+    // used for (x, y, nodeCol, nodeQuat) rather than one Record per field.
+    // Unlike profileTreeCollapsed/labTreeCollapsed, folders here default to
+    // COLLAPSED, not expanded: a column list can run into the hundreds
+    // across many folders, where profiles/labs are typically few - starting
+    // collapsed is what actually declutters that case, so an absent entry
+    // here means "collapsed" instead of the opposite default those two use.
+    columnTreeCollapsed: {} as Record<string, boolean>,
+    // Caches getColumnTreeRows' result per field, keyed on the few things
+    // that actually change it (the underlying columns array's identity,
+    // config.refFrame for the y field's rotatable-vector restriction, and
+    // that field's own search string) - NOT columnTreeCollapsed, which is
+    // deliberately excluded so a plain folder toggle can't invalidate it.
+    // Before this, every toggle re-ran getFilteredCols (regex filter +
+    // sort) and rebuilt the whole tree from scratch even though neither
+    // actually depends on which folders happen to be open - free for
+    // Profiles' handful of entries, but real, repeated O(n log n) work on
+    // a signal tree with hundreds of columns, which is what made folder
+    // expansion feel slow there specifically while staying instant on
+    // Profiles. selectableYColumns/availableQuats are getters that build a
+    // fresh array on every access, so their own reference can't be used to
+    // detect "did the underlying data actually change" - comparing
+    // this.columns (a plain, only-reassigned-not-mutated property) plus
+    // refFrame instead sidesteps that without needing to materialize
+    // either getter just to check the cache.
+    _columnTreeRowsCache: {} as Record<
+      string,
+      { colsRef: string[]; refFrame: string; search: string; rows: TreeRow<string>[] }
+    >,
+    // extraFilter: an additional per-column predicate beyond
+    // getFilteredCols(field) itself - the Y-axis dropdown also excludes
+    // non-rotateable columns while a reference frame is active, a
+    // condition specific to that one call site rather than something
+    // getFilteredCols itself should know about.
+    getColumnTreeRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      // 'y' is called both without extraFilter (the has-folders check
+      // driving tree_expand_collapse_buttons' x-show) and with it (actual
+      // row rendering) - two different result sets for the same field, so
+      // they need their own cache slots or one call would silently return
+      // the other's (stale, wrongly filtered or wrongly unfiltered) rows.
+      const cacheKey = extraFilter ? `${field}:filtered` : field;
+      const search = (this as unknown as Record<string, string>)[field + "Search"] ?? "";
+      const refFrame = this.config.refFrame ?? "";
+      const cached = this._columnTreeRowsCache[cacheKey];
+      if (
+        cached &&
+        cached.colsRef === this.columns &&
+        cached.refFrame === refFrame &&
+        cached.search === search
+      ) {
+        return cached.rows;
+      }
+      const cols = this.getFilteredCols(field);
+      const rows = buildTreeRowsFromNames(extraFilter ? cols.filter(extraFilter) : cols);
+      this._columnTreeRowsCache[cacheKey] = { colsRef: this.columns, refFrame, search, rows };
+      return rows;
+    },
+    // Single source of truth for "is this column-tree folder currently
+    // collapsed" (default true, absent an explicit entry) - used by the
+    // chevron's own rotation in the template as well as the two call sites
+    // below, so the chevron can never again show "open" for a folder
+    // getColumnVisibleRows is actually treating as collapsed (or vice
+    // versa) the way two separately-duplicated copies of this same
+    // true-when-absent fallback drifting apart once already caused.
+    isColumnFolderCollapsed(field: string, path: string): boolean {
+      const key = field + ":" + path;
+      return key in this.columnTreeCollapsed ? !!this.columnTreeCollapsed[key] : true;
+    },
+    // Last output of getColumnVisibleRows per field (same field:filtered
+    // keying as _columnTreeRowsCache, for the same reason) - fed back into
+    // visibleTreeRows as `previous` so it can hand back the exact same row
+    // reference for anything whose hidden state didn't change on this
+    // call, rather than a fresh spread copy of every row every time. See
+    // visibleTreeRows' own comment in lib/tree.ts for why that reference
+    // stability is what actually lets Alpine skip re-evaluating most of
+    // the tree's bindings on a single folder toggle.
+    _columnVisibleRowsCache: {} as Record<string, TreeRow<string>[]>,
+    getColumnVisibleRows(field: string, extraFilter?: (col: string) => boolean): TreeRow<string>[] {
+      const cacheKey = extraFilter ? `${field}:filtered` : field;
+      const rows = this.getColumnTreeRows(field, extraFilter);
+      const collapsed: Record<string, boolean> = {};
+      for (const row of rows) {
+        if (row.type !== "folder") continue;
+        collapsed[row.path] = this.isColumnFolderCollapsed(field, row.path);
+      }
+      const result = visibleTreeRows(
+        rows,
+        collapsed,
+        "",
+        () => true,
+        this._columnVisibleRowsCache[cacheKey],
+      );
+      this._columnVisibleRowsCache[cacheKey] = result;
+      return result;
+    },
+    toggleColumnFolder(field: string, path: string) {
+      const key = field + ":" + path;
+      this.columnTreeCollapsed = { ...this.columnTreeCollapsed, [key]: !this.isColumnFolderCollapsed(field, path) };
+    },
+    expandAllColumnFolders(field: string) {
+      const prefix = field + ":";
+      const next = { ...this.columnTreeCollapsed };
+      for (const path of allTreeFolderPaths(this.getColumnTreeRows(field))) next[prefix + path] = false;
+      this.columnTreeCollapsed = next;
+    },
+    collapseAllColumnFolders(field: string) {
+      const prefix = field + ":";
+      const next = { ...this.columnTreeCollapsed };
+      for (const path of allTreeFolderPaths(this.getColumnTreeRows(field))) next[prefix + path] = true;
+      this.columnTreeCollapsed = next;
     },
 
     toggleRegexSegment(
@@ -3067,7 +3839,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3095,7 +3867,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       const base =
         field === "x" || field === "nodeCol"
           ? this.columns
-          : field === "nodeQuat"
+          : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
             : this.selectableYColumns;
       const search =
@@ -3166,18 +3938,18 @@ function trialViewer(trialId: string, externalUrl: string) {
         regex,
         (match, _token, _i1, _i2, _i3, garbage: string | undefined) => {
           if (garbage)
-            return `<span class="text-rose-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
-          let cls = "text-slate-500 dark:text-slate-400";
+            return `<span class="text-danger-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
+          let cls = "text-ink-secondary";
           if (/^"/.test(match)) {
             cls = /:$/.test(match)
-              ? "text-cyan-600 dark:text-cyan-300"
-              : "text-emerald-600 dark:text-emerald-400";
+              ? "text-accent-600 dark:text-accent-300"
+              : "text-success-600 dark:text-success-400";
           } else if (/true|false/.test(match)) {
-            cls = "text-violet-600 dark:text-violet-400";
+            cls = "text-secondary-600 dark:text-secondary-400";
           } else if (/null/.test(match)) {
-            cls = "text-rose-500";
+            cls = "text-danger-500";
           } else if (/-?\d/.test(match)) {
-            cls = "text-amber-600 dark:text-amber-500";
+            cls = "text-warning-600 dark:text-warning-500";
           }
           return `<span class="${cls}">${match}</span>`;
         },
@@ -3185,8 +3957,22 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     validateConfig(cfg: PlotConfig): string[] {
-      // schema-level checks (types, required fields, enums, discriminated unions, ...)
-      const errors: string[] = validateAgainstSchema(cfg, PLOT_CONFIG_SCHEMA);
+      // schema-level checks (types, required fields, enums, discriminated
+      // unions, ...) - against plotConfigSchema (fetched once from
+      // /mosaic/api/plot-config-schema, the same schema the Plot Editor's
+      // and JSON editor's hover tooltips already read), not a second copy
+      // baked into the bundle at build time. Skips this pass entirely
+      // before that fetch resolves rather than blocking on it - the
+      // hand-written semantic checks below still run regardless. The cast
+      // is just bridging two structurally-equivalent-but-nominally-
+      // different JsonSchemaNode types (this file's own, from
+      // lib/json-schema.ts, vs. validateAgainstSchema's own loosely-typed
+      // Record<string, unknown> from lib/schema-validate.ts) - not
+      // papering over a real mismatch, since both represent the same
+      // arbitrary JSON Schema object at different strictness levels.
+      const errors: string[] = this.plotConfigSchema
+        ? validateAgainstSchema(cfg, this.plotConfigSchema as Record<string, unknown>)
+        : [];
       const labsNoted = new Set<string>();
       const schemasLoaded = this.labSchemas.length > 0;
 
@@ -3221,8 +4007,6 @@ function trialViewer(trialId: string, externalUrl: string) {
       } else {
         Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
       }
-      if (cfg.vsRange && cfg.vsRange[0] > cfg.vsRange[1])
-        errors.push("Comparison range start cannot be greater than end.");
       return errors;
     },
 
@@ -3267,8 +4051,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as Partial<PlotConfig>;
-          const { vsEnabled: _vs, ...rest } = parsed;
-          this.config = { ...this.config, ...rest };
+          this.config = { ...this.config, ...parsed };
         } catch {
           console.error("Stored config corrupt");
         }
@@ -3340,6 +4123,75 @@ function trialViewer(trialId: string, externalUrl: string) {
       void this.copyToClipboard(this.configRaw, "JSON Config copied!");
     },
 
+    // Accepts either a bare shared-link code (the ?v= value alone) or a
+    // full URL containing one, so pasting the whole copied link just
+    // works without the user having to trim it down themselves.
+    _extractShareBlob(input: string): string | null {
+      const trimmed = input.trim();
+      if (!trimmed) return null;
+      try {
+        const url = new URL(trimmed);
+        const v = url.searchParams.get("v");
+        if (v) return v;
+      } catch {
+        // not a parseable URL - fall through and treat it as a bare code
+      }
+      return trimmed;
+    },
+
+    // Adds a shared link as a NEW tab instead of replacing the session the
+    // way opening a ?v= link in a fresh page load does (hydrateFromUrl) -
+    // lets several links get combined into one browser window one at a
+    // time, e.g. pasting a colleague's link alongside your own tabs.
+    async addTabFromShareLink(input: string) {
+      const blob = this._extractShareBlob(input);
+      if (!blob) {
+        this.notify("Paste a shared link first", "error");
+        return;
+      }
+      try {
+        const decoded = LZString.decompressFromEncodedURIComponent(blob);
+        if (!decoded) throw new Error("Decompression failed");
+        const parsed = JSON.parse(decoded) as Partial<PlotConfig>;
+        const config = {
+          ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
+          ...parsed,
+        };
+        this._snapshotActivePlotTab();
+        const newTab: PlotTab = {
+          id: newTabId(),
+          config,
+          data: null,
+          filterFingerprints: {},
+          xAxisFilterFingerprint: "[]",
+          historyStack: [],
+          historyIndex: -1,
+          savedSnapshot: null,
+        };
+        this.plotTabs.push(newTab);
+        await this._activatePlotTab(newTab.id);
+        this._persistPlotTabs();
+        this.mergeLinkDraft = "";
+        this.shareOpen = false;
+        this.notify("Tab added from shared link", "success");
+      } catch {
+        this.notify("Failed to decode shared link", "error");
+      }
+    },
+
+    // Forces an immediate Plotly resize of the main chart. initChartResize's
+    // own resize handling only fires from its drag handle (a height change);
+    // this covers width changes from elsewhere, e.g. _chart.html's x-init
+    // watches $store.dojo.isFullscreen and calls this, since that toggle
+    // changes the page's own max-width rather than anything the drag handle
+    // observes. Referenced by name (not a bare `Plotly` global) because
+    // that inline Alpine expression isn't bundled TS and can't reach the
+    // module-scoped Plotly import in lib/plotly.ts.
+    resizeMainPlot() {
+      const plotEl = document.getElementById("plot-area");
+      if (plotEl && plotEl.offsetParent !== null) Plotly.Plots.resize(plotEl);
+    },
+
     initChartResize(hostEl: HTMLElement | undefined) {
       if (!hostEl || hostEl.dataset.resizeAttached) return;
       hostEl.dataset.resizeAttached = "true";
@@ -3373,7 +4225,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         storageKey: "mojo:chart:height",
         minHeight: 300,
         onResize: resizePlot,
-        getResetHeight: () => "600px",
+        getResetHeight: () => "521.133px",
       });
 
       // Fill (or shrink to) the restored height once the plot has rendered.
@@ -3381,20 +4233,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     initCodeMirror(hostEl: HTMLElement) {
-      if (!hostEl || typeof CM === "undefined" || _cm.editor) return;
-      const {
-        EditorView,
-        basicSetup,
-        json,
-        jsonParseLinter,
-        oneDarkHighlightStyle,
-        EditorState,
-        Compartment,
-        linter,
-        lintGutter,
-        syntaxHighlighting,
-        defaultHighlightStyle,
-      } = CM;
+      if (!hostEl || _cm.editor) return;
       const self = this;
 
       // Restore persisted height before creating the editor so it sizes correctly.
@@ -3403,100 +4242,143 @@ function trialViewer(trialId: string, externalUrl: string) {
       // --- themes (base chrome only; highlight handled separately) ---
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#020617", color: "#cbd5e1", height: "100%" },
+          "&": {
+            backgroundColor: themeColor("slate-950"),
+            color: themeColor("slate-300"),
+            height: "100%",
+          },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: "#06b6d4" },
-          ".cm-cursor": { borderLeftColor: "#06b6d4" },
+          ".cm-content": {
+            padding: "1rem",
+            caretColor: themeColor("accent-500"),
+          },
+          ".cm-cursor": { borderLeftColor: themeColor("accent-500") },
           ".cm-gutters": {
-            backgroundColor: "#0f172a",
-            color: "#475569",
-            borderRight: "1px solid #1e293b",
+            backgroundColor: themeColor("slate-900"),
+            color: themeColor("slate-600"),
+            borderRight: `1px solid ${themeColor("slate-800")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(15,23,42,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(15,23,42,0.4)" },
-          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          ".cm-activeLineGutter": {
+            backgroundColor: themeColorAlpha("slate-900", 0.6),
+          },
+          ".cm-activeLine": {
+            backgroundColor: themeColorAlpha("slate-900", 0.4),
+          },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#1e293b !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: "#22d3ee", fontWeight: "bold" },
+          ".cm-matchingBracket": {
+            color: themeColor("accent-400"),
+            fontWeight: "bold",
+          },
           ".cm-tooltip": {
-            backgroundColor: "#1e293b",
-            border: "1px solid #334155",
-            color: "#cbd5e1",
+            backgroundColor: themeColor("slate-800"),
+            border: `1px solid ${themeColor("slate-700")}`,
+            color: themeColor("slate-300"),
           },
           ".cm-panels": {
-            backgroundColor: "#0f172a",
-            borderColor: "#1e293b",
-            color: "#cbd5e1",
+            backgroundColor: themeColor("slate-900"),
+            borderColor: themeColor("slate-800"),
+            color: themeColor("slate-300"),
           },
-          ".cm-searchMatch": { backgroundColor: "rgba(34,211,238,0.18)" },
+          ".cm-searchMatch": {
+            backgroundColor: themeColorAlpha("accent-400", 0.18),
+          },
           ".cm-searchMatch.cm-searchMatch-selected": {
-            backgroundColor: "rgba(34,211,238,0.35)",
+            backgroundColor: themeColorAlpha("accent-400", 0.35),
           },
           ".cm-lintRange-error": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #ef4444 1.5px",
+            textDecoration: `underline wavy ${themeColor("danger")} 1.5px`,
             textUnderlineOffset: "3px",
           },
           ".cm-lintRange-warning": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #f59e0b 1.5px",
+            textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+          ".cm-diagnostic-error": {
+            borderLeft: `3px solid ${themeColor("danger")}`,
+          },
         },
         { dark: true },
       );
 
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#ffffff", color: "#0f172a", height: "100%" },
+          "&": {
+            backgroundColor: themeColor("white"),
+            color: themeColor("slate-900"),
+            height: "100%",
+          },
           ".cm-scroller": {
             overflow: "auto",
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.875rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "1rem", caretColor: "#0891b2" },
-          ".cm-cursor": { borderLeftColor: "#0891b2" },
+          ".cm-content": {
+            padding: "1rem",
+            caretColor: themeColor("accent-600"),
+          },
+          ".cm-cursor": { borderLeftColor: themeColor("accent-600") },
           ".cm-gutters": {
-            backgroundColor: "#f8fafc",
-            color: "#94a3b8",
-            borderRight: "1px solid #e2e8f0",
+            backgroundColor: themeColor("slate-50"),
+            color: themeColor("slate-400"),
+            borderRight: `1px solid ${themeColor("slate-200")}`,
           },
-          ".cm-activeLineGutter": { backgroundColor: "rgba(241,245,249,0.6)" },
-          ".cm-activeLine": { backgroundColor: "rgba(241,245,249,0.5)" },
-          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          ".cm-activeLineGutter": {
+            backgroundColor: themeColorAlpha("slate-100", 0.6),
+          },
+          ".cm-activeLine": {
+            backgroundColor: themeColorAlpha("slate-100", 0.5),
+          },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#e2e8f0 !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
-          ".cm-matchingBracket": { color: "#0891b2", fontWeight: "bold" },
+          ".cm-matchingBracket": {
+            color: themeColor("accent-600"),
+            fontWeight: "bold",
+          },
           ".cm-tooltip": {
-            backgroundColor: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            color: "#0f172a",
+            backgroundColor: themeColor("slate-50"),
+            border: `1px solid ${themeColor("slate-200")}`,
+            color: themeColor("slate-900"),
           },
-          ".cm-panels": { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
-          ".cm-searchMatch": { backgroundColor: "rgba(8,145,178,0.15)" },
+          ".cm-panels": {
+            backgroundColor: themeColor("slate-50"),
+            borderColor: themeColor("slate-200"),
+          },
+          ".cm-searchMatch": {
+            backgroundColor: themeColorAlpha("accent-600", 0.15),
+          },
           ".cm-searchMatch.cm-searchMatch-selected": {
-            backgroundColor: "rgba(8,145,178,0.3)",
+            backgroundColor: themeColorAlpha("accent-600", 0.3),
           },
           ".cm-lintRange-error": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #ef4444 1.5px",
+            textDecoration: `underline wavy ${themeColor("danger")} 1.5px`,
             textUnderlineOffset: "3px",
           },
           ".cm-lintRange-warning": {
             backgroundImage: "none",
-            textDecoration: "underline wavy #f59e0b 1.5px",
+            textDecoration: `underline wavy ${themeColor("warning")} 1.5px`,
             textUnderlineOffset: "3px",
           },
-          ".cm-diagnostic-error": { borderLeft: "3px solid #ef4444" },
+          ".cm-diagnostic-error": {
+            borderLeft: `3px solid ${themeColor("danger")}`,
+          },
         },
         { dark: false },
       );
@@ -3510,6 +4392,80 @@ function trialViewer(trialId: string, externalUrl: string) {
           dark ? oneDarkHighlightStyle : defaultHighlightStyle,
         );
 
+      // Base (theme-independent) styling for the hover tooltip's own DOM
+      // below - the surrounding .cm-tooltip chrome (background/border/text
+      // color) already comes from darkTheme/lightTheme above for free,
+      // since hoverTooltip wraps whatever create() returns in that same
+      // .cm-tooltip container; this only needs to add what's specific to
+      // this content (a readable prose font instead of the editor's own
+      // monospace, and a width cap so a long description wraps instead of
+      // stretching across the whole document).
+      const plotFieldTooltipBaseTheme = EditorView.baseTheme({
+        ".cm-plot-field-tooltip": {
+          maxWidth: "260px",
+          padding: "0.5rem 0.625rem",
+          fontSize: "0.75rem",
+          lineHeight: "1.4",
+          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+        },
+      });
+
+      // Shows a PlotConfig field's Field(description=...) (via
+      // plotConfigSchema, /mosaic/api/plot-config-schema) when hovering
+      // any JSON key or value in the document - jsonPathAt (module scope,
+      // above) walks CodeMirror's own parse tree to find which field
+      // that position is inside, including nested ones (e.g. a signal's
+      // own "color" key under "yAxes"), the same schema-path resolution
+      // the Plot Editor's own field_help_icon tooltips use
+      // (_macros.html/plotFieldHelp) - one schema, one field/description
+      // relationship, read by both UIs instead of each hand-maintaining
+      // its own copy of what a field means.
+      const plotFieldHoverTooltip = hoverTooltip((view, pos): Tooltip | null => {
+        const path = jsonPathAt(view.state, pos);
+        if (path.length === 0) return null;
+        const description = describeSchemaPath(self.plotConfigSchema, path);
+        if (!description) return null;
+        const node = syntaxTree(view.state).resolveInner(pos, -1);
+        return {
+          pos: node.from,
+          end: node.to,
+          above: true,
+          create: () => {
+            const dom = document.createElement("div");
+            dom.className = "cm-plot-field-tooltip";
+            dom.textContent = description;
+            return { dom };
+          },
+        };
+      });
+
+      // Underlines the exact JSON range for each schema violation
+      // collectSchemaDiagnostics finds (type mismatches, discriminated-
+      // union mismatches, and unknown/"extra" keys - the same
+      // extra_forbidden error the server raises for e.g. a stray leftover
+      // filter param left over from switching that filter's type). Runs
+      // alongside jsonParseLinter (which only ever catches malformed JSON
+      // text, not schema violations) rather than replacing it - CM6
+      // supports multiple linter() sources side by side. Skips entirely
+      // when the document isn't valid JSON yet (jsonParseLinter already
+      // covers that) or before plotConfigSchema has loaded (see the
+      // forceLinting call in init(), which re-runs this once it has).
+      const plotConfigSchemaLinter = linter((view): Diagnostic[] => {
+        if (!self.plotConfigSchema) return [];
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(view.state.doc.toString());
+        } catch {
+          return [];
+        }
+        return collectSchemaDiagnostics(parsed, self.plotConfigSchema as Record<string, unknown>)
+          .map(({ path, message }): Diagnostic | null => {
+            const range = jsonRangeForPath(view.state, path);
+            return range ? { ...range, severity: "error", message } : null;
+          })
+          .filter((d): d is Diagnostic => d !== null);
+      });
+
       const startState = EditorState.create({
         doc: this.configRaw,
         extensions: [
@@ -3517,8 +4473,11 @@ function trialViewer(trialId: string, externalUrl: string) {
           json(),
           lintGutter(),
           linter(jsonParseLinter()),
+          plotConfigSchemaLinter,
           themeComp.of(makeTheme(isDark())),
           highlightComp.of(makeHighlight(isDark())),
+          plotFieldTooltipBaseTheme,
+          plotFieldHoverTooltip,
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !_cm.updating) {
               const text = update.state.doc.toString();
@@ -3581,50 +4540,58 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     initMetadataViewer(hostEl: HTMLElement, jsonText: string): object | null {
-      if (!hostEl || typeof CM === "undefined") return null;
-      const {
-        EditorView,
-        EditorState,
-        json,
-        syntaxHighlighting,
-        oneDarkHighlightStyle,
-        defaultHighlightStyle,
-      } = CM;
+      if (!hostEl) return null;
       const isDark = document.documentElement.classList.contains("dark");
       const darkTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#020617", color: "#cbd5e1" },
+          "&": {
+            backgroundColor: themeColor("slate-950"),
+            color: themeColor("slate-300"),
+          },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#06b6d4" },
+          ".cm-content": {
+            padding: "0.6rem 0.75rem",
+            caretColor: themeColor("accent-500"),
+          },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
-          ".cm-selectionBackground": { backgroundColor: "#1e293b !important" },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#1e293b !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
         },
         { dark: true },
       );
       const lightTheme = EditorView.theme(
         {
-          "&": { backgroundColor: "#ffffff", color: "#0f172a" },
+          "&": {
+            backgroundColor: themeColor("white"),
+            color: themeColor("slate-900"),
+          },
           ".cm-scroller": {
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             fontSize: "0.8rem",
             lineHeight: "1.625",
           },
-          ".cm-content": { padding: "0.6rem 0.75rem", caretColor: "#0891b2" },
+          ".cm-content": {
+            padding: "0.6rem 0.75rem",
+            caretColor: themeColor("accent-600"),
+          },
           ".cm-gutters": { display: "none" },
           ".cm-cursor, .cm-dropCursor": { display: "none" },
           ".cm-activeLine": { backgroundColor: "transparent" },
-          ".cm-selectionBackground": { backgroundColor: "#e2e8f0 !important" },
+          ".cm-selectionBackground": {
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
+          },
           "&.cm-focused .cm-selectionBackground": {
-            backgroundColor: "#e2e8f0 !important",
+            backgroundColor: `${themeColorAlpha("accent-500", 0.4)} !important`,
           },
         },
         { dark: false },
@@ -3650,7 +4617,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           "Reset plot to factory defaults? This will clear your current view.",
         confirmLabel: "Reset",
         cancelLabel: "Cancel",
-        variant: "info",
+        variant: "danger",
       });
       if (ok) {
         localStorage.removeItem("mojo_mosaic_config");
@@ -3693,8 +4660,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       };
       if (!el) return;
       const plotlyFormat = format === "jpg" ? "jpeg" : format;
-      const isDark = document.documentElement.classList.contains("dark");
-      const bgColor = isDark ? tw.slate[800] : "#ffffff";
+      const bgColor = themeColor("surface");
       const resW = Math.round(1280 * scale);
       const resH = Math.round(720 * scale);
       this.notify(
@@ -3763,7 +4729,7 @@ function trialViewer(trialId: string, externalUrl: string) {
     downloadJSON() {
       const link = document.createElement("a");
       link.href = URL.createObjectURL(
-        new Blob([JSON.stringify(this.config, null, 4)], {
+        new Blob([JSON.stringify(this.config)], {
           type: "application/json",
         }),
       );
@@ -3801,6 +4767,40 @@ function trialViewer(trialId: string, externalUrl: string) {
     // -----------------------------------------------------------------------
     // Y-axis management
     // -----------------------------------------------------------------------
+    // anchor for shift-click range-select in the Y-axis tree, below.
+    lastYRangeClick: null as string | null,
+    // Shift-click toggles every file row between the last-clicked row and
+    // this one (in the tree's current visible order) to match this click's
+    // own resulting state, the common file-manager range-select
+    // convention - not something that existed here before, but a
+    // reasonable one to add now that the flat list is a browsable tree
+    // rather than a single short column.
+    toggleYRange(row: TreeRow<string>, shiftKey: boolean) {
+      const col = row.item;
+      if (col === null) return;
+      if (shiftKey && this.lastYRangeClick !== null) {
+        const rows = this.getColumnVisibleRows(
+          "y",
+          (c) => !this.config.refFrame || this.rotateableVectors.includes(c.split(":")[0]!),
+        ).filter((r) => r.type === "file" && !r.hidden);
+        const fromIdx = rows.findIndex((r) => r.path === this.lastYRangeClick);
+        const toIdx = rows.findIndex((r) => r.path === row.path);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+          const shouldSelect = !this.config.yAxes[col];
+          for (let i = lo; i <= hi; i++) {
+            const c = rows[i]!.item!;
+            const isOn = !!this.config.yAxes[c];
+            if (shouldSelect && !isOn) this.toggleY(c);
+            else if (!shouldSelect && isOn) this.toggleY(c);
+          }
+          this.lastYRangeClick = row.path;
+          return;
+        }
+      }
+      this.toggleY(col);
+      this.lastYRangeClick = row.path;
+    },
     toggleY(col: string) {
       if (this.config.yAxes[col]) {
         const { [col]: _, ...rest } = this.config.yAxes;
@@ -3808,7 +4808,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       } else {
         const usedStyles = Object.values(this.config.yAxes).map((y) => ({
           color: y.color,
-          dash: y.dash,
+          dash: y.dash ?? "solid",
         }));
         const nextStyle = this.nextAvailableStyle(usedStyles);
         const initFilters: FilterEntry[] = this.config.refFrame
@@ -3858,6 +4858,7 @@ function trialViewer(trialId: string, externalUrl: string) {
       for (const col of Object.keys(this.config.yAxes)) {
         const yConfig = this.config.yAxes[col];
         if (!yConfig) continue;
+        yConfig.filters ??= [];
         if (frame) {
           const newEntry: FilterEntry = {
             type: "rotation",
@@ -3900,7 +4901,10 @@ function trialViewer(trialId: string, externalUrl: string) {
     },
 
     getSignalColor(index: number): string {
-      return this.plotColors[index % this.plotColors.length] ?? tw.cyan[500];
+      return (
+        this.plotColors[index % this.plotColors.length] ??
+        themeColor("accent-500")
+      );
     },
 
     // picks the lowest-index (color, dash) pair not already in use by `used`,
@@ -4226,46 +5230,53 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     // ── tab helpers ──────────────────────────────────────────────────────────
 
-    _tabId(): string {
-      return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    _makeBlankLabTab(): LabTab {
+      return {
+        id: newTabId(),
+        name: "",
+        graph: null,
+        savedState: null,
+        viewport: null,
+        dirty: false,
+      };
     },
 
     _initTabs() {
-      try {
-        const raw = localStorage.getItem("mojo:lab:tabs");
-        if (raw) {
-          const tabs = JSON.parse(raw) as LabTab[];
-          if (Array.isArray(tabs) && tabs.length > 0) {
-            this.labTabs = tabs;
-            const activeId = localStorage.getItem("mojo:lab:activeTab") ?? "";
-            this.labActiveTabId =
-              tabs.find((t) => t.id === activeId)?.id ?? tabs[0]!.id;
-            const active = this.labTabs.find(
-              (t) => t.id === this.labActiveTabId,
-            )!;
-            this.labName = active.name;
-            this.labGraph = active.graph;
-            return;
-          }
-        }
-      } catch {}
-      // fall back to old single-lab format
-      const name = localStorage.getItem("mojo:lab:name") ?? "";
-      const graph = (() => {
-        try {
-          const s = localStorage.getItem("mojo:lab:draft");
-          return s ? (JSON.parse(s) as object) : null;
-        } catch {
-          return null;
-        }
-      })();
-      const id = this._tabId();
-      this.labTabs = [
-        { id, name, graph, savedState: null, dirty: false, viewport: null },
-      ];
-      this.labActiveTabId = id;
-      this.labName = name;
-      this.labGraph = graph;
+      const { tabs, activeId } = loadTabsFromStorage<LabTab>(
+        "mojo:lab:tabs",
+        "mojo:lab:activeTab",
+        () => {
+          // fall back to old single-lab format
+          const name = localStorage.getItem("mojo:lab:name") ?? "";
+          const graph = (() => {
+            try {
+              const s = localStorage.getItem("mojo:lab:draft");
+              return s ? (JSON.parse(s) as object) : null;
+            } catch {
+              return null;
+            }
+          })();
+          const id = newTabId();
+          return {
+            tabs: [
+              {
+                id,
+                name,
+                graph,
+                savedState: null,
+                dirty: false,
+                viewport: null,
+              },
+            ],
+            activeId: id,
+          };
+        },
+      );
+      this.labTabs = tabs;
+      this.labActiveTabId = activeId;
+      const active = tabs.find((t) => t.id === activeId)!;
+      this.labName = active.name;
+      this.labGraph = active.graph;
     },
 
     _snapshotActiveTab() {
@@ -4289,15 +5300,22 @@ function trialViewer(trialId: string, externalUrl: string) {
     _persistTabs() {
       // persist tab list to localStorage WITHOUT snapshotting the live canvas —
       // safe to call immediately after _activateTab() before mojoLabInit fires
-      try {
-        localStorage.setItem("mojo:lab:tabs", JSON.stringify(this.labTabs));
-        localStorage.setItem("mojo:lab:activeTab", this.labActiveTabId ?? "");
-      } catch {}
+      persistTabsToStorage(
+        "mojo:lab:tabs",
+        "mojo:lab:activeTab",
+        this.labTabs,
+        this.labActiveTabId ?? "",
+      );
     },
 
     _saveTabs() {
       this._snapshotActiveTab();
       this._persistTabs();
+    },
+
+    reorderLabTabs(draggedId: string, dropIndex: number) {
+      this.labTabs = reorderTabs(this.labTabs, draggedId, dropIndex);
+      this._saveTabs();
     },
 
     async _activateTab(tabId: string) {
@@ -4325,20 +5343,66 @@ function trialViewer(trialId: string, externalUrl: string) {
 
     async newTab() {
       this._snapshotActiveTab();
-      const id = this._tabId();
-      this.labTabs.push({
-        id,
-        name: "",
-        graph: null,
-        savedState: null,
-        viewport: null,
-        dirty: false,
-      });
-      await this._activateTab(id);
+      const blank = this._makeBlankLabTab();
+      this.labTabs.push(blank);
+      await this._activateTab(blank.id);
       this._persistTabs();
     },
 
+    async duplicateLabTab(tabId: string) {
+      const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.labActiveTabId) this._snapshotActiveTab();
+      const source = this.labTabs[tabIdx]!;
+      const duplicate: LabTab = {
+        id: newTabId(),
+        name: source.name ? `${source.name} copy` : "",
+        graph: source.graph
+          ? (JSON.parse(JSON.stringify(source.graph)) as object)
+          : null,
+        // never saved under its own name yet, so it starts dirty (unless
+        // it's an empty graph, matching a blank tab's own clean baseline)
+        savedState: null,
+        dirty: !!source.graph,
+        viewport: source.viewport ? { ...source.viewport } : null,
+      };
+      this.labTabs.splice(tabIdx + 1, 0, duplicate);
+      await this._activateTab(duplicate.id);
+      this._persistTabs();
+    },
+
+    // See selectPlotTab's own comment for the shared shift/ctrl-click
+    // semantics - identical here, just against labTabs/labActiveTabId.
+    selectLabTab(tabId: string, event: MouseEvent) {
+      if (event.shiftKey && this._labTabSelectionAnchorId) {
+        this.selectedLabTabIds = selectRange(
+          this.labTabs,
+          this._labTabSelectionAnchorId,
+          tabId,
+        );
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        this.selectedLabTabIds = toggleSelection(
+          this.selectedLabTabIds,
+          tabId,
+        );
+        this._labTabSelectionAnchorId = tabId;
+        return;
+      }
+      this.selectedLabTabIds = [];
+      this._labTabSelectionAnchorId = tabId;
+      void this.switchTab(tabId);
+    },
+
     async closeTab(tabId: string) {
+      if (
+        this.selectedLabTabIds.length > 1 &&
+        this.selectedLabTabIds.includes(tabId)
+      ) {
+        await this.closeMultipleLabTabs(this.selectedLabTabIds);
+        return;
+      }
       const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
       if (tabIdx === -1) return;
       const tab = this.labTabs[tabIdx]!;
@@ -4359,25 +5423,56 @@ function trialViewer(trialId: string, externalUrl: string) {
         });
         if (!ok) return;
       }
-      this.labTabs.splice(tabIdx, 1);
+      const { tabs, nextActiveId, activeChanged } = pickNextActiveOnClose(
+        this.labTabs,
+        tabIdx,
+        this.labActiveTabId ?? "",
+        () => this._makeBlankLabTab(),
+      );
+      this.labTabs = tabs;
       window.mojoLabDiscardHistory?.(tabId);
-      if (this.labTabs.length === 0) {
-        const newId = this._tabId();
-        this.labTabs.push({
-          id: newId,
-          name: "",
-          graph: null,
-          savedState: null,
-          viewport: null,
-          dirty: false,
-        });
-        await this._activateTab(newId);
-      } else if (tabId === this.labActiveTabId) {
-        const newActive =
-          this.labTabs[Math.min(tabIdx, this.labTabs.length - 1)]!;
-        await this._activateTab(newActive.id);
+      if (activeChanged) {
+        await this._activateTab(nextActiveId);
       }
       // persist only - see switchTab for why we must not re-snapshot here
+      this._persistTabs();
+    },
+
+    // Bulk-close path for a multi-selection - one confirm dialog covering
+    // the whole group rather than one per tab, mirroring
+    // closeMultiplePlotTabs()'s dirty-count message.
+    async closeMultipleLabTabs(tabIds: string[]) {
+      const idSet = new Set(tabIds);
+      const toClose = this.labTabs.filter((t) => idSet.has(t.id));
+      if (toClose.length === 0) return;
+      const activeWasClosed = idSet.has(this.labActiveTabId ?? "");
+      if (activeWasClosed) this._snapshotActiveTab();
+      const dirtyCount = toClose.filter((t) =>
+        t.id === this.labActiveTabId
+          ? (window.mojoLabHasUnsavedChanges?.() ?? false)
+          : t.dirty,
+      ).length;
+      if (dirtyCount > 0) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: `Close ${toClose.length} tabs and discard unsaved changes in ${dirtyCount} of them?`,
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const remaining = this.labTabs.filter((t) => !idSet.has(t.id));
+      toClose.forEach((t) => window.mojoLabDiscardHistory?.(t.id));
+      this.selectedLabTabIds = [];
+      if (remaining.length === 0) {
+        const blank = this._makeBlankLabTab();
+        this.labTabs = [blank];
+        await this._activateTab(blank.id);
+      } else {
+        this.labTabs = remaining;
+        if (activeWasClosed) await this._activateTab(remaining[0]!.id);
+      }
       this._persistTabs();
     },
 
@@ -4416,7 +5511,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           }
         } else {
           this._snapshotActiveTab();
-          const id = this._tabId();
+          const id = newTabId();
           this.labTabs.push({
             id,
             name: labName,
@@ -4585,6 +5680,381 @@ function trialViewer(trialId: string, externalUrl: string) {
       await this.refreshLabValidation();
     },
 
+    // ── plot tab helpers ─────────────────────────────────────────────────────
+    // config/data/filterFingerprints/xAxisFilterFingerprint/historyStack/
+    // historyIndex are all mirrors of the *active* PlotTab's own fields - the
+    // same pattern labName/labGraph use for Lab tabs above. This means
+    // renderPlot(), the JSON editor, undo/redo, and every axis/filter picker
+    // keep reading/writing `this.config` etc. completely unchanged; only tab
+    // switching needs to know these are mirrors at all. vsDatasets is NOT
+    // part of this mirror set - VS (comparison-trial) settings and their
+    // fetched data are page-level/shared across every tab (see the `vs`
+    // field and syncVsRange()), not per-tab.
+
+    _makeBlankPlotTab(): PlotTab {
+      const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
+      return {
+        id: newTabId(),
+        config,
+        data: null,
+        filterFingerprints: {},
+        xAxisFilterFingerprint: "[]",
+        historyStack: [],
+        historyIndex: -1,
+        // baselined against its own just-created state, not null/dirty - an
+        // untouched new tab has nothing unsaved to warn about; savedSnapshot
+        // only diverges once the user actually edits something in it.
+        savedSnapshot: JSON.stringify(config),
+      };
+    },
+
+    // Shared by the tab strip's dirty dot (_plot_tabs.html) and
+    // closePlotTab()'s confirm-before-discard check, so the two can't drift.
+    _isPlotTabDirty(tab: PlotTab): boolean {
+      return (
+        !tab.savedSnapshot || JSON.stringify(tab.config) !== tab.savedSnapshot
+      );
+    },
+
+    // Called once at the end of init()'s existing config-loading sequence
+    // (after hydrateFromUrl/loadConfig and the ref-frame migration have
+    // settled this.config). Tries to restore a previously-saved multi-tab
+    // session from mojo:plot:tabs first; only when there isn't one yet does
+    // it fall back to wrapping whatever this.config/data/etc. the sequence
+    // above already produced into a single starting tab - the same
+    // legacy-format-fallback shape _initTabs() uses for Signal Lab.
+    // `skipStoredTabs` is true when a shared link (?v=) was just hydrated
+    // AND the caller confirmed it's OK to replace whatever tabs happen to
+    // be saved on this browser (see init()'s useSharedLink) - a link left
+    // in the address bar shouldn't silently wipe an existing session on
+    // every plain page refresh.
+    async _initPlotTabs(skipStoredTabs: boolean) {
+      const wrapCurrentAsTab = (): { tabs: PlotTab[]; activeId: string } => {
+        const tab: PlotTab = {
+          id: newTabId(),
+          config: this.config,
+          data: this.data,
+          filterFingerprints: this.filterFingerprints,
+          xAxisFilterFingerprint: this.xAxisFilterFingerprint,
+          historyStack: this.historyStack,
+          historyIndex: this.historyIndex,
+          // baselined against whatever boot already produced, not dirty by
+          // default - same reasoning as _makeBlankPlotTab()'s own baseline.
+          savedSnapshot: JSON.stringify(this.config),
+        };
+        return { tabs: [tab], activeId: tab.id };
+      };
+      const { tabs, activeId } = skipStoredTabs
+        ? wrapCurrentAsTab()
+        : loadTabsFromStorage<PlotTab>(
+            "mojo:plot:tabs",
+            "mojo:plot:activeTab",
+            wrapCurrentAsTab,
+          );
+      this.plotTabs = tabs;
+      this.plotActiveTabId = activeId;
+      try {
+        const raw = localStorage.getItem("mojo:plot:closedTabs");
+        this.closedPlotTabs = raw ? (JSON.parse(raw) as PlotTab[]) : [];
+      } catch {
+        this.closedPlotTabs = [];
+      }
+      const active = tabs.find((t) => t.id === activeId)!;
+      // active tab's fields become the live mirrors - when tabs came from
+      // storage rather than wrapCurrentAsTab(), this replaces whatever
+      // hydrateFromUrl()/loadConfig() set up above with the restored
+      // session's own state instead.
+      this.config = active.config;
+      this.data = active.data;
+      this.filterFingerprints = active.filterFingerprints;
+      this.xAxisFilterFingerprint = active.xAxisFilterFingerprint;
+      this.historyStack = active.historyStack;
+      this.historyIndex = active.historyIndex;
+      // data is never persisted (see _persistPlotTabs), so a tab restored
+      // from storage always needs its columns re-fetched here.
+      const needed = this._neededColumns(active.config, active.data);
+      if (needed.length > 0) {
+        const fetched = await this.fetchTrialData(this.trialId, needed);
+        this.data = { ...(this.data ?? {}), ...fetched.data };
+      }
+    },
+
+    _snapshotActivePlotTab() {
+      const tab = this.plotTabs.find((t) => t.id === this.plotActiveTabId);
+      if (!tab) return;
+      tab.config = this.config;
+      tab.data = this.data;
+      tab.filterFingerprints = this.filterFingerprints;
+      tab.xAxisFilterFingerprint = this.xAxisFilterFingerprint;
+      tab.historyStack = this.historyStack;
+      tab.historyIndex = this.historyIndex;
+    },
+
+    // Persists the tab list WITHOUT the large, always-refetchable data
+    // cache - unlike a LabTab's graph (small, needed to restore the
+    // canvas), raw telemetry arrays would bloat localStorage for no
+    // benefit, so every tab's data starts null again after a page reload.
+    _persistPlotTabs() {
+      const sanitized = this.plotTabs.map((t) => ({
+        ...t,
+        data: null,
+      }));
+      persistTabsToStorage(
+        "mojo:plot:tabs",
+        "mojo:plot:activeTab",
+        sanitized,
+        this.plotActiveTabId ?? "",
+      );
+    },
+
+    _neededColumns(
+      cfg: PlotConfig,
+      cache: Record<string, number[]> | null,
+    ): string[] {
+      const needed: string[] = [];
+      if (cfg.xAxis?.col && !cache?.[cfg.xAxis.col]) needed.push(cfg.xAxis.col);
+      for (const col of Object.keys(cfg.yAxes ?? {})) {
+        if (!cache?.[col]) needed.push(col);
+      }
+      return needed;
+    },
+
+    async _activatePlotTab(tabId: string) {
+      const tab = this.plotTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      this.plotActiveTabId = tabId;
+      // order matters: data/fingerprints/history must be in place before
+      // `config` is reassigned, since the central config watcher (below)
+      // reads them synchronously and must not diff the new tab's filters
+      // against the previous tab's fingerprints.
+      this.data = tab.data;
+      this.filterFingerprints = tab.filterFingerprints;
+      this.xAxisFilterFingerprint = tab.xAxisFilterFingerprint;
+      this.historyStack = tab.historyStack;
+      this.historyIndex = tab.historyIndex;
+      this.config = tab.config; // fires $watch("config", ...): validates,
+      // pushes history (a no-op if unchanged), and re-fetches any columns
+      // this tab's own fingerprints mark as stale - no explicit renderPlot()
+      // call needed here for that part, exactly like undo()/redo() already
+      // rely on this watcher instead of calling it directly.
+      const needed = this._neededColumns(tab.config, tab.data);
+      if (needed.length > 0) {
+        const fetched = await this.fetchTrialData(this.trialId, needed);
+        this.data = { ...(this.data ?? {}), ...fetched.data };
+        this.renderPlot();
+      }
+    },
+
+    async switchPlotTab(tabId: string) {
+      if (tabId === this.plotActiveTabId) return;
+      this._snapshotActivePlotTab();
+      await this._activatePlotTab(tabId);
+      this._persistPlotTabs();
+    },
+
+    async newPlotTab() {
+      this._snapshotActivePlotTab();
+      const blank = this._makeBlankPlotTab();
+      this.plotTabs.push(blank);
+      await this._activatePlotTab(blank.id);
+      this._persistPlotTabs();
+    },
+
+    async duplicatePlotTab(tabId: string) {
+      const tabIdx = this.plotTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.plotActiveTabId) this._snapshotActivePlotTab();
+      const source = this.plotTabs[tabIdx]!;
+      const config = JSON.parse(JSON.stringify(source.config)) as PlotConfig;
+      if (config.title) config.title = `${config.title} copy`;
+      const duplicate: PlotTab = {
+        id: newTabId(),
+        config,
+        data: source.data ? { ...source.data } : null,
+        filterFingerprints: { ...source.filterFingerprints },
+        xAxisFilterFingerprint: source.xAxisFilterFingerprint,
+        historyStack: [],
+        historyIndex: -1,
+        savedSnapshot: null,
+      };
+      this.plotTabs.splice(tabIdx + 1, 0, duplicate);
+      await this._activatePlotTab(duplicate.id);
+      this._persistPlotTabs();
+    },
+
+    // Plain click switches tabs and clears any multi-selection. Shift-click
+    // selects the inclusive range from the last anchor to this tab
+    // (matching file-manager/list conventions); ctrl/cmd-click toggles this
+    // one tab without touching the rest. Selection only exists to drive
+    // closePlotTab()'s bulk-close check below - it's independent of which
+    // tab is active/displayed.
+    selectPlotTab(tabId: string, event: MouseEvent) {
+      if (event.shiftKey && this._plotTabSelectionAnchorId) {
+        this.selectedPlotTabIds = selectRange(
+          this.plotTabs,
+          this._plotTabSelectionAnchorId,
+          tabId,
+        );
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        this.selectedPlotTabIds = toggleSelection(
+          this.selectedPlotTabIds,
+          tabId,
+        );
+        this._plotTabSelectionAnchorId = tabId;
+        return;
+      }
+      this.selectedPlotTabIds = [];
+      this._plotTabSelectionAnchorId = tabId;
+      void this.switchPlotTab(tabId);
+    },
+
+    // Confirms before discarding a dirty tab, same as Lab tabs
+    // (window.mojoConfirm) - and any close (confirmed-dirty or not) is
+    // additionally always recoverable via reopenLastClosedPlotTab(), since
+    // every closed tab is pushed onto closedPlotTabs regardless of how it
+    // was closed. When tabId is part of a 2+ multi-selection (shift/ctrl-
+    // click via selectPlotTab, or the tab_strip's own middle-click
+    // listener), closes the whole selection instead of just this one tab -
+    // both the close button and a middle-click go through this same method.
+    async closePlotTab(tabId: string) {
+      if (
+        this.selectedPlotTabIds.length > 1 &&
+        this.selectedPlotTabIds.includes(tabId)
+      ) {
+        await this.closeMultiplePlotTabs(this.selectedPlotTabIds);
+        return;
+      }
+      const tabIdx = this.plotTabs.findIndex((t) => t.id === tabId);
+      if (tabIdx === -1) return;
+      if (tabId === this.plotActiveTabId) this._snapshotActivePlotTab();
+      const closedTab = this.plotTabs[tabIdx]!;
+      if (this._isPlotTabDirty(closedTab)) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: closedTab.config.title
+            ? `Close "${closedTab.config.title}" and discard unsaved changes?`
+            : "Close this tab and discard unsaved changes?",
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const { tabs, nextActiveId, activeChanged } = pickNextActiveOnClose(
+        this.plotTabs,
+        tabIdx,
+        this.plotActiveTabId ?? "",
+        () => this._makeBlankPlotTab(),
+      );
+      this.plotTabs = tabs;
+      // data stripped same as _persistPlotTabs() - always re-fetched on
+      // reopen via _activatePlotTab()'s own needed-columns check;
+      // closedAtIndex is this tab's position before the splice above, so
+      // reopenLastClosedPlotTab() can reinsert it back where it was.
+      this.closedPlotTabs = [
+        { ...closedTab, data: null, closedAtIndex: tabIdx },
+        ...this.closedPlotTabs,
+      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this._persistClosedPlotTabs();
+      if (activeChanged) {
+        await this._activatePlotTab(nextActiveId);
+      }
+      this._persistPlotTabs();
+    },
+
+    // Bulk-close path for a bulk selection (see closePlotTab above) - one
+    // confirm dialog covering the whole group rather than one per tab, and
+    // each closed tab still lands on closedPlotTabs individually (with its
+    // own pre-close index) so reopenLastClosedPlotTab() can bring them back
+    // one at a time, each near where it was.
+    async closeMultiplePlotTabs(tabIds: string[]) {
+      const idSet = new Set(tabIds);
+      const indexById = new Map(this.plotTabs.map((t, i) => [t.id, i]));
+      const toClose = this.plotTabs.filter((t) => idSet.has(t.id));
+      if (toClose.length === 0) return;
+      const activeWasClosed = idSet.has(this.plotActiveTabId ?? "");
+      if (activeWasClosed) this._snapshotActivePlotTab();
+      const dirtyCount = toClose.filter((t) =>
+        this._isPlotTabDirty(t),
+      ).length;
+      if (dirtyCount > 0) {
+        const ok = await window.mojoConfirm?.({
+          title: "Unsaved changes",
+          message: `Close ${toClose.length} tabs and discard unsaved changes in ${dirtyCount} of them?`,
+          confirmLabel: "Close",
+          cancelLabel: "Keep editing",
+          variant: "warning",
+        });
+        if (!ok) return;
+      }
+      const remaining = this.plotTabs.filter((t) => !idSet.has(t.id));
+      this.closedPlotTabs = [
+        ...toClose.map((t) => ({
+          ...t,
+          data: null,
+          closedAtIndex: indexById.get(t.id),
+        })),
+        ...this.closedPlotTabs,
+      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this._persistClosedPlotTabs();
+      this.selectedPlotTabIds = [];
+      if (remaining.length === 0) {
+        const blank = this._makeBlankPlotTab();
+        this.plotTabs = [blank];
+        await this._activatePlotTab(blank.id);
+      } else {
+        this.plotTabs = remaining;
+        if (activeWasClosed) await this._activatePlotTab(remaining[0]!.id);
+      }
+      this._persistPlotTabs();
+    },
+
+    async reopenLastClosedPlotTab() {
+      const [mostRecent, ...rest] = this.closedPlotTabs;
+      if (!mostRecent) return;
+      this.closedPlotTabs = rest;
+      this._persistClosedPlotTabs();
+      this._snapshotActivePlotTab();
+      const insertAt = Math.min(
+        mostRecent.closedAtIndex ?? this.plotTabs.length,
+        this.plotTabs.length,
+      );
+      const reopened: PlotTab = { ...mostRecent, closedAtIndex: undefined };
+      this.plotTabs.splice(insertAt, 0, reopened);
+      await this._activatePlotTab(reopened.id);
+      this._persistPlotTabs();
+    },
+
+    _persistClosedPlotTabs() {
+      try {
+        localStorage.setItem(
+          "mojo:plot:closedTabs",
+          JSON.stringify(this.closedPlotTabs),
+        );
+      } catch {}
+    },
+
+    reorderPlotTabs(draggedId: string, dropIndex: number) {
+      this.plotTabs = reorderTabs(this.plotTabs, draggedId, dropIndex);
+      this._persistPlotTabs();
+    },
+
+    // Shared by the Profiles button's own @click (_chart.html) and the
+    // Ctrl+S shortcut below, so the popup lands in the right place
+    // regardless of which one opened it - both need this, since Ctrl+S
+    // can't reach a coords value scoped to the button's own local x-data.
+    _computeProfilesCoords() {
+      const btn = document.getElementById("profiles-btn");
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      this.profilesCoords = {
+        top: r.top + window.scrollY,
+        left: r.left + window.scrollX - 288 - 16,
+      };
+    },
+
     // -----------------------------------------------------------------------
     async loadProfiles() {
       try {
@@ -4606,15 +6076,19 @@ function trialViewer(trialId: string, externalUrl: string) {
             try {
               const pr = await fetch(this._profileUrl(p.name));
               if (!pr.ok) return;
-              const cfg = (await pr.json()) as Partial<PlotConfig>;
+              const profile = (await pr.json()) as Partial<PlotProfile>;
               const w: string[] = [];
-              if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
-                w.push(`x-axis "${cfg.xAxis!.col!}"`);
-              for (const key of Object.keys(cfg.yAxes ?? {})) {
-                if (!colSet.has(key)) w.push(`"${key}"`);
-              }
-              if (cfg.refFrame && !frames.has(cfg.refFrame))
-                w.push(`frame "${cfg.refFrame}"`);
+              (profile.tabs ?? []).forEach((t, idx) => {
+                const cfg = t.config;
+                const label = cfg.title || `tab ${idx + 1}`;
+                if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
+                  w.push(`${label}: x-axis "${cfg.xAxis.col}"`);
+                for (const key of Object.keys(cfg.yAxes ?? {})) {
+                  if (!colSet.has(key)) w.push(`${label}: "${key}"`);
+                }
+                if (cfg.refFrame && !frames.has(cfg.refFrame))
+                  w.push(`${label}: frame "${cfg.refFrame}"`);
+              });
               if (w.length) warnings[p.name] = w;
             } catch {
               /* skip */
@@ -4640,22 +6114,42 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (existing) {
         const ok = await window.mojoConfirm?.({
           title: "Overwrite profile",
-          message: `"${existing.name}" already exists. Replace it with the current configuration?`,
+          message: `"${existing.name}" already exists. Replace it with the current set of plot tabs?`,
           confirmLabel: "Overwrite",
           cancelLabel: "Cancel",
           variant: "warning",
         });
         if (!ok) return;
       }
+      // a profile saves every open tab, not just the active one
+      this._snapshotActivePlotTab();
+      const activeTabIndex = Math.max(
+        0,
+        this.plotTabs.findIndex((t) => t.id === this.plotActiveTabId),
+      );
+      const payload: PlotProfile = {
+        version: 2,
+        tabs: this.plotTabs.map((t) => ({ config: t.config })),
+        activeTabIndex,
+        // VS is workspace-level - saved once for the whole profile, not per tab
+        vsEnabled: this.vs.enabled,
+        vsRange: this.vs.range,
+        vsPinned: this.vs.pinned,
+      };
       try {
         const resp = await fetch(this._profileUrl(name), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(this.config),
+          body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error("Save failed");
         const result = (await resp.json()) as { name: string };
         this.profileNameDraft = "";
+        // the just-saved content is every tab's new clean baseline
+        this.plotTabs.forEach((t) => {
+          t.savedSnapshot = JSON.stringify(t.config);
+        });
+        this._persistPlotTabs();
         await this.loadProfiles();
         this.notify(`Profile "${result.name}" saved`, "success");
       } catch {
@@ -4672,7 +6166,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           };
           throw new Error(body.detail ?? `HTTP ${resp.status}`);
         }
-        const loaded = (await resp.json()) as Partial<PlotConfig>;
+        const profile = (await resp.json()) as PlotProfile;
 
         const colSet = new Set(this.columns);
         const frames = new Set(
@@ -4680,24 +6174,52 @@ function trialViewer(trialId: string, externalUrl: string) {
             .filter((c) => c.endsWith(":w"))
             .map((c) => c.replace(":w", "")),
         );
-        // columns not present in this trial are tolerated: the profile still loads
-        // (so it can be used as a starting point), but those signals won't plot
-        // until matching columns exist.
+        // columns not present in this trial are tolerated: the profile still
+        // loads (so it can be used as a starting point), but those signals
+        // won't plot until matching columns exist.
         const missing: string[] = [];
-        if (
-          loaded.xAxis?.col &&
-          !loaded.xAxis.col.startsWith("Lab/") &&
-          !colSet.has(loaded.xAxis.col)
-        )
-          missing.push(`x-axis "${loaded.xAxis!.col!}"`);
-        for (const key of Object.keys(loaded.yAxes ?? {})) {
-          if (!key.startsWith("Lab/") && !colSet.has(key))
-            missing.push(`signal "${key}"`);
-        }
-        if (loaded.refFrame && !frames.has(loaded.refFrame))
-          missing.push(`frame "${loaded.refFrame}"`);
+        profile.tabs.forEach((t, idx) => {
+          const cfg = t.config;
+          const label = cfg.title || `tab ${idx + 1}`;
+          if (
+            cfg.xAxis?.col &&
+            !cfg.xAxis.col.startsWith("Lab/") &&
+            !colSet.has(cfg.xAxis.col)
+          )
+            missing.push(`${label}: x-axis "${cfg.xAxis.col}"`);
+          for (const key of Object.keys(cfg.yAxes ?? {})) {
+            if (!key.startsWith("Lab/") && !colSet.has(key))
+              missing.push(`${label}: signal "${key}"`);
+          }
+          if (cfg.refFrame && !frames.has(cfg.refFrame))
+            missing.push(`${label}: frame "${cfg.refFrame}"`);
+        });
 
-        this.config = { ...this.config, ...loaded };
+        // a profile is a saved workspace - loading one replaces every open
+        // tab, it doesn't patch the currently active one
+        const newTabs: PlotTab[] = profile.tabs.map((t) => ({
+          id: newTabId(),
+          config: t.config,
+          data: null,
+          filterFingerprints: {},
+          xAxisFilterFingerprint: "[]",
+          historyStack: [],
+          historyIndex: -1,
+          savedSnapshot: JSON.stringify(t.config),
+        }));
+        const activeIndex = Math.min(
+          Math.max(profile.activeTabIndex ?? 0, 0),
+          newTabs.length - 1,
+        );
+        this.plotTabs = newTabs;
+        await this._activatePlotTab(newTabs[activeIndex]!.id);
+        this._persistPlotTabs();
+        // a profile's saved comparison range/pinned trials carry over, but
+        // (like page load) VS mode itself never auto-enables from this -
+        // pulling comparison data is only ever a deliberate toggle+Apply,
+        // even if the profile happened to be saved with it on.
+        this._restoreVsRange(profile.vsRange ?? [0, 10], profile.vsPinned ?? []);
+        this._persistVsState();
 
         if (missing.length) {
           this.notify(
@@ -4707,25 +6229,6 @@ function trialViewer(trialId: string, externalUrl: string) {
         } else {
           this.notify(`Profile "${name}" loaded`, "success");
         }
-
-        // Fetch data for any columns the profile introduces that aren't cached yet.
-        const needed: string[] = [];
-        if (loaded.xAxis?.col && !this.data?.[loaded.xAxis.col])
-          needed.push(loaded.xAxis.col);
-        for (const col of Object.keys(loaded.yAxes ?? {})) {
-          if (!this.data?.[col]) needed.push(col);
-        }
-        if (needed.length > 0) {
-          const fetched = await this.fetchTrialData(this.trialId, needed);
-          this.data = { ...(this.data ?? {}), ...fetched.data };
-        }
-
-        void this.$nextTick(() => {
-          this.configErrors = this.validateConfig(this.config as PlotConfig);
-          this.isValidConfig = this.configErrors.length === 0;
-          this.isValidJson = true;
-          this.saveAndRender();
-        });
       } catch (e) {
         this.notify(
           `Failed to load "${name}": ${(e as Error).message}`,
@@ -4797,9 +6300,9 @@ function trialViewer(trialId: string, externalUrl: string) {
       let globalMax = -Infinity;
       const activeDatasets: Array<Record<string, number[]>> = [this.data ?? {}];
 
-      if (this.config.vsEnabled) {
-        const [start, end] = this.config.vsRange;
-        const pinnedSet = new Set(this.config.vsPinned ?? []);
+      if (this.vs.enabled) {
+        const [start, end] = this.vs.range;
+        const pinnedSet = new Set(this.vs.pinned ?? []);
         Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
           const n = parseInt(vsId.split("_").pop() ?? "");
           if ((n >= start && n <= end) || pinnedSet.has(n))
@@ -4925,13 +6428,13 @@ function trialViewer(trialId: string, externalUrl: string) {
       if (!this.data) return;
 
       const isDark = document.documentElement.classList.contains("dark");
-      const textColor = isDark ? tw.slate[400] : tw.slate[600];
-      const majorGrid = isDark ? tw.slate[950] : tw.slate[200];
-      const minorGrid = isDark ? tw.slate[900] : tw.slate[100];
-      const tooltipBg = isDark ? tw.slate[900] : "#ffffff";
-      const tooltipFont = isDark ? tw.slate[50] : tw.slate[900];
-      const tooltipBorder = tw.cyan[500];
-      const spikeColor = tw.cyan[500];
+      const textColor = themeColor("chart-text");
+      const majorGrid = themeColor("chart-grid-major");
+      const minorGrid = themeColor("chart-grid-minor");
+      const tooltipBg = themeColor("chart-tooltip-bg");
+      const tooltipFont = themeColor("chart-tooltip-font");
+      const tooltipBorder = themeColor("accent-500");
+      const spikeColor = themeColor("accent-500");
 
       const isHoverDisabled = this.config.hover === "none";
       const showX =
@@ -5008,9 +6511,9 @@ function trialViewer(trialId: string, externalUrl: string) {
         })
         .filter((t): t is NonNullable<typeof t> => t !== null);
 
-      if (this.config.vsEnabled) {
-        const [start, end] = this.config.vsRange;
-        const pinnedSet = new Set(this.config.vsPinned ?? []);
+      if (this.vs.enabled) {
+        const [start, end] = this.vs.range;
+        const pinnedSet = new Set(this.vs.pinned ?? []);
         const legendTracker = new Set<string>();
         const sortedVsIds = Object.keys(this.vsDatasets).sort(
           (a, b) =>
@@ -5121,6 +6624,26 @@ function trialViewer(trialId: string, externalUrl: string) {
         ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
         : "";
 
+      // same "column (unit)" fallback the x-axis title already has (see
+      // xAxisText above), extended for the fact that the y-axis can have
+      // several signals: with exactly one, mirror the x-axis exactly;
+      // with several, fall back to just the shared unit (e.g. "N·m") if
+      // they all agree on one, since concatenating every column name
+      // doesn't read as a title. No fallback (blank) if units disagree.
+      const yCols = Object.keys(this.config.yAxes);
+      const yUnitList = yCols.map((c) => this.effectiveUnit(c));
+      const yUnitsShared =
+        yUnitList.length > 0 && yUnitList.every((u) => u && u === yUnitList[0])
+          ? yUnitList[0]
+          : null;
+      const yAxisFallback =
+        yCols.length === 1
+          ? yUnitsShared
+            ? `${yCols[0]} (${yUnitsShared.replace(/\s+/g, "")})`
+            : yCols[0]
+          : (yUnitsShared ?? "");
+      const yAxisText = this.config.yAxisTitle || yAxisFallback;
+
       const resolvedRangeY = this.resolveAxisRange(
         this.config.rangeY,
         Object.keys(this.config.yAxes),
@@ -5150,7 +6673,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         zeroline: false,
         tickfont: { color: textColor, size: 14 },
         title: {
-          text: this.config.yAxisTitle + frameLabel,
+          text: yAxisText + frameLabel,
           font: { size: 14, color: textColor, family: "monospace" },
         },
         showspikes: showY,
@@ -5168,7 +6691,7 @@ function trialViewer(trialId: string, externalUrl: string) {
                 gridcolor: majorGrid,
                 tickfont: { color: textColor, size: 14, family: "monospace" },
                 title: {
-                  text: this.config.yAxisTitle || "r",
+                  text: yAxisText || "r",
                   font: { size: 14, color: textColor, family: "monospace" },
                 },
               },
@@ -5193,7 +6716,7 @@ function trialViewer(trialId: string, externalUrl: string) {
               font: {
                 family: "monospace",
                 size: 16,
-                color: isDark ? tw.slate[200] : tw.slate[800],
+                color: themeColor("chart-title"),
                 weight: "bold",
               },
               x: 0,
@@ -5206,7 +6729,7 @@ function trialViewer(trialId: string, externalUrl: string) {
           t: this.config.title ? 60 : 30,
           r: this.config.legendPos === "right" ? 150 : 30,
           b: this.config.legendPos === "bottom" ? 80 : 50,
-          l: this.config.yAxisTitle ? 80 : 60,
+          l: yAxisText ? 80 : 60,
         },
         hovermode: isHoverDisabled ? false : this.config.hover,
         hoverlabel: {
@@ -5248,10 +6771,10 @@ function trialViewer(trialId: string, externalUrl: string) {
                 font: {
                   family: "monospace",
                   size: 12,
-                  color: isDark ? tw.slate[50] : tw.slate[900],
+                  color: themeColor("chart-tooltip-font"),
                 },
-                bgcolor: isDark ? tw.slate[800] : tw.slate[50],
-                bordercolor: tw.cyan[500],
+                bgcolor: themeColor("chart-annotation-bg"),
+                bordercolor: themeColor("accent-500"),
                 borderwidth: 1,
                 borderpad: 4,
               })),
@@ -5288,12 +6811,13 @@ function trialViewer(trialId: string, externalUrl: string) {
                     yanchor,
                     font: {
                       size: 10,
-                      color: s.color || tw.cyan[500],
+                      color: s.color || themeColor("accent-500"),
                       family: "monospace",
                     },
-                    bgcolor: isDark
-                      ? tw.slate[900] + "B3"
-                      : tw.slate[50] + "B3",
+                    bgcolor: themeColorAlpha(
+                      "chart-shape-label-bg",
+                      0xb3 / 255,
+                    ),
                     borderpad: 2,
                   };
                 }),
@@ -5301,7 +6825,7 @@ function trialViewer(trialId: string, externalUrl: string) {
         shapes: isPolar
           ? []
           : (this.config.shapes ?? []).map((s) => {
-              const shapeColor = s.color || tw.cyan[500];
+              const shapeColor = s.color || themeColor("accent-500");
               const base = {
                 line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
                 layer: "below",
@@ -5346,6 +6870,11 @@ function trialViewer(trialId: string, externalUrl: string) {
         displaylogo: false,
         displayModeBar: true,
         modeBarButtonsToRemove: ["toImage"],
+        // plotly.js defaults this to true, adding a "Share chart..." modebar
+        // button (cloud-upload icon) that's easily confused with the
+        // sidebar's own Share button -- it also does nothing useful here
+        // since no plotlyServerURL/Chart Studio is configured.
+        showSendToCloud: false,
         doubleClick: false as const,
       };
       const plotEl = document.getElementById("plot-area");

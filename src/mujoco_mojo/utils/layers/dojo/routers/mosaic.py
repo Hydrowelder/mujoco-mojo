@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import re
 import socket
 import tempfile
@@ -16,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
@@ -41,6 +43,8 @@ from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
 from ..plot_config import PlotConfig as _PlotConfig
+from ..plot_config import PlotProfile as _PlotProfile
+from ..plot_config import PlotProfileTab as _PlotProfileTab
 
 logger = get_logger(__name__)
 
@@ -66,6 +70,18 @@ _UNIT_SYSTEMS: dict[str, _UnitSystem] = {
     "ips": _UnitSystem.ips(),
     "fff": _UnitSystem.fff(),
 }
+
+
+def _json_safe_list(series: pl.Series) -> list:
+    """
+    Converts a polars `Series` to a plain Python list, replacing any `NaN`/`Infinity`/`-Infinity` with `None`.
+
+    Starlette's `JSONResponse.render()` calls `json.dumps(..., allow_nan=False)`, which raises `ValueError: Out of range float values are not JSON compliant` for any of those three - unlike Python's own `json.dumps` default, which would otherwise silently emit the (strictly invalid) literal tokens `NaN`/`Infinity`/`-Infinity` rather than erroring. A non-float column (e.g. a string or bool signal) is returned via a plain `to_list()`, skipping the per-value scan entirely.
+    """
+    if not series.dtype.is_float():
+        return series.to_list()
+    values = series.fill_nan(None).to_list()
+    return [None if v is not None and math.isinf(v) else v for v in values]
 
 
 def _downsample(data: dict[str, list], max_points: int) -> dict[str, list]:
@@ -327,6 +343,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
             "prev_id": prev_id,
             "next_id": next_id,
             "external_url": f"http://{server_ip}:{port}",
+            "show_quick_filters": MujocoMojoSettings().dojo.show_quick_filters,
         },
     )
 
@@ -425,6 +442,32 @@ async def get_filter_schema():
     return result
 
 
+@router.get("/api/plot-config-schema")
+async def get_plot_config_schema():
+    """
+    Returns PlotConfig's raw JSON schema, descriptions included - single
+    source of truth for the Plot Editor's and JSON editor's hover tooltips
+    (trial-viewer.ts), so a Field(description=...) change in plot_config.py
+    shows up in both without any manual sync. Properties are keyed by their
+    camelCase alias (e.g. "lineMode"), matching `config.*` in the frontend
+    and the JSON editor's own document, since PlotConfig's model_config
+    serializes by alias.
+
+    Uses GenerateJsonSchemaWithDefaults (settings.py - the same generator
+    the Dojo settings panel's own schema endpoint uses, not redefined here)
+    for two extras beyond plain model_json_schema(): each field's
+    description gets its default value appended, and each enum type in
+    $defs gets an `x-enum-descriptions` map of value -> attribute-docstring
+    (e.g. GridMode.ALL's own docstring), since standard JSON Schema's
+    `enum` keyword has no room for per-value metadata - that's what lets a
+    dropdown show a tooltip on "Major + Minor" itself, not just on the
+    Gridlines field as a whole.
+    """
+    return _PlotConfig.model_json_schema(
+        schema_generator=GenerateJsonSchemaWithDefaults
+    )
+
+
 # ---------------------------------------------------------------------------
 # Profiles  ·  named saved views stored under ~/.mujoco-mojo/profiles/
 # ---------------------------------------------------------------------------
@@ -480,9 +523,28 @@ async def list_profiles():
     return profiles
 
 
+def _parse_profile(data: object, name: str) -> _PlotProfile:
+    """
+    Parse a profile's JSON payload, transparently upgrading the legacy
+    single-`PlotConfig`-per-file format to a one-tab `PlotProfile`.
+
+    The `"tabs" in data` check is an explicit, cheap discriminator rather
+    than relying on `ValidationError` control flow - it's also required for
+    correctness, not just style: a bare `PlotConfig` payload would otherwise
+    validate as a (new-format) `_PlotProfile` too, silently filling in
+    defaults and dropping every field it doesn't recognize (`camel_case_dict`
+    doesn't set `extra="forbid"`), which for an old single-config file means
+    silently discarding the entire saved plot.
+    """
+    if isinstance(data, dict) and "tabs" in data:
+        return _PlotProfile.model_validate(data)
+    legacy = _PlotConfig.model_validate(data)
+    return _PlotProfile(tabs=[_PlotProfileTab(config=legacy)])
+
+
 @router.get("/api/profiles/{name:path}")
 async def get_profile(name: str):
-    """Return the PlotConfig JSON for a saved profile, validated against the schema."""
+    """Return the saved profile (tabs + active index), validated against the schema."""
     from pydantic import ValidationError
 
     path = _resolve_profile_path(name)
@@ -490,34 +552,49 @@ async def get_profile(name: str):
         raise HTTPException(status_code=404, detail="Profile not found")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        config = _PlotConfig.model_validate(data)
+        profile = _parse_profile(data, name)
     except (json.JSONDecodeError, ValidationError) as exc:
         raise HTTPException(
             status_code=422,
             detail=f"Profile '{name}' failed validation and cannot be loaded: {exc}",
         ) from exc
-    return config.model_dump()
+    return profile.model_dump()
 
 
-_PROFILE_MAX_BYTES = 512 * 1024  # 512 KB (more than enough for any real PlotConfig)
+_PROFILE_MAX_BYTES = (
+    512 * 1024
+)  # 512 KB (more than enough for any real set of plot tabs)
 
 
 @router.post("/api/profiles/{name:path}")
-async def save_profile(name: str, request: Request, body: _PlotConfig):
+async def save_profile(name: str, request: Request, body: dict):
     """
-    Save the current PlotConfig as a named profile.
+    Save the current set of plot tabs as a named profile.
 
-    FastAPI/Pydantic validates the request body structure automatically.
-    The Content-Length header is checked first as a lightweight size guard.
-    Sub-folder paths (e.g. 'project/baseline') are supported; directories
-    are created automatically.
+    `body` is a plain dict (not `_PlotProfile` directly) so the legacy-format
+    discriminator in `_parse_profile` can run before Pydantic's own request
+    validation would otherwise reject an old-shaped payload with a 422 - in
+    practice the frontend only ever POSTs the current (tabs-based) format,
+    but accepting a legacy body here too keeps this endpoint's behavior
+    symmetric with `get_profile`. The Content-Length header is checked first
+    as a lightweight size guard. Sub-folder paths (e.g. 'project/baseline')
+    are supported; directories are created automatically.
     """
+    from pydantic import ValidationError
+
     cl = request.headers.get("content-length")
     if cl and int(cl) > _PROFILE_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Profile payload too large")
+    try:
+        profile = _parse_profile(body, name)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid profile payload: {exc}",
+        ) from exc
     path = _resolve_profile_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body.model_dump_json(), encoding="utf-8")
+    path.write_text(profile.model_dump_json(), encoding="utf-8")
     d = _get_profiles_dir()
     return {"name": path.relative_to(d).with_suffix("").as_posix()}
 
@@ -1011,7 +1088,7 @@ async def get_trial_data(
                                 s = outputs[output_label].rename(full_col)
                                 new_series.append(s)
                                 if full_col in lab_cols_set:
-                                    data[full_col] = s.to_list()
+                                    data[full_col] = _json_safe_list(s)
                         if new_series:
                             exec_df = MojoDataFrame.from_pl(exec_df.hstack(new_series))
                         del remaining[lab_name]
@@ -1038,7 +1115,7 @@ async def get_trial_data(
                             tmp = pl.DataFrame({col: series})
                             tmp = tmp.with_columns(f.apply(pl.col(col)).alias(col))
                             series = tmp[col]
-                    data[col] = series.to_list()
+                    data[col] = _json_safe_list(series)
                 continue
             if col not in df.columns:
                 continue
@@ -1056,7 +1133,7 @@ async def get_trial_data(
                         tmp = pl.DataFrame({col: series})
                         tmp = tmp.with_columns(f.apply(pl.col(col)).alias(col))
                         series = tmp[col]
-            data[col] = series.to_list()
+            data[col] = _json_safe_list(series)
 
         if max_points is not None:
             data = _downsample(data, max_points)

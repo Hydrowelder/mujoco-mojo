@@ -292,6 +292,17 @@ def test_empty_flush_early_return(sm: SignalManager) -> None:
     assert not sm.export_path.exists()
 
 
+def test_close_does_not_claim_data_saved_when_none_recorded(
+    sm: SignalManager, caplog: pytest.LogCaptureFixture
+) -> None:
+    """close() shouldn't log a "Data saved" message when recording never happened (e.g. a `reloaded` session with `record` off)."""
+    with caplog.at_level("INFO"):
+        sm.close()
+
+    assert not sm.export_path.exists()
+    assert not any("Data saved" in r.message for r in caplog.records)
+
+
 def test_properties_and_static_methods(sm: SignalManager) -> None:
     """Verify property and static method correctness."""
     assert sm.db_name == "telemetry.parquet"

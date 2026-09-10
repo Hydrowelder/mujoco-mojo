@@ -11,7 +11,7 @@ To regenerate TypeScript types after changing this file:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
@@ -27,6 +27,14 @@ camel_case_dict = ConfigDict(
     populate_by_name=True,
     serialize_by_alias=True,
 )
+
+# every `color` field below is restricted to this shape rather than any
+# valid CSS color string - the Plot Editor's color picker widget
+# (_macros.html's color_picker macro, backed by iro.js) can only ever
+# produce and display 6-digit hex, so a schema that promised more (a CSS
+# keyword like "red", or an rgb()/hsl() string) would silently fail to
+# render in that picker with no visible error.
+HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
 
 
 class DashStyle(StrEnum):
@@ -317,11 +325,15 @@ class XAxisConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    col: str = "time"
-    """Column name used as the x-axis source."""
+    col: str = Field(
+        default="time",
+        description="Column name used as the x-axis source.",
+    )
 
-    filters: list[AnyFilter] = []
-    """Ordered list of filters applied to the x-axis signal."""
+    filters: list[AnyFilter] = Field(
+        default_factory=list,
+        description="Ordered list of filters applied to the x-axis signal.",
+    )
 
 
 class YAxisConfig(BaseModel):
@@ -329,26 +341,43 @@ class YAxisConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    label: str
-    """Display label shown in the legend and tooltip."""
+    label: str = Field(
+        default="",
+        description="Display label shown in the legend and tooltip.",
+    )
 
-    color: str
-    """Line color as a CSS color string."""
+    color: str = Field(
+        pattern=HEX_COLOR_PATTERN,
+        description="Line color as a 6-digit hex code (e.g. `#ff0000`).",
+    )
 
-    width: float = Field(gt=0)
-    """Line stroke width in pixels."""
+    width: float = Field(
+        default=3,
+        gt=0,
+        description="Line stroke width.",
+    )
 
-    opacity: float = Field(ge=0, le=1)
-    """Line opacity from 0 (transparent) to 1 (opaque)."""
+    opacity: float = Field(
+        default=1.0,
+        ge=0,
+        le=1,
+        description="Line opacity from 0 (transparent) to 1 (opaque).",
+    )
 
-    filters: list[AnyFilter]
-    """Ordered list of filters applied to this signal."""
+    filters: list[AnyFilter] = Field(
+        default_factory=list,
+        description="Ordered list of filters applied to this signal.",
+    )
 
-    dash: DashStyle
-    """Dash pattern for the line."""
+    dash: DashStyle = Field(
+        default=DashStyle.SOLID,
+        description="Dash pattern for the line.",
+    )
 
-    marker: MarkerSymbol
-    """Marker symbol drawn at each data point."""
+    marker: MarkerSymbol = Field(
+        default=MarkerSymbol.NONE,
+        description="Marker symbol drawn at each data point.",
+    )
 
 
 class Annotation(BaseModel):
@@ -356,14 +385,17 @@ class Annotation(BaseModel):
 
     model_config = camel_case_dict
 
-    x: float
-    """x-axis coordinate of the annotation anchor."""
+    x: float = Field(
+        description="x-axis coordinate of the annotation anchor.",
+    )
 
-    y: float
-    """y-axis coordinate of the annotation anchor."""
+    y: float = Field(
+        description="y-axis coordinate of the annotation anchor.",
+    )
 
-    text: str
-    """Annotation text content."""
+    text: str = Field(
+        description="Annotation text content.",
+    )
 
 
 class VlineShape(BaseModel):
@@ -371,20 +403,29 @@ class VlineShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.VLINE] = ShapeType.VLINE
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.VLINE] = Field(
+        default=ShapeType.VLINE,
+        description="Shape variant discriminator.",
+    )
 
-    x0: float
-    """X coordinate of the line."""
+    x0: float = Field(
+        description="X coordinate of the line.",
+    )
 
-    color: str
-    """Stroke color as a CSS color string."""
+    color: str = Field(
+        pattern=HEX_COLOR_PATTERN,
+        description="Stroke color as a 6-digit hex code (e.g. `#ff0000`).",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the line. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the line. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        default="",
+        description="Short label displayed alongside the shape.",
+    )
 
 
 class HlineShape(BaseModel):
@@ -392,20 +433,29 @@ class HlineShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.HLINE] = ShapeType.HLINE
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.HLINE] = Field(
+        default=ShapeType.HLINE,
+        description="Shape variant discriminator.",
+    )
 
-    y0: float
-    """Y coordinate of the line."""
+    y0: float = Field(
+        description="Y coordinate of the line.",
+    )
 
-    color: str
-    """Stroke color as a CSS color string."""
+    color: str = Field(
+        pattern=HEX_COLOR_PATTERN,
+        description="Stroke color as a 6-digit hex code (e.g. `#ff0000`).",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the line. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the line. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        default="",
+        description="Short label displayed alongside the shape.",
+    )
 
 
 class RectShape(BaseModel):
@@ -413,36 +463,50 @@ class RectShape(BaseModel):
 
     model_config = camel_case_dict
 
-    type: Literal[ShapeType.RECT] = ShapeType.RECT
-    """Shape variant discriminator."""
+    type: Literal[ShapeType.RECT] = Field(
+        default=ShapeType.RECT,
+        description="Shape variant discriminator.",
+    )
 
-    x0: float
-    """Left x coordinate."""
+    x0: float = Field(
+        description="Left x coordinate.",
+    )
 
-    x1: float
-    """Right x coordinate."""
+    x1: float = Field(
+        description="Right x coordinate.",
+    )
 
-    y0: float
-    """Bottom y coordinate."""
+    y0: float = Field(
+        description="Bottom y coordinate.",
+    )
 
-    y1: float
-    """Top y coordinate."""
+    y1: float = Field(
+        description="Top y coordinate.",
+    )
 
-    color: str
-    """Fill/stroke color as a CSS color string."""
+    color: str = Field(
+        pattern=HEX_COLOR_PATTERN,
+        description="Fill/stroke color as a 6-digit hex code (e.g. `#ff0000`).",
+    )
 
-    dash: DashStyle | None = None
-    """Dash pattern for the rectangle border. `None` uses a solid stroke."""
+    dash: DashStyle | None = Field(
+        default=None,
+        description="Dash pattern for the rectangle border. `None` uses a solid stroke.",
+    )
 
-    label: str
-    """Short label displayed alongside the shape."""
+    label: str = Field(
+        default="",
+        description="Short label displayed alongside the shape.",
+    )
 
     @model_validator(mode="after")
-    def validate_coords(self) -> RectShape:
+    def validate_coords(self) -> Self:
         if self.x0 >= self.x1:
-            raise ValueError("rect requires x0 < x1")
+            self.x0, self.x1 = (self.x1, self.x0)
+
         if self.y0 >= self.y1:
-            raise ValueError("rect requires y0 < y1")
+            self.y0, self.y1 = (self.y1, self.y0)
+
         return self
 
 
@@ -457,83 +521,123 @@ class PlotConfig(BaseModel):
 
     model_config = camel_case_dict
 
-    x_axis: XAxisConfig = Field(default_factory=XAxisConfig)
-    """X-axis signal selection and filter chain."""
+    x_axis: XAxisConfig = Field(
+        default_factory=XAxisConfig,
+        description="X-axis signal selection and filter chain.",
+    )
 
-    y_axes: dict[str, YAxisConfig]
-    """Mapping of signal key to y-axis configuration."""
+    y_axes: dict[str, YAxisConfig] = Field(
+        default_factory=dict,
+        description="Mapping of signal key to y-axis configuration.",
+    )
 
-    ref_frame: str | None
-    """Reference frame used to transform signal coordinates. `None` for world frame."""
+    ref_frame: str | None = Field(
+        default=None,
+        description="Reference frame used to transform signal coordinates. `None` for world frame.",
+    )
 
-    grid: GridMode
-    """Grid line visibility. Sets if the backing grid is visible with both major and minor ticks, major ticks only, or none at all."""
+    grid: GridMode = Field(
+        default=GridMode.ALL,
+        description="Grid line visibility. Sets if the backing grid is visible with both major and minor ticks, major ticks only, or none at all.",
+    )
 
-    line_mode: LineMode
-    """Whether traces render as lines, markers, or both."""
+    line_mode: LineMode = Field(
+        default=LineMode.LINES_AND_MARKERS,
+        description="Whether traces render as lines, markers, or both.",
+    )
 
-    interp: InterpMode
-    """Interpolation method drawn between data points."""
+    interp: InterpMode = Field(
+        default=InterpMode.LINEAR,
+        description="Interpolation method drawn between data points.",
+    )
 
-    hover: HoverMode
-    """Tooltip behavior on hover."""
+    hover: HoverMode = Field(
+        default=HoverMode.CLOSEST,
+        description="Tooltip behavior on hover.",
+    )
 
-    title: str
-    """Plot title displayed above the chart."""
+    title: str = Field(
+        default="",
+        description="Plot title displayed above the chart.",
+    )
 
-    x_axis_title: str
-    """Label shown along the x-axis."""
+    x_axis_title: str = Field(
+        default="",
+        description="Label shown along the x-axis.",
+    )
 
-    y_axis_title: str
-    """Label shown along the y-axis."""
+    y_axis_title: str = Field(
+        default="",
+        description="Label shown along the y-axis.",
+    )
 
-    show_spike: bool
-    """Whether to draw spike lines from the hovered point to each axis."""
+    show_spike: bool = Field(
+        default=True,
+        description="Whether to draw spike lines from the hovered point to each axis.",
+    )
 
-    legend_pos: LegendPos
-    """Legend placement relative to the plot area."""
+    legend_pos: LegendPos = Field(
+        default=LegendPos.BOTTOM,
+        description="Legend placement relative to the plot area.",
+    )
 
-    range_x: Annotated[tuple[float | None, float | None], Field()] | None
-    """Fixed x-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
+    range_x: Annotated[tuple[float | None, float | None], Field()] | None = Field(
+        default=None,
+        description="Fixed x-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side.",
+    )
 
-    range_y: Annotated[tuple[float | None, float | None], Field()] | None
-    """Fixed y-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side."""
+    range_y: Annotated[tuple[float | None, float | None], Field()] | None = Field(
+        default=None,
+        description="Fixed y-axis range as `(min, max)`. `None` enables auto-range; either side may also be `None` to auto-range just that side.",
+    )
 
-    x_scale: ScaleType
-    """Scale type for the x-axis."""
+    x_scale: ScaleType = Field(
+        default=ScaleType.LINEAR,
+        description="Scale type for the x-axis.",
+    )
 
-    y_scale: ScaleType
-    """Scale type for the y-axis."""
+    y_scale: ScaleType = Field(
+        default=ScaleType.LINEAR,
+        description="Scale type for the y-axis.",
+    )
 
-    x_log_base: float | None = Field(default=None, gt=0)
-    """Logarithm base for the x-axis. Only used when `x_scale` is `log`."""
+    x_log_base: float | None = Field(
+        default=None,
+        gt=0,
+        description="Logarithm base for the x-axis. Only used when `x_scale` is `log`.",
+    )
 
-    y_log_base: float | None = Field(default=None, gt=0)
-    """Logarithm base for the y-axis. Only used when `y_scale` is `log`."""
+    y_log_base: float | None = Field(
+        default=None,
+        gt=0,
+        description="Logarithm base for the y-axis. Only used when `y_scale` is `log`.",
+    )
 
-    plot_type: PlotType = PlotType.CARTESIAN
-    """Coordinate system used to render the plot."""
+    plot_type: PlotType = Field(
+        default=PlotType.CARTESIAN,
+        description="Coordinate system used to render the plot.",
+    )
 
-    vs_enabled: bool
-    """Whether comparison traces from other trials are shown."""
+    annotations: list[Annotation] = Field(
+        default_factory=list,
+        description="Text annotations pinned to data coordinates.",
+    )
 
-    vs_range: Annotated[tuple[float, float], Field()]
-    """Trial number range for comparison traces as `(first, last)`."""
+    shapes: list[Shape] = Field(
+        default_factory=list,
+        description="Geometric reference shapes drawn over the plot.",
+    )
 
-    annotations: list[Annotation]
-    """Text annotations pinned to data coordinates."""
+    display_unit_system: DisplayUnitSystem | None = Field(
+        default=None,
+        description="When set, telemetry values are converted from their logged units to this unit system before being returned. Only columns whose metadata carries a concrete `unit` key (or a `dimension` key resolvable against the target system) are converted; all others pass through unchanged.",
+    )
 
-    shapes: list[Shape]
-    """Geometric reference shapes drawn over the plot."""
-
-    display_unit_system: DisplayUnitSystem | None = None
-    """When set, telemetry values are converted from their logged units to this unit system before being returned. Only columns whose metadata carries a concrete `unit` key (or a `dimension` key resolvable against the target system) are converted; all others pass through unchanged."""
-
-    max_points: int | None = Field(default=None, gt=0)
-    """Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points."""
-
-    vs_pinned: list[int] = Field(default_factory=list)
-    """Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set."""
+    max_points: int | None = Field(
+        default=None,
+        gt=0,
+        description="Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points.",
+    )
 
     @field_validator("ref_frame")
     @classmethod
@@ -543,29 +647,90 @@ class PlotConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_ranges(self) -> PlotConfig:
+    def validate_ranges(self) -> Self:
         if (
             self.range_x is not None
             and self.range_x[0] is not None
             and self.range_x[1] is not None
             and self.range_x[0] >= self.range_x[1]
         ):
-            raise ValueError("range_x min must be less than max")
+            self.range_x = self.range_x[1], self.range_x[0]
+
         if (
             self.range_y is not None
             and self.range_y[0] is not None
             and self.range_y[1] is not None
             and self.range_y[0] >= self.range_y[1]
         ):
-            raise ValueError("range_y min must be less than max")
-        if self.vs_range[0] > self.vs_range[1]:
-            raise ValueError("vs_range first must be <= last")
+            self.range_y = self.range_y[1], self.range_y[0]
+
         if self.x_scale == ScaleType.LOG and self.x_log_base is None:
             raise ValueError("x_log_base is required when x_scale is log")
+
         if self.y_scale == ScaleType.LOG and self.y_log_base is None:
             raise ValueError("y_log_base is required when y_scale is log")
+
         if self.x_log_base == 1:
             raise ValueError("x_log_base must not be 1")
+
         if self.y_log_base == 1:
             raise ValueError("y_log_base must not be 1")
+
+        return self
+
+
+class PlotProfileTab(BaseModel):
+    """One tab's worth of plot state inside a saved profile."""
+
+    model_config = camel_case_dict
+
+    config: PlotConfig = Field(
+        default_factory=PlotConfig,
+        description="The tab's plot configuration.",
+    )
+
+
+class PlotProfile(BaseModel):
+    """
+    A saved profile: the full set of open plot tabs.
+
+    Replaces the old profile format (a single bare `PlotConfig` per saved
+    file) - see `routers/mosaic.py`'s `get_profile`/`save_profile` for how a
+    legacy single-config file is transparently read as a one-tab profile.
+    """
+
+    model_config = camel_case_dict
+
+    version: Literal[2] = 2
+
+    tabs: list[PlotProfileTab] = Field(
+        min_length=1,
+        description="Every open plot tab, in tab-strip order.",
+    )
+
+    active_tab_index: int = Field(
+        default=0,
+        ge=0,
+        description="Index into `tabs` of the tab that should be active when the profile is loaded.",
+    )
+
+    vs_enabled: bool = Field(
+        default=False,
+        description="Whether comparison traces from other trials are shown.",
+    )
+
+    vs_range: Annotated[tuple[int, int], Field()] = Field(
+        default=(0, 10),
+        description="Trial number range for comparison traces as `(first, last)`.",
+    )
+
+    vs_pinned: list[int] = Field(
+        default_factory=list,
+        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
+    )
+
+    @model_validator(mode="after")
+    def validate_vs_range(self) -> Self:
+        if self.vs_range[0] > self.vs_range[1]:
+            self.vs_range = self.vs_range[1], self.vs_range[0]
         return self

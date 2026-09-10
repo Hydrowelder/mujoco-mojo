@@ -41,15 +41,23 @@ export function attachVerticalResizeHandle(
   handle.style.cssText =
     "height:14px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
   const grip = document.createElement("div");
+  // var(--color-line)/var(--color-accent-500) directly, not themeColor()'s
+  // resolved hex string - themeColor() exists for canvas/Plotly contexts
+  // that can't consume a CSS custom property at all, but a plain style
+  // string like this one can reference the variable itself, which then
+  // updates live with the theme (no re-computation needed). Baking in a
+  // resolved hex here meant the grip's color went stale on every light/dark
+  // toggle until something (a mouseenter/mouseleave) happened to re-run
+  // themeColor() and overwrite it.
   grip.style.cssText =
-    "width:36px;height:4px;border-radius:2px;background:#334155;transition:background 150ms,width 150ms;pointer-events:none;";
+    "width:36px;height:4px;border-radius:2px;background:var(--color-line);transition:background 150ms,width 150ms;pointer-events:none;";
   handle.appendChild(grip);
   handle.addEventListener("mouseenter", () => {
-    grip.style.background = "#06b6d4";
+    grip.style.background = "var(--color-accent-500)";
     grip.style.width = "52px";
   });
   handle.addEventListener("mouseleave", () => {
-    grip.style.background = "#334155";
+    grip.style.background = "var(--color-line)";
     grip.style.width = "36px";
   });
 

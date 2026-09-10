@@ -1,0 +1,194 @@
+/* Tokenized input-field styles, matching the "Plot Editor" panels
+   (partials/trial_viewer/_chart.html, _series_panel.html) - the reference
+   look every input field across Dojo is being standardized toward. These
+   were previously either a bare .input-field (main.css) with ad hoc
+   padding/shadow repeated at every call site, a visually-divergent
+   .number-input with no focus ring, a hand-duplicated .input-field-alike
+   string for the color hex field, or - for dropdowns - three unstyled
+   jinja {% set %} string constants declared once in trial_viewer.html and
+   unavailable to any page that doesn't extend that exact template. Extracting
+   real, named classes here makes the same look reachable from any page. */
+
+/* Moved from main.css - @utility, not a plain class in @layer components,
+   so the classes below can @apply it by name. Tailwind v4 only treats
+   @utility declarations as valid @apply targets, not arbitrary selectors,
+   the same reason buttons.css's .btn-secondary is a @utility.
+
+   bg-track (not bare bg-surface-inset, and not bg-well either) in light
+   mode: --color-surface-inset is pure white there, same as --color-surface
+   behind it, so a field read as a border outline with no fill distinction
+   at all. bg-well (slate-100) was tried first but matches the bg-well pill
+   rows fields sit in on the Plot Editor (e.g. _chart.html's "Show Spikes"
+   row), so a field there would match its own container exactly and vanish.
+   bg-control (slate-300) was tried next but ran a shade too dark against
+   the white/well surfaces most fields actually sit on - bg-track
+   (slate-200) is the middle step that reads clearly there without being
+   heavier than it needs to be. It does happen to equal --color-canvas
+   (the page's own body background), which would repeat the exact
+   "field matches its own backdrop" problem for the one spot without any
+   card behind it at all (_header.html's trial-jump/versus-range fields,
+   sitting directly on <body>) - those two call sites carry their own
+   .input-field-canvas override (below) rather than bumping every field's
+   default here just to cover a single location. Dark mode's
+   bg-surface-inset/border-inset pairing already read fine, so it's kept
+   exactly via the dark: override rather than changing the shared tokens,
+   which are also used for non-input things (e.g. the Signal Lab overlay
+   background) this shouldn't touch. */
+@utility input-field {
+  @apply bg-track dark:bg-surface-inset border border-inset rounded-md text-sm font-mono text-ink-strong outline-none focus:ring-1 focus:ring-accent-500;
+}
+
+/* Override for the two _header.html fields with no card behind them at all
+   (the trial-jump box, the versus-range START/END fields) - see the
+   .input-field comment above for why the shared bg-track default can't
+   also cover this one spot. bg-control/border-line match the "a shade
+   past bg-track/border-inset" step this needs; dark mode is unaffected
+   (restated as-is here only because an unprefixed utility class always
+   wins over @layer components regardless of Tailwind's dark: variant, so
+   leaving it off here would silently override dark mode's already-correct
+   bg-surface-inset too, not just light mode's). */
+@utility input-field-canvas {
+  @apply bg-control dark:bg-surface-inset border-line dark:border-inset;
+}
+
+/* Also @utility (not @layer components): .dropdown-trigger-sm below needs
+   to @apply this one to build its smaller variant on top of it. */
+@utility dropdown-trigger {
+  @apply w-full flex items-center justify-between gap-2 bg-well border border-control rounded-lg p-2 text-sm font-mono text-ink-strong transition-all hover:bg-control hover:border-accent-500 hover:text-accent-500 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@layer components {
+  /* ── Text ──────────────────────────────────────────────────────────── */
+  .input-text {
+    @apply input-field w-full shadow-sm px-2 py-1.5;
+  }
+
+  /* ── Search (a leading magnifying-glass icon + optional trailing
+       .input-clear-btn) - the left/right padding a search field needs to
+       clear both is baked in here rather than each call site remembering
+       its own "input-text pl-8 pr-8", the same reasoning .input-number-wrap
+       exists instead of repeating .input-field's rules by hand. Pair with
+       tree_search_input (_macros.html), which also supplies the icon
+       itself, for the full search box in one call. */
+  .input-search {
+    @apply input-field w-full shadow-sm pl-8 pr-8 py-1.5;
+  }
+
+  /* ── Number (float or int - the distinction is purely behavioral: step,
+       inputmode, and parseInt vs. parseFloat/expression-eval at the call
+       site, not a separate class) ─────────────────────────────────────
+     A single <input> can't take .input-field's border/background AND be
+     centered/monospace/accent-colored without fighting the browser's own
+     number-spinner chrome, so the visible "field" box lives on a wrapper
+     div instead: class="input-number-wrap" around <input class="input-number">.
+     The wrapper carries a real focus-within ring, which outline:none on
+     the input itself (needed to suppress its own default focus outline)
+     can't provide on its own - the old .number-input this replaces had no
+     focus indicator at all.
+
+     bg-track/border-inset here duplicates .input-field's own choice above
+     rather than @applying it (this wrapper needs flex/focus-within, not
+     .input-field's font/text-color rules meant for the input itself) - the
+     two have drifted out of sync once already (this one got left on the
+     older, too-dark bg-control/border-line a round of contrast tuning ago,
+     after .input-field had already been walked back to bg-track), so
+     they're being called out together here as one pair to keep in sync,
+     not two independent choices. Header fields needing the darker step
+     use .input-field-canvas (see above) as an override on top of this,
+     not a different base value here. */
+  .input-number-wrap {
+    @apply flex items-center bg-track dark:bg-surface-inset border border-inset rounded-md shadow-sm transition-colors focus-within:ring-1 focus-within:ring-accent-500 focus-within:border-accent-500;
+  }
+  .input-number {
+    @apply w-full py-1.5 px-2 text-sm text-center font-mono font-bold text-accent-500 bg-transparent outline-none;
+    appearance: textfield;
+  }
+  .input-number::-webkit-outer-spin-button,
+  .input-number::-webkit-inner-spin-button {
+    appearance: none;
+  }
+
+  /* ── Text-field clear ("x") button - absolutely positioned inside a
+       relative-positioned wrapper around a .input-text, shown via x-show
+       when the field has a value. */
+  .input-clear-btn {
+    @apply absolute right-0 top-0 h-full w-7 flex items-center justify-center text-ink-muted hover:text-danger-500 z-10 transition-colors;
+  }
+
+  /* ── Color (the hex text field half of a color picker - see
+       lib/color-picker.ts / _macros.html's color_picker macro and
+       _settings_panel.html's per-field color widget). Pair with a
+       relative-positioned wrapper and a "#" prefix icon like the existing
+       call sites do - this only covers the input itself. */
+  .input-color {
+    @apply input-field w-full pl-7 pr-3 py-2;
+  }
+
+  /* ── Placeholder text, unified across the token family. Previously
+       unstyled (each browser's own default gray), so a placeholder read as
+       inconsistent with - and no dimmer than - a field's real value in one
+       field but not another. Same accent-500/40 dim tone main.css's
+       ::selection already uses, so "this is a hint, not a value" reads
+       consistently everywhere rather than varying per browser/field. */
+  .input-field::placeholder,
+  .input-text::placeholder,
+  .input-number::placeholder,
+  .input-color::placeholder,
+  .input-search::placeholder {
+    @apply text-accent-500/70;
+  }
+
+  /* ── Field (title above, card below) - the shape a "dropdown-trigger"
+       field already had (label, then the trigger directly beneath it):
+       this formalizes that same shape as reusable classes so an
+       inline-row field (label left, control right, both packed into one
+       horizontal strip) can match it instead of being its own one-off
+       layout. Two things motivated pulling it out now rather than later:
+       an inline row has nowhere to grow when its control needs more room
+       (Plot Editor's Cartesian/Polar toggle ran out of horizontal space
+       exactly this way, sharing a row with a Max Points field in a fixed
+       320px popover), and .field-label's own row (label + optional
+       trailing content) is where a future per-field tooltip icon slots in
+       later, the same position _settings_panel.html's field rows already
+       use theirs. Usage:
+         <div class="space-y-1">
+           <label class="field-label">Show Spikes</label>
+           <div class="field-card justify-end">...the actual control...</div>
+         </div> */
+  .field-label {
+    @apply flex items-center gap-1 text-xs font-bold text-ink-secondary uppercase tracking-widest;
+  }
+  .field-card {
+    @apply flex items-center gap-2 p-2 bg-well border border-control rounded-lg;
+  }
+
+  /* ── Dropdown (custom trigger/panel/option, not a native <select> - a
+       native select's open menu renders outside the page's own control, so
+       it can't be styled to match this look). Usage:
+         <div class="relative" x-data="{ open: false }">
+           <button class="dropdown-trigger" @click="open = !open" @click.away="open = false">
+             <span x-text="..."></span>
+             <svg class="dropdown-chevron" :class="open ? 'rotate-180' : ''">...</svg>
+           </button>
+           <div x-show="open" class="dropdown-panel">
+             <template x-for="opt in options">
+               <button class="dropdown-option" :class="opt === selected ? 'dropdown-option-active' : ''">...</button>
+             </template>
+           </div>
+         </div> */
+  .dropdown-trigger-sm {
+    @apply dropdown-trigger rounded-md p-1.5;
+  }
+  .dropdown-chevron {
+    @apply w-3.5 h-3.5 text-icon-strong shrink-0 transition-transform duration-200;
+  }
+  .dropdown-panel {
+    @apply absolute top-full left-0 w-full mt-1 bg-surface border border-line rounded-lg shadow-2xl z-250 overflow-hidden;
+  }
+  .dropdown-option {
+    @apply w-full text-left px-3 py-2 text-sm font-mono border-b last:border-none border-subtle text-ink-body hover:bg-control transition-colors;
+  }
+  .dropdown-option-active {
+    @apply bg-accent-500 text-white font-bold hover:bg-accent-500;
+  }
+}

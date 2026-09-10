@@ -2,31 +2,27 @@
 {% block title %}{{ trial_id }} | MuJoCo Mojo{% endblock %}
 
 {% block extra_head %}
-<script src="/mojo-static/vendored/plotly-3.4.0.min.js"></script>
-<script src="/mojo-static/vendored/lz-string.min.js"></script>
-<script src="/mojo-static/vendored/iro.min.js"></script>
 <link rel="stylesheet"
-      href="/mojo-static/vendored/litegraph.min.css" />
-<script src="/mojo-static/vendored/litegraph.min.js"></script>
-<script src="/mojo-static/vendored/codemirror.bundle.js"></script>
-<script src="/mojo-static/js/trial-viewer.js"></script>
+      href="/mojo-static/dist/vendored/litegraph.css" />
+<script src="/mojo-static/dist/vendored/litegraph.js"></script>
+<script type="module"
+        src="/mojo-static/dist/trial-viewer.js"></script>
 <style>
+    /* Firefox's scrollbar theming API (no equivalent to ::-webkit-scrollbar-thumb
+       below); main.css's .custom-scrollbar rule doesn't set this, so it's
+       added here rather than duplicating the webkit thumb color rule too.
+       That duplicate previously had its own slightly different dark shade
+       (slate-700 vs main.css's token-driven slate-600) and, loading after
+       main.css in the cascade at equal specificity, silently won on this
+       page only, making the scrollbar thumb one shade darker here than on
+       every other page. */
     .custom-scrollbar {
         scrollbar-width: thin;
-        scrollbar-color: #94a3b8 transparent;
+        scrollbar-color: var(--color-scrollbar-thumb) transparent;
     }
 
     .custom-scrollbar::-webkit-scrollbar {
         height: 3px;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: #cbd5e1;
-        border-radius: 10px;
-    }
-
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: #334155;
     }
 
     /* LiteGraph context menus and dialogs must sit above the lab overlay (z-500) */
@@ -38,17 +34,7 @@
 {% endblock %}
 
 {% block content %}
-{# ── Repeated CSS class strings ─────────────────────────────────────────── #}
-{% set dropdown_panel = "absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-700 rounded-lg shadow-2xl z-[250] overflow-hidden" %}
-{% set dropdown_option = "w-full text-left px-3 py-2 text-sm font-mono border-b last:border-none border-slate-100 dark:border-slate-700" %}
-{% set clear_btn = "absolute right-0 top-0 h-full w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 z-10 transition-colors" %}
-{# sidebar-btn, sidebar-btn-plain, sidebar-btn-lock → .sidebar-btn CSS class in base.html #}
-{% set dropdown_trigger = "w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50" %}
-{% set dropdown_trigger_disabled = "w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-sm font-mono text-slate-700 dark:text-slate-200 transition-all hover:border-cyan-500/50 disabled:cursor-not-allowed" %}
-{% set dropdown_trigger_sm = "w-full flex items-center justify-between bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 text-sm font-mono text-slate-700 dark:text-slate-200" %}
-{# ─────────────────────────────────────────────────────────────────────────── #}
-
-<div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}')"
+<div x-data="trialViewer('{{ trial_id }}', '{{ external_url }}', {{ 'true' if show_quick_filters else 'false' }})"
      @dragenter.prevent="$event.dataTransfer?.types.includes('Files') && dragCounter++"
      @dragleave.prevent="$event.dataTransfer?.types.includes('Files') && dragCounter--"
      @dragover.prevent
@@ -57,6 +43,7 @@
 
     {% include 'partials/trial_viewer/_overlays.html' %}
     {% include 'partials/trial_viewer/_header.html' %}
+    {% include 'partials/trial_viewer/_plot_tabs.html' %}
     {% include 'partials/trial_viewer/_series_panel.html' %}
     {% include 'partials/trial_viewer/_chart.html' %}
     {% include 'partials/trial_viewer/_media_player.html' %}

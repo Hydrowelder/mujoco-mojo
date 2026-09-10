@@ -1,0 +1,66 @@
+/* Collapsible-section header/chevron/body treatment, shared by every
+   expander in Dojo (trial-viewer's Logs/Distributions sections, the
+   settings panel's section/subgroup toggles, ...). Combine .expander-header
+   with layout/sizing utilities per call site (w-full, text-xs, normal-case,
+   ...) - this only carries what's common across all of them. The Alpine
+   wiring itself (x-show, x-transition:*, @mousedown.prevent="toggle()",
+   :class for the chevron's rotation) stays inline per usage, since that's
+   behavior, not style. */
+
+@layer components {
+  /* w-full + justify-between so the header is clickable across the entire
+     row, not just the width of its own chevron+label text - a plain
+     `flex items-center gap-2` button only occupies its content's width,
+     leaving the rest of the row (and any trailing badge that used to be a
+     separate sibling positioned by the row's own justify-between) dead to
+     clicks. justify-between is a no-op when a call site has nothing to
+     push to the far end (a single flex child just stays flex-start), so
+     this is safe for every usage, not just the ones with trailing content. */
+  .expander-header {
+    @apply flex items-center justify-between gap-2 w-full text-base font-black uppercase text-ink-muted tracking-widest hover:text-ink-body transition-colors;
+  }
+
+  .expander-chevron {
+    @apply w-4 h-4 transition-transform duration-150 pointer-events-none;
+  }
+
+  /* Outer grid wrapper for the collapsible body. grid-template-rows
+     animates between 0fr and 1fr - a CSS-only way to transition to/from
+     "auto" height without measuring scrollHeight in JS or guessing a
+     max-height cap (the classic max-height-transition trick always either
+     clips real content or, if the cap is set generously high, finishes
+     the visible animation almost instantly for anything shorter than the
+     cap, since the transition still runs at a constant fraction-of-cap
+     rate). A 0fr track has zero height regardless of content; a 1fr track
+     claims exactly the content's natural height; the browser tweens
+     between the two using the content's real size on both ends. Toggle
+     the .expander-open modifier via Alpine's :class, not x-show - the
+     collapse itself is what hides the content now, so there's no separate
+     display:none stage to coordinate. */
+  .expander-body-wrap {
+    @apply grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-in-out;
+  }
+  .expander-body-wrap.expander-open {
+    @apply grid-rows-[1fr];
+  }
+
+  /* Inner clipper. A grid item's default min-height is auto (its content's
+     own size), which would keep the content fully visible regardless of
+     the wrapper's 0fr track and defeat the collapse above entirely -
+     overflow-hidden + min-h-0 is what actually lets the track clip it. */
+  .expander-body {
+    @apply overflow-hidden min-h-0;
+  }
+}
+
+/* Cancels the global button:active { transform: scale(0.96) } (buttons.css)
+   for expander headers - a wide, full-row header shrinking by even 4% reads
+   as an obvious wobble, unlike a small icon button where it's unnoticeable.
+   Deliberately unlayered, like buttons.css's .dark .btn-primary:hover: an
+   unlayered rule always wins over a layered one regardless of specificity,
+   and Tailwind's own active: utility (e.g. active:scale-100) is always
+   layered - so it can never actually override button:active no matter how
+   it's written, only a plain, unlayered CSS rule like this one can. */
+.expander-header:active {
+  transform: none;
+}

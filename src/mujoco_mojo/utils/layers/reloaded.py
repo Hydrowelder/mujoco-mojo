@@ -23,6 +23,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
+from mujoco_mojo.typing import UserInterface
 from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     NAMED_VALUES_FNAME,
@@ -43,8 +44,6 @@ from mujoco_mojo.utils.statusing import (
 )
 from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
-
-from .cli import UserInterface
 
 logger = get_logger(__name__)
 console = Console()
@@ -633,7 +632,7 @@ class MojoReloaded:
                 "- [bold white]seed <N>[/]: Set seed to N [dim](use [bold]seed none[/bold] to clear)[/dim]\n"
                 "- [bold white]trial <N>[/]: Set trial number to N\n"
                 f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
-                f"- [bold blue]record[/bold blue]: Toggle telemetry recording for [dim]mujoco-mojo dojo[/dim] (currently {record_status})\n"
+                f"- [bold blue]record[/bold blue]: Toggle telemetry (for [dim]mujoco-mojo dojo[/dim]) and video recording (currently {record_status})\n"
                 "- [bold blue]dojo[/bold blue]: Print a command to launch the Dojo monitor for this session\n"
                 "- [bold red]stop[/bold red] / [bold red]halt[/bold red]: Abort a run in progress\n"
                 "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
@@ -1147,7 +1146,7 @@ class MojoReloaded:
 
         class ViserState(TypedDict):
             scene: ViserMujocoScene
-            arrow_handle: None | viser.LineSegmentsHandle
+            arrow_handle: viser.LineSegmentsHandle | None
 
         for name in ["websockets", "matplotlib.font_manager"]:
             _l = logging.getLogger(name)
@@ -1269,7 +1268,7 @@ class MojoReloaded:
                 name="mojo_arrows",
                 points=points_batch,
                 colors=colors_batch,
-                line_width=line_width,
+                thickness=line_width,
             )
 
         def update_scene(s: MjState):

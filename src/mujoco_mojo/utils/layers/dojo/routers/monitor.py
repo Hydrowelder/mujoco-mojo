@@ -1,10 +1,12 @@
 import asyncio
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sse_starlette.sse import EventSourceResponse
 
+from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import TRIAL_STATUS_FNAME, TrialStatus
 
@@ -97,11 +99,34 @@ async def _emit_to_all(message_dict: dict):
 @router.get("/", response_class=HTMLResponse)
 async def get_monitor(request: Request):
     """Serves the initial monitor frame."""
+    dojo_settings = MujocoMojoSettings().dojo
+    chime = dojo_settings.chime_source
+    if chime is None:
+        chime_src = "/mojo-static/chime.mp3"
+    elif isinstance(chime, Path):
+        chime_src = "/monitor/chime"
+    else:
+        chime_src = str(chime)
+
     return shared.templates.TemplateResponse(
         request=request,
         name="monitor.html",
-        context={"request": request, "job": shared.CURRENT_JOB},
+        context={
+            "request": request,
+            "job": shared.CURRENT_JOB,
+            "chime_src": chime_src,
+            "chime_enabled": dojo_settings.chime_enabled,
+        },
     )
+
+
+@router.get("/chime")
+async def get_custom_chime():
+    """Serves the configured local chime file (dojo.chime_source, when it's a Path) so the browser can play it without direct filesystem access."""
+    chime = MujocoMojoSettings().dojo.chime_source
+    if not isinstance(chime, Path) or not chime.is_file():
+        raise HTTPException(status_code=404, detail="No custom chime file configured.")
+    return FileResponse(chime)
 
 
 @router.get("/api/status/job")
@@ -159,7 +184,13 @@ async def status_stream(request: Request):
     ACTIVE_CONNECTIONS.add(client_queue)
 
     async def event_generator():
-        yield ": connected\n\n"
+        # a dict with "comment" (not a bare string) so sse_starlette emits a
+        # real SSE comment line (": connected", no data: field) instead of
+        # wrapping the string as the payload of a data: field -- yielding
+        # the string directly here previously did the latter, so the client
+        # received a literal ": connected\n\n" as event.data on every
+        # connect and failed to JSON.parse it.
+        yield {"comment": "connected"}
 
         try:
             while True:

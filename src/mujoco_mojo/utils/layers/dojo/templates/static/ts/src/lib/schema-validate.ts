@@ -1,12 +1,25 @@
 // Minimal JSON Schema (draft 2020-12 subset) validator for the PlotConfig
 // schema exported from plot_config.py. Covers $ref/$defs, anyOf, oneOf with
-// discriminator, enum, const, object/array/number constraints - the subset
-// that Pydantic's model_json_schema() actually emits for this project.
+// discriminator, enum, const, object/array/number constraints, and
+// additionalProperties: false - the subset that Pydantic's
+// model_json_schema() actually emits for this project.
 //
 // This is additive validation: it runs alongside (not instead of) the
 // hand-written semantic checks in validateConfig().
 
 export type JsonSchemaNode = Record<string, unknown>;
+
+// A JSON path segment: an object key, or an array index. Kept structured
+// (rather than pre-joined into a string) so a caller can walk a CodeMirror
+// JSON syntax tree down to the exact offending node - see trial-viewer.ts's
+// jsonRangeForPath, the mirror image of jsonPathAt in lib/json-schema.ts's
+// caller which walks a position back up into a path.
+export type SchemaPathSegment = string | number;
+
+export interface SchemaDiagnostic {
+  path: SchemaPathSegment[];
+  message: string;
+}
 
 function resolveRef(ref: string, defs: Record<string, JsonSchemaNode>): JsonSchemaNode {
   const name = ref.replace(/^#\/\$defs\//, "");
@@ -32,33 +45,32 @@ function pickDiscriminatedBranch(
   data: unknown,
   schema: JsonSchemaNode,
   defs: Record<string, JsonSchemaNode>,
-  path: string,
 ): { schema?: JsonSchemaNode; error?: string } {
   const disc = schema.discriminator as
     | { propertyName: string; mapping?: Record<string, string> }
     | undefined;
   if (!disc || typeOfValue(data) !== "object") {
-    return { error: `${path}: does not match any allowed type` };
+    return { error: "does not match any allowed type" };
   }
   const obj = data as Record<string, unknown>;
   const tag = obj[disc.propertyName];
   const ref = typeof tag === "string" ? disc.mapping?.[tag] : undefined;
   if (!ref) {
-    return { error: `${path}: unknown "${disc.propertyName}" value ${JSON.stringify(tag)}` };
+    return { error: `unknown "${disc.propertyName}" value ${JSON.stringify(tag)}` };
   }
   return { schema: resolveRef(ref, defs) };
 }
 
 function validatesQuietly(data: unknown, schema: JsonSchemaNode, defs: Record<string, JsonSchemaNode>): boolean {
-  return validateNode(data, schema, defs, "$").length === 0;
+  return validateNode(data, schema, defs, []).length === 0;
 }
 
 function validateNode(
   data: unknown,
   schema: JsonSchemaNode,
   defs: Record<string, JsonSchemaNode>,
-  path: string,
-): string[] {
+  path: SchemaPathSegment[],
+): SchemaDiagnostic[] {
   if (typeof schema.$ref === "string") {
     return validateNode(data, resolveRef(schema.$ref, defs), defs, path);
   }
@@ -66,55 +78,78 @@ function validateNode(
   if (Array.isArray(schema.anyOf)) {
     const branches = schema.anyOf as JsonSchemaNode[];
     if (branches.some((s) => validatesQuietly(data, s, defs))) return [];
-    return [`${path}: does not match any allowed type`];
+    return [{ path, message: "does not match any allowed type" }];
   }
 
   if (Array.isArray(schema.oneOf)) {
-    const branch = pickDiscriminatedBranch(data, schema, defs, path);
-    if (branch.error) return [branch.error];
+    const branch = pickDiscriminatedBranch(data, schema, defs);
+    if (branch.error) return [{ path, message: branch.error }];
     return validateNode(data, branch.schema!, defs, path);
   }
 
   if ("const" in schema) {
-    if (data !== schema.const) return [`${path}: must equal ${JSON.stringify(schema.const)}`];
+    if (data !== schema.const) return [{ path, message: `must equal ${JSON.stringify(schema.const)}` }];
     return [];
   }
 
   if (Array.isArray(schema.enum)) {
     if (!schema.enum.includes(data)) {
-      return [`${path}: must be one of ${schema.enum.map((v) => JSON.stringify(v)).join(", ")}`];
+      return [{ path, message: `must be one of ${schema.enum.map((v) => JSON.stringify(v)).join(", ")}` }];
     }
     return [];
   }
 
-  const errors: string[] = [];
+  const errors: SchemaDiagnostic[] = [];
   const type = schema.type as string | string[] | undefined;
   if (type) {
     const types = Array.isArray(type) ? type : [type];
     if (!types.some((t) => matchesType(data, t))) {
-      errors.push(`${path}: must be of type ${types.join(" | ")} (got ${typeOfValue(data)})`);
+      errors.push({ path, message: `must be of type ${types.join(" | ")} (got ${typeOfValue(data)})` });
       return errors;
+    }
+  }
+
+  if (type === "string" && typeof schema.pattern === "string") {
+    // e.g. PlotConfig's color fields (YAxisConfig.color, VlineShape.color,
+    // ...), which Pydantic restricts to 6-digit hex - the one string
+    // format constraint this codebase's schemas actually use.
+    if (!new RegExp(schema.pattern).test(data as string)) {
+      errors.push({ path, message: `must match pattern ${schema.pattern}` });
     }
   }
 
   if (type === "object" && typeOfValue(data) === "object") {
     const obj = data as Record<string, unknown>;
     for (const key of (schema.required as string[] | undefined) ?? []) {
-      if (!(key in obj)) errors.push(`${path}.${key}: required field is missing`);
+      if (!(key in obj)) errors.push({ path: [...path, key], message: "required field is missing" });
     }
     const properties = schema.properties as Record<string, JsonSchemaNode> | undefined;
     if (properties) {
       for (const [key, propSchema] of Object.entries(properties)) {
-        if (key in obj) errors.push(...validateNode(obj[key], propSchema, defs, `${path}.${key}`));
+        if (key in obj) errors.push(...validateNode(obj[key], propSchema, defs, [...path, key]));
       }
     }
     // dict/Record types (e.g. PlotConfig.yAxes) validate each entry against
     // `additionalProperties` instead of (or in addition to) named properties.
     const additionalProperties = schema.additionalProperties;
-    if (additionalProperties && typeof additionalProperties === "object") {
+    if (additionalProperties === false) {
+      // Mirrors Pydantic's `extra="forbid"` (every filter model, plus every
+      // camelCase-aliased PlotConfig submodel) - a key that isn't one of
+      // this object's own named properties is rejected outright, exactly
+      // the "Extra inputs are not permitted" error the server raises for
+      // the same input. Previously unchecked here, so a stray leftover key
+      // (e.g. switching a filter's type without clearing its old params)
+      // silently passed client-side validation while the server rejected
+      // it - the config appeared to save/apply with no visible error.
+      for (const key of Object.keys(obj)) {
+        if (!properties || !(key in properties)) {
+          errors.push({ path: [...path, key], message: "Extra inputs are not permitted" });
+        }
+      }
+    } else if (additionalProperties && typeof additionalProperties === "object") {
       for (const [key, value] of Object.entries(obj)) {
         if (!properties || !(key in properties)) {
-          errors.push(...validateNode(value, additionalProperties as JsonSchemaNode, defs, `${path}.${key}`));
+          errors.push(...validateNode(value, additionalProperties as JsonSchemaNode, defs, [...path, key]));
         }
       }
     }
@@ -125,32 +160,32 @@ function validateNode(
     const items = schema.items as JsonSchemaNode | undefined;
     if (prefixItems) {
       prefixItems.forEach((itemSchema, i) => {
-        if (i < data.length) errors.push(...validateNode(data[i], itemSchema, defs, `${path}[${i}]`));
+        if (i < data.length) errors.push(...validateNode(data[i], itemSchema, defs, [...path, i]));
       });
     } else if (items) {
-      data.forEach((item, i) => errors.push(...validateNode(item, items, defs, `${path}[${i}]`)));
+      data.forEach((item, i) => errors.push(...validateNode(item, items, defs, [...path, i])));
     }
     if (typeof schema.minItems === "number" && data.length < schema.minItems) {
-      errors.push(`${path}: must have at least ${schema.minItems} items`);
+      errors.push({ path, message: `must have at least ${schema.minItems} items` });
     }
     if (typeof schema.maxItems === "number" && data.length > schema.maxItems) {
-      errors.push(`${path}: must have at most ${schema.maxItems} items`);
+      errors.push({ path, message: `must have at most ${schema.maxItems} items` });
     }
   }
 
   if (type === "number" || type === "integer") {
     const n = data as number;
     if (typeof schema.minimum === "number" && n < schema.minimum) {
-      errors.push(`${path}: must be >= ${schema.minimum}`);
+      errors.push({ path, message: `must be >= ${schema.minimum}` });
     }
     if (typeof schema.maximum === "number" && n > schema.maximum) {
-      errors.push(`${path}: must be <= ${schema.maximum}`);
+      errors.push({ path, message: `must be <= ${schema.maximum}` });
     }
     if (typeof schema.exclusiveMinimum === "number" && n <= schema.exclusiveMinimum) {
-      errors.push(`${path}: must be > ${schema.exclusiveMinimum}`);
+      errors.push({ path, message: `must be > ${schema.exclusiveMinimum}` });
     }
     if (typeof schema.exclusiveMaximum === "number" && n >= schema.exclusiveMaximum) {
-      errors.push(`${path}: must be < ${schema.exclusiveMaximum}`);
+      errors.push({ path, message: `must be < ${schema.exclusiveMaximum}` });
     }
   }
 
@@ -158,8 +193,25 @@ function validateNode(
 }
 
 // Validates `data` against a top-level JSON Schema document (with its own
-// `$defs`), returning a list of human-readable error paths/messages.
-export function validateAgainstSchema(data: unknown, schema: JsonSchemaNode): string[] {
+// `$defs`), returning structured {path, message} diagnostics - path is a
+// real segment array (object keys / array indices), suitable for mapping
+// onto exact source ranges in a JSON editor (see trial-viewer.ts's
+// jsonRangeForPath).
+export function collectSchemaDiagnostics(data: unknown, schema: JsonSchemaNode): SchemaDiagnostic[] {
   const defs = (schema.$defs as Record<string, JsonSchemaNode> | undefined) ?? {};
-  return validateNode(data, schema, defs, "config");
+  return validateNode(data, schema, defs, []);
+}
+
+// Same validation, flattened to "config.path.to.field: message" strings for
+// the JSON editor's plain-text error panel (_json_editor.html) - kept
+// separate from collectSchemaDiagnostics so that display format doesn't
+// leak into the structured path callers need for position-mapping.
+export function validateAgainstSchema(data: unknown, schema: JsonSchemaNode): string[] {
+  return collectSchemaDiagnostics(data, schema).map(({ path, message }) => {
+    const rendered = path.reduce(
+      (acc, seg) => (typeof seg === "number" ? `${acc}[${seg}]` : `${acc}.${seg}`),
+      "config",
+    );
+    return `${rendered}: ${message}`;
+  });
 }

@@ -2,17 +2,16 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 
+from .favicons import CACHE_DIR as FAVICON_CACHE_DIR
+from .favicons import ensure_favicons
 from .routers import monitor, morph, mosaic
-
-# try:
-#     from .routers import sensai as _sensai_router
-# except ImportError:
-_sensai_router = None
+from .routers import sensai as _sensai_router
+from .routers import settings as settings_router
 
 security = HTTPBasic(auto_error=False)
 
@@ -70,6 +69,10 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, _cleanup_webm_cache)
 
+    # (re)generate raster favicons if light-logo.svg has changed since last run
+    static_dir = shared.HERE / "templates" / "static"
+    await loop.run_in_executor(None, ensure_favicons, static_dir)
+
     # start the monitor background broadcast task
     broadcast_task = asyncio.create_task(monitor.broadcast_updates())
     yield
@@ -85,6 +88,36 @@ async def lifespan(app: FastAPI):
 
 dojo_app = FastAPI(title="MuJoCo Mojo Dojo", lifespan=lifespan)
 dojo_app.mount("/mojo-static", shared.static, name="mojo_static")
+
+
+def _serve_favicon_asset(filename: str) -> FileResponse:
+    """
+    Serves one generated favicon file straight from the cache directory (see favicons.py), at its conventional root-level path -- not under /mojo-static, since bookmarks/tab switchers/OS chrome probe these exact well-known paths directly, independent of any <link> tag in the page.
+    """
+    path = FAVICON_CACHE_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@dojo_app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    return _serve_favicon_asset("favicon.ico")
+
+
+@dojo_app.get("/apple-touch-icon.png", include_in_schema=False)
+async def apple_touch_icon():
+    return _serve_favicon_asset("apple-touch-icon.png")
+
+
+@dojo_app.get("/favicon-32x32.png", include_in_schema=False)
+async def favicon_32x32():
+    return _serve_favicon_asset("favicon-32x32.png")
+
+
+@dojo_app.get("/favicon-16x16.png", include_in_schema=False)
+async def favicon_16x16():
+    return _serve_favicon_asset("favicon-16x16.png")
 
 
 @dojo_app.get("/")
@@ -133,7 +166,9 @@ dependencies = [Depends(validate_dojo_auth)]
 dojo_app.include_router(monitor.router, prefix="/monitor", dependencies=dependencies)
 dojo_app.include_router(mosaic.router, prefix="/mosaic", dependencies=dependencies)
 dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies)
-if _sensai_router is not None:
-    dojo_app.include_router(
-        _sensai_router.router, prefix="/sensai", dependencies=dependencies
-    )
+dojo_app.include_router(
+    settings_router.router, prefix="/settings", dependencies=dependencies
+)
+dojo_app.include_router(
+    _sensai_router.router, prefix="/sensai", dependencies=dependencies
+)

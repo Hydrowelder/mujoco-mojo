@@ -14,8 +14,8 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Literal, TypedDict
 
-import pandas as pd
 from pydantic import Field, PrivateAttr, computed_field
+from tabulate import tabulate
 
 from mujoco_mojo.base import MojoBaseModel
 from mujoco_mojo.meta import REPO_URL
@@ -50,17 +50,31 @@ REQUIREMENTS_FNAME = "requirements.json"
 
 
 class JobType(StrEnum):
+    """Which `mujoco-mojo run` subcommand (or the reloaded viewer) produced a job."""
+
     MONTE_CARLO = "monte_carlo"
+    """A `mujoco-mojo run monte_carlo` job: many trials sampled from randomized parameters."""
+
     OPTIMIZE = "optimize"
+    """A `mujoco-mojo run optimize` job: trials driven by a parameter search/optimizer."""
+
     RELOADED = "reloaded"
+    """A `mujoco-mojo reloaded` job: interactive live-reload viewer, not a batch of trials."""
 
 
 class ExecutionMode(StrEnum):
+    """Where a job's trials actually run."""
+
     LOCAL = "local"
+    """Trials run as local processes/threads on the machine that launched the job."""
+
     SLURM = "slurm"
+    """Trials are submitted as SLURM jobs to a cluster scheduler."""
 
 
 class Completion(StrEnum):
+    """How a trial ended, from "still running" through the different ways it can finish."""
+
     INCOMPLETE = "incomplete"
     """Neither completed nor failed. Indicates the process is ongoing."""
 
@@ -477,12 +491,18 @@ class JobStatus(MojoBaseModel):
         totals["total"] = sum(totals.values())
         return totals  # pyright: ignore[reportReturnType]
 
+    def get_trial_nums_with_status(
+        self, *status: Completion, invert: bool = False
+    ) -> list[int]:
+        """Returns a list of trial numbers which have the provided status. If invert is True it will provide trial numbers which do not match."""
+        to_check = [m for m in Completion if m not in status] if invert else status
+
+        return sorted([tn for tn, comp in self._registry.items() if comp in to_check])
+
     @property
     def pending_trial_nums(self) -> list[int]:
         """Returns trial numbers which are either missing or marked as incomplete."""
-        return [
-            tn for tn, comp in self._registry.items() if comp == Completion.INCOMPLETE
-        ]
+        return self.get_trial_nums_with_status(Completion.INCOMPLETE)
 
     @property
     def time_remaining_wall_clock(self) -> timedelta:
@@ -558,49 +578,39 @@ class JobStatus(MojoBaseModel):
 
     @property
     def n_success(self) -> int:
-        return sum(1 for c in self._registry.values() if c == Completion.SUCCESS)
+        return len(self.success_trial_nums)
 
     @property
     def n_failed(self) -> int:
         """Number of done trials that failed one or more requirements (`FAILURE` or `TERMINATED`). Errored trials are counted separately in `n_error`."""
-        return sum(1 for c in self._registry.values() if c in _FAILED_COMPLETIONS)
+        return len(self.failed_trial_nums)
 
     @property
     def n_error(self) -> int:
         """Number of trials that raised an unhandled exception (`ERROR`)."""
-        return sum(1 for c in self._registry.values() if c == Completion.ERROR)
+        return len(self.get_trial_nums_with_status(Completion.ERROR))
 
     @property
     def success_trial_nums(self) -> list[int]:
-        tns = []
-        for tn in self._registry.keys():
-            if self._registry[tn] == Completion.SUCCESS:
-                tns.append(tn)
-        return sorted(tns)
+        return self.get_trial_nums_with_status(Completion.SUCCESS)
 
     @computed_field
     @property
     def failed_trial_nums(self) -> list[int]:
         """Trials that completed but failed one or more requirements (`FAILURE` or `TERMINATED`)."""
-        return sorted(
-            tn for tn, comp in self._registry.items() if comp in _FAILED_COMPLETIONS
-        )
+        return self.get_trial_nums_with_status(*_FAILED_COMPLETIONS)
 
     @computed_field
     @property
     def error_trial_nums(self) -> list[int]:
         """Trials that raised an unhandled exception (`ERROR`)."""
-        return sorted(
-            tn for tn, comp in self._registry.items() if comp == Completion.ERROR
-        )
+        return self.get_trial_nums_with_status(Completion.ERROR)
 
     @property
     def unsuccessful_trial_nums(self) -> list[int]:
         """Union of failed and errored trials, for anything-went-wrong checks like process exit codes."""
-        return sorted(
-            tn
-            for tn, comp in self._registry.items()
-            if comp not in {Completion.SUCCESS, Completion.INCOMPLETE}
+        return self.get_trial_nums_with_status(
+            Completion.SUCCESS, Completion.INCOMPLETE, invert=True
         )
 
     def update_trial(self, status: TrialStatus, save: bool = True):
@@ -643,7 +653,7 @@ class JobStatus(MojoBaseModel):
         return name
 
     @property
-    def _metrics_series(self) -> pd.DataFrame:
+    def _metrics_series(self) -> list[tuple[str, str]]:
         def _parse_func(name: str, path: Path | None, line: int | None) -> str:
             if path is None or line is None:
                 return name
@@ -702,9 +712,9 @@ class JobStatus(MojoBaseModel):
                 if n_rt
                 else "N/A"
             )
-        return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
+        return list(data.items())
 
-    def _run_time_series(self) -> pd.DataFrame:
+    def _run_time_series(self) -> list[tuple[str, str]]:
         data = {
             "Total Elapsed": str(self.elapsed).split(".")[0],
             "Total Remaining": str(self.time_remaining_average_success).split(".")[0],
@@ -724,7 +734,7 @@ class JobStatus(MojoBaseModel):
                     "Elapsed Solving": f"{str(timedelta(seconds=runtimes['solving'])).split('.')[0]} ({runtimes['solving'] / runtimes['total']:.2%})",
                 }
             )
-        return pd.DataFrame(data=data.items(), columns=("Metric", "Value"))
+        return list(data.items())
 
     @property
     def requirement_summary(self) -> list[RequirementSummary]:
@@ -759,7 +769,7 @@ class JobStatus(MojoBaseModel):
         return sum(row["n_failed"] for row in self.requirement_summary)
 
     @property
-    def _requirements_series(self) -> pd.DataFrame | None:
+    def _requirements_series(self) -> list[dict[str, str]] | None:
         summary = self.requirement_summary
         if not summary:
             return None
@@ -780,7 +790,7 @@ class JobStatus(MojoBaseModel):
                     "Pass Rate": f"{row['pass_rate']:.1%}",
                 }
             )
-        return pd.DataFrame(rows)
+        return rows
 
     @property
     def _failed_runs_md(self) -> str:
@@ -815,10 +825,10 @@ class JobStatus(MojoBaseModel):
                 f"{self.progress:.1%} progress.\n```\n"
             )
 
-        req_df = self._requirements_series
+        req_rows = self._requirements_series
         requirements_section = (
-            f"\n---\n\n## Requirements\n\n{req_df.to_markdown(index=False)}\n"
-            if req_df is not None
+            f"\n---\n\n## Requirements\n\n{tabulate(req_rows, headers='keys', tablefmt='pipe')}\n"
+            if req_rows is not None
             else ""
         )
 
@@ -832,12 +842,12 @@ class JobStatus(MojoBaseModel):
 
 > Progress **{self.progress:.1%}** <progress value="{self.progress}" max="1" style="accent-color: #06b6d4;">{self.progress:.1%}</progress>
 
-{self._metrics_series.to_markdown(index=False)}
+{tabulate(self._metrics_series, headers=("Metric", "Value"), tablefmt="pipe")}
 
 ---
 
 ## Run Times
-{self._run_time_series().to_markdown(index=False)}
+{tabulate(self._run_time_series(), headers=("Metric", "Value"), tablefmt="pipe")}
 
 ---
 

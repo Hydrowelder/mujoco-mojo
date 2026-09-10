@@ -1,0 +1,1087 @@
+// Drives the global Dojo settings panel ($store.dojo, merged in by store.ts)
+// by walking the JSON Schema returned from GET /settings at runtime, rather
+// than hand-listing fields here - see settings.py's MujocoMojoSettings for
+// the single source of truth. A field only needs a widget hint here
+// (`x-widget`) when a validator enforces something the JSON Schema type
+// system can't express on its own (currently just the Color-enum fields);
+// everything else is inferred from plain schema shape (type/enum/writeOnly/anyOf).
+
+import { Marked } from "marked";
+
+// a dedicated instance, not the shared `marked` singleton import - Vite
+// factors `marked` into one chunk shared between this bundle (main.js) and
+// sensai.ts's (marked.use({renderer: {code, codespan}}), rendering fenced
+// code blocks as embedded CodeMirror editors for chat responses). Sharing
+// the singleton would mean these tooltips silently inherited that renderer
+// too, on any page where both happened to load. An instance of its own
+// can't be affected by another module's marked.use() call regardless of
+// chunking. Named for its role (rendering any Field(description=...) text
+// this store's callers hand it), not "settings" specifically - main.js
+// loads on every Dojo page, so renderMarkdown() below is already globally
+// available via $store.dojo wherever a tooltip needs it (e.g. the Plot
+// Editor/Line Config panels' field_help_icon macro, _macros.html), not
+// just this file's own settings-panel tooltip.
+const dojoMarked = new Marked();
+
+// crypto.randomUUID() only exists in a secure context (HTTPS, or localhost) -
+// the Dojo dashboard is routinely reached over plain HTTP from another
+// machine on the network, where `crypto` itself still exists but this one
+// method doesn't, throwing "crypto.randomUUID is not a function". Every
+// caller here only needs a string that's unique for this browser session
+// (see SettingsListItem's doc comment on why), not a real UUID, so a counter
+// plus a little randomness for good measure works everywhere `randomUUID`
+// would have and never depends on the page's origin.
+let _uniqueIdCounter = 0;
+function uniqueId(): string {
+  return `${Date.now().toString(36)}-${(_uniqueIdCounter++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export type SettingsWidget =
+  | "toggle"
+  | "select"
+  | "secret"
+  | "number"
+  | "color"
+  | "url"
+  | "text";
+
+export interface SettingsField {
+  path: string;
+  key: string;
+  title: string;
+  description: string;
+  widget: SettingsWidget;
+  default: string | number | boolean | null;
+  value: string | number | boolean | null;
+  enumOptions?: string[];
+  // per-option help text, keyed by the option's own wire value - e.g.
+  // {"modified": "By last-modified time."} for SortMode - sourced from the
+  // enum class's own attribute-docstrings (settings.py's
+  // GenerateJsonSchemaWithDefaults.enum_schema, via typing.py's
+  // SortMode/SortDirection/Direction/UserInterface member docstrings).
+  // Shown in the hint bar while a specific dropdown option is
+  // hovered/focused, in place of the field's own top-level description.
+  enumDescriptions?: Record<string, string>;
+  minimum?: number;
+  maximum?: number;
+  nullable: boolean;
+  // for a "url" field, whether the *current* value should show the
+  // clickable-globe affordance. Seeded from the backend's value_meta
+  // (computed from the real validated HttpUrl/Path object - see
+  // routers/settings.py) and recomputed client-side as the user types.
+  isUrl: boolean;
+  // for a "secret" field only: the masked placeholder as loaded from the
+  // last GET, resent verbatim on save when the user leaves the (blanked)
+  // input untouched, so the backend's masked-value check preserves the
+  // real secret instead of overwriting it with the mask string.
+  secretOriginal?: string;
+}
+
+export interface SettingsDictEntry {
+  key: string;
+  valueType: "string" | "number" | "boolean";
+  value: string | number | boolean;
+}
+
+export interface SettingsDictField {
+  path: string;
+  key: string;
+  title: string;
+  description: string;
+  entries: SettingsDictEntry[];
+}
+
+// One row in a SettingsListField (a fixed-shape object, e.g. SensAIModelEntry)
+// - each row's fields are real SettingsField objects (not a lighter bespoke
+// shape), so the exact same widget rendering, updateField/resetField, and
+// hint-bar wiring already built for a normal field row works unmodified for
+// a row's fields too. A field's `.path` is a synthetic client-side id
+// (`${listField.path}.${crypto.randomUUID()}.${propKey}`, not a real dotted
+// settings path the backend recognizes) - it only has to be unique enough
+// for updateField/findSettingsField to address this one field unambiguously
+// for the lifetime of this row, since the actual POST payload is rebuilt
+// from `.fields`/`.key` (listFieldValue below), not from this path string.
+// (`crypto.randomUUID()` would read more naturally there, but it only
+// exists in a secure context - see uniqueId() above.)
+export interface SettingsListItem {
+  fields: SettingsField[];
+}
+
+export interface SettingsListField {
+  path: string;
+  key: string;
+  title: string;
+  description: string;
+  // the item schema's own title (e.g. "Model" for SensAIModelEntry),
+  // used to label the "+ Add ..." button.
+  itemTitle: string;
+  // a blank row's fields, built once from the item schema at parse time
+  // (see buildListField) - addListItem below deep-clones this (with fresh
+  // paths) rather than re-deriving the item schema from scratch every time
+  // a row is added.
+  itemTemplate: SettingsField[];
+  items: SettingsListItem[];
+}
+
+export interface SettingsGroup {
+  path: string;
+  key: string;
+  title: string;
+  description: string;
+  fields: SettingsField[];
+  subgroups: SettingsGroup[];
+  dictField: SettingsDictField | null;
+  listFields: SettingsListField[];
+  // inner SVG markup (<path>/<rect>/<circle> elements, no outer <svg> tag)
+  // shown next to the section title. Sourced from the schema's own
+  // x-icon (model_config's json_schema_extra, settings.py), the same
+  // mechanism x-widget uses below for color fields - the schema stays the
+  // single source of truth for this kind of metadata rather than a second,
+  // hand-maintained map here that could drift from it. Empty string for
+  // any section that doesn't set one, so a new section never breaks - it
+  // just renders with no icon.
+  icon: string;
+}
+
+export interface SettingsSchemaNode {
+  $ref?: string;
+  type?: string;
+  anyOf?: SettingsSchemaNode[];
+  properties?: Record<string, SettingsSchemaNode>;
+  additionalProperties?: SettingsSchemaNode | boolean;
+  items?: SettingsSchemaNode;
+  enum?: (string | number)[];
+  description?: string;
+  title?: string;
+  default?: unknown;
+  minimum?: number;
+  maximum?: number;
+  writeOnly?: boolean;
+  format?: string;
+  "x-widget"?: string;
+  "x-icon"?: string;
+  "x-enum-descriptions"?: Record<string, string>;
+}
+
+export interface SettingsSchema extends SettingsSchemaNode {
+  $defs?: Record<string, SettingsSchemaNode>;
+}
+
+export interface SettingsValueMetaEntry {
+  is_url?: boolean;
+}
+
+export interface SettingsGetResponse {
+  schema: SettingsSchema;
+  values: Record<string, unknown>;
+  value_meta: Record<string, SettingsValueMetaEntry>;
+  color_choices: Record<string, string>;
+  is_localhost: boolean;
+}
+
+export interface SettingsWriteResponse {
+  values: Record<string, unknown>;
+  value_meta: Record<string, SettingsValueMetaEntry>;
+}
+
+export interface SettingsPanelState {
+  settingsOpen: boolean;
+  settingsLoading: boolean;
+  settingsSaving: boolean;
+  settingsError: string;
+  settingsIsLocalhost: boolean;
+  settingsSections: SettingsGroup[];
+  settingsColorChoices: Record<string, string>;
+  settingsCollapsed: Record<string, boolean>;
+  // which top-level section the left nav currently shows (settings.py's
+  // general/visualization/dojo/reloaded/run/slurm) - independent of
+  // settingsCollapsed, which still separately tracks each *subgroup's* own
+  // expand/collapse state within whichever section is active.
+  settingsActiveSectionPath: string;
+  settingsSearchQuery: string;
+  // description text for whichever field/section row the mouse is
+  // currently over or a control within is focused - shown in the panel's
+  // reserved hint bar at the bottom (see _settings_panel.html), replacing
+  // an earlier design where this only appeared in a floating tooltip on
+  // hovering a small (i) icon. "" means nothing is hovered/focused right
+  // now - the bar shows a neutral placeholder instead.
+  settingsHintText: string;
+  _settingsSchema: SettingsSchema | null;
+  // dojo.show_quick_filters (settings.py), mirrored onto the store so
+  // trial-viewer.ts's X/Y-axis and reference-frame trees can read it live
+  // rather than only the value baked into the page at initial server
+  // render - without this, toggling the setting here while a trial-viewer
+  // tab is already open would only take effect on that tab's next full
+  // reload. Starts undefined (this store slice loads before trial-viewer.ts
+  // has had a chance to seed it with the page's own initial value) and is
+  // refreshed on every settings fetch/save/reset below.
+  showQuickFilters?: boolean;
+
+  // Both methods, not getters: this whole state slice gets merged into the
+  // wider dojoStore object via `{ ...createSettingsPanelState(), ... }`
+  // (store.ts), and object-spread reads a getter's CURRENT value once at
+  // spread time and copies that as a plain, permanently-frozen data
+  // property - it does not preserve live accessor semantics. A getter here
+  // would eval to `[]`/`false` at store construction (before any settings
+  // have loaded) and never recompute again, no matter how settingsSections
+  // or settingsSearchQuery later change. A method survives the spread
+  // (spread copies function values by reference just fine) and simply
+  // recomputes on every call.
+  settingsFilteredSections(): SettingsGroup[];
+  settingsActiveGroup(): SettingsGroup | null;
+  settingsHasInvalidFields(): boolean;
+
+  openSettings(): Promise<void>;
+  closeSettings(): void;
+  updateField(path: string, value: string | number | boolean | null): void;
+  resetField(path: string): void;
+  resetAllToDefaults(): Promise<void>;
+  saveSettings(): Promise<void>;
+  toggleSettingsSection(path: string): void;
+  selectSettingsSection(path: string): void;
+  openOnLocalhost(): void;
+  addDictEntry(groupPath: string): void;
+  removeDictEntry(groupPath: string, index: number): void;
+  addListItem(listPath: string): void;
+  removeListItem(listPath: string, index: number): void;
+  showSettingsHint(text: string): void;
+  hideSettingsHint(): void;
+  settingsFieldOutOfRange(field: SettingsField): boolean;
+  settingsFieldRangeMessage(field: SettingsField): string;
+  renderMarkdown(text: string): string;
+  _applySettingsResponse(data: SettingsGetResponse): void;
+  _applySettingsWrite(data: SettingsWriteResponse): void;
+}
+
+// ---------------------------------------------------------------------------
+// schema walking
+// ---------------------------------------------------------------------------
+
+function resolveRef(
+  schema: SettingsSchema,
+  node: SettingsSchemaNode,
+): SettingsSchemaNode {
+  if (!node.$ref) return node;
+  const refName = node.$ref.replace("#/$defs/", "");
+  const target = schema.$defs?.[refName];
+  if (!target) return node;
+  const { $ref: _ref, ...override } = node;
+  return { ...target, ...override };
+}
+
+function isDictNode(node: SettingsSchemaNode): boolean {
+  return node.type === "object" && !node.properties && !!node.additionalProperties;
+}
+
+function isObjectNode(node: SettingsSchemaNode): boolean {
+  return node.type === "object" && !!node.properties;
+}
+
+// a `list[SomeModel]` field (e.g. SensAISettings.models: list[SensAIModelEntry])
+// - as opposed to a plain scalar array, which describeLeaf below falls back
+// to rendering as a "text" field (harmless for a field type that doesn't
+// otherwise exist in this schema today, but not this function's job to guard
+// against).
+function isObjectListNode(schema: SettingsSchema, node: SettingsSchemaNode): boolean {
+  return node.type === "array" && !!node.items && isObjectNode(resolveRef(schema, node.items));
+}
+
+interface LeafDescription {
+  widget: SettingsWidget;
+  nullable: boolean;
+  minimum?: number;
+  maximum?: number;
+  enumOptions?: string[];
+  enumDescriptions?: Record<string, string>;
+}
+
+function describeLeaf(node: SettingsSchemaNode): LeafDescription {
+  if (node["x-widget"] === "color") return { widget: "color", nullable: true };
+  if (node.type === "boolean") return { widget: "toggle", nullable: false };
+  if (node.writeOnly) return { widget: "secret", nullable: false };
+  if (node.enum) {
+    return {
+      widget: "select",
+      nullable: false,
+      enumOptions: node.enum.map(String),
+      enumDescriptions: node["x-enum-descriptions"],
+    };
+  }
+
+  const branches = node.anyOf ?? [node];
+  const nonNull = branches.filter((b) => b.type !== "null");
+  const nullable = nonNull.length !== branches.length;
+  const primary = nonNull[0] ?? node;
+
+  if (nonNull.some((b) => b.format === "uri")) return { widget: "url", nullable };
+  if (primary.type === "integer" || primary.type === "number") {
+    return {
+      widget: "number",
+      nullable,
+      minimum: primary.minimum ?? node.minimum,
+      maximum: primary.maximum ?? node.maximum,
+    };
+  }
+  return { widget: "text", nullable };
+}
+
+function buildField(
+  schema: SettingsSchema,
+  path: string,
+  key: string,
+  rawNode: SettingsSchemaNode,
+  value: unknown,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsField {
+  const node = resolveRef(schema, rawNode);
+  const { widget, nullable, minimum, maximum, enumOptions, enumDescriptions } = describeLeaf(node);
+  const isSecret = widget === "secret";
+  const rawValue = value as string | number | boolean | null | undefined;
+
+  return {
+    path,
+    key,
+    title: node.title ?? key,
+    description: node.description ?? "",
+    widget,
+    default: (node.default ?? null) as string | number | boolean | null,
+    value: isSecret ? "" : (rawValue ?? null),
+    enumOptions,
+    enumDescriptions,
+    minimum,
+    maximum,
+    nullable,
+    isUrl: widget === "url" ? !!valueMeta[path]?.is_url : false,
+    secretOriginal: isSecret ? String(rawValue ?? "") : undefined,
+  };
+}
+
+function inferScalarType(v: unknown): "string" | "number" | "boolean" {
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number") return "number";
+  return "string";
+}
+
+function buildDictField(
+  path: string,
+  key: string,
+  node: SettingsSchemaNode,
+  value: unknown,
+): SettingsDictField {
+  const raw = (value ?? {}) as Record<string, string | number | boolean>;
+  return {
+    path,
+    key,
+    title: node.title ?? key,
+    description: node.description ?? "",
+    entries: Object.entries(raw).map(([k, v]) => ({
+      key: k,
+      valueType: inferScalarType(v),
+      value: v,
+    })),
+  };
+}
+
+// one row's worth of fields, built with real values (an existing row loaded
+// from `values`) or as a template (no `rawValues`, used once per
+// SettingsListField to seed addListItem's clones) - either way each
+// property becomes a genuine SettingsField via buildField, so it renders
+// and updates exactly like any other field.
+function buildListItemFields(
+  schema: SettingsSchema,
+  path: string,
+  itemNode: SettingsSchemaNode,
+  rawValues: Record<string, unknown>,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsField[] {
+  return Object.entries(itemNode.properties ?? {}).map(([propKey, propRawNode]) =>
+    buildField(schema, `${path}.${propKey}`, propKey, propRawNode, rawValues[propKey], valueMeta),
+  );
+}
+
+function buildListField(
+  schema: SettingsSchema,
+  path: string,
+  key: string,
+  node: SettingsSchemaNode,
+  value: unknown,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsListField {
+  const itemNode = resolveRef(schema, node.items ?? {});
+  const rawItems = Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+  return {
+    path,
+    key,
+    title: node.title ?? key,
+    description: node.description ?? "",
+    itemTitle: itemNode.title ?? "Item",
+    itemTemplate: buildListItemFields(schema, `${path}.__template__`, itemNode, {}, valueMeta),
+    items: rawItems.map((raw) => ({
+      fields: buildListItemFields(
+        schema,
+        `${path}.${uniqueId()}`,
+        itemNode,
+        raw ?? {},
+        valueMeta,
+      ),
+    })),
+  };
+}
+
+function buildGroup(
+  schema: SettingsSchema,
+  path: string,
+  key: string,
+  rawNode: SettingsSchemaNode,
+  value: unknown,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsGroup {
+  const node = resolveRef(schema, rawNode);
+  const objectValue = (value ?? {}) as Record<string, unknown>;
+  const fields: SettingsField[] = [];
+  const subgroups: SettingsGroup[] = [];
+  const listFields: SettingsListField[] = [];
+  let dictField: SettingsDictField | null = null;
+
+  for (const [propKey, propRawNode] of Object.entries(node.properties ?? {})) {
+    const propPath = `${path}.${propKey}`;
+    const propNode = resolveRef(schema, propRawNode);
+    const propValue = objectValue[propKey];
+    if (propNode.writeOnly) {
+      // SecretStr fields (dojo.password) never reach
+      // this point in practice anymore - the Dojo backend
+      // (routers/settings.py's _dojo_settings_schema) deletes any
+      // writeOnly property from the schema entirely before it's ever
+      // served, on the principle that this panel has no legitimate need
+      // to even know a secret field exists, let alone render something
+      // for it. This check is a defense-in-depth backstop, not the actual
+      // guard: browsers also flag any type="password" input on a plain
+      // http:// page (Dojo's normal serving mode) as a credential-theft
+      // risk, so if a future field somehow slips past the backend strip,
+      // this still keeps it from being rendered. Set these via
+      // `mujoco-mojo settings set` or the documented environment-variable
+      // escape hatch instead (see each field's own description in
+      // settings.py).
+      continue;
+    }
+    if (isDictNode(propNode)) {
+      dictField = buildDictField(propPath, propKey, propNode, propValue);
+    } else if (isObjectListNode(schema, propNode)) {
+      listFields.push(buildListField(schema, propPath, propKey, propNode, propValue, valueMeta));
+    } else if (isObjectNode(propNode)) {
+      subgroups.push(buildGroup(schema, propPath, propKey, propRawNode, propValue, valueMeta));
+    } else {
+      fields.push(buildField(schema, propPath, propKey, propRawNode, propValue, valueMeta));
+    }
+  }
+
+  return {
+    path,
+    key,
+    title: node.title ?? key,
+    description: node.description ?? "",
+    fields,
+    subgroups,
+    dictField,
+    listFields,
+    icon: node["x-icon"] ?? "",
+  };
+}
+
+export function parseSettingsSchema(
+  schema: SettingsSchema,
+  values: Record<string, unknown>,
+  valueMeta: Record<string, SettingsValueMetaEntry>,
+): SettingsGroup[] {
+  const groups: SettingsGroup[] = [];
+  for (const [key, rawNode] of Object.entries(schema.properties ?? {})) {
+    const node = resolveRef(schema, rawNode);
+    const value = values[key];
+    if (isDictNode(node)) {
+      groups.push({
+        path: key,
+        key,
+        title: node.title ?? key,
+        description: node.description ?? "",
+        fields: [],
+        subgroups: [],
+        dictField: buildDictField(key, key, node, value),
+        listFields: [],
+        icon: node["x-icon"] ?? "",
+      });
+    } else {
+      groups.push(buildGroup(schema, key, key, rawNode, value, valueMeta));
+    }
+  }
+  return groups;
+}
+
+// ---------------------------------------------------------------------------
+// lookup / serialization
+// ---------------------------------------------------------------------------
+
+export function findSettingsField(groups: SettingsGroup[], path: string): SettingsField | null {
+  for (const g of groups) {
+    const direct = g.fields.find((f) => f.path === path);
+    if (direct) return direct;
+    for (const listField of g.listFields) {
+      for (const item of listField.items) {
+        const found = item.fields.find((f) => f.path === path);
+        if (found) return found;
+      }
+    }
+    const nested = findSettingsField(g.subgroups, path);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+export function findSettingsGroup(groups: SettingsGroup[], path: string): SettingsGroup | null {
+  for (const g of groups) {
+    if (g.path === path) return g;
+    const nested = findSettingsGroup(g.subgroups, path);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+export function findSettingsListField(groups: SettingsGroup[], path: string): SettingsListField | null {
+  for (const g of groups) {
+    const direct = g.listFields.find((l) => l.path === path);
+    if (direct) return direct;
+    const nested = findSettingsListField(g.subgroups, path);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+/** A sensible starting value for a freshly added row's field - the schema declares no `default` for either of SensAIModelEntry's fields (both are required), so a bare clone of the template would otherwise start every new row on `null`, which is invalid for both a select (no enum value) and a plain string field. */
+function blankFieldValue(field: SettingsField): string | number | boolean | null {
+  if (field.default !== null) return field.default;
+  if (field.widget === "select") return field.enumOptions?.[0] ?? null;
+  if (field.widget === "toggle") return false;
+  if (field.widget === "number") return field.minimum ?? 0;
+  return "";
+}
+
+/** Deep-clones a SettingsListField's blank itemTemplate into a fresh row, giving each field a new unique path so it doesn't collide with any other row's (added-then-removed rows can leave gaps, but never reused paths - see SettingsListItem's own doc comment on why that matters for findSettingsField/updateField). */
+function cloneListItemTemplate(listField: SettingsListField): SettingsListItem {
+  return {
+    fields: listField.itemTemplate.map((templateField) => ({
+      ...templateField,
+      path: `${listField.path}.${uniqueId()}.${templateField.key}`,
+      value: blankFieldValue(templateField),
+    })),
+  };
+}
+
+function collectSettingsFields(groups: SettingsGroup[]): SettingsField[] {
+  const out: SettingsField[] = [];
+  for (const g of groups) {
+    out.push(...g.fields);
+    for (const listField of g.listFields) {
+      for (const item of listField.items) out.push(...item.fields);
+    }
+    out.push(...collectSettingsFields(g.subgroups));
+  }
+  return out;
+}
+
+/** Whether a number field's current value violates the schema's minimum/maximum (e.g. VisualizationSettings' `ge=0` width scales) - guards against posting a value the backend would reject anyway, surfacing it inline instead of only after a failed save. */
+export function isFieldOutOfRange(field: SettingsField): boolean {
+  if (field.widget !== "number" || typeof field.value !== "number") return false;
+  if (field.minimum !== undefined && field.value < field.minimum) return true;
+  if (field.maximum !== undefined && field.value > field.maximum) return true;
+  return false;
+}
+
+export function fieldRangeMessage(field: SettingsField): string {
+  if (field.minimum !== undefined && field.maximum !== undefined) {
+    return `Must be between ${field.minimum} and ${field.maximum}`;
+  }
+  if (field.minimum !== undefined) return `Must be at least ${field.minimum}`;
+  if (field.maximum !== undefined) return `Must be at most ${field.maximum}`;
+  return "";
+}
+
+function dictFieldValue(dictField: SettingsDictField): Record<string, unknown> {
+  return Object.fromEntries(dictField.entries.map((e) => [e.key, e.value]));
+}
+
+function listFieldValue(listField: SettingsListField): Record<string, unknown>[] {
+  return listField.items.map((item) => {
+    const out: Record<string, unknown> = {};
+    for (const field of item.fields) out[field.key] = serializeFieldValue(field);
+    return out;
+  });
+}
+
+function serializeFieldValue(field: SettingsField): unknown {
+  if (field.widget === "secret") return field.value ? field.value : (field.secretOriginal ?? "");
+  if (field.nullable && field.value === "") return null;
+  return field.value;
+}
+
+function groupValue(group: SettingsGroup): unknown {
+  if (
+    group.dictField &&
+    group.dictField.key === group.key &&
+    group.fields.length === 0 &&
+    group.subgroups.length === 0
+  ) {
+    return dictFieldValue(group.dictField);
+  }
+  const out: Record<string, unknown> = {};
+  for (const field of group.fields) out[field.key] = serializeFieldValue(field);
+  for (const sub of group.subgroups) out[sub.key] = groupValue(sub);
+  for (const listField of group.listFields) out[listField.key] = listFieldValue(listField);
+  if (group.dictField) out[group.dictField.key] = dictFieldValue(group.dictField);
+  return out;
+}
+
+export function serializeSettings(groups: SettingsGroup[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const group of groups) out[group.key] = groupValue(group);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// search / filter
+// ---------------------------------------------------------------------------
+
+function fieldMatchesQuery(field: SettingsField, query: string): boolean {
+  return (
+    field.title.toLowerCase().includes(query) ||
+    field.description.toLowerCase().includes(query) ||
+    field.key.toLowerCase().includes(query)
+  );
+}
+
+/**
+ * Filters one group to only the fields/subgroups matching `query` (already
+ * lowercased). A group whose own title/description matches is returned
+ * whole (unfiltered) - searching "sensai" should show the entire SensAI
+ * subgroup, not an empty shell with nothing under it. A group with no
+ * matching title and no matching descendants (leaf fields or a dict field,
+ * which has no per-entry title/description to search) is dropped entirely
+ * rather than shown empty.
+ */
+function filterGroup(group: SettingsGroup, query: string): SettingsGroup | null {
+  const titleMatches =
+    group.title.toLowerCase().includes(query) || group.description.toLowerCase().includes(query);
+  if (titleMatches) return group;
+
+  const fields = group.fields.filter((f) => fieldMatchesQuery(f, query));
+  const subgroups = group.subgroups
+    .map((s) => filterGroup(s, query))
+    .filter((s): s is SettingsGroup => s !== null);
+
+  if (fields.length === 0 && subgroups.length === 0) return null;
+  return { ...group, fields, subgroups };
+}
+
+/** Empty query is a no-op pass-through - the panel's normal, unfiltered section list. */
+export function filterSettingsSections(groups: SettingsGroup[], query: string): SettingsGroup[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return groups;
+  const out: SettingsGroup[] = [];
+  for (const group of groups) {
+    const filtered = filterGroup(group, q);
+    if (filtered) out.push(filtered);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// color (visualization.* fields, x-widget: "color")
+// ---------------------------------------------------------------------------
+// settings.py's color-widget fields accept either a Color enum member name
+// (e.g. "EMERALD_500", matched case-insensitively) or a raw "#rrggbb" hex
+// code - see parse_color_value, also reachable directly via
+// GET /settings/color/resolve for a color picker that isn't this settings
+// panel. The frontend mirrors that: a text input takes either form
+// directly, and the wheel picker sets whatever hex was picked verbatim, no
+// forced snapping to a named swatch. nearestColorName is kept only as an
+// informational "closest named color" hint for a value that's a hex the
+// user typed/picked rather than one of the named swatches.
+
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+export function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && HEX_COLOR_RE.test(value);
+}
+
+/** Resolves a color field's current value (a Color name in any case, or a hex code) to a hex string for swatch/wheel display, or null if it's neither (e.g. hidden, or a still-being-typed value). Name matching is case-insensitive to mirror Color.parse - without this, typing a name in anything but the exact stored case (e.g. lowercase) looked up nothing and left the wheel stale. */
+export function resolveColorHex(
+  value: string | null | undefined,
+  choices: Record<string, string>,
+): string | null {
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  return isHexColor(upper) ? upper : (choices[upper] ?? null);
+}
+
+/** Collapses a hex value that exactly matches a named swatch to that name, mirroring Color.parse's own alias-collapsing (settings.py, via the model validator on save) so the wheel/text input reflect it immediately rather than only after a save+reload round trip. A name, an unmatched hex, or anything not yet a complete valid value passes through unchanged. */
+export function collapseColorAlias(
+  value: string | null | undefined,
+  choices: Record<string, string>,
+): string | null | undefined {
+  if (!isHexColor(value)) return value;
+  const upper = value.toUpperCase();
+  for (const [name, hex] of Object.entries(choices)) {
+    if (hex.toUpperCase() === upper) return name;
+  }
+  return upper;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace("#", "");
+  return {
+    r: parseInt(clean.substring(0, 2), 16) || 0,
+    g: parseInt(clean.substring(2, 4), 16) || 0,
+    b: parseInt(clean.substring(4, 6), 16) || 0,
+  };
+}
+
+/** Closest named entry in `choices` (e.g. settingsColorChoices) to an arbitrary hex, by simple RGB distance - good enough given how densely Color's ~200 swatches cover the space. Purely informational (see above); never overwrites what the user picked/typed. */
+export function nearestColorName(hex: string, choices: Record<string, string>): string {
+  const target = hexToRgb(hex);
+  let bestName = "";
+  let bestDist = Infinity;
+  for (const [name, choiceHex] of Object.entries(choices)) {
+    const rgb = hexToRgb(choiceHex);
+    const dist = (rgb.r - target.r) ** 2 + (rgb.g - target.g) ** 2 + (rgb.b - target.b) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestName = name;
+    }
+  }
+  return bestName;
+}
+
+// ---------------------------------------------------------------------------
+// url detection (dojo.chime and any future url-or-path field)
+// ---------------------------------------------------------------------------
+
+/**
+ * Live, client-side check used only while the user is typing an unsaved
+ * edit - never the source of truth for what gets stored (POST /settings
+ * re-validates through the real HttpUrl | Path union server-side
+ * regardless). For a value already loaded from GET /settings, the
+ * authoritative signal is value_meta[path].is_url instead, computed
+ * server-side from the real validated Python object.
+ */
+export function looksLikeHttpUrl(value: unknown): boolean {
+  if (typeof value !== "string" || !value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// store slice
+// ---------------------------------------------------------------------------
+
+function loadCollapsedSections(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem("mojo:settings:collapsed-sections");
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Falls back to "" (resolved to the first available section by settingsActiveGroup()) rather than a hardcoded section key - a stored path from a since-renamed/removed section degrades the same way as one that was simply never set, instead of pointing at nothing. */
+function loadActiveSectionPath(): string {
+  try {
+    return localStorage.getItem("mojo:settings:active-section") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function settingsErrorDetail(resp: Response): Promise<string> {
+  try {
+    const data = (await resp.json()) as { detail?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((e) =>
+          e && typeof e === "object" && "msg" in e
+            ? String((e as { msg: unknown }).msg)
+            : JSON.stringify(e),
+        )
+        .join("; ");
+    }
+  } catch {
+    /* not JSON */
+  }
+  return `Request failed (${resp.status})`;
+}
+
+// cross-slice calls (toast/notifications) go through Alpine.store('dojo')
+// rather than `this`, matching lib/toast.ts's createToastMixin() - `this`
+// inside these methods is typed as SettingsPanelState only, which doesn't
+// itself declare toast()/addNotification() (those live on the wider
+// DojoStore this state gets spread into by store.ts).
+function notifyDojo(message: string, type: "success" | "error" | "info") {
+  (Alpine.store("dojo") as { toast?: (m: string, t?: string) => void }).toast?.(message, type);
+}
+
+// Pulls dojo.show_quick_filters back out of a /settings response's raw
+// `values` tree (typed as Record<string, unknown> since it's the live
+// MujocoMojoSettings dump, not a shape this module otherwise needs to know)
+// - returns undefined rather than throwing if the shape isn't what's
+// expected, so a malformed/older response degrades to "leave the store
+// value alone" instead of clobbering it with undefined.
+function extractShowQuickFilters(values: Record<string, unknown>): boolean | undefined {
+  const dojo = values.dojo;
+  if (!dojo || typeof dojo !== "object") return undefined;
+  const v = (dojo as Record<string, unknown>).show_quick_filters;
+  return typeof v === "boolean" ? v : undefined;
+}
+
+export function createSettingsPanelState(): SettingsPanelState {
+  return {
+    settingsOpen: false,
+    settingsLoading: false,
+    settingsSaving: false,
+    settingsError: "",
+    settingsIsLocalhost: false,
+    settingsSections: [],
+    settingsColorChoices: {},
+    settingsCollapsed: loadCollapsedSections(),
+    settingsActiveSectionPath: loadActiveSectionPath(),
+    settingsSearchQuery: "",
+    settingsHintText: "",
+    _settingsSchema: null,
+    showQuickFilters: undefined,
+
+    settingsHasInvalidFields() {
+      return collectSettingsFields(this.settingsSections).some(isFieldOutOfRange);
+    },
+
+    settingsFilteredSections() {
+      return filterSettingsSections(this.settingsSections, this.settingsSearchQuery);
+    },
+
+    // deliberately reads the *unfiltered* settingsSections, not
+    // settingsFilteredSections() - the left nav always lists every section
+    // regardless of an active search query (only the content pane's
+    // search-results view is filtered), and a stored/previously-selected
+    // path that no longer exists (a since-renamed section, or simply never
+    // set yet) falls back to the first section rather than showing nothing.
+    settingsActiveGroup() {
+      const found = this.settingsSections.find(
+        (g) => g.path === this.settingsActiveSectionPath,
+      );
+      return found ?? this.settingsSections[0] ?? null;
+    },
+
+    settingsFieldOutOfRange(field) {
+      return isFieldOutOfRange(field);
+    },
+
+    settingsFieldRangeMessage(field) {
+      return fieldRangeMessage(field);
+    },
+
+    renderMarkdown(text) {
+      try {
+        return dojoMarked.parse(text, { async: false }) as string;
+      } catch {
+        return text;
+      }
+    },
+
+    async openSettings() {
+      this.settingsOpen = true;
+      // guard scrolling to the settings panel itself while it's open,
+      // rather than letting wheel/touch input also scroll the Dojo page
+      // sitting behind the backdrop
+      document.body.style.overflow = "hidden";
+      this.settingsLoading = true;
+      this.settingsError = "";
+      try {
+        const resp = await fetch("/settings");
+        if (!resp.ok) throw new Error(await settingsErrorDetail(resp));
+        const data = (await resp.json()) as SettingsGetResponse;
+        this._applySettingsResponse(data);
+      } catch (err) {
+        this.settingsError = err instanceof Error ? err.message : "Failed to load settings";
+      } finally {
+        this.settingsLoading = false;
+      }
+    },
+
+    closeSettings() {
+      this.settingsOpen = false;
+      document.body.style.overflow = "";
+      this.hideSettingsHint();
+      this.settingsSearchQuery = "";
+    },
+
+    showSettingsHint(text) {
+      // the panel's own closing transition keeps its content visible (and
+      // hoverable/focusable) for ~100ms after settingsOpen flips false, so
+      // a mouseenter/focusin can still land on a row mid-fade -
+      // closeSettings() already clears the hint synchronously, but that
+      // can't stop a *later* hover/focus from setting it again afterward,
+      // and nothing would then be left to clear it. Guarding here (rather
+      // than only reacting to the close) closes that race outright: no
+      // hint can newly show once the panel isn't open.
+      if (!this.settingsOpen) return;
+      this.settingsHintText = text;
+    },
+
+    hideSettingsHint() {
+      this.settingsHintText = "";
+    },
+
+    updateField(path, value) {
+      const field = findSettingsField(this.settingsSections, path);
+      if (!field) return;
+      field.value = value;
+      if (field.widget === "url") field.isUrl = looksLikeHttpUrl(value);
+    },
+
+    resetField(path) {
+      const field = findSettingsField(this.settingsSections, path);
+      if (!field) return;
+      field.value = field.default;
+      if (field.widget === "url") field.isUrl = looksLikeHttpUrl(field.default);
+    },
+
+    async resetAllToDefaults() {
+      const ok = await window.mojoConfirm?.({
+        title: "Restore default settings?",
+        message: "Every setting will be reset to its built-in default. This cannot be undone.",
+        confirmLabel: "Restore Defaults",
+        variant: "danger",
+      });
+      if (!ok) return;
+      this.settingsSaving = true;
+      try {
+        const resp = await fetch("/settings/reset", { method: "POST" });
+        if (!resp.ok) throw new Error(await settingsErrorDetail(resp));
+        const data = (await resp.json()) as SettingsWriteResponse;
+        this._applySettingsWrite(data);
+        notifyDojo("Settings restored to defaults", "success");
+      } catch (err) {
+        notifyDojo(err instanceof Error ? err.message : "Failed to restore defaults", "error");
+      } finally {
+        this.settingsSaving = false;
+      }
+    },
+
+    async saveSettings() {
+      if (this.settingsHasInvalidFields()) {
+        this.settingsError = "Fix the highlighted field(s) before saving.";
+        return;
+      }
+      this.settingsSaving = true;
+      this.settingsError = "";
+      try {
+        const body = serializeSettings(this.settingsSections);
+        const resp = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) throw new Error(await settingsErrorDetail(resp));
+        const data = (await resp.json()) as SettingsWriteResponse;
+        this._applySettingsWrite(data);
+        notifyDojo("Settings saved", "success");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to save settings";
+        this.settingsError = message;
+        notifyDojo(message, "error");
+      } finally {
+        this.settingsSaving = false;
+      }
+    },
+
+    toggleSettingsSection(path) {
+      this.settingsCollapsed = {
+        ...this.settingsCollapsed,
+        [path]: !this.settingsCollapsed[path],
+      };
+      try {
+        localStorage.setItem(
+          "mojo:settings:collapsed-sections",
+          JSON.stringify(this.settingsCollapsed),
+        );
+      } catch {
+        /* quota exceeded - ignore */
+      }
+    },
+
+    // clears any active search query on select - a nav click is a "take me
+    // to this section" GOTO, so it should always land on a normal,
+    // un-filtered view of that section rather than leaving stale search
+    // results shown underneath a now-highlighted (but not actually
+    // rendered) nav item.
+    selectSettingsSection(path) {
+      this.settingsActiveSectionPath = path;
+      this.settingsSearchQuery = "";
+      try {
+        localStorage.setItem("mojo:settings:active-section", path);
+      } catch {
+        /* quota exceeded - ignore */
+      }
+    },
+
+    openOnLocalhost() {
+      const url = new URL(window.location.href);
+      url.hostname = "127.0.0.1";
+      window.open(url.toString(), "_blank", "noopener");
+    },
+
+    addDictEntry(groupPath) {
+      const group = findSettingsGroup(this.settingsSections, groupPath);
+      if (!group?.dictField) return;
+      group.dictField.entries.push({ key: "", valueType: "string", value: "" });
+    },
+
+    removeDictEntry(groupPath, index) {
+      const group = findSettingsGroup(this.settingsSections, groupPath);
+      group?.dictField?.entries.splice(index, 1);
+    },
+
+    addListItem(listPath) {
+      const listField = findSettingsListField(this.settingsSections, listPath);
+      if (!listField) return;
+      listField.items.push(cloneListItemTemplate(listField));
+    },
+
+    removeListItem(listPath, index) {
+      const listField = findSettingsListField(this.settingsSections, listPath);
+      listField?.items.splice(index, 1);
+    },
+
+    _applySettingsResponse(data) {
+      this._settingsSchema = data.schema;
+      this.settingsColorChoices = data.color_choices;
+      this.settingsIsLocalhost = data.is_localhost;
+      this.settingsSections = parseSettingsSchema(data.schema, data.values, data.value_meta);
+      this.showQuickFilters = extractShowQuickFilters(data.values) ?? this.showQuickFilters;
+    },
+
+    _applySettingsWrite(data) {
+      if (!this._settingsSchema) return;
+      this.settingsSections = parseSettingsSchema(
+        this._settingsSchema,
+        data.values,
+        data.value_meta,
+      );
+      this.showQuickFilters = extractShowQuickFilters(data.values) ?? this.showQuickFilters;
+      // lets other Alpine components on the page (e.g. sensai()) react to a
+      // settings save/reset without a full page reload - see mojo-data-updated
+      // and mojo-sensai-plot-config for the same window-event pattern.
+      window.dispatchEvent(new CustomEvent("mojo-settings-saved", { detail: data.values }));
+    },
+  };
+}

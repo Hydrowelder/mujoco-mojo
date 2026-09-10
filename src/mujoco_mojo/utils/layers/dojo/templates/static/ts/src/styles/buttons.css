@@ -1,0 +1,148 @@
+/* Standardized button classes, shared across every page. Combine one sizing
+   class with one color class, e.g. class="btn btn-primary" or
+   class="btn-icon btn-secondary" - see CLAUDE.md's Dojo theming section for
+   the underlying color-token conventions. */
+
+@layer components {
+  /* ── Sizing ────────────────────────────────────────────────────────── */
+  .btn {
+    @apply h-9 px-3 border rounded-lg flex items-center gap-2 shadow-sm;
+  }
+  .btn-icon {
+    @apply h-9 w-9 rounded-lg border flex items-center justify-center shadow-sm;
+  }
+
+  /* ── Color variants ───────────────────────────────────────────────── */
+  .btn-primary {
+    @apply bg-accent-500 text-white border-accent-600 shadow-inner;
+  }
+  /* Solid destructive counterpart to .btn-primary - same filled/bordered/
+     shadow-inner structure, danger's palette instead of accent's. The one
+     shared style for a critical/destructive action button (Reset to
+     Defaults, Deselect All, the confirm dialog's danger button, ...) -
+     previously each of those hand-rolled its own soft/translucent
+     variant (bg-danger-500/10) that only solidified on hover, and only in
+     dark mode, so the three drifted into visibly different buttons for
+     the same class of action. Not for lower-emphasis danger affordances
+     that aren't buttons (status badges, inline text links) - those keep
+     using the raw bg-danger-500/10 utility directly. */
+  .btn-danger {
+    @apply bg-danger-600/20 border-2 border-danger-600 shadow-inner text-ink-secondary font-bold;
+  }
+  .dark .btn-danger {
+    @apply text-white;
+  }
+  /* Warning counterpart, same structure - currently only the confirm
+     dialog's warning variant uses this. */
+  .btn-warning {
+    @apply bg-warning-600/20 border-2 border-warning-600 shadow-inner text-ink-secondary font-bold;
+  }
+  .dark .btn-warning {
+    @apply text-white;
+  }
+  .btn-sound-on {
+    @apply bg-accent-50 dark:bg-accent-900/20 border-accent-500 text-accent-500;
+  }
+
+  /* compact pill variant of .btn-secondary for inline list-row actions (e.g.
+     the "Load" button on each saved profile) that don't need the full h-9
+     header-button size */
+  .btn-secondary-sm {
+    @apply btn-secondary text-xs px-2 py-1 rounded font-bold uppercase;
+  }
+
+  /* ── Sidebar action buttons (trial viewer) ────────────────────────── */
+  /* same secondary-button treatment as every other neutral button (see
+     btn-secondary below) plus its own vertical icon-tile layout. */
+  .sidebar-btn {
+    @apply w-14 aspect-square flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-200 btn-secondary;
+  }
+
+  /* ── Toggle switch (boolean on/off) ───────────────────────────────── */
+  /* Usage: <button class="toggle" :class="value ? 'toggle-on' : ''">
+              <span class="toggle-thumb" :class="value ? 'toggle-thumb-on' : ''"></span>
+            </button>
+     The "off" track deliberately isn't --color-well (bg-well): well is
+     slate-100 in light mode, nearly indistinguishable from the white thumb
+     sitting on it - control's slate-300 actually reads as a track. Dark
+     mode keeps well (slate-900) explicitly via the dark: override below,
+     since white-on-slate-900 already had good contrast and shouldn't
+     change. */
+  .toggle {
+    @apply relative w-10 h-6 rounded-full border transition-colors shrink-0 bg-control border-line dark:bg-well dark:border-line disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .toggle-on {
+    @apply bg-accent-500 border-accent-600;
+  }
+  /* border-line gives the thumb a crisp edge regardless of what's behind
+     it, rather than relying on fill-color contrast alone. */
+  .toggle-thumb {
+    @apply absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white border border-line shadow transition-transform;
+  }
+  .toggle-thumb-on {
+    @apply translate-x-4;
+  }
+}
+
+/* the one shared "neutral/secondary button" treatment: bg-well + border-line
+   at rest, explicit bg-control/border-accent-500/text-accent-500 on hover
+   (not the generic `button:hover` brightness filter below, which barely
+   reads against an already-dark bg-well in dark mode). @utility (not @layer
+   components) so .sidebar-btn/.btn-secondary-sm above can @apply it
+   alongside their own layout; includes its own border width so nothing
+   that uses it also needs a separate .btn/.btn-icon/border just to make
+   the color visible. */
+@utility btn-secondary {
+  @apply border bg-well border-line text-ink-secondary hover:bg-control hover:border-accent-500 hover:text-accent-500;
+}
+
+/* ── Standard button behavior (cursor, hover, active-state) ──────────── */
+/* Deliberately unlayered (not inside @layer components): an unlayered rule
+   always wins over any Tailwind utility class regardless of specificity, so
+   this stays in effect no matter what color/sizing classes a given button
+   also carries. filter composes with whatever background/border those
+   classes set - it doesn't replace it. */
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: all 0.2s ease;
+}
+
+/* without this, a disabled button (e.g. undo/redo with no history left)
+   still shows the pointer cursor from the plain `button` rule above,
+   suggesting it's clickable when it isn't. */
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:hover {
+  filter: brightness(0.92);
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+/* .btn-primary's fill is already a vivid accent-500; brightening it further
+   on hover (the default above) washes it out against dark mode's darker
+   surroundings instead of reading as "hovered" - darken instead. Both an
+   explicit darker background AND a sub-1 filter are set here since the
+   generic button:hover filter above still applies on top of this rule
+   (different property, so it composes rather than getting overridden) -
+   without also correcting the filter, its brighten would partly cancel
+   the darker background. */
+.btn-primary:hover {
+  background-color: var(--color-accent-600);
+  filter: brightness(0.92);
+}
+
+/* Same reasoning as .dark .btn-primary:hover above, danger's palette instead. */
+.btn-danger:hover {
+  background-color: var(--color-danger-600);
+  color: var(--color-white);
+}
+
+/* Same reasoning as .dark .btn-primary:hover above, warning's palette instead. */
+.dark .btn-warning:hover {
+  background-color: var(--color-warning-600);
+}

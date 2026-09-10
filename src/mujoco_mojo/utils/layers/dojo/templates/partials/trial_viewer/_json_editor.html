@@ -3,8 +3,11 @@
          CodeMirror 6 editor with live syntax + schema validation
          ══════════════════════════════════════════════════════════════════ -->
 
-<!-- JSON editor -->
-<div class="mt-8 space-y-2"
+<!-- JSON editor. pt-8 (padding, not margin) on the outer div guarantees
+     clearance before the divider below, immune to margin-collapsing with
+     whatever sibling section precedes this one - see _trial_logs.html's
+     identical comment for the full reasoning. -->
+<div class="pt-6"
      x-data="{
          open: localStorage.getItem('mojo:json-editor:open') !== '0',
          toggle() {
@@ -13,73 +16,86 @@
          },
          init() { this.$nextTick(() => this.initCodeMirror(this.$refs.cmHost)); }
      }">
-    <div class="flex items-center justify-between px-2">
-        <button @mousedown.prevent="toggle()"
-                @keydown.enter.prevent="toggle()"
-                @keydown.space.prevent="toggle()"
-                class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors active:scale-100">
-            <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
-                 :class="open ? '' : '-rotate-90'"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="2.5"
-                 viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 9l-7 7-7-7" />
-            </svg>
-            JSON Configuration
-        </button>
-        <div class="flex items-center gap-3">
-            <span x-show="!isValidJson"
-                  class="text-base font-bold text-rose-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span> Syntax Error
-            </span>
+    <div class="pt-2 space-y-2 border-t border-line dark:border-subtle">
+        <div class="px-2">
+            <button @mousedown.prevent="toggle()"
+                    @keydown.enter.prevent="toggle()"
+                    @keydown.space.prevent="toggle()"
+                    class="expander-header">
+                <span class="flex items-center gap-2">
+                    <svg class="expander-chevron"
+                         :class="open ? '' : '-rotate-90'"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M19 9l-7 7-7-7" />
+                    </svg>
+                    JSON Configuration
+                </span>
+                <div class="flex items-center gap-3">
+                    <span x-show="!isValidJson"
+                          class="text-base font-bold text-danger-500 font-mono flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-danger-500 animate-pulse"></span> Syntax Error
+                    </span>
 
-            <span x-show="isValidJson && !isValidConfig"
-                  class="text-base font-bold text-amber-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Config Error
-            </span>
+                    <span x-show="isValidJson && !isValidConfig"
+                          class="text-base font-bold text-warning-500 font-mono flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-warning-500"></span> Config Error
+                    </span>
 
-            <span x-show="isValidJson && isValidConfig"
-                  class="text-base font-bold text-emerald-500 font-mono flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live
-            </span>
-        </div>
-    </div>
-
-    <template x-if="configErrors.length > 0 && isValidJson">
-        <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 mx-1">
-            <template x-for="err in configErrors">
-                <p class="text-sm font-mono text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                    <span>→</span> <span x-text="err"></span>
-                </p>
-            </template>
-        </div>
-    </template>
-
-    <div x-show="open"
-         x-transition:enter="transition-opacity duration-150"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition-opacity duration-100"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="relative rounded-xl border border-slate-300 dark:border-slate-800 shadow-2xl shadow-slate-900/20 dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-800 transition-all overflow-hidden focus-within:border-cyan-500/50">
-
-        <div x-ref="cmHost"
-             class="min-h-[16rem]"
-             style="overflow: hidden;"></div>
-
-        <div class="absolute right-4 bottom-4 flex gap-2 z-10">
-            <button @click="copyRawConfig()"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
-                Copy
+                    <span x-show="isValidJson && isValidConfig"
+                          class="text-base font-bold text-success-500 font-mono flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-success-500"></span> Live
+                    </span>
+                </div>
             </button>
-            <button @click="configRaw = JSON.stringify(config, null, 4)"
-                    class="btn-ghost border px-3 py-1.5 text-sm font-black uppercase rounded-lg hover:text-cyan-500 hover:border-cyan-500/50 transition-all shadow-sm">
-                Format
-            </button>
+        </div>
+
+        <template x-if="configErrors.length > 0 && isValidJson">
+            <div class="bg-warning-500/10 border border-warning-500/20 rounded-lg p-2 mx-1">
+                <template x-for="err in configErrors">
+                    <p class="text-sm font-mono text-warning-600 dark:text-warning-400 flex items-center gap-2">
+                        <span>→</span> <span x-text="err"></span>
+                    </p>
+                </template>
+            </div>
+        </template>
+
+        <div class="expander-body-wrap"
+             :class="open ? 'expander-open' : ''">
+            <!-- .expander-body here is a pure overflow-hidden clipper with no
+         border/shadow/ring of its own - those live one level deeper, on
+         the actual editor box below, not on this element. A border/ring/
+         box-shadow still paints even around a box the grid track has
+         squeezed to ~0 height (overflow:hidden clips CONTENT, not an
+         element's own border-box decoration), so putting them directly on
+         the clipper left a thin bordered/shadowed sliver visible while
+         collapsed. Nesting the decorated box one level inside the clipper
+         means the clipper's overflow:hidden clips the decorated box's
+         entire rendered box - border, ring, shadow included - once the
+         grid track collapses. -->
+            <div class="expander-body">
+                <div class="relative rounded-xl border border-inset shadow-2xl shadow-icon-strong/20 dark:shadow-none ring-1 ring-subtle transition-all focus-within:border-accent-500/50">
+
+                    <div x-ref="cmHost"
+                         class="min-h-64"
+                         style="overflow: hidden;"></div>
+
+                    <div class="absolute right-4 bottom-4 flex gap-2 z-10">
+                        <button @click="copyRawConfig()"
+                                class="btn-secondary px-3 py-1.5 text-sm font-black uppercase rounded-lg transition-all shadow-sm">
+                            Copy
+                        </button>
+                        <button @click="configRaw = JSON.stringify(config, null, 4)"
+                                class="btn-secondary px-3 py-1.5 text-sm font-black uppercase rounded-lg transition-all shadow-sm">
+                            Format
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

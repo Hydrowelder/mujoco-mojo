@@ -1,0 +1,979 @@
+{# ── Global settings panel ──────────────────────────────────────────────
+   Triggered by the gear button in base.html ($store.dojo.openSettings()).
+   Entirely data-driven from GET /settings's JSON Schema (see
+   lib/settings-panel.ts) - a field only needs markup here once, per widget
+   *type*, not per setting, so a new/changed field in settings.py shows up
+   automatically with no template edit required.
+   ─────────────────────────────────────────────────────────────────────── #}
+
+{% macro settings_field_row(field_expr) %}
+<!-- hint: shows this field's description in the panel's reserved bottom
+     hint bar (see the bottom of this file) the moment the mouse is
+     anywhere over this row, OR a control inside it gains focus (so
+     keyboard/tab navigation and "currently editing" both count, not just
+     hover) - not just on a small (i) icon like this used to be.
+     @focusin/@focusout (not @focus/@blur) since focus doesn't bubble but
+     these do, letting one listener on the row cover every input/button
+     inside it. -->
+<div class="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4"
+     @mouseenter="$store.dojo.showSettingsHint({{ field_expr }}.description)"
+     @mouseleave="$store.dojo.hideSettingsHint()"
+     @focusin="$store.dojo.showSettingsHint({{ field_expr }}.description)"
+     @focusout="$store.dojo.hideSettingsHint()">
+  <div class="min-w-0 flex-1 flex items-center gap-1.5">
+    <label class="text-sm font-bold text-ink-strong"
+           x-text="{{ field_expr }}.title"></label>
+
+    <!-- reset-to-default -->
+    <button x-show="{{ field_expr }}.widget !== 'secret' && {{ field_expr }}.value !== {{ field_expr }}.default"
+            @click="$store.dojo.resetField({{ field_expr }}.path)"
+            :disabled="!$store.dojo.settingsIsLocalhost"
+            title="Reset to default"
+            class="shrink-0 text-ink-muted hover:text-accent-500 disabled:opacity-30 disabled:cursor-not-allowed">
+      <svg class="w-3.5 h-3.5"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="2"
+           viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0113.9-3.5M19.5 15a8 8 0 01-13.9 3.5" />
+      </svg>
+    </button>
+  </div>
+
+  <div class="shrink-0 w-72 flex justify-end">
+    <!-- toggle -->
+    <template x-if="{{ field_expr }}.widget === 'toggle'">
+      <button @click="$store.dojo.updateField({{ field_expr }}.path, !{{ field_expr }}.value)"
+              :disabled="!$store.dojo.settingsIsLocalhost"
+              class="toggle"
+              :class="{{ field_expr }}.value ? 'toggle-on' : ''">
+        <span class="toggle-thumb"
+              :class="{{ field_expr }}.value ? 'toggle-thumb-on' : ''"></span>
+      </button>
+    </template>
+
+    <!-- select (fixed enum choices): the same custom trigger/panel/option
+         dropdown as the Plot Editor (partials/trial_viewer/_chart.html),
+         not a native <select> - a native select's own open menu renders
+         outside the page's control, so it can't be styled to match.
+
+         The panel is teleported to <body> and manually positioned from the
+         trigger's own getBoundingClientRect(), rather than a plain
+         `absolute` child of this row (the Plot Editor's own version of this
+         same widget uses `absolute` since its dropdowns live in a
+         non-scrolling toolbar) - this row sits inside the settings panel's
+         scrollable content pane (overflow-y-auto), which clips any
+         descendant that visually extends past its box. A field near the
+         bottom of a long enum list would otherwise have its lower options
+         clipped off right at the pane's edge, which (since the hint bar
+         sits directly below that edge) reads as the missing options having
+         gone "behind" the hint bar rather than merely being cut off.
+         Teleporting out to <body> escapes that clipping entirely, the same
+         technique already used for the Plot Editor's y-axis unit/column
+         dropdowns (_series_panel.html) and _chart.html's own version of
+         this exact widget. z-960 - above the settings modal's own z-950
+         backdrop (base.html), so the now-top-level panel still paints over
+         the modal it visually belongs to, but below the z-1000 toast
+         layer. -->
+    <template x-if="{{ field_expr }}.widget === 'select'">
+      <div class="relative w-full"
+           x-data="{ open: false, coords: { top: 0, left: 0, width: 0 } }"
+           @click.away="open = false">
+        <button type="button"
+                x-ref="trigger"
+                @click="const r = $refs.trigger.getBoundingClientRect(); coords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; open = !open"
+                :disabled="!$store.dojo.settingsIsLocalhost"
+                class="dropdown-trigger">
+          <!-- capitalize: enum values are plain lowercase wire values
+               (settings.py's StrEnum members, e.g. Direction.MINIMIZE =
+               "minimize") - display-only formatting, never affects what's
+               actually stored/posted. Reads fine for the plain-English
+               values (minimize/maximize, name/modified); acronym-style
+               sampler names (tpe, cmaes, nsgaii...) just get their first
+               letter capitalized too (Tpe, Cmaes) rather than their
+               proper all-caps form - an accepted, minor imperfection
+               rather than a per-value display-name table for one field. -->
+          <span class="truncate capitalize"
+                x-text="{{ field_expr }}.value"></span>
+          <svg class="dropdown-chevron"
+               :class="open ? 'rotate-180' : ''"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <template x-teleport="body">
+          <div x-show="open"
+               x-transition
+               @click.stop
+               @click.away="open = false"
+               :style="`position:absolute;top:${coords.top}px;left:${coords.left}px;width:${coords.width}px;`"
+               class="dropdown-panel z-960"
+               style="display:none;">
+            <template x-for="opt in {{ field_expr }}.enumOptions"
+                      :key="opt">
+              <!-- per-option hint: falls back to the field's own
+                   description when this particular value has no docstring
+                   of its own - every enum field's StrEnum class currently
+                   documents all of its members (typing.py), but this keeps
+                   a future member added without one from going blank on
+                   hover instead of silently degrading. -->
+              <button type="button"
+                      @click="$store.dojo.updateField({{ field_expr }}.path, opt); open = false"
+                      @mouseenter="$store.dojo.showSettingsHint({{ field_expr }}.enumDescriptions?.[opt] ?? {{ field_expr }}.description)"
+                      @mouseleave="$store.dojo.hideSettingsHint()"
+                      @focus="$store.dojo.showSettingsHint({{ field_expr }}.enumDescriptions?.[opt] ?? {{ field_expr }}.description)"
+                      @blur="$store.dojo.hideSettingsHint()"
+                      class="dropdown-option"
+                      :class="opt === {{ field_expr }}.value ? 'dropdown-option-active' : ''">
+                <span class="capitalize"
+                      x-text="opt"></span>
+              </button>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- secret: always blank on load, only sent back if actually retyped -->
+    <template x-if="{{ field_expr }}.widget === 'secret'">
+      <input type="password"
+             :value="{{ field_expr }}.value"
+             @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value)"
+             :disabled="!$store.dojo.settingsIsLocalhost"
+             placeholder="Unchanged"
+             autocomplete="new-password"
+             class="input-text" />
+    </template>
+
+    <!-- number: the browser's native min/max attributes only clamp the
+         spinner, they don't stop the user from typing an out-of-range
+         value, so this also guards/warns explicitly - matches what
+         settings.py's Field(ge=..., le=...) would reject on save anyway,
+         just surfaced immediately instead of only after a failed POST -->
+    <template x-if="{{ field_expr }}.widget === 'number'">
+      <div class="w-full">
+        <div class="input-number-wrap"
+             :class="$store.dojo.settingsFieldOutOfRange({{ field_expr }}) ? 'border-danger-500 focus-within:ring-danger-500 focus-within:border-danger-500' : ''">
+          <input type="number"
+                 :value="{{ field_expr }}.value"
+                 :min="{{ field_expr }}.minimum"
+                 :max="{{ field_expr }}.maximum"
+                 step="any"
+                 @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value === '' ? null : Number($event.target.value))"
+                 :disabled="!$store.dojo.settingsIsLocalhost"
+                 class="input-number" />
+        </div>
+        <p x-show="$store.dojo.settingsFieldOutOfRange({{ field_expr }})"
+           class="text-xs text-danger-500 text-right mt-0.5"
+           x-text="$store.dojo.settingsFieldRangeMessage({{ field_expr }})"></p>
+      </div>
+    </template>
+
+    <!-- url-or-path: globe only when the value is airtight-confirmed a URL,
+         either by the backend's value_meta (as loaded) or, live, by
+         looksLikeHttpUrl() as the user types - see settings-panel.ts -->
+    <template x-if="{{ field_expr }}.widget === 'url'">
+      <div class="flex items-center gap-1.5 w-full">
+        <input type="text"
+               :value="{{ field_expr }}.value ?? ''"
+               @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value)"
+               :disabled="!$store.dojo.settingsIsLocalhost"
+               placeholder="URL or file path"
+               class="input-text flex-1 min-w-0" />
+        <a x-show="{{ field_expr }}.isUrl"
+           :href="{{ field_expr }}.value"
+           target="_blank"
+           rel="noopener"
+           title="Open link"
+           class="shrink-0 text-ink-muted hover:text-accent-500">
+          <svg class="w-4 h-4"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="1.75"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
+          </svg>
+        </a>
+        <button x-show="{{ field_expr }}.value"
+                @click="$store.dojo.updateField({{ field_expr }}.path, '')"
+                :disabled="!$store.dojo.settingsIsLocalhost"
+                title="Clear"
+                class="shrink-0 text-ink-muted hover:text-danger-500 disabled:opacity-30">✕</button>
+      </div>
+    </template>
+
+    <!-- color: accepts either a Color enum name (e.g. EMERALD_500) or a
+         #rrggbb hex code, typed directly or picked from the wheel - see
+         Color.parse. A hex that exactly matches a named swatch collapses
+         to that name immediately (mirroring Color.parse's own alias
+         collapsing, which would otherwise only take effect after a save);
+         an unmatched hex is kept as-is, no forced snapping. -->
+    <template x-if="{{ field_expr }}.widget === 'color'">
+      <div class="flex flex-col items-end gap-1 w-full"
+           x-data="{ picker: null }"
+           x-init="$nextTick(() => {
+             const initial = window.mojoResolveColorHex({{ field_expr }}.value, $store.dojo.settingsColorChoices) || '#888888';
+             picker = window.mojoCreateColorPicker($refs.wheel, 90, 50, initial);
+             picker.on('color:change', (color) => {
+               const collapsed = window.mojoCollapseColorAlias(color.hexString.toUpperCase(), $store.dojo.settingsColorChoices);
+               $store.dojo.updateField({{ field_expr }}.path, collapsed);
+             });
+             $watch('{{ field_expr }}.value', (v) => {
+               const hex = window.mojoResolveColorHex(v, $store.dojo.settingsColorChoices);
+               if (hex && picker && hex !== picker.color.hexString) picker.color.set(hex);
+             });
+           })">
+        <div class="flex items-center gap-2 w-full justify-end">
+          <input type="text"
+                 :value="{{ field_expr }}.value ?? ''"
+                 @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value)"
+                 @blur="$store.dojo.updateField({{ field_expr }}.path, window.mojoCollapseColorAlias({{ field_expr }}.value, $store.dojo.settingsColorChoices))"
+                 :disabled="!$store.dojo.settingsIsLocalhost"
+                 placeholder="NAME or #hex"
+                 class="input-text flex-1 min-w-0 font-mono text-xs" />
+          <div class="w-6 h-6 rounded-full border border-line shrink-0"
+               :style="`background-color: ${window.mojoResolveColorHex({{ field_expr }}.value, $store.dojo.settingsColorChoices) || 'transparent'}`"></div>
+          <div x-ref="wheel"
+               :class="!$store.dojo.settingsIsLocalhost ? 'pointer-events-none opacity-50' : ''"></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <p x-show="window.mojoIsHexColor({{ field_expr }}.value)"
+             class="text-xs font-mono text-ink-muted"
+             x-text="'closest: ' + window.mojoNearestColorName({{ field_expr }}.value || '', $store.dojo.settingsColorChoices)"></p>
+          <!-- always rendered (visible/invisible, not x-show) so the row's
+               width doesn't jump when this button appears/disappears.
+               "Disable" (not "Hide") - this turns off the visual element
+               the field controls (e.g. the force-arrow overlay), it
+               doesn't hide the setting row itself. -->
+          <button :class="{{ field_expr }}.value ? 'visible' : 'invisible'"
+                  @click="$store.dojo.updateField({{ field_expr }}.path, '')"
+                  :disabled="!$store.dojo.settingsIsLocalhost"
+                  class="text-xs text-ink-muted hover:text-danger-500 disabled:opacity-30">Disable</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- text (fallback for everything else) -->
+    <template x-if="{{ field_expr }}.widget === 'text'">
+      <div class="flex items-center gap-1.5 w-full">
+        <input type="text"
+               :value="{{ field_expr }}.value ?? ''"
+               @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value)"
+               :disabled="!$store.dojo.settingsIsLocalhost"
+               class="input-text flex-1 min-w-0" />
+        <button x-show="{{ field_expr }}.nullable && {{ field_expr }}.value"
+                @click="$store.dojo.updateField({{ field_expr }}.path, '')"
+                :disabled="!$store.dojo.settingsIsLocalhost"
+                title="Clear"
+                class="shrink-0 text-ink-muted hover:text-danger-500 disabled:opacity-30">✕</button>
+      </div>
+    </template>
+  </div>
+</div>
+{% endmacro %}
+
+{# Renders one group's own content - its leaf fields, its subgroups (each
+   still its own independently-collapsible mini-accordion), and its dict
+   field, if any - with no outer per-group header/collapse-toggle of its
+   own. Shared by both places a single group's content needs to render:
+   the search-results view (one call per matching group, each wrapped in
+   its own collapsible header there) and the left-nav "active section" view
+   (exactly one call, for whichever section is currently selected, with no
+   header/toggle needed since it's already the only thing shown). #}
+{% macro settings_group_body(group_expr) %}
+<template x-for="field in {{ group_expr }}.fields"
+          :key="field.path">
+  {{ settings_field_row('field') }}
+</template>
+
+<template x-for="sub in {{ group_expr }}.subgroups"
+          :key="sub.path">
+  <div class="pt-3 pb-1 pl-3 border-l-2 border-subtle">
+    <!-- hint trigger lives on the header button alone, not this whole
+         wrapper - the wrapper also contains this subgroup's own fields
+         below, each with their own row-level hint trigger
+         (settings_field_row), and mouseenter fires on every ancestor
+         boundary a pointer crosses (unlike click, it doesn't just bubble
+         from one target) - putting it here too would fight each field's
+         own hint as the mouse moves between them. -->
+    <button @mousedown.prevent="$store.dojo.toggleSettingsSection(sub.path)"
+            @mouseenter="$store.dojo.showSettingsHint(sub.description)"
+            @mouseleave="$store.dojo.hideSettingsHint()"
+            @focus="$store.dojo.showSettingsHint(sub.description)"
+            @blur="$store.dojo.hideSettingsHint()"
+            class="expander-header w-full normal-case text-xs mb-1">
+      <svg x-show="sub.icon"
+           x-html="sub.icon"
+           class="w-3.5 h-3.5 shrink-0 text-ink-muted"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="1.75"
+           viewBox="0 0 24 24"></svg>
+      <p class="min-w-0"
+         x-text="sub.title"></p>
+      <svg class="expander-chevron w-3.5 h-3.5 ml-auto"
+           :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[sub.path] ? '-rotate-90' : ''"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="2"
+           viewBox="0 0 24 24">
+        <path stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+
+    <!-- same x-show + duration-matched x-transition backstop as the
+         group-level wrapper (search-results view) uses - see its comment. -->
+    <div class="expander-body-wrap"
+         x-show="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery"
+         x-transition.duration.200ms
+         :class="!$store.dojo.settingsCollapsed[sub.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
+    <div class="expander-body divide-y divide-subtle dark:divide-subtle/50">
+      <template x-for="field in sub.fields"
+                :key="field.path">
+        {{ settings_field_row('field') }}
+      </template>
+    </div>
+
+    <!-- a subgroup's own dict/list fields (e.g. dojo.sensai.models) -
+         mirrors the top-level dictField/listFields blocks just below this
+         template, since this expander-body loop above only covers plain
+         fields, not either of those. -->
+    <template x-if="sub.dictField">
+      <div class="pt-3">
+        {{ settings_dict_rows('sub') }}
+      </div>
+    </template>
+
+    <template x-for="listField in sub.listFields"
+              :key="listField.path">
+      <div class="pt-3">
+        <label class="text-sm font-bold text-ink-strong"
+               @mouseenter="$store.dojo.showSettingsHint(listField.description)"
+               @mouseleave="$store.dojo.hideSettingsHint()"
+               x-text="listField.title"></label>
+        <div class="mt-2">
+          {{ settings_list_rows('listField') }}
+        </div>
+      </div>
+    </template>
+    </div>
+  </div>
+</template>
+
+<template x-if="{{ group_expr }}.dictField">
+  <div class="pt-3">
+    {{ settings_dict_rows(group_expr) }}
+  </div>
+</template>
+
+<template x-for="listField in {{ group_expr }}.listFields"
+          :key="listField.path">
+  <div class="pt-3">
+    <label class="text-sm font-bold text-ink-strong"
+           @mouseenter="$store.dojo.showSettingsHint(listField.description)"
+           @mouseleave="$store.dojo.hideSettingsHint()"
+           x-text="listField.title"></label>
+    <div class="mt-2">
+      {{ settings_list_rows('listField') }}
+    </div>
+  </div>
+</template>
+{% endmacro %}
+
+{% macro settings_dict_rows(group_expr) %}
+<div class="space-y-2">
+  <template x-for="(entry, idx) in {{ group_expr }}.dictField.entries"
+            :key="idx">
+    <div class="flex items-center gap-2">
+      <input type="text"
+             x-model="entry.key"
+             placeholder="key"
+             :disabled="!$store.dojo.settingsIsLocalhost"
+             class="input-text flex-1 min-w-0 font-mono text-xs" />
+
+      <div class="relative w-20 shrink-0"
+           x-data="{ open: false }">
+        <button type="button"
+                @click="open = !open"
+                @click.away="open = false"
+                :disabled="!$store.dojo.settingsIsLocalhost"
+                class="dropdown-trigger-sm text-xs">
+          <span x-text="{ string: 'str', number: 'num', boolean: 'bool' }[entry.valueType]"></span>
+          <svg class="dropdown-chevron w-3 h-3"
+               :class="open ? 'rotate-180' : ''"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div x-show="open"
+             x-transition
+             class="dropdown-panel text-xs">
+          <template x-for="opt in [{ v: 'string', l: 'str' }, { v: 'number', l: 'num' }, { v: 'boolean', l: 'bool' }]"
+                    :key="opt.v">
+            <button type="button"
+                    @click="entry.valueType = opt.v; open = false"
+                    class="dropdown-option text-xs"
+                    :class="opt.v === entry.valueType ? 'dropdown-option-active' : ''">
+              <span x-text="opt.l"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <template x-if="entry.valueType === 'boolean'">
+        <button @click="entry.value = !entry.value"
+                :disabled="!$store.dojo.settingsIsLocalhost"
+                class="toggle"
+                :class="entry.value ? 'toggle-on' : ''">
+          <span class="toggle-thumb"
+                :class="entry.value ? 'toggle-thumb-on' : ''"></span>
+        </button>
+      </template>
+      <template x-if="entry.valueType === 'number'">
+        <div class="input-number-wrap w-24 shrink-0">
+          <input type="number"
+                 x-model.number="entry.value"
+                 :disabled="!$store.dojo.settingsIsLocalhost"
+                 class="input-number text-xs" />
+        </div>
+      </template>
+      <template x-if="entry.valueType === 'string'">
+        <input type="text"
+               x-model="entry.value"
+               :disabled="!$store.dojo.settingsIsLocalhost"
+               class="input-text flex-1 min-w-0 text-xs" />
+      </template>
+
+      <button @click="$store.dojo.removeDictEntry({{ group_expr }}.path, idx)"
+              :disabled="!$store.dojo.settingsIsLocalhost"
+              title="Remove"
+              class="shrink-0 text-ink-muted hover:text-danger-500 disabled:opacity-30">
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2.5"
+             viewBox="0 0 24 24">
+          <path stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  </template>
+
+  <button @click="$store.dojo.addDictEntry({{ group_expr }}.path)"
+          :disabled="!$store.dojo.settingsIsLocalhost"
+          class="btn-secondary-sm">
+    + Add entry
+  </button>
+
+  <p x-show="{{ group_expr }}.dictField.entries.length === 0"
+     class="text-xs font-mono italic text-ink-disabled">
+    No entries
+  </p>
+</div>
+{% endmacro %}
+
+{# Renders a SettingsListField (settings-panel.ts) - an editable, add/removable
+   list of fixed-shape objects, e.g. SensAISettings.models: list[SensAIModelEntry].
+   Each row's fields are real SettingsField objects (built once from the item
+   schema), so the widgets below only need to cover the handful of field
+   *types* a row can contain (select/text/number/toggle) rather than one
+   bespoke input per settings field - a new fixed-shape list field defined in
+   settings.py picks up this same editor automatically, the same way a plain
+   field or subgroup does. Deliberately its own compact one-line-per-row
+   layout (unlike settings_field_row's label-left/control-right layout, sized
+   for one standalone field) since a row here packs 2+ fields plus a remove
+   button side by side. #}
+{% macro settings_list_rows(list_expr) %}
+<div class="space-y-2">
+  <template x-for="(item, idx) in {{ list_expr }}.items"
+            :key="idx">
+    <div class="flex items-center gap-2">
+      <template x-for="field in item.fields"
+                :key="field.path">
+        <div class="flex-1 min-w-0">
+          <!-- select: teleported to <body> and positioned from the trigger's
+               own getBoundingClientRect(), same as settings_field_row's own
+               select widget above (NOT the dict field's compact valueType
+               selector, which stays untelported since it only ever has 3
+               options) - ModelProvider has 18, tall enough to hit the exact
+               scroll-clipping problem that widget's own comment explains, so
+               a list-row select needs the same escape-the-scroll-pane fix. -->
+          <template x-if="field.widget === 'select'">
+            <div class="relative w-full"
+                 x-data="{ open: false, coords: { top: 0, left: 0, width: 0 } }"
+                 @click.away="open = false">
+              <button type="button"
+                      x-ref="trigger"
+                      @click="const r = $refs.trigger.getBoundingClientRect(); coords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; open = !open"
+                      :disabled="!$store.dojo.settingsIsLocalhost"
+                      class="dropdown-trigger-sm text-xs w-full">
+                <span class="truncate"
+                      x-text="field.value"></span>
+                <svg class="dropdown-chevron w-3 h-3"
+                     :class="open ? 'rotate-180' : ''"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     viewBox="0 0 24 24">
+                  <path stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <template x-teleport="body">
+                <div x-show="open"
+                     x-transition
+                     @click.stop
+                     @click.away="open = false"
+                     :style="`position:absolute;top:${coords.top}px;left:${coords.left}px;width:${coords.width}px;`"
+                     class="dropdown-panel z-960 text-xs max-h-60 overflow-y-auto"
+                     style="display:none;">
+                  <template x-for="opt in field.enumOptions"
+                            :key="opt">
+                    <button type="button"
+                            @click="$store.dojo.updateField(field.path, opt); open = false"
+                            @mouseenter="$store.dojo.showSettingsHint(field.enumDescriptions?.[opt] ?? field.description)"
+                            @mouseleave="$store.dojo.hideSettingsHint()"
+                            class="dropdown-option text-xs"
+                            :class="opt === field.value ? 'dropdown-option-active' : ''">
+                      <span x-text="opt"></span>
+                    </button>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- text -->
+          <template x-if="field.widget === 'text'">
+            <input type="text"
+                   :value="field.value"
+                   @input="$store.dojo.updateField(field.path, $event.target.value)"
+                   :disabled="!$store.dojo.settingsIsLocalhost"
+                   :placeholder="field.title"
+                   class="input-text w-full text-xs" />
+          </template>
+
+          <!-- number -->
+          <template x-if="field.widget === 'number'">
+            <div class="input-number-wrap w-full">
+              <input type="number"
+                     :value="field.value"
+                     @input="$store.dojo.updateField(field.path, $event.target.valueAsNumber)"
+                     :disabled="!$store.dojo.settingsIsLocalhost"
+                     class="input-number text-xs" />
+            </div>
+          </template>
+
+          <!-- toggle -->
+          <template x-if="field.widget === 'toggle'">
+            <button @click="$store.dojo.updateField(field.path, !field.value)"
+                    :disabled="!$store.dojo.settingsIsLocalhost"
+                    class="toggle"
+                    :class="field.value ? 'toggle-on' : ''">
+              <span class="toggle-thumb"
+                    :class="field.value ? 'toggle-thumb-on' : ''"></span>
+            </button>
+          </template>
+        </div>
+      </template>
+
+      <button @click="$store.dojo.removeListItem({{ list_expr }}.path, idx)"
+              :disabled="!$store.dojo.settingsIsLocalhost"
+              title="Remove"
+              class="shrink-0 text-ink-muted hover:text-danger-500 disabled:opacity-30">
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2.5"
+             viewBox="0 0 24 24">
+          <path stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  </template>
+
+  <button @click="$store.dojo.addListItem({{ list_expr }}.path)"
+          :disabled="!$store.dojo.settingsIsLocalhost"
+          class="btn-secondary-sm">
+    <span x-text="'+ Add ' + {{ list_expr }}.itemTitle"></span>
+  </button>
+
+  <p x-show="{{ list_expr }}.items.length === 0"
+     class="text-xs font-mono italic text-ink-disabled">
+    No entries
+  </p>
+</div>
+{% endmacro %}
+
+<div x-data
+     x-show="$store.dojo.settingsOpen"
+     class="fixed inset-0 z-950 flex items-center justify-center p-4"
+     style="display:none;"
+     @keydown.escape.window="$store.dojo.closeSettings()">
+
+  <!-- backdrop: its own explicit enter/leave (styles/overlay.css's
+       .modal-backdrop), timed identically to the card below, rather than
+       riding this wrapper's own x-show transition - backdrop-filter
+       doesn't interpolate as smoothly as opacity in every engine when it's
+       only carried by an ancestor's fade, so it previously read as a step
+       arriving after the card had already finished animating in. Both
+       elements now animate from the same tick instead of one being
+       implicit and the other explicit. -->
+  <div class="modal-backdrop"
+       x-transition:enter="transition duration-150 ease-out"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition duration-100 ease-in"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       @click="$store.dojo.closeSettings()"></div>
+
+  <!-- card: a fixed h-[85vh] (not max-h) so the panel's footprint stays put
+       regardless of which sections are collapsed/expanded - only the
+       sections list scrolls internally, the modal itself never resizes.
+       max-w-3xl (wider than the old max-w-2xl) makes room for the left nav
+       column without squeezing field labels against the fixed w-72 control
+       column in settings_field_row. -->
+  <div class="relative w-full max-w-3xl h-[85vh] flex flex-col"
+       x-transition:enter="transition duration-150 ease-out"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition duration-100 ease-in"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <!-- h-full: a flex-column child only stretches to fill its parent's
+         cross axis (width here) by default, not the main axis (height) -
+         without this, the outer h-[85vh] wrapper was fixed but this actual
+         visible card still shrank to its own content underneath it. -->
+    <div class="bg-surface rounded-2xl shadow-2xl ring-2 ring-accent-500 flex flex-col overflow-hidden h-full">
+
+      <!-- header -->
+      <!-- border-line (not border-subtle) in light mode for the header/
+           section/footer separators below: --color-subtle is slate-200,
+           barely visible against the white surface. Dark mode already read
+           fine (--color-subtle is slate-700 there), so its dark: override
+           keeps that exact value rather than changing the shared token,
+           which would also affect every other page using border-subtle. -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-line dark:border-subtle shrink-0">
+        <div>
+          <p class="text-base font-black uppercase tracking-widest text-ink-strong">Settings</p>
+          <p class="text-xs text-ink-muted mt-0.5">Global MuJoCo Mojo configuration</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button x-show="$store.dojo.settingsIsLocalhost && $store.dojo.settingsSections.length > 0"
+                  @click="$store.dojo.resetAllToDefaults()"
+                  class="btn-secondary-sm">
+            Restore Defaults
+          </button>
+          <button @click="$store.dojo.closeSettings()"
+                  class="btn-icon btn-secondary"
+                  title="Close">
+            <svg class="w-4 h-4"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2.5"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- localhost banner -->
+      <div x-show="!$store.dojo.settingsLoading && !$store.dojo.settingsIsLocalhost"
+           class="mx-6 mt-4 px-4 py-3 rounded-lg border border-warning-400 dark:border-warning-500/50 bg-warning-50 dark:bg-warning-900/20 flex items-center justify-between gap-3 shrink-0">
+        <p class="text-xs text-warning-700 dark:text-warning-300 leading-relaxed">
+          Settings can only be changed from the machine running Dojo. You're viewing this over the
+          network, so every field below is read-only.
+        </p>
+        <button @click="$store.dojo.openOnLocalhost()"
+                class="btn-secondary-sm shrink-0 whitespace-nowrap">
+          Open on 127.0.0.1
+        </button>
+      </div>
+
+      <!-- error -->
+      <div x-show="$store.dojo.settingsError"
+           class="mx-6 mt-4 px-4 py-3 rounded-lg border border-danger-400 dark:border-danger-500/50 bg-danger-50 dark:bg-danger-900/20 text-xs text-danger-700 dark:text-danger-300 shrink-0"
+           x-text="$store.dojo.settingsError"></div>
+
+      <!-- loading -->
+      <div x-show="$store.dojo.settingsLoading"
+           class="px-6 py-10 text-center text-sm font-mono text-ink-muted">
+        Loading settings...
+      </div>
+
+      <!-- search: filters settingsSections by field/section title, description,
+           and key (settingsFilteredSections, settings-panel.ts) - a plain
+           .input-text rather than a dedicated search-input variant, since
+           nothing here needs anything beyond what that class already gives
+           a text field. While a query is active, every section/subgroup a
+           match survived in auto-expands regardless of its own collapsed
+           state (see the :class bindings below), so a hit is never hidden
+           inside a still-collapsed section. -->
+      <div x-show="!$store.dojo.settingsLoading && $store.dojo.settingsSections.length > 0"
+           class="px-6 pt-4 shrink-0">
+        <div class="relative">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+          </svg>
+          <input type="text"
+                 x-model="$store.dojo.settingsSearchQuery"
+                 placeholder="Search settings..."
+                 class="input-text pl-8 pr-8" />
+          <button x-show="$store.dojo.settingsSearchQuery"
+                  @click="$store.dojo.settingsSearchQuery = ''"
+                  class="input-clear-btn"
+                  title="Clear search">
+            <svg class="w-3.5 h-3.5"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2.5"
+                 viewBox="0 0 24 24">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- body: left nav (one entry per top-level section, click = GOTO
+           that section) + a content pane showing either the active
+           section alone, or - while a search query is active - every
+           matching section stacked (the panel's original behavior, kept
+           for "find something regardless of where it lives"). overflow-
+           hidden on this row keeps the nav and content pane's own
+           independent vertical scrollbars from spilling into each other;
+           each gets min-h-0 for the same flex:1+overflow:auto reason
+           documented below. -->
+      <div x-show="!$store.dojo.settingsLoading"
+           class="flex-1 min-h-0 flex overflow-hidden">
+        <!-- nav -->
+        <div class="w-44 shrink-0 min-h-0 overflow-y-auto custom-scrollbar border-r border-line dark:border-subtle py-2 px-2 space-y-0.5">
+          <template x-for="group in $store.dojo.settingsSections"
+                    :key="group.path">
+            <button @click="$store.dojo.selectSettingsSection(group.path)"
+                    class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-left transition-colors"
+                    :class="!$store.dojo.settingsSearchQuery && group.path === $store.dojo.settingsActiveSectionPath
+                      ? 'bg-accent-100/50 dark:bg-chip/50 text-ink-strong font-bold'
+                      : 'text-ink-muted hover:text-ink-body hover:bg-control'">
+              <svg x-show="group.icon"
+                   x-html="group.icon"
+                   class="w-4 h-4 shrink-0"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="1.75"
+                   viewBox="0 0 24 24"></svg>
+              <span class="truncate"
+                    x-text="group.title"></span>
+            </button>
+          </template>
+        </div>
+
+        <!-- content pane -->
+        <!-- min-h-0 is required alongside flex-1 + overflow-y-auto here: a
+             flex item's default min-height is auto (its content size), which
+             in some browsers makes a flex:1 + overflow:auto child claim the
+             full available height even when its actual content (e.g. just
+             the one-field Assets section) is much shorter, leaving a block
+             of empty space above the footer instead of shrinking to fit. -->
+        <div class="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar px-6">
+          <!-- search mode: every matching section, stacked and still
+               individually collapsible - unchanged from this panel's
+               original single-column behavior. -->
+          <template x-if="$store.dojo.settingsSearchQuery">
+            <div>
+              <div x-show="$store.dojo.settingsFilteredSections().length === 0"
+                   class="py-10 text-center text-sm font-mono text-ink-muted">
+                No settings match "<span x-text="$store.dojo.settingsSearchQuery"></span>"
+              </div>
+              <template x-for="group in $store.dojo.settingsFilteredSections()"
+                        :key="group.path">
+                <div class="border-b border-line dark:border-subtle last:border-0">
+                  <!-- header: .expander-header/.expander-chevron (styles/expander.css)
+                       - the exact same classes as partials/trial_viewer/_trial_logs.html
+                       and _distributions.html use, not just a lookalike copy.
+                       normal-case overrides the shared class's uppercase (dynamic
+                       titles like "SensAI" need their real casing, unlike a
+                       static page-header label); w-full/ml-auto/py-3/text-sm are
+                       this usage's own layout, same compositional pattern as
+                       .btn-secondary + per-call-site sizing elsewhere. -->
+                  <!-- hint trigger lives on this header button alone, not a
+                       wrapping element - the group's own fields render
+                       below (settings_group_body) each with their own
+                       row-level hint trigger, and mouseenter fires on
+                       every ancestor boundary a pointer crosses, so a
+                       wrapper-level trigger here would fight each field's
+                       own hint as the mouse moves between them. -->
+                  <button @mousedown.prevent="$store.dojo.toggleSettingsSection(group.path)"
+                          @mouseenter="$store.dojo.showSettingsHint(group.description)"
+                          @mouseleave="$store.dojo.hideSettingsHint()"
+                          @focus="$store.dojo.showSettingsHint(group.description)"
+                          @blur="$store.dojo.hideSettingsHint()"
+                          class="expander-header w-full normal-case text-sm py-3">
+                    <svg x-show="group.icon"
+                         x-html="group.icon"
+                         class="w-4 h-4 shrink-0 text-ink-muted"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.75"
+                         viewBox="0 0 24 24"></svg>
+                    <p class="min-w-0"
+                       x-text="group.title"></p>
+                    <svg class="expander-chevron ml-auto"
+                         :class="!$store.dojo.settingsSearchQuery && $store.dojo.settingsCollapsed[group.path] ? '-rotate-90' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  <!-- expander-open whenever this section isn't collapsed, OR a
+                       search is active - a query result would otherwise still be
+                       hidden inside a section the user had previously collapsed.
+                       x-show + duration-matched x-transition is a hard display:none
+                       backstop on top of the grid animation below, not a
+                       replacement for it: nested grid-template-rows:0fr accordions
+                       (a group containing a subgroup, both using this same
+                       pattern) aren't reliably collapsed to true zero height by
+                       the CSS trick alone in every engine, which let a collapsed
+                       group's fields stay hit-testable/selectable (and, in some
+                       cases, faintly visible) even though the track had shrunk.
+                       x-transition.duration here just delays Alpine's display:none
+                       until the CSS transition finishes, so the visual animation
+                       is unchanged - display:none is what actually guarantees
+                       full removal once it lands. -->
+                  <div class="expander-body-wrap"
+                       x-show="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery"
+                       x-transition.duration.200ms
+                       :class="!$store.dojo.settingsCollapsed[group.path] || $store.dojo.settingsSearchQuery ? 'expander-open' : ''">
+                  <div class="expander-body pb-4 divide-y divide-subtle dark:divide-subtle/50">
+                    {{ settings_group_body('group') }}
+                  </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- normal mode: just the left nav's active section - no
+               collapse toggle on it, since it's already the only section
+               shown (its subgroups, if any, keep their own toggle inside
+               settings_group_body). -->
+          <template x-if="!$store.dojo.settingsSearchQuery && $store.dojo.settingsActiveGroup()">
+            <div class="py-4">
+              <div class="flex items-center gap-2 mb-3"
+                   @mouseenter="$store.dojo.showSettingsHint($store.dojo.settingsActiveGroup().description)"
+                   @mouseleave="$store.dojo.hideSettingsHint()">
+                <svg x-show="$store.dojo.settingsActiveGroup().icon"
+                     x-html="$store.dojo.settingsActiveGroup().icon"
+                     class="w-5 h-5 shrink-0 text-ink-muted"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.75"
+                     viewBox="0 0 24 24"></svg>
+                <p class="text-base font-bold text-ink-strong"
+                   x-text="$store.dojo.settingsActiveGroup().title"></p>
+              </div>
+              <div class="divide-y divide-subtle dark:divide-subtle/50">
+                {{ settings_group_body('$store.dojo.settingsActiveGroup()') }}
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- hint bar: reserved space for whichever field or section's
+           description the mouse is currently over (or a control within is
+           focused/being edited) - showSettingsHint/hideSettingsHint,
+           wired on every row/header above. Always present (not x-show'd
+           away) so moving between settings never reflows the panel the
+           way a floating tooltip popping in and out used to risk. No
+           max-height/scroll here at all - unlike a normal scrollable
+           area, this one could never actually be scrolled in practice:
+           reaching a scrollbar down here means moving the mouse off
+           whatever row is being hovered, which immediately clears the
+           hint via mouseleave before the scroll would even matter.
+
+           min-h-32 is load-bearing, not decorative: without a floor, this
+           box starts short (its one-line empty-state text) and grows the
+           instant a longer description shows up. Since it's a flex sibling
+           of the scrollable content pane above it (both children of the
+           fixed-height card), growing it shrinks that pane's available
+           height in the same frame - which, if the row you're currently
+           hovering happens to be the last one visible, pulls the pane's
+           own bottom edge up past your cursor and right into the space the
+           hint bar just claimed. That reads as "the hint bar covered the
+           row I was pointing at," even though nothing is actually
+           positioned on top of anything else - it's the adjacent box
+           resizing out from under a stationary mouse. A fixed floor tall
+           enough for the worst case this panel can actually produce (every
+           description is capped at 200 chars by
+           settings_test.py::test_no_description_is_too_long_for_the_settings_panel_hint_bar,
+           but a multi-paragraph one like chime_enabled's plus the
+           auto-appended "Default: ..." line can still reach ~4-5 wrapped
+           lines) means the box's height no longer depends on which row is
+           hovered, so hovering the last row never moves the pane's edge
+           out from under it. Still allowed to grow past this floor for
+           some future outlier - it's min-h, not h - just never shorter. -->
+      <div class="px-6 py-2.5 border-t border-line dark:border-subtle shrink-0 min-h-32">
+        <p x-show="$store.dojo.settingsHintText"
+           class="text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-1 [&_p:last-child]:mb-0"
+           x-html="$store.dojo.renderMarkdown($store.dojo.settingsHintText)"></p>
+        <p x-show="!$store.dojo.settingsHintText"
+           class="text-xs italic text-ink-disabled">
+          Hover over or edit a setting to see more info here.
+        </p>
+      </div>
+
+      <!-- footer -->
+      <div class="flex justify-end gap-2 px-6 py-4 border-t border-line dark:border-subtle shrink-0">
+        <button @click="$store.dojo.closeSettings()"
+                class="btn btn-secondary text-sm">
+          Cancel
+        </button>
+        <button x-show="$store.dojo.settingsIsLocalhost"
+                @click="$store.dojo.saveSettings()"
+                :disabled="$store.dojo.settingsSaving || $store.dojo.settingsHasInvalidFields()"
+                :title="$store.dojo.settingsHasInvalidFields() ? 'Fix the highlighted field(s) before saving' : ''"
+                class="btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <span x-text="$store.dojo.settingsSaving ? 'Saving...' : 'Save'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

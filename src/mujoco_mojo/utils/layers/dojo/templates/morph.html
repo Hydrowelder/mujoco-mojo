@@ -4,17 +4,6 @@
 
 {% block scripts %}
 <script>
-    document.addEventListener("alpine:init", () => {
-        const store = Alpine.store("dojo");
-        if (store) {
-            // Morph has its own fullscreen (the iframe fills the screen), so reset
-            // the shared state without writing to localStorage - navigating back to
-            // Monitor/Mosaic/Trial Viewer will still restore their last fullscreen state.
-            store.isFullscreen = false;
-            store.setPageReady(true, true);
-        }
-    });
-
     // Forward Escape from inside the Optuna iframe to the parent store.
     // Called by the iframe's onload attribute.
     const attachIframeListeners = () => {
@@ -32,11 +21,26 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-col gap-4">
+{# Morph has its own fullscreen (the iframe fills the screen), so this
+   forces $store.dojo.isFullscreen to false on every load regardless of
+   dojo.default_to_fullscreen or a leftover mojo_fullscreen in
+   localStorage from another page - never writes to localStorage itself,
+   so navigating back to Monitor/Mosaic/Trial Viewer still restores
+   whatever fullscreen state the user last left THOSE pages in. x-init
+   (not the raw alpine:init DOM event morph.html used before) is what
+   makes this reliable: it's guaranteed by Alpine itself to run only after
+   alpine:init has fully fired and every store is registered, unlike a
+   second alpine:init listener racing store.ts's own registration of
+   $store.dojo, whose relative order depends on this being a classic
+   (parser-blocking) script vs. main.js being a deferred module - a
+   morph-is-inescapable failure mode this sidesteps entirely rather than
+   relying on getting that race right. #}
+<div class="flex flex-col gap-4"
+     x-init="$store.dojo.isFullscreen = false; $store.dojo.setPageReady(true, true)">
     <div class="transition-all duration-300 ease-in-out"
-         :class="$store.dojo.isFullscreen ? 'fixed inset-0 z-[100] bg-white dark:bg-slate-900' : 'relative w-full h-[calc(100vh-300px)] min-h-[600px]'">
+         :class="$store.dojo.isFullscreen ? 'fixed inset-0 z-100 bg-canvas' : 'relative w-full h-[calc(100vh-300px)] min-h-150'">
 
-        <div class="w-full h-full overflow-hidden border border-slate-300 dark:border-slate-700 shadow-2xl bg-white"
+        <div class="w-full h-full overflow-hidden border border-control shadow-2xl bg-white"
              :class="$store.dojo.isFullscreen ? 'rounded-none border-none' : 'rounded-2xl'">
 
             <iframe id="optuna-iframe"

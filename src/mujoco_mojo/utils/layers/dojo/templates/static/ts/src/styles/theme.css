@@ -1,0 +1,267 @@
+/*
+ * design tokens for the Dojo UI. every token below aliases one of
+ * Tailwind's own auto-generated `--color-<name>-<shade>` variables (from
+ * `@theme` in main.css importing "tailwindcss") rather than a hand-typed
+ * hex value, so nothing here can drift from Tailwind's actual palette.
+ * `@theme` also auto-generates a utility class per token (e.g. `bg-accent-500`,
+ * `text-canvas`), so this file doubles as the color part of the Tailwind
+ * config: no separate JS config object needed under v4.
+ */
+
+/* `static` (not plain `@theme`) because most of these tokens are only ever
+   read dynamically at runtime (getComputedStyle().getPropertyValue(), see
+   lib/theme-colors.ts and _signal_lab.html) rather than appearing as a
+   literal `var(--color-x)` string or a Tailwind utility class anywhere
+   Tailwind's content scanner can see. Without `static`, Tailwind silently
+   drops any theme variable it can't prove is used, which verifiably broke
+   the Signal Lab node colors and the danger/success/warning/info tokens
+   during this file's Tailwind v4 migration (confirmed by inspecting the
+   compiled output: they were simply missing). `static` forces every
+   variable declared here into the output unconditionally. */
+@theme static {
+  /* core neutrals, aliased to Tailwind's slate scale */
+  --color-canvas: var(--color-slate-200);
+  --color-surface: var(--color-white);
+  --color-surface-sunken: var(--color-slate-100); /* recessed panels like code blocks */
+  --color-line: var(--color-slate-400); /* structural borders */
+  --color-scrollbar-thumb: var(--color-slate-400); /* a separate slate-400/600 pair from --color-line's slate-400/700 */
+  --color-ink-muted: var(--color-slate-400); /* de-emphasized text */
+  /* kbd's shadow reads as a border in light mode but blends into the page in
+     dark mode, so it aliases a different token per theme rather than having
+     its own hardcoded value. */
+  --color-kbd-shadow: var(--color-line);
+
+  /* Text-emphasis ladder beyond --color-ink-muted above, from a full audit
+     of every slate light/dark pair actually used across the templates
+     (grouped by count, then verified against real usage sites, not
+     guessed). Lightest/least emphasis first: */
+  --color-ink-disabled: var(--color-slate-400); /* disabled controls, empty-state copy, always paired with opacity-50 */
+  --color-ink-secondary: var(--color-slate-500); /* section labels, stat-card labels, headings-that-aren't-primary */
+  --color-ink-body: var(--color-slate-600); /* paragraph/help text; also the hover-darken target for ink-muted/ink-secondary */
+  --color-ink-strong: var(--color-slate-700); /* emphasized text: entered input values, selected-option text, uppercase titles */
+  --color-icon-strong: var(--color-slate-900); /* single narrow role: dropdown-trigger chevron icons */
+  --color-icon-faint: var(--color-slate-300); /* large decorative/empty-state icons, deliberately low-contrast in both modes */
+
+  /* Border-weight ladder, same audit-then-verify process as the text ladder.
+     --color-line (slate-400, above) already covers the mid-weight
+     major-divider/floating-panel role; these three fill in the rest.
+     Named without a leading border- word, unlike the ink-/icon- names above:
+     a border-subtle token would read as border-border-subtle when used,
+     the same stutter accent-cyan-500 avoided by staying put instead of
+     becoming accent-accent-500 for the native accent-color utility. */
+  --color-subtle: var(--color-slate-200); /* card/panel outer borders, border-b/border-t/divide-y dividers: the largest single border cluster found */
+  --color-control: var(--color-slate-300); /* form-control borders: inputs, dropdowns, checkboxes, segmented buttons */
+  --color-inset: var(--color-slate-300); /* pairs with --color-surface-inset below */
+
+  /* Background roles beyond canvas/surface/surface-sunken above. */
+  --color-well: var(--color-slate-100); /* form-control/input fill ("well") */
+  --color-surface-inset: var(--color-white); /* deeply-nested inputs: header search box, numeric fields, color swatches */
+  --color-track: var(--color-slate-200); /* resize-handle bars, <input type="range"> tracks: same shades as --color-subtle but a background, not a border */
+  /* small highlighted pill/badge backgrounds: active theme-toggle segment,
+     count badges, dropdown-row hover. slate-100 read as barely-there against
+     the white --color-surface these usually sit on (the theme-toggle's
+     active segment in particular), so this sits a couple of steps darker
+     -- same shade as --color-control, though kept as its own token since
+     that one is reserved for borders (see its comment above). */
+  --color-chip: var(--color-slate-300);
+
+  /* Fixed (no .dark override) because the thing they color doesn't change
+     with the theme either: a modal backdrop scrim always needs to read as
+     "behind everything, dimmed" regardless of light/dark mode, and the
+     info-toast fill is a flat brand-neutral surface the same way
+     --color-accent-500/--color-danger-500 already are for the other toast
+     variants. */
+  --color-scrim: var(--color-slate-950); /* modal/dialog backdrop overlay */
+  --color-neutral: var(--color-slate-700); /* "info" toast fill: no established status color fits a neutral notice */
+  --color-on-accent: var(--color-slate-950); /* readable text over a filled --color-accent-500 surface (white fails contrast there, see below) */
+
+  /* accent, aliased to Tailwind's cyan scale. Every shade is aliased (not
+     just the 3 this project happens to use today), the same way flask-website's
+     own theme.css does it: nothing about the mechanism lets a shade be
+     "aliased on demand", and only covering a handful invites exactly the
+     drift this file exists to prevent: the next person needing e.g.
+     accent-700 either adds it here (one line, in the right place) or reaches
+     for raw `cyan-700` in a template because it's "close enough", which is
+     how the cyan/rose/emerald/amber drift this file cleans up happened
+     in the first place. */
+  --color-accent-50: var(--color-cyan-50);
+  --color-accent-100: var(--color-cyan-100);
+  --color-accent-200: var(--color-cyan-200);
+  --color-accent-300: var(--color-cyan-300);
+  --color-accent-400: var(--color-cyan-400);
+  --color-accent-500: var(--color-cyan-500);
+  --color-accent-600: var(--color-cyan-600);
+  --color-accent-700: var(--color-cyan-700);
+  --color-accent-800: var(--color-cyan-800);
+  --color-accent-900: var(--color-cyan-900);
+  --color-accent-950: var(--color-cyan-950);
+  /* text links need a lighter step in dark mode for contrast, same idea as
+     the neutral tokens above but scoped to the accent family. */
+  --color-link: var(--color-accent-500);
+
+  /* status colors: same full-scale-alias reasoning as accent above, one
+     Tailwind hue per status, used at whatever shade a given spot needs
+     (`danger-100`, `danger-900`, ...) instead of reaching for a raw
+     `rose-*`/`red-*` class. `--color-danger` (bare, no shade) is a
+     convenience default equal to `-500`, for TS call sites
+     (lib/theme-colors.ts's themeColor()) that just want "the" status color
+     without picking a specific shade. */
+  --color-success-50: var(--color-emerald-50);
+  --color-success-100: var(--color-emerald-100);
+  --color-success-200: var(--color-emerald-200);
+  --color-success-300: var(--color-emerald-300);
+  --color-success-400: var(--color-emerald-400);
+  --color-success-500: var(--color-emerald-500);
+  --color-success-600: var(--color-emerald-600);
+  --color-success-700: var(--color-emerald-700);
+  --color-success-800: var(--color-emerald-800);
+  --color-success-900: var(--color-emerald-900);
+  --color-success-950: var(--color-emerald-950);
+  --color-success: var(--color-success-500);
+
+  --color-danger-50: var(--color-rose-50);
+  --color-danger-100: var(--color-rose-100);
+  --color-danger-200: var(--color-rose-200);
+  --color-danger-300: var(--color-rose-300);
+  --color-danger-400: var(--color-rose-400);
+  --color-danger-500: var(--color-rose-500);
+  --color-danger-600: var(--color-rose-600);
+  --color-danger-700: var(--color-rose-700);
+  --color-danger-800: var(--color-rose-800);
+  --color-danger-900: var(--color-rose-900);
+  --color-danger-950: var(--color-rose-950);
+  --color-danger: var(--color-danger-500);
+
+  --color-warning-50: var(--color-amber-50);
+  --color-warning-100: var(--color-amber-100);
+  --color-warning-200: var(--color-amber-200);
+  --color-warning-300: var(--color-amber-300);
+  --color-warning-400: var(--color-amber-400);
+  --color-warning-500: var(--color-amber-500);
+  --color-warning-600: var(--color-amber-600);
+  --color-warning-700: var(--color-amber-700);
+  --color-warning-800: var(--color-amber-800);
+  --color-warning-900: var(--color-amber-900);
+  --color-warning-950: var(--color-amber-950);
+  --color-warning: var(--color-warning-500);
+
+  --color-info-50: var(--color-indigo-50);
+  --color-info-100: var(--color-indigo-100);
+  --color-info-200: var(--color-indigo-200);
+  --color-info-300: var(--color-indigo-300);
+  --color-info-400: var(--color-indigo-400);
+  --color-info-500: var(--color-indigo-500);
+  --color-info-600: var(--color-indigo-600);
+  --color-info-700: var(--color-indigo-700);
+  --color-info-800: var(--color-indigo-800);
+  --color-info-900: var(--color-indigo-900);
+  --color-info-950: var(--color-indigo-950);
+  --color-info: var(--color-info-500);
+
+  /* not a status color like the four above: the second categorical color
+     wherever a spot needs to distinguish "this" from something already
+     using --color-accent/--color-success (e.g. a distribution's discrete
+     vs. continuous badge, a config-JSON vs. filtered-CSV download button). */
+  --color-secondary-50: var(--color-violet-50);
+  --color-secondary-100: var(--color-violet-100);
+  --color-secondary-200: var(--color-violet-200);
+  --color-secondary-300: var(--color-violet-300);
+  --color-secondary-400: var(--color-violet-400);
+  --color-secondary-500: var(--color-violet-500);
+  --color-secondary-600: var(--color-violet-600);
+  --color-secondary-700: var(--color-violet-700);
+  --color-secondary-800: var(--color-violet-800);
+  --color-secondary-900: var(--color-violet-900);
+  --color-secondary-950: var(--color-violet-950);
+
+  /* the Signal Lab's "Template" concept (badges/labels in the surrounding
+     page chrome). Distinct from --color-node-tmpl below, which is the
+     fixed-dark node-canvas fill color for the same concept, a different job
+     with different contrast needs, same reasoning as chart-* vs
+     line/ink-muted elsewhere in this file. */
+  --color-template-50: var(--color-fuchsia-50);
+  --color-template-100: var(--color-fuchsia-100);
+  --color-template-200: var(--color-fuchsia-200);
+  --color-template-300: var(--color-fuchsia-300);
+  --color-template-400: var(--color-fuchsia-400);
+  --color-template-500: var(--color-fuchsia-500);
+  --color-template-600: var(--color-fuchsia-600);
+  --color-template-700: var(--color-fuchsia-700);
+  --color-template-800: var(--color-fuchsia-800);
+  --color-template-900: var(--color-fuchsia-900);
+  --color-template-950: var(--color-fuchsia-950);
+
+  /* trial-viewer chart series steps not already covered by accent/success/danger/warning above */
+  --color-chart-blue: var(--color-blue-500);
+  --color-chart-violet: var(--color-violet-500);
+
+  /* chart chrome for Plotly (trial-viewer.ts renderPlot()), kept separate
+     from the core neutrals above, same reasoning as flask-website's
+     theme.css keeping --color-chart-grid distinct from --color-line: a mark
+     read directly against the plot canvas needs different contrast than a
+     UI hairline border, so these get their own slate steps rather than
+     reusing --color-line/--color-ink-muted's. */
+  --color-chart-text: var(--color-slate-600); /* axis/legend labels */
+  --color-chart-title: var(--color-slate-800);
+  --color-chart-grid-major: var(--color-slate-300);
+  --color-chart-grid-minor: var(--color-slate-200);
+  --color-chart-tooltip-bg: var(--color-white);
+  --color-chart-tooltip-font: var(--color-slate-900);
+  --color-chart-annotation-bg: var(--color-slate-50);
+  --color-chart-shape-label-bg: var(--color-slate-50);
+
+  /* the Signal Lab node editor is fixed dark chrome regardless of the
+     site's light/dark toggle, so none of these are overridden under .dark
+     below. */
+  --color-node-bg: var(--color-slate-900);
+  --color-node-src: var(--color-green-900); /* entry point */
+  --color-node-sink: var(--color-accent-900); /* exit point, same hue as the brand accent */
+  --color-node-filt: var(--color-indigo-950); /* filter nodes */
+  --color-node-calc: var(--color-violet-950); /* calculus nodes */
+  --color-node-util: var(--color-orange-950); /* utility nodes */
+  --color-node-math: var(--color-sky-950); /* arithmetic nodes */
+  --color-node-trig: var(--color-green-950); /* trigonometry nodes */
+  --color-node-comp: var(--color-red-950); /* comparison nodes */
+  --color-node-tmpl: var(--color-template-950); /* template in/out/reference nodes, same hue as the page-chrome "Template" badges */
+  --color-event-link: var(--color-violet-400); /* LiteGraph event-type links */
+}
+
+.dark {
+  --color-canvas: var(--color-slate-900);
+  --color-surface: var(--color-slate-800);
+  --color-surface-sunken: var(--color-slate-800); /* coincides with surface here */
+  --color-line: var(--color-slate-700);
+  --color-scrollbar-thumb: var(--color-slate-600);
+  --color-ink-muted: var(--color-slate-500);
+  --color-kbd-shadow: var(--color-canvas);
+  --color-link: var(--color-accent-400);
+
+  --color-ink-disabled: var(--color-slate-600);
+  --color-ink-secondary: var(--color-slate-400);
+  --color-ink-body: var(--color-slate-300);
+  --color-ink-strong: var(--color-slate-200);
+  --color-icon-strong: var(--color-slate-100);
+
+  --color-subtle: var(--color-slate-700);
+  --color-control: var(--color-slate-700);
+  --color-inset: var(--color-slate-800);
+
+  --color-well: var(--color-slate-900);
+  --color-surface-inset: var(--color-slate-950);
+  --color-track: var(--color-slate-700);
+  /* one step lighter than --color-control/-subtle above (rather than the
+     same slate-700) so an active/selected chip still visibly lifts off a
+     surface that's already using --color-control as a border or fill
+     nearby, e.g. the nav-highlight pill against the nav's bg-control/50
+     track. */
+  --color-chip: var(--color-slate-600);
+
+  --color-chart-text: var(--color-slate-400);
+  --color-chart-title: var(--color-slate-200);
+  --color-chart-grid-major: var(--color-slate-950);
+  --color-chart-grid-minor: var(--color-slate-900);
+  --color-chart-tooltip-bg: var(--color-slate-900);
+  --color-chart-tooltip-font: var(--color-slate-50);
+  --color-chart-annotation-bg: var(--color-slate-800);
+  --color-chart-shape-label-bg: var(--color-slate-900);
+}

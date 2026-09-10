@@ -1,14 +1,65 @@
+import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
-import type { DojoStore, NotificationEntry } from "./models";
+import {
+  nearestColorName,
+  resolveColorHex,
+  isHexColor,
+  collapseColorAlias,
+  createSettingsPanelState,
+} from "./lib/settings-panel";
+import { themeColor } from "./lib/theme-colors";
+import type { DojoStore, JobStatus, NotificationEntry } from "./models";
+// window.mojoCreateColorPicker (used by both _settings_panel.html below and
+// _macros.html's color_picker macro) was only ever registered as a side
+// effect of trial-viewer.ts importing this module - fine for the Plot
+// Editor's color pickers, which only ever render on the trial-viewer page
+// anyway, but the Settings panel is a global, every-page feature (opened
+// from base.html's gear icon), so its color-widget wheel silently never
+// rendered at all on any page that doesn't also load trial-viewer.js (e.g.
+// Monitor, Mosaic). Importing it here too - main.js loads on every page -
+// fixes that; ES modules are idempotent, so trial-viewer.ts keeping its own
+// import as well is harmless, not a double-registration.
+import "./lib/color-picker";
+
+// the npm/module build doesn't auto-start itself the way the old vendored
+// CDN script did, so this is now the one place that does it explicitly --
+// see types/global.d.ts for why every other entry bundle keeps referencing
+// the bare `Alpine` global instead of importing its own separate copy.
+window.Alpine = Alpine;
 
 // Expose time helpers as globals - HTML templates call them in x-text expressions.
 window.formatTimeAgo = formatTimeAgo;
 window.notifTimeAgo = notifTimeAgo;
 
+// _macros.html's color_picker x-init isn't bundled TS, so it needs the same
+// hex-normalizing themeColor() every TS caller uses (see lib/theme-colors.ts)
+// rather than its own raw getComputedStyle() read, which would resolve
+// Tailwind's default palette to a lab() string in modern browsers -- a
+// format iro.js can't parse.
+window.themeColor = themeColor;
+
+// _settings_panel.html's color-picker wiring isn't bundled TS either (it's
+// built per-field at runtime from the schema, unlike _macros.html's
+// compile-time color_picker macro), so it needs these exposed the same way.
+window.mojoNearestColorName = nearestColorName;
+window.mojoResolveColorHex = resolveColorHex;
+window.mojoIsHexColor = isHexColor;
+window.mojoCollapseColorAlias = collapseColorAlias;
+
 document.addEventListener("alpine:init", () => {
-  Alpine.store("dojo", {
+  const dojoStore: DojoStore = {
+    ...createSettingsPanelState(),
+
     isPageReady: false,
-    isFullscreen: localStorage.getItem("mojo_fullscreen") === "true",
+    // Falls back to dojo.default_to_fullscreen (settings.py, seeded onto
+    // window by base.html's own blocking <head> script) only when the user
+    // has never actually touched fullscreen in this browser - once they
+    // have (mojo_fullscreen exists in localStorage either way), that choice
+    // always wins over the server default, same as today.
+    isFullscreen:
+      localStorage.getItem("mojo_fullscreen") === null
+        ? !!window.__mojoDefaultToFullscreen
+        : localStorage.getItem("mojo_fullscreen") === "true",
     overlayCount: 0,
     loadStartTime: Date.now(),
     isComplete: false,
@@ -318,13 +369,14 @@ document.addEventListener("alpine:init", () => {
           const data = JSON.parse(event.data as string) as {
             type: string;
             value?: number;
-            status?: { is_complete: boolean };
+            status?: JobStatus;
           };
           if (data.type === "start") this.startSync();
           if (data.type === "progress" && data.value !== undefined)
             this.setSyncProgress(data.value);
           if (data.type === "final") {
             this.endSync(Date.now(), data.status?.is_complete ?? false);
+            this.applyJobOutcomes(data.status);
             window.dispatchEvent(
               new CustomEvent("mojo-data-updated", { detail: data.status }),
             );
@@ -380,6 +432,19 @@ document.addEventListener("alpine:init", () => {
       this.secondsSinceUpdate = 0;
       this.isComplete = isComplete;
       if (isComplete) this.stopGlobalSync();
+    },
+
+    // ── Trial outcome tracking ──────────────────────────────────────────────
+    // shared across every page that colors something by trial status
+    // (mosaic tiles, the trial-viewer versus-selector chips), so each page
+    // doesn't fetch/derive its own copy independently.
+    failureTrialNums: [] as number[],
+    errorTrialNums: [] as number[],
+
+    applyJobOutcomes(data: JobStatus | undefined) {
+      if (!data) return;
+      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
+      this.errorTrialNums = (data.error_tns ?? []).map(Number);
     },
 
     // ── Notification history ───────────────────────────────────────────────
@@ -510,7 +575,8 @@ document.addEventListener("alpine:init", () => {
         this._resolve = null;
       },
     },
-  });
+  };
+  Alpine.store("dojo", dojoStore);
 
   // expose as a drop-in async alternative to the native confirm() dialog
   window.mojoConfirm = (opts) =>
@@ -554,3 +620,14 @@ document.addEventListener("alpine:init", () => {
     store.startLoadingMessages();
   }
 });
+
+// the vendored CDN build called this itself once loaded; the npm build
+// requires an explicit call. This bundle (main.js) loads in <head>, ahead of
+// the page-specific bundle (monitor.js/mosaic.js/trial-viewer.js/sensai.js)
+// which is declared at the bottom of the body and sets window.<name> for the
+// page's own x-data component -- so starting Alpine here immediately would
+// scan the DOM and evaluate e.g. x-data="monitor()" before that global
+// exists. Waiting for DOMContentLoaded defers the start until every deferred
+// <script type="module"> on the page (main.js included) has finished
+// executing, guaranteeing those globals are already in place.
+document.addEventListener("DOMContentLoaded", () => Alpine.start());

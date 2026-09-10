@@ -4,7 +4,11 @@
          for scrubbing. Canvas miniplayer mirrors the active source.
          ══════════════════════════════════════════════════════════════════ -->
 
-<div class="mt-8 space-y-2"
+<!-- pt-8 (padding, not margin) on the outer div guarantees clearance
+     before the divider below, immune to margin-collapsing with whatever
+     sibling section precedes this one - see _trial_logs.html's identical
+     comment for the full reasoning. -->
+<div class="pt-6"
      x-show="mediaFiles.length > 0"
      x-data="{
          open: localStorage.getItem('mojo:media-player:open') !== '0',
@@ -18,232 +22,275 @@
              return ext.endsWith('.mp4') || ext.endsWith('.webm');
          }
      }">
+    <div class="pt-2 space-y-2 border-t border-line dark:border-subtle">
 
-    <!-- section header -->
-    <div class="flex items-center justify-between px-2">
-        <button @mousedown.prevent="toggle()"
-                @keydown.enter.prevent="toggle()"
-                @keydown.space.prevent="toggle()"
-                class="flex items-center gap-2 text-base font-black uppercase text-slate-400 tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors active:scale-100">
-            <svg class="w-4 h-4 transition-transform duration-150 pointer-events-none"
-                 :class="open ? '' : '-rotate-90'"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="2.5"
-                 viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 9l-7 7-7-7" />
-            </svg>
-            Animation
-        </button>
-
-        <div class="flex items-center gap-2">
-            <!-- miniplayer toggle -->
-            <button @click="mediaMiniplayerOpen = !mediaMiniplayerOpen"
-                    :title="mediaMiniplayerOpen ? 'Close miniplayer' : 'Open miniplayer'"
-                    class="transition-colors"
-                    :class="mediaMiniplayerOpen ? 'text-cyan-500' : 'text-slate-400 hover:text-cyan-500'">
-                <svg class="w-4 h-4"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2"
-                     viewBox="0 0 24 24">
-                    <rect x="2"
-                          y="3"
-                          width="20"
-                          height="14"
-                          rx="2"
-                          stroke-linejoin="round" />
-                    <rect x="12"
-                          y="11"
-                          width="8"
-                          height="5"
-                          rx="1"
-                          fill="currentColor"
-                          stroke="none" />
-                </svg>
+        <!-- section header. The trailing controls (miniplayer toggle button,
+         file <select>) are interactive elements of their own, which the
+         HTML spec forbids nesting inside a <button> (browsers respond by
+         silently mis-closing the outer button, breaking the whole row) -
+         so unlike the other expanders' plain-text badges, these stay
+         siblings of the header button rather than moving inside it. The
+         button is flex-1 (not w-full) so it still absorbs the full click
+         area of everything BUT the controls themselves. -->
+        <div class="flex items-center justify-between px-2">
+            <button @mousedown.prevent="toggle()"
+                    @keydown.enter.prevent="toggle()"
+                    @keydown.space.prevent="toggle()"
+                    class="expander-header flex-1">
+                <span class="flex items-center gap-2">
+                    <svg class="expander-chevron"
+                         :class="open ? '' : '-rotate-90'"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Animation
+                </span>
             </button>
 
-            <!-- file selector (multiple files) or filename badge (single file) -->
-            <template x-if="mediaFiles.length > 1">
-                <select :value="selectedMedia"
-                        @change="selectedMedia = $event.target.value"
-                        class="text-sm font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-0.5 text-slate-700 dark:text-slate-300 hover:border-cyan-500 transition-colors focus:outline-none focus:border-cyan-500">
-                    <template x-for="f in mediaFiles"
-                              :key="f">
-                        <option :value="f"
-                                :selected="f === selectedMedia"
-                                x-text="f"></option>
-                    </template>
-                </select>
-            </template>
-            <template x-if="mediaFiles.length === 1">
-                <span class="text-sm font-mono text-slate-400 dark:text-slate-500"
-                      x-text="mediaFiles[0]"></span>
-            </template>
-        </div>
-    </div>
-
-    <!-- collapsible body -->
-    <div x-show="open"
-         x-transition:enter="transition-opacity duration-150"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition-opacity duration-100"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="space-y-2">
-
-        <!-- controls row -->
-        <template x-if="selectedMedia">
-            <div class="flex items-center gap-3 px-1 flex-wrap">
-                <span class="text-sm font-bold uppercase tracking-widest text-slate-400">Mode</span>
-
-                <!-- play / scrub toggle -->
-                <div class="flex rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden text-sm font-bold uppercase tracking-wide">
-                    <button @click="mediaScrubMode = 'play'"
-                            class="px-3 py-1 transition-colors"
-                            :class="mediaScrubMode === 'play'
-                                ? 'bg-cyan-500 text-white'
-                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50'">
-                        Play
-                    </button>
-                    <button @click="mediaIsScrubbable && (mediaScrubMode = 'scrub')"
-                            :disabled="!mediaIsScrubbable"
-                            class="px-3 py-1 border-l border-slate-300 dark:border-slate-700 transition-colors"
-                            :class="!mediaIsScrubbable
-                                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-500'
-                                : mediaScrubMode === 'scrub'
-                                    ? 'bg-cyan-500 text-white'
-                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50'">
-                        Scrub
-                    </button>
-                </div>
-
-                <!-- gif conversion status notices -->
-                <span x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus === 'loading'"
-                      class="flex items-center gap-1 text-sm text-slate-400 dark:text-slate-500 italic">
-                    <svg class="w-3.5 h-3.5 animate-spin flex-shrink-0"
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- miniplayer toggle -->
+                <button @click="mediaMiniplayerOpen = !mediaMiniplayerOpen"
+                        :title="mediaMiniplayerOpen ? 'Close miniplayer' : 'Open miniplayer'"
+                        class="transition-colors btn aspect-square"
+                        :class="mediaMiniplayerOpen ? 'btn-primary' : 'btn-secondary'">
+                    <svg class="w-4 h-4"
                          fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
                          viewBox="0 0 24 24">
-                        <circle class="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                stroke-width="4" />
-                        <path class="opacity-75"
+                        <rect x="2"
+                              y="3"
+                              width="20"
+                              height="14"
+                              rx="2"
+                              stroke-linejoin="round" />
+                        <rect x="12"
+                              y="11"
+                              width="8"
+                              height="5"
+                              rx="1"
                               fill="currentColor"
-                              d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+                              stroke="none" />
                     </svg>
-                    preparing scrub...
-                </span>
-                <span x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus === 'failed'"
-                      class="flex items-center gap-1 text-sm text-amber-500 dark:text-amber-400 italic">
-                    <svg class="w-3.5 h-3.5 flex-shrink-0"
-                         fill="currentColor"
-                         viewBox="0 0 20 20">
-                        <path fill-rule="evenodd"
-                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                              clip-rule="evenodd" />
-                    </svg>
-                    scrub unavailable
-                </span>
+                </button>
 
-                <!-- scrub hint -->
-                <span x-show="mediaScrubMode === 'scrub' && mediaIsScrubbable"
-                      class="text-sm text-slate-400 dark:text-slate-500 italic">
-                    hover over the plot to scrub
-                </span>
+                <!-- file selector (multiple files) or filename badge (single file) -->
+                <template x-if="mediaFiles.length > 1">
+                    <div class="relative shrink-0"
+                         x-data="{
+                             mediaSelectOpen: false,
+                             // fixed width fit to the *widest* filename, not just
+                             // whichever is currently selected - otherwise the trigger
+                             // (and the panel, which matches its width) would resize
+                             // every time the selection changes. ch is exact here since
+                             // .dropdown-trigger/.dropdown-option are both font-mono -
+                             // every character really is the same width, so this needs
+                             // no JS text measurement. +3rem covers the button's own
+                             // padding, the label/chevron gap, the chevron itself, and
+                             // the border - see dropdown-trigger-sm/dropdown-chevron in
+                             // inputs.css for those exact values.
+                             get triggerWidth() {
+                                 const maxLen = Math.max(0, ...mediaFiles.map(f => f.length));
+                                 return `min(16rem, calc(${maxLen}ch + 3rem))`;
+                             },
+                         }"
+                         :style="`width: ${triggerWidth}`">
+                        <button @click="mediaSelectOpen = !mediaSelectOpen"
+                                @click.away="mediaSelectOpen = false"
+                                class="dropdown-trigger-sm">
+                            <span class="truncate"
+                                  x-text="selectedMedia"></span>
+                            <svg class="dropdown-chevron"
+                                 :class="mediaSelectOpen ? 'rotate-180' : ''"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 viewBox="0 0 24 24">
+                                <path stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="3"
+                                      d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div x-show="mediaSelectOpen"
+                             x-transition
+                             class="dropdown-panel max-h-52 overflow-y-auto custom-scrollbar">
+                            <template x-for="f in mediaFiles"
+                                      :key="f">
+                                <!-- break-all (not the default wrap-on-spaces) since a
+                                     filename is one long unbroken token - without it a
+                                     name wider than the panel just overflows instead of
+                                     wrapping to a second line -->
+                                <button @click="selectedMedia = f; mediaSelectOpen = false"
+                                        class="dropdown-option break-all"
+                                        :class="f === selectedMedia ? 'dropdown-option-active' : ''"
+                                        x-text="f"></button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="mediaFiles.length === 1">
+                    <span class="text-sm font-mono text-ink-muted"
+                          x-text="mediaFiles[0]"></span>
+                </template>
+            </div>
+        </div>
 
-                <!-- plot line (play mode, scrubbable + time axis) -->
-                <label x-show="mediaScrubMode === 'play'"
-                       class="flex items-center gap-1.5 ml-2 text-sm select-none"
-                       :class="mediaIsScrubbable && config.xAxis?.col === 'time'
-                           ? 'text-slate-500 dark:text-slate-400 cursor-pointer'
-                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'"
-                       :title="config.xAxis?.col !== 'time'
+        <!-- collapsible body: grid-template-rows 0fr<->1fr "emerge" animation,
+         see .expander-body-wrap in expander.css -->
+        <div class="expander-body-wrap"
+             :class="open ? 'expander-open' : ''">
+            <div class="expander-body space-y-2">
+
+                <!-- controls row -->
+                <template x-if="selectedMedia">
+                    <div class="flex items-center gap-3 px-1 flex-wrap">
+                        <span class="text-sm font-bold uppercase tracking-widest text-ink-muted">Mode</span>
+
+                        <!-- play / scrub toggle -->
+                        <div class="relative flex gap-1 p-1 bg-control/50 rounded-lg w-fit text-sm font-bold uppercase tracking-widest border border-control shadow-xl">
+                            <button @click="mediaScrubMode = 'play'"
+                                    class="relative z-10 px-3 py-1 rounded-md border transition-all "
+                                    :class="mediaScrubMode === 'play' ? 'btn-primary' : 'btn-secondary'">
+                                Play
+                            </button>
+                            <button @click="mediaIsScrubbable && (mediaScrubMode = 'scrub')"
+                                    :disabled="!mediaIsScrubbable"
+                                    class="relative z-10 px-3 py-1 rounded-md border transition-all "
+                                    :class="!mediaIsScrubbable ? 'opacity-40 cursor-not-allowed text-ink-muted' : mediaScrubMode === 'scrub' ? 'btn-primary' : 'btn-secondary'">
+                                Scrub
+                            </button>
+                        </div>
+
+                        <!-- gif conversion status notices -->
+                        <span x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus === 'loading'"
+                              class="flex items-center gap-1 text-sm text-ink-muted italic">
+                            <svg class="w-3.5 h-3.5 animate-spin shrink-0"
+                                 fill="none"
+                                 viewBox="0 0 24 24">
+                                <circle class="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        stroke-width="4" />
+                                <path class="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+                            </svg>
+                            preparing scrub...
+                        </span>
+                        <span x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus === 'failed'"
+                              class="flex items-center gap-1 text-sm text-warning-500 dark:text-warning-400 italic">
+                            <svg class="w-3.5 h-3.5 shrink-0"
+                                 fill="currentColor"
+                                 viewBox="0 0 20 20">
+                                <path fill-rule="evenodd"
+                                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                      clip-rule="evenodd" />
+                            </svg>
+                            scrub unavailable
+                        </span>
+
+                        <!-- scrub hint -->
+                        <span x-show="mediaScrubMode === 'scrub' && mediaIsScrubbable"
+                              class="text-sm text-ink-muted italic">
+                            hover over the plot to scrub
+                        </span>
+
+                        <!-- plot line (play mode, scrubbable + time axis) -->
+                        <label x-show="mediaScrubMode === 'play'"
+                               class="flex items-center gap-1.5 ml-2 text-sm select-none"
+                               :class="mediaIsScrubbable && config.xAxis?.col === 'time'
+                           ? 'text-ink-secondary cursor-pointer'
+                           : 'text-ink-disabled opacity-50 cursor-not-allowed'"
+                               :title="config.xAxis?.col !== 'time'
                            ? 'Requires the x-axis to be \'time\''
                            : (!mediaIsScrubbable ? 'Scrubbing is unavailable for this media' : '')">
-                    <input type="checkbox"
-                           :checked="mediaShowLine"
-                           @change="(mediaIsScrubbable && config.xAxis?.col === 'time') && (mediaShowLine = $event.target.checked)"
-                           :disabled="!mediaIsScrubbable || config.xAxis?.col !== 'time'"
-                           class="accent-cyan-500"
-                           :class="mediaIsScrubbable && config.xAxis?.col === 'time' ? 'cursor-pointer' : 'cursor-not-allowed'">
-                    Plot line
-                </label>
+                            <input type="checkbox"
+                                   :checked="mediaShowLine"
+                                   @change="(mediaIsScrubbable && config.xAxis?.col === 'time') && (mediaShowLine = $event.target.checked)"
+                                   :disabled="!mediaIsScrubbable || config.xAxis?.col !== 'time'"
+                                   class="accent-accent-500"
+                                   :class="mediaIsScrubbable && config.xAxis?.col === 'time' ? 'cursor-pointer' : 'cursor-not-allowed'">
+                            Plot line
+                        </label>
 
-                <!-- frames (time axis only) -->
-                <label class="flex items-center gap-1.5 text-sm select-none"
-                       :class="config.xAxis?.col === 'time'
-                           ? 'text-slate-500 dark:text-slate-400 cursor-pointer'
-                           : 'text-slate-400 dark:text-slate-600 opacity-50 cursor-not-allowed'"
-                       :title="config.xAxis?.col !== 'time' ? 'Requires the x-axis to be \'time\'' : ''">
-                    <input type="checkbox"
-                           :checked="mediaShowFrames"
-                           @change="config.xAxis?.col === 'time' && (mediaShowFrames = $event.target.checked)"
-                           :disabled="config.xAxis?.col !== 'time'"
-                           class="accent-cyan-500"
-                           :class="config.xAxis?.col === 'time' ? 'cursor-pointer' : 'cursor-not-allowed'">
-                    Frames
-                </label>
+                        <!-- frames (time axis only) -->
+                        <label class="flex items-center gap-1.5 text-sm select-none"
+                               :class="config.xAxis?.col === 'time'
+                           ? 'text-ink-secondary cursor-pointer'
+                           : 'text-ink-disabled opacity-50 cursor-not-allowed'"
+                               :title="config.xAxis?.col !== 'time' ? 'Requires the x-axis to be \'time\'' : ''">
+                            <input type="checkbox"
+                                   :checked="mediaShowFrames"
+                                   @change="config.xAxis?.col === 'time' && (mediaShowFrames = $event.target.checked)"
+                                   :disabled="config.xAxis?.col !== 'time'"
+                                   class="accent-accent-500"
+                                   :class="config.xAxis?.col === 'time' ? 'cursor-pointer' : 'cursor-not-allowed'">
+                            Frames
+                        </label>
 
-                <!-- playback speed (any scrubbable media, play mode only) -->
-                <div x-show="mediaScrubMode === 'play'"
-                     class="flex items-center gap-1.5"
-                     :class="mediaIsScrubbable ? '' : 'opacity-50 pointer-events-none'">
-                    <span class="text-sm font-bold uppercase tracking-widest text-slate-400">Speed</span>
-                    <div class="flex gap-1">
-                        <template x-for="preset in mediaSpeedPresets"
-                                  :key="preset">
-                            <button @click="mediaIsScrubbable && (mediaPlaybackRate = preset)"
-                                    class="btn btn-ghost h-7 w-10 justify-center font-mono text-xs hover:border-cyan-500 hover:text-cyan-500 transition-colors"
-                                    :class="mediaPlaybackRate === preset ? '!border-cyan-500 !text-cyan-500' : ''"
-                                    x-text="preset + '&#x00d7;'">
-                            </button>
-                        </template>
+                        <!-- playback speed (any scrubbable media, play mode only) -->
+                        <div x-show="mediaScrubMode === 'play'"
+                             class="flex items-center gap-1.5"
+                             :class="mediaIsScrubbable ? '' : 'opacity-50 pointer-events-none'">
+                            <span class="text-sm font-bold uppercase tracking-widest text-ink-muted">Speed</span>
+                            <div class="flex gap-1">
+                                <template x-for="preset in mediaSpeedPresets"
+                                          :key="preset">
+                                    <button @click="mediaIsScrubbable && (mediaPlaybackRate = preset)"
+                                            class="btn h-7 w-10 justify-center font-mono text-xs transition-colors"
+                                            :class="mediaPlaybackRate === preset ? 'btn-primary' : 'btn-secondary'"
+                                            x-text="preset + '&#x00d7;'">
+                                    </button>
+                                </template>
+                            </div>
+                            <div class="flex items-center bg-surface-inset border border-inset rounded-md shadow-sm px-2 py-0.5">
+                                <input type="text"
+                                       inputmode="decimal"
+                                       :value="mediaPlaybackRate"
+                                       @change="mediaIsScrubbable && (mediaPlaybackRate = Math.max(0.1, Math.min(8, parseFloat($event.target.value) || 1)))"
+                                       @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
+                                       :disabled="!mediaIsScrubbable"
+                                       class="number-input w-10 text-sm" />
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-md shadow-sm px-2 py-0.5">
-                        <input type="text"
-                               inputmode="decimal"
-                               :value="mediaPlaybackRate"
-                               @change="mediaIsScrubbable && (mediaPlaybackRate = Math.max(0.1, Math.min(8, parseFloat($event.target.value) || 1)))"
-                               @keydown="!/^[0-9.]$/.test($event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes($event.key) && $event.preventDefault()"
-                               :disabled="!mediaIsScrubbable"
-                               class="number-input w-10 text-sm" />
-                    </div>
-                </div>
-            </div>
-        </template>
+                </template>
 
-        <!-- video player: shown for mp4/webm, and for any gif once WebM conversion is ready.
+                <!-- video player: shown for mp4/webm, and for any gif once WebM conversion is ready.
              preload="metadata" ensures the browser loads duration/dimensions even when hidden,
              which is necessary for the gif-to-webm conversion flow. -->
-        <video id="media-video-player"
-               x-show="isVideo(selectedMedia) || (selectedMedia?.toLowerCase().endsWith('.gif') && _gifConvertStatus === 'ready')"
-               preload="metadata"
-               :src="isVideo(selectedMedia)
+                <video id="media-video-player"
+                       x-show="isVideo(selectedMedia) || (selectedMedia?.toLowerCase().endsWith('.gif') && _gifConvertStatus === 'ready')"
+                       preload="metadata"
+                       :src="isVideo(selectedMedia)
                      ? _mediaFileUrl(selectedMedia)
                      : selectedMedia?.toLowerCase().endsWith('.gif')
                          ? _mediaFileUrl(selectedMedia, '/as-webm')
                          : ''"
-               :controls="mediaScrubMode === 'play'"
-               loop
-               muted
-               playsinline
-               webkit-playsinline
-               class="w-full rounded-lg bg-black"
-               style="max-height: 480px; object-fit: contain;">
-        </video>
+                       :controls="mediaScrubMode === 'play'"
+                       loop
+                       muted
+                       playsinline
+                       webkit-playsinline
+                       class="w-full rounded-lg bg-black"
+                       style="max-height: 480px; object-fit: contain;">
+                </video>
 
-        <!-- gif display: shown only while WebM conversion is not yet ready -->
-        <img id="media-gif-player"
-             x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus !== 'ready'"
-             :src="selectedMedia && !isVideo(selectedMedia) ? _mediaFileUrl(selectedMedia) : ''"
-             alt=""
-             class="w-full rounded-lg" />
+                <!-- gif display: shown only while WebM conversion is not yet ready -->
+                <img id="media-gif-player"
+                     x-show="selectedMedia && !isVideo(selectedMedia) && _gifConvertStatus !== 'ready'"
+                     :src="selectedMedia && !isVideo(selectedMedia) ? _mediaFileUrl(selectedMedia) : ''"
+                     alt=""
+                     class="w-full rounded-lg" />
 
+            </div>
+        </div>
     </div>
 </div>
