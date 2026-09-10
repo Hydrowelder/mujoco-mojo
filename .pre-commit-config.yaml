@@ -56,7 +56,13 @@ repos:
     hooks:
       - id: act-test
         name: Run GitHub Actions locally (act)
-        entry: act -j test
+        # --concurrent-jobs 1: the matrix jobs share one uv cache dir, and
+        # griffe/beartype are pure-Python wheels with no per-Python-version
+        # distinction, so running them in parallel races uv's cache
+        # hardlink-or-copy step and can hand one container a half-written
+        # package file. Real GitHub Actions runners don't hit this since
+        # each matrix job gets its own isolated VM.
+        entry: act -j test --concurrent-jobs 1
         language: system
         stages: [pre-push]
         pass_filenames: false
