@@ -36,27 +36,27 @@ Before writing code, it is helpful to understand the three pillars of a Mojo pro
   - This class relies upon `pydantic` V2 to statically type and validate entries.
 - **The Generate-Runtime Pattern:** Mojo separates Generation (building the XML and sampling random values) from **Runtime** (the physics loop where forces and logic are applied).
 
-  ???+ example "Example: Generate and Runtime Functions"
+???+ example "Example: Generate and Runtime Functions"
 
-        ```python
-        import mujoco_mojo as mojo
+    ```python
+    import mujoco_mojo as mojo
 
-        def generate(
-            mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
-            # Add geoms, sites, and sample distributions here
-            return mojo_model
+    def generate(
+        mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+        # Add geoms, sites, and sample distributions here
+        return mojo_model
 
-        def runtime(
-            mojo_model: mojo.MojoModel,
-            runtime_manager: rt.RuntimeManager,
-            state: mojo.MjState,
-            *args,
-            **kwargs,
-        ):
-            # Step the physics and apply logic here
-            while state.data.time < 10.0:
-                runtime_manager.step(state)
-        ```
+    def runtime(
+        mojo_model: mojo.MojoModel,
+        runtime_manager: rt.RuntimeManager,
+        state: mojo.MjState,
+        *args,
+        **kwargs,
+    ):
+        # Step the physics and apply logic here
+        while state.data.time < 10.0:
+            runtime_manager.step(state)
+    ```
 
 - **Request-Based Telemetry:** You don't (_have to_) manually log data. Instead, you "Request" that specific geoms, sites, or custom forces be tracked by the `SignalManager`.
 
