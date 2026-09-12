@@ -371,7 +371,7 @@
             function RotationNode() {
                 this.addInput("signal", SER);
                 this.addOutput("signal", SER);
-                this.properties = { quat_col: "", invert: true };
+                this.properties = { quat_col: "", invert: true, origin_col: "" };
                 this._quatWidget = this.addWidget(
                     "text", "quat_col", "",
                     (v) => {
@@ -388,7 +388,28 @@
                 });
                 this._invertWidget = this.addWidget("toggle", "invert", true,
                     (v) => { this.properties.invert = v; });
-                this.size = [220, 100];
+                // Origin is only needed for position-type vectors (translation as well as
+                // rotation); left blank it's a no-op, matching a free vector's rotation-only transform.
+                this._originWidget = this.addWidget(
+                    "text", "origin_col", "",
+                    (v) => {
+                        this.properties.origin_col = v;
+                        _rotColor(this);
+                        if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                    }
+                );
+                // Browse button - fires to Alpine which opens the origin (position) vector picker
+                this.addWidget("button", "pick", "Browse…", () => {
+                    document.dispatchEvent(new CustomEvent("mojo:lab-pick-origin", {
+                        detail: { nodeId: this.id }
+                    }));
+                });
+                // 5 widget rows (quat_col, pick, invert, origin_col, pick) at the
+                // same 32 + rows*24 baseline the generic filter-node builder uses -
+                // _rotColor keeps this in sync (and adds room for warning text)
+                // on every validation pass, but a fresh node needs it too before
+                // that first pass runs.
+                this.size = [220, 152];
             }
             RotationNode.title = "Rotation";
             RotationNode.color = C_CALC;
@@ -396,6 +417,7 @@
             RotationNode.prototype.onConfigure = function () {
                 if (this._quatWidget) this._quatWidget.value = this.properties.quat_col ?? "";
                 if (this._invertWidget) this._invertWidget.value = this.properties.invert ?? true;
+                if (this._originWidget) this._originWidget.value = this.properties.origin_col ?? "";
                 _rotColor(this);
             };
             RotationNode.prototype.onConnectionsChange = function () {
@@ -406,8 +428,10 @@
                 const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
                 const quatBases = RotCtor._quatBases || [];
                 const rotatableBases = RotCtor._rotatableBases || [];
+                // quat_col is optional (blank + an origin_col = pure translation, no
+                // rotation), so only flag it once the user has set one that doesn't resolve.
                 const quat = this.properties && this.properties.quat_col;
-                const quatBad = !quat || !quatBases.includes(quat);
+                const quatBad = !!quat && !quatBases.includes(quat);
 
                 const fromNode = this.getInputNode ? this.getInputNode(0) : null;
                 let vecBad = true;
@@ -419,7 +443,16 @@
                     vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
                 }
 
-                if (!quatBad && !vecBad) return;
+                // Origin is likewise optional (blank = pure rotation for a free vector),
+                // so only flag it once the user has actually set one that doesn't resolve.
+                const origin = this.properties && this.properties.origin_col;
+                const originBad = !!origin && !rotatableBases.includes(origin);
+
+                // Neither set at all means the node does nothing (no rotation, no
+                // translation) - distinct from either being set to something unresolvable.
+                const neitherSet = !quat && !origin;
+
+                if (!quatBad && !vecBad && !originBad && !neitherSet) return;
                 ctx.save();
                 ctx.font = "italic 10px monospace";
                 ctx.textAlign = "center";
@@ -432,10 +465,96 @@
                 }
                 if (quatBad) {
                     ctx.fillText("unknown quaternion base", this.size[0] / 2, y);
+                    y -= 14;
+                }
+                if (originBad) {
+                    ctx.fillText("unknown origin base", this.size[0] / 2, y);
+                    y -= 14;
+                }
+                if (neitherSet) {
+                    ctx.fillText("set a quaternion and/or origin base", this.size[0] / 2, y);
                 }
                 ctx.restore();
             };
             LiteGraph.registerNodeType("Vector/rotation", RotationNode);
+        })();
+
+        // ── Vector: translate by adding/subtracting another position column ────
+        (function () {
+            function TranslationNode() {
+                this.addInput("signal", SER);
+                this.addOutput("signal", SER);
+                this.properties = { origin_col: "", subtract: true };
+                this._originWidget = this.addWidget(
+                    "text", "origin_col", "",
+                    (v) => {
+                        this.properties.origin_col = v;
+                        _transColor(this);
+                        if (_lab.graph) _lab.graph.setDirtyCanvas(true, true);
+                    }
+                );
+                // Browse button - fires to Alpine which opens the origin (position) vector picker
+                this.addWidget("button", "pick", "Browse…", () => {
+                    document.dispatchEvent(new CustomEvent("mojo:lab-pick-origin", {
+                        detail: { nodeId: this.id }
+                    }));
+                });
+                this._subtractWidget = this.addWidget("toggle", "subtract", true,
+                    (v) => { this.properties.subtract = v; });
+                // 3 widget rows (origin_col, pick, subtract) at the same 32 + rows*24
+                // baseline the generic filter-node builder uses.
+                this.size = [220, 104];
+            }
+            TranslationNode.title = "Translation";
+            TranslationNode.color = C_CALC;
+            TranslationNode.bgcolor = BG;
+            TranslationNode.prototype.onConfigure = function () {
+                if (this._originWidget) this._originWidget.value = this.properties.origin_col ?? "";
+                if (this._subtractWidget) this._subtractWidget.value = this.properties.subtract ?? true;
+                _transColor(this);
+            };
+            TranslationNode.prototype.onConnectionsChange = function () {
+                _transColor(this);
+                if (_lab.graph) _lab.graph.setDirtyCanvas(true, false);
+            };
+            TranslationNode.prototype.onDrawForeground = function (ctx) {
+                // Reuses Rotation's _rotatableBases cache (mojoLabSetContext) rather
+                // than computing its own - it's the same base-name discovery over the
+                // same columns, not something specific to rotation.
+                const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
+                const rotatableBases = RotCtor._rotatableBases || [];
+                // Unlike Rotation's origin_col, this node's origin_col is the only
+                // thing driving its behavior, so unset is just as bad as unresolvable.
+                const origin = this.properties && this.properties.origin_col;
+                const originBad = !origin || !rotatableBases.includes(origin);
+
+                const fromNode = this.getInputNode ? this.getInputNode(0) : null;
+                let vecBad = true;
+                if (fromNode && (fromNode.type || '').endsWith('signal_in')) {
+                    const col = (fromNode.properties && fromNode.properties.column) || '';
+                    const idx = col.lastIndexOf(':');
+                    const base = idx >= 0 ? col.slice(0, idx) : '';
+                    const suffix = idx >= 0 ? col.slice(idx + 1) : '';
+                    vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
+                }
+
+                if (!originBad && !vecBad) return;
+                ctx.save();
+                ctx.font = "italic 10px monospace";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "bottom";
+                ctx.fillStyle = themeColor("warning");
+                let y = this.size[1] - 4;
+                if (vecBad) {
+                    ctx.fillText("input is not a rotatable vector", this.size[0] / 2, y);
+                    y -= 14;
+                }
+                if (originBad) {
+                    ctx.fillText(origin ? "unknown origin base" : "set an origin base", this.size[0] / 2, y);
+                }
+                ctx.restore();
+            };
+            LiteGraph.registerNodeType("Vector/translation", TranslationNode);
         })();
 
         // Global callback - called by trial-viewer.ts when the user picks a quaternion base
@@ -446,6 +565,21 @@
             node.properties.quat_col = base;
             if (node._quatWidget) node._quatWidget.value = base;
             _rotColor(node);
+            _lab.graph.setDirtyCanvas(true, true);
+        };
+
+        // Global callback - called by trial-viewer.ts when the user picks an origin vector
+        // base - shared by both Rotation and Translation nodes, so it dispatches to
+        // whichever validator actually matches the node being edited.
+        window.mojoLabSelectNodeOrigin = function (nodeId, base) {
+            if (!_lab.graph) return;
+            const node = _lab.graph.getNodeById(nodeId);
+            if (!node) return;
+            node.properties.origin_col = base;
+            if (node._originWidget) node._originWidget.value = base;
+            const t = (node.type || '').split('/').pop();
+            if (t === 'translation') _transColor(node);
+            else _rotColor(node);
             _lab.graph.setDirtyCanvas(true, true);
         };
 
@@ -1024,15 +1158,17 @@
         node.size[1] = collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55);
     }
 
-    // Validates a Rotation node's quaternion base and its incoming vector component,
-    // recoloring/resizing the node to surface either problem as a warning.
+    // Validates a Rotation node's quaternion base, origin base, and incoming vector
+    // component, recoloring/resizing the node to surface any problem as a warning.
     function _rotColor(node) {
         const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
         const quatBases = RotCtor._quatBases || [];
         const rotatableBases = RotCtor._rotatableBases || [];
 
+        // quat_col is optional (blank + an origin_col = pure translation) - only a
+        // problem once set to something that doesn't resolve.
         const quat = node.properties && node.properties.quat_col;
-        const quatBad = !quat || !quatBases.includes(quat);
+        const quatBad = !!quat && !quatBases.includes(quat);
 
         // the input must come directly from a Signal In node whose column is a
         // rotatable x/y/z vector component - filters between them rename the
@@ -1047,9 +1183,55 @@
             vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
         }
 
-        node.color = (quatBad || vecBad) ? themeColor("warning-900") : themeColor("node-calc");
-        let h = 100;
+        // origin is likewise optional - only a problem once set to something that
+        // doesn't resolve.
+        const origin = node.properties && node.properties.origin_col;
+        const originBad = !!origin && !rotatableBases.includes(origin);
+
+        // neither set at all means the node does nothing (no rotation, no
+        // translation) - distinct from either being set to something unresolvable.
+        const neitherSet = !quat && !origin;
+
+        node.color = (quatBad || vecBad || originBad || neitherSet) ? themeColor("warning-900") : themeColor("node-calc");
+        // 152 = the 5-widget-row baseline (32 + 5*24, matching the generic
+        // filter-node builder's formula) the node needs regardless of warnings;
+        // each active warning line adds its own 14px of text height on top.
+        // quatBad/originBad and neitherSet are mutually exclusive (neitherSet
+        // requires both unset, which can't also be "set but unresolvable"), so
+        // the worst case is still 3 lines (vecBad + quatBad + originBad).
+        let h = 152;
         if (quatBad) h += 14;
+        if (vecBad) h += 14;
+        if (originBad) h += 14;
+        if (neitherSet) h += 14;
+        node.size[1] = h;
+    }
+
+    // Validates a Translation node's origin base and its incoming vector component -
+    // unlike Rotation's origin_col, this one is the only thing driving the node's
+    // behavior, so it's required (unset counts as bad, not just unresolvable).
+    function _transColor(node) {
+        const RotCtor = LiteGraph.registered_node_types["Vector/rotation"] || {};
+        const rotatableBases = RotCtor._rotatableBases || [];
+
+        const origin = node.properties && node.properties.origin_col;
+        const originBad = !origin || !rotatableBases.includes(origin);
+
+        let vecBad = true;
+        const fromNode = node.getInputNode ? node.getInputNode(0) : null;
+        if (fromNode && (fromNode.type || '').endsWith('signal_in')) {
+            const col = (fromNode.properties && fromNode.properties.column) || '';
+            const idx = col.lastIndexOf(':');
+            const base = idx >= 0 ? col.slice(0, idx) : '';
+            const suffix = idx >= 0 ? col.slice(idx + 1) : '';
+            vecBad = !(['x', 'y', 'z'].includes(suffix) && rotatableBases.includes(base));
+        }
+
+        node.color = (originBad || vecBad) ? themeColor("warning-900") : themeColor("node-calc");
+        // 104 = the 3-widget-row baseline (32 + 3*24) the node needs regardless of
+        // warnings; each active warning line adds its own 14px of text height.
+        let h = 104;
+        if (originBad) h += 14;
         if (vecBad) h += 14;
         node.size[1] = h;
     }
@@ -1127,6 +1309,7 @@
                 if (t === 'signal_in') _siColor(n);
                 else if (t === 'signal_out') _soColor(n);
                 else if (t === 'rotation') _rotColor(n);
+                else if (t === 'translation') _transColor(n);
                 else if (t === 'template_ref') _tmplColor(n, schemas);
             });
             _lab.graph.setDirtyCanvas(true, false);
@@ -1443,6 +1626,7 @@
             if (t === 'signal_in') _siColor(n);
             else if (t === 'signal_out') _soColor(n);
             else if (t === 'rotation') _rotColor(n);
+            else if (t === 'translation') _transColor(n);
             else if (t === 'template_ref') _tmplColor(n, _labContext.schemas);
         });
         _lab.graph.setDirtyCanvas(true, false);
@@ -2129,6 +2313,7 @@
     <div class="flex-1 relative overflow-hidden"
          @mojo:lab-pick-column.document="nodePickingColumn = $event.detail.nodeId"
          @mojo:lab-pick-quat.document="nodePickingQuat = $event.detail.nodeId"
+         @mojo:lab-pick-origin.document="nodePickingOrigin = $event.detail.nodeId"
          @mojo:lab-pick-template.document="nodePickingTemplate = $event.detail.nodeId"
          @mojo:lab-refresh.document="refreshLabValidation()"
          @mojo:lab-new.document="newTab()"
@@ -2343,6 +2528,89 @@
                 <p x-show="getColumnVisibleRows('nodeQuat').every(r => r.hidden)"
                    class="px-2 py-2 text-sm font-mono italic text-ink-secondary">No matching
                     quaternions
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Origin (position) base picker — fixed so it escapes the overflow-hidden canvas container ── -->
+    <div x-show="nodePickingOrigin !== null"
+         @click.self="nodePickingOrigin = null"
+         class="fixed inset-0 z-600 flex items-start justify-center pt-16 bg-scrim/80 backdrop-blur-sm"
+         style="display:none;">
+        <div class="panel w-80 space-y-3 max-h-[70vh] flex flex-col">
+
+            <!-- header -->
+            <div class="flex items-center justify-between pb-2 border-b border-subtle shrink-0">
+                <p class="text-sm font-black uppercase text-ink-strong tracking-widest">Select
+                    Origin Vector</p>
+                <button @click="nodePickingOrigin = null"
+                        class="text-ink-muted hover:text-ink-strong transition-colors">
+                    <svg class="w-4 h-4"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
+            <!-- search -->
+            <div class="flex items-center gap-1 shrink-0">
+                <div class="flex-1">
+                    {{ tree_search_input('nodeOriginSearch', 'Filter vectors…') }}
+                </div>
+                {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeOrigin')", "collapseAllColumnFolders('nodeOrigin')", "getColumnTreeRows('nodeOrigin').some(r => r.type === 'folder')") }}
+            </div>
+
+            <!-- hierarchical segment drills -->
+            <div class="flex flex-col gap-1.5 shrink-0">
+                <template x-for="depth in getActiveLevels('nodeOrigin')"
+                          :key="depth">
+                    <div x-show="getSegmentsAtDepth('nodeOrigin', depth).length > 0"
+                         class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
+                        <template x-for="seg in getSegmentsAtDepth('nodeOrigin', depth)"
+                                  :key="seg">
+                            <button @click="toggleRegexSegment('nodeOrigin', seg, depth)"
+                                    :class="isSegmentActive('nodeOrigin', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
+                                    class="shrink-0 px-2 py-0.5 rounded border text-sm font-mono transition-all"
+                                    x-text="seg">
+                            </button>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <!-- filtered origin (position) vector list -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                <template x-for="row in getColumnVisibleRows('nodeOrigin')"
+                          :key="row.key">
+                    <div class="expander-body-wrap duration-100 ease-out"
+                         :class="!row.hidden ? 'expander-open' : ''">
+                        <div class="expander-body">
+                            <template x-if="row.type === 'folder'">
+                                {{ tree_folder_row('row', "toggleColumnFolder('nodeOrigin', row.path)", "isColumnFolderCollapsed('nodeOrigin', row.path)") }}
+                            </template>
+                            <template x-if="row.type === 'file'">
+                                <div class="flex items-center">
+                                    {{ tree_indent_guides('row') }}
+                                    <button @click="selectNodeOrigin(row.item)"
+                                            :title="row.item"
+                                            class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200"
+                                            x-text="row.name">
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="getColumnVisibleRows('nodeOrigin').every(r => r.hidden)"
+                   class="px-2 py-2 text-sm font-mono italic text-ink-secondary">No matching
+                    vectors
                 </p>
             </div>
         </div>

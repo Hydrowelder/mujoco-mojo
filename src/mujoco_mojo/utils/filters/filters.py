@@ -45,6 +45,7 @@ __all__ = [
     "SortFilter",
     "StandardDeviationFilter",
     "TaringFilter",
+    "TranslationFilter",
     "TrigFilter",
     "UnitFilter",
     "WrapFilter",
@@ -69,6 +70,7 @@ class FilterType(StrEnum):
     SAVITZKY_GOLAY = "savitzky_golay"
     UNIT = "unit"
     ROTATION = "rotation"
+    TRANSLATION = "translation"
     LOG = "log"
     EXP = "exp"
     POWER = "power"
@@ -519,28 +521,95 @@ class UnitFilter(BaseFilter):
         return (expr * m) + b
 
 
+def _translate_vector(vs: np.ndarray, origin: np.ndarray, subtract: bool) -> np.ndarray:
+    """Adds or subtracts a per-row (N, 3) origin from (N, 3) vectors `vs` - the one piece of math shared by `TranslationFilter` (standalone) and `RotationFilter` (composing it internally for the combined rotate+translate case, where the add/subtract choice isn't independent - see `RotationFilter._rotate`)."""
+    return vs - origin if subtract else vs + origin
+
+
+class TranslationFilter(BaseFilter):
+    """Translates a 3D vector by adding or subtracting another position column group - a reference-frame origin, a second point for a displacement, etc."""
+
+    category: ClassVar[str] = "Vector"
+
+    type: Literal[FilterType.TRANSLATION] = FilterType.TRANSLATION
+    """The discriminator type for Pydantic."""
+
+    origin_col: str | None = Field(None, json_schema_extra={"ui_type": "vec_col"})
+    """Base name of the position column group to add or subtract (e.g. 'Bodies/hand/xpos')."""
+
+    subtract: bool = True
+    """If True, subtracts origin_col (v - origin); if False, adds it (v + origin)."""
+
+    def apply(self, expr: pl.Expr) -> pl.Expr:
+        return expr
+
+    def apply_with_context(
+        self, series: pl.Series, df: pl.DataFrame
+    ) -> pl.Series | None:
+        name = series.name
+        suffix = name.rsplit(":", 1)[-1] if ":" in name else ""
+        if suffix not in ("x", "y", "z") or not self.origin_col:
+            return None
+        base = name.rsplit(":", 1)[0]
+        v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
+        o_cols = [
+            f"{self.origin_col}:x",
+            f"{self.origin_col}:y",
+            f"{self.origin_col}:z",
+        ]
+        if not all(c in df.columns for c in v_cols + o_cols):
+            return None
+        v_out = _translate_vector(
+            df.select(v_cols).to_numpy(),
+            df.select(o_cols).to_numpy(),
+            self.subtract,
+        )
+        return pl.Series(name=name, values=v_out[:, {"x": 0, "y": 1, "z": 2}[suffix]])
+
+
 class RotationFilter(BaseFilter):
     """Rotates a 3D vector component into a reference frame using a quaternion column."""
+
+    category: ClassVar[str] = "Vector"
 
     type: Literal[FilterType.ROTATION] = FilterType.ROTATION
     """The discriminator type for Pydantic."""
 
-    quat_col: str = Field("", json_schema_extra={"ui_type": "quat_col"})
-    """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat')."""
+    quat_col: str | None = Field(None, json_schema_extra={"ui_type": "quat_col"})
+    """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat'). Leave unset together with an `origin_col` for a pure translation with no rotation."""
 
     invert: bool = True
-    """If True, transforms world-to-local (invert the quaternion rotation)."""
+    """If True, transforms world-to-local (invert the quaternion rotation; with no `quat_col`, subtracts `origin_col` instead of adding it)."""
 
-    def _rotate(self, vs: np.ndarray, qs: np.ndarray) -> np.ndarray:
-        """Rotate (N, 3) vectors by (N, 4) quaternions [x, y, z, w] using the sandwich formula v' = v + 2w(u x v) + 2u x (u x v). Quaternions are normalized in place."""
-        qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
-        u = -qs[:, :3] if self.invert else qs[:, :3]
-        w = qs[:, 3]
-        cross_1 = np.cross(u, vs)
-        return vs + 2 * w[:, None] * cross_1 + 2 * np.cross(u, cross_1)
+    origin_col: str | None = Field(None, json_schema_extra={"ui_type": "vec_col"})
+    """Base name of a position column group giving this frame's origin in world coordinates (e.g. 'Bodies/hand/xpos'). Only needed for position-type vectors, which need translating as well as rotating; leave unset for free vectors (velocity, angular velocity, force, etc.) that have no origin to translate against."""
+
+    def _rotate(
+        self, vs: np.ndarray, qs: np.ndarray | None, origin: np.ndarray | None = None
+    ) -> np.ndarray:
+        """
+        Rotate (N, 3) vectors by (N, 4) quaternions [x, y, z, w] using the sandwich formula v' = v + 2w(u x v) + 2u x (u x v). Quaternions are normalized in place. `qs=None` skips rotation entirely (identity), for a pure translation.
+
+        `origin` (N, 3), when given, is the rotation frame's position in world coordinates. A position vector needs both translation and rotation to change frames, and the two must be composed in the order matching the direction of the transform: world-to-local subtracts the origin (expressed in world coordinates) before rotating, while local-to-world rotates first and then adds the origin (now expressed in world coordinates) - reversing that order mixes vectors from two different frames. With `qs=None` there is no rotation to order against, so `invert` alone picks subtract (world-to-local direction) vs. add (local-to-world direction). Reuses `_translate_vector` rather than `TranslationFilter` itself - the add/subtract choice here is dictated by `invert`, not independently configurable the way `TranslationFilter.subtract` is, so composing the standalone filter directly would let its own `subtract` flag contradict this method's own logic.
+        """
+        if origin is not None and self.invert:
+            vs = _translate_vector(vs, origin, subtract=True)
+        if qs is None:
+            rotated = vs
+        else:
+            qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
+            u = -qs[:, :3] if self.invert else qs[:, :3]
+            w = qs[:, 3]
+            cross_1 = np.cross(u, vs)
+            rotated = vs + 2 * w[:, None] * cross_1 + 2 * np.cross(u, cross_1)
+        if origin is not None and not self.invert:
+            rotated = _translate_vector(rotated, origin, subtract=False)
+        return rotated
 
     def apply_to_frame(self, df: pl.DataFrame, vector_bases: set[str]) -> pl.DataFrame:
-        """Rotate all xyz vector families in `vector_bases` in one pass. Used by `MojoDataFrame.with_rotation` and any write path that needs the full-frame transform."""
+        """Rotate all xyz vector families in `vector_bases` in one pass. Used by `MojoDataFrame.with_rotation` and any write path that needs the full-frame transform. Rotation-only and requires `quat_col`: `vector_bases` sweeps up every kind of vector indiscriminately (positions alongside velocities/forces/etc.), and `origin_col` translation is only correct for position-type vectors, so it is intentionally not applied here - use `apply_with_context` for a single, explicitly-selected position column instead."""
+        if not self.quat_col:
+            return df
         q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
         if not all(c in df.columns for c in q_cols):
             return df
@@ -568,16 +637,24 @@ class RotationFilter(BaseFilter):
     ) -> pl.Series | None:
         name = series.name
         suffix = name.rsplit(":", 1)[-1] if ":" in name else ""
-        if suffix not in ("x", "y", "z") or not self.quat_col:
+        if suffix not in ("x", "y", "z") or not (self.quat_col or self.origin_col):
             return None
         base = name.rsplit(":", 1)[0]
         v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
-        q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
-        if not all(c in df.columns for c in v_cols + q_cols):
+        q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"] if self.quat_col else []
+        o_cols = (
+            [f"{self.origin_col}:x", f"{self.origin_col}:y", f"{self.origin_col}:z"]
+            if self.origin_col
+            else []
+        )
+        if not all(c in df.columns for c in v_cols + q_cols + o_cols):
             return None
+        qs = df.select(q_cols).to_numpy() if q_cols else None
+        origin = df.select(o_cols).to_numpy() if o_cols else None
         v_rot = self._rotate(
             df.select(v_cols).to_numpy(),
-            df.select(q_cols).to_numpy(),
+            qs,
+            origin,
         )
         return pl.Series(name=name, values=v_rot[:, {"x": 0, "y": 1, "z": 2}[suffix]])
 
@@ -915,6 +992,7 @@ AnyFilter = Annotated[
     | NormalizeFilter
     | WrapFilter
     | RotationFilter
+    | TranslationFilter
     | LogFilter
     | ExpFilter
     | PowerFilter

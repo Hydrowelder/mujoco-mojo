@@ -189,8 +189,9 @@ export interface RollingMedianFilter {
 export interface RotationFilter {
   enabled?: boolean;
   type?: "rotation";
-  quatCol?: string;
+  quatCol?: string | null;
   invert?: boolean;
+  originCol?: string | null;
 }
 
 export interface RoundFilter {
@@ -236,6 +237,13 @@ export interface StandardDeviationFilter {
 export interface TaringFilter {
   enabled?: boolean;
   type?: "taring";
+}
+
+export interface TranslationFilter {
+  enabled?: boolean;
+  type?: "translation";
+  originCol?: string | null;
+  subtract?: boolean;
 }
 
 export interface TrigFilter {

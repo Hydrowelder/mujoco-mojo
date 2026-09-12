@@ -143,7 +143,15 @@ export interface TrialDataResponse {
 
 export interface FilterParamSchema {
   name: string;
-  type: "float" | "int" | "bool" | "string" | "col" | "select";
+  type:
+    | "float"
+    | "int"
+    | "bool"
+    | "string"
+    | "col"
+    | "quat_col"
+    | "vec_col"
+    | "select";
   default: number | boolean | string | null;
   options?: string[];
   min?: number;

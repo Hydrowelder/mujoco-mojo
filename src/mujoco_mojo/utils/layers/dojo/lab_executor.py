@@ -45,6 +45,7 @@ from mujoco_mojo.utils.filters.filters import (
     SortFilter,
     StandardDeviationFilter,
     TaringFilter,
+    TranslationFilter,
     TrigFilter,
     WrapFilter,
 )
@@ -116,21 +117,27 @@ class LabExecutor:
         ]
 
     @property
-    def rotation_dependencies(self) -> set[str]:
+    def frame_dependencies(self) -> set[str]:
         """
-        Parquet columns required by any Rotation node in this graph: the
-        quaternion's x/y/z/w components, and the x/y/z siblings of the vector
-        feeding the rotation's input (which must come directly from a Signal In
-        node - see the rotation handling note in `_apply`).
+        Parquet columns required by any Rotation or Translation node in this
+        graph: the quaternion's x/y/z/w components (Rotation only, when set),
+        the origin's x/y/z components (when set), and the x/y/z siblings of
+        the vector feeding the node's input (which must come directly from a
+        Signal In node - see the rotation/translation handling note in
+        `_apply`).
         """
         deps: set[str] = set()
         for node in self.nodes.values():
-            if self._bare_type(node) != "rotation":
+            if self._bare_type(node) not in ("rotation", "translation"):
                 continue
 
             quat_col = node.get("properties", {}).get("quat_col")
             if quat_col:
                 deps.update(f"{quat_col}:{k}" for k in ("x", "y", "z", "w"))
+
+            origin_col = node.get("properties", {}).get("origin_col")
+            if origin_col:
+                deps.update(f"{origin_col}:{k}" for k in ("x", "y", "z"))
 
             link_id = node.get("inputs", [{}])[0].get("link")
             lnk = self.links.get(link_id) if link_id is not None else None
@@ -390,13 +397,23 @@ class LabExecutor:
             dt = float(props.get("dt", 0.001)) or 0.001
             return signal.cast(pl.Float64).cum_sum() * dt
 
-        # Rotation needs the full dataframe and the signal's original column
-        # name (to find its x/y/z siblings and the quaternion columns), so it
-        # is applied directly rather than via the renamed "_s" tmp column.
+        # Rotation and Translation both need the full dataframe and the signal's
+        # original column name (to find its x/y/z siblings and the quaternion/
+        # origin columns), so they are applied directly rather than via the
+        # renamed "_s" tmp column.
         if ntype == "rotation":
             clean = {k: v for k, v in props.items() if v is not None}
             try:
                 filt = RotationFilter(**clean)
+            except Exception:
+                return signal
+            ctx = filt.apply_with_context(signal.cast(pl.Float64), df)
+            return ctx if ctx is not None else signal
+
+        if ntype == "translation":
+            clean = {k: v for k, v in props.items() if v is not None}
+            try:
+                filt = TranslationFilter(**clean)
             except Exception:
                 return signal
             ctx = filt.apply_with_context(signal.cast(pl.Float64), df)

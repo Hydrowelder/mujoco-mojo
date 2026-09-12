@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.6.10 (20206-09-11)
+
+- Added a new option for the rotation filter that will also perform a reference frame translation after the rotation
+- Added support for skipping the rotation entirely in the rotation filter, for a pure translation (leave the quaternion column unset and only set the origin column)
+- Added a standalone Translation filter (adds or subtracts another position column) for use outside the rotation filter, e.g. computing a displacement between two points; the rotation filter now uses the same math internally for its own translation option
+
 ## Version 2.6.9 (2026-09-10)
 
 - Added support for MuJoCo 3.13.0
@@ -21,7 +27,7 @@
 - Settings Updates:
     - Updated to add lots of new CLI settings
     - Settings now allow for project-specific settings
-    - Replaced the original SLURM overrides JSON file
+    - Replaced the original Slurm overrides JSON file
     - Project settings now take priority over Global settings
 - Fixed asset bundling to use a folder structure, preventing files with the same name from being overwritten
     - Added an option to symlink instead of copy on POSIX systems

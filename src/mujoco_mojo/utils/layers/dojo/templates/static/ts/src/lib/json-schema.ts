@@ -27,6 +27,11 @@ export interface JsonSchemaNode {
   oneOf?: JsonSchemaNode[];
   anyOf?: JsonSchemaNode[];
   $defs?: Record<string, JsonSchemaNode>;
+  // Pydantic's own emission for a discriminated union (e.g. AnyFilter) -
+  // maps each discriminator value ("rotation") to its $defs $ref
+  // ("#/$defs/RotationFilter"). Only present on the union's own schema node
+  // (an array's `items`, here), not on the resolved branches themselves.
+  discriminator?: { propertyName: string; mapping: Record<string, string> };
   // value -> that enum member's own attribute-docstring, e.g.
   // GridMode's {"all": "Major and minor tick grid lines."} - a custom
   // extension (routers/mosaic.py's GeneratePlotConfigSchema), since
@@ -139,4 +144,21 @@ export function describeDefField(root: JsonSchemaNode | null, defName: string, f
  */
 export function describeEnumValue(root: JsonSchemaNode | null, path: string[], value: string): string {
   return resolveSchemaPath(root, path)?.["x-enum-descriptions"]?.[value] ?? "";
+}
+
+/**
+ * Description of `fieldName` on the filter class discriminated by `filterType`
+ * (e.g. "rotation" + "originCol" -> RotationFilter.originCol's docstring).
+ * The type -> $defs name mapping isn't a fixed rule - type "median" is
+ * RollingMedianFilter, type "stat_median" is MedianFilter - so this reads
+ * Pydantic's own discriminator.mapping off AnyFilter (read from
+ * YAxisConfig.filters; XAxisConfig.filters carries the identical union, so
+ * either would resolve the same mapping) rather than guessing a class name
+ * from the type string.
+ */
+export function describeFilterField(root: JsonSchemaNode | null, filterType: string, fieldName: string): string {
+  const mapping = root?.$defs?.["YAxisConfig"]?.properties?.["filters"]?.items?.discriminator?.mapping;
+  const ref = mapping?.[filterType];
+  if (!ref) return "";
+  return describeDefField(root, ref.replace(/^#\/\$defs\//, ""), fieldName);
 }

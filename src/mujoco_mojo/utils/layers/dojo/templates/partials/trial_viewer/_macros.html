@@ -19,7 +19,42 @@ font-normal on the tooltip's own text counteracts the uppercase/
 tracking-widest styling every caller's <label> already has - CSS
     text-transform inherits into this icon's tooltip since it's nested
     inside that same label. #}
-    {% macro field_help_icon(help_expr) %}
+    {% macro field_help_icon(help_expr, teleport=False) %}
+    {% if teleport %}
+    {# Same icon/tooltip, but for a spot nested inside a scrolling ancestor
+    (e.g. _series_panel.html's X-Axis filter panel, whose filter stack is a
+    max-h-80 overflow-y-auto list) where the plain CSS version below gets
+    clipped by that ancestor instead of floating over the whole popout - a
+    position:absolute tooltip can't escape a clipping parent no matter its
+    z-index. Tracks hover itself and teleports the panel to <body> with a
+    JS-computed position instead, the same escape-the-scroll-container
+    technique this file's own quat_col/vec_col/col pickers already use for
+    their (click-toggled) dropdown panels - adapted here to a hover trigger
+    since @mouseenter/@mouseleave replace peer-hover once the tooltip is no
+    longer a CSS sibling of the icon. #}
+    <span class="cursor-help relative inline-flex"
+          x-show="{{ help_expr }}"
+          x-data="{ _tOpen: false, _tCoords: { top: 0, left: 0 } }"
+          @mouseenter="const r = $el.getBoundingClientRect(); _tCoords = { top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX }; _tOpen = true"
+          @mouseleave="_tOpen = false">
+        <svg class="w-3 h-3 text-ink-muted hover:text-accent-500 dark:hover:text-accent-400 transition-colors duration-150"
+             fill="none"
+             stroke="currentColor"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2.5"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <template x-teleport="body">
+            <div x-show="_tOpen"
+                 :style="`position:absolute;top:${_tCoords.top}px;left:${_tCoords.left}px;`"
+                 class="panel w-56 z-800 pointer-events-none normal-case tracking-normal font-normal text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
+                 style="display:none;"
+                 x-html="$store.dojo.renderMarkdown({{ help_expr }})"></div>
+        </template>
+    </span>
+    {% else %}
     {# peer/peer-hover (not group/group-hover) deliberately - group-hover keeps
     the tooltip open as long as the mouse is anywhere inside the shared
     .group ancestor, which includes the tooltip panel itself once it's
@@ -55,6 +90,7 @@ tracking-widest styling every caller's <label> already has - CSS
         <div class="tooltip-panel peer-hover:visible peer-hover:opacity-100 pointer-events-none left-1/2 -translate-x-1/2 w-56 normal-case tracking-normal font-normal text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-2 [&_p:last-child]:mb-0"
              x-html="$store.dojo.renderMarkdown({{ help_expr }})"></div>
     </span>
+    {% endif %}
     {% endmacro %}
 
     {# Per-field "reset to default" icon - the same affordance and icon (a

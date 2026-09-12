@@ -38,6 +38,7 @@ from mujoco_mojo.utils.filters.filters import AnyFilter as _AnyFilter
 from mujoco_mojo.utils.filters.filters import BaseFilter as _BaseFilter
 from mujoco_mojo.utils.filters.filters import FilterType as _FilterType
 from mujoco_mojo.utils.filters.filters import RotationFilter as _RotationFilter
+from mujoco_mojo.utils.filters.filters import TranslationFilter as _TranslationFilter
 from mujoco_mojo.utils.filters.filters import filter_adapter as _filter_adapter
 from mujoco_mojo.utils.log import get_logger
 
@@ -363,6 +364,8 @@ async def get_filter_schema():
             return "col"
         if prop.get("ui_type") == "quat_col":
             return "quat_col"
+        if prop.get("ui_type") == "vec_col":
+            return "vec_col"
         if prop.get("ui_type") == "select":
             return "select"
         if "anyOf" in prop:
@@ -957,10 +960,11 @@ async def get_trial_data(
                 for si_col in executor.signal_in_columns:
                     if si_col in available_cols:
                         extra_si.add(si_col)
-                # Sibling vector components and quaternion columns needed by any
-                # in-graph Rotation node - without these, apply_with_context()
-                # can't find the columns it needs and the rotation is a no-op.
-                for dep_col in executor.rotation_dependencies:
+                # Sibling vector components and quaternion/origin columns needed by
+                # any in-graph Rotation or Translation node - without these,
+                # apply_with_context() can't find the columns it needs and the
+                # transform is a no-op.
+                for dep_col in executor.frame_dependencies:
                     if dep_col in available_cols:
                         extra_si.add(dep_col)
             if _TIME_COLUMN_NAME in available_cols:
@@ -968,7 +972,7 @@ async def get_trial_data(
             existing_targets = set(fetch_targets)
             fetch_targets.extend(c for c in extra_si if c not in existing_targets)
 
-        # ── Pre-flight: ensure RotationFilter dependencies are fetched ────────
+        # ── Pre-flight: ensure Rotation/Translation filter dependencies are fetched ──
         # Parse filters early (errors are tolerated; full parse happens again below).
         if filters:
             try:
@@ -976,9 +980,12 @@ async def get_trial_data(
                 _existing = set(fetch_targets)
                 for _col, _flist in _preflight.items():
                     for _f in _flist:
-                        if not isinstance(_f, _RotationFilter) or not _f.quat_col:
+                        if not isinstance(_f, (_RotationFilter, _TranslationFilter)):
                             continue
-                        # Sibling vector components for the column being rotated
+                        # Sibling vector components for the column being transformed -
+                        # fetched unconditionally (cheap if unused) since either
+                        # quat_col or origin_col alone is enough to need them, and a
+                        # RotationFilter with neither set is just a no-op.
                         if (
                             _col.endswith(":x")
                             or _col.endswith(":y")
@@ -990,12 +997,20 @@ async def get_trial_data(
                                 if _sib in available_cols and _sib not in _existing:
                                     fetch_targets.append(_sib)
                                     _existing.add(_sib)
-                        # Quaternion components
-                        for _comp in ("w", "x", "y", "z"):
-                            _qc = f"{_f.quat_col}:{_comp}"
-                            if _qc in available_cols and _qc not in _existing:
-                                fetch_targets.append(_qc)
-                                _existing.add(_qc)
+                        # Quaternion components (RotationFilter only, when set)
+                        if isinstance(_f, _RotationFilter) and _f.quat_col:
+                            for _comp in ("w", "x", "y", "z"):
+                                _qc = f"{_f.quat_col}:{_comp}"
+                                if _qc in available_cols and _qc not in _existing:
+                                    fetch_targets.append(_qc)
+                                    _existing.add(_qc)
+                        # Origin (frame position) components, when set
+                        if _f.origin_col:
+                            for _comp in ("x", "y", "z"):
+                                _oc = f"{_f.origin_col}:{_comp}"
+                                if _oc in available_cols and _oc not in _existing:
+                                    fetch_targets.append(_oc)
+                                    _existing.add(_oc)
             except Exception:
                 pass
 

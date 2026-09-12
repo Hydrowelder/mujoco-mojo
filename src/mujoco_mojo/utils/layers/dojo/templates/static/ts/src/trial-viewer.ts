@@ -27,6 +27,7 @@ import {
   describeSchemaPath,
   describeEnumValue,
   describeDefField,
+  describeFilterField,
   type JsonSchemaNode,
 } from "./lib/json-schema";
 import Plotly from "./lib/plotly";
@@ -549,6 +550,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     plotDefFieldHelp(defName: string, fieldName: string): string {
       return describeDefField(this.plotConfigSchema, defName, fieldName);
     },
+    // Same schema, for a filter-stack param (e.g. RotationFilter.originCol) -
+    // named by the filter's own discriminator value ("rotation") rather than
+    // its $defs class name, since that's all the filter-param editor
+    // (_series_panel.html) has on hand at that point (f.type). See
+    // describeFilterField for why the type -> class name mapping has to be
+    // read from the schema instead of guessed.
+    plotFilterFieldHelp(filterType: string, fieldName: string): string {
+      return describeFilterField(this.plotConfigSchema, filterType, fieldName);
+    },
     // Maps a shape's own "type" discriminator (ShapeType's values: "vline"/
     // "hline"/"rect") to its $defs name, for plotDefFieldHelp calls in the
     // Shape editor whose defName has to follow shapeDraft.type rather than
@@ -655,6 +665,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     nodeColSearch: "" as string,
     nodePickingQuat: null as number | null,
     nodeQuatSearch: "" as string,
+    nodePickingOrigin: null as number | null,
+    nodeOriginSearch: "" as string,
     nodePickingTemplate: null as number | null,
     labSchemas: [] as LabSchema[],
     // lifted out of the "load into new tab" dropdown's own local x-data
@@ -3655,7 +3667,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : this.selectableYColumns;
+            : field === "nodeOrigin"
+              ? this.rotateableVectors
+              : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       if (!search) return this.smartSort([...base]);
@@ -3841,7 +3855,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : this.selectableYColumns;
+            : field === "nodeOrigin"
+              ? this.rotateableVectors
+              : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const pathSearch = search.split(":")[0] ?? "";
@@ -3869,7 +3885,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : this.selectableYColumns;
+            : field === "nodeOrigin"
+              ? this.rotateableVectors
+              : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const [pathPart = "", suffixPart = ""] = search.split(":");
@@ -4963,6 +4981,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         "Arithmetic",
         "Trigonometry",
         "Calculus",
+        "Vector",
         "Comparison",
         "Bounding",
         "Misc",
@@ -5660,6 +5679,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       }
       this.nodePickingQuat = null;
       this.nodeQuatSearch = "";
+    },
+
+    selectNodeOrigin(base: string) {
+      if (this.nodePickingOrigin !== null) {
+        // Defined in _signal_lab.html - updates the LiteGraph node property
+        if (typeof window.mojoLabSelectNodeOrigin === "function") {
+          window.mojoLabSelectNodeOrigin(this.nodePickingOrigin, base);
+        }
+      }
+      this.nodePickingOrigin = null;
+      this.nodeOriginSearch = "";
     },
 
     selectNodeTemplate(name: string) {

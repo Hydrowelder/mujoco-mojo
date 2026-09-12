@@ -76,6 +76,7 @@ declare global {
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabSelectNodeQuat?(nodeId: number, base: string): void;
+    mojoLabSelectNodeOrigin?(nodeId: number, base: string): void;
     mojoLabSelectNodeTemplate?(nodeId: number, name: string): void;
     // Replaces the active tab's clean baseline with its current live state
     // (e.g. after a successful save, or clearing the graph)
