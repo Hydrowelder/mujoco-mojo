@@ -11,6 +11,7 @@ from mujoco_mojo.stochas import BaseDict
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import MojoDataFrame
+from mujoco_mojo.utils.signal_metadata import TransformType
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import REQUIREMENTS_FNAME, RequirementResult
 
@@ -124,6 +125,7 @@ class RequirementsManager:
                 category=SignalCategory.REQUIREMENTS,
                 subgroups=(resolved_name,),
                 attr="result",
+                metadata=TransformType.SCALAR.metadata,
             )
             if post_result
             else None

@@ -1506,7 +1506,7 @@ def test_actuator_load_request_posts_ctrl_signal(tmp_path):
 
 
 def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path):
-    """Ctrl has no built-in metadata default (its units depend on gear/dyntype)."""
+    """Ctrl has no built-in unit default (its units depend on gear/dyntype), only the scalar tag."""
     state = _actuated_slide_state()
     load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
     load.resolve_ids(state)
@@ -1516,7 +1516,9 @@ def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path):
     load.request(sm)
     sm.record(state)
 
-    assert "Loads/drive:ctrl" not in sm._column_metadata
+    assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {
+        "transform_type": "scalar"
+    }
 
 
 def test_actuator_load_request_metadata_override(tmp_path):
@@ -1530,4 +1532,7 @@ def test_actuator_load_request_metadata_override(tmp_path):
     load.request(sm, metadata={"ctrl": {"unit": "newton"}})
     sm.record(state)
 
-    assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {"unit": "newton"}
+    assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {
+        "unit": "newton",
+        "transform_type": "scalar",
+    }

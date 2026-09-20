@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from typing import Annotated, Any, Self, overload
 
 import numpy as np
@@ -17,6 +18,7 @@ from mujoco_mojo.mjcf.orientation import (
 )
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.typing import Angle, EulerSeq, Vec3
+from mujoco_mojo.utils.column import Column, pose_column_names, pose_missing_error
 
 __all__ = [
     "AnyPose",
@@ -160,6 +162,28 @@ class PoseQuat(PoseBase, Quat):
     """A full pose defined by a position and a quaternion."""
 
     attributes = (*PoseBase.attributes, *Quat.attributes)
+
+    @classmethod
+    def from_row(
+        cls,
+        row: Mapping[str, Any],
+        source: Column | str,
+        *,
+        pos_channel: str = "xpos",
+        quat_channel: str = "quat",
+    ) -> Self:
+        """
+        Builds the pose of `source` (for example `Sites/A`) from one telemetry row, such as `df.row(i, named=True)`.
+
+        Reads the seven columns `Sites/A/xpos:x` through `Sites/A/quat:z` (the names come from `Column`, the same grammar the writer uses, so they cannot drift) and raises a `ValueError` naming every missing one. The quaternion is taken by column name, so the `w, x, y, z` order is the MJCF one regardless of how the frame is laid out. For a whole trajectory use `MojoNamespace.pose_arrays`, which avoids building a model per row.
+        """
+        pos_names, quat_names = pose_column_names(source, pos_channel, quat_channel)
+        if error := pose_missing_error(source, row, pos_channel, quat_channel):
+            raise error
+        return cls(
+            pos=np.array([row[n] for n in pos_names], dtype=float),
+            quat=np.array([row[n] for n in quat_names], dtype=float),
+        )
 
 
 class PoseEuler(PoseBase, Euler):

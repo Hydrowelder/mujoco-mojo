@@ -44,6 +44,11 @@ def test_signal_out_fields_cover_every_column_metadata_field() -> None:
 
 def test_signal_out_fields_offer_a_combo_only_for_fixed_choices() -> None:
     by_name = {f["name"]: f for f in _column_metadata_fields()}
-    assert by_name["transform_type"]["options"] == ["point", "vector", "quaternion"]
+    assert by_name["transform_type"]["options"] == [
+        "point",
+        "vector",
+        "quaternion",
+        "scalar",
+    ]
     for free_text in ("unit", "dimension", "quantity"):
         assert by_name[free_text]["options"] is None

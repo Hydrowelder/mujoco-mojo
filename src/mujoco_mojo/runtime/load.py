@@ -1083,7 +1083,9 @@ class ActuatorControl(Load):
             category=SignalCategory.LOADS,
             subgroups=(self.name,),
             attr="ctrl",
-            metadata=merge_signal_metadata(None, "ctrl", metadata),
+            metadata=merge_signal_metadata(
+                TransformType.SCALAR.metadata, "ctrl", metadata
+            ),
         )
 
         def sample(state: MjState) -> None:

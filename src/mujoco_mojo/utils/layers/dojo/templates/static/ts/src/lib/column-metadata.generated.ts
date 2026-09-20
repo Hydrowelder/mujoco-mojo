@@ -4,8 +4,8 @@
 // Regenerate: python scripts/gen_ts_models.py
 // ============================================================
 
-export type TransformType = "point" | "vector" | "quaternion";
-export const TRANSFORM_TYPE_VALUES: TransformType[] = ["point", "vector", "quaternion"];
+export type TransformType = "point" | "vector" | "quaternion" | "scalar";
+export const TRANSFORM_TYPE_VALUES: TransformType[] = ["point", "vector", "quaternion", "scalar"];
 
 export interface ColumnMetadata {
   unit?: string | null;

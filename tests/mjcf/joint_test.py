@@ -125,9 +125,13 @@ def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {"unit": "radian"}
+    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
+        "unit": "radian",
+        "transform_type": "scalar",
+    }
     assert sm._column_metadata["Joints/elbow:qvel"].model_dump() == {
-        "unit": "radian / second"
+        "unit": "radian / second",
+        "transform_type": "scalar",
     }
 
 
@@ -157,10 +161,12 @@ def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
     sm.record(state)
 
     assert sm._column_metadata["Joints/rail:qpos"].model_dump() == {
-        "dimension": "[length]"
+        "dimension": "[length]",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata["Joints/rail:qvel"].model_dump() == {
-        "dimension": "[length] / [time]"
+        "dimension": "[length] / [time]",
+        "transform_type": "scalar",
     }
 
 
@@ -176,6 +182,7 @@ def test_joint_request_metadata_override(
 
     assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
         "unit": "radian",
+        "transform_type": "scalar",
         "display_name": "Elbow Angle",
     }
 
@@ -265,15 +272,15 @@ def test_ball_joint_request_tags_transform_types(tmp_path: Path) -> None:
     assert meta["Joints/shoulder/qfrc_passive:x"].transform_type == "vector"
 
 
-def test_single_dof_joint_scalars_carry_no_transform_type(
+def test_single_dof_joint_scalars_are_tagged_scalar(
     hinge_setup: tuple[MjState, Joint], tmp_path: Path
 ) -> None:
-    """Hinge/slide scalars are never grouped into :x/:y/:z families, so they must not be tagged."""
+    """Hinge/slide scalars are never grouped into :x/:y/:z families, so they are tagged `scalar` rather than a vector kind."""
     state, joint = hinge_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"].transform_type is None
-    assert sm._column_metadata["Joints/elbow:qvel"].transform_type is None
+    assert sm._column_metadata["Joints/elbow:qpos"].transform_type == "scalar"
+    assert sm._column_metadata["Joints/elbow:qvel"].transform_type == "scalar"

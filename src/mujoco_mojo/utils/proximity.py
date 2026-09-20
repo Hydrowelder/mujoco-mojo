@@ -52,9 +52,9 @@ Proximityable = Annotated[
 ]
 
 _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
-    "dist": dim(Dimension.LENGTH),
+    "dist": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
     "fromto": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
-    "prox_type": dimensionless_metadata(),
+    "prox_type": dimensionless_metadata() | TransformType.SCALAR.metadata,
 }
 
 

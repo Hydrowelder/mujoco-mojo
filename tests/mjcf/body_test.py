@@ -166,7 +166,8 @@ def test_body_request_tags_builtin_dimension_metadata(
         "transform_type": "vector",
     }
     assert sm._column_metadata["Bodies/box:ke_trans"].model_dump() == {
-        "dimension": "[mass] * [length] ** 2 / [time] ** 2"
+        "dimension": "[mass] * [length] ** 2 / [time] ** 2",
+        "transform_type": "scalar",
     }
 
 

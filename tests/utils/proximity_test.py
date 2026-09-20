@@ -790,14 +790,16 @@ def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> No
 
     pair = proximity.pair_name
     assert sm._column_metadata[f"Proximities/{pair}:dist"].model_dump() == {
-        "dimension": "[length]"
+        "dimension": "[length]",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata[f"Proximities/{pair}/fromto/g1:x"].model_dump() == {
         "dimension": "[length]",
         "transform_type": "point",
     }
     assert sm._column_metadata[f"Proximities/{pair}:prox_type"].model_dump() == {
-        "dimension": "[]"
+        "dimension": "[]",
+        "transform_type": "scalar",
     }
 
 
@@ -813,6 +815,7 @@ def test_proximity_request_metadata_override(tmp_path: Path) -> None:
     pair = proximity.pair_name
     assert sm._column_metadata[f"Proximities/{pair}:dist"].model_dump() == {
         "dimension": "[length]",
+        "transform_type": "scalar",
         "display_name": "Pair Distance",
     }
 

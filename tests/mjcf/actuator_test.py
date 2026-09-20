@@ -171,14 +171,17 @@ def test_actuator_request_tags_hinge_transmission_with_angle_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/elbow_motor:length"].model_dump() == {
-        "unit": "radian"
+        "unit": "radian",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/elbow_motor:velocity"].model_dump() == {
-        "unit": "radian / second"
+        "unit": "radian / second",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
+        "transform_type": "scalar",
     }
 
 
@@ -211,27 +214,32 @@ def test_actuator_request_tags_slide_transmission_with_length_dimension(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/rail_motor:length"].model_dump() == {
-        "dimension": "[length]"
+        "dimension": "[length]",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/rail_motor:velocity"].model_dump() == {
-        "dimension": "[length] / [time]"
+        "dimension": "[length] / [time]",
+        "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/rail_motor:force"].model_dump() == {
-        "dimension": "[mass] * [length] / [time] ** 2"
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "scalar",
     }
 
 
 def test_actuator_request_ctrl_has_no_builtin_default(
     motor_setup: tuple[MjState, ActuatorMotor], tmp_path: Path
 ) -> None:
-    """Ctrl has no built-in metadata default (its units depend on gear/dyntype, not the transmission alone)."""
+    """Ctrl has no built-in unit default (its units depend on gear/dyntype, not the transmission alone), only the scalar tag."""
     state, actuator = motor_setup
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
 
     actuator.request(sm, channels=["ctrl"])
     sm.record(state)
 
-    assert "Actuators/elbow_motor:ctrl" not in sm._column_metadata
+    assert sm._column_metadata["Actuators/elbow_motor:ctrl"].model_dump() == {
+        "transform_type": "scalar"
+    }
 
 
 def test_actuator_request_metadata_override(
@@ -253,8 +261,10 @@ def test_actuator_request_metadata_override(
     assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
+        "transform_type": "scalar",
         "display_name": "Elbow Torque",
     }
     assert sm._column_metadata["Actuators/elbow_motor:ctrl"].model_dump() == {
-        "unit": "newton"
+        "unit": "newton",
+        "transform_type": "scalar",
     }

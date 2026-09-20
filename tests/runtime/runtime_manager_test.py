@@ -15,6 +15,7 @@ from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import GeomName, JointName, MeshName
 from mujoco_mojo.utils.proximity import Proximity
+from mujoco_mojo.utils.signal_metadata import TransformType
 from mujoco_mojo.utils.statusing import RequirementResult, TrialStatus
 
 
@@ -910,6 +911,7 @@ def test_requirement_posts_to_its_result_column() -> None:
     (call,) = sm.post.call_args_list
     assert call.kwargs["value"] == 1.0
     assert str(call.kwargs["column"]) == "Requirements/ok_req:result"
+    assert call.kwargs["column"].metadata.transform_type == TransformType.SCALAR
 
 
 def test_latch_logs_once_not_on_every_replay(caplog) -> None:

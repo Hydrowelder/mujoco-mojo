@@ -32,6 +32,7 @@ from mujoco_mojo.utils.signal_metadata import (
     MetadataLike,
     MetadataOverrides,
     ColumnMetadata,
+    TransformType,
     merge_signal_metadata,
 )
 
@@ -355,6 +356,10 @@ class ActuatorBase(XMLModel, ABC):
                     if transmission_meta is not None
                     else None
                 )
+                if size == 1:
+                    builtin = (
+                        builtin or ColumnMetadata()
+                    ) | TransformType.SCALAR.metadata
                 meta = merge_signal_metadata(
                     builtin, channel, _meta, unit_system=state.us
                 )

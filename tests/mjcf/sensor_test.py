@@ -68,7 +68,8 @@ def test_touch_request_tags_force_metadata(state: MjState, tmp_path: Path) -> No
     sm.record(state)
 
     assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
-        "dimension": "[mass] * [length] / [time] ** 2"
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "scalar",
     }
 
 
@@ -179,5 +180,6 @@ def test_request_metadata_override(state: MjState, tmp_path: Path) -> None:
 
     assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "scalar",
         "display_name": "Touch Force",
     }

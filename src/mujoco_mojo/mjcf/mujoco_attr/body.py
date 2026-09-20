@@ -70,11 +70,11 @@ _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "ximat": dimensionless_metadata(),
     "lin_mom": dim(Dimension.LINEAR_MOMENTUM) | TransformType.VECTOR.metadata,
     "ang_mom": dim(Dimension.ANGULAR_MOMENTUM) | TransformType.VECTOR.metadata,
-    "ke_trans": dim(Dimension.ENERGY),
-    "ke_rot": dim(Dimension.ENERGY),
-    "pe": dim(Dimension.ENERGY),
-    "ke_total": dim(Dimension.ENERGY),
-    "total_energy": dim(Dimension.ENERGY),
+    "ke_trans": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "ke_rot": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "pe": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "ke_total": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "total_energy": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
 }
 
 _body_attr = (

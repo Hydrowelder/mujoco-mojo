@@ -13,7 +13,7 @@ from .runner import (
     OptimizerConfig,
     Trial,
 )
-from .signal_metadata import ColumnMetadata
+from .signal_metadata import ColumnMetadata, TransformType
 from .utils import is_empty_list, to_pretty_xml
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "MonteCarloConfig",
     "OptimizerConfig",
     "Proximity",
+    "TransformType",
     "Trial",
     "filters",
     "get_logger",

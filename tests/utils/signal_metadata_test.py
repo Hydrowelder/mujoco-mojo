@@ -89,6 +89,10 @@ def test_transform_type_metadata_builds_expected_metadata() -> None:
     assert TransformType.QUATERNION.metadata.model_dump() == {
         "transform_type": "quaternion"
     }
+    assert TransformType.SCALAR.metadata.model_dump() == {"transform_type": "scalar"}
+    assert ColumnMetadata.validated({"transform_type": "scalar"}).transform_type == (
+        TransformType.SCALAR
+    )
 
 
 # --- ColumnMetadata ---
@@ -105,7 +109,7 @@ def test_column_metadata_omits_unset_fields() -> None:
 def test_column_metadata_keeps_extra_fields() -> None:
     meta = ColumnMetadata.model_validate({"unit": "meter", "display_name": "Length"})
     assert meta.model_dump() == {"unit": "meter", "display_name": "Length"}
-    assert meta.display_name == "Length"  # pyright: ignore[reportAttributeAccessIssue]
+    assert (meta.model_extra or {})["display_name"] == "Length"
 
 
 def test_column_metadata_serializes_transform_type_as_a_plain_string() -> None:
@@ -127,7 +131,7 @@ def test_column_metadata_rejects_invalid_values(
     kwargs: dict[str, str], message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        ColumnMetadata(**kwargs)  # pyright: ignore[reportArgumentType]
+        ColumnMetadata.model_validate(kwargs)
 
 
 def test_column_metadata_accepts_matching_unit_and_dimension() -> None:

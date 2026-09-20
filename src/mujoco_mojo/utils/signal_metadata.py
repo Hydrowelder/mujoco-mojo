@@ -73,10 +73,9 @@ class Dimension(StrEnum):
 
 class TransformType(StrEnum):
     """
-    How a signal's grouped `:x/:y/:z` (or `:w/:x/:y/:z`) components must be re-expressed under
-    `MojoDataFrame.mojo.change_frame()`. Only tag channels that are actually grouped into such a
-    family (see `rotatable_bases`/`quaternion_bases`) - untagged scalar channels are already out
-    of scope structurally and don't need this.
+    How a signal must be re-expressed under `MojoDataFrame.mojo.change_frame()`.
+
+    `POINT`, `VECTOR`, and `QUATERNION` tag channels grouped into a `:x/:y/:z` (or `:w/:x/:y/:z`) family (see `rotatable_bases`/`quaternion_bases`), which `change_frame` refuses to touch untagged. `SCALAR` says the value does not depend on the frame at all. A lone scalar column needs no tag to be left alone, so tagging it is optional and states the intent; the tag matters for a group whose columns happen to be named `:x/:y/:z` (or `:w/:x/:y/:z`) without being a vector, which it keeps out of any rotation.
     """
 
     POINT = "point"
@@ -87,6 +86,9 @@ class TransformType(StrEnum):
 
     QUATERNION = "quaternion"
     """Compose: q' = q_b^-1 (x) q."""
+
+    SCALAR = "scalar"
+    """Unchanged by a frame change (energies, distances, angles, magnitudes, joint values)."""
 
     @property
     def metadata(self) -> ColumnMetadata:

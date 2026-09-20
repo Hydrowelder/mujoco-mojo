@@ -419,7 +419,8 @@ class Joint(XMLModel):
                             # scalar values are considered an attr of the parent
                             attr=channel,
                             metadata=merge_signal_metadata(
-                                joint_type_metadata(jnt_type)[scalar_key],
+                                joint_type_metadata(jnt_type)[scalar_key]
+                                | TransformType.SCALAR.metadata,
                                 channel,
                                 _meta,
                                 unit_system=u,

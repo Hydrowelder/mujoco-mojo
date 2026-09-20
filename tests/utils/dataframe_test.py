@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +5,7 @@ import polars as pl
 import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
+from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import MojoDataFrame, read_column_metadata
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
@@ -136,6 +136,134 @@ def test_select_body(sample_data: MojoDataFrame):
     assert "Joints/hinge_1/qpos" not in body_df.columns
 
 
+def test_select_body_includes_scalar_channels():
+    """A body's scalar channels (`Bodies/box:ke_trans`) belong to it as much as its vector groups."""
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/box/xpos:x": [1.0],
+            "Bodies/box:ke_trans": [2.0],
+            "Bodies/box2:ke_trans": [3.0],
+            "Sites/box/xpos:x": [4.0],
+        }
+    )
+    assert df.mojo.select_body(BodyName("box")).columns == [
+        "Bodies/box/xpos:x",
+        "Bodies/box:ke_trans",
+    ]
+
+
+def test_typed_selectors_match_names_literally():
+    """Object names are compared as parts, so regex characters in a name do not match other objects."""
+    df = MojoDataFrame.from_dict(
+        {"Bodies/arm.1/xpos:x": [1.0], "Bodies/armX1/xpos:x": [2.0]}
+    )
+    assert df.mojo.select_body(BodyName("arm.1")).columns == ["Bodies/arm.1/xpos:x"]
+
+    spiky = MojoDataFrame.from_dict(
+        {"Bodies/(arm) #1+2/xpos:x": [1.0], "Bodies/(arm) #1/xpos:x": [2.0]}
+    )
+    assert spiky.mojo.select_body(BodyName("(arm) #1+2")).columns == [
+        "Bodies/(arm) #1+2/xpos:x"
+    ]
+
+
+def test_columns_parses_the_frame_and_skips_free_form_names(sample_data: MojoDataFrame):
+    df = MojoDataFrame.from_dict(
+        {TIME_COLUMN_NAME: [0.0], "Bodies/a/xpos:x": [1.0], "My Output//x": [2.0]}
+    )
+    assert df.mojo.columns == [
+        Column(category=TIME_COLUMN_NAME),
+        Column(category="Bodies", subgroups=("a", "xpos"), attr="x"),
+    ]
+
+
+def test_select_accepts_columns_and_strings(sample_data: MojoDataFrame):
+    by_string = sample_data.mojo.select("Bodies/racket/xpos")
+    assert by_string.columns == [
+        "Bodies/racket/xpos:x",
+        "Bodies/racket/xpos:y",
+        "Bodies/racket/xpos:z",
+    ]
+    by_column = sample_data.mojo.select(
+        Column(category="Bodies", subgroups=("racket", "xpos"))
+    )
+    assert by_column.columns == by_string.columns
+
+
+def test_select_takes_several_columns_and_an_attr_only_column(
+    sample_data: MojoDataFrame,
+):
+    every_x = sample_data.mojo.select(Column(category="Bodies", attr="x"))
+    assert every_x.columns == ["Bodies/racket/xpos:x", "Bodies/racket/xiquat:x"]
+    both = sample_data.mojo.select(TIME_COLUMN_NAME, "Sensors/gyro")
+    assert both.columns == [
+        TIME_COLUMN_NAME,
+        "Sensors/gyro/data:x",
+        "Sensors/gyro/data:y",
+        "Sensors/gyro/data:z",
+    ]
+
+
+def test_select_with_no_match_is_empty(sample_data: MojoDataFrame):
+    assert sample_data.mojo.select("Bodies/nothing").columns == []
+
+
+def _pose_frame() -> MojoDataFrame:
+    return MojoDataFrame.from_dict(
+        {
+            TIME_COLUMN_NAME: [0.0, 0.1],
+            "Sites/A/xpos:x": [1.0, 4.0],
+            "Sites/A/xpos:y": [2.0, 5.0],
+            "Sites/A/xpos:z": [3.0, 6.0],
+            # deliberately not in w, x, y, z order: columns are read by name
+            "Sites/A/quat:x": [0.0, 0.0],
+            "Sites/A/quat:y": [0.0, 0.0],
+            "Sites/A/quat:z": [0.0, 1.0],
+            "Sites/A/quat:w": [1.0, 0.0],
+        }
+    )
+
+
+def test_pose_at_reads_one_row_by_column_name():
+    first = _pose_frame().mojo.pose_at(0, "Sites/A")
+    assert np.allclose(first.pos, [1.0, 2.0, 3.0])
+    assert np.allclose(first.quat, [1.0, 0.0, 0.0, 0.0])  # w, x, y, z
+
+    second = _pose_frame().mojo.pose_at(1, Column(category="Sites", subgroups=("A",)))
+    assert np.allclose(second.pos, [4.0, 5.0, 6.0])
+    assert np.allclose(second.quat, [0.0, 0.0, 0.0, 1.0])
+
+
+def test_pose_at_raises_naming_the_missing_columns():
+    df = _pose_frame().drop("Sites/A/quat:w", "Sites/A/xpos:z")
+    with pytest.raises(ValueError, match="Sites/A/quat:w") as excinfo:
+        df.mojo.pose_at(0, "Sites/A")
+    assert "Sites/A/xpos:z" in str(excinfo.value)
+    assert "Sites/A/xpos:x" not in str(excinfo.value)
+
+
+def test_pose_arrays_returns_the_whole_trajectory():
+    pos, quat = _pose_frame().mojo.pose_arrays("Sites/A")
+    assert pos.shape == (2, 3)
+    assert quat.shape == (2, 4)
+    assert np.allclose(pos, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    assert np.allclose(quat, [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+
+
+def test_pose_arrays_raises_naming_the_missing_columns():
+    with pytest.raises(ValueError, match="Sites/B/xpos:x"):
+        _pose_frame().mojo.pose_arrays("Sites/B")
+
+
+def test_pose_at_matches_pose_arrays():
+    df = _pose_frame()
+    pos, quat = df.mojo.pose_arrays("Sites/A")
+    for i in range(df.height):
+        pose = df.mojo.pose_at(i, "Sites/A")
+        assert np.allclose(pose.pos, pos[i])
+        assert np.allclose(pose.quat, quat[i])
+
+
 # --- Discovery & Manifest Tests ---
 
 
@@ -164,10 +292,6 @@ def test_get_manifest(sample_data: MojoDataFrame):
 # --- Physics Transformation Tests ---
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 13),
-    reason="mujoco_mojo.deprecate.deprecated is a no-op before Python 3.13",
-)
 def test_change_frame_raises_when_untagged():
     """change_frame refuses to guess: any rotatable/quaternion column without a transform_type tag raises, rather than silently applying the wrong transform."""
     df = MojoDataFrame.from_dict(
@@ -193,6 +317,87 @@ def test_change_frame_raises_when_untagged():
         df.mojo.change_frame(
             "Bodies/frame/quat", "Bodies/frame/xpos", column_metadata=meta
         )
+
+
+def test_change_frame_leaves_scalar_tagged_groups_untouched():
+    """A group named `:x/:y/:z` (or `:w/:x/:y/:z`) that is not a vector can be tagged `scalar`: change_frame skips it instead of raising or rotating it, while still transforming the tagged point."""
+    half = float(np.sqrt(0.5))
+    df = MojoDataFrame.from_dict(
+        {
+            # a frame rotated 90 degrees about z, at the origin
+            "Bodies/frame/xpos:x": [0.0],
+            "Bodies/frame/xpos:y": [0.0],
+            "Bodies/frame/xpos:z": [0.0],
+            "Bodies/frame/quat:w": [half],
+            "Bodies/frame/quat:x": [0.0],
+            "Bodies/frame/quat:y": [0.0],
+            "Bodies/frame/quat:z": [half],
+            "Bodies/target/xpos:x": [1.0],
+            "Bodies/target/xpos:y": [0.0],
+            "Bodies/target/xpos:z": [0.0],
+            # independent scalars that only happen to be named x/y/z
+            "Custom/euler:x": [0.1],
+            "Custom/euler:y": [0.2],
+            "Custom/euler:z": [0.3],
+            # four independent scalars named like a quaternion
+            "Custom/gains:w": [1.0],
+            "Custom/gains:x": [2.0],
+            "Custom/gains:y": [3.0],
+            "Custom/gains:z": [4.0],
+        }
+    )
+    meta = {
+        "Bodies/frame/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/frame/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
+        "Bodies/target/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Custom/euler:x": TransformType.SCALAR.metadata,
+        "Custom/gains:w": TransformType.SCALAR.metadata,
+    }
+    out = df.mojo.change_frame(
+        "Bodies/frame/quat", "Bodies/frame/xpos", column_metadata=meta
+    )
+
+    # the target point was rotated by the inverse of the frame (+90 deg about z)
+    assert out["Bodies/target/xpos:x"][0] == pytest.approx(0.0, abs=1e-12)
+    assert out["Bodies/target/xpos:y"][0] == pytest.approx(-1.0)
+    for col in ("Custom/euler:x", "Custom/euler:y", "Custom/euler:z"):
+        assert out[col][0] == df[col][0]
+    for col in ("Custom/gains:w", "Custom/gains:x", "Custom/gains:y", "Custom/gains:z"):
+        assert out[col][0] == df[col][0]
+
+
+def test_manifest_leaves_scalar_tagged_groups_out_of_rotation():
+    """The Dojo rotates whatever the manifest lists, so a group tagged `scalar` must not be listed; an untagged group still is."""
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/a/xpos:x": [1.0],
+            "Bodies/a/xpos:y": [1.0],
+            "Bodies/a/xpos:z": [1.0],
+            "Custom/euler:x": [0.1],
+            "Custom/euler:y": [0.2],
+            "Custom/euler:z": [0.3],
+            "Custom/gains:w": [1.0],
+            "Custom/gains:x": [2.0],
+            "Custom/gains:y": [3.0],
+            "Custom/gains:z": [4.0],
+            "Bodies/a/quat:w": [1.0],
+            "Bodies/a/quat:x": [0.0],
+            "Bodies/a/quat:y": [0.0],
+            "Bodies/a/quat:z": [0.0],
+        }
+    )
+    without_metadata = df.mojo.get_manifest()
+    assert "Custom/euler" in without_metadata["rotatable_vectors"]
+    assert "Custom/gains" in without_metadata["available_quats"]
+
+    meta = {
+        "Custom/euler:x": TransformType.SCALAR.metadata,
+        "Custom/gains:w": TransformType.SCALAR.metadata,
+        "Bodies/a/xpos:x": TransformType.POINT.metadata,
+    }
+    manifest = df.mojo.get_manifest(column_metadata=meta)
+    assert manifest["rotatable_vectors"] == ["Bodies/a/xpos"]
+    assert manifest["available_quats"] == ["Bodies/a/quat"]
 
 
 def test_change_frame_translates_rotates_and_composes():

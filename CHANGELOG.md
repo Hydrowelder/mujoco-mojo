@@ -1,16 +1,19 @@
 # Changelog
 
-## Version 2.6.11 (2026-09-12)
+## Version 2.6.11 (2026-09-20)
 
 - Fixed the return type annotation of `rotatable_columns`
 - `RotationFilter` now raises on a missing quaternion column or a zero/NaN quaternion, instead of returning unrotated data or NaN
-- Added `transform_type` (`point`/`vector`/`quaternion`) metadata to built-in signals
+- Added `transform_type` (`point`/`vector`/`quaternion`/`scalar`) metadata to built-in signals. `scalar` marks a frame-independent value, and a group tagged `scalar` is left untouched by `change_frame()` and is not offered for rotation in the Dojo (for example three independent angles named `:x/:y/:z`)
 - Added `change_frame()`, which translates positions, rotates vectors, and composes quaternions according to their `transform_type`
 - Removed `with_rotation` in favor of `change_frame`, which rotated every vector-shaped column, including positions, without translating them
 - Dojo reference frames are now an orientation and an origin, chosen with two dropdowns, so positions are translated as well as rotated. Saved profiles using the old single-signal frame are no longer accepted
 - Added `ColumnMetadata`, a typed model for signal metadata. The metadata helpers now return it instead of dicts (combine them with `|`), while `request(metadata=...)` still accepts dicts
 - Added metadata fields (unit, dimension, quantity, transform type) to the Lab's Signal Out node
-- Added `Column`, a frozen model of a telemetry column's name parts and metadata. A name containing `/` or `:` now raises instead of silently landing in a different position
+- Added `Column`, a model of a telemetry column's name parts and metadata. A name part containing `/` or `:` now raises
+- Added `PoseQuat.from_row(row, "Sites/A")`, `df.mojo.pose_at()`, and `df.mojo.pose_arrays()` to read a pose from telemetry
+- Added `df.mojo.select(*columns)` and `df.mojo.columns` for selecting by `Column`
+- The typed selectors (`select_body`, ...) now match names literally and include an object's scalar channels
 - **Breaking:** `SignalManager.post(value, column)` and `track(getter, column)` now take a `Column` in place of `category`, `subgroups`, `attr`, and `metadata`. Build the `Column` once, since `post` runs every timestep
 - Added a Column Manifest export to the Mosaic export menu
 
