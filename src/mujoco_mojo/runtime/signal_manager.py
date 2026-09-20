@@ -15,6 +15,7 @@ from mujoco_mojo.stochas import UnitSystem, ureg
 from mujoco_mojo.typing import MatN, SignalCategory
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import TransformType
 
 logger = get_logger(__name__)
 
@@ -28,9 +29,9 @@ _COLUMN_METADATA_KEY = "column_metadata"
 
 def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """
-    Validates the well-known `dimension`/`unit` metadata keys via Pint, leaving any other user-defined keys untouched.
+    Validates the well-known `dimension`/`unit`/`transform_type` metadata keys, leaving any other user-defined keys untouched.
 
-    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
+    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality. `transform_type` (see `mujoco_mojo.utils.signal_metadata.TransformType`) tags how a grouped `:x/:y/:z`/`:w/:x/:y/:z` signal must be re-expressed under a change of reference frame.
     """
     dimension = metadata.get("dimension")
     unit = metadata.get("unit")
@@ -51,6 +52,16 @@ def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(
                 f"Signal metadata unit {unit!r} ({parsed_unit.dimensionality}) do not "
                 f"match dimension {dimension!r} ({dimensionality})"
+            )
+
+    transform_type = metadata.get("transform_type")
+    if transform_type is not None:
+        try:
+            TransformType(transform_type)
+        except ValueError:
+            valid = ", ".join(t.value for t in TransformType)
+            raise ValueError(
+                f"Invalid signal metadata transform_type {transform_type!r}: expected one of {valid}"
             )
 
     return metadata

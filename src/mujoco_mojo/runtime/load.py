@@ -23,6 +23,7 @@ from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     dim,
     force_or_torque,
     merge_signal_metadata,
@@ -226,8 +227,8 @@ class SiteLoad(Load):
             _meta = {}
 
         channel_metadata = {
-            "force": dim(Dimension.FORCE),
-            "torque": torque_metadata(),
+            "force": {**dim(Dimension.FORCE), **TransformType.VECTOR.metadata},
+            "torque": {**torque_metadata(), **TransformType.VECTOR.metadata},
         }
 
         def sample(state: MjState):
@@ -825,7 +826,10 @@ class JointFriction(JointLoad):
             jnt_id = self.joint.get_id(state.model)
             jnt_type = int(state.model.jnt_type[jnt_id])
             meta = merge_signal_metadata(
-                force_or_torque(jnt_type), "friction", metadata, unit_system=state.us
+                {**force_or_torque(jnt_type), **TransformType.VECTOR.metadata},
+                "friction",
+                metadata,
+                unit_system=state.us,
             )
 
             frc = self._last_force if self.active else np.zeros(3)

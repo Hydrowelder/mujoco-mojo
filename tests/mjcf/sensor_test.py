@@ -83,7 +83,8 @@ def test_accelerometer_request_tags_acceleration_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/acc/accelerometer:x"] == {
-        "dimension": "[length] / [time] ** 2"
+        "dimension": "[length] / [time] ** 2",
+        "transform_type": "vector",
     }
 
 
@@ -103,7 +104,10 @@ def test_framequat_request_tags_dimensionless_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/fq/framequat:w"] == {"dimension": "[]"}
+    assert sm._column_metadata["Sensors/fq/framequat:w"] == {
+        "dimension": "[]",
+        "transform_type": "quaternion",
+    }
 
 
 def test_jointpos_request_resolves_hinge_to_angle_metadata(

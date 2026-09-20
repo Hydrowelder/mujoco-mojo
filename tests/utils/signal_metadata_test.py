@@ -4,6 +4,7 @@ import pytest
 from mujoco_mojo.utils.filters.filters import ureg
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     angle_metadata,
     angular_rate_metadata,
     dim,
@@ -79,6 +80,12 @@ def test_merge_signal_metadata_user_overrides_builtin_keys() -> None:
         {"xpos": {"dimension": "[time]", "display_name": "X"}},
     )
     assert merged == {"dimension": "[time]", "display_name": "X"}
+
+
+def test_transform_type_metadata_builds_expected_dicts() -> None:
+    assert TransformType.POINT.metadata == {"transform_type": "point"}
+    assert TransformType.VECTOR.metadata == {"transform_type": "vector"}
+    assert TransformType.QUATERNION.metadata == {"transform_type": "quaternion"}
 
 
 def test_all_dimension_expressions_are_valid_pint_dimensions() -> None:

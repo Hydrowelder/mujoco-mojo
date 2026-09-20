@@ -27,6 +27,7 @@ from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity_mixin import ProximityMixin
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -41,13 +42,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "xpos": dim(Dimension.LENGTH),
+    "xpos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
     "xmat": dimensionless_metadata(),
-    "xvelp": dim(Dimension.VELOCITY),
-    "xvelr": angular_rate_metadata(),
-    "xaccp": dim(Dimension.ACCELERATION),
-    "xaccr": angular_rate_metadata(per="second ** 2"),
-    "quat": dimensionless_metadata(),
+    "xvelp": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
+    "xvelr": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
+    "xaccp": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
+    "xaccr": {
+        **angular_rate_metadata(per="second ** 2"),
+        **TransformType.VECTOR.metadata,
+    },
+    "quat": {**dimensionless_metadata(), **TransformType.QUATERNION.metadata},
 }
 
 __all__ = [

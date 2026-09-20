@@ -655,8 +655,11 @@
 
                     <div class="space-y-3">
                         <p class="text-xs text-ink-body leading-relaxed">
-                            This allows for the dynamic rotation of 3D signals about specific frames.
-                            Valid frames must contain <code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code> components.
+                            This re-expresses 3D signals in a frame you pick. Choose the frame's orientation
+                            (<code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code>) and its origin
+                            (a position). Positions are translated to the origin then rotated; other 3D
+                            signals such as velocities and forces are only rotated. Either can be left unset: an orientation alone only
+                            rotates, and an origin alone only translates.
                         </p>
 
                         <div class="bg-well dark:bg-well/50 p-2 rounded border border-subtle dark:border-subtle/50">
@@ -674,7 +677,7 @@
                  @click.away="refFrameMenuOpen = false">
                 <button @click="refFrameMenuOpen = !refFrameMenuOpen"
                         class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-35">
-                    <span x-text="config.refFrame || 'world'"
+                    <span x-text="config.refFrame?.[0] || (config.refFrame ? 'none' : 'world')"
                           class="truncate"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
                          :class="refFrameMenuOpen ? 'rotate-180' : ''"
@@ -692,7 +695,7 @@
                      class="absolute top-full left-0 mt-2 w-full bg-surface border border-line rounded-xl shadow-2xl z-110 p-2 sm:w-64">
 
                     <div class="flex items-center justify-between mb-1">
-                        <button @click="config.refFrame = ''; refFrameMenuOpen = false; saveAndRender()"
+                        <button @click="setRefFrame(null, null); refFrameMenuOpen = false; saveAndRender()"
                                 class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
                             <span class="text-sm font-mono font-bold"
                                   :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
@@ -742,7 +745,87 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "config.refFrame = row.item; refFrameMenuOpen = false; saveAndRender()", "config.refFrame === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame?.[0] === row.item") }}
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative flex-1 sm:flex-none"
+                 @click.away="refFrameOriginMenuOpen = false">
+                <button @click="refFrameOriginMenuOpen = !refFrameOriginMenuOpen"
+                        class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-35">
+                    <span x-text="config.refFrame?.[1] || (config.refFrame ? 'none' : 'origin')"
+                          class="truncate"
+                          :class="config.refFrame?.[1] ? '' : 'text-ink-muted'"></span>
+                    <svg class="w-3 h-3 transition-transform duration-200"
+                         :class="refFrameOriginMenuOpen ? 'rotate-180' : ''"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7"
+                              stroke-width="3" />
+                    </svg>
+                </button>
+
+                <div x-show="refFrameOriginMenuOpen"
+                     x-transition
+                     class="absolute top-full left-0 mt-2 w-full bg-surface border border-line rounded-xl shadow-2xl z-110 p-2 sm:w-64">
+
+                    <div class="flex items-center justify-between mb-1">
+                        <button @click="setRefFrame(null, null); refFrameOriginMenuOpen = false; saveAndRender()"
+                                class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
+                            <span class="text-sm font-mono font-bold"
+                                  :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
+                            <span x-show="!config.refFrame"
+                                  class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
+                        </button>
+                        {{ tree_expand_collapse_buttons("expandAllColumnFolders('refFrameOrigin')", "collapseAllColumnFolders('refFrameOrigin')", "getColumnTreeRows('refFrameOrigin').some(r => r.type === 'folder')") }}
+                    </div>
+
+                    <div class="mb-2">
+                        {{ tree_search_input('refFrameOriginSearch', 'Filter...') }}
+                    </div>
+
+                    <!-- quick filters - same regex-chip mechanism as the X/Y-axis
+                         trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
+                         reused as-is; refFrameOrigin maps to rotateableVectors. -->
+                    <div x-show="$store.dojo.showQuickFilters"
+                         class="flex flex-col gap-1 mb-2">
+                        <template x-for="depth in getActiveLevels('refFrameOrigin')"
+                                  :key="depth">
+                            <div x-show="getSegmentsAtDepth('refFrameOrigin', depth).length > 0"
+                                 class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
+                                <template x-for="seg in getSegmentsAtDepth('refFrameOrigin', depth)"
+                                          :key="seg">
+                                    <button @mousedown.prevent="toggleRegexSegment('refFrameOrigin', seg, depth)"
+                                            :class="isSegmentActive('refFrameOrigin', seg, depth) ? 'bg-accent-500 text-white border-accent-500 shadow-sm' : 'btn-secondary'"
+                                            class="shrink-0 px-2 py-1 rounded-lg border text-sm font-bold transition-all"
+                                            x-text="seg"></button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- "world" above is a fixed pseudo-option, not part of the
+                         tree itself - availableQuats' own names are never
+                         expected to carry ":attribute" suffixes (they're
+                         stripped at the source), so there's no suffix-chip row
+                         here the way the X/Y-axis trees have one. -->
+                    <div class="max-h-48 overflow-y-auto custom-scrollbar border-t border-subtle pt-1">
+                        <template x-for="row in getColumnVisibleRows('refFrameOrigin')"
+                                  :key="row.key">
+                            <div class="expander-body-wrap duration-100 ease-out"
+                                 :class="!row.hidden ? 'expander-open' : ''">
+                                <div class="expander-body">
+                                    <template x-if="row.type === 'folder'">
+                                        {{ tree_folder_row('row', "toggleColumnFolder('refFrameOrigin', row.path)", "isColumnFolderCollapsed('refFrameOrigin', row.path)") }}
+                                    </template>
+                                    <template x-if="row.type === 'file'">
+                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame?.[1] === row.item") }}
                                     </template>
                                 </div>
                             </div>

@@ -24,7 +24,7 @@ Trial Navigation
 ### Signal Selection (X and Y Axes)
 
 - **X-Axis:** Usually set to time, but you can map any telemetry signal to the X-axis to create phase-space plots (e.g., `velocity` vs. `position`).
-- **Reference Frame:** For signals which could have a full quaternion defined (ends with `quat:(w|x|y|z)`), a reference frame can be defined to rotate vector based columns (those ending in `:(x|y|z)`). It is assumed these vector columns are defined in the `world` frame.
+- **Reference Frame:** A reference frame is a pair: an orientation (a signal with a full quaternion, ending in `quat:(w|x|y|z)`) and an origin (a position signal ending in `:(x|y|z)`). Either can be left unset: an orientation alone only rotates, and an origin alone only translates. Vector based columns (those ending in `:(x|y|z)`) are re-expressed in that frame: positions are translated to the origin and rotated, while other vectors such as velocities and forces are only rotated. It is assumed these columns are defined in the `world` frame. Only signals tagged as positions (`transform_type`) are translated, so signals from runs recorded before the tag existed, custom signals, and Signal Lab outputs are only rotated. Profiles or shared links saved with the older single-signal reference frame are no longer accepted and reset to `world`.
 - **Y-Axes (Multi-Select):** You can overlay as many signals as you want. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
 - **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them. The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button.
 

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Dimension",
+    "TransformType",
     "angle_metadata",
     "angular_rate_metadata",
     "dim",
@@ -122,6 +123,29 @@ def angular_rate_metadata(per: str = "second") -> dict[str, str]:
 def torque_metadata() -> dict[str, str]:
     """Tags a signal as torque. Includes an extra `quantity` hint since torque and energy share the same Pint dimensionality and can't be told apart by dimension alone."""
     return {**dim(Dimension.TORQUE), "quantity": "torque"}
+
+
+class TransformType(StrEnum):
+    """
+    How a signal's grouped `:x/:y/:z` (or `:w/:x/:y/:z`) components must be re-expressed under
+    `MojoDataFrame.mojo.change_frame()`. Only tag channels that are actually grouped into such a
+    family (see `rotatable_bases`/`quaternion_bases`) - untagged scalar channels are already out
+    of scope structurally and don't need this.
+    """
+
+    POINT = "point"
+    """Translate then rotate (positions)."""
+
+    VECTOR = "vector"
+    """Rotate only (velocities, forces, accelerations, momenta, directions)."""
+
+    QUATERNION = "quaternion"
+    """Compose: q' = q_b^-1 (x) q."""
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        """Builds a `transform_type=`-keyed metadata entry, tagging how this signal's grouped vector/quaternion components transform under `MojoDataFrame.mojo.change_frame()`."""
+        return {"transform_type": str(self)}
 
 
 def force_or_torque(jnt_type: int) -> dict[str, str]:

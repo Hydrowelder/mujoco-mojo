@@ -13,7 +13,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 from mujoco_mojo.utils.filters.filters import AnyFilter
@@ -531,9 +531,9 @@ class PlotConfig(BaseModel):
         description="Mapping of signal key to y-axis configuration.",
     )
 
-    ref_frame: str | None = Field(
+    ref_frame: tuple[str | None, str | None] | None = Field(
         default=None,
-        description="Reference frame used to transform signal coordinates. `None` for world frame.",
+        description="Reference frame used to transform signal coordinates, as `(quaternion base, origin base)` (e.g. `('Bodies/B/quat', 'Bodies/B/xpos')`). Either half may be `None`: a quaternion alone only rotates, an origin alone only translates. Positions are translated to the origin then rotated; free vectors are only rotated. `None` for world frame.",
     )
 
     grid: GridMode = Field(
@@ -638,13 +638,6 @@ class PlotConfig(BaseModel):
         gt=0,
         description="Maximum number of data points per trace returned by the server. When the raw data exceeds this limit the server downsamples using uniform time-domain buckets (equal coverage across the time range regardless of variable timestep). `None` disables downsampling and returns all points.",
     )
-
-    @field_validator("ref_frame")
-    @classmethod
-    def validate_ref_frame(cls, v: str | None) -> str | None:
-        if isinstance(v, str) and v.lower() == "world":
-            return None
-        return v
 
     @model_validator(mode="after")
     def validate_ranges(self) -> Self:

@@ -211,12 +211,22 @@ def test_request_tags_builtin_dimension_metadata(
     s1.request(sm, channels=["xpos", "xvelp", "xvelr", "quat"])
     sm.record(state)
 
-    assert sm._column_metadata["Sites/site1/xpos:x"] == {"dimension": "[length]"}
-    assert sm._column_metadata["Sites/site1/xvelp:x"] == {
-        "dimension": "[length] / [time]"
+    assert sm._column_metadata["Sites/site1/xpos:x"] == {
+        "dimension": "[length]",
+        "transform_type": "point",
     }
-    assert sm._column_metadata["Sites/site1/xvelr:x"] == {"unit": "radian / second"}
-    assert sm._column_metadata["Sites/site1/quat:w"] == {"dimension": "[]"}
+    assert sm._column_metadata["Sites/site1/xvelp:x"] == {
+        "dimension": "[length] / [time]",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Sites/site1/xvelr:x"] == {
+        "unit": "radian / second",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Sites/site1/quat:w"] == {
+        "dimension": "[]",
+        "transform_type": "quaternion",
+    }
 
 
 def test_request_metadata_override(
@@ -231,6 +241,7 @@ def test_request_metadata_override(
 
     assert sm._column_metadata["Sites/site1/xpos:x"] == {
         "dimension": "[length]",
+        "transform_type": "point",
         "display_name": "Site Position",
     }
 

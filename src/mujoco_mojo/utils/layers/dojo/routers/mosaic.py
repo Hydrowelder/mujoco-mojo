@@ -73,6 +73,17 @@ _UNIT_SYSTEMS: dict[str, _UnitSystem] = {
 }
 
 
+def _origin_for_positions_only(f: _AnyFilter, transform_type: str | None) -> _AnyFilter:
+    """
+    Drops a rotation filter's frame origin unless the column is tagged as a position.
+
+    The dojo gives every series in a reference frame the same (quaternion, origin) pair, but only positions should be translated to the origin: velocities, forces and other free vectors are only rotated. Columns with no tag (older runs, custom signals, lab outputs) are treated as free vectors, which is the behavior before frames had an origin.
+    """
+    if isinstance(f, _RotationFilter) and f.origin_col and transform_type != "point":
+        return f.model_copy(update={"origin_col": None})
+    return f
+
+
 def _json_safe_list(series: pl.Series) -> list:
     """
     Converts a polars `Series` to a plain Python list, replacing any `NaN`/`Infinity`/`-Infinity` with `None`.
@@ -1023,15 +1034,18 @@ async def get_trial_data(
             col: _get_atomic_column(db_path, col, mtime) for col in fetch_targets
         }
         df = MojoDataFrame.from_dict(raw_data)
+        raw_col_meta = _get_column_metadata(db_path, mtime)
 
         if rotate_by:
-            # rotate from world to rotate_by frame
-            df = df.mojo.with_rotation(quat_base=rotate_by, invert=True)
+            # rotate from world to rotate_by frame; raises if a position column would be
+            # rotated without also being translated (see MojoNamespace.with_rotation)
+            df = df.mojo.with_rotation(
+                quat_base=rotate_by, invert=True, column_metadata=raw_col_meta
+            )
 
         # apply display unit system conversion before filters so filter params operate in display units
         if display_unit_system and display_unit_system in _UNIT_SYSTEMS:
             target_us = _UNIT_SYSTEMS[display_unit_system]
-            raw_col_meta = _get_column_metadata(db_path, mtime)
             df = df.mojo.with_unit_system(target_us, column_metadata=raw_col_meta)
             # update manifest column_metadata with resolved units and group_unit for the UI
             display_col_meta = {
@@ -1123,6 +1137,8 @@ async def get_trial_data(
                 if filter_list and col in data:
                     series = pl.Series(name=col, values=data[col], dtype=pl.Float64)
                     for f in filter_list:
+                        # lab outputs carry no transform_type, so they are never translated
+                        f = _origin_for_positions_only(f, None)
                         ctx = f.apply_with_context(series, exec_df)
                         if ctx is not None:
                             series = ctx
@@ -1140,6 +1156,9 @@ async def get_trial_data(
                 if series.dtype != pl.Float64:
                     series = series.cast(pl.Float64)
                 for f in filter_list:
+                    f = _origin_for_positions_only(
+                        f, raw_col_meta.get(col, {}).get("transform_type")
+                    )
                     # context-aware filters (e.g. derivative/integral wrt another col)
                     ctx = f.apply_with_context(series, df)
                     if ctx is not None:

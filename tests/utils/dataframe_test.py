@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -125,6 +126,23 @@ def test_get_manifest(sample_data: MojoDataFrame):
 # --- Physics Transformation Tests ---
 
 
+_ignore_with_rotation_deprecation = pytest.mark.filterwarnings(
+    "ignore:.*with_rotation is deprecated:DeprecationWarning"
+)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 13),
+    reason="mujoco_mojo.deprecate.deprecated is a no-op before Python 3.13",
+)
+def test_with_rotation_is_deprecated(sample_data: MojoDataFrame):
+    """with_rotation warns and points callers at change_frame, while still working."""
+    with pytest.warns(DeprecationWarning, match="change_frame"):
+        rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat")
+    assert rotated.height == sample_data.height
+
+
+@_ignore_with_rotation_deprecation
 def test_with_rotation_identity(sample_data: MojoDataFrame):
     """Rotating by identity [0,0,0,1] should result in zero change."""
     # Our sample_data quat is already identity
@@ -134,6 +152,7 @@ def test_with_rotation_identity(sample_data: MojoDataFrame):
         assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
 
 
+@_ignore_with_rotation_deprecation
 def test_with_rotation_single_row_buffer_is_writable():
     """
     Regression test: with_rotation must work on a single-row DataFrame.
@@ -163,6 +182,7 @@ def test_with_rotation_single_row_buffer_is_writable():
     assert np.allclose(rotated["Bodies/racket/xpos:x"].to_numpy(), [1.0])
 
 
+@_ignore_with_rotation_deprecation
 def test_with_rotation_matches_scipy():
     """Cross-check the hand-rolled quaternion rotation against scipy as a trusted oracle."""
     from scipy.spatial.transform import Rotation
@@ -199,6 +219,7 @@ def test_with_rotation_matches_scipy():
         assert np.allclose(actual, expected, atol=1e-10)
 
 
+@_ignore_with_rotation_deprecation
 def test_with_rotation_does_not_mutate_source(sample_data: MojoDataFrame):
     """Regression test: with_rotation must not write into the source DataFrame's backing store."""
     pos_cols = ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
@@ -210,6 +231,272 @@ def test_with_rotation_does_not_mutate_source(sample_data: MojoDataFrame):
         assert np.array_equal(sample_data[col].to_numpy(), before[col])
 
 
+@_ignore_with_rotation_deprecation
+def test_with_rotation_unknown_quat_base_raises(sample_data: MojoDataFrame):
+    """An unknown quat_base must fail loudly instead of silently returning unrotated data."""
+    with pytest.raises(ValueError, match="not found"):
+        sample_data.mojo.with_rotation("Bodies/racket/typo", invert=True)
+
+
+@_ignore_with_rotation_deprecation
+def test_with_rotation_zero_quaternion_raises():
+    """A zero (or non-finite) quaternion row must fail loudly instead of propagating NaN."""
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/racket/xpos:x": [1.0],
+            "Bodies/racket/xpos:y": [0.0],
+            "Bodies/racket/xpos:z": [0.0],
+            "Bodies/racket/xiquat:x": [0.0],
+            "Bodies/racket/xiquat:y": [0.0],
+            "Bodies/racket/xiquat:z": [0.0],
+            "Bodies/racket/xiquat:w": [0.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="zero, NaN, or infinite"):
+        df.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
+
+
+@_ignore_with_rotation_deprecation
+def test_with_rotation_column_metadata_guards_against_point_columns(
+    sample_data: MojoDataFrame,
+):
+    """with_rotation raises when column_metadata tags a rotatable column as a position - rotating a point without translating it silently produces rotated-axes world coordinates, not a position in the new frame."""
+    meta = {
+        "Bodies/racket/xpos:x": {"transform_type": "point"},
+        "Sensors/gyro/data:x": {"transform_type": "vector"},
+    }
+    with pytest.raises(ValueError, match="vector-only"):
+        sample_data.mojo.with_rotation(
+            "Bodies/racket/xiquat", invert=True, column_metadata=meta
+        )
+
+
+@_ignore_with_rotation_deprecation
+def test_with_rotation_without_column_metadata_keeps_existing_behavior(
+    sample_data: MojoDataFrame,
+):
+    """Omitting column_metadata keeps with_rotation's original behavior (rotate every :x/:y/:z group regardless of kind) - a deliberate backward-compat choice for frames without embedded metadata."""
+    rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
+    for col in ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]:
+        assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
+
+
+def test_change_frame_raises_when_untagged():
+    """change_frame refuses to guess: any rotatable/quaternion column without a transform_type tag raises, rather than silently applying the wrong transform."""
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/frame/xpos:x": [1.0],
+            "Bodies/frame/xpos:y": [0.0],
+            "Bodies/frame/xpos:z": [0.0],
+            "Bodies/frame/quat:x": [0.0],
+            "Bodies/frame/quat:y": [0.0],
+            "Bodies/frame/quat:z": [0.0],
+            "Bodies/frame/quat:w": [1.0],
+            "Bodies/target/xpos:x": [1.0],
+            "Bodies/target/xpos:y": [0.0],
+            "Bodies/target/xpos:z": [0.0],
+        }
+    )
+    meta = {
+        "Bodies/frame/xpos:x": {"transform_type": "point"},
+        "Bodies/frame/quat:w": {"transform_type": "quaternion"},
+        # "Bodies/target/xpos" is deliberately left untagged
+    }
+    with pytest.raises(ValueError, match="transform_type"):
+        df.mojo.change_frame(
+            "Bodies/frame/quat", "Bodies/frame/xpos", column_metadata=meta
+        )
+
+
+def test_change_frame_translates_rotates_and_composes():
+    """End-to-end: change_frame re-expresses a point, a free vector, and a quaternion relative to a target frame, matching an independently computed scipy reference (not the bug report's own numbers, since their component-ordering convention relative to this codebase's is unverified)."""
+    from scipy.spatial.transform import Rotation
+
+    p_a = np.array([1.0, 2.0, 3.0])
+    p_b = np.array([4.0, 5.0, 6.0])
+    q_b = Rotation.from_euler("x", 90, degrees=True).as_quat()  # [x, y, z, w]
+    q_a = Rotation.from_euler("z", 30, degrees=True).as_quat()
+    v = np.array([1.0, 0.5, -0.25])  # a free vector, e.g. a velocity
+
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/A/xpos:x": [p_a[0]],
+            "Bodies/A/xpos:y": [p_a[1]],
+            "Bodies/A/xpos:z": [p_a[2]],
+            "Bodies/A/quat:x": [q_a[0]],
+            "Bodies/A/quat:y": [q_a[1]],
+            "Bodies/A/quat:z": [q_a[2]],
+            "Bodies/A/quat:w": [q_a[3]],
+            "Bodies/A/xvelp:x": [v[0]],
+            "Bodies/A/xvelp:y": [v[1]],
+            "Bodies/A/xvelp:z": [v[2]],
+            "Bodies/B/xpos:x": [p_b[0]],
+            "Bodies/B/xpos:y": [p_b[1]],
+            "Bodies/B/xpos:z": [p_b[2]],
+            "Bodies/B/quat:x": [q_b[0]],
+            "Bodies/B/quat:y": [q_b[1]],
+            "Bodies/B/quat:z": [q_b[2]],
+            "Bodies/B/quat:w": [q_b[3]],
+        }
+    )
+    meta = {
+        "Bodies/A/xpos:x": {"transform_type": "point"},
+        "Bodies/A/quat:w": {"transform_type": "quaternion"},
+        "Bodies/A/xvelp:x": {"transform_type": "vector"},
+        "Bodies/B/xpos:x": {"transform_type": "point"},
+        "Bodies/B/quat:w": {"transform_type": "quaternion"},
+    }
+
+    result = df.mojo.change_frame(
+        "Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta
+    )
+
+    rb = Rotation.from_quat(q_b)
+    expected_p = rb.inv().apply(p_a - p_b)
+    expected_v = rb.inv().apply(v)
+    expected_q_rot = rb.inv() * Rotation.from_quat(q_a)
+
+    actual_p = result.select(
+        ["Bodies/A/xpos:x", "Bodies/A/xpos:y", "Bodies/A/xpos:z"]
+    ).to_numpy()[0]
+    actual_v = result.select(
+        ["Bodies/A/xvelp:x", "Bodies/A/xvelp:y", "Bodies/A/xvelp:z"]
+    ).to_numpy()[0]
+    actual_q = result.select(
+        ["Bodies/A/quat:x", "Bodies/A/quat:y", "Bodies/A/quat:z", "Bodies/A/quat:w"]
+    ).to_numpy()
+
+    assert np.allclose(actual_p, expected_p, atol=1e-10)
+    assert np.allclose(actual_v, expected_v, atol=1e-10)
+    assert np.allclose(
+        Rotation.from_quat(actual_q).as_matrix()[0],
+        expected_q_rot.as_matrix(),
+        atol=1e-10,
+    )
+
+    # B re-expressed in its own frame collapses to the origin, facing its own local axes
+    b_p = result.select(
+        ["Bodies/B/xpos:x", "Bodies/B/xpos:y", "Bodies/B/xpos:z"]
+    ).to_numpy()[0]
+    b_q = result.select(
+        ["Bodies/B/quat:x", "Bodies/B/quat:y", "Bodies/B/quat:z", "Bodies/B/quat:w"]
+    ).to_numpy()[0]
+    assert np.allclose(b_p, [0.0, 0.0, 0.0], atol=1e-10)
+    assert np.allclose(np.abs(b_q), [0.0, 0.0, 0.0, 1.0], atol=1e-10)
+
+
+def _two_pose_frame() -> tuple[MojoDataFrame, dict[str, dict[str, str]]]:
+    """Two named poses (A, B) plus a velocity on A, and matching transform_type metadata."""
+    from scipy.spatial.transform import Rotation
+
+    p_a = [1.0, 2.0, 3.0]
+    p_b = [4.0, 5.0, 6.0]
+    q_a = Rotation.from_euler("z", 30, degrees=True).as_quat()
+    q_b = Rotation.from_euler("x", 90, degrees=True).as_quat()
+    df = MojoDataFrame.from_dict(
+        {
+            "Bodies/A/xpos:x": [p_a[0]],
+            "Bodies/A/xpos:y": [p_a[1]],
+            "Bodies/A/xpos:z": [p_a[2]],
+            "Bodies/A/xpos:m": [float(np.linalg.norm(p_a))],
+            "Bodies/A/quat:x": [q_a[0]],
+            "Bodies/A/quat:y": [q_a[1]],
+            "Bodies/A/quat:z": [q_a[2]],
+            "Bodies/A/quat:w": [q_a[3]],
+            "Bodies/A/xvelp:x": [1.0],
+            "Bodies/A/xvelp:y": [0.5],
+            "Bodies/A/xvelp:z": [-0.25],
+            "Bodies/B/xpos:x": [p_b[0]],
+            "Bodies/B/xpos:y": [p_b[1]],
+            "Bodies/B/xpos:z": [p_b[2]],
+            "Bodies/B/quat:x": [q_b[0]],
+            "Bodies/B/quat:y": [q_b[1]],
+            "Bodies/B/quat:z": [q_b[2]],
+            "Bodies/B/quat:w": [q_b[3]],
+        }
+    )
+    meta = {
+        "Bodies/A/xpos:x": {"transform_type": "point"},
+        "Bodies/A/quat:w": {"transform_type": "quaternion"},
+        "Bodies/A/xvelp:x": {"transform_type": "vector"},
+        "Bodies/B/xpos:x": {"transform_type": "point"},
+        "Bodies/B/quat:w": {"transform_type": "quaternion"},
+    }
+    return df, meta
+
+
+def test_change_frame_round_trips_with_invert_false():
+    """Re-expressing world -> B's frame -> world recovers the original columns. The frame's own columns are restored between the two calls, since B is itself transformed by the first call."""
+    df, meta = _two_pose_frame()
+    b_cols = [c for c in df.columns if c.startswith("Bodies/B/")]
+
+    local = df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta)
+    local = local.with_columns([df[c] for c in b_cols])
+    restored = local.mojo.change_frame(
+        "Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta, invert=False
+    )
+
+    for col in [
+        "Bodies/A/xpos:x",
+        "Bodies/A/xpos:y",
+        "Bodies/A/xpos:z",
+        "Bodies/A/xvelp:x",
+        "Bodies/A/xvelp:y",
+        "Bodies/A/xvelp:z",
+    ]:
+        assert np.allclose(restored[col].to_numpy(), df[col].to_numpy(), atol=1e-10)
+
+
+def test_change_frame_recomputes_point_magnitude():
+    """A point's :m sibling is recomputed from the transformed x/y/z rather than left as the stale world-frame norm."""
+    df, meta = _two_pose_frame()
+    result = df.mojo.change_frame(
+        "Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta
+    )
+
+    xyz = result.select(
+        ["Bodies/A/xpos:x", "Bodies/A/xpos:y", "Bodies/A/xpos:z"]
+    ).to_numpy()
+    assert np.allclose(
+        result["Bodies/A/xpos:m"].to_numpy(), np.linalg.norm(xyz, axis=1)
+    )
+    assert not np.isclose(result["Bodies/A/xpos:m"][0], df["Bodies/A/xpos:m"][0])
+
+
+def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path):
+    """change_frame(path=...) reads transform_type tags from the parquet footer, matching an explicit column_metadata call."""
+    import json
+
+    df, meta = _two_pose_frame()
+    path = tmp_path / "tel.parquet"
+    df.write_parquet(path, metadata={"column_metadata": json.dumps(meta)})
+
+    from_path = df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", path=path)
+    from_meta = df.mojo.change_frame(
+        "Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta
+    )
+
+    assert from_path.equals(from_meta)
+
+
+def test_change_frame_raises_when_quaternion_mistagged():
+    """A quaternion base tagged as something other than 'quaternion' raises instead of being composed."""
+    df, meta = _two_pose_frame()
+    meta["Bodies/A/quat:w"] = {"transform_type": "vector"}
+    with pytest.raises(ValueError, match="quaternion"):
+        df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta)
+
+
+def test_change_frame_raises_for_unknown_quat_or_origin_base():
+    df, meta = _two_pose_frame()
+    with pytest.raises(ValueError, match="quaternion base"):
+        df.mojo.change_frame("Bodies/nope/quat", "Bodies/B/xpos", column_metadata=meta)
+    with pytest.raises(ValueError, match="origin base"):
+        df.mojo.change_frame("Bodies/B/quat", "Bodies/nope/xpos", column_metadata=meta)
+
+
+@_ignore_with_rotation_deprecation
 def test_with_rotation_90deg_z(sample_data: MojoDataFrame):
     """Tests a 90-degree Z-axis rotation."""
     # quat for 90deg about Z: [0, 0, sin(45), cos(45)]

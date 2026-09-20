@@ -16,6 +16,7 @@ from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     dim,
     dimensionless_metadata,
     merge_signal_metadata,
@@ -48,7 +49,7 @@ Proximityable = Annotated[
 
 _REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
     "dist": dim(Dimension.LENGTH),
-    "fromto": dim(Dimension.LENGTH),
+    "fromto": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
     "prox_type": dimensionless_metadata(),
 }
 

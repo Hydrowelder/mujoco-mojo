@@ -11,6 +11,10 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.alias_generators import to_camel
 
+from mujoco_mojo.utils.log import get_logger
+
+logger = get_logger(__name__)
+
 __all__ = [
     "UNIT_GROUPS",
     "AbsoluteValueFilter",
@@ -526,6 +530,29 @@ def _translate_vector(vs: np.ndarray, origin: np.ndarray, subtract: bool) -> np.
     return vs - origin if subtract else vs + origin
 
 
+def _normalize_quaternions(qs: np.ndarray) -> np.ndarray:
+    """Normalizes (N, 4) quaternion rows, raising if any row is zero, NaN, or infinite - shared by `RotationFilter._rotate` and `RotationFilter.compose_to_frame`, which both need a unit quaternion before rotating/composing."""
+    norms = np.linalg.norm(qs, axis=1, keepdims=True)
+    if not np.all(np.isfinite(norms)) or np.any(norms == 0):
+        msg = (
+            "Rotation failed: quaternion column contains a zero, NaN, or infinite row."
+        )
+        logger.error(msg)
+        raise ValueError(msg)
+    return qs / norms
+
+
+def _hamilton_product(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """q1 (x) q2 for (N, 4) quaternion arrays ordered [x, y, z, w] (scalar last, matching this module's telemetry-column convention - the opposite of MJCF/pydantic's scalar-first [w, x, y, z])."""
+    x1, y1, z1, w1 = q1[:, 0], q1[:, 1], q1[:, 2], q1[:, 3]
+    x2, y2, z2, w2 = q2[:, 0], q2[:, 1], q2[:, 2], q2[:, 3]
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+    return np.stack([x, y, z, w], axis=1)
+
+
 class TranslationFilter(BaseFilter):
     """Translates a 3D vector by adding or subtracting another position column group - a reference-frame origin, a second point for a displacement, etc."""
 
@@ -534,7 +561,9 @@ class TranslationFilter(BaseFilter):
     type: Literal[FilterType.TRANSLATION] = FilterType.TRANSLATION
     """The discriminator type for Pydantic."""
 
-    origin_col: str | None = Field(None, json_schema_extra={"ui_type": "vec_col"})
+    origin_col: str | None = Field(
+        default=None, json_schema_extra={"ui_type": "vec_col"}
+    )
     """Base name of the position column group to add or subtract (e.g. 'Bodies/hand/xpos')."""
 
     subtract: bool = True
@@ -575,13 +604,17 @@ class RotationFilter(BaseFilter):
     type: Literal[FilterType.ROTATION] = FilterType.ROTATION
     """The discriminator type for Pydantic."""
 
-    quat_col: str | None = Field(None, json_schema_extra={"ui_type": "quat_col"})
+    quat_col: str | None = Field(
+        default=None, json_schema_extra={"ui_type": "quat_col"}
+    )
     """Base name of the quaternion column group (e.g. 'Bodies/hand/xquat'). Leave unset together with an `origin_col` for a pure translation with no rotation."""
 
     invert: bool = True
     """If True, transforms world-to-local (invert the quaternion rotation; with no `quat_col`, subtracts `origin_col` instead of adding it)."""
 
-    origin_col: str | None = Field(None, json_schema_extra={"ui_type": "vec_col"})
+    origin_col: str | None = Field(
+        default=None, json_schema_extra={"ui_type": "vec_col"}
+    )
     """Base name of a position column group giving this frame's origin in world coordinates (e.g. 'Bodies/hand/xpos'). Only needed for position-type vectors, which need translating as well as rotating; leave unset for free vectors (velocity, angular velocity, force, etc.) that have no origin to translate against."""
 
     def _rotate(
@@ -597,7 +630,7 @@ class RotationFilter(BaseFilter):
         if qs is None:
             rotated = vs
         else:
-            qs = qs / np.linalg.norm(qs, axis=1, keepdims=True)
+            qs = _normalize_quaternions(qs)
             u = -qs[:, :3] if self.invert else qs[:, :3]
             w = qs[:, 3]
             cross_1 = np.cross(u, vs)
@@ -606,14 +639,37 @@ class RotationFilter(BaseFilter):
             rotated = _translate_vector(rotated, origin, subtract=False)
         return rotated
 
-    def apply_to_frame(self, df: pl.DataFrame, vector_bases: set[str]) -> pl.DataFrame:
-        """Rotate all xyz vector families in `vector_bases` in one pass. Used by `MojoDataFrame.with_rotation` and any write path that needs the full-frame transform. Rotation-only and requires `quat_col`: `vector_bases` sweeps up every kind of vector indiscriminately (positions alongside velocities/forces/etc.), and `origin_col` translation is only correct for position-type vectors, so it is intentionally not applied here - use `apply_with_context` for a single, explicitly-selected position column instead."""
+    def apply_to_frame(
+        self,
+        df: pl.DataFrame,
+        vector_bases: set[str],
+        point_bases: set[str] | None = None,
+    ) -> pl.DataFrame:
+        """Rotate all xyz vector families in `vector_bases` in one pass, and translate-then-rotate every family in `point_bases`. Used by `MojoDataFrame.with_rotation` (vector_bases only) and `MojoDataFrame.change_frame` (both). Requires `quat_col`; `point_bases` additionally requires `origin_col`, since a position needs translating against a frame origin as well as rotating - unlike `vector_bases`, which is rotated only. A `point_bases` base's `:m` magnitude sibling, if present, is recomputed from the transformed x/y/z rather than left stale, since translation changes distance-from-origin."""
+        point_bases = point_bases or set()
         if not self.quat_col:
             return df
         q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
-        if not all(c in df.columns for c in q_cols):
-            return df
+        missing = [c for c in q_cols if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Rotation failed: quaternion column(s) {missing} not found for quat_col '{self.quat_col}'."
+            )
+        if point_bases and not self.origin_col:
+            raise ValueError(
+                "Rotation failed: point_bases given but origin_col is not set."
+            )
         qs = df.select(q_cols).to_numpy()
+        origin = None
+        if point_bases:
+            o_cols = [f"{self.origin_col}:{k}" for k in "xyz"]
+            missing_o = [c for c in o_cols if c not in df.columns]
+            if missing_o:
+                raise ValueError(
+                    f"Rotation failed: origin column(s) {missing_o} not found for origin_col '{self.origin_col}'."
+                )
+            origin = df.select(o_cols).to_numpy()
+
         new_columns: list[pl.Series] = []
         for base in vector_bases:
             v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
@@ -626,6 +682,55 @@ class RotationFilter(BaseFilter):
                     pl.Series(name=f"{base}:y", values=v_rot[:, 1]),
                     pl.Series(name=f"{base}:z", values=v_rot[:, 2]),
                 ]
+            )
+        for base in point_bases:
+            assert (
+                origin is not None
+            )  # guaranteed above whenever point_bases is non-empty
+            v_cols = [f"{base}:x", f"{base}:y", f"{base}:z"]
+            if not all(c in df.columns for c in v_cols):
+                continue
+            v_rot = self._rotate(df.select(v_cols).to_numpy(), qs.copy(), origin.copy())
+            new_columns.extend(
+                [
+                    pl.Series(name=f"{base}:x", values=v_rot[:, 0]),
+                    pl.Series(name=f"{base}:y", values=v_rot[:, 1]),
+                    pl.Series(name=f"{base}:z", values=v_rot[:, 2]),
+                ]
+            )
+            mag_col = f"{base}:m"
+            if mag_col in df.columns:
+                new_columns.append(
+                    pl.Series(name=mag_col, values=np.linalg.norm(v_rot, axis=1))
+                )
+        return df.with_columns(new_columns) if new_columns else df
+
+    def compose_to_frame(
+        self, df: pl.DataFrame, quaternion_bases: set[str]
+    ) -> pl.DataFrame:
+        """Composes every quaternion family in `quaternion_bases` with this filter's `quat_col` quaternion: q' = quat_col^-1 (x) q when `invert` (world-to-local), or q' = quat_col (x) q otherwise (local-to-world). Used by `MojoDataFrame.change_frame` for orientation columns, which need composition rather than the sandwich rotation `apply_to_frame` uses for vectors/points. `origin_col` is irrelevant here - quaternions don't translate."""
+        if not self.quat_col:
+            return df
+        q_cols = [f"{self.quat_col}:{k}" for k in "xyzw"]
+        missing = [c for c in q_cols if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Rotation failed: quaternion column(s) {missing} not found for quat_col '{self.quat_col}'."
+            )
+        qb = _normalize_quaternions(df.select(q_cols).to_numpy())
+        if self.invert:
+            qb = qb * np.array([-1.0, -1.0, -1.0, 1.0])
+
+        new_columns: list[pl.Series] = []
+        for base in quaternion_bases:
+            a_cols = [f"{base}:{k}" for k in "xyzw"]
+            if not all(c in df.columns for c in a_cols):
+                continue
+            qa = _normalize_quaternions(df.select(a_cols).to_numpy())
+            q_new = _hamilton_product(qb, qa)
+            new_columns.extend(
+                pl.Series(name=f"{base}:{k}", values=q_new[:, i])
+                for i, k in enumerate("xyzw")
             )
         return df.with_columns(new_columns) if new_columns else df
 

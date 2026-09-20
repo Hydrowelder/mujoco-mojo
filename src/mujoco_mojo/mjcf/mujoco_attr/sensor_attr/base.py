@@ -23,6 +23,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -38,20 +39,30 @@ if TYPE_CHECKING:
 
 # tags with a fixed, unambiguous physical quantity regardless of what the sensor references
 _TAG_METADATA: dict[str, dict[str, str]] = {
-    "accelerometer": dim(Dimension.ACCELERATION),
-    "velocimeter": dim(Dimension.VELOCITY),
-    "gyro": angular_rate_metadata(),
-    "force": dim(Dimension.FORCE),
-    "torque": {**dim(Dimension.TORQUE), "quantity": "torque"},
-    "framepos": dim(Dimension.LENGTH),
-    "subtreecom": dim(Dimension.LENGTH),
-    "framelinvel": dim(Dimension.VELOCITY),
-    "subtreelinvel": dim(Dimension.VELOCITY),
-    "frameangvel": angular_rate_metadata(),
-    "ballangvel": angular_rate_metadata(),
-    "framelinacc": dim(Dimension.ACCELERATION),
-    "frameangacc": angular_rate_metadata(per="second ** 2"),
-    "subtreeangmom": dim(Dimension.ANGULAR_MOMENTUM),
+    "accelerometer": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
+    "velocimeter": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
+    "gyro": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
+    "force": {**dim(Dimension.FORCE), **TransformType.VECTOR.metadata},
+    "torque": {
+        **dim(Dimension.TORQUE),
+        "quantity": "torque",
+        **TransformType.VECTOR.metadata,
+    },
+    "framepos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+    "subtreecom": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+    "framelinvel": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
+    "subtreelinvel": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
+    "frameangvel": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
+    "ballangvel": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
+    "framelinacc": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
+    "frameangacc": {
+        **angular_rate_metadata(per="second ** 2"),
+        **TransformType.VECTOR.metadata,
+    },
+    "subtreeangmom": {
+        **dim(Dimension.ANGULAR_MOMENTUM),
+        **TransformType.VECTOR.metadata,
+    },
     "e_kinetic": dim(Dimension.ENERGY),
     "e_potential": dim(Dimension.ENERGY),
     "touch": dim(Dimension.FORCE),
@@ -64,10 +75,10 @@ _TAG_METADATA: dict[str, dict[str, str]] = {
     "tendonactuatorfrc": dim(Dimension.FORCE),
     "tendonlimitfrc": dim(Dimension.FORCE),
     "clock": dim(Dimension.TIME),
-    "framexaxis": dimensionless_metadata(),
-    "frameyaxis": dimensionless_metadata(),
-    "framezaxis": dimensionless_metadata(),
-    "normal": dimensionless_metadata(),
+    "framexaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
+    "frameyaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
+    "framezaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
+    "normal": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
     "insidesite": dimensionless_metadata(),
 }
 
@@ -180,7 +191,7 @@ class SensorBase(XMLModel, ABC):
                 else None
             )
         elif self.tag.endswith("quat"):
-            builtin = dimensionless_metadata()
+            builtin = {**dimensionless_metadata(), **TransformType.QUATERNION.metadata}
         else:
             builtin = None
 

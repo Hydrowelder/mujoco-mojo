@@ -791,7 +791,8 @@ def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> No
     pair = proximity.pair_name
     assert sm._column_metadata[f"Proximities/{pair}:dist"] == {"dimension": "[length]"}
     assert sm._column_metadata[f"Proximities/{pair}/fromto/g1:x"] == {
-        "dimension": "[length]"
+        "dimension": "[length]",
+        "transform_type": "point",
     }
     assert sm._column_metadata[f"Proximities/{pair}:prox_type"] == {"dimension": "[]"}
 

@@ -356,6 +356,27 @@ def test_post_accepts_consistent_dimension_and_unit(sm: SignalManager) -> None:
     }
 
 
+def test_post_rejects_invalid_transform_type(sm: SignalManager) -> None:
+    """An unrecognized transform_type value raises on first registration."""
+    with pytest.raises(ValueError, match="Invalid signal metadata transform_type"):
+        sm.post(1.0, "Sensors", ("Foo",), metadata={"transform_type": "not_a_kind"})
+
+
+def test_post_accepts_valid_transform_type(sm: SignalManager) -> None:
+    """A valid transform_type is stored as-is, alongside other metadata keys."""
+    sm.post(
+        1.0,
+        "Bodies",
+        ("Foo", "xpos"),
+        attr="x",
+        metadata={"dimension": "[length]", "transform_type": "point"},
+    )
+    assert sm._column_metadata["Bodies/Foo/xpos:x"] == {
+        "dimension": "[length]",
+        "transform_type": "point",
+    }
+
+
 def test_post_metadata_only_consulted_on_first_registration(sm: SignalManager) -> None:
     """Metadata passed on a later call for an already-registered signal is ignored."""
     sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})

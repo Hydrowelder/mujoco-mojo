@@ -655,11 +655,13 @@ def test_load_request_tags_builtin_dimension_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Loads/thruster/force:x"] == {
-        "dimension": "[mass] * [length] / [time] ** 2"
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "vector",
     }
     assert sm._column_metadata["Loads/thruster/torque:x"] == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
+        "transform_type": "vector",
     }
 
 
@@ -682,6 +684,7 @@ def test_load_request_metadata_override(
 
     assert sm._column_metadata["Loads/thruster/force:x"] == {
         "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "vector",
         "display_name": "Thrust",
     }
 
@@ -1212,6 +1215,7 @@ def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path):
     assert sm._column_metadata["Loads/brake/friction:x"] == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
+        "transform_type": "vector",
     }
 
 
@@ -1226,7 +1230,8 @@ def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path):
     sm.record(state)
 
     assert sm._column_metadata["Loads/brake/friction:x"] == {
-        "dimension": "[mass] * [length] / [time] ** 2"
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "vector",
     }
 
 
@@ -1245,6 +1250,7 @@ def test_joint_friction_request_metadata_override(tmp_path):
     assert sm._column_metadata["Loads/brake/friction:x"] == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
+        "transform_type": "vector",
         "display_name": "Brake Torque",
     }
 

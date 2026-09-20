@@ -37,6 +37,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -52,18 +53,21 @@ logger = get_logger(__name__)
 __all__ = ["Body", "WorldBody"]
 
 _REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "xpos": dim(Dimension.LENGTH),
-    "quat": dimensionless_metadata(),
+    "xpos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+    "quat": {**dimensionless_metadata(), **TransformType.QUATERNION.metadata},
     "xmat": dimensionless_metadata(),
-    "xvelp": dim(Dimension.VELOCITY),
-    "xvelr": angular_rate_metadata(),
-    "xaccp": dim(Dimension.ACCELERATION),
-    "xaccr": angular_rate_metadata(per="second ** 2"),
-    "xipos": dim(Dimension.LENGTH),
-    "xiquat": dimensionless_metadata(),
+    "xvelp": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
+    "xvelr": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
+    "xaccp": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
+    "xaccr": {
+        **angular_rate_metadata(per="second ** 2"),
+        **TransformType.VECTOR.metadata,
+    },
+    "xipos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+    "xiquat": {**dimensionless_metadata(), **TransformType.QUATERNION.metadata},
     "ximat": dimensionless_metadata(),
-    "lin_mom": dim(Dimension.LINEAR_MOMENTUM),
-    "ang_mom": dim(Dimension.ANGULAR_MOMENTUM),
+    "lin_mom": {**dim(Dimension.LINEAR_MOMENTUM), **TransformType.VECTOR.metadata},
+    "ang_mom": {**dim(Dimension.ANGULAR_MOMENTUM), **TransformType.VECTOR.metadata},
     "ke_trans": dim(Dimension.ENERGY),
     "ke_rot": dim(Dimension.ENERGY),
     "pe": dim(Dimension.ENERGY),

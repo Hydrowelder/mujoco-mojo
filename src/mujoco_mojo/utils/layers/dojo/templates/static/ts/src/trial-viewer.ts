@@ -129,6 +129,56 @@ const DEFAULT_CONFIG: PlotConfig = {
 // rather than looking like a different kind of value. Empty string
 // (title/xAxisTitle/yAxisTitle's actual default) renders as "(empty)"
 // instead of nothing visibly between the backticks.
+type RefFrame = [string | null, string | null];
+
+function sameRefFrame(a: RefFrame | null, b: RefFrame | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+// The server decides which series actually get translated to the origin
+// (positions) and which are only rotated (free vectors), so every series
+// gets the same pair here.
+function refFrameLabel(frame: RefFrame | null): string {
+  if (!frame) return "world";
+  const [quat, origin] = frame;
+  return quat && origin ? `${quat} @ ${origin}` : (quat ?? `@ ${origin}`);
+}
+
+// each half of a frame that is set must exist in the trial: the quaternion as
+// a :w family, the origin as an :x/:y/:z family
+function refFrameAvailable(
+  frame: RefFrame,
+  quats: Set<string>,
+  cols: Set<string>,
+): boolean {
+  const [quat, origin] = frame;
+  return (!quat || quats.has(quat)) && (!origin || cols.has(`${origin}:x`));
+}
+
+function buildRefFrameFilter(frame: RefFrame): FilterEntry {
+  return {
+    type: "rotation",
+    quatCol: frame[0],
+    originCol: frame[1],
+    invert: true,
+    enabled: true,
+  };
+}
+
+// A saved config from before the frame became a (quat, origin) pair stores a
+// plain string; reset it to world instead of misreading it as a pair.
+function sanitizeRefFrame<T extends { refFrame?: unknown }>(cfg: T): T {
+  const v = cfg.refFrame;
+  if (v === undefined || v === null) return cfg;
+  const valid =
+    Array.isArray(v) &&
+    v.length === 2 &&
+    v.every((x) => x === null || typeof x === "string") &&
+    v.some((x) => x !== null);
+  return valid ? cfg : { ...cfg, refFrame: null };
+}
+
 function formatDefaultValue(value: unknown): string {
   if (value === null || value === undefined) return "None";
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -360,6 +410,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     ySearch: "",
     refFrameMenuOpen: false,
     refFrameSearch: "",
+    refFrameOriginMenuOpen: false,
+    refFrameOriginSearch: "",
     plotConfigOpen: false,
     downloadOpen: false,
     shareOpen: false,
@@ -2883,6 +2935,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               this.xMenuOpen ||
               this.yMenuOpen ||
               this.refFrameMenuOpen ||
+              this.refFrameOriginMenuOpen ||
               this.plotConfigOpen ||
               this.downloadOpen ||
               this.editorOpen ||
@@ -2899,7 +2952,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             this.cancelShapeDraft();
             this.annotationsOpen = false;
             this.shapesOpen = false;
-            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = false;
+            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = this.refFrameOriginMenuOpen = false;
             this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
             this.profilesOpen = this.vsMenuOpen = false;
             this.profileSearch = "";
@@ -3194,9 +3247,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
       this.$watch(
         "config.refFrame",
-        (newValue: string | null, oldValue: string | null) => {
-          if (newValue === oldValue) return;
-          this.notify(`Frame: ${newValue || "world"}`, "info");
+        (newValue: RefFrame | null, oldValue: RefFrame | null) => {
+          if (sameRefFrame(newValue, oldValue)) return;
+          this.notify(`Frame: ${refFrameLabel(newValue)}`, "info");
           this.discoveryId++;
           this.applyRefFrame(newValue);
           // config watcher handles re-fetch and re-render when yAxes.filters change
@@ -3509,12 +3562,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           families.forEach((fam) =>
             activeCols.push(`${fam}:x`, `${fam}:y`, `${fam}:z`),
           );
-          activeCols.push(
-            `${this.config.refFrame}:w`,
-            `${this.config.refFrame}:x`,
-            `${this.config.refFrame}:y`,
-            `${this.config.refFrame}:z`,
-          );
+          const [refQuat, refOrigin] = this.config.refFrame;
+          if (refQuat)
+            activeCols.push(
+              `${refQuat}:w`,
+              `${refQuat}:x`,
+              `${refQuat}:y`,
+              `${refQuat}:z`,
+            );
+          if (refOrigin)
+            activeCols.push(`${refOrigin}:x`, `${refOrigin}:y`, `${refOrigin}:z`);
         }
         activeCols = [...new Set(activeCols)];
 
@@ -3667,7 +3724,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : field === "nodeOrigin"
+            : field === "nodeOrigin" || field === "refFrameOrigin"
               ? this.rotateableVectors
               : this.selectableYColumns;
       const search =
@@ -3733,7 +3790,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // the other's (stale, wrongly filtered or wrongly unfiltered) rows.
       const cacheKey = extraFilter ? `${field}:filtered` : field;
       const search = (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      const refFrame = this.config.refFrame ?? "";
+      const refFrame = this.config.refFrame ? this.config.refFrame.join("|") : "";
       const cached = this._columnTreeRowsCache[cacheKey];
       if (
         cached &&
@@ -3855,7 +3912,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : field === "nodeOrigin"
+            : field === "nodeOrigin" || field === "refFrameOrigin"
               ? this.rotateableVectors
               : this.selectableYColumns;
       const search =
@@ -3885,7 +3942,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           ? this.columns
           : field === "nodeQuat" || field === "refFrame"
             ? this.availableQuats
-            : field === "nodeOrigin"
+            : field === "nodeOrigin" || field === "refFrameOrigin"
               ? this.rotateableVectors
               : this.selectableYColumns;
       const search =
@@ -4045,9 +4102,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             // Apply rotation filters synchronously. $watch("config.refFrame") fires
             // asynchronously after the whole config object is replaced, so filters
             // would be wrong during the first render if we relied solely on the watch.
-            const nextRefFrame =
-              (this.config.refFrame as string | null) ?? null;
-            if (nextRefFrame !== prevRefFrame) {
+            const nextRefFrame = this.config.refFrame ?? null;
+            if (!sameRefFrame(nextRefFrame, prevRefFrame)) {
               this.applyRefFrame(nextRefFrame);
             }
             void this.$nextTick(() => {
@@ -4068,7 +4124,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const saved = localStorage.getItem("mojo_mosaic_config");
       if (saved) {
         try {
-          const parsed = JSON.parse(saved) as Partial<PlotConfig>;
+          const parsed = sanitizeRefFrame(JSON.parse(saved) as Partial<PlotConfig>);
           this.config = { ...this.config, ...parsed };
         } catch {
           console.error("Stored config corrupt");
@@ -4110,7 +4166,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       try {
         const decoded = LZString.decompressFromEncodedURIComponent(blob);
         if (!decoded) throw new Error("Decompression failed");
-        const parsed = JSON.parse(decoded) as Partial<PlotConfig>;
+        const parsed = sanitizeRefFrame(JSON.parse(decoded) as Partial<PlotConfig>);
         this.config = { ...this.config, ...parsed };
         this.notify("Shared view loaded", "success");
       } catch {
@@ -4170,7 +4226,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       try {
         const decoded = LZString.decompressFromEncodedURIComponent(blob);
         if (!decoded) throw new Error("Decompression failed");
-        const parsed = JSON.parse(decoded) as Partial<PlotConfig>;
+        const parsed = sanitizeRefFrame(JSON.parse(decoded) as Partial<PlotConfig>);
         const config = {
           ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
           ...parsed,
@@ -4830,14 +4886,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         }));
         const nextStyle = this.nextAvailableStyle(usedStyles);
         const initFilters: FilterEntry[] = this.config.refFrame
-          ? [
-              {
-                type: "rotation",
-                quatCol: this.config.refFrame,
-                invert: true,
-                enabled: true,
-              },
-            ]
+          ? [buildRefFrameFilter(this.config.refFrame)]
           : [];
         this.config.yAxes[col] = {
           color: nextStyle.color,
@@ -4872,18 +4921,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.notify("Signals Cleared", "info");
     },
 
-    applyRefFrame(frame: string | null) {
+    applyRefFrame(frame: RefFrame | null) {
       for (const col of Object.keys(this.config.yAxes)) {
         const yConfig = this.config.yAxes[col];
         if (!yConfig) continue;
         yConfig.filters ??= [];
         if (frame) {
-          const newEntry: FilterEntry = {
-            type: "rotation",
-            quatCol: frame,
-            invert: true,
-            enabled: true,
-          };
+          const newEntry = buildRefFrameFilter(frame);
           const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
           if (idx >= 0) {
             // Replace in-place to preserve the user's chosen position in the stack
@@ -4905,6 +4949,20 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           }
         }
       }
+    },
+
+    // either half may be null (a quaternion alone only rotates, an origin
+    // alone only translates); both null is the world frame.
+    setRefFrame(quat: string | null, origin: string | null) {
+      this.config.refFrame = quat || origin ? [quat, origin] : null;
+    },
+
+    setRefFrameQuat(quat: string) {
+      this.setRefFrame(quat, this.config.refFrame?.[1] ?? null);
+    },
+
+    setRefFrameOrigin(origin: string) {
+      this.setRefFrame(this.config.refFrame?.[0] ?? null, origin);
     },
 
     warpToTrial() {
@@ -5794,7 +5852,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // storage rather than wrapCurrentAsTab(), this replaces whatever
       // hydrateFromUrl()/loadConfig() set up above with the restored
       // session's own state instead.
-      this.config = active.config;
+      this.config = sanitizeRefFrame(active.config);
       this.data = active.data;
       this.filterFingerprints = active.filterFingerprints;
       this.xAxisFilterFingerprint = active.xAxisFilterFingerprint;
@@ -6116,8 +6174,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 for (const key of Object.keys(cfg.yAxes ?? {})) {
                   if (!colSet.has(key)) w.push(`${label}: "${key}"`);
                 }
-                if (cfg.refFrame && !frames.has(cfg.refFrame))
-                  w.push(`${label}: frame "${cfg.refFrame}"`);
+                if (cfg.refFrame && !refFrameAvailable(cfg.refFrame, frames, colSet))
+                  w.push(`${label}: frame "${refFrameLabel(cfg.refFrame)}"`);
               });
               if (w.length) warnings[p.name] = w;
             } catch {
@@ -6221,8 +6279,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             if (!key.startsWith("Lab/") && !colSet.has(key))
               missing.push(`${label}: signal "${key}"`);
           }
-          if (cfg.refFrame && !frames.has(cfg.refFrame))
-            missing.push(`${label}: frame "${cfg.refFrame}"`);
+          if (cfg.refFrame && !refFrameAvailable(cfg.refFrame, frames, colSet))
+            missing.push(`${label}: frame "${refFrameLabel(cfg.refFrame)}"`);
         });
 
         // a profile is a saved workspace - loading one replaces every open
@@ -6651,7 +6709,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       };
 
       const frameLabel = this.config.refFrame
-        ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${this.config.refFrame}]</span>`
+        ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${refFrameLabel(this.config.refFrame)}]</span>`
         : "";
 
       // same "column (unit)" fallback the x-axis title already has (see

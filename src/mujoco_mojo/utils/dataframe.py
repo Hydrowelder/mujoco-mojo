@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 import polars as pl
 import pyarrow.parquet as pq
 
+from mujoco_mojo.deprecate import deprecated
 from mujoco_mojo.typing import (
     ActuatorName,
     BodyName,
@@ -44,6 +45,40 @@ def read_column_metadata(path: Path | str) -> dict[str, dict[str, Any]]:
     if raw is None:
         return {}
     return json.loads(raw.decode())  # type: ignore[no-any-return]
+
+
+def _classify_transform_bases(
+    bases: set[str], column_metadata: dict[str, dict[str, Any]]
+) -> tuple[set[str], set[str]]:
+    """Splits `bases` (from `rotatable_bases`) into `(points, vectors)` by their `:x` sibling's `transform_type` tag. Raises `ValueError` naming the base if it is untagged or tagged something other than `point`/`vector` - there is no untagged fallback, since guessing wrong here is exactly the bug this classification exists to prevent."""
+    points: set[str] = set()
+    vectors: set[str] = set()
+    for base in sorted(bases):
+        kind = (column_metadata.get(f"{base}:x") or {}).get("transform_type")
+        if kind == "point":
+            points.add(base)
+        elif kind == "vector":
+            vectors.add(base)
+        else:
+            raise ValueError(
+                f"Column '{base}' has no ('point' or 'vector') transform_type metadata "
+                "(see mujoco_mojo.utils.signal_metadata.TransformType); tag it before rotating."
+            )
+    return points, vectors
+
+
+def _classify_quaternion_bases(
+    bases: set[str], column_metadata: dict[str, dict[str, Any]]
+) -> set[str]:
+    """Validates every base in `bases` (from `quaternion_bases`) is tagged `transform_type="quaternion"` via its `:w` sibling. Raises `ValueError` naming the base otherwise."""
+    for base in sorted(bases):
+        kind = (column_metadata.get(f"{base}:w") or {}).get("transform_type")
+        if kind != "quaternion":
+            raise ValueError(
+                f"Column '{base}' has no 'quaternion' transform_type metadata "
+                "(see mujoco_mojo.utils.signal_metadata.TransformType); tag it before composing."
+            )
+    return set(bases)
 
 
 class _MojoFrame(pl.DataFrame):
@@ -305,7 +340,7 @@ class MojoNamespace:
         return {b for b, s in base_map.items() if {"w", "x", "y", "z"}.issubset(s)}
 
     @property
-    def rotatable_columns(self) -> list[tuple[str, str, str]]:
+    def rotatable_columns(self) -> list[str]:
         """Returns column names ending in `:x`, `:y`, or `:z` (excluding quaternions which end with `:w`)."""
         expanded = []
         for base in self.rotatable_bases:
@@ -450,26 +485,109 @@ class MojoNamespace:
 
         return _MojoFrame.from_pl(self._df.with_columns(exprs))
 
-    def with_rotation(self, quat_base: str, invert: bool = True) -> MojoDataFrame:
+    @deprecated(
+        "with_rotation is deprecated and will be removed in a future release; use change_frame, which also translates positions and composes quaternions.",
+        stacklevel=2,
+    )
+    def with_rotation(
+        self,
+        quat_base: str,
+        invert: bool = True,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> MojoDataFrame:
         """
         Rotates all 3D vectors into a new frame using the specified quaternion.
+
+        Deprecated: use `change_frame`, which applies the correct transform per column (translating positions, rotating vectors, and composing quaternions) instead of rotating every vector-shaped column indiscriminately. This method will be removed in a future release.
+
+        This is a vector-only rotation: every `:x/:y/:z` group in the frame is rotated in place by `quat_base`, with no translation. That's the correct re-expression for free vectors (velocities, angular rates, forces), but wrong for positions, which also need to be translated against a frame origin - see `change_frame` for that case.
 
         Args:
             quat_base (str): Prefix for the [w,x,y,z] quaternion group.
             invert (bool, optional): If True, performs World to Local transformation (use False with the same `quat_base` to revert the rotation). Defaults to True.
+            column_metadata: Optional, e.g. from `read_column_metadata()`. When given, raises if any rotatable column in the frame is tagged `transform_type="point"` - rotating a position without also translating it produces "the world position on rotated axes", not a position in the new frame. Omit this to keep today's behavior (rotate every `:x/:y/:z` group, regardless of kind) for frames without embedded metadata.
 
         Returns:
             Self: DataFrame with transformed :x, :y, :z columns.
 
+        Raises:
+            ValueError: If `quat_base` is not a complete quaternion group in this frame, or if `column_metadata` is given and a rotatable column is tagged `transform_type="point"`.
+
         """
         if quat_base not in self.quaternion_bases:
-            logger.warning(
-                f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
+            msg = f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        vector_bases = self.rotatable_bases
+        if column_metadata is not None:
+            points, vector_bases = _classify_transform_bases(
+                vector_bases, column_metadata
             )
-            return _MojoFrame.from_pl(self._df)
+            if points:
+                msg = (
+                    f"with_rotation is vector-only, but {sorted(points)} are tagged "
+                    "transform_type='point'; use change_frame to translate and rotate positions."
+                )
+                logger.error(msg)
+                raise ValueError(msg)
+
         rotated = RotationFilter(quat_col=quat_base, invert=invert).apply_to_frame(
-            self._df, self.rotatable_bases
+            self._df, vector_bases
         )
+        return _MojoFrame.from_pl(rotated)
+
+    def change_frame(
+        self,
+        quat_base: str,
+        origin_base: str,
+        *,
+        path: Path | str | None = None,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
+        invert: bool = True,
+    ) -> MojoDataFrame:
+        """
+        Re-expresses every tagged point/vector/quaternion column in this frame relative to the frame defined by `origin_base` (position) and `quat_base` (orientation).
+
+        Unlike `with_rotation`, this applies the correct transform per column by its declared `transform_type`: points are translated then rotated, vectors are rotated only, and quaternions are composed (`q' = q_b^-1 (x) q`). Every rotatable/quaternion column in the frame must be tagged (see `mujoco_mojo.utils.signal_metadata.TransformType`) or this raises - there is no untagged fallback, since guessing the wrong kind is exactly the silent-corruption bug this method exists to prevent.
+
+        Args:
+            quat_base: Prefix for the [x,y,z,w] quaternion group giving the target frame's orientation in world coordinates (e.g. 'Bodies/chassis/xquat').
+            origin_base: Prefix for the [x,y,z] position group giving the target frame's origin in world coordinates (e.g. 'Bodies/chassis/xpos').
+            path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
+            column_metadata: Pre-loaded metadata dict (from `read_column_metadata()`). Takes precedence over `path`.
+            invert: If True (default), performs a world-to-local transform into the target frame; if False, reverses it (local-to-world).
+
+        Returns:
+            Self: DataFrame with every point/vector/quaternion column re-expressed in the target frame.
+
+        Raises:
+            ValueError: If `quat_base`/`origin_base` aren't valid column groups in this frame, or if any rotatable/quaternion column lacks a `transform_type` tag.
+
+        """
+        if quat_base not in self.quaternion_bases:
+            msg = f"change_frame failed: quaternion base '{quat_base}' not found (see the quaternion_bases property for valid columns)."
+            logger.error(msg)
+            raise ValueError(msg)
+        if origin_base not in self.rotatable_bases:
+            msg = f"change_frame failed: origin base '{origin_base}' not found (see the rotatable_bases property for valid columns)."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        meta: dict[str, dict[str, Any]]
+        if column_metadata is not None:
+            meta = column_metadata
+        elif path is not None:
+            meta = read_column_metadata(path)
+        else:
+            meta = {}
+
+        points, vectors = _classify_transform_bases(self.rotatable_bases, meta)
+        quats = _classify_quaternion_bases(self.quaternion_bases, meta)
+
+        rf = RotationFilter(quat_col=quat_base, origin_col=origin_base, invert=invert)
+        rotated = rf.apply_to_frame(self._df, vector_bases=vectors, point_bases=points)
+        rotated = rf.compose_to_frame(rotated, quaternion_bases=quats)
         return _MojoFrame.from_pl(rotated)
 
     def with_filter_map(

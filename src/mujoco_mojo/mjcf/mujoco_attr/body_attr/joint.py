@@ -26,6 +26,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -397,18 +398,30 @@ class Joint(XMLModel):
                     post_vec3(
                         val[:3],
                         channel=f"pos_{channel}",
-                        builtin=dim(Dimension.LENGTH),
+                        builtin={
+                            **dim(Dimension.LENGTH),
+                            **TransformType.POINT.metadata,
+                        },
                         us=u,
                     )
                     post_quat(
                         val[3:],
                         channel=f"quat_{channel}",
-                        builtin=dimensionless_metadata(),
+                        builtin={
+                            **dimensionless_metadata(),
+                            **TransformType.QUATERNION.metadata,
+                        },
                         us=u,
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
                     post_quat(
-                        val, channel=channel, builtin=dimensionless_metadata(), us=u
+                        val,
+                        channel=channel,
+                        builtin={
+                            **dimensionless_metadata(),
+                            **TransformType.QUATERNION.metadata,
+                        },
+                        us=u,
                     )
                 elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
                     lin_builtin = (
@@ -422,10 +435,16 @@ class Joint(XMLModel):
                         else torque_metadata()
                     )
                     post_vec3(
-                        val[:3], channel=f"lin_{channel}", builtin=lin_builtin, us=u
+                        val[:3],
+                        channel=f"lin_{channel}",
+                        builtin={**lin_builtin, **TransformType.VECTOR.metadata},
+                        us=u,
                     )
                     post_vec3(
-                        val[3:], channel=f"ang_{channel}", builtin=ang_builtin, us=u
+                        val[3:],
+                        channel=f"ang_{channel}",
+                        builtin={**ang_builtin, **TransformType.VECTOR.metadata},
+                        us=u,
                     )
                 else:
                     # ball joint's qvel/qfrc_*: always rotational (3 DOF, no translation)
@@ -434,6 +453,11 @@ class Joint(XMLModel):
                         if channel == "qvel"
                         else torque_metadata()
                     )
-                    post_vec3(val, channel=channel, builtin=ang_builtin, us=u)
+                    post_vec3(
+                        val,
+                        channel=channel,
+                        builtin={**ang_builtin, **TransformType.VECTOR.metadata},
+                        us=u,
+                    )
 
         signal_manager.register_sampler(sample)
