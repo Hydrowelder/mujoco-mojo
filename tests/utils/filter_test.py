@@ -224,7 +224,7 @@ def test_rotation_filter_compose_to_frame_matches_scipy():
                 "Bodies/target/quat:z",
                 "Bodies/target/quat:w",
             ]
-        ).to_numpy()
+        ).to_numpy(writable=True)  # scipy < 1.18 rejects polars' read-only views
 
         expected_rot = (rb.inv() * ra) if invert else (rb * ra)
         actual_rot = Rotation.from_quat(result)

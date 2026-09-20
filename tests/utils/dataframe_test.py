@@ -454,9 +454,10 @@ def test_change_frame_translates_rotates_and_composes():
     actual_v = result.select(
         ["Bodies/A/xvelp:x", "Bodies/A/xvelp:y", "Bodies/A/xvelp:z"]
     ).to_numpy()[0]
+    # writable: polars can return a read-only zero-copy view, which older scipy rejects
     actual_q = result.select(
         ["Bodies/A/quat:x", "Bodies/A/quat:y", "Bodies/A/quat:z", "Bodies/A/quat:w"]
-    ).to_numpy()
+    ).to_numpy(writable=True)
 
     assert np.allclose(actual_p, expected_p, atol=1e-10)
     assert np.allclose(actual_v, expected_v, atol=1e-10)
