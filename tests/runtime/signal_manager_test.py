@@ -10,9 +10,10 @@ import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import read_column_metadata
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
-from mujoco_mojo.utils.signal_metadata import TransformType
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 
 class _FixedCapacitySignalManager(SignalManager):
@@ -39,15 +40,15 @@ def sm(tmp_path: Path) -> Generator[SignalManager, None, None]:
 def test_hierarchical_key_generation(sm: SignalManager) -> None:
     """Verify the 'Category/Subgroup:Attribute' naming logic."""
     # Test full path
-    sm.post(1.0, "Bodies", ("Hand",), attr="xpos_x")
+    sm.post(1.0, Column(category="Bodies", subgroups=("Hand",), attr="xpos_x"))
     assert "Bodies/Hand:xpos_x" in sm._key_to_idx
 
     # Test simple path (no attr)
-    sm.post(2.0, "Sensors", ("IMU",))
+    sm.post(2.0, Column(category="Sensors", subgroups=("IMU",)))
     assert "Sensors/IMU" in sm._key_to_idx
 
     # Test another signal
-    sm.post(3.0, "Joints", ("Elbow",), attr="qpos")
+    sm.post(3.0, Column(category="Joints", subgroups=("Elbow",), attr="qpos"))
     assert "Joints/Elbow:qpos" in sm._key_to_idx
 
 
@@ -59,14 +60,14 @@ def test_batching_and_persistence(sm: SignalManager) -> None:
 
     # Post 4 steps (fixture's flush capacity is 5)
     for i in range(4):
-        sm.post(float(i), "Custom", ("Signal",))
+        sm.post(float(i), Column(category="Custom", subgroups=("Signal",)))
         sm.record(MjState(m, d))
 
     # Buffer row index should have 4 rows (capacity is 5, so no flush yet)
     assert sm._buffer_row_idx == 4
 
     # 5th step triggers flush
-    sm.post(4.0, "Custom", ("Signal",))
+    sm.post(4.0, Column(category="Custom", subgroups=("Signal",)))
     sm.record(MjState(m, d))
 
     assert sm._buffer_row_idx == 0  # Buffer cleared after flush
@@ -108,7 +109,7 @@ def test_sample_task_execution(sm: SignalManager) -> None:
 
     def mock_sample(state: MjState) -> None:
         nonlocal was_called
-        sm.post(99.0, "Custom", ("Sampled",))
+        sm.post(99.0, Column(category="Custom", subgroups=("Sampled",)))
         was_called = True
 
     sm.register_sampler(mock_sample)
@@ -127,15 +128,15 @@ def test_multiple_samplers_execution_order(sm: SignalManager) -> None:
 
     def sampler_1(state: MjState) -> None:
         execution_order.append(1)
-        sm.post(1.0, "Sampler", ("One",))
+        sm.post(1.0, Column(category="Sampler", subgroups=("One",)))
 
     def sampler_2(state: MjState) -> None:
         execution_order.append(2)
-        sm.post(2.0, "Sampler", ("Two",))
+        sm.post(2.0, Column(category="Sampler", subgroups=("Two",)))
 
     def sampler_3(state: MjState) -> None:
         execution_order.append(3)
-        sm.post(3.0, "Sampler", ("Three",))
+        sm.post(3.0, Column(category="Sampler", subgroups=("Three",)))
 
     sm.register_sampler(sampler_1)
     sm.register_sampler(sampler_2)
@@ -158,7 +159,7 @@ def test_buffer_growth_on_signal_overflow(sm: SignalManager) -> None:
 
     # Register 120 unique signals (exceeds initial 100)
     for i in range(120):
-        sm.post(float(i), "Signal", (f"S{i}",))
+        sm.post(float(i), Column(category="Signal", subgroups=(f"S{i}",)))
 
     # Buffer should have grown
     assert sm._data_buffer.shape[1] > initial_buffer_width
@@ -174,7 +175,7 @@ def test_capacity_shrinks_as_more_signals_are_registered(tmp_path: Path) -> None
         assert initial_capacity == 10  # 8000 bytes // (100 guessed cols * 8 bytes)
 
         for i in range(150):
-            manager.post(float(i), "Signal", (f"S{i}",))
+            manager.post(float(i), Column(category="Signal", subgroups=(f"S{i}",)))
 
         assert manager._n_cols == 151  # 150 signals + time
         assert manager._capacity < initial_capacity
@@ -195,7 +196,7 @@ def test_signal_value_correctness_in_output(sm: SignalManager) -> None:
     }
 
     for signal_name, value in test_values.items():
-        sm.post(value, "Sensors", (signal_name,))
+        sm.post(value, Column(category="Sensors", subgroups=(signal_name,)))
 
     sm.record(MjState(m, d))
     sm.flush()
@@ -211,18 +212,50 @@ def test_signal_value_correctness_in_output(sm: SignalManager) -> None:
 
 
 def test_cache_hit_performance(sm: SignalManager) -> None:
-    """Verify that repeated signal names use cache instead of recomputing."""
-    # Post same signal 3 times
-    sm.post(1.0, "Category", ("Sub",), attr="attr")
-    initial_cache_size: int = len(sm._key_cache)
+    """Verify that a repeated column is looked up by hash instead of re-resolving its name."""
+    column = Column(category="Category", subgroups=("Sub",), attr="attr")
+    sm.post(1.0, column)
+    initial_cache_size: int = len(sm._col_idx)
 
-    sm.post(2.0, "Category", ("Sub",), attr="attr")
-    sm.post(3.0, "Category", ("Sub",), attr="attr")
+    sm.post(2.0, column)
+    sm.post(3.0, column)
 
-    # Cache should not have grown
-    assert len(sm._key_cache) == initial_cache_size
-    # But all values should be in key_to_idx
+    # the lookup table should not have grown
+    assert len(sm._col_idx) == initial_cache_size
+    # but the column is registered under its name
     assert "Category/Sub:attr" in sm._key_to_idx
+
+
+def test_equal_columns_share_one_index(sm: SignalManager) -> None:
+    """A separately built but equal `Column` writes to the same buffer column, so a caller that builds one per call is slow but correct."""
+    sm.post(1.0, Column(category="Signal", subgroups=("A",)))
+    n_cols = sm._n_cols
+    sm.post(2.0, Column(category="Signal", subgroups=("A",)))
+
+    assert sm._n_cols == n_cols
+    assert sm._data_buffer[sm._buffer_row_idx, sm._key_to_idx["Signal/A"]] == 2.0
+
+
+def test_same_name_different_metadata_keeps_the_first(sm: SignalManager) -> None:
+    """Two columns with one name but different metadata share an index, and the first registration's metadata wins."""
+    sm.post(
+        1.0,
+        Column(
+            category="Sensors", subgroups=("Foo",), metadata=ColumnMetadata(unit="volt")
+        ),
+    )
+    n_cols = sm._n_cols
+    sm.post(
+        2.0,
+        Column(
+            category="Sensors",
+            subgroups=("Foo",),
+            metadata=ColumnMetadata(unit="ampere"),
+        ),
+    )
+
+    assert sm._n_cols == n_cols
+    assert sm._column_metadata["Sensors/Foo"].model_dump() == {"unit": "volt"}
 
 
 def test_append_to_existing_file(sm: SignalManager) -> None:
@@ -231,15 +264,15 @@ def test_append_to_existing_file(sm: SignalManager) -> None:
     d: mujoco.MjData = mujoco.MjData(m)
 
     # Write first batch
-    sm.post(1.0, "Signal", ("A",))
+    sm.post(1.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
-    sm.post(2.0, "Signal", ("A",))
+    sm.post(2.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
-    sm.post(3.0, "Signal", ("A",))
+    sm.post(3.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
-    sm.post(4.0, "Signal", ("A",))
+    sm.post(4.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
-    sm.post(5.0, "Signal", ("A",))
+    sm.post(5.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
     sm.flush()
 
@@ -248,14 +281,14 @@ def test_append_to_existing_file(sm: SignalManager) -> None:
     assert len(sm._part_paths) == 1
 
     # Add a new signal and write another batch
-    sm.post(10.0, "Signal", ("A",))
-    sm.post(20.0, "Signal", ("B",))  # New signal
+    sm.post(10.0, Column(category="Signal", subgroups=("A",)))
+    sm.post(20.0, Column(category="Signal", subgroups=("B",)))  # New signal
     sm.record(MjState(m, d))
-    sm.post(11.0, "Signal", ("A",))
-    sm.post(21.0, "Signal", ("B",))
+    sm.post(11.0, Column(category="Signal", subgroups=("A",)))
+    sm.post(21.0, Column(category="Signal", subgroups=("B",)))
     sm.record(MjState(m, d))
-    sm.post(12.0, "Signal", ("A",))
-    sm.post(22.0, "Signal", ("B",))
+    sm.post(12.0, Column(category="Signal", subgroups=("A",)))
+    sm.post(22.0, Column(category="Signal", subgroups=("B",)))
     sm.record(MjState(m, d))
     sm.flush()
 
@@ -316,40 +349,21 @@ def test_properties_and_static_methods(sm: SignalManager) -> None:
 # --- Signal metadata tests ---
 
 
-def test_post_rejects_invalid_dimension(sm: SignalManager) -> None:
-    """An unparseable Pint dimension expression raises on first registration."""
-    with pytest.raises(ValueError, match="Invalid signal metadata dimension"):
-        sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "not_a_dimension"})
-
-
-def test_post_rejects_invalid_unit(sm: SignalManager) -> None:
-    """An unparseable Pint unit string raises on first registration."""
-    with pytest.raises(ValueError, match="Invalid signal metadata unit"):
-        sm.post(1.0, "Sensors", ("Foo",), metadata={"unit": "not_a_unit"})
-
-
-def test_post_rejects_mismatched_dimension_and_unit(sm: SignalManager) -> None:
-    """Units that don't match the given dimension raise on first registration."""
-    with pytest.raises(ValueError, match="do not"):
-        sm.post(
-            1.0,
-            "Sensors",
-            ("Foo",),
-            metadata={"dimension": "[length]", "unit": "newton"},
-        )
-
-
 def test_post_accepts_consistent_dimension_and_unit(sm: SignalManager) -> None:
     """Matching dimension and unit, and arbitrary extra keys, are stored as-is."""
     sm.post(
         1.0,
-        "Sensors",
-        ("Foo",),
-        metadata={
-            "dimension": "[length] / [time]",
-            "unit": "meter / second",
-            "display_name": "Foo Speed",
-        },
+        Column(
+            category="Sensors",
+            subgroups=("Foo",),
+            metadata=ColumnMetadata.model_validate(
+                {
+                    "dimension": "[length] / [time]",
+                    "unit": "meter / second",
+                    "display_name": "Foo Speed",
+                }
+            ),
+        ),
     )
     assert sm._column_metadata["Sensors/Foo"].model_dump() == {
         "dimension": "[length] / [time]",
@@ -358,20 +372,18 @@ def test_post_accepts_consistent_dimension_and_unit(sm: SignalManager) -> None:
     }
 
 
-def test_post_rejects_invalid_transform_type(sm: SignalManager) -> None:
-    """An unrecognized transform_type value raises on first registration."""
-    with pytest.raises(ValueError, match="Invalid signal metadata transform_type"):
-        sm.post(1.0, "Sensors", ("Foo",), metadata={"transform_type": "not_a_kind"})
-
-
 def test_post_accepts_valid_transform_type(sm: SignalManager) -> None:
     """A valid transform_type is stored as-is, alongside other metadata keys."""
     sm.post(
         1.0,
-        "Bodies",
-        ("Foo", "xpos"),
-        attr="x",
-        metadata={"dimension": "[length]", "transform_type": "point"},
+        Column(
+            category="Bodies",
+            subgroups=("Foo", "xpos"),
+            attr="x",
+            metadata=ColumnMetadata(
+                dimension="[length]", transform_type=TransformType.POINT
+            ),
+        ),
     )
     assert sm._column_metadata["Bodies/Foo/xpos:x"].model_dump() == {
         "dimension": "[length]",
@@ -379,20 +391,19 @@ def test_post_accepts_valid_transform_type(sm: SignalManager) -> None:
     }
 
 
-def test_post_metadata_only_consulted_on_first_registration(sm: SignalManager) -> None:
-    """Metadata passed on a later call for an already-registered signal is ignored."""
-    sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
-    sm.post(2.0, "Sensors", ("Foo",), metadata={"dimension": "[force]"})
-
-    assert sm._column_metadata["Sensors/Foo"].model_dump() == {"dimension": "[length]"}
-
-
 def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
     """A single-part run embeds column metadata including the always-present time column."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
-    sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
+    sm.post(
+        1.0,
+        Column(
+            category="Sensors",
+            subgroups=("Foo",),
+            metadata=ColumnMetadata(dimension="[length]"),
+        ),
+    )
     sm.record(MjState(m, d))
     sm.close()
 
@@ -410,14 +421,18 @@ def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> N
 
     sm.post(
         1.0,
-        "Bodies",
-        ("A", "xpos"),
-        attr="x",
-        metadata={
-            "dimension": "[length]",
-            "transform_type": "point",
-            "display_name": "A position",
-        },
+        Column(
+            category="Bodies",
+            subgroups=("A", "xpos"),
+            attr="x",
+            metadata=ColumnMetadata.model_validate(
+                {
+                    "dimension": "[length]",
+                    "transform_type": "point",
+                    "display_name": "A position",
+                }
+            ),
+        ),
     )
     sm.record(MjState(m, d))
     sm.close()
@@ -428,6 +443,32 @@ def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> N
     assert read["time"].dimension == "[time]"
 
 
+def test_a_rejected_column_registers_nothing(sm: SignalManager) -> None:
+    """A name part that would corrupt the grammar fails when the `Column` is built, so nothing reaches the signal manager."""
+    with pytest.raises(ValueError, match="subgroup"):
+        sm.post(1.0, Column(category="Bodies", subgroups=("left/rear",), attr="x"))
+    with pytest.raises(ValueError, match="attr"):
+        sm.post(1.0, Column(category="Bodies", subgroups=("box",), attr="x:vel"))
+    assert set(sm._key_to_idx) == {TIME_COLUMN_NAME}
+
+
+def test_registered_columns_parse_back_to_the_same_parts(sm: SignalManager) -> None:
+    """Writer and reader agree: every registered column name parses back to the parts it was posted with."""
+    sm.post(1.0, Column(category="Bodies", subgroups=("box1", "xpos"), attr="x"))
+    sm.post(1.0, Column(category="Bodies", subgroups=("box1",), attr="ke_trans"))
+    sm.post(
+        1.0,
+        Column(category="Proximities", subgroups=("a_to_b", "fromto", "g1"), attr="z"),
+    )
+    sm.post(1.0, Column(category="Loads", subgroups=("thruster", "force")))
+
+    for name, column in sm._columns.items():
+        parsed = Column.parse(name)
+        assert parsed.category == column.category
+        assert parsed.subgroups == column.subgroups
+        assert parsed.attr == column.attr
+
+
 def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
     """A multi-part run (the scan/sink merge path) embeds column metadata too."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
@@ -435,9 +476,14 @@ def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
 
     # fixture's flush capacity is 5: force two parts
     for i in range(5):
-        sm.post(float(i), "Signal", ("A",))
+        sm.post(float(i), Column(category="Signal", subgroups=("A",)))
         sm.record(MjState(m, d))
-    sm.post(99.0, "Sensors", ("Foo",), metadata={"unit": "volt"})
+    sm.post(
+        99.0,
+        Column(
+            category="Sensors", subgroups=("Foo",), metadata=ColumnMetadata(unit="volt")
+        ),
+    )
     sm.record(MjState(m, d))
     sm.close()
 
@@ -453,7 +499,7 @@ def test_time_metadata_always_in_footer(sm: SignalManager) -> None:
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
-    sm.post(1.0, "Signal", ("A",))
+    sm.post(1.0, Column(category="Signal", subgroups=("A",)))
     sm.record(MjState(m, d))
     sm.close()
 
@@ -461,11 +507,19 @@ def test_time_metadata_always_in_footer(sm: SignalManager) -> None:
     assert json.loads(footer["column_metadata"]) == {"time": {"dimension": "[time]"}}
 
 
-def test_track_forwards_metadata(sm: SignalManager) -> None:
-    """track() forwards its metadata kwarg into post() the same way as a direct post() call."""
-    sm.track(lambda: 1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
+def test_track_posts_its_column(sm: SignalManager) -> None:
+    """track() samples its getter into the given `Column` the same way as a direct post() call."""
+    sm.track(
+        lambda: 1.0,
+        Column(
+            category="Sensors",
+            subgroups=("Foo",),
+            metadata=ColumnMetadata(dimension="[length]"),
+        ),
+    )
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
     sm.record(MjState(m, d))
 
     assert sm._column_metadata["Sensors/Foo"].model_dump() == {"dimension": "[length]"}
+    assert sm._data_buffer[0, sm._key_to_idx["Sensors/Foo"]] == 1.0

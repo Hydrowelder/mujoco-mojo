@@ -888,6 +888,30 @@ def test_telemetry_keeps_posting_on_replay_ticks_after_latch() -> None:
         assert call.kwargs["value"] == 0.0
 
 
+def test_requirement_name_that_cannot_be_a_column_fails_when_added() -> None:
+    """The requirement's telemetry `Column` is built at `add_requirement`, so a name containing '/' or ':' raises there instead of partway through a run."""
+    mgr = RuntimeManager()
+    with pytest.raises(ValueError, match="subgroup"):
+        mgr.add_requirement(lambda m, s, df: (True, "ok"), name="a/b", every=1)
+    assert not mgr.requirements._requirements.root
+
+
+def test_requirement_posts_to_its_result_column() -> None:
+    """The live result is posted to `Requirements/<name>:result`."""
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (True, "ok"), name="ok_req", every=1)
+
+    state = MagicMock()
+    state.data.time = 0.1
+    sm = MagicMock(spec=SignalManager)
+    mgr.requirements.step(state, signal_manager=sm, mojo_model=mgr._mojo_model)
+
+    (call,) = sm.post.call_args_list
+    assert call.kwargs["value"] == 1.0
+    assert str(call.kwargs["column"]) == "Requirements/ok_req:result"
+
+
 def test_latch_logs_once_not_on_every_replay(caplog) -> None:
     """The 'latched' debug log fires exactly once, when the latch is first set, not again on every subsequent replayed evaluation tick."""
     import logging

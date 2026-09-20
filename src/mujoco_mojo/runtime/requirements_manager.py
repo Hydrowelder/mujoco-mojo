@@ -9,6 +9,7 @@ from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.stochas import BaseDict
 from mujoco_mojo.typing import SignalCategory
+from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import REQUIREMENTS_FNAME, RequirementResult
@@ -54,6 +55,8 @@ class _RequirementSpec:
     latch_on_fail: bool = True
     latch_on_pass: bool = False
     post_result: bool = True
+    column: Column | None = None
+    """The telemetry column the live result is posted to (`None` when `post_result` is off). Built when the requirement is registered, so a name that cannot be a column name fails there rather than partway through a run."""
 
 
 @dataclass
@@ -116,6 +119,16 @@ class RequirementsManager:
                     f"Requirement {resolved_name} was set to latch but its function will only be evaluated once, at the end of the simulation"
                 )
 
+        column = (
+            Column(
+                category=SignalCategory.REQUIREMENTS,
+                subgroups=(resolved_name,),
+                attr="result",
+            )
+            if post_result
+            else None
+        )
+
         try:
             self._requirements.update(
                 _RequirementSpec(
@@ -127,6 +140,7 @@ class RequirementsManager:
                     latch_on_fail=latch_on_fail,
                     latch_on_pass=latch_on_pass,
                     post_result=post_result,
+                    column=column,
                 )
             )
         except KeyError:
@@ -265,14 +279,12 @@ class RequirementsManager:
             # skip entirely if this requirement has never been evaluated yet.
             if (
                 signal_manager
-                and spec.post_result
+                and spec.column is not None
                 and spec.name in self._last_live_result
             ):
                 signal_manager.post(
                     value=1.0 if self._last_live_result[spec.name] else 0.0,
-                    category=SignalCategory.REQUIREMENTS,
-                    subgroups=(spec.name,),
-                    attr="result",
+                    column=spec.column,
                 )
 
         # a failing terminator wins over a satisfied one on the same step

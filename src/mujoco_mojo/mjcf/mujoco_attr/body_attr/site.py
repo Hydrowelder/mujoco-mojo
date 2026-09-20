@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 import mujoco
@@ -25,6 +26,7 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity_mixin import ProximityMixin
+from mujoco_mojo.utils.column import MATRIX_ATTRS, Column, fan_out
 from mujoco_mojo.utils.signal_metadata import (
     MetadataLike,
     MetadataOverrides,
@@ -620,15 +622,29 @@ class SiteBase(XMLModel, ABC):
         else:
             _meta = {}
 
-        def sample(state: MjState):
-            for channel in channels:
+        name = f"{self.name}"
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(
+            channel: str, state: MjState, attrs: Iterable[str]
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
                 meta = merge_signal_metadata(
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
                     unit_system=state.us,
                 )
+                cols = columns[channel] = fan_out(
+                    SignalCategory.SITES, (name, channel), attrs, meta
+                )
+            return cols
 
+        def sample(state: MjState):
+            for channel in channels:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match channel:
                     case "xpos":
@@ -646,14 +662,8 @@ class SiteBase(XMLModel, ABC):
                     case "quat":
                         val = self.rt_quat(state)
 
-                        for i, attr in enumerate("wxyz"):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.SITES,
-                                subgroups=(f"{self.name}", channel),
-                                attr=attr,
-                                metadata=meta,
-                            )
+                        for v, col in zip(val, channel_columns(channel, state, "wxyz")):
+                            signal_manager.post(float(v), col)
                         continue
                     case _:
                         continue
@@ -663,25 +673,16 @@ class SiteBase(XMLModel, ABC):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, attr in enumerate("xyzm"):
-                        signal_manager.post(
-                            value=float(full_vec[i]),
-                            category=SignalCategory.SITES,
-                            subgroups=(f"{self.name}", channel),
-                            attr=attr,
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        full_vec, channel_columns(channel, state, "xyzm")
+                    ):
+                        signal_manager.post(float(v), col)
                 else:
                     # longer arrays (or matrices like xmat), use flattened indices
-                    val_flat = val.flatten()
-                    for i in range(len(val_flat)):
-                        signal_manager.post(
-                            value=float(val_flat[i]),
-                            category=SignalCategory.SITES,
-                            subgroups=(f"{self.name}", channel),
-                            attr=str(i),
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        val.flatten(), channel_columns(channel, state, MATRIX_ATTRS)
+                    ):
+                        signal_manager.post(float(v), col)
 
         signal_manager.register_sampler(sample)
 

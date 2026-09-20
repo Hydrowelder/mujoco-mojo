@@ -351,13 +351,12 @@ def merge_signal_metadata(
     user_metadata: MetadataOverrides | None,
     *,
     unit_system: UnitSystem | None = None,
-) -> ColumnMetadata | None:
-    """Merges a built-in default with the caller-supplied override/extension for `channel`, with user-supplied fields winning on conflict. If `unit_system` is provided and `builtin` has a `dimension`, it is resolved to a concrete unit. Returns `None` if both are empty. Called every timestep, so nothing here is validated: the result is validated once, when the signal is registered."""
+) -> ColumnMetadata:
+    """Merges a built-in default with the caller-supplied override/extension for `channel`, with user-supplied fields winning on conflict. If `unit_system` is provided and `builtin` has a `dimension`, it is resolved to a concrete unit. Returns an empty `ColumnMetadata` if both are empty. Nothing here is validated: the result is validated when it is used to build a `Column`."""
     if builtin is not None and unit_system is not None:
         builtin = resolve_dimension_metadata(builtin, unit_system)
     override = (user_metadata or {}).get(channel)
     if override is None:
-        return builtin
+        return builtin if builtin is not None else ColumnMetadata()
     override_meta = ColumnMetadata.unchecked(override)
-    merged = override_meta if builtin is None else builtin | override_meta
-    return merged if merged else None
+    return override_meta if builtin is None else builtin | override_meta

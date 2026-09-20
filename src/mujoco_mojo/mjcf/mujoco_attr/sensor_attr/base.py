@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
@@ -20,6 +21,7 @@ from mujoco_mojo.typing import (
     SignalCategory,
     VecN,
 )
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     MetadataOverrides,
@@ -235,58 +237,62 @@ class SensorBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
+        name = str(self.name)
+        columns: dict[int, tuple[Column, ...]] = {}
+
+        def sensor_columns(state: MjState, sensor_dim: int) -> tuple[Column, ...]:
+            # built on the first sample (the metadata depends on the unit system and,
+            # for some tags, the referenced object), then reused: this runs every timestep
+            cols = columns.get(sensor_dim)
+            if cols is None:
+                meta = merge_signal_metadata(
+                    self._resolve_builtin_metadata(state),
+                    self.tag,
+                    metadata,
+                    unit_system=state.us,
+                )
+                if sensor_dim == 1:
+                    # scalar values are considered an attr of the parent
+                    cols = (
+                        Column(
+                            category=SignalCategory.SENSORS,
+                            subgroups=(name,),
+                            attr=self.tag,
+                            metadata=meta,
+                        ),
+                    )
+                else:
+                    if sensor_dim == 4 and self.tag.endswith("quat"):
+                        attrs: Iterable[str] = "wxyz"
+                    elif sensor_dim == 3 and self.tag not in ("tactile", "user"):
+                        attrs = "xyzm"
+                    else:
+                        attrs = tuple(str(i) for i in range(sensor_dim))
+                    cols = fan_out(
+                        SignalCategory.SENSORS, (name, self.tag), attrs, meta
+                    )
+                columns[sensor_dim] = cols
+            return cols
+
         def sample(state: MjState):
             sid = self.get_id(state.model)
-            meta = merge_signal_metadata(
-                self._resolve_builtin_metadata(state),
-                self.tag,
-                metadata,
-                unit_system=state.us,
-            )
 
             # find where this sensor's data starts and how long it is
             # (e.g., sensor_dim=3 for an accelerometer, sensor_dim=4 for a framequat sensor)
             adr = state.model.sensor_adr[sid]
-            sensor_dim = state.model.sensor_dim[sid]
+            sensor_dim = int(state.model.sensor_dim[sid])
 
             # slice the flat sensordata array
             val = state.data.sensordata[adr : adr + sensor_dim]
+            cols = sensor_columns(state, sensor_dim)
 
             if sensor_dim == 1:
-                signal_manager.post(
-                    value=float(val[0]),
-                    category=SignalCategory.SENSORS,
-                    subgroups=(str(self.name),),
-                    attr=self.tag,  # scalar values are considered an attr of the parent
-                    metadata=meta,
-                )
-            elif sensor_dim == 4 and self.tag.endswith("quat"):
-                for v, attr in zip(val, "wxyz", strict=True):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=attr,
-                        metadata=meta,
-                    )
-            elif sensor_dim == 3 and self.tag not in ("tactile", "user"):
-                full_vec = np.append(val, np.linalg.norm(val))
-                for v, attr in zip(full_vec, "xyzm", strict=True):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=attr,
-                        metadata=meta,
-                    )
-            else:
-                for i, v in enumerate(val):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=str(i),
-                        metadata=meta,
-                    )
+                signal_manager.post(float(val[0]), cols[0])
+                return
+            if sensor_dim == 3 and self.tag not in ("tactile", "user"):
+                # cartesian vector: x, y, z + magnitude
+                val = np.append(val, np.linalg.norm(val))
+            for v, col in zip(val, cols, strict=True):
+                signal_manager.post(float(v), col)
 
         signal_manager.register_sampler(sample)

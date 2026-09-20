@@ -901,18 +901,16 @@ def _get_atomic_column(path: Path, col_name: str, mtime: float):
 async def get_trial_data(
     trial_id: str,
     cols: str = Query(None),
-    rotate_by: str = Query(None),
     filters: str = Query(None),
     display_unit_system: str | None = Query(None),
     max_points: int | None = Query(None, gt=0),
 ):
     """
-    Loops over the columns in the trial_id provided and returns their data. Optionally performs a rotation if requested and there are an associated x, y, and z column.
+    Loops over the columns in the trial_id provided and returns their data.
 
     Args:
         trial_id (str): Trial to search (e.g. `"trial_001"`).
         cols (str, optional): Comma separated list of column names to return data for (e.g. `"/Bodies/body1/xpos:x,/Bodies/body2/xpos:m"`). Defaults to Query(None).
-        rotate_by (str, optional): Quaternion family to rotate vectors by (e.g. `"/Bodies/body1/quat"`). Defaults to Query(None).
         filters (str, optional): String representation of filters to be applied sequentially. Defaults to Query(None).
         display_unit_system (str, optional): Named unit system to convert data into before returning (e.g. `"si"`, `"ips"`). Only columns whose metadata carries a resolvable unit or dimension are converted. Defaults to Query(None).
         max_points (int, optional): Maximum number of data points per trace. When the raw data exceeds this limit the response is downsampled using uniform time-domain buckets. Defaults to Query(None).
@@ -973,17 +971,6 @@ async def get_trial_data(
 
         # determine columns to request
         fetch_targets = [c for c in requested if c in available_cols]
-
-        if rotate_by:
-            q_family = [
-                f"{rotate_by}:x",
-                f"{rotate_by}:y",
-                f"{rotate_by}:z",
-                f"{rotate_by}:w",
-            ]
-            for q in q_family:
-                if q in available_cols and q not in fetch_targets:
-                    fetch_targets.append(q)
 
         # ── Collect lab SI columns before building the df ─────────────────────
         # Lab virtual columns are computed from the graph, not read from parquet.
@@ -1096,19 +1083,13 @@ async def get_trial_data(
             col: _get_atomic_column(db_path, col, mtime) for col in fetch_targets
         }
         df = MojoDataFrame.from_dict(raw_data)
-        raw_col_meta = _get_column_metadata(db_path, mtime)
-
-        if rotate_by:
-            # rotate from world to rotate_by frame; raises if a position column would be
-            # rotated without also being translated (see MojoNamespace.with_rotation)
-            df = df.mojo.with_rotation(
-                quat_base=rotate_by, invert=True, column_metadata=raw_col_meta
-            )
 
         # apply display unit system conversion before filters so filter params operate in display units
         if display_unit_system and display_unit_system in _UNIT_SYSTEMS:
             target_us = _UNIT_SYSTEMS[display_unit_system]
-            df = df.mojo.with_unit_system(target_us, column_metadata=raw_col_meta)
+            df = df.mojo.with_unit_system(
+                target_us, column_metadata=_get_column_metadata(db_path, mtime)
+            )
             # update manifest column_metadata with resolved units and group_unit for the UI
             display_col_meta = {
                 col: _augment_col_meta(_resolve_dim_meta(meta, target_us))

@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 import polars as pl
 import pyarrow.parquet as pq
 
-from mujoco_mojo.deprecate import deprecated
 from mujoco_mojo.typing import (
     ActuatorName,
     BodyName,
@@ -496,58 +495,6 @@ class MojoNamespace:
 
         return _MojoFrame.from_pl(self._df.with_columns(exprs))
 
-    @deprecated(
-        "with_rotation is deprecated and will be removed in a future release; use change_frame, which also translates positions and composes quaternions.",
-        stacklevel=2,
-    )
-    def with_rotation(
-        self,
-        quat_base: str,
-        invert: bool = True,
-        column_metadata: Mapping[str, ColumnMetadata] | None = None,
-    ) -> MojoDataFrame:
-        """
-        Rotates all 3D vectors into a new frame using the specified quaternion.
-
-        Deprecated: use `change_frame`, which applies the correct transform per column (translating positions, rotating vectors, and composing quaternions) instead of rotating every vector-shaped column indiscriminately. This method will be removed in a future release.
-
-        This is a vector-only rotation: every `:x/:y/:z` group in the frame is rotated in place by `quat_base`, with no translation. That's the correct re-expression for free vectors (velocities, angular rates, forces), but wrong for positions, which also need to be translated against a frame origin - see `change_frame` for that case.
-
-        Args:
-            quat_base (str): Prefix for the [w,x,y,z] quaternion group.
-            invert (bool, optional): If True, performs World to Local transformation (use False with the same `quat_base` to revert the rotation). Defaults to True.
-            column_metadata: Optional, e.g. from `read_column_metadata()`. When given, raises if any rotatable column in the frame is tagged `transform_type="point"` - rotating a position without also translating it produces "the world position on rotated axes", not a position in the new frame. Omit this to keep today's behavior (rotate every `:x/:y/:z` group, regardless of kind) for frames without embedded metadata.
-
-        Returns:
-            Self: DataFrame with transformed :x, :y, :z columns.
-
-        Raises:
-            ValueError: If `quat_base` is not a complete quaternion group in this frame, or if `column_metadata` is given and a rotatable column is tagged `transform_type="point"`.
-
-        """
-        if quat_base not in self.quaternion_bases:
-            msg = f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
-            logger.error(msg)
-            raise ValueError(msg)
-
-        vector_bases = self.rotatable_bases
-        if column_metadata is not None:
-            points, vector_bases = _classify_transform_bases(
-                vector_bases, column_metadata
-            )
-            if points:
-                msg = (
-                    f"with_rotation is vector-only, but {sorted(points)} are tagged "
-                    "transform_type='point'; use change_frame to translate and rotate positions."
-                )
-                logger.error(msg)
-                raise ValueError(msg)
-
-        rotated = RotationFilter(quat_col=quat_base, invert=invert).apply_to_frame(
-            self._df, vector_bases
-        )
-        return _MojoFrame.from_pl(rotated)
-
     def change_frame(
         self,
         quat_base: str,
@@ -560,7 +507,7 @@ class MojoNamespace:
         """
         Re-expresses every tagged point/vector/quaternion column in this frame relative to the frame defined by `origin_base` (position) and `quat_base` (orientation).
 
-        Unlike `with_rotation`, this applies the correct transform per column by its declared `transform_type`: points are translated then rotated, vectors are rotated only, and quaternions are composed (`q' = q_b^-1 (x) q`). Every rotatable/quaternion column in the frame must be tagged (see `mujoco_mojo.utils.signal_metadata.TransformType`) or this raises - there is no untagged fallback, since guessing the wrong kind is exactly the silent-corruption bug this method exists to prevent.
+        Applies the correct transform per column by its declared `transform_type`: points are translated then rotated, vectors are rotated only, and quaternions are composed (`q' = q_b^-1 (x) q`). Every rotatable/quaternion column in the frame must be tagged (see `mujoco_mojo.utils.signal_metadata.TransformType`) or this raises - there is no untagged fallback, since guessing the wrong kind is exactly the silent-corruption bug this method exists to prevent.
 
         Args:
             quat_base: Prefix for the [x,y,z,w] quaternion group giving the target frame's orientation in world coordinates (e.g. 'Bodies/chassis/xquat').

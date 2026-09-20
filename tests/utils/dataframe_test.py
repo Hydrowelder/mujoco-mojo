@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import polars as pl
@@ -165,162 +164,10 @@ def test_get_manifest(sample_data: MojoDataFrame):
 # --- Physics Transformation Tests ---
 
 
-_ignore_with_rotation_deprecation = pytest.mark.filterwarnings(
-    "ignore:.*with_rotation is deprecated:DeprecationWarning"
-)
-
-
 @pytest.mark.skipif(
     sys.version_info < (3, 13),
     reason="mujoco_mojo.deprecate.deprecated is a no-op before Python 3.13",
 )
-def test_with_rotation_is_deprecated(sample_data: MojoDataFrame):
-    """with_rotation warns and points callers at change_frame, while still working."""
-    with pytest.warns(DeprecationWarning, match="change_frame"):
-        rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat")
-    assert rotated.height == sample_data.height
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_identity(sample_data: MojoDataFrame):
-    """Rotating by identity [0,0,0,1] should result in zero change."""
-    # Our sample_data quat is already identity
-    rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
-
-    for col in ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]:
-        assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_single_row_buffer_is_writable():
-    """
-    Regression test: with_rotation must work on a single-row DataFrame.
-
-    Polars' to_numpy() defaults to writable=False and returns a zero-copy, read-only view
-    when the selected columns are stored contiguously as a single chunk, the common case for
-    a freshly-constructed single-row frame. with_rotation previously passed that view straight
-    to scipy, which raised `ValueError: buffer source array is read-only`. The current
-    implementation does pure numpy arithmetic (no third-party calls requiring a writable
-    buffer), so this is now structurally prevented, but the test is kept as a guard.
-    """
-    single_row = MojoDataFrame.from_dict(
-        {
-            "Bodies/racket/xpos:x": [1.0],
-            "Bodies/racket/xpos:y": [0.0],
-            "Bodies/racket/xpos:z": [0.0],
-            "Bodies/racket/xiquat:x": [0.0],
-            "Bodies/racket/xiquat:y": [0.0],
-            "Bodies/racket/xiquat:z": [0.0],
-            "Bodies/racket/xiquat:w": [1.0],
-        }
-    )
-
-    rotated = single_row.mojo.with_rotation("Bodies/racket/xiquat", invert=False)
-
-    assert rotated.height == 1
-    assert np.allclose(rotated["Bodies/racket/xpos:x"].to_numpy(), [1.0])
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_matches_scipy():
-    """Cross-check the hand-rolled quaternion rotation against scipy as a trusted oracle."""
-    from scipy.spatial.transform import Rotation
-
-    rng = np.random.default_rng(0)
-    n = 25
-    raw_quats = rng.normal(size=(n, 4))
-    quats = raw_quats / np.linalg.norm(raw_quats, axis=1, keepdims=True)
-    vecs = rng.normal(size=(n, 3))
-
-    df = MojoDataFrame.from_dict(
-        {
-            "Bodies/racket/xpos:x": vecs[:, 0],
-            "Bodies/racket/xpos:y": vecs[:, 1],
-            "Bodies/racket/xpos:z": vecs[:, 2],
-            "Bodies/racket/xiquat:x": quats[:, 0],
-            "Bodies/racket/xiquat:y": quats[:, 1],
-            "Bodies/racket/xiquat:z": quats[:, 2],
-            "Bodies/racket/xiquat:w": quats[:, 3],
-        }
-    )
-
-    for invert in (False, True):
-        transformer = Rotation.from_quat(quats)
-        if invert:
-            transformer = transformer.inv()
-        expected = transformer.apply(vecs)
-
-        rotated = df.mojo.with_rotation("Bodies/racket/xiquat", invert=invert)
-        actual = rotated.select(
-            ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
-        ).to_numpy()
-
-        assert np.allclose(actual, expected, atol=1e-10)
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_does_not_mutate_source(sample_data: MojoDataFrame):
-    """Regression test: with_rotation must not write into the source DataFrame's backing store."""
-    pos_cols = ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
-    before = {col: sample_data[col].to_numpy().copy() for col in pos_cols}
-
-    sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=False)
-
-    for col in pos_cols:
-        assert np.array_equal(sample_data[col].to_numpy(), before[col])
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_unknown_quat_base_raises(sample_data: MojoDataFrame):
-    """An unknown quat_base must fail loudly instead of silently returning unrotated data."""
-    with pytest.raises(ValueError, match="not found"):
-        sample_data.mojo.with_rotation("Bodies/racket/typo", invert=True)
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_zero_quaternion_raises():
-    """A zero (or non-finite) quaternion row must fail loudly instead of propagating NaN."""
-    df = MojoDataFrame.from_dict(
-        {
-            "Bodies/racket/xpos:x": [1.0],
-            "Bodies/racket/xpos:y": [0.0],
-            "Bodies/racket/xpos:z": [0.0],
-            "Bodies/racket/xiquat:x": [0.0],
-            "Bodies/racket/xiquat:y": [0.0],
-            "Bodies/racket/xiquat:z": [0.0],
-            "Bodies/racket/xiquat:w": [0.0],
-        }
-    )
-
-    with pytest.raises(ValueError, match="zero, NaN, or infinite"):
-        df.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_column_metadata_guards_against_point_columns(
-    sample_data: MojoDataFrame,
-):
-    """with_rotation raises when column_metadata tags a rotatable column as a position - rotating a point without translating it silently produces rotated-axes world coordinates, not a position in the new frame."""
-    meta = {
-        "Bodies/racket/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
-        "Sensors/gyro/data:x": ColumnMetadata(transform_type=TransformType.VECTOR),
-    }
-    with pytest.raises(ValueError, match="vector-only"):
-        sample_data.mojo.with_rotation(
-            "Bodies/racket/xiquat", invert=True, column_metadata=meta
-        )
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_without_column_metadata_keeps_existing_behavior(
-    sample_data: MojoDataFrame,
-):
-    """Omitting column_metadata keeps with_rotation's original behavior (rotate every :x/:y/:z group regardless of kind) - a deliberate backward-compat choice for frames without embedded metadata."""
-    rotated = sample_data.mojo.with_rotation("Bodies/racket/xiquat", invert=True)
-    for col in ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]:
-        assert np.allclose(sample_data[col].to_numpy(), rotated[col].to_numpy())
-
-
 def test_change_frame_raises_when_untagged():
     """change_frame refuses to guess: any rotatable/quaternion column without a transform_type tag raises, rather than silently applying the wrong transform."""
     df = MojoDataFrame.from_dict(
@@ -540,36 +387,6 @@ def test_change_frame_raises_for_unknown_quat_or_origin_base():
         df.mojo.change_frame("Bodies/nope/quat", "Bodies/B/xpos", column_metadata=meta)
     with pytest.raises(ValueError, match="origin base"):
         df.mojo.change_frame("Bodies/B/quat", "Bodies/nope/xpos", column_metadata=meta)
-
-
-@_ignore_with_rotation_deprecation
-def test_with_rotation_90deg_z(sample_data: MojoDataFrame):
-    """Tests a 90-degree Z-axis rotation."""
-    # quat for 90deg about Z: [0, 0, sin(45), cos(45)]
-    q90 = [0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)]
-
-    # Create data with 90deg rotation
-    rows = sample_data.height
-    df_q = cast(
-        MojoDataFrame,
-        sample_data.with_columns(
-            [
-                pl.Series("Bodies/racket/xiquat:x", [q90[0]] * rows),
-                pl.Series("Bodies/racket/xiquat:y", [q90[1]] * rows),
-                pl.Series("Bodies/racket/xiquat:z", [q90[2]] * rows),
-                pl.Series("Bodies/racket/xiquat:w", [q90[3]] * rows),
-            ]
-        ),
-    )
-
-    # Rotate World [1, 0, 0] by 90deg Z (invert=False) -> [0, 1, 0]
-    rotated = df_q.mojo.with_rotation("Bodies/racket/xiquat", invert=False)
-
-    v_x = rotated["Bodies/racket/xpos:x"][0]
-    v_y = rotated["Bodies/racket/xpos:y"][0]
-
-    assert np.allclose(v_x, 0.0, atol=1e-7)
-    assert np.allclose(v_y, 1.0, atol=1e-7)
 
 
 # --- Filter Logic Tests ---

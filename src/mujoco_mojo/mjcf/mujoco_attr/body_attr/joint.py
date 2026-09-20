@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
@@ -23,6 +24,7 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     MetadataLike,
@@ -337,6 +339,26 @@ class Joint(XMLModel):
         else:
             _meta = {}
 
+        name = f"{self.name}"
+        vector_columns: dict[str, tuple[Column, ...]] = {}
+        scalar_columns: dict[str, Column] = {}
+
+        def joint_columns(
+            channel: str,
+            builtin: ColumnMetadata | None,
+            attrs: Iterable[str],
+            us: UnitSystem | None,
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system and joint type), then reused: this runs every timestep
+            cols = vector_columns.get(channel)
+            if cols is None:
+                meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
+                cols = vector_columns[channel] = fan_out(
+                    SignalCategory.JOINTS, (name, channel), attrs, meta
+                )
+            return cols
+
         def post_vec3(
             vec3: np.ndarray,
             channel: str,
@@ -346,15 +368,10 @@ class Joint(XMLModel):
         ):
             """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
             full_vec = np.append(vec3, np.linalg.norm(vec3))
-            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
-            for v, attr in zip(full_vec, "xyzm", strict=True):
-                signal_manager.post(
-                    value=float(v),
-                    category=SignalCategory.JOINTS,
-                    subgroups=(f"{self.name}", channel),
-                    attr=attr,
-                    metadata=meta,
-                )
+            for v, col in zip(
+                full_vec, joint_columns(channel, builtin, "xyzm", us), strict=True
+            ):
+                signal_manager.post(float(v), col)
 
         def post_quat(
             quat: np.ndarray,
@@ -364,19 +381,13 @@ class Joint(XMLModel):
             us: UnitSystem | None = None,
         ):
             """Posts an orientation quaternion under w/x/y/z attrs."""
-            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
-            for v, attr in zip(quat, "wxyz", strict=True):
-                signal_manager.post(
-                    value=float(v),
-                    category=SignalCategory.JOINTS,
-                    subgroups=(f"{self.name}", channel),
-                    attr=attr,
-                    metadata=meta,
-                )
+            for v, col in zip(
+                quat, joint_columns(channel, builtin, "wxyz", us), strict=True
+            ):
+                signal_manager.post(float(v), col)
 
         def sample(state: MjState):
             jnt_type = self._jnt_type(state)
-            scalar_meta = joint_type_metadata(jnt_type)
             u = state.us
 
             for channel in channels:
@@ -400,15 +411,21 @@ class Joint(XMLModel):
                         if channel == "qpos"
                         else ("vel" if channel == "qvel" else "frc")
                     )
-                    signal_manager.post(
-                        value=float(val[0]),
-                        category=SignalCategory.JOINTS,
-                        subgroups=(f"{self.name}",),
-                        attr=channel,  # scalar values are considered an attr of the parent
-                        metadata=merge_signal_metadata(
-                            scalar_meta[scalar_key], channel, _meta, unit_system=u
-                        ),
-                    )
+                    col = scalar_columns.get(channel)
+                    if col is None:
+                        col = scalar_columns[channel] = Column(
+                            category=SignalCategory.JOINTS,
+                            subgroups=(name,),
+                            # scalar values are considered an attr of the parent
+                            attr=channel,
+                            metadata=merge_signal_metadata(
+                                joint_type_metadata(jnt_type)[scalar_key],
+                                channel,
+                                _meta,
+                                unit_system=u,
+                            ),
+                        )
+                    signal_manager.post(float(val[0]), col)
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_FREE:
                     post_vec3(
                         val[:3],

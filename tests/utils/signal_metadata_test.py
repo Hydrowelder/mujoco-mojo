@@ -59,20 +59,18 @@ def test_force_or_torque_dispatches_on_joint_type() -> None:
 
 
 def test_merge_signal_metadata_with_no_builtin_or_user() -> None:
-    assert merge_signal_metadata(None, "xpos", None) is None
-    assert merge_signal_metadata(None, "xpos", {}) is None
-    assert merge_signal_metadata(None, "xpos", {"other": {"a": "b"}}) is None
+    assert not merge_signal_metadata(None, "xpos", None)
+    assert not merge_signal_metadata(None, "xpos", {})
+    assert not merge_signal_metadata(None, "xpos", {"other": {"a": "b"}})
 
 
 def test_merge_signal_metadata_user_only() -> None:
     merged = merge_signal_metadata(None, "xpos", {"xpos": {"display_name": "X"}})
-    assert merged is not None
     assert merged.model_dump() == {"display_name": "X"}
 
 
 def test_merge_signal_metadata_builtin_only() -> None:
     merged = merge_signal_metadata(dim(Dimension.LENGTH), "xpos", None)
-    assert merged is not None
     assert merged.model_dump() == {"dimension": "[length]"}
 
 
@@ -82,7 +80,6 @@ def test_merge_signal_metadata_user_overrides_builtin_keys() -> None:
         "xpos",
         {"xpos": {"dimension": "[time]", "display_name": "X"}},
     )
-    assert merged is not None
     assert merged.model_dump() == {"dimension": "[time]", "display_name": "X"}
 
 

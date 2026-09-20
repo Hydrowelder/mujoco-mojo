@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
@@ -34,6 +35,7 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.column import MATRIX_ATTRS, Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
     MetadataLike,
@@ -510,15 +512,32 @@ class Body(XMLModel):
         else:
             _meta = {}
 
-        def sample(state: MjState):
-            for channel in channels:
+        name = f"{self.name}"
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(
+            channel: str,
+            state: MjState,
+            subgroups: tuple[str, ...],
+            attrs: Iterable[str],
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
                 meta = merge_signal_metadata(
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
                     unit_system=state.us,
                 )
+                cols = columns[channel] = fan_out(
+                    SignalCategory.BODIES, subgroups, attrs, meta
+                )
+            return cols
 
+        def sample(state: MjState):
+            for channel in channels:
                 match channel:
                     case "xpos":
                         val = self.rt_pos(state)
@@ -529,14 +548,13 @@ class Body(XMLModel):
                             case "ximat":
                                 val = self.rt_ximat(state, flatten=True)
 
-                        for i in range(len(val)):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", channel),
-                                attr=str(i),
-                                metadata=meta,
-                            )
+                        for v, col in zip(
+                            val,
+                            channel_columns(
+                                channel, state, (name, channel), MATRIX_ATTRS
+                            ),
+                        ):
+                            signal_manager.post(float(v), col)
                         continue
                     case "quat" | "xiquat":
                         match channel:
@@ -545,14 +563,11 @@ class Body(XMLModel):
                             case "xiquat":
                                 val = self.rt_xiquat(state)
 
-                        for i, attr in enumerate("wxyz"):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", channel),
-                                attr=attr,
-                                metadata=meta,
-                            )
+                        for v, col in zip(
+                            val,
+                            channel_columns(channel, state, (name, channel), "wxyz"),
+                        ):
+                            signal_manager.post(float(v), col)
                         continue
                     case "xvelp":
                         val = self.rt_lin_vel(state)
@@ -586,23 +601,15 @@ class Body(XMLModel):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, attr in enumerate("xyzm"):
-                        signal_manager.post(
-                            value=full_vec[i],
-                            category=SignalCategory.BODIES,
-                            subgroups=(f"{self.name}", channel),
-                            attr=attr,
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        full_vec,
+                        channel_columns(channel, state, (name, channel), "xyzm"),
+                    ):
+                        signal_manager.post(v, col)
                 else:
                     # scalar output
-                    signal_manager.post(
-                        value=float(val),
-                        category=SignalCategory.BODIES,
-                        subgroups=(f"{self.name}",),
-                        attr=channel,
-                        metadata=meta,
-                    )
+                    (col,) = channel_columns(channel, state, (name,), (channel,))
+                    signal_manager.post(float(val), col)
 
         signal_manager.register_sampler(sample)
 

@@ -3,13 +3,15 @@
 ## Version 2.6.11 (2026-09-12)
 
 - Fixed the return type annotation of `rotatable_columns`
-- `with_rotation` and `RotationFilter` now raise on an unknown quaternion base or a zero/NaN quaternion, instead of returning unrotated data or NaN
+- `RotationFilter` now raises on a missing quaternion column or a zero/NaN quaternion, instead of returning unrotated data or NaN
 - Added `transform_type` (`point`/`vector`/`quaternion`) metadata to built-in signals
 - Added `change_frame()`, which translates positions, rotates vectors, and composes quaternions according to their `transform_type`
-- Deprecated `with_rotation` in favor of `change_frame`. It now also raises if given metadata that marks a column as a position
+- Removed `with_rotation` in favor of `change_frame`, which rotated every vector-shaped column, including positions, without translating them
 - Dojo reference frames are now an orientation and an origin, chosen with two dropdowns, so positions are translated as well as rotated. Saved profiles using the old single-signal frame are no longer accepted
 - Added `ColumnMetadata`, a typed model for signal metadata. The metadata helpers now return it instead of dicts (combine them with `|`), while `request(metadata=...)` still accepts dicts
 - Added metadata fields (unit, dimension, quantity, transform type) to the Lab's Signal Out node
+- Added `Column`, a frozen model of a telemetry column's name parts and metadata. A name containing `/` or `:` now raises instead of silently landing in a different position
+- **Breaking:** `SignalManager.post(value, column)` and `track(getter, column)` now take a `Column` in place of `category`, `subgroups`, `attr`, and `metadata`. Build the `Column` once, since `post` runs every timestep
 - Added a Column Manifest export to the Mosaic export menu
 
 ## Version 2.6.10 (20206-09-11)

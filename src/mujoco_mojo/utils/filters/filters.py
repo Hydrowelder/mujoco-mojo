@@ -645,7 +645,7 @@ class RotationFilter(BaseFilter):
         vector_bases: set[str],
         point_bases: set[str] | None = None,
     ) -> pl.DataFrame:
-        """Rotate all xyz vector families in `vector_bases` in one pass, and translate-then-rotate every family in `point_bases`. Used by `MojoDataFrame.with_rotation` (vector_bases only) and `MojoDataFrame.change_frame` (both). Requires `quat_col`; `point_bases` additionally requires `origin_col`, since a position needs translating against a frame origin as well as rotating - unlike `vector_bases`, which is rotated only. A `point_bases` base's `:m` magnitude sibling, if present, is recomputed from the transformed x/y/z rather than left stale, since translation changes distance-from-origin."""
+        """Rotate all xyz vector families in `vector_bases` in one pass, and translate-then-rotate every family in `point_bases`. Used by `MojoDataFrame.change_frame`. Requires `quat_col`; `point_bases` additionally requires `origin_col`, since a position needs translating against a frame origin as well as rotating - unlike `vector_bases`, which is rotated only. A `point_bases` base's `:m` magnitude sibling, if present, is recomputed from the transformed x/y/z rather than left stale, since translation changes distance-from-origin."""
         point_bases = point_bases or set()
         if not self.quat_col:
             return df

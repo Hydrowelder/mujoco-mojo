@@ -1,5 +1,6 @@
 from . import filters, statusing
 from .color import Color
+from .column import Column
 from .dataframe import MojoDataFrame
 from .log import get_logger, setup_logger
 from .proximity import Proximity
@@ -12,10 +13,13 @@ from .runner import (
     OptimizerConfig,
     Trial,
 )
+from .signal_metadata import ColumnMetadata
 from .utils import is_empty_list, to_pretty_xml
 
 __all__ = [
     "Color",
+    "Column",
+    "ColumnMetadata",
     "MojoDataFrame",
     "MojoGenerator",
     "MojoObjective",
