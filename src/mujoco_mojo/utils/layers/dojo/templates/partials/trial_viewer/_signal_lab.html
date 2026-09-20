@@ -13,6 +13,16 @@
     const themeColor = (name) =>
         getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
 
+    // The metadata fields a Signal Out node exposes, generated from the backend's
+    // ColumnMetadata model each time this page renders (routers/mosaic.py,
+    // _column_metadata_fields), so the node cannot drift from the model. Each entry is
+    // {name, description, options}; a field with `options` is a combo, anything else is
+    // free text. Property names are the model's field names, which is also what
+    // lab_executor.py reads back.
+    const SO_META_FIELDS = {{ column_metadata_fields | tojson }};
+    // vertical space the metadata widgets add to a Signal Out node
+    const SO_META_HEIGHT = SO_META_FIELDS.length * (LiteGraph.NODE_WIDGET_HEIGHT + 4);
+
     // ── Node registration ─────────────────────────────────────────────────────
     // Called once with the current column list; guarded against double-registration.
     function mojoLabRegisterNodes(columns) {
@@ -157,6 +167,7 @@
         function SignalOutNode() {
             this.addInput("signal", SER);
             this.properties = { label: "" };
+            SO_META_FIELDS.forEach((f) => { this.properties[f.name] = ""; });
             this.addWidget(
                 "text", "label", "",
                 (v) => {
@@ -173,7 +184,18 @@
                     }
                 }
             );
-            this.size = [200, 55];
+            SO_META_FIELDS.forEach((f) => {
+                const onChange = (v) => {
+                    this.properties[f.name] = v ?? "";
+                    if (_lab.graph) _lab.graph.setDirtyCanvas(true, false);
+                };
+                if (f.options) {
+                    this.addWidget("combo", f.name, "", onChange, { values: ["", ...f.options] });
+                } else {
+                    this.addWidget("text", f.name, "", onChange);
+                }
+            });
+            this.size = [200, 55 + SO_META_HEIGHT];
         }
         SignalOutNode.title = "Signal Out";
         SignalOutNode.color = C_SINK;
@@ -186,6 +208,10 @@
         SignalOutNode.prototype.onConfigure = function () {
             const lbl = this.properties.label ?? "";
             if (this.widgets && this.widgets[0]) this.widgets[0].value = lbl;
+            // the metadata widgets follow the label widget, in SO_META_FIELDS order
+            SO_META_FIELDS.forEach((f, i) => {
+                if (this.widgets && this.widgets[i + 1]) this.widgets[i + 1].value = this.properties[f.name] ?? "";
+            });
             this.size[0] = Math.max(200, lbl.length * 7 + 80);
             _soColor(this);
         };
@@ -1155,7 +1181,7 @@
         ));
         const isCyclic = !!(lbl && cyclicOutputs.has(lbl));
         node.color = (collision || duplicate || isCyclic) ? themeColor("warning-900") : themeColor("node-sink");
-        node.size[1] = collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55);
+        node.size[1] = SO_META_HEIGHT + (collision ? 85 : ((duplicate || isCyclic || (lbl && !connected)) ? 72 : 55));
     }
 
     // Validates a Rotation node's quaternion base, origin base, and incoming vector

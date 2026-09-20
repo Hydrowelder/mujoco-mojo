@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
@@ -32,32 +33,37 @@ from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.filters.filters import RotationFilter
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 logger = get_logger(__name__)
 
 
-def read_column_metadata(path: Path | str) -> dict[str, dict[str, Any]]:
-    """Reads the per-column metadata dict from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata."""
+def read_column_metadata(path: Path | str) -> dict[str, ColumnMetadata]:
+    """Reads the per-column metadata from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata. An entry that fails validation (for example a unit written by another version) is still loaded, unvalidated, with a warning, so older files keep opening."""
     file_meta = pq.read_metadata(str(path)).metadata
     if not file_meta:
         return {}
     raw = file_meta.get(b"column_metadata")
     if raw is None:
         return {}
-    return json.loads(raw.decode())  # type: ignore[no-any-return]
+    return {
+        col: ColumnMetadata.lenient(entry, where=f" for column '{col}'")
+        for col, entry in json.loads(raw.decode()).items()
+    }
 
 
 def _classify_transform_bases(
-    bases: set[str], column_metadata: dict[str, dict[str, Any]]
+    bases: set[str], column_metadata: Mapping[str, ColumnMetadata]
 ) -> tuple[set[str], set[str]]:
     """Splits `bases` (from `rotatable_bases`) into `(points, vectors)` by their `:x` sibling's `transform_type` tag. Raises `ValueError` naming the base if it is untagged or tagged something other than `point`/`vector` - there is no untagged fallback, since guessing wrong here is exactly the bug this classification exists to prevent."""
     points: set[str] = set()
     vectors: set[str] = set()
     for base in sorted(bases):
-        kind = (column_metadata.get(f"{base}:x") or {}).get("transform_type")
-        if kind == "point":
+        meta = column_metadata.get(f"{base}:x")
+        kind = meta.transform_type if meta else None
+        if kind == TransformType.POINT:
             points.add(base)
-        elif kind == "vector":
+        elif kind == TransformType.VECTOR:
             vectors.add(base)
         else:
             raise ValueError(
@@ -68,12 +74,13 @@ def _classify_transform_bases(
 
 
 def _classify_quaternion_bases(
-    bases: set[str], column_metadata: dict[str, dict[str, Any]]
+    bases: set[str], column_metadata: Mapping[str, ColumnMetadata]
 ) -> set[str]:
     """Validates every base in `bases` (from `quaternion_bases`) is tagged `transform_type="quaternion"` via its `:w` sibling. Raises `ValueError` naming the base otherwise."""
     for base in sorted(bases):
-        kind = (column_metadata.get(f"{base}:w") or {}).get("transform_type")
-        if kind != "quaternion":
+        meta = column_metadata.get(f"{base}:w")
+        kind = meta.transform_type if meta else None
+        if kind != TransformType.QUATERNION:
             raise ValueError(
                 f"Column '{base}' has no 'quaternion' transform_type metadata "
                 "(see mujoco_mojo.utils.signal_metadata.TransformType); tag it before composing."
@@ -165,8 +172,8 @@ class ColumnManifest(TypedDict):
     available_quats: list[str]
     """All quaternion names which have enough information to rotate self.rotateable_vectors."""
 
-    column_metadata: dict[str, dict[str, str]]
-    """All per-column signal metadata keyed by column name. Contains all metadata keys (e.g. `unit`, `dimension`, custom keys) for every column that has any metadata. Populated only when `column_metadata` is passed to `get_manifest()`."""
+    column_metadata: dict[str, ColumnMetadata]
+    """All per-column signal metadata keyed by column name, for every column that has any metadata. Populated only when `column_metadata` is passed to `get_manifest()`."""
 
 
 class MojoNamespace:
@@ -360,7 +367,7 @@ class MojoNamespace:
     def get_manifest(
         self,
         extra_columns: list[str] | None = None,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
     ) -> ColumnManifest:
         """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `read_column_metadata()`) to populate `column_units`."""
         bm = self._get_base_map(extra_columns)
@@ -383,7 +390,7 @@ class MojoNamespace:
         target: UnitSystem,
         *,
         path: Path | str | None = None,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
         assume_source: UnitSystem | None = None,
     ) -> MojoDataFrame:
         """
@@ -404,7 +411,7 @@ class MojoNamespace:
         from mujoco_mojo.stochas import ureg
         from mujoco_mojo.utils.filters.filters import UnitFilter
 
-        meta: dict[str, dict[str, Any]]
+        meta: Mapping[str, ColumnMetadata]
         if column_metadata is not None:
             meta = column_metadata
         elif path is not None:
@@ -444,17 +451,21 @@ class MojoNamespace:
 
         exprs = []
         for col in self._df.columns:
-            col_meta = meta.get(col, {})
+            col_meta = meta.get(col)
             src_str: str | None = None
 
-            if "unit" in col_meta:
+            if col_meta is not None and col_meta.unit is not None:
                 try:
-                    dim_dict = dict(ureg.get_dimensionality(col_meta["unit"]))
+                    dim_dict = dict(ureg.get_dimensionality(col_meta.unit))
                 except Exception:
                     continue
-                src_str = col_meta["unit"]
-            elif source_map is not None and "dimension" in col_meta:
-                dim_str = col_meta["dimension"]
+                src_str = col_meta.unit
+            elif (
+                source_map is not None
+                and col_meta is not None
+                and col_meta.dimension is not None
+            ):
+                dim_str = col_meta.dimension
                 if dim_str == "[]":
                     continue
                 try:
@@ -493,7 +504,7 @@ class MojoNamespace:
         self,
         quat_base: str,
         invert: bool = True,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
     ) -> MojoDataFrame:
         """
         Rotates all 3D vectors into a new frame using the specified quaternion.
@@ -543,7 +554,7 @@ class MojoNamespace:
         origin_base: str,
         *,
         path: Path | str | None = None,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
         invert: bool = True,
     ) -> MojoDataFrame:
         """
@@ -574,7 +585,7 @@ class MojoNamespace:
             logger.error(msg)
             raise ValueError(msg)
 
-        meta: dict[str, dict[str, Any]]
+        meta: Mapping[str, ColumnMetadata]
         if column_metadata is not None:
             meta = column_metadata
         elif path is not None:

@@ -2,13 +2,15 @@
 
 ## Version 2.6.11 (2026-09-12)
 
-- Fixed `MojoNamespace.rotatable_columns`'s return type annotation to match what it actually returns (`list[str]`, not `list[tuple[str, str, str]]`)
-- `with_rotation`/`RotationFilter` now raise instead of silently no-op'ing or emitting NaN: an unknown or incomplete quaternion base, or a zero/NaN/infinite quaternion row, now raises a `ValueError` instead of returning the frame unchanged or propagating NaN into every rotated column
-- Added `transform_type` (`point`/`vector`/`quaternion`) signal metadata, tagging how a built-in telemetry channel's grouped `:x/:y/:z`/`:w/:x/:y/:z` components must be re-expressed under a change of reference frame
-- Added `MojoDataFrame.mojo.change_frame()`, a frame-aware alternative to `with_rotation` that translates-then-rotates positions, rotates free vectors, and composes quaternions correctly per their declared `transform_type`, instead of rotating every vector-shaped column indiscriminately
-- `with_rotation` now takes an optional `column_metadata` argument and raises if a rotatable column is tagged as a position, instead of silently producing "the world position on rotated axes"; the dojo's `rotate_by` query parameter now passes this metadata
-- The dojo's reference frame is now a pair of an orientation and an origin, selected with two dropdowns. Either can be left unset (an orientation alone only rotates, an origin alone only translates). Position signals are translated to the origin and rotated, while other vectors, untagged signals, and Signal Lab outputs are only rotated (previously positions were rotated without being translated). Saved profiles that use the older single-signal reference frame are no longer accepted, and older shared links and stored plot configs reset to `world`
-- Deprecated `with_rotation` in favor of `change_frame`; it is now marked with `mujoco_mojo.deprecate.deprecated` (a `DeprecationWarning` at call time on Python 3.13+) and will be removed in a future release
+- Fixed the return type annotation of `rotatable_columns`
+- `with_rotation` and `RotationFilter` now raise on an unknown quaternion base or a zero/NaN quaternion, instead of returning unrotated data or NaN
+- Added `transform_type` (`point`/`vector`/`quaternion`) metadata to built-in signals
+- Added `change_frame()`, which translates positions, rotates vectors, and composes quaternions according to their `transform_type`
+- Deprecated `with_rotation` in favor of `change_frame`. It now also raises if given metadata that marks a column as a position
+- Dojo reference frames are now an orientation and an origin, chosen with two dropdowns, so positions are translated as well as rotated. Saved profiles using the old single-signal frame are no longer accepted
+- Added `ColumnMetadata`, a typed model for signal metadata. The metadata helpers now return it instead of dicts (combine them with `|`), while `request(metadata=...)` still accepts dicts
+- Added metadata fields (unit, dimension, quantity, transform type) to the Lab's Signal Out node
+- Added a Column Manifest export to the Mosaic export menu
 
 ## Version 2.6.10 (20206-09-11)
 

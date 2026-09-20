@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -27,7 +27,12 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.signal_metadata import merge_signal_metadata
+from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
+    merge_signal_metadata,
+)
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -255,14 +260,14 @@ class ActuatorBase(XMLModel, ABC):
     _metadata_resolved: bool = PrivateAttr(default=False)
     """Whether `_transmission_metadata_cache` has been computed yet (None is itself a valid resolution for SITE/BODY/SLIDERCRANK transmission, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
 
-    _transmission_metadata_cache: dict[str, dict[str, str]] | None = PrivateAttr(
+    _transmission_metadata_cache: dict[str, ColumnMetadata] | None = PrivateAttr(
         default=None
     )
     """Cached `{"length": ..., "velocity": ..., "force": ...}` metadata for this actuator's transmission, resolved once on first sample."""
 
     def _resolve_transmission_metadata(
         self, state: MjState
-    ) -> dict[str, dict[str, str]] | None:
+    ) -> dict[str, ColumnMetadata] | None:
         """Resolves and caches this actuator's transmission-based metadata for `length`/`velocity`/`force`."""
         if not self._metadata_resolved:
             actuator_id = self.get_id(state.model)
@@ -278,7 +283,7 @@ class ActuatorBase(XMLModel, ABC):
         channels: list[Literal["ctrl", "length", "velocity", "force", "act", "act_dot"]]
         | dict[
             Literal["ctrl", "length", "velocity", "force", "act", "act_dot"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = [
             "ctrl",
             "length",
@@ -328,7 +333,7 @@ class ActuatorBase(XMLModel, ABC):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}

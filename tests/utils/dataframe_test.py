@@ -7,9 +7,10 @@ import polars as pl
 import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
-from mujoco_mojo.utils.dataframe import MojoDataFrame
+from mujoco_mojo.utils.dataframe import MojoDataFrame, read_column_metadata
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 
 @pytest.fixture
@@ -56,6 +57,44 @@ def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame):
     col_df = MojoDataFrame.read_parquet(path, columns=cols)
     assert col_df.columns == cols
     assert col_df.height == 3
+
+
+def test_read_column_metadata_returns_models(tmp_path: Path):
+    import json
+
+    path = tmp_path / "meta.parquet"
+    pl.DataFrame({"a": [1.0]}).write_parquet(
+        path,
+        metadata={
+            "column_metadata": json.dumps(
+                {"a": {"unit": "meter", "transform_type": "point", "note": "x"}}
+            )
+        },
+    )
+
+    meta = read_column_metadata(path)
+    assert meta["a"] == ColumnMetadata.model_validate(
+        {"unit": "meter", "transform_type": "point", "note": "x"}
+    )
+
+
+def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path):
+    """A file written by another version with a unit Pint rejects must still open."""
+    import json
+
+    path = tmp_path / "meta.parquet"
+    pl.DataFrame({"a": [1.0], "b": [2.0]}).write_parquet(
+        path,
+        metadata={
+            "column_metadata": json.dumps(
+                {"a": {"unit": "not_a_unit"}, "b": {"unit": "meter"}}
+            )
+        },
+    )
+
+    meta = read_column_metadata(path)
+    assert meta["a"].unit == "not_a_unit"
+    assert meta["b"].unit == "meter"
 
 
 # --- Selection Logic Tests ---
@@ -263,8 +302,8 @@ def test_with_rotation_column_metadata_guards_against_point_columns(
 ):
     """with_rotation raises when column_metadata tags a rotatable column as a position - rotating a point without translating it silently produces rotated-axes world coordinates, not a position in the new frame."""
     meta = {
-        "Bodies/racket/xpos:x": {"transform_type": "point"},
-        "Sensors/gyro/data:x": {"transform_type": "vector"},
+        "Bodies/racket/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Sensors/gyro/data:x": ColumnMetadata(transform_type=TransformType.VECTOR),
     }
     with pytest.raises(ValueError, match="vector-only"):
         sample_data.mojo.with_rotation(
@@ -299,8 +338,8 @@ def test_change_frame_raises_when_untagged():
         }
     )
     meta = {
-        "Bodies/frame/xpos:x": {"transform_type": "point"},
-        "Bodies/frame/quat:w": {"transform_type": "quaternion"},
+        "Bodies/frame/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/frame/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
         # "Bodies/target/xpos" is deliberately left untagged
     }
     with pytest.raises(ValueError, match="transform_type"):
@@ -341,11 +380,11 @@ def test_change_frame_translates_rotates_and_composes():
         }
     )
     meta = {
-        "Bodies/A/xpos:x": {"transform_type": "point"},
-        "Bodies/A/quat:w": {"transform_type": "quaternion"},
-        "Bodies/A/xvelp:x": {"transform_type": "vector"},
-        "Bodies/B/xpos:x": {"transform_type": "point"},
-        "Bodies/B/quat:w": {"transform_type": "quaternion"},
+        "Bodies/A/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/A/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
+        "Bodies/A/xvelp:x": ColumnMetadata(transform_type=TransformType.VECTOR),
+        "Bodies/B/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/B/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
     }
 
     result = df.mojo.change_frame(
@@ -386,7 +425,7 @@ def test_change_frame_translates_rotates_and_composes():
     assert np.allclose(np.abs(b_q), [0.0, 0.0, 0.0, 1.0], atol=1e-10)
 
 
-def _two_pose_frame() -> tuple[MojoDataFrame, dict[str, dict[str, str]]]:
+def _two_pose_frame() -> tuple[MojoDataFrame, dict[str, ColumnMetadata]]:
     """Two named poses (A, B) plus a velocity on A, and matching transform_type metadata."""
     from scipy.spatial.transform import Rotation
 
@@ -417,11 +456,11 @@ def _two_pose_frame() -> tuple[MojoDataFrame, dict[str, dict[str, str]]]:
         }
     )
     meta = {
-        "Bodies/A/xpos:x": {"transform_type": "point"},
-        "Bodies/A/quat:w": {"transform_type": "quaternion"},
-        "Bodies/A/xvelp:x": {"transform_type": "vector"},
-        "Bodies/B/xpos:x": {"transform_type": "point"},
-        "Bodies/B/quat:w": {"transform_type": "quaternion"},
+        "Bodies/A/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/A/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
+        "Bodies/A/xvelp:x": ColumnMetadata(transform_type=TransformType.VECTOR),
+        "Bodies/B/xpos:x": ColumnMetadata(transform_type=TransformType.POINT),
+        "Bodies/B/quat:w": ColumnMetadata(transform_type=TransformType.QUATERNION),
     }
     return df, meta
 
@@ -470,7 +509,14 @@ def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path):
 
     df, meta = _two_pose_frame()
     path = tmp_path / "tel.parquet"
-    df.write_parquet(path, metadata={"column_metadata": json.dumps(meta)})
+    df.write_parquet(
+        path,
+        metadata={
+            "column_metadata": json.dumps(
+                {k: v.model_dump(mode="json") for k, v in meta.items()}
+            )
+        },
+    )
 
     from_path = df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", path=path)
     from_meta = df.mojo.change_frame(
@@ -483,7 +529,7 @@ def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path):
 def test_change_frame_raises_when_quaternion_mistagged():
     """A quaternion base tagged as something other than 'quaternion' raises instead of being composed."""
     df, meta = _two_pose_frame()
-    meta["Bodies/A/quat:w"] = {"transform_type": "vector"}
+    meta["Bodies/A/quat:w"] = ColumnMetadata(transform_type=TransformType.VECTOR)
     with pytest.raises(ValueError, match="quaternion"):
         df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta)
 

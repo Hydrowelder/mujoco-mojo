@@ -30,6 +30,10 @@ from mujoco_mojo.utils.defaults import STOCHAS_DISTS_FNAME as _STOCHAS_DISTS_FNA
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.stochas import UnitSystem as _UnitSystem
 from mujoco_mojo.utils.signal_metadata import (
+    ColumnMetadata,
+    TransformType,
+)
+from mujoco_mojo.utils.signal_metadata import (
     resolve_dimension_metadata as _resolve_dim_meta,
 )
 from mujoco_mojo.utils.filters.filters import UNIT_GROUPS as _UNIT_GROUPS
@@ -73,13 +77,19 @@ _UNIT_SYSTEMS: dict[str, _UnitSystem] = {
 }
 
 
-def _origin_for_positions_only(f: _AnyFilter, transform_type: str | None) -> _AnyFilter:
+def _origin_for_positions_only(
+    f: _AnyFilter, transform_type: TransformType | str | None
+) -> _AnyFilter:
     """
     Drops a rotation filter's frame origin unless the column is tagged as a position.
 
     The dojo gives every series in a reference frame the same (quaternion, origin) pair, but only positions should be translated to the origin: velocities, forces and other free vectors are only rotated. Columns with no tag (older runs, custom signals, lab outputs) are treated as free vectors, which is the behavior before frames had an origin.
     """
-    if isinstance(f, _RotationFilter) and f.origin_col and transform_type != "point":
+    if (
+        isinstance(f, _RotationFilter)
+        and f.origin_col
+        and transform_type != TransformType.POINT
+    ):
         return f.model_copy(update={"origin_col": None})
     return f
 
@@ -175,19 +185,19 @@ def _find_group_unit_by_dimension(dimension: str) -> str | None:
     return None
 
 
-def _augment_col_meta(meta: dict[str, str]) -> dict[str, str]:
+def _augment_col_meta(meta: ColumnMetadata) -> ColumnMetadata:
     """Adds group_unit to column metadata if a matching unit group member can be found."""
-    unit = meta.get("unit")
+    unit = meta.unit
     if unit:
         group = _find_group_unit(unit)
         if group and group != unit:
-            return {**meta, "group_unit": group}
+            return meta.model_copy(update={"group_unit": group})
         return meta
-    dimension = meta.get("dimension")
+    dimension = meta.dimension
     if dimension and dimension != "[]":
         group = _find_group_unit_by_dimension(dimension)
         if group:
-            return {**meta, "group_unit": group}
+            return meta.model_copy(update={"group_unit": group})
     return meta
 
 
@@ -356,6 +366,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
             "next_id": next_id,
             "external_url": f"http://{server_ip}:{port}",
             "show_quick_filters": MujocoMojoSettings().dojo.show_quick_filters,
+            "column_metadata_fields": _column_metadata_fields(),
         },
     )
 
@@ -807,6 +818,48 @@ def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list
     return valid_cols
 
 
+@lru_cache(maxsize=32)
+def _lab_column_metadata_cached(lab_mtime: float) -> dict[str, ColumnMetadata]:
+    """Metadata declared on each lab's Signal Out nodes, keyed by 'Lab/{name}/{output}'. Cached by lab dir mtime."""
+    from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
+
+    d = _get_lab_dir()
+    result: dict[str, ColumnMetadata] = {}
+    for f in d.rglob("*.json"):
+        try:
+            exc = LabExecutor(json.loads(f.read_text(encoding="utf-8")))
+            name = f.relative_to(d).with_suffix("").as_posix()
+            for out, meta in exc.output_metadata.items():
+                result[f"{_LAB_PREFIX}/{name}/{out}"] = meta
+        except Exception:
+            pass
+    return result
+
+
+def _column_metadata_fields() -> list[dict]:
+    """
+    Describes the fields `ColumnMetadata` declares, for the Lab's Signal Out node.
+
+    Generated from the model's own JSON schema on every page render, so the node's fields cannot drift from the model. A field with a fixed set of values carries `options` (a combo in the UI); anything else is free text.
+    """
+    schema = ColumnMetadata.model_json_schema()
+    defs = schema.get("$defs", {})
+    fields: list[dict] = []
+    for name, prop in schema["properties"].items():
+        variants = [v for v in prop.get("anyOf", [prop]) if v.get("type") != "null"]
+        variant = variants[0] if variants else {}
+        if "$ref" in variant:
+            variant = defs[variant["$ref"].rsplit("/", 1)[-1]]
+        fields.append(
+            {
+                "name": name,
+                "description": prop.get("description", ""),
+                "options": variant.get("enum"),
+            }
+        )
+    return fields
+
+
 @lru_cache(maxsize=128)
 def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
     """Zero-row MojoDataFrame for schema queries, cached by path and mtime."""
@@ -814,7 +867,7 @@ def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
 
 
 @lru_cache(maxsize=128)
-def _get_column_metadata(path: Path, mtime: float) -> dict:
+def _get_column_metadata(path: Path, mtime: float) -> dict[str, ColumnMetadata]:
     """Reads per-column signal metadata from the parquet footer, cached by path and mtime."""
     return read_column_metadata(path)
 
@@ -895,14 +948,23 @@ async def get_trial_data(
     parquet_manifest = _get_column_manifest(db_path, mtime)
     lab_mtime = _lab_dir_mtime()
     lab_extra = _valid_lab_columns_cached(frozenset(parquet_manifest["all"]), lab_mtime)
-    column_manifest = (
-        _get_mojo_df(db_path, mtime).mojo.get_manifest(
+    if lab_extra:
+        raw_manifest = _get_mojo_df(db_path, mtime).mojo.get_manifest(
             extra_columns=list(lab_extra),
-            column_metadata=_get_column_metadata(db_path, mtime),
+            column_metadata={
+                **_get_column_metadata(db_path, mtime),
+                **_lab_column_metadata_cached(lab_mtime),
+            },
         )
-        if lab_extra
-        else parquet_manifest
-    )
+        column_manifest: ColumnManifest = {
+            **raw_manifest,
+            "column_metadata": {
+                col: _augment_col_meta(meta)
+                for col, meta in raw_manifest["column_metadata"].items()
+            },
+        }
+    else:
+        column_manifest = parquet_manifest
 
     try:
         requested = cols.split(",") if cols else []
@@ -1049,9 +1111,7 @@ async def get_trial_data(
             df = df.mojo.with_unit_system(target_us, column_metadata=raw_col_meta)
             # update manifest column_metadata with resolved units and group_unit for the UI
             display_col_meta = {
-                col: _augment_col_meta(
-                    _resolve_dim_meta(meta, target_us) if "dimension" in meta else meta
-                )
+                col: _augment_col_meta(_resolve_dim_meta(meta, target_us))
                 for col, meta in column_manifest["column_metadata"].items()
             }
             column_manifest = {
@@ -1129,6 +1189,12 @@ async def get_trial_data(
                 if not progress:
                     break
 
+        column_meta = column_manifest["column_metadata"]
+
+        def _transform_type_of(col: str) -> TransformType | None:
+            meta = column_meta.get(col)
+            return meta.transform_type if meta else None
+
         # ── build response data, applying per-column filters where present ────
         for col in requested:
             if col.startswith(f"{_LAB_PREFIX}/"):
@@ -1137,8 +1203,7 @@ async def get_trial_data(
                 if filter_list and col in data:
                     series = pl.Series(name=col, values=data[col], dtype=pl.Float64)
                     for f in filter_list:
-                        # lab outputs carry no transform_type, so they are never translated
-                        f = _origin_for_positions_only(f, None)
+                        f = _origin_for_positions_only(f, _transform_type_of(col))
                         ctx = f.apply_with_context(series, exec_df)
                         if ctx is not None:
                             series = ctx
@@ -1156,9 +1221,7 @@ async def get_trial_data(
                 if series.dtype != pl.Float64:
                     series = series.cast(pl.Float64)
                 for f in filter_list:
-                    f = _origin_for_positions_only(
-                        f, raw_col_meta.get(col, {}).get("transform_type")
-                    )
+                    f = _origin_for_positions_only(f, _transform_type_of(col))
                     # context-aware filters (e.g. derivative/integral wrt another col)
                     ctx = f.apply_with_context(series, df)
                     if ctx is not None:

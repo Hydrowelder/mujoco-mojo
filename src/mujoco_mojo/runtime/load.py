@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from functools import cache
+from typing import TYPE_CHECKING, Literal, Self, cast
 
 import mujoco
 import numpy as np
@@ -22,6 +23,9 @@ from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    ColumnMetadata,
+    MetadataLike,
+    MetadataOverrides,
     Dimension,
     TransformType,
     dim,
@@ -50,6 +54,12 @@ __all__ = [
     "VectorForce",
     "VectorTorque",
 ]
+
+
+@cache
+def _friction_metadata(jnt_type: int) -> ColumnMetadata:
+    """A joint friction load is always posted as a 3-vector; only its units depend on the joint type. Cached since the sampler runs every timestep."""
+    return force_or_torque(jnt_type) | TransformType.VECTOR.metadata
 
 
 def _ideal_force_logic(
@@ -191,7 +201,7 @@ class SiteLoad(Load):
         self,
         signal_manager: SignalManager | None = None,
         channels: list[Literal["force", "torque"]]
-        | dict[Literal["force", "torque"], dict[str, Any] | None] = ["force", "torque"],
+        | dict[Literal["force", "torque"], MetadataLike | None] = ["force", "torque"],
     ):
         """
         Registers specific channels for logging.
@@ -221,14 +231,14 @@ class SiteLoad(Load):
             return
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
         channel_metadata = {
-            "force": {**dim(Dimension.FORCE), **TransformType.VECTOR.metadata},
-            "torque": {**torque_metadata(), **TransformType.VECTOR.metadata},
+            "force": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+            "torque": torque_metadata() | TransformType.VECTOR.metadata,
         }
 
         def sample(state: MjState):
@@ -788,7 +798,7 @@ class JointFriction(JointLoad):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ) -> None:
         """
         Registers specific channels for logging.
@@ -826,7 +836,7 @@ class JointFriction(JointLoad):
             jnt_id = self.joint.get_id(state.model)
             jnt_type = int(state.model.jnt_type[jnt_id])
             meta = merge_signal_metadata(
-                {**force_or_torque(jnt_type), **TransformType.VECTOR.metadata},
+                _friction_metadata(jnt_type),
                 "friction",
                 metadata,
                 unit_system=state.us,
@@ -1050,7 +1060,7 @@ class ActuatorControl(Load):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ) -> None:
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.

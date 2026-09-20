@@ -654,11 +654,11 @@ def test_load_request_tags_builtin_dimension_metadata(
     force.request(sm, channels=["force", "torque"])
     sm.record(state)
 
-    assert sm._column_metadata["Loads/thruster/force:x"] == {
+    assert sm._column_metadata["Loads/thruster/force:x"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
     }
-    assert sm._column_metadata["Loads/thruster/torque:x"] == {
+    assert sm._column_metadata["Loads/thruster/torque:x"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -682,7 +682,7 @@ def test_load_request_metadata_override(
     force.request(sm, channels={"force": {"display_name": "Thrust"}})
     sm.record(state)
 
-    assert sm._column_metadata["Loads/thruster/force:x"] == {
+    assert sm._column_metadata["Loads/thruster/force:x"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
         "display_name": "Thrust",
@@ -1212,7 +1212,7 @@ def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path):
     fric.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Loads/brake/friction:x"] == {
+    assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -1229,7 +1229,7 @@ def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path):
     fric.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Loads/brake/friction:x"] == {
+    assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
     }
@@ -1247,7 +1247,7 @@ def test_joint_friction_request_metadata_override(tmp_path):
     fric.request(sm, metadata={"friction": {"display_name": "Brake Torque"}})
     sm.record(state)
 
-    assert sm._column_metadata["Loads/brake/friction:x"] == {
+    assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -1530,4 +1530,4 @@ def test_actuator_load_request_metadata_override(tmp_path):
     load.request(sm, metadata={"ctrl": {"unit": "newton"}})
     sm.record(state)
 
-    assert sm._column_metadata["Loads/drive:ctrl"] == {"unit": "newton"}
+    assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {"unit": "newton"}

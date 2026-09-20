@@ -15,6 +15,7 @@ from collections import defaultdict, deque
 from typing import Any
 
 import polars as pl
+from pydantic import ValidationError
 
 from mujoco_mojo.utils.filters.filters import (
     AbsoluteValueFilter,
@@ -49,6 +50,10 @@ from mujoco_mojo.utils.filters.filters import (
     TrigFilter,
     WrapFilter,
 )
+from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
+
+logger = get_logger(__name__)
 
 # Map node type string → filter class (single-input filters only)
 _FILTER_MAP = {
@@ -162,6 +167,34 @@ class LabExecutor:
             for n in self.nodes.values()
             if self._bare_type(n) == "signal_out"
         ]
+
+    @property
+    def output_metadata(self) -> dict[str, ColumnMetadata]:
+        """
+        Metadata declared on each Signal Out node, keyed by output label.
+
+        Only the fields `ColumnMetadata` declares are read (taken from `ColumnMetadata.model_fields`), so a new field needs no change here. Empty values are ignored, and metadata that fails validation (for example an unknown unit) is skipped with a warning.
+        """
+        result: dict[str, ColumnMetadata] = {}
+        for node in self.nodes.values():
+            if self._bare_type(node) != "signal_out":
+                continue
+            props = node.get("properties", {})
+            raw = {
+                name: props[name]
+                for name in ColumnMetadata.model_fields
+                if props.get(name) not in (None, "")
+            }
+            if not raw:
+                continue
+            label = props.get("label") or f"out_{node['id']}"
+            try:
+                result[label] = ColumnMetadata.validated(raw)
+            except ValidationError as e:
+                logger.warning(
+                    f"Ignoring invalid metadata on Signal Out '{label}': {e}"
+                )
+        return result
 
     @property
     def _template_in_labels(self) -> list[str]:

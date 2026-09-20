@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
 import numpy as np
@@ -22,12 +22,15 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
     TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
     merge_signal_metadata,
+    torque_metadata,
 )
 
 logger = get_logger(__name__)
@@ -38,31 +41,22 @@ if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 # tags with a fixed, unambiguous physical quantity regardless of what the sensor references
-_TAG_METADATA: dict[str, dict[str, str]] = {
-    "accelerometer": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
-    "velocimeter": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
-    "gyro": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
-    "force": {**dim(Dimension.FORCE), **TransformType.VECTOR.metadata},
-    "torque": {
-        **dim(Dimension.TORQUE),
-        "quantity": "torque",
-        **TransformType.VECTOR.metadata,
-    },
-    "framepos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
-    "subtreecom": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
-    "framelinvel": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
-    "subtreelinvel": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
-    "frameangvel": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
-    "ballangvel": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
-    "framelinacc": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
-    "frameangacc": {
-        **angular_rate_metadata(per="second ** 2"),
-        **TransformType.VECTOR.metadata,
-    },
-    "subtreeangmom": {
-        **dim(Dimension.ANGULAR_MOMENTUM),
-        **TransformType.VECTOR.metadata,
-    },
+_TAG_METADATA: dict[str, ColumnMetadata] = {
+    "accelerometer": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "velocimeter": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "gyro": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "force": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+    "torque": torque_metadata() | TransformType.VECTOR.metadata,
+    "framepos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "subtreecom": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "framelinvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "subtreelinvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "frameangvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "ballangvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "framelinacc": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "frameangacc": angular_rate_metadata(per="second ** 2")
+    | TransformType.VECTOR.metadata,
+    "subtreeangmom": dim(Dimension.ANGULAR_MOMENTUM) | TransformType.VECTOR.metadata,
     "e_kinetic": dim(Dimension.ENERGY),
     "e_potential": dim(Dimension.ENERGY),
     "touch": dim(Dimension.FORCE),
@@ -75,10 +69,10 @@ _TAG_METADATA: dict[str, dict[str, str]] = {
     "tendonactuatorfrc": dim(Dimension.FORCE),
     "tendonlimitfrc": dim(Dimension.FORCE),
     "clock": dim(Dimension.TIME),
-    "framexaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
-    "frameyaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
-    "framezaxis": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
-    "normal": {**dimensionless_metadata(), **TransformType.VECTOR.metadata},
+    "framexaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "frameyaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "framezaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "normal": dimensionless_metadata() | TransformType.VECTOR.metadata,
     "insidesite": dimensionless_metadata(),
 }
 
@@ -163,10 +157,10 @@ class SensorBase(XMLModel, ABC):
     _metadata_resolved: bool = PrivateAttr(default=False)
     """Whether `_resolved_metadata_cache` has been computed yet (None is itself a valid resolution, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
 
-    _resolved_metadata_cache: dict[str, str] | None = PrivateAttr(default=None)
+    _resolved_metadata_cache: ColumnMetadata | None = PrivateAttr(default=None)
     """Cached built-in metadata for this sensor's tag, resolved once on first sample."""
 
-    def _resolve_builtin_metadata(self, state: MjState) -> dict[str, str] | None:
+    def _resolve_builtin_metadata(self, state: MjState) -> ColumnMetadata | None:
         """Resolves and caches this sensor's built-in dimension/unit metadata, based on its tag (and, for joint-/actuator-referencing tags, the referenced object's type)."""
         if self._metadata_resolved:
             return self._resolved_metadata_cache
@@ -191,7 +185,7 @@ class SensorBase(XMLModel, ABC):
                 else None
             )
         elif self.tag.endswith("quat"):
-            builtin = {**dimensionless_metadata(), **TransformType.QUATERNION.metadata}
+            builtin = dimensionless_metadata() | TransformType.QUATERNION.metadata
         else:
             builtin = None
 
@@ -202,7 +196,7 @@ class SensorBase(XMLModel, ABC):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ):
         """
         Registers the sensor's output for logging.

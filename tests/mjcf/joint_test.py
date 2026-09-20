@@ -125,8 +125,10 @@ def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"] == {"unit": "radian"}
-    assert sm._column_metadata["Joints/elbow:qvel"] == {"unit": "radian / second"}
+    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {"unit": "radian"}
+    assert sm._column_metadata["Joints/elbow:qvel"].model_dump() == {
+        "unit": "radian / second"
+    }
 
 
 def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
@@ -154,8 +156,12 @@ def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/rail:qpos"] == {"dimension": "[length]"}
-    assert sm._column_metadata["Joints/rail:qvel"] == {"dimension": "[length] / [time]"}
+    assert sm._column_metadata["Joints/rail:qpos"].model_dump() == {
+        "dimension": "[length]"
+    }
+    assert sm._column_metadata["Joints/rail:qvel"].model_dump() == {
+        "dimension": "[length] / [time]"
+    }
 
 
 def test_joint_request_metadata_override(
@@ -168,7 +174,7 @@ def test_joint_request_metadata_override(
     joint.request(sm, channels={"qpos": {"display_name": "Elbow Angle"}})
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"] == {
+    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
         "unit": "radian",
         "display_name": "Elbow Angle",
     }
@@ -237,12 +243,12 @@ def test_free_joint_request_tags_transform_types(tmp_path: Path) -> None:
     sm.record(state)
 
     meta = sm._column_metadata
-    assert meta["Joints/root/pos_qpos:x"]["transform_type"] == "point"
-    assert meta["Joints/root/quat_qpos:w"]["transform_type"] == "quaternion"
-    assert meta["Joints/root/lin_qvel:x"]["transform_type"] == "vector"
-    assert meta["Joints/root/ang_qvel:x"]["transform_type"] == "vector"
-    assert meta["Joints/root/lin_qfrc_actuator:x"]["transform_type"] == "vector"
-    assert meta["Joints/root/ang_qfrc_actuator:x"]["transform_type"] == "vector"
+    assert meta["Joints/root/pos_qpos:x"].transform_type == "point"
+    assert meta["Joints/root/quat_qpos:w"].transform_type == "quaternion"
+    assert meta["Joints/root/lin_qvel:x"].transform_type == "vector"
+    assert meta["Joints/root/ang_qvel:x"].transform_type == "vector"
+    assert meta["Joints/root/lin_qfrc_actuator:x"].transform_type == "vector"
+    assert meta["Joints/root/ang_qfrc_actuator:x"].transform_type == "vector"
 
 
 def test_ball_joint_request_tags_transform_types(tmp_path: Path) -> None:
@@ -254,9 +260,9 @@ def test_ball_joint_request_tags_transform_types(tmp_path: Path) -> None:
     sm.record(state)
 
     meta = sm._column_metadata
-    assert meta["Joints/shoulder/qpos:w"]["transform_type"] == "quaternion"
-    assert meta["Joints/shoulder/qvel:x"]["transform_type"] == "vector"
-    assert meta["Joints/shoulder/qfrc_passive:x"]["transform_type"] == "vector"
+    assert meta["Joints/shoulder/qpos:w"].transform_type == "quaternion"
+    assert meta["Joints/shoulder/qvel:x"].transform_type == "vector"
+    assert meta["Joints/shoulder/qfrc_passive:x"].transform_type == "vector"
 
 
 def test_single_dof_joint_scalars_carry_no_transform_type(
@@ -269,5 +275,5 @@ def test_single_dof_joint_scalars_carry_no_transform_type(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert "transform_type" not in sm._column_metadata["Joints/elbow:qpos"]
-    assert "transform_type" not in sm._column_metadata["Joints/elbow:qvel"]
+    assert sm._column_metadata["Joints/elbow:qpos"].transform_type is None
+    assert sm._column_metadata["Joints/elbow:qvel"].transform_type is None

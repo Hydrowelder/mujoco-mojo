@@ -650,16 +650,15 @@
                 <div class="tooltip-panel left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 w-[calc(100vw-2rem)] sm:w-80">
 
                     <p class="text-sm font-black uppercase text-ink-muted mb-3 tracking-widest border-b border-subtle pb-1">
-                        Rotation Logic
+                        Reference Frame
                     </p>
 
                     <div class="space-y-3">
                         <p class="text-xs text-ink-body leading-relaxed">
-                            This re-expresses 3D signals in a frame you pick. Choose the frame's orientation
-                            (<code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code>) and its origin
-                            (a position). Positions are translated to the origin then rotated; other 3D
-                            signals such as velocities and forces are only rotated. Either can be left unset: an orientation alone only
-                            rotates, and an origin alone only translates.
+                            Re-expresses 3D signals in a frame made of an orientation
+                            (<code class="text-accent-500 font-mono font-bold">quat:w,x,y,z</code>) and an origin
+                            (a position). Positions are translated then rotated; other vectors are only rotated.
+                            Either can be left unset.
                         </p>
 
                         <div class="bg-well dark:bg-well/50 p-2 rounded border border-subtle dark:border-subtle/50">
@@ -677,7 +676,7 @@
                  @click.away="refFrameMenuOpen = false">
                 <button @click="refFrameMenuOpen = !refFrameMenuOpen"
                         class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-35">
-                    <span x-text="config.refFrame?.[0] || (config.refFrame ? 'none' : 'world')"
+                    <span x-text="config.refFrame[0] || (frameActive ? 'none' : 'world')"
                           class="truncate"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
                          :class="refFrameMenuOpen ? 'rotate-180' : ''"
@@ -698,8 +697,8 @@
                         <button @click="setRefFrame(null, null); refFrameMenuOpen = false; saveAndRender()"
                                 class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
                             <span class="text-sm font-mono font-bold"
-                                  :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
-                            <span x-show="!config.refFrame"
+                                  :class="!frameActive ? 'text-accent-500' : 'text-ink-muted'">world</span>
+                            <span x-show="!frameActive"
                                   class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
                         </button>
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('refFrame')", "collapseAllColumnFolders('refFrame')", "getColumnTreeRows('refFrame').some(r => r.type === 'folder')") }}
@@ -745,7 +744,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame?.[0] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame[0] === row.item") }}
                                     </template>
                                 </div>
                             </div>
@@ -758,9 +757,9 @@
                  @click.away="refFrameOriginMenuOpen = false">
                 <button @click="refFrameOriginMenuOpen = !refFrameOriginMenuOpen"
                         class="w-full bg-surface border border-control rounded px-3 py-1 text-xs font-mono font-bold text-ink-strong flex items-center justify-between gap-2 hover:border-accent-500 transition-all min-w-35">
-                    <span x-text="config.refFrame?.[1] || (config.refFrame ? 'none' : 'origin')"
+                    <span x-text="config.refFrame[1] || (frameActive ? 'none' : 'origin')"
                           class="truncate"
-                          :class="config.refFrame?.[1] ? '' : 'text-ink-muted'"></span>
+                          :class="config.refFrame[1] ? '' : 'text-ink-muted'"></span>
                     <svg class="w-3 h-3 transition-transform duration-200"
                          :class="refFrameOriginMenuOpen ? 'rotate-180' : ''"
                          fill="none"
@@ -779,8 +778,8 @@
                         <button @click="setRefFrame(null, null); refFrameOriginMenuOpen = false; saveAndRender()"
                                 class="flex-1 text-left px-2 py-1.5 rounded hover:bg-control flex items-center justify-between group">
                             <span class="text-sm font-mono font-bold"
-                                  :class="!config.refFrame ? 'text-accent-500' : 'text-ink-muted'">world</span>
-                            <span x-show="!config.refFrame"
+                                  :class="!frameActive ? 'text-accent-500' : 'text-ink-muted'">world</span>
+                            <span x-show="!frameActive"
                                   class="w-1.5 h-1.5 rounded-full bg-accent-500"></span>
                         </button>
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('refFrameOrigin')", "collapseAllColumnFolders('refFrameOrigin')", "getColumnTreeRows('refFrameOrigin').some(r => r.type === 'folder')") }}
@@ -825,7 +824,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrameOrigin', row.path)", "isColumnFolderCollapsed('refFrameOrigin', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame?.[1] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame[1] === row.item") }}
                                     </template>
                                 </div>
                             </div>
@@ -940,7 +939,7 @@
                     </div>
 
                     <div class="max-h-80 overflow-y-auto custom-scrollbar border-b border-t border-subtle py-2">
-                        <template x-for="row in getColumnVisibleRows('y', (col) => !config.refFrame || rotateableVectors.includes(col.split(':')[0]))"
+                        <template x-for="row in getColumnVisibleRows('y', (col) => !frameActive || rotateableVectors.includes(col.split(':')[0]))"
                                   :key="row.key">
                             <div class="expander-body-wrap duration-100 ease-out"
                                  :class="!row.hidden ? 'expander-open' : ''">

@@ -5,7 +5,7 @@ from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig
 
 
 def test_ref_frame_defaults_to_world() -> None:
-    assert PlotConfig().ref_frame is None
+    assert PlotConfig().ref_frame == (None, None)
 
 
 def test_ref_frame_accepts_quat_and_origin_pair() -> None:
@@ -20,6 +20,11 @@ def test_ref_frame_halves_are_independently_optional() -> None:
     translate_only = PlotConfig.model_validate({"refFrame": [None, "Bodies/B/xpos"]})
     assert rotate_only.ref_frame == ("Bodies/B/quat", None)
     assert translate_only.ref_frame == (None, "Bodies/B/xpos")
+
+
+def test_ref_frame_null_from_older_saved_configs_is_world() -> None:
+    """Profiles and links saved before the frame was a pair store null for world."""
+    assert PlotConfig.model_validate({"refFrame": None}).ref_frame == (None, None)
 
 
 @pytest.mark.parametrize("legacy", ["Bodies/B/quat", "world", ""])

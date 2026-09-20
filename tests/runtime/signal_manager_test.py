@@ -10,7 +10,9 @@ import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.utils.dataframe import read_column_metadata
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
+from mujoco_mojo.utils.signal_metadata import TransformType
 
 
 class _FixedCapacitySignalManager(SignalManager):
@@ -349,7 +351,7 @@ def test_post_accepts_consistent_dimension_and_unit(sm: SignalManager) -> None:
             "display_name": "Foo Speed",
         },
     )
-    assert sm._column_metadata["Sensors/Foo"] == {
+    assert sm._column_metadata["Sensors/Foo"].model_dump() == {
         "dimension": "[length] / [time]",
         "unit": "meter / second",
         "display_name": "Foo Speed",
@@ -371,7 +373,7 @@ def test_post_accepts_valid_transform_type(sm: SignalManager) -> None:
         attr="x",
         metadata={"dimension": "[length]", "transform_type": "point"},
     )
-    assert sm._column_metadata["Bodies/Foo/xpos:x"] == {
+    assert sm._column_metadata["Bodies/Foo/xpos:x"].model_dump() == {
         "dimension": "[length]",
         "transform_type": "point",
     }
@@ -382,7 +384,7 @@ def test_post_metadata_only_consulted_on_first_registration(sm: SignalManager) -
     sm.post(1.0, "Sensors", ("Foo",), metadata={"dimension": "[length]"})
     sm.post(2.0, "Sensors", ("Foo",), metadata={"dimension": "[force]"})
 
-    assert sm._column_metadata["Sensors/Foo"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Sensors/Foo"].model_dump() == {"dimension": "[length]"}
 
 
 def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
@@ -399,6 +401,31 @@ def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
         "time": {"dimension": "[time]"},
         "Sensors/Foo": {"dimension": "[length]"},
     }
+
+
+def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> None:
+    """What SignalManager writes is what read_column_metadata gives back, typed."""
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+
+    sm.post(
+        1.0,
+        "Bodies",
+        ("A", "xpos"),
+        attr="x",
+        metadata={
+            "dimension": "[length]",
+            "transform_type": "point",
+            "display_name": "A position",
+        },
+    )
+    sm.record(MjState(m, d))
+    sm.close()
+
+    read = read_column_metadata(sm.export_path)
+    assert read == sm._column_metadata
+    assert read["Bodies/A/xpos:x"].transform_type == TransformType.POINT
+    assert read["time"].dimension == "[time]"
 
 
 def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
@@ -441,4 +468,4 @@ def test_track_forwards_metadata(sm: SignalManager) -> None:
     d: mujoco.MjData = mujoco.MjData(m)
     sm.record(MjState(m, d))
 
-    assert sm._column_metadata["Sensors/Foo"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Sensors/Foo"].model_dump() == {"dimension": "[length]"}

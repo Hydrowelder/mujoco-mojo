@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -25,6 +25,9 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
     TransformType,
     angular_rate_metadata,
@@ -41,6 +44,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Joint"]
+
+# built once: the sampler runs every timestep
+_FREE_POSITION_META = dim(Dimension.LENGTH) | TransformType.POINT.metadata
+_QUATERNION_META = dimensionless_metadata() | TransformType.QUATERNION.metadata
+_LINEAR_VECTOR_META = {
+    "qvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "frc": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+}
+_ANGULAR_VECTOR_META = {
+    "qvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "frc": torque_metadata() | TransformType.VECTOR.metadata,
+}
 
 
 class Joint(XMLModel):
@@ -276,7 +291,7 @@ class Joint(XMLModel):
         ]
         | dict[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = ["qpos", "qvel"],
     ):
         """
@@ -317,7 +332,7 @@ class Joint(XMLModel):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
@@ -325,7 +340,7 @@ class Joint(XMLModel):
         def post_vec3(
             vec3: np.ndarray,
             channel: str,
-            builtin: dict[str, str] | None,
+            builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
         ):
@@ -344,7 +359,7 @@ class Joint(XMLModel):
         def post_quat(
             quat: np.ndarray,
             channel: str,
-            builtin: dict[str, str] | None,
+            builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
         ):
@@ -398,65 +413,44 @@ class Joint(XMLModel):
                     post_vec3(
                         val[:3],
                         channel=f"pos_{channel}",
-                        builtin={
-                            **dim(Dimension.LENGTH),
-                            **TransformType.POINT.metadata,
-                        },
+                        builtin=_FREE_POSITION_META,
                         us=u,
                     )
                     post_quat(
                         val[3:],
                         channel=f"quat_{channel}",
-                        builtin={
-                            **dimensionless_metadata(),
-                            **TransformType.QUATERNION.metadata,
-                        },
+                        builtin=_QUATERNION_META,
                         us=u,
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
                     post_quat(
                         val,
                         channel=channel,
-                        builtin={
-                            **dimensionless_metadata(),
-                            **TransformType.QUATERNION.metadata,
-                        },
+                        builtin=_QUATERNION_META,
                         us=u,
                     )
                 elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-                    lin_builtin = (
-                        dim(Dimension.VELOCITY)
-                        if channel == "qvel"
-                        else dim(Dimension.FORCE)
-                    )
-                    ang_builtin = (
-                        angular_rate_metadata()
-                        if channel == "qvel"
-                        else torque_metadata()
-                    )
+                    kind = "qvel" if channel == "qvel" else "frc"
                     post_vec3(
                         val[:3],
                         channel=f"lin_{channel}",
-                        builtin={**lin_builtin, **TransformType.VECTOR.metadata},
+                        builtin=_LINEAR_VECTOR_META[kind],
                         us=u,
                     )
                     post_vec3(
                         val[3:],
                         channel=f"ang_{channel}",
-                        builtin={**ang_builtin, **TransformType.VECTOR.metadata},
+                        builtin=_ANGULAR_VECTOR_META[kind],
                         us=u,
                     )
                 else:
                     # ball joint's qvel/qfrc_*: always rotational (3 DOF, no translation)
-                    ang_builtin = (
-                        angular_rate_metadata()
-                        if channel == "qvel"
-                        else torque_metadata()
-                    )
                     post_vec3(
                         val,
                         channel=channel,
-                        builtin={**ang_builtin, **TransformType.VECTOR.metadata},
+                        builtin=_ANGULAR_VECTOR_META[
+                            "qvel" if channel == "qvel" else "frc"
+                        ],
                         us=u,
                     )
 

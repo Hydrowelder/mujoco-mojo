@@ -7,10 +7,10 @@ import contextlib
 import json
 import re
 from collections.abc import AsyncIterable, AsyncIterator
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import RunContext  # pyright: ignore[reportMissingImports]
 from pydantic_ai.messages import (  # pyright: ignore[reportMissingImports]
     AgentStreamEvent,
@@ -34,6 +34,7 @@ from mujoco_mojo.utils.layers.dojo.sensai import (
     chat_agent,
 )
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 
 from .. import shared
 
@@ -131,7 +132,15 @@ class ChatRequest(BaseModel):
     available_quats: list[str] = Field(default_factory=list)
     """Quaternion column names available for rotating rotatable_vectors."""
 
-    column_metadata: dict[str, dict[str, str]] = Field(default_factory=dict)
+    column_metadata: dict[str, ColumnMetadata] = Field(default_factory=dict)
+
+    @field_validator("column_metadata", mode="before")
+    @classmethod
+    def _lenient_column_metadata(cls, v: Any) -> Any:
+        # this payload echoes what the manifest endpoint sent, so load it without failing the request on an odd entry
+        if isinstance(v, dict):
+            return {k: ColumnMetadata.lenient(m) for k, m in v.items()}
+        return v
 
     current_plot_config_json: str | None = None
     """JSON-serialized PlotConfig currently active in the trial viewer, or None."""

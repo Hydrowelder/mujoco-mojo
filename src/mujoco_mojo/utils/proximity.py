@@ -15,6 +15,9 @@ from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
     TransformType,
     dim,
@@ -47,9 +50,9 @@ Proximityable = Annotated[
     Discriminator(_proximityable_discriminator),
 ]
 
-_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
+_REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "dist": dim(Dimension.LENGTH),
-    "fromto": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+    "fromto": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
     "prox_type": dimensionless_metadata(),
 }
 
@@ -483,7 +486,7 @@ class Proximity(MojoBaseModel):
         self,
         signal_manager: SignalManager | None = None,
         channels: list[Literal["dist", "fromto", "prox_type"]]
-        | dict[Literal["dist", "fromto", "prox_type"], dict[str, Any] | None] = [
+        | dict[Literal["dist", "fromto", "prox_type"], MetadataLike | None] = [
             "dist",
             "prox_type",
         ],
@@ -520,7 +523,7 @@ class Proximity(MojoBaseModel):
             return
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}

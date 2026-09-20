@@ -10,6 +10,7 @@ import mujoco
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.utils.signal_metadata import (
+    ColumnMetadata,
     Dimension,
     angle_metadata,
     angular_rate_metadata,
@@ -24,7 +25,7 @@ __all__ = [
 ]
 
 
-def joint_type_metadata(jnt_type: int) -> dict[str, dict[str, str]]:
+def joint_type_metadata(jnt_type: int) -> dict[str, ColumnMetadata]:
     """
     Returns `{"pos": ..., "vel": ..., "frc": ...}` metadata for a single-DOF joint's generalized position/velocity/force, based on its type: angle-based (units) for hinge, or length-based (dimension) for slide.
     """
@@ -43,7 +44,7 @@ def joint_type_metadata(jnt_type: int) -> dict[str, dict[str, str]]:
 
 def actuator_transmission_metadata(
     state: MjState, actuator_id: int
-) -> dict[str, dict[str, str]] | None:
+) -> dict[str, ColumnMetadata] | None:
     """
     Resolves `{"length": ..., "velocity": ..., "force": ...}` metadata for a JOINT/JOINTINPARENT- or TENDON-transmission actuator. Returns None for SITE/BODY/SLIDERCRANK transmission, since the `gear` attribute lets those mean anything; those channels stay user-injectable-only.
     """

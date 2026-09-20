@@ -7,15 +7,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-import pint
 import polars as pl
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.stochas import UnitSystem, ureg
+from mujoco_mojo.stochas import UnitSystem
 from mujoco_mojo.typing import MatN, SignalCategory
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.signal_metadata import TransformType
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, MetadataLike
 
 logger = get_logger(__name__)
 
@@ -25,46 +24,6 @@ _FLOAT64_BYTES = np.dtype(np.float64).itemsize
 
 _COLUMN_METADATA_KEY = "column_metadata"
 """Key under which the per-column metadata JSON blob is stored in the parquet file's footer."""
-
-
-def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    """
-    Validates the well-known `dimension`/`unit`/`transform_type` metadata keys, leaving any other user-defined keys untouched.
-
-    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality. `transform_type` (see `mujoco_mojo.utils.signal_metadata.TransformType`) tags how a grouped `:x/:y/:z`/`:w/:x/:y/:z` signal must be re-expressed under a change of reference frame.
-    """
-    dimension = metadata.get("dimension")
-    unit = metadata.get("unit")
-
-    dimensionality = None
-    if dimension is not None:
-        try:
-            dimensionality = ureg.get_dimensionality(dimension)
-        except (pint.UndefinedUnitError, pint.DefinitionSyntaxError) as e:
-            raise ValueError(f"Invalid signal metadata dimension {dimension!r}: {e}")
-
-    if unit is not None:
-        try:
-            parsed_unit = ureg.parse_units(unit)
-        except pint.UndefinedUnitError as e:
-            raise ValueError(f"Invalid signal metadata unit {unit!r}: {e}")
-        if dimensionality is not None and parsed_unit.dimensionality != dimensionality:
-            raise ValueError(
-                f"Signal metadata unit {unit!r} ({parsed_unit.dimensionality}) do not "
-                f"match dimension {dimension!r} ({dimensionality})"
-            )
-
-    transform_type = metadata.get("transform_type")
-    if transform_type is not None:
-        try:
-            TransformType(transform_type)
-        except ValueError:
-            valid = ", ".join(t.value for t in TransformType)
-            raise ValueError(
-                f"Invalid signal metadata transform_type {transform_type!r}: expected one of {valid}"
-            )
-
-    return metadata
 
 
 def resolve_signal_manager(
@@ -129,7 +88,7 @@ class SignalManager:
     _part_paths: list[Path] = field(default_factory=list, init=False)
     """Paths of per-flush part files written this run, in order, pending merge in `close()`."""
 
-    _column_metadata: dict[str, dict[str, Any]] = field(
+    _column_metadata: dict[str, ColumnMetadata] = field(
         default_factory=dict, init=False
     )
     """User-supplied metadata (e.g. `dimension`/`unit`) for columns that registered any, keyed by full signal key. Written into the merged parquet file's footer on `close()`."""
@@ -181,9 +140,9 @@ class SignalManager:
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
-        time_meta: dict[str, str] = {"dimension": "[time]"}
+        time_meta = ColumnMetadata(dimension="[time]")
         if self.unit_system is not None and self.unit_system.time is not None:
-            time_meta["unit"] = self.unit_system.time
+            time_meta = ColumnMetadata(dimension="[time]", unit=self.unit_system.time)
         self._column_metadata[TIME_COLUMN_NAME] = time_meta
         self._n_cols = 1
         logger.debug(
@@ -213,7 +172,7 @@ class SignalManager:
         subgroups: tuple[str, ...] = (),
         *,
         attr: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: MetadataLike | None = None,
     ):
         """
         Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
@@ -245,7 +204,7 @@ class SignalManager:
         subgroups: tuple[str, ...] = (),
         *,
         attr: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: MetadataLike | None = None,
     ):
         """
         Injects a value into the telemetry ledger using a hierarchical namespace.
@@ -261,7 +220,7 @@ class SignalManager:
             category (SignalCategory | str): Top level category (e.g., "Bodies")
             subgroups (tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
             attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
-            metadata (dict[str, Any] | None, optional): Arbitrary metadata for this signal, persisted into the telemetry file's footer. Only consulted the first time this signal is registered (ignored on later calls for the same signal). Two keys are validated via Pint if present: `dimension` (e.g. `"[length] / [time]"`), for tagging the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `unit` (e.g. `"meter / second"`), for the rarer case the concrete unit truly is known. Any other keys (e.g. `display_name`, `comment`) pass through unvalidated. Defaults to None.
+            metadata (ColumnMetadata | dict[str, Any] | None, optional): Metadata for this signal, persisted into the telemetry file's footer. A plain dict is validated as a `ColumnMetadata`. Only consulted the first time this signal is registered (ignored on later calls for the same signal). `dimension` (e.g. `"[length] / [time]"`) tags the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `unit` (e.g. `"meter / second"`) is for the rarer case the concrete unit truly is known; both are validated via Pint, and must agree if both are given. `transform_type` and `quantity` are also declared fields. Any other keys (e.g. `display_name`, `comment`) are kept as-is. Defaults to None.
 
         Examples:
             >>> # Becomes "Bodies/Hand/xpos:x"
@@ -299,7 +258,7 @@ class SignalManager:
             self._n_cols += 1
 
             if metadata:
-                self._column_metadata[full_key] = _validate_signal_metadata(metadata)
+                self._column_metadata[full_key] = ColumnMetadata.validated(metadata)
 
             logger.debug(f"New signal registered: {full_key} at index {idx}")
 
@@ -372,7 +331,11 @@ class SignalManager:
         """Builds the parquet file-level metadata dict, or None if no signal registered any."""
         if not self._column_metadata:
             return None
-        return {_COLUMN_METADATA_KEY: json.dumps(self._column_metadata)}
+        return {
+            _COLUMN_METADATA_KEY: json.dumps(
+                {k: v.model_dump(mode="json") for k, v in self._column_metadata.items()}
+            )
+        }
 
     def _merge_parts(self):
         """Streams all part files written this run into `export_path`, then removes the parts."""

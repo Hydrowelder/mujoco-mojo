@@ -1701,6 +1701,7 @@
                          jpg: 'Compressed raster image, smaller file size.',
                          csv: 'Currently visible data, with active filters applied.',
                          json: 'Current plot configuration, to share or restore later.',
+                         manifest: 'Every available column with its unit, dimension and transform type, as the server reports it for this trial.',
                          chat: 'Full chat history with SensAI assistant.',
                      },
                  }">
@@ -1784,6 +1785,14 @@
                                     class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
                                 Config JSON
                                 <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">CONFIG</span>
+                            </button>
+
+                            <button @click="downloadColumnManifest()"
+                                    @mouseenter="hoveredExport = 'manifest'"
+                                    @mouseleave="hoveredExport = null"
+                                    class="w-full text-left px-2 py-1.5 text-xs font-mono font-bold btn btn-secondary flex items-center justify-between group">
+                                Column Manifest
+                                <span class="text-xs bg-well px-1 rounded text-ink-muted group-hover:text-accent-500">COLUMNS</span>
                             </button>
 
                             <button @click="downloadSensAIHistory(); downloadOpen = false"

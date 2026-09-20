@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -26,6 +26,9 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity_mixin import ProximityMixin
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
     TransformType,
     angular_rate_metadata,
@@ -41,17 +44,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "xpos": {**dim(Dimension.LENGTH), **TransformType.POINT.metadata},
+_REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
+    "xpos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
     "xmat": dimensionless_metadata(),
-    "xvelp": {**dim(Dimension.VELOCITY), **TransformType.VECTOR.metadata},
-    "xvelr": {**angular_rate_metadata(), **TransformType.VECTOR.metadata},
-    "xaccp": {**dim(Dimension.ACCELERATION), **TransformType.VECTOR.metadata},
-    "xaccr": {
-        **angular_rate_metadata(per="second ** 2"),
-        **TransformType.VECTOR.metadata,
-    },
-    "quat": {**dimensionless_metadata(), **TransformType.QUATERNION.metadata},
+    "xvelp": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "xvelr": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "xaccp": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "xaccr": angular_rate_metadata(per="second ** 2") | TransformType.VECTOR.metadata,
+    "quat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
 }
 
 __all__ = [
@@ -565,7 +565,7 @@ class SiteBase(XMLModel, ABC):
         ]
         | dict[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = [
             "xpos",
             "quat",
@@ -615,7 +615,7 @@ class SiteBase(XMLModel, ABC):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}

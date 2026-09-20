@@ -28,6 +28,13 @@ export type {
   SettingsWriteResponse,
 } from "./lib/settings-panel";
 import type { SettingsPanelState } from "./lib/settings-panel";
+import type { ColumnMetadata } from "./lib/column-metadata.generated";
+
+export type { ColumnMetadata, TransformType } from "./lib/column-metadata.generated";
+
+// group_unit is not part of the backend model: the dojo router derives it from
+// unit/dimension when it builds the manifest.
+export type ColumnMeta = ColumnMetadata & { group_unit?: string };
 
 // ---------------------------------------------------------------------------
 // Backend API shapes
@@ -131,7 +138,7 @@ export interface TrialDataResponse {
     all: string[];
     rotatable_vectors: string[];
     available_quats: string[];
-    column_metadata: Record<string, Record<string, string>>;
+    column_metadata: Record<string, ColumnMeta>;
   };
   data: Record<string, number[]>;
   filter_errors?: string[];

@@ -170,11 +170,13 @@ def test_actuator_request_tags_hinge_transmission_with_angle_metadata(
     actuator.request(sm, channels=["length", "velocity", "force"])
     sm.record(state)
 
-    assert sm._column_metadata["Actuators/elbow_motor:length"] == {"unit": "radian"}
-    assert sm._column_metadata["Actuators/elbow_motor:velocity"] == {
+    assert sm._column_metadata["Actuators/elbow_motor:length"].model_dump() == {
+        "unit": "radian"
+    }
+    assert sm._column_metadata["Actuators/elbow_motor:velocity"].model_dump() == {
         "unit": "radian / second"
     }
-    assert sm._column_metadata["Actuators/elbow_motor:force"] == {
+    assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
     }
@@ -208,13 +210,13 @@ def test_actuator_request_tags_slide_transmission_with_length_dimension(
     actuator.request(sm, channels=["length", "velocity", "force"])
     sm.record(state)
 
-    assert sm._column_metadata["Actuators/rail_motor:length"] == {
+    assert sm._column_metadata["Actuators/rail_motor:length"].model_dump() == {
         "dimension": "[length]"
     }
-    assert sm._column_metadata["Actuators/rail_motor:velocity"] == {
+    assert sm._column_metadata["Actuators/rail_motor:velocity"].model_dump() == {
         "dimension": "[length] / [time]"
     }
-    assert sm._column_metadata["Actuators/rail_motor:force"] == {
+    assert sm._column_metadata["Actuators/rail_motor:force"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2"
     }
 
@@ -248,9 +250,11 @@ def test_actuator_request_metadata_override(
     )
     sm.record(state)
 
-    assert sm._column_metadata["Actuators/elbow_motor:force"] == {
+    assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "display_name": "Elbow Torque",
     }
-    assert sm._column_metadata["Actuators/elbow_motor:ctrl"] == {"unit": "newton"}
+    assert sm._column_metadata["Actuators/elbow_motor:ctrl"].model_dump() == {
+        "unit": "newton"
+    }
