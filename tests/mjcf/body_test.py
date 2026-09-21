@@ -145,17 +145,29 @@ def test_body_request_tags_builtin_dimension_metadata(
     body.request(sm, channels=["xpos", "xvelp", "xvelr", "quat", "lin_mom", "ke_trans"])
     sm.record(state)
 
-    assert sm._column_metadata["Bodies/box/xpos:x"] == {"dimension": "[length]"}
-    assert sm._column_metadata["Bodies/box/xvelp:x"] == {
-        "dimension": "[length] / [time]"
+    assert sm._column_metadata["Bodies/box/xpos:x"].model_dump() == {
+        "dimension": "[length]",
+        "transform_type": "point",
     }
-    assert sm._column_metadata["Bodies/box/xvelr:x"] == {"unit": "radian / second"}
-    assert sm._column_metadata["Bodies/box/quat:w"] == {"dimension": "[]"}
-    assert sm._column_metadata["Bodies/box/lin_mom:x"] == {
-        "dimension": "[mass] * [length] / [time]"
+    assert sm._column_metadata["Bodies/box/xvelp:x"].model_dump() == {
+        "dimension": "[length] / [time]",
+        "transform_type": "vector",
     }
-    assert sm._column_metadata["Bodies/box:ke_trans"] == {
-        "dimension": "[mass] * [length] ** 2 / [time] ** 2"
+    assert sm._column_metadata["Bodies/box/xvelr:x"].model_dump() == {
+        "unit": "radian / second",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Bodies/box/quat:w"].model_dump() == {
+        "dimension": "[]",
+        "transform_type": "quaternion",
+    }
+    assert sm._column_metadata["Bodies/box/lin_mom:x"].model_dump() == {
+        "dimension": "[mass] * [length] / [time]",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Bodies/box:ke_trans"].model_dump() == {
+        "dimension": "[mass] * [length] ** 2 / [time] ** 2",
+        "transform_type": "scalar",
     }
 
 
@@ -169,8 +181,9 @@ def test_body_request_metadata_override(
     body.request(sm, channels={"xpos": {"display_name": "Box Position"}})
     sm.record(state)
 
-    assert sm._column_metadata["Bodies/box/xpos:x"] == {
+    assert sm._column_metadata["Bodies/box/xpos:x"].model_dump() == {
         "dimension": "[length]",
+        "transform_type": "point",
         "display_name": "Box Position",
     }
 
@@ -206,18 +219,30 @@ def test_geom_request_tags_builtin_dimension_metadata(
     geom.request(sm, channels=["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"])
     sm.record(state)
 
-    assert sm._column_metadata["Geoms/ball_geom/xpos:x"] == {"dimension": "[length]"}
-    assert sm._column_metadata["Geoms/ball_geom/xvelp:x"] == {
-        "dimension": "[length] / [time]"
+    assert sm._column_metadata["Geoms/ball_geom/xpos:x"].model_dump() == {
+        "dimension": "[length]",
+        "transform_type": "point",
     }
-    assert sm._column_metadata["Geoms/ball_geom/xvelr:x"] == {"unit": "radian / second"}
-    assert sm._column_metadata["Geoms/ball_geom/xaccp:x"] == {
-        "dimension": "[length] / [time] ** 2"
+    assert sm._column_metadata["Geoms/ball_geom/xvelp:x"].model_dump() == {
+        "dimension": "[length] / [time]",
+        "transform_type": "vector",
     }
-    assert sm._column_metadata["Geoms/ball_geom/xaccr:x"] == {
-        "unit": "radian / second ** 2"
+    assert sm._column_metadata["Geoms/ball_geom/xvelr:x"].model_dump() == {
+        "unit": "radian / second",
+        "transform_type": "vector",
     }
-    assert sm._column_metadata["Geoms/ball_geom/quat:w"] == {"dimension": "[]"}
+    assert sm._column_metadata["Geoms/ball_geom/xaccp:x"].model_dump() == {
+        "dimension": "[length] / [time] ** 2",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Geoms/ball_geom/xaccr:x"].model_dump() == {
+        "unit": "radian / second ** 2",
+        "transform_type": "vector",
+    }
+    assert sm._column_metadata["Geoms/ball_geom/quat:w"].model_dump() == {
+        "dimension": "[]",
+        "transform_type": "quaternion",
+    }
 
 
 def test_geom_request_metadata_override(
@@ -230,7 +255,8 @@ def test_geom_request_metadata_override(
     geom.request(sm, channels={"xpos": {"display_name": "Ball Position"}})
     sm.record(state)
 
-    assert sm._column_metadata["Geoms/ball_geom/xpos:x"] == {
+    assert sm._column_metadata["Geoms/ball_geom/xpos:x"].model_dump() == {
         "dimension": "[length]",
+        "transform_type": "point",
         "display_name": "Ball Position",
     }

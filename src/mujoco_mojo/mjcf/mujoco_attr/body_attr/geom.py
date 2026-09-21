@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, cast
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -30,8 +31,13 @@ from mujoco_mojo.typing import (
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.proximity_mixin import ProximityMixin
+from mujoco_mojo.utils.column import MATRIX_ATTRS, Column, fan_out
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -58,14 +64,14 @@ __all__ = [
     "GeomSphere",
 ]
 
-_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "xpos": dim(Dimension.LENGTH),
+_REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
+    "xpos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
     "xmat": dimensionless_metadata(),
-    "xvelp": dim(Dimension.VELOCITY),
-    "xvelr": angular_rate_metadata(),
-    "xaccp": dim(Dimension.ACCELERATION),
-    "xaccr": angular_rate_metadata(per="second ** 2"),
-    "quat": dimensionless_metadata(),
+    "xvelp": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "xvelr": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "xaccp": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "xaccr": angular_rate_metadata(per="second ** 2") | TransformType.VECTOR.metadata,
+    "quat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
 }
 
 _geom_attr = (
@@ -301,7 +307,7 @@ class GeomBase(XMLModel, ABC):
         ]
         | dict[
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
     ):
         """
@@ -344,20 +350,34 @@ class GeomBase(XMLModel, ABC):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
-        def sample(state: MjState):
-            for channel in channels:
+        name = f"{self.name}"
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(
+            channel: str, state: MjState, attrs: Iterable[str]
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
                 meta = merge_signal_metadata(
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
                     unit_system=state.us,
                 )
+                cols = columns[channel] = fan_out(
+                    SignalCategory.GEOMS, (name, channel), attrs, meta
+                )
+            return cols
 
+        def sample(state: MjState):
+            for channel in channels:
                 # Manual mapping to avoid getattr
                 match channel:
                     case "xpos":
@@ -375,14 +395,8 @@ class GeomBase(XMLModel, ABC):
                     case "quat":
                         val = self.rt_quat(state)
 
-                        for i, attr in enumerate("wxyz"):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.GEOMS,
-                                subgroups=(f"{self.name}", channel),
-                                attr=attr,
-                                metadata=meta,
-                            )
+                        for v, col in zip(val, channel_columns(channel, state, "wxyz")):
+                            signal_manager.post(float(v), col)
                         continue
                     case _:
                         continue
@@ -393,25 +407,16 @@ class GeomBase(XMLModel, ABC):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, attr in enumerate("xyzm"):
-                        signal_manager.post(
-                            value=float(full_vec[i]),
-                            category=SignalCategory.GEOMS,
-                            subgroups=(f"{self.name}", channel),
-                            attr=attr,
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        full_vec, channel_columns(channel, state, "xyzm")
+                    ):
+                        signal_manager.post(float(v), col)
                 else:
                     # Handle flattened matrices (xmat)
-                    val_flat = val.flatten()
-                    for i in range(len(val_flat)):
-                        signal_manager.post(
-                            value=float(val_flat[i]),
-                            category=SignalCategory.GEOMS,
-                            subgroups=(f"{self.name}", channel),
-                            attr=str(i),
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        val.flatten(), channel_columns(channel, state, MATRIX_ATTRS)
+                    ):
+                        signal_manager.post(float(v), col)
 
         signal_manager.register_sampler(sample)
 

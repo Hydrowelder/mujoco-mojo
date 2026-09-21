@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Self, cast
+from functools import cache
+from typing import TYPE_CHECKING, Literal, Self, cast
 
 import mujoco
 import numpy as np
@@ -20,9 +21,14 @@ from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.stochas import NamedValue
 from mujoco_mojo.typing import SignalCategory, Vec3, Vec4
 from mujoco_mojo.utils.color import Color
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    ColumnMetadata,
+    MetadataLike,
+    MetadataOverrides,
     Dimension,
+    TransformType,
     dim,
     force_or_torque,
     merge_signal_metadata,
@@ -49,6 +55,12 @@ __all__ = [
     "VectorForce",
     "VectorTorque",
 ]
+
+
+@cache
+def _friction_metadata(jnt_type: int) -> ColumnMetadata:
+    """A joint friction load is always posted as a 3-vector; only its units depend on the joint type. Cached since the sampler runs every timestep."""
+    return force_or_torque(jnt_type) | TransformType.VECTOR.metadata
 
 
 def _ideal_force_logic(
@@ -190,7 +202,7 @@ class SiteLoad(Load):
         self,
         signal_manager: SignalManager | None = None,
         channels: list[Literal["force", "torque"]]
-        | dict[Literal["force", "torque"], dict[str, Any] | None] = ["force", "torque"],
+        | dict[Literal["force", "torque"], MetadataLike | None] = ["force", "torque"],
     ):
         """
         Registers specific channels for logging.
@@ -220,33 +232,38 @@ class SiteLoad(Load):
             return
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
         channel_metadata = {
-            "force": dim(Dimension.FORCE),
-            "torque": torque_metadata(),
+            "force": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+            "torque": torque_metadata() | TransformType.VECTOR.metadata,
         }
+
+        name = f"{self.name}"
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(channel: str, state: MjState) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
+                meta = merge_signal_metadata(
+                    channel_metadata.get(channel), channel, _meta, unit_system=state.us
+                )
+                # x, y, z, and magnitude, nested under the load's name
+                cols = columns[channel] = fan_out(
+                    SignalCategory.LOADS, (name, channel), "xyzm", meta
+                )
+            return cols
 
         def sample(state: MjState):
             for channel in channels:
                 source = self._last_f if channel == "force" else self._last_t
-                meta = merge_signal_metadata(
-                    channel_metadata.get(channel), channel, _meta, unit_system=state.us
-                )
-
-                # iterate through x, y, z, and magnitude (pop. pop.)
-                for i, attr in enumerate("xyzm"):
-                    signal_manager.post(
-                        value=float(source[i]) if self.active else 0.0,
-                        category=SignalCategory.LOADS,
-                        # nest the force/torque under the function name
-                        subgroups=(f"{self.name}", channel),
-                        attr=attr,
-                        metadata=meta,
-                    )
+                for i, col in enumerate(channel_columns(channel, state)):
+                    signal_manager.post(float(source[i]) if self.active else 0.0, col)
 
         signal_manager.register_sampler(sample)
 
@@ -787,7 +804,7 @@ class JointFriction(JointLoad):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ) -> None:
         """
         Registers specific channels for logging.
@@ -821,29 +838,27 @@ class JointFriction(JointLoad):
             logger.error(msg)
             raise ValueError(msg)
 
+        columns: list[tuple[Column, ...]] = []
+
         def sample(state: MjState) -> None:
-            jnt_id = self.joint.get_id(state.model)
-            jnt_type = int(state.model.jnt_type[jnt_id])
-            meta = merge_signal_metadata(
-                force_or_torque(jnt_type), "friction", metadata, unit_system=state.us
-            )
+            if not columns:
+                # built on the first sample (the units depend on the joint type and the
+                # unit system), then reused: this runs every timestep
+                jnt_id = self.joint.get_id(state.model)
+                jnt_type = int(state.model.jnt_type[jnt_id])
+                meta = merge_signal_metadata(
+                    _friction_metadata(jnt_type),
+                    "friction",
+                    metadata,
+                    unit_system=state.us,
+                )
+                columns.append(
+                    fan_out(SignalCategory.LOADS, (self.name, "friction"), "xyzm", meta)
+                )
 
             frc = self._last_force if self.active else np.zeros(3)
-            for v, attr in zip(frc, ("x", "y", "z")):
-                signal_manager.post(
-                    value=float(v),
-                    category=SignalCategory.LOADS,
-                    subgroups=(self.name, "friction"),
-                    attr=attr,
-                    metadata=meta,
-                )
-            signal_manager.post(
-                value=float(np.linalg.norm(frc)),
-                category=SignalCategory.LOADS,
-                subgroups=(self.name, "friction"),
-                attr="m",
-                metadata=meta,
-            )
+            for v, col in zip((*frc, np.linalg.norm(frc)), columns[0], strict=True):
+                signal_manager.post(float(v), col)
 
         signal_manager.register_sampler(sample)
 
@@ -1046,7 +1061,7 @@ class ActuatorControl(Load):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ) -> None:
         """
         Registers the applied control value for logging under `Loads/<name>:ctrl`.
@@ -1064,14 +1079,17 @@ class ActuatorControl(Load):
         if signal_manager is None:
             return
 
+        column = Column(
+            category=SignalCategory.LOADS,
+            subgroups=(self.name,),
+            attr="ctrl",
+            metadata=merge_signal_metadata(
+                TransformType.SCALAR.metadata, "ctrl", metadata
+            ),
+        )
+
         def sample(state: MjState) -> None:
-            signal_manager.post(
-                value=self._last_ctrl if self.active else 0.0,
-                category=SignalCategory.LOADS,
-                subgroups=(self.name,),
-                attr="ctrl",
-                metadata=merge_signal_metadata(None, "ctrl", metadata),
-            )
+            signal_manager.post(self._last_ctrl if self.active else 0.0, column)
 
         signal_manager.register_sampler(sample)
 

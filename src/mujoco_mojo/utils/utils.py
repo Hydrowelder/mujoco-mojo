@@ -4,6 +4,7 @@ import hashlib
 import os
 import random
 import socket
+import sys
 import time
 from importlib.resources import files
 from pathlib import Path
@@ -85,7 +86,7 @@ def find_free_port(host: str, start_port: int, max_tries: int = 50) -> int:
     """
     Returns the first free port at or after `start_port` on `host`.
 
-    Binds a throwaway socket per candidate port and closes it immediately, returning the first one that accepted a bind. Deliberately does not set `SO_REUSEADDR` - on Windows that option would let a probe bind succeed against a port another process is still actively listening on, which is exactly the false "it's free" reading this function must not give. This is a probe, not a reservation: nothing stops another process from grabbing the same port between this call returning and the real bind that follows - acceptable here since the only realistic collision is a second `mujoco-mojo` command started moments earlier on the same machine, not an adversarial race.
+    Sets OS-appropriate socket reuse options (`SO_REUSEADDR` on POSIX, `SO_EXCLUSIVEADDRUSE` on Windows) so that ports sitting in `TIME_WAIT` from a recently closed server instance do not trigger false "occupied" readings.
 
     Args:
         host: Host/interface to probe on (e.g. `"127.0.0.1"`, `"0.0.0.0"`).
@@ -102,12 +103,21 @@ def find_free_port(host: str, start_port: int, max_tries: int = 50) -> int:
     for port in range(start_port, start_port + max_tries):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            if sys.platform == "win32":
+                # On Windows, SO_EXCLUSIVEADDRUSE prevents other processes from hijacking
+                # active ports while allowing clean re-binds after process closure.
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                # On POSIX, SO_REUSEADDR allows binding over TIME_WAIT sockets from
+                # recently closed processes without allowing active listening hijacking.
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
             s.bind((host, port))
+            return port
         except OSError:
             continue
-        else:
-            return port
         finally:
             s.close()
+
     msg = f"No free port found in [{start_port}, {start_port + max_tries}) on {host}"
     raise RuntimeError(msg)

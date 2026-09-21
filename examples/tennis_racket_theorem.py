@@ -151,6 +151,14 @@ def runtime(
         angle=mojo.Angle.RADIAN,
     )
 
+    # It will be logged to "Bodies/racket:nutation_deg" ("category/subgroup:attr")
+    # Build the column once, `post` is called every timestep
+    nutation_column = mojo.utils.Column(
+        category=mojo.SignalCategory.BODIES,
+        subgroups=(f"{handoff.racket.name}",),
+        attr="nutation_deg",
+    )
+
     # Define a custom signal sampler
     def sample_nutation(state: mojo.MjState):
         """Adds the [nutation angle](https://en.wikipedia.org/wiki/Nutation) as an output signal."""
@@ -172,13 +180,7 @@ def runtime(
             nutation_deg = np.degrees(nutation_rad)
 
             # Post to the signal manager
-            # It will be logged to "Bodies/racket:nutation_deg" ("category/subgroup:attr")
-            runtime_manager.signal_manager.post(
-                value=float(nutation_deg),
-                category=mojo.SignalCategory.BODIES,
-                subgroups=(f"{handoff.racket.name}",),
-                attr="nutation_deg",
-            )
+            runtime_manager.signal_manager.post(float(nutation_deg), nutation_column)
 
     with runtime_manager as rm:
         # Request telemetry to monitor the tumbling

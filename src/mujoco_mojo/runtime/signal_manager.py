@@ -7,14 +7,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-import pint
 import polars as pl
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.stochas import UnitSystem, ureg
-from mujoco_mojo.typing import MatN, SignalCategory
+from mujoco_mojo.stochas import UnitSystem
+from mujoco_mojo.typing import MatN
+from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 
 logger = get_logger(__name__)
 
@@ -24,36 +25,6 @@ _FLOAT64_BYTES = np.dtype(np.float64).itemsize
 
 _COLUMN_METADATA_KEY = "column_metadata"
 """Key under which the per-column metadata JSON blob is stored in the parquet file's footer."""
-
-
-def _validate_signal_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    """
-    Validates the well-known `dimension`/`unit` metadata keys via Pint, leaving any other user-defined keys untouched.
-
-    `dimension` (e.g. "[length] / [time]") tags the physical quantity type without committing to a concrete unit. It's the right choice for built-in signals where the user's modeling unit system isn't knowable. `unit` (e.g. "meter / second") is for the rarer case where the concrete unit truly is known. If both are given, they must describe the same dimensionality.
-    """
-    dimension = metadata.get("dimension")
-    unit = metadata.get("unit")
-
-    dimensionality = None
-    if dimension is not None:
-        try:
-            dimensionality = ureg.get_dimensionality(dimension)
-        except (pint.UndefinedUnitError, pint.DefinitionSyntaxError) as e:
-            raise ValueError(f"Invalid signal metadata dimension {dimension!r}: {e}")
-
-    if unit is not None:
-        try:
-            parsed_unit = ureg.parse_units(unit)
-        except pint.UndefinedUnitError as e:
-            raise ValueError(f"Invalid signal metadata unit {unit!r}: {e}")
-        if dimensionality is not None and parsed_unit.dimensionality != dimensionality:
-            raise ValueError(
-                f"Signal metadata unit {unit!r} ({parsed_unit.dimensionality}) do not "
-                f"match dimension {dimension!r} ({dimensionality})"
-            )
-
-    return metadata
 
 
 def resolve_signal_manager(
@@ -87,10 +58,8 @@ class SignalManager:
     """When set, the time column's concrete unit is resolved from `unit_system.time` (e.g. `"second"`, `"millisecond"`). Always tagged with `dimension="[time]"` regardless."""
 
     # === BEGIN PRIVATE API ===
-    _key_cache: dict[tuple[str, tuple[str, ...], str], str] = field(
-        default_factory=dict, init=False
-    )
-    """Caches (category, subgroups, attr) tuples to their joined string keys."""
+    _col_idx: dict[Column, int] = field(default_factory=dict, init=False)
+    """Maps every `Column` object `post` has seen to its column index in the NumPy buffer. Equal columns share one entry."""
 
     _key_to_idx: dict[str, int] = field(default_factory=dict, init=False)
     """Maps signal strings to their specific column index in the NumPy buffer."""
@@ -118,10 +87,8 @@ class SignalManager:
     _part_paths: list[Path] = field(default_factory=list, init=False)
     """Paths of per-flush part files written this run, in order, pending merge in `close()`."""
 
-    _column_metadata: dict[str, dict[str, Any]] = field(
-        default_factory=dict, init=False
-    )
-    """User-supplied metadata (e.g. `dimension`/`unit`) for columns that registered any, keyed by full signal key. Written into the merged parquet file's footer on `close()`."""
+    _columns: dict[str, Column] = field(default_factory=dict, init=False)
+    """Every registered column, keyed by its full name. Each column's metadata is written into the merged parquet file's footer on `close()`."""
 
     @staticmethod
     def default_output_name() -> Literal["telemetry.parquet"]:
@@ -170,10 +137,12 @@ class SignalManager:
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
-        time_meta: dict[str, str] = {"dimension": "[time]"}
+        time_meta = ColumnMetadata(dimension="[time]")
         if self.unit_system is not None and self.unit_system.time is not None:
-            time_meta["unit"] = self.unit_system.time
-        self._column_metadata[TIME_COLUMN_NAME] = time_meta
+            time_meta = ColumnMetadata(dimension="[time]", unit=self.unit_system.time)
+        self._columns[TIME_COLUMN_NAME] = Column(
+            category=TIME_COLUMN_NAME, metadata=time_meta
+        )
         self._n_cols = 1
         logger.debug(
             f"SignalManager initialized: buffer capacity={self._capacity} rows, Path={self.export_path}"
@@ -195,27 +164,20 @@ class SignalManager:
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
         )
 
-    def track(
-        self,
-        getter: Callable[[], float],
-        category: SignalCategory | str,
-        subgroups: tuple[str, ...] = (),
-        *,
-        attr: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ):
+    def track(self, getter: Callable[[], float], column: Column):
         """
-        Registers `getter` to be called and posted on every recorded step, under the same `category`/`subgroups`/`attr` namespace as `post`.
+        Registers `getter` to be called and posted on every recorded step, under `column`.
 
         `getter` is called fresh on every recorded step, so it should look up a value that changes over the course of the simulation (e.g. a variable updated each step, an attribute, or an indexing operation) rather than a constant computed once. If the underlying value never changes after registration, `track` will simply keep posting that same value every step.
 
         Examples:
             >>> # Becomes "Custom/MyGroup:value", re-read from `obj.value` every step
-            >>> manager.track(lambda: obj.value, "Custom", ("MyGroup",), attr="value")
+            >>> column = Column(category="Custom", subgroups=("MyGroup",), attr="value")
+            >>> manager.track(lambda: obj.value, column)
 
             >>> # Also works: `level` is a variable reassigned each step in the same scope
             >>> level = 0.0
-            >>> manager.track(lambda: level, "Custom", ("MyGroup",), attr="level")
+            >>> manager.track(lambda: level, Column(category="Custom", subgroups=("MyGroup",), attr="level"))
             >>> for _ in range(n_steps):
             ...     level = compute_level(state)
             ...     rm.step(state)
@@ -223,90 +185,76 @@ class SignalManager:
         """
 
         def _sample(_: MjState):
-            self.post(getter(), category, subgroups, attr=attr, metadata=metadata)
+            self.post(getter(), column)
 
         self.register_sampler(_sample)
 
-    def post(
-        self,
-        value: float,
-        category: SignalCategory | str,
-        subgroups: tuple[str, ...] = (),
-        *,
-        attr: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ):
+    @property
+    def _column_metadata(self) -> dict[str, ColumnMetadata]:
+        """The metadata of every registered column that has any, keyed by full name."""
+        return {name: c.metadata for name, c in self._columns.items() if c.metadata}
+
+    def _register(self, column: Column) -> int:
+        """Adds a new column to the buffer and returns its index."""
+        full_key = str(column)
+        idx = self._n_cols
+        self._key_to_idx[full_key] = idx
+        self._columns[full_key] = column
+        self._n_cols += 1
+
+        logger.debug(f"New signal registered: {full_key} at index {idx}")
+
+        # grow buffer if exceeding the initial guess
+        if self._n_cols > self._data_buffer.shape[1]:
+            n_cols_to_add = 50
+            new_width = self._data_buffer.shape[1] + n_cols_to_add
+            logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
+
+            growth = np.full(
+                (self._data_buffer.shape[0], n_cols_to_add),
+                np.nan,
+                dtype=np.float64,
+            )
+            self._data_buffer = np.hstack([self._data_buffer, growth])
+
+        # more columns means more bytes per row, so the row budget shrinks
+        self._recompute_capacity()
+        return idx
+
+    def post(self, value: float, column: Column):
         """
-        Injects a value into the telemetry ledger using a hierarchical namespace.
+        Injects a value into the telemetry ledger under `column`.
 
-        This method constructs a structured key that the dashboard uses to build a navigable tree view. The naming convention follows a folder-like structure to group related signals (e.g., all axes of a body's position).
+        The column's name places the signal in a hierarchical namespace that the dashboard uses to build a navigable tree view. Its metadata is persisted into the telemetry file's footer, but only the first time a column with this name is registered (metadata on later columns with the same name is ignored).
 
-        Format:
-            Category/Subgroup:Attribute
-            (e.g., "Bodies/Link_1:xpos_x")
+        This is called for every column on every timestep, so build each `Column` once and reuse it rather than constructing one per call. A `Column` with the same parts as one already seen still works, but is looked up by comparing its fields instead of by identity.
 
         Args:
             value (float): The numeric data to record.
-            category (SignalCategory | str): Top level category (e.g., "Bodies")
-            subgroups (tuple[str, ...], optional): The second-level organizational folders. Defaults to an empty tuple.
-            attr (str | None, optional): The specific signal or component name (e.g., "qpos" or "x"). Defaults to None.
-            metadata (dict[str, Any] | None, optional): Arbitrary metadata for this signal, persisted into the telemetry file's footer. Only consulted the first time this signal is registered (ignored on later calls for the same signal). Two keys are validated via Pint if present: `dimension` (e.g. `"[length] / [time]"`), for tagging the physical quantity type when the concrete unit isn't knowable (the right choice for built-in signals, since the user's modeling unit system isn't known here), and `unit` (e.g. `"meter / second"`), for the rarer case the concrete unit truly is known. Any other keys (e.g. `display_name`, `comment`) pass through unvalidated. Defaults to None.
+            column (Column): Where to record it: the category, subgroups, and attr that make up the column's name, plus its metadata. See `Column` for the naming grammar and `ColumnMetadata` for the metadata fields.
 
         Examples:
             >>> # Becomes "Bodies/Hand/xpos:x"
-            >>> manager.post(1.2, SignalCategory.BODIES, ("Hand", "xpos"), "x")
-
-            >>> # Becomes "Sensors/IMU/Accel:z"
-            >>> manager.post(9.81, "Sensors", ("IMU", "Accel"), attr="z")
+            >>> x = Column(category=SignalCategory.BODIES, subgroups=("Hand", "xpos"), attr="x")
+            >>> manager.post(1.2, x)
 
             >>> # Tag a custom signal's physical quantity type without committing to a unit system
-            >>> manager.post(0.4, "Custom", ("Spring",), attr="stiffness", metadata={"dimension": "[force] / [length]"})
+            >>> stiffness = Column(
+            ...     category="Custom",
+            ...     subgroups=("Spring",),
+            ...     attr="stiffness",
+            ...     metadata={"dimension": "[force] / [length]"},
+            ... )
+            >>> manager.post(0.4, stiffness)
 
         """
-        # use tuple as cache key to avoid string construction
-        cache_lookup = (str(category), subgroups, attr if attr is not None else "")
-
-        if cache_lookup in self._key_cache:
-            # fast path for cached signal
-            full_key = self._key_cache[cache_lookup]
-        else:
-            # slow path for a new signal
-            path_parts = [str(category)] + [str(s) for s in subgroups if s]
-            full_key = "/".join(path_parts)
-            if attr:
-                full_key += f":{attr}"
-
-            self._key_cache[cache_lookup] = full_key
-
-        # get column index
-        if full_key in self._key_to_idx:
-            idx = self._key_to_idx[full_key]
-        else:
-            # register a new signal column
-            idx = self._n_cols
-            self._key_to_idx[full_key] = idx
-            self._n_cols += 1
-
-            if metadata:
-                self._column_metadata[full_key] = _validate_signal_metadata(metadata)
-
-            logger.debug(f"New signal registered: {full_key} at index {idx}")
-
-            # grow buffer if exceeding the initial guess
-            if self._n_cols > self._data_buffer.shape[1]:
-                n_cols_to_add = 50
-                new_width = self._data_buffer.shape[1] + n_cols_to_add
-                logger.debug(f"Growing telemetry buffer width to {new_width} columns.")
-
-                growth = np.full(
-                    (self._data_buffer.shape[0], n_cols_to_add),
-                    np.nan,
-                    dtype=np.float64,
-                )
-                self._data_buffer = np.hstack([self._data_buffer, growth])
-
-            # more columns means more bytes per row, so the row budget shrinks
-            self._recompute_capacity()
+        idx = self._col_idx.get(column)
+        if idx is None:
+            # first time this column object is seen: a different column object with the
+            # same name may already be registered, in which case it keeps its metadata
+            registered = self._key_to_idx.get(str(column))
+            idx = registered if registered is not None else self._register(column)
+            self._col_idx[column] = idx
 
         # write value to buffer for next flush
         self._data_buffer[self._buffer_row_idx, idx] = value
@@ -361,7 +309,11 @@ class SignalManager:
         """Builds the parquet file-level metadata dict, or None if no signal registered any."""
         if not self._column_metadata:
             return None
-        return {_COLUMN_METADATA_KEY: json.dumps(self._column_metadata)}
+        return {
+            _COLUMN_METADATA_KEY: json.dumps(
+                {k: v.model_dump(mode="json") for k, v in self._column_metadata.items()}
+            )
+        }
 
     def _merge_parts(self):
         """Streams all part files written this run into `export_path`, then removes the parts."""

@@ -1,12 +1,13 @@
 """
-Generate TypeScript types from Pydantic models in plot_config.py.
+Generate TypeScript types from the dojo's Pydantic models.
 
 Run from the repo root:
 
     python scripts/gen_ts_models.py
 
 Writes:
-    src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/plot-config.generated.ts
+    src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/plot-config.generated.ts (from plot_config.py)
+    src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/column-metadata.generated.ts (from signal_metadata.py's ColumnMetadata)
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ TS_OUT = (
     / "src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib"
     / "plot-config.generated.ts"
 )
+TS_COLUMN_METADATA_OUT = TS_OUT.with_name("column-metadata.generated.ts")
 
 # ---------------------------------------------------------------------------
 # JSON Schema → TypeScript converter
@@ -258,6 +260,34 @@ def main() -> None:
     TS_OUT.parent.mkdir(parents=True, exist_ok=True)
     TS_OUT.write_text(output, encoding="utf-8")
     print(f"Written → {TS_OUT.relative_to(ROOT)}")
+
+    write_column_metadata_types()
+
+
+def write_column_metadata_types() -> None:
+    """Emit the ColumnMetadata interface (and the enums it references) the frontend uses for per-column metadata."""
+    from mujoco_mojo.utils.signal_metadata import ColumnMetadata
+
+    schema = ColumnMetadata.model_json_schema()
+    defs: dict = schema.get("$defs", {})
+    extra_unions: dict[str, str] = {}
+
+    blocks = [
+        _def_to_ts(name, def_schema, defs, extra_unions)
+        for name, def_schema in defs.items()
+    ]
+    blocks.append(_def_to_ts("ColumnMetadata", schema, defs, extra_unions))
+
+    header = textwrap.dedent("""\
+        // ============================================================
+        // AUTO-GENERATED - do not edit manually.
+        // Source: src/mujoco_mojo/utils/signal_metadata.py (ColumnMetadata)
+        // Regenerate: python scripts/gen_ts_models.py
+        // ============================================================
+
+    """)
+    TS_COLUMN_METADATA_OUT.write_text(header + "\n".join(blocks), encoding="utf-8")
+    print(f"Written → {TS_COLUMN_METADATA_OUT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

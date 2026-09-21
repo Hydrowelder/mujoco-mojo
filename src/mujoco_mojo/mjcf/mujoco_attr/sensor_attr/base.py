@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, ClassVar
 
 import mujoco
 import numpy as np
@@ -20,13 +21,18 @@ from mujoco_mojo.typing import (
     SignalCategory,
     VecN,
 )
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
     merge_signal_metadata,
+    torque_metadata,
 )
 
 logger = get_logger(__name__)
@@ -37,38 +43,39 @@ if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
 # tags with a fixed, unambiguous physical quantity regardless of what the sensor references
-_TAG_METADATA: dict[str, dict[str, str]] = {
-    "accelerometer": dim(Dimension.ACCELERATION),
-    "velocimeter": dim(Dimension.VELOCITY),
-    "gyro": angular_rate_metadata(),
-    "force": dim(Dimension.FORCE),
-    "torque": {**dim(Dimension.TORQUE), "quantity": "torque"},
-    "framepos": dim(Dimension.LENGTH),
-    "subtreecom": dim(Dimension.LENGTH),
-    "framelinvel": dim(Dimension.VELOCITY),
-    "subtreelinvel": dim(Dimension.VELOCITY),
-    "frameangvel": angular_rate_metadata(),
-    "ballangvel": angular_rate_metadata(),
-    "framelinacc": dim(Dimension.ACCELERATION),
-    "frameangacc": angular_rate_metadata(per="second ** 2"),
-    "subtreeangmom": dim(Dimension.ANGULAR_MOMENTUM),
-    "e_kinetic": dim(Dimension.ENERGY),
-    "e_potential": dim(Dimension.ENERGY),
-    "touch": dim(Dimension.FORCE),
-    "distance": dim(Dimension.LENGTH),
-    "rangefinder": dim(Dimension.LENGTH),
+_TAG_METADATA: dict[str, ColumnMetadata] = {
+    "accelerometer": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "velocimeter": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "gyro": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "force": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+    "torque": torque_metadata() | TransformType.VECTOR.metadata,
+    "framepos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "subtreecom": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "framelinvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "subtreelinvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "frameangvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "ballangvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "framelinacc": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "frameangacc": angular_rate_metadata(per="second ** 2")
+    | TransformType.VECTOR.metadata,
+    "subtreeangmom": dim(Dimension.ANGULAR_MOMENTUM) | TransformType.VECTOR.metadata,
+    "e_kinetic": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "e_potential": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "touch": dim(Dimension.FORCE) | TransformType.SCALAR.metadata,
+    "distance": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
+    "rangefinder": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
     "fromto": dim(Dimension.LENGTH),
-    "tendonpos": dim(Dimension.LENGTH),
-    "tendonvel": dim(Dimension.VELOCITY),
-    "tendonlimitvel": dim(Dimension.VELOCITY),
-    "tendonactuatorfrc": dim(Dimension.FORCE),
-    "tendonlimitfrc": dim(Dimension.FORCE),
-    "clock": dim(Dimension.TIME),
-    "framexaxis": dimensionless_metadata(),
-    "frameyaxis": dimensionless_metadata(),
-    "framezaxis": dimensionless_metadata(),
-    "normal": dimensionless_metadata(),
-    "insidesite": dimensionless_metadata(),
+    "tendonpos": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
+    "tendonvel": dim(Dimension.VELOCITY) | TransformType.SCALAR.metadata,
+    "tendonlimitvel": dim(Dimension.VELOCITY) | TransformType.SCALAR.metadata,
+    "tendonactuatorfrc": dim(Dimension.FORCE) | TransformType.SCALAR.metadata,
+    "tendonlimitfrc": dim(Dimension.FORCE) | TransformType.SCALAR.metadata,
+    "clock": dim(Dimension.TIME) | TransformType.SCALAR.metadata,
+    "framexaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "frameyaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "framezaxis": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "normal": dimensionless_metadata() | TransformType.VECTOR.metadata,
+    "insidesite": dimensionless_metadata() | TransformType.SCALAR.metadata,
 }
 
 # tags whose physical quantity depends on the referenced joint's type (hinge vs. slide),
@@ -152,10 +159,10 @@ class SensorBase(XMLModel, ABC):
     _metadata_resolved: bool = PrivateAttr(default=False)
     """Whether `_resolved_metadata_cache` has been computed yet (None is itself a valid resolution, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
 
-    _resolved_metadata_cache: dict[str, str] | None = PrivateAttr(default=None)
+    _resolved_metadata_cache: ColumnMetadata | None = PrivateAttr(default=None)
     """Cached built-in metadata for this sensor's tag, resolved once on first sample."""
 
-    def _resolve_builtin_metadata(self, state: MjState) -> dict[str, str] | None:
+    def _resolve_builtin_metadata(self, state: MjState) -> ColumnMetadata | None:
         """Resolves and caches this sensor's built-in dimension/unit metadata, based on its tag (and, for joint-/actuator-referencing tags, the referenced object's type)."""
         if self._metadata_resolved:
             return self._resolved_metadata_cache
@@ -180,7 +187,7 @@ class SensorBase(XMLModel, ABC):
                 else None
             )
         elif self.tag.endswith("quat"):
-            builtin = dimensionless_metadata()
+            builtin = dimensionless_metadata() | TransformType.QUATERNION.metadata
         else:
             builtin = None
 
@@ -191,7 +198,7 @@ class SensorBase(XMLModel, ABC):
     def request(
         self,
         signal_manager: SignalManager | None = None,
-        metadata: dict[str, dict[str, Any]] | None = None,
+        metadata: MetadataOverrides | None = None,
     ):
         """
         Registers the sensor's output for logging.
@@ -230,58 +237,62 @@ class SensorBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
 
+        name = str(self.name)
+        columns: dict[int, tuple[Column, ...]] = {}
+
+        def sensor_columns(state: MjState, sensor_dim: int) -> tuple[Column, ...]:
+            # built on the first sample (the metadata depends on the unit system and,
+            # for some tags, the referenced object), then reused: this runs every timestep
+            cols = columns.get(sensor_dim)
+            if cols is None:
+                meta = merge_signal_metadata(
+                    self._resolve_builtin_metadata(state),
+                    self.tag,
+                    metadata,
+                    unit_system=state.us,
+                )
+                if sensor_dim == 1:
+                    # scalar values are considered an attr of the parent
+                    cols = (
+                        Column(
+                            category=SignalCategory.SENSORS,
+                            subgroups=(name,),
+                            attr=self.tag,
+                            metadata=meta,
+                        ),
+                    )
+                else:
+                    if sensor_dim == 4 and self.tag.endswith("quat"):
+                        attrs: Iterable[str] = "wxyz"
+                    elif sensor_dim == 3 and self.tag not in ("tactile", "user"):
+                        attrs = "xyzm"
+                    else:
+                        attrs = tuple(str(i) for i in range(sensor_dim))
+                    cols = fan_out(
+                        SignalCategory.SENSORS, (name, self.tag), attrs, meta
+                    )
+                columns[sensor_dim] = cols
+            return cols
+
         def sample(state: MjState):
             sid = self.get_id(state.model)
-            meta = merge_signal_metadata(
-                self._resolve_builtin_metadata(state),
-                self.tag,
-                metadata,
-                unit_system=state.us,
-            )
 
             # find where this sensor's data starts and how long it is
             # (e.g., sensor_dim=3 for an accelerometer, sensor_dim=4 for a framequat sensor)
             adr = state.model.sensor_adr[sid]
-            sensor_dim = state.model.sensor_dim[sid]
+            sensor_dim = int(state.model.sensor_dim[sid])
 
             # slice the flat sensordata array
             val = state.data.sensordata[adr : adr + sensor_dim]
+            cols = sensor_columns(state, sensor_dim)
 
             if sensor_dim == 1:
-                signal_manager.post(
-                    value=float(val[0]),
-                    category=SignalCategory.SENSORS,
-                    subgroups=(str(self.name),),
-                    attr=self.tag,  # scalar values are considered an attr of the parent
-                    metadata=meta,
-                )
-            elif sensor_dim == 4 and self.tag.endswith("quat"):
-                for v, attr in zip(val, "wxyz", strict=True):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=attr,
-                        metadata=meta,
-                    )
-            elif sensor_dim == 3 and self.tag not in ("tactile", "user"):
-                full_vec = np.append(val, np.linalg.norm(val))
-                for v, attr in zip(full_vec, "xyzm", strict=True):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=attr,
-                        metadata=meta,
-                    )
-            else:
-                for i, v in enumerate(val):
-                    signal_manager.post(
-                        value=float(v),
-                        category=SignalCategory.SENSORS,
-                        subgroups=(str(self.name), self.tag),
-                        attr=str(i),
-                        metadata=meta,
-                    )
+                signal_manager.post(float(val[0]), cols[0])
+                return
+            if sensor_dim == 3 and self.tag not in ("tactile", "user"):
+                # cartesian vector: x, y, z + magnitude
+                val = np.append(val, np.linalg.norm(val))
+            for v, col in zip(val, cols, strict=True):
+                signal_manager.post(float(v), col)
 
         signal_manager.register_sampler(sample)

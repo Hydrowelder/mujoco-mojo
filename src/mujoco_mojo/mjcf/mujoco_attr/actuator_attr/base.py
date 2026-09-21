@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -27,7 +27,14 @@ from mujoco_mojo.typing import (
     VecN,
 )
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.signal_metadata import merge_signal_metadata
+from mujoco_mojo.utils.column import Column, fan_out
+from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
+    TransformType,
+    merge_signal_metadata,
+)
 
 if TYPE_CHECKING:
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -255,14 +262,14 @@ class ActuatorBase(XMLModel, ABC):
     _metadata_resolved: bool = PrivateAttr(default=False)
     """Whether `_transmission_metadata_cache` has been computed yet (None is itself a valid resolution for SITE/BODY/SLIDERCRANK transmission, so a plain `is None` check can't distinguish "unresolved" from "resolved to no metadata")."""
 
-    _transmission_metadata_cache: dict[str, dict[str, str]] | None = PrivateAttr(
+    _transmission_metadata_cache: dict[str, ColumnMetadata] | None = PrivateAttr(
         default=None
     )
     """Cached `{"length": ..., "velocity": ..., "force": ...}` metadata for this actuator's transmission, resolved once on first sample."""
 
     def _resolve_transmission_metadata(
         self, state: MjState
-    ) -> dict[str, dict[str, str]] | None:
+    ) -> dict[str, ColumnMetadata] | None:
         """Resolves and caches this actuator's transmission-based metadata for `length`/`velocity`/`force`."""
         if not self._metadata_resolved:
             actuator_id = self.get_id(state.model)
@@ -278,7 +285,7 @@ class ActuatorBase(XMLModel, ABC):
         channels: list[Literal["ctrl", "length", "velocity", "force", "act", "act_dot"]]
         | dict[
             Literal["ctrl", "length", "velocity", "force", "act", "act_dot"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = [
             "ctrl",
             "length",
@@ -328,24 +335,55 @@ class ActuatorBase(XMLModel, ABC):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
-        def sample(state: MjState):
-            transmission_meta = self._resolve_transmission_metadata(state)
+        name = f"{self.name}"
+        columns: dict[tuple[str, int], tuple[Column, ...]] = {}
 
-            for channel in channels:
+        def channel_columns(
+            channel: str, size: int, state: MjState
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system and the transmission), then reused: this runs every timestep
+            cols = columns.get((channel, size))
+            if cols is None:
+                transmission_meta = self._resolve_transmission_metadata(state)
                 builtin = (
                     transmission_meta.get(channel)
                     if transmission_meta is not None
                     else None
                 )
+                if size == 1:
+                    builtin = (
+                        builtin or ColumnMetadata()
+                    ) | TransformType.SCALAR.metadata
                 meta = merge_signal_metadata(
                     builtin, channel, _meta, unit_system=state.us
                 )
+                if size == 1:
+                    cols = (
+                        Column(
+                            category=SignalCategory.ACTUATORS,
+                            subgroups=(name,),
+                            attr=channel,
+                            metadata=meta,
+                        ),
+                    )
+                else:
+                    cols = fan_out(
+                        SignalCategory.ACTUATORS,
+                        (name, channel),
+                        (str(i) for i in range(size)),
+                        meta,
+                    )
+                columns[(channel, size)] = cols
+            return cols
 
+        def sample(state: MjState):
+            for channel in channels:
                 match channel:
                     case "ctrl":
                         val = self.rt_ctrl(state)
@@ -365,31 +403,12 @@ class ActuatorBase(XMLModel, ABC):
                 if isinstance(val, np.ndarray):
                     if val.size == 0:
                         continue
-                    if val.size == 1:
-                        signal_manager.post(
-                            value=float(val[0]),
-                            category=SignalCategory.ACTUATORS,
-                            subgroups=(f"{self.name}",),
-                            attr=channel,
-                            metadata=meta,
-                        )
-                    else:
-                        for i in range(val.size):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.ACTUATORS,
-                                subgroups=(f"{self.name}", channel),
-                                attr=str(i),
-                                metadata=meta,
-                            )
+                    cols = channel_columns(channel, val.size, state)
+                    for v, col in zip(val.ravel(), cols, strict=True):
+                        signal_manager.post(float(v), col)
                     continue
 
-                signal_manager.post(
-                    value=val,
-                    category=SignalCategory.ACTUATORS,
-                    subgroups=(f"{self.name}",),
-                    attr=channel,
-                    metadata=meta,
-                )
+                (col,) = channel_columns(channel, 1, state)
+                signal_manager.post(val, col)
 
         signal_manager.register_sampler(sample)

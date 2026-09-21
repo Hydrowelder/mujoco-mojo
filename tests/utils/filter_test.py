@@ -23,6 +23,7 @@ from mujoco_mojo.utils.filters import (
     NormalizeFilter,
     RollingMeanFilter,
     RollingMedianFilter,
+    RotationFilter,
     SavitzkyGolayFilter,
     ScaleFilter,
     SortFilter,
@@ -123,6 +124,271 @@ def test_normalize_filter(signal_df: MojoDataFrame):
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert np.allclose(result[0], 0.0)
     assert np.allclose(result[-1], 1.0)
+
+
+def test_rotation_filter_apply_to_frame_missing_quat_columns_raises():
+    """apply_to_frame must fail loudly rather than silently returning the frame unchanged."""
+    df = pl.DataFrame(
+        {
+            "Bodies/racket/xpos:x": [1.0],
+            "Bodies/racket/xpos:y": [0.0],
+            "Bodies/racket/xpos:z": [0.0],
+        }
+    )
+    f = RotationFilter(quat_col="Bodies/racket/missing_quat", origin_col=None)
+    with pytest.raises(ValueError, match="not found"):
+        f.apply_to_frame(df, {"Bodies/racket/xpos"})
+
+
+def test_rotation_filter_apply_to_frame_point_bases_without_origin_col_raises():
+    df = pl.DataFrame(
+        {
+            "Bodies/racket/xquat:x": [0.0],
+            "Bodies/racket/xquat:y": [0.0],
+            "Bodies/racket/xquat:z": [0.0],
+            "Bodies/racket/xquat:w": [1.0],
+            "Bodies/target/xpos:x": [5.0],
+            "Bodies/target/xpos:y": [0.0],
+            "Bodies/target/xpos:z": [0.0],
+        }
+    )
+    f = RotationFilter(quat_col="Bodies/racket/xquat", origin_col=None)
+    with pytest.raises(ValueError, match="origin_col"):
+        f.apply_to_frame(df, vector_bases=set(), point_bases={"Bodies/target/xpos"})
+
+
+def test_rotation_filter_apply_to_frame_translates_points_and_recomputes_magnitude():
+    """A point base is translated against origin_col before rotating (unlike a vector base), and its stale :m magnitude sibling is recomputed rather than left untouched - translation changes distance-from-origin, so the old magnitude no longer applies."""
+    df = pl.DataFrame(
+        {
+            "Bodies/racket/xquat:x": [0.0],
+            "Bodies/racket/xquat:y": [0.0],
+            "Bodies/racket/xquat:z": [0.0],
+            "Bodies/racket/xquat:w": [1.0],
+            "Bodies/racket/xpos:x": [1.0],
+            "Bodies/racket/xpos:y": [0.0],
+            "Bodies/racket/xpos:z": [0.0],
+            "Bodies/target/xpos:x": [5.0],
+            "Bodies/target/xpos:y": [0.0],
+            "Bodies/target/xpos:z": [0.0],
+            "Bodies/target/xpos:m": [5.0],
+        }
+    )
+    f = RotationFilter(
+        quat_col="Bodies/racket/xquat", origin_col="Bodies/racket/xpos", invert=True
+    )
+    rotated = f.apply_to_frame(
+        df, vector_bases=set(), point_bases={"Bodies/target/xpos"}
+    )
+
+    assert np.allclose(rotated["Bodies/target/xpos:x"].to_numpy(), [4.0])
+    assert np.allclose(rotated["Bodies/target/xpos:y"].to_numpy(), [0.0])
+    assert np.allclose(rotated["Bodies/target/xpos:z"].to_numpy(), [0.0])
+    assert np.allclose(rotated["Bodies/target/xpos:m"].to_numpy(), [4.0])
+
+
+def test_rotation_filter_compose_to_frame_matches_scipy():
+    """Cross-check the hand-rolled Hamilton-product quaternion composition against scipy as a trusted oracle. Quaternions double-cover rotations (q and -q represent the same rotation), so compare via the resulting rotation matrices rather than raw components."""
+    from scipy.spatial.transform import Rotation
+
+    rng = np.random.default_rng(1)
+    n = 10
+    qb = rng.normal(size=(n, 4))
+    qb /= np.linalg.norm(qb, axis=1, keepdims=True)
+    qa = rng.normal(size=(n, 4))
+    qa /= np.linalg.norm(qa, axis=1, keepdims=True)
+
+    df = pl.DataFrame(
+        {
+            "Bodies/frame/quat:x": qb[:, 0],
+            "Bodies/frame/quat:y": qb[:, 1],
+            "Bodies/frame/quat:z": qb[:, 2],
+            "Bodies/frame/quat:w": qb[:, 3],
+            "Bodies/target/quat:x": qa[:, 0],
+            "Bodies/target/quat:y": qa[:, 1],
+            "Bodies/target/quat:z": qa[:, 2],
+            "Bodies/target/quat:w": qa[:, 3],
+        }
+    )
+
+    rb = Rotation.from_quat(qb)
+    ra = Rotation.from_quat(qa)
+
+    for invert in (True, False):
+        f = RotationFilter(quat_col="Bodies/frame/quat", origin_col=None, invert=invert)
+        composed = f.compose_to_frame(df, quaternion_bases={"Bodies/target/quat"})
+        result = composed.select(
+            [
+                "Bodies/target/quat:x",
+                "Bodies/target/quat:y",
+                "Bodies/target/quat:z",
+                "Bodies/target/quat:w",
+            ]
+        ).to_numpy(writable=True)  # scipy < 1.18 rejects polars' read-only views
+
+        expected_rot = (rb.inv() * ra) if invert else (rb * ra)
+        actual_rot = Rotation.from_quat(result)
+        assert np.allclose(actual_rot.as_matrix(), expected_rot.as_matrix(), atol=1e-10)
+
+
+def test_rotation_filter_compose_to_frame_missing_quat_col_columns_raises():
+    df = pl.DataFrame(
+        {
+            "Bodies/target/quat:x": [0.0],
+            "Bodies/target/quat:y": [0.0],
+            "Bodies/target/quat:z": [0.0],
+            "Bodies/target/quat:w": [1.0],
+        }
+    )
+    f = RotationFilter(quat_col="Bodies/frame/missing_quat", origin_col=None)
+    with pytest.raises(ValueError, match="not found"):
+        f.compose_to_frame(df, quaternion_bases={"Bodies/target/quat"})
+
+
+def test_rotation_filter_compose_to_frame_zero_quaternion_raises():
+    df = pl.DataFrame(
+        {
+            "Bodies/frame/quat:x": [0.0],
+            "Bodies/frame/quat:y": [0.0],
+            "Bodies/frame/quat:z": [0.0],
+            "Bodies/frame/quat:w": [0.0],
+            "Bodies/target/quat:x": [0.0],
+            "Bodies/target/quat:y": [0.0],
+            "Bodies/target/quat:z": [0.0],
+            "Bodies/target/quat:w": [1.0],
+        }
+    )
+    f = RotationFilter(quat_col="Bodies/frame/quat", origin_col=None)
+    with pytest.raises(ValueError, match="zero, NaN, or infinite"):
+        f.compose_to_frame(df, quaternion_bases={"Bodies/target/quat"})
+
+
+def _frame_and_point_df() -> tuple[pl.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
+    """A frame rotated +90 degrees about z at (1, 0, 0), and a point at (2, 0, 0)."""
+    from scipy.spatial.transform import Rotation
+
+    q = Rotation.from_euler("z", 90, degrees=True).as_quat()  # [x, y, z, w]
+    origin = np.array([1.0, 0.0, 0.0])
+    point = np.array([2.0, 0.0, 0.0])
+    df = pl.DataFrame(
+        {
+            "Bodies/F/quat:x": [q[0]],
+            "Bodies/F/quat:y": [q[1]],
+            "Bodies/F/quat:z": [q[2]],
+            "Bodies/F/quat:w": [q[3]],
+            "Bodies/F/xpos:x": [origin[0]],
+            "Bodies/F/xpos:y": [origin[1]],
+            "Bodies/F/xpos:z": [origin[2]],
+            "Bodies/P/xpos:x": [point[0]],
+            "Bodies/P/xpos:y": [point[1]],
+            "Bodies/P/xpos:z": [point[2]],
+        }
+    )
+    return df, q, origin, point
+
+
+def _apply_per_component(f: RotationFilter, df: pl.DataFrame, base: str) -> np.ndarray:
+    """Runs apply_with_context on each :x/:y/:z series, as the dojo router does."""
+    out = []
+    for axis in "xyz":
+        col = f"{base}:{axis}"
+        result = f.apply_with_context(df[col], df)
+        assert result is not None
+        out.append(result[0])
+    return np.array(out)
+
+
+def test_rotation_filter_apply_with_context_translates_then_rotates_with_origin():
+    """With origin_col set, a position series is expressed relative to the frame origin: R^T (p - o)."""
+    from scipy.spatial.transform import Rotation
+
+    df, q, origin, point = _frame_and_point_df()
+    f = RotationFilter(
+        quat_col="Bodies/F/quat", origin_col="Bodies/F/xpos", invert=True
+    )
+
+    actual = _apply_per_component(f, df, "Bodies/P/xpos")
+
+    expected = Rotation.from_quat(q).inv().apply(point - origin)
+    assert np.allclose(actual, expected, atol=1e-10)
+
+
+def test_rotation_filter_apply_with_context_only_rotates_without_origin():
+    """Without origin_col the same series is only rotated, keeping its world-frame origin."""
+    from scipy.spatial.transform import Rotation
+
+    df, q, _origin, point = _frame_and_point_df()
+    f = RotationFilter(quat_col="Bodies/F/quat", origin_col=None, invert=True)
+
+    actual = _apply_per_component(f, df, "Bodies/P/xpos")
+
+    assert np.allclose(actual, Rotation.from_quat(q).inv().apply(point), atol=1e-10)
+
+
+def _rotation_frame(quats: np.ndarray, vecs: np.ndarray) -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "Bodies/racket/xpos:x": vecs[:, 0],
+            "Bodies/racket/xpos:y": vecs[:, 1],
+            "Bodies/racket/xpos:z": vecs[:, 2],
+            "Bodies/racket/xiquat:x": quats[:, 0],
+            "Bodies/racket/xiquat:y": quats[:, 1],
+            "Bodies/racket/xiquat:z": quats[:, 2],
+            "Bodies/racket/xiquat:w": quats[:, 3],
+        }
+    )
+
+
+def test_rotation_filter_apply_to_frame_matches_scipy():
+    """Cross-check the hand-rolled quaternion rotation against scipy as a trusted oracle."""
+    from scipy.spatial.transform import Rotation
+
+    rng = np.random.default_rng(0)
+    quats = rng.normal(size=(25, 4))
+    quats /= np.linalg.norm(quats, axis=1, keepdims=True)
+    vecs = rng.normal(size=(25, 3))
+    df = _rotation_frame(quats, vecs)
+
+    for invert in (False, True):
+        transformer = Rotation.from_quat(quats)
+        if invert:
+            transformer = transformer.inv()
+        f = RotationFilter(
+            quat_col="Bodies/racket/xiquat", origin_col=None, invert=invert
+        )
+        rotated = f.apply_to_frame(df, {"Bodies/racket/xpos"})
+        actual = rotated.select(
+            ["Bodies/racket/xpos:x", "Bodies/racket/xpos:y", "Bodies/racket/xpos:z"]
+        ).to_numpy()
+        assert np.allclose(actual, transformer.apply(vecs), atol=1e-10)
+
+
+def test_rotation_filter_apply_to_frame_works_on_a_single_row():
+    """Polars' to_numpy() can return a read-only zero-copy view for a freshly built single-row frame, which must not break the rotation."""
+    df = _rotation_frame(np.array([[0.0, 0.0, 0.0, 1.0]]), np.array([[1.0, 0.0, 0.0]]))
+    f = RotationFilter(quat_col="Bodies/racket/xiquat", origin_col=None, invert=False)
+    rotated = f.apply_to_frame(df, {"Bodies/racket/xpos"})
+    assert rotated.height == 1
+    assert np.allclose(rotated["Bodies/racket/xpos:x"].to_numpy(), [1.0])
+
+
+def test_rotation_filter_apply_to_frame_does_not_mutate_the_source():
+    df = _rotation_frame(
+        np.array([[0.0, 0.0, 0.7071067811865476, 0.7071067811865476]]),
+        np.array([[1.0, 0.0, 0.0]]),
+    )
+    before = df["Bodies/racket/xpos:x"].to_numpy().copy()
+    f = RotationFilter(quat_col="Bodies/racket/xiquat", origin_col=None, invert=False)
+    f.apply_to_frame(df, {"Bodies/racket/xpos"})
+    assert np.array_equal(df["Bodies/racket/xpos:x"].to_numpy(), before)
+
+
+def test_rotation_filter_apply_to_frame_zero_quaternion_raises():
+    """A zero (or non-finite) quaternion row must fail loudly instead of propagating NaN."""
+    df = _rotation_frame(np.array([[0.0, 0.0, 0.0, 0.0]]), np.array([[1.0, 0.0, 0.0]]))
+    f = RotationFilter(quat_col="Bodies/racket/xiquat", origin_col=None, invert=True)
+    with pytest.raises(ValueError, match="zero, NaN, or infinite"):
+        f.apply_to_frame(df, {"Bodies/racket/xpos"})
 
 
 # --- Pydantic Validation Tests ---

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -23,9 +24,14 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -40,6 +46,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Joint"]
+
+# built once: the sampler runs every timestep
+_FREE_POSITION_META = dim(Dimension.LENGTH) | TransformType.POINT.metadata
+_QUATERNION_META = dimensionless_metadata() | TransformType.QUATERNION.metadata
+_LINEAR_VECTOR_META = {
+    "qvel": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "frc": dim(Dimension.FORCE) | TransformType.VECTOR.metadata,
+}
+_ANGULAR_VECTOR_META = {
+    "qvel": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "frc": torque_metadata() | TransformType.VECTOR.metadata,
+}
 
 
 class Joint(XMLModel):
@@ -275,7 +293,7 @@ class Joint(XMLModel):
         ]
         | dict[
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = ["qpos", "qvel"],
     ):
         """
@@ -316,51 +334,60 @@ class Joint(XMLModel):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
+        name = f"{self.name}"
+        vector_columns: dict[str, tuple[Column, ...]] = {}
+        scalar_columns: dict[str, Column] = {}
+
+        def joint_columns(
+            channel: str,
+            builtin: ColumnMetadata | None,
+            attrs: Iterable[str],
+            us: UnitSystem | None,
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system and joint type), then reused: this runs every timestep
+            cols = vector_columns.get(channel)
+            if cols is None:
+                meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
+                cols = vector_columns[channel] = fan_out(
+                    SignalCategory.JOINTS, (name, channel), attrs, meta
+                )
+            return cols
+
         def post_vec3(
             vec3: np.ndarray,
             channel: str,
-            builtin: dict[str, str] | None,
+            builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
         ):
             """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
             full_vec = np.append(vec3, np.linalg.norm(vec3))
-            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
-            for v, attr in zip(full_vec, "xyzm", strict=True):
-                signal_manager.post(
-                    value=float(v),
-                    category=SignalCategory.JOINTS,
-                    subgroups=(f"{self.name}", channel),
-                    attr=attr,
-                    metadata=meta,
-                )
+            for v, col in zip(
+                full_vec, joint_columns(channel, builtin, "xyzm", us), strict=True
+            ):
+                signal_manager.post(float(v), col)
 
         def post_quat(
             quat: np.ndarray,
             channel: str,
-            builtin: dict[str, str] | None,
+            builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
         ):
             """Posts an orientation quaternion under w/x/y/z attrs."""
-            meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
-            for v, attr in zip(quat, "wxyz", strict=True):
-                signal_manager.post(
-                    value=float(v),
-                    category=SignalCategory.JOINTS,
-                    subgroups=(f"{self.name}", channel),
-                    attr=attr,
-                    metadata=meta,
-                )
+            for v, col in zip(
+                quat, joint_columns(channel, builtin, "wxyz", us), strict=True
+            ):
+                signal_manager.post(float(v), col)
 
         def sample(state: MjState):
             jnt_type = self._jnt_type(state)
-            scalar_meta = joint_type_metadata(jnt_type)
             u = state.us
 
             for channel in channels:
@@ -384,56 +411,65 @@ class Joint(XMLModel):
                         if channel == "qpos"
                         else ("vel" if channel == "qvel" else "frc")
                     )
-                    signal_manager.post(
-                        value=float(val[0]),
-                        category=SignalCategory.JOINTS,
-                        subgroups=(f"{self.name}",),
-                        attr=channel,  # scalar values are considered an attr of the parent
-                        metadata=merge_signal_metadata(
-                            scalar_meta[scalar_key], channel, _meta, unit_system=u
-                        ),
-                    )
+                    col = scalar_columns.get(channel)
+                    if col is None:
+                        col = scalar_columns[channel] = Column(
+                            category=SignalCategory.JOINTS,
+                            subgroups=(name,),
+                            # scalar values are considered an attr of the parent
+                            attr=channel,
+                            metadata=merge_signal_metadata(
+                                joint_type_metadata(jnt_type)[scalar_key]
+                                | TransformType.SCALAR.metadata,
+                                channel,
+                                _meta,
+                                unit_system=u,
+                            ),
+                        )
+                    signal_manager.post(float(val[0]), col)
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_FREE:
                     post_vec3(
                         val[:3],
                         channel=f"pos_{channel}",
-                        builtin=dim(Dimension.LENGTH),
+                        builtin=_FREE_POSITION_META,
                         us=u,
                     )
                     post_quat(
                         val[3:],
                         channel=f"quat_{channel}",
-                        builtin=dimensionless_metadata(),
+                        builtin=_QUATERNION_META,
                         us=u,
                     )
                 elif channel == "qpos" and jnt_type == mujoco.mjtJoint.mjJNT_BALL:
                     post_quat(
-                        val, channel=channel, builtin=dimensionless_metadata(), us=u
+                        val,
+                        channel=channel,
+                        builtin=_QUATERNION_META,
+                        us=u,
                     )
                 elif jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-                    lin_builtin = (
-                        dim(Dimension.VELOCITY)
-                        if channel == "qvel"
-                        else dim(Dimension.FORCE)
-                    )
-                    ang_builtin = (
-                        angular_rate_metadata()
-                        if channel == "qvel"
-                        else torque_metadata()
+                    kind = "qvel" if channel == "qvel" else "frc"
+                    post_vec3(
+                        val[:3],
+                        channel=f"lin_{channel}",
+                        builtin=_LINEAR_VECTOR_META[kind],
+                        us=u,
                     )
                     post_vec3(
-                        val[:3], channel=f"lin_{channel}", builtin=lin_builtin, us=u
-                    )
-                    post_vec3(
-                        val[3:], channel=f"ang_{channel}", builtin=ang_builtin, us=u
+                        val[3:],
+                        channel=f"ang_{channel}",
+                        builtin=_ANGULAR_VECTOR_META[kind],
+                        us=u,
                     )
                 else:
                     # ball joint's qvel/qfrc_*: always rotational (3 DOF, no translation)
-                    ang_builtin = (
-                        angular_rate_metadata()
-                        if channel == "qvel"
-                        else torque_metadata()
+                    post_vec3(
+                        val,
+                        channel=channel,
+                        builtin=_ANGULAR_VECTOR_META[
+                            "qvel" if channel == "qvel" else "frc"
+                        ],
+                        us=u,
                     )
-                    post_vec3(val, channel=channel, builtin=ang_builtin, us=u)
 
         signal_manager.register_sampler(sample)

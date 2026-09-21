@@ -15,6 +15,7 @@ from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import GeomName, JointName, MeshName
 from mujoco_mojo.utils.proximity import Proximity
+from mujoco_mojo.utils.signal_metadata import TransformType
 from mujoco_mojo.utils.statusing import RequirementResult, TrialStatus
 
 
@@ -886,6 +887,31 @@ def test_telemetry_keeps_posting_on_replay_ticks_after_latch() -> None:
     assert sm.post.call_count == 3
     for call in sm.post.call_args_list:
         assert call.kwargs["value"] == 0.0
+
+
+def test_requirement_name_that_cannot_be_a_column_fails_when_added() -> None:
+    """The requirement's telemetry `Column` is built at `add_requirement`, so a name containing '/' or ':' raises there instead of partway through a run."""
+    mgr = RuntimeManager()
+    with pytest.raises(ValueError, match="subgroup"):
+        mgr.add_requirement(lambda m, s, df: (True, "ok"), name="a/b", every=1)
+    assert not mgr.requirements._requirements.root
+
+
+def test_requirement_posts_to_its_result_column() -> None:
+    """The live result is posted to `Requirements/<name>:result`."""
+    mgr = RuntimeManager()
+    mgr._mojo_model = MagicMock()
+    mgr.add_requirement(lambda m, s, df: (True, "ok"), name="ok_req", every=1)
+
+    state = MagicMock()
+    state.data.time = 0.1
+    sm = MagicMock(spec=SignalManager)
+    mgr.requirements.step(state, signal_manager=sm, mojo_model=mgr._mojo_model)
+
+    (call,) = sm.post.call_args_list
+    assert call.kwargs["value"] == 1.0
+    assert str(call.kwargs["column"]) == "Requirements/ok_req:result"
+    assert call.kwargs["column"].metadata.transform_type == TransformType.SCALAR
 
 
 def test_latch_logs_once_not_on_every_replay(caplog) -> None:

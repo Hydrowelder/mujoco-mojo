@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
@@ -34,9 +35,14 @@ from mujoco_mojo.typing import (
     Vec6,
     VecN,
 )
+from mujoco_mojo.utils.column import MATRIX_ATTRS, Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
+    TransformType,
     angular_rate_metadata,
     dim,
     dimensionless_metadata,
@@ -51,24 +57,24 @@ logger = get_logger(__name__)
 
 __all__ = ["Body", "WorldBody"]
 
-_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "xpos": dim(Dimension.LENGTH),
-    "quat": dimensionless_metadata(),
+_REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
+    "xpos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "quat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
     "xmat": dimensionless_metadata(),
-    "xvelp": dim(Dimension.VELOCITY),
-    "xvelr": angular_rate_metadata(),
-    "xaccp": dim(Dimension.ACCELERATION),
-    "xaccr": angular_rate_metadata(per="second ** 2"),
-    "xipos": dim(Dimension.LENGTH),
-    "xiquat": dimensionless_metadata(),
+    "xvelp": dim(Dimension.VELOCITY) | TransformType.VECTOR.metadata,
+    "xvelr": angular_rate_metadata() | TransformType.VECTOR.metadata,
+    "xaccp": dim(Dimension.ACCELERATION) | TransformType.VECTOR.metadata,
+    "xaccr": angular_rate_metadata(per="second ** 2") | TransformType.VECTOR.metadata,
+    "xipos": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "xiquat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
     "ximat": dimensionless_metadata(),
-    "lin_mom": dim(Dimension.LINEAR_MOMENTUM),
-    "ang_mom": dim(Dimension.ANGULAR_MOMENTUM),
-    "ke_trans": dim(Dimension.ENERGY),
-    "ke_rot": dim(Dimension.ENERGY),
-    "pe": dim(Dimension.ENERGY),
-    "ke_total": dim(Dimension.ENERGY),
-    "total_energy": dim(Dimension.ENERGY),
+    "lin_mom": dim(Dimension.LINEAR_MOMENTUM) | TransformType.VECTOR.metadata,
+    "ang_mom": dim(Dimension.ANGULAR_MOMENTUM) | TransformType.VECTOR.metadata,
+    "ke_trans": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "ke_rot": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "pe": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "ke_total": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
+    "total_energy": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
 }
 
 _body_attr = (
@@ -432,7 +438,7 @@ class Body(XMLModel):
                 "ke_total",
                 "total_energy",
             ],
-            dict[str, Any] | None,
+            MetadataLike | None,
         ] = [
             "xpos",
             "quat",
@@ -501,20 +507,37 @@ class Body(XMLModel):
             raise ValueError(msg)
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
 
-        def sample(state: MjState):
-            for channel in channels:
+        name = f"{self.name}"
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(
+            channel: str,
+            state: MjState,
+            subgroups: tuple[str, ...],
+            attrs: Iterable[str],
+        ) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
                 meta = merge_signal_metadata(
                     _REQUEST_CHANNEL_METADATA.get(channel),
                     channel,
                     _meta,
                     unit_system=state.us,
                 )
+                cols = columns[channel] = fan_out(
+                    SignalCategory.BODIES, subgroups, attrs, meta
+                )
+            return cols
 
+        def sample(state: MjState):
+            for channel in channels:
                 match channel:
                     case "xpos":
                         val = self.rt_pos(state)
@@ -525,14 +548,13 @@ class Body(XMLModel):
                             case "ximat":
                                 val = self.rt_ximat(state, flatten=True)
 
-                        for i in range(len(val)):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", channel),
-                                attr=str(i),
-                                metadata=meta,
-                            )
+                        for v, col in zip(
+                            val,
+                            channel_columns(
+                                channel, state, (name, channel), MATRIX_ATTRS
+                            ),
+                        ):
+                            signal_manager.post(float(v), col)
                         continue
                     case "quat" | "xiquat":
                         match channel:
@@ -541,14 +563,11 @@ class Body(XMLModel):
                             case "xiquat":
                                 val = self.rt_xiquat(state)
 
-                        for i, attr in enumerate("wxyz"):
-                            signal_manager.post(
-                                value=float(val[i]),
-                                category=SignalCategory.BODIES,
-                                subgroups=(f"{self.name}", channel),
-                                attr=attr,
-                                metadata=meta,
-                            )
+                        for v, col in zip(
+                            val,
+                            channel_columns(channel, state, (name, channel), "wxyz"),
+                        ):
+                            signal_manager.post(float(v), col)
                         continue
                     case "xvelp":
                         val = self.rt_lin_vel(state)
@@ -582,23 +601,15 @@ class Body(XMLModel):
                     mag = np.linalg.norm(val)
                     full_vec = np.append(val, mag)
 
-                    for i, attr in enumerate("xyzm"):
-                        signal_manager.post(
-                            value=full_vec[i],
-                            category=SignalCategory.BODIES,
-                            subgroups=(f"{self.name}", channel),
-                            attr=attr,
-                            metadata=meta,
-                        )
+                    for v, col in zip(
+                        full_vec,
+                        channel_columns(channel, state, (name, channel), "xyzm"),
+                    ):
+                        signal_manager.post(v, col)
                 else:
                     # scalar output
-                    signal_manager.post(
-                        value=float(val),
-                        category=SignalCategory.BODIES,
-                        subgroups=(f"{self.name}",),
-                        attr=channel,
-                        metadata=meta,
-                    )
+                    (col,) = channel_columns(channel, state, (name,), (channel,))
+                    signal_manager.post(float(val), col)
 
         signal_manager.register_sampler(sample)
 

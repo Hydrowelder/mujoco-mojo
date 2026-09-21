@@ -1,7 +1,9 @@
 import numpy as np
+import pytest
 
 from mujoco_mojo.mjcf.pose import PoseEuler, PoseQuat
 from mujoco_mojo.typing import EulerSeq
+from mujoco_mojo.utils.column import Column
 
 
 def test_pose_initialization():
@@ -130,3 +132,58 @@ def test_pose_converters():
     pose_z = pose_euler.as_pose_zaxis()
     assert np.array_equal(np.asarray(pose_z.pos), p_orig)
     assert np.allclose(np.asarray(pose_z.zaxis), [0, 0, 1])
+
+
+_ROW = {
+    "Sites/A/xpos:x": 1.0,
+    "Sites/A/xpos:y": 2.0,
+    "Sites/A/xpos:z": 3.0,
+    "Sites/A/quat:w": 0.5,
+    "Sites/A/quat:x": 0.5,
+    "Sites/A/quat:y": 0.5,
+    "Sites/A/quat:z": 0.5,
+    "time": 0.25,
+}
+
+
+def test_from_row_builds_the_pose_from_a_telemetry_row():
+    pose = PoseQuat.from_row(_ROW, "Sites/A")
+    assert np.allclose(pose.pos, [1.0, 2.0, 3.0])
+    assert np.allclose(pose.quat, [0.5, 0.5, 0.5, 0.5])
+
+
+def test_from_row_accepts_a_column_and_other_channels():
+    row = {
+        k.replace("xpos", "xipos").replace("quat", "xiquat"): v for k, v in _ROW.items()
+    }
+    pose = PoseQuat.from_row(
+        row,
+        Column(category="Sites", subgroups=("A",)),
+        pos_channel="xipos",
+        quat_channel="xiquat",
+    )
+    assert np.allclose(pose.pos, [1.0, 2.0, 3.0])
+
+
+def test_from_row_reads_quaternion_components_by_name():
+    row = {
+        **_ROW,
+        "Sites/A/quat:w": 1.0,
+        "Sites/A/quat:x": 0.0,
+        "Sites/A/quat:y": 0.0,
+        "Sites/A/quat:z": 0.0,
+    }
+    assert np.allclose(PoseQuat.from_row(row, "Sites/A").quat, [1.0, 0.0, 0.0, 0.0])
+
+
+def test_from_row_raises_naming_every_missing_column():
+    row = {k: v for k, v in _ROW.items() if not k.endswith(("quat:y", "xpos:z"))}
+    with pytest.raises(ValueError, match="Sites/A/quat:y") as excinfo:
+        PoseQuat.from_row(row, "Sites/A")
+    assert "Sites/A/xpos:z" in str(excinfo.value)
+    assert "request(channels=" in str(excinfo.value)
+
+
+def test_from_row_rejects_a_single_column_source():
+    with pytest.raises(ValueError, match="names a single column"):
+        PoseQuat.from_row(_ROW, "Sites/A/xpos:x")

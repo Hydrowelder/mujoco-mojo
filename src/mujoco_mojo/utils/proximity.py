@@ -14,8 +14,13 @@ from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.column import Column, fan_out
 from mujoco_mojo.utils.signal_metadata import (
+    MetadataLike,
+    MetadataOverrides,
+    ColumnMetadata,
     Dimension,
+    TransformType,
     dim,
     dimensionless_metadata,
     merge_signal_metadata,
@@ -46,10 +51,10 @@ Proximityable = Annotated[
     Discriminator(_proximityable_discriminator),
 ]
 
-_REQUEST_CHANNEL_METADATA: dict[str, dict[str, str]] = {
-    "dist": dim(Dimension.LENGTH),
-    "fromto": dim(Dimension.LENGTH),
-    "prox_type": dimensionless_metadata(),
+_REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
+    "dist": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
+    "fromto": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
+    "prox_type": dimensionless_metadata() | TransformType.SCALAR.metadata,
 }
 
 
@@ -482,7 +487,7 @@ class Proximity(MojoBaseModel):
         self,
         signal_manager: SignalManager | None = None,
         channels: list[Literal["dist", "fromto", "prox_type"]]
-        | dict[Literal["dist", "fromto", "prox_type"], dict[str, Any] | None] = [
+        | dict[Literal["dist", "fromto", "prox_type"], MetadataLike | None] = [
             "dist",
             "prox_type",
         ],
@@ -519,7 +524,7 @@ class Proximity(MojoBaseModel):
             return
 
         if isinstance(channels, dict):
-            _meta = cast("dict[str, dict[str, Any] | None]", channels)
+            _meta = cast("MetadataOverrides", channels)
             channels = list(channels.keys())
         else:
             _meta = {}
@@ -531,6 +536,44 @@ class Proximity(MojoBaseModel):
         if needs_proximity:
             self._requested = True
 
+        volume_names = (str(self.volume_1.name), str(self.volume_2.name))
+        columns: dict[str, tuple[Column, ...]] = {}
+
+        def channel_columns(channel: str, state: MjState) -> tuple[Column, ...]:
+            # built on a channel's first sample (its metadata depends on the unit
+            # system), then reused: this runs every timestep
+            cols = columns.get(channel)
+            if cols is None:
+                meta = merge_signal_metadata(
+                    _REQUEST_CHANNEL_METADATA.get(channel),
+                    channel,
+                    _meta,
+                    unit_system=state.us,
+                )
+                if channel == "fromto":
+                    # one x/y/z point per volume in the pair
+                    cols = tuple(
+                        col
+                        for volume in volume_names
+                        for col in fan_out(
+                            SignalCategory.PROXIMITIES,
+                            (pair_name, channel, volume),
+                            "xyz",
+                            meta,
+                        )
+                    )
+                else:
+                    cols = (
+                        Column(
+                            category=SignalCategory.PROXIMITIES,
+                            subgroups=(pair_name,),
+                            attr=channel,
+                            metadata=meta,
+                        ),
+                    )
+                columns[channel] = cols
+            return cols
+
         def sample(state: MjState):
             dist: float = np.nan
             p1: Vec3 = np.zeros(3)
@@ -541,47 +584,18 @@ class Proximity(MojoBaseModel):
                 dist, p1, p2, prox_type = self.get_proximity(state)
 
             for channel in channels:
-                meta = merge_signal_metadata(
-                    _REQUEST_CHANNEL_METADATA.get(channel),
-                    channel,
-                    _meta,
-                    unit_system=state.us,
-                )
-
                 match channel:
                     case "dist":
-                        signal_manager.post(
-                            value=dist,
-                            category=SignalCategory.PROXIMITIES,
-                            subgroups=(pair_name,),
-                            attr=channel,
-                            metadata=meta,
-                        )
+                        (col,) = channel_columns(channel, state)
+                        signal_manager.post(dist, col)
                     case "fromto":
-                        for i, attr in enumerate("xyz"):
-                            signal_manager.post(
-                                value=float(p1[i]),
-                                category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, channel, str(self.volume_1.name)),
-                                attr=attr,
-                                metadata=meta,
-                            )
-                        for i, attr in enumerate("xyz"):
-                            signal_manager.post(
-                                value=float(p2[i]),
-                                category=SignalCategory.PROXIMITIES,
-                                subgroups=(pair_name, channel, str(self.volume_2.name)),
-                                attr=attr,
-                                metadata=meta,
-                            )
+                        for v, col in zip(
+                            (*p1, *p2), channel_columns(channel, state), strict=True
+                        ):
+                            signal_manager.post(float(v), col)
                     case "prox_type":
-                        signal_manager.post(
-                            value=float(prox_type.value),
-                            category=SignalCategory.PROXIMITIES,
-                            subgroups=(pair_name,),
-                            attr=channel,
-                            metadata=meta,
-                        )
+                        (col,) = channel_columns(channel, state)
+                        signal_manager.post(float(prox_type.value), col)
                     case _:
                         continue
 

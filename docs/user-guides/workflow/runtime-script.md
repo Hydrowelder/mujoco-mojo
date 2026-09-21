@@ -122,7 +122,18 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     The `.request()` method is available on select Mojo objects. It tells the `SignalManager` to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
 
-    Custom requests can also be made using the `SignalManager.post()` method!
+    Custom requests can also be made using the `SignalManager.post()` method! It takes a value and a `Column`, which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
+
+    ```python
+    nutation = mojo.utils.Column(
+        category=mojo.SignalCategory.BODIES,
+        subgroups=("racket",),
+        attr="nutation_deg",
+    )
+
+    def sample_nutation(state: mojo.MjState):
+        signal_manager.post(compute_nutation(state), nutation)
+    ```
 
 ???+ example "Example: Telemetry Requests"
 

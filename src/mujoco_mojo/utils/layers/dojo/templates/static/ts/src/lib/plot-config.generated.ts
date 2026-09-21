@@ -293,7 +293,7 @@ export interface YAxisConfig {
 export interface PlotConfig {
   xAxis: XAxisConfig;
   yAxes: Record<string, YAxisConfig>;
-  refFrame: string | null;
+  refFrame: [string | null, string | null];
   grid: GridMode;
   lineMode: LineMode;
   interp: InterpMode;

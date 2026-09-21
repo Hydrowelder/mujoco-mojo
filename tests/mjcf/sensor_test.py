@@ -67,8 +67,9 @@ def test_touch_request_tags_force_metadata(state: MjState, tmp_path: Path) -> No
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/tch:touch"] == {
-        "dimension": "[mass] * [length] / [time] ** 2"
+    assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
+        "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "scalar",
     }
 
 
@@ -82,8 +83,9 @@ def test_accelerometer_request_tags_acceleration_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/acc/accelerometer:x"] == {
-        "dimension": "[length] / [time] ** 2"
+    assert sm._column_metadata["Sensors/acc/accelerometer:x"].model_dump() == {
+        "dimension": "[length] / [time] ** 2",
+        "transform_type": "vector",
     }
 
 
@@ -103,7 +105,10 @@ def test_framequat_request_tags_dimensionless_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/fq/framequat:w"] == {"dimension": "[]"}
+    assert sm._column_metadata["Sensors/fq/framequat:w"].model_dump() == {
+        "dimension": "[]",
+        "transform_type": "quaternion",
+    }
 
 
 def test_jointpos_request_resolves_hinge_to_angle_metadata(
@@ -116,7 +121,9 @@ def test_jointpos_request_resolves_hinge_to_angle_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/jp_h:jointpos"] == {"unit": "radian"}
+    assert sm._column_metadata["Sensors/jp_h:jointpos"].model_dump() == {
+        "unit": "radian"
+    }
 
 
 def test_jointpos_request_resolves_slide_to_length_metadata(
@@ -129,7 +136,9 @@ def test_jointpos_request_resolves_slide_to_length_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/jp_s:jointpos"] == {"dimension": "[length]"}
+    assert sm._column_metadata["Sensors/jp_s:jointpos"].model_dump() == {
+        "dimension": "[length]"
+    }
 
 
 def test_actuatorfrc_request_resolves_transmission_to_torque_metadata(
@@ -142,7 +151,7 @@ def test_actuatorfrc_request_resolves_transmission_to_torque_metadata(
     sensor.request(sm)
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/af:actuatorfrc"] == {
+    assert sm._column_metadata["Sensors/af:actuatorfrc"].model_dump() == {
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
     }
@@ -169,7 +178,8 @@ def test_request_metadata_override(state: MjState, tmp_path: Path) -> None:
     sensor.request(sm, metadata={"touch": {"display_name": "Touch Force"}})
     sm.record(state)
 
-    assert sm._column_metadata["Sensors/tch:touch"] == {
+    assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
         "dimension": "[mass] * [length] / [time] ** 2",
+        "transform_type": "scalar",
         "display_name": "Touch Force",
     }

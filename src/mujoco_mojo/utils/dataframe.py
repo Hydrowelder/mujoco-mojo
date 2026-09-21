@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
     from typing import Self
 
+    from mujoco_mojo.mjcf.pose import PoseQuat
     from mujoco_mojo.stochas import UnitSystem
 
+import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 
@@ -27,23 +30,82 @@ from mujoco_mojo.typing import (
     SiteName,
     TendonName,
 )
+from mujoco_mojo.utils.column import (
+    Column,
+    covering_pattern,
+    pose_column_names,
+    pose_missing_error,
+)
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter
 from mujoco_mojo.utils.filters.filters import RotationFilter
 from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 logger = get_logger(__name__)
 
 
-def read_column_metadata(path: Path | str) -> dict[str, dict[str, Any]]:
-    """Reads the per-column metadata dict from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata."""
+def read_column_metadata(path: Path | str) -> dict[str, ColumnMetadata]:
+    """Reads the per-column metadata from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata. An entry that fails validation (for example a unit written by another version) is still loaded, unvalidated, with a warning, so older files keep opening."""
     file_meta = pq.read_metadata(str(path)).metadata
     if not file_meta:
         return {}
     raw = file_meta.get(b"column_metadata")
     if raw is None:
         return {}
-    return json.loads(raw.decode())  # type: ignore[no-any-return]
+    return {
+        col: ColumnMetadata.lenient(entry, where=f" for column '{col}'")
+        for col, entry in json.loads(raw.decode()).items()
+    }
+
+
+def _try_parse(name: str) -> Column | None:
+    """`Column.parse` that returns `None` for a name outside the telemetry grammar, so such a column is simply never matched."""
+    try:
+        return Column.parse(name)
+    except ValueError:
+        return None
+
+
+def _classify_transform_bases(
+    bases: set[str], column_metadata: Mapping[str, ColumnMetadata]
+) -> tuple[set[str], set[str]]:
+    """Splits `bases` (from `rotatable_bases`) into `(points, vectors)` by their `:x` sibling's `transform_type` tag. A base tagged `scalar` is in neither: it is left untouched. Raises `ValueError` naming the base if it is untagged or tagged `quaternion` - there is no untagged fallback, since guessing wrong here is exactly the bug this classification exists to prevent."""
+    points: set[str] = set()
+    vectors: set[str] = set()
+    for base in sorted(bases):
+        meta = column_metadata.get(f"{base}:x")
+        kind = meta.transform_type if meta else None
+        if kind == TransformType.POINT:
+            points.add(base)
+        elif kind == TransformType.VECTOR:
+            vectors.add(base)
+        elif kind == TransformType.SCALAR:
+            continue
+        else:
+            raise ValueError(
+                f"Column '{base}' has no ('point', 'vector', or 'scalar') transform_type metadata "
+                "(see mujoco_mojo.utils.signal_metadata.TransformType); tag it before rotating."
+            )
+    return points, vectors
+
+
+def _classify_quaternion_bases(
+    bases: set[str], column_metadata: Mapping[str, ColumnMetadata]
+) -> set[str]:
+    """Returns the bases in `bases` (from `quaternion_bases`) tagged `transform_type="quaternion"` via their `:w` sibling. A base tagged `scalar` is left out, so it stays untouched. Raises `ValueError` naming the base if it is tagged anything else or untagged."""
+    quaternions: set[str] = set()
+    for base in sorted(bases):
+        meta = column_metadata.get(f"{base}:w")
+        kind = meta.transform_type if meta else None
+        if kind == TransformType.QUATERNION:
+            quaternions.add(base)
+        elif kind != TransformType.SCALAR:
+            raise ValueError(
+                f"Column '{base}' has no 'quaternion' or 'scalar' transform_type metadata "
+                "(see mujoco_mojo.utils.signal_metadata.TransformType); tag it before composing."
+            )
+    return quaternions
 
 
 class _MojoFrame(pl.DataFrame):
@@ -125,13 +187,13 @@ class ColumnManifest(TypedDict):
     """Manifest of all columns available for plotting."""
 
     rotatable_vectors: list[str]
-    """All columns in self.all which are available be rotated using self.available_quats."""
+    """All columns in self.all which are available be rotated using self.available_quats. Groups tagged `scalar` are left out."""
 
     available_quats: list[str]
     """All quaternion names which have enough information to rotate self.rotateable_vectors."""
 
-    column_metadata: dict[str, dict[str, str]]
-    """All per-column signal metadata keyed by column name. Contains all metadata keys (e.g. `unit`, `dimension`, custom keys) for every column that has any metadata. Populated only when `column_metadata` is passed to `get_manifest()`."""
+    column_metadata: dict[str, ColumnMetadata]
+    """All per-column signal metadata keyed by column name, for every column that has any metadata. Populated only when `column_metadata` is passed to `get_manifest()`."""
 
 
 class MojoNamespace:
@@ -148,6 +210,85 @@ class MojoNamespace:
     def time(self) -> pl.Series:
         """Access the master simulation time column."""
         return self._df.get_column(TIME_COLUMN_NAME)
+
+    @property
+    def columns(self) -> list[Column]:
+        """
+        The frame's columns as parsed `Column`s (category, subgroups, and attr), in frame order. A column whose name does not follow the telemetry grammar (for example a Lab output with a free-form label) is left out.
+
+        Parsing is cached per name, so this stays cheap for frames with thousands of columns.
+        """
+        return [c for name in self._df.columns if (c := _try_parse(name)) is not None]
+
+    def select(self, *columns: Column | str) -> MojoDataFrame:
+        """
+        Keeps every column that is one of `columns` or lies beneath one, as decided by `Column.covers`. A string is parsed with `Column.parse`.
+
+        A partial column selects a subtree, so `select("Bodies/box1")` keeps `Bodies/box1/xpos:x` and `Bodies/box1:ke_trans`, while `select(Column(category="Bodies", attr="x"))` keeps every body's `:x` components. Names are matched as parts, never as patterns (each part is escaped), so an object name containing regex characters is matched literally.
+        """
+        wanted = [Column.parse(c) if isinstance(c, str) else c for c in columns]
+        if not wanted:
+            return _MojoFrame.from_pl(self._df.select([]))
+        # matched by polars' regex engine, so a frame with tens of thousands of columns is not walked in Python
+        return _MojoFrame.from_pl(self._df.select(pl.col(covering_pattern(wanted))))
+
+    def _select_object(self, category: SignalCategory, name: str) -> MojoDataFrame:
+        """Every signal of one named object: the columns under `Category/name`, including its scalar channels such as `Bodies/box:ke_trans`."""
+        return self.select(Column(category=category, subgroups=(name,)))
+
+    def pose_at(
+        self,
+        index: int,
+        source: Column | str,
+        *,
+        pos_channel: str = "xpos",
+        quat_channel: str = "quat",
+    ) -> PoseQuat:
+        """
+        The pose of `source` (for example `Sites/A`) at row `index`.
+
+        Reads only the seven pose columns of that one row, so the cost does not grow with the size of the frame. Raises a `ValueError` naming every missing column. For every row at once use `pose_arrays`.
+        """
+        from mujoco_mojo.mjcf.pose import PoseQuat
+
+        pos_names, quat_names = pose_column_names(source, pos_channel, quat_channel)
+        names = (*pos_names, *quat_names)
+        try:
+            # `get_column` is a lookup by name; `select` would cost time proportional to the frame's width
+            row = {n: self._df.get_column(n)[index] for n in names}
+        except pl.exceptions.ColumnNotFoundError:
+            raise pose_missing_error(
+                source, self._df.columns, pos_channel, quat_channel
+            ) or ValueError(f"No pose for {str(source)!r}") from None
+        return PoseQuat.from_row(
+            row, source, pos_channel=pos_channel, quat_channel=quat_channel
+        )
+
+    def pose_arrays(
+        self,
+        source: Column | str,
+        *,
+        pos_channel: str = "xpos",
+        quat_channel: str = "quat",
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        The pose of `source` over the whole frame as plain arrays: positions `(n_rows, 3)` and quaternions `(n_rows, 4)` in MJCF `w, x, y, z` order.
+
+        Prefer this over calling `pose_at` per row for a trajectory: it makes one array copy per group, where a per-row `PoseQuat` would validate a pydantic model for every row. Raises a `ValueError` naming every missing column.
+        """
+        pos_names, quat_names = pose_column_names(source, pos_channel, quat_channel)
+        try:
+            pos = np.column_stack(
+                [self._df.get_column(n).to_numpy() for n in pos_names]
+            )
+            quat = np.column_stack(
+                [self._df.get_column(n).to_numpy() for n in quat_names]
+            )
+        except pl.exceptions.ColumnNotFoundError:
+            raise pose_missing_error(
+                source, self._df.columns, pos_channel, quat_channel
+            ) or ValueError(f"No pose for {str(source)!r}") from None
+        return pos, quat
 
     def select_category(self, category: SignalCategory | str) -> MojoDataFrame:
         """Filter columns belonging to a specific SignalCategory (e.g., 'Bodies')."""
@@ -194,80 +335,54 @@ class MojoNamespace:
         )
 
     def select_custom(self, name: str) -> MojoDataFrame:
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.CUSTOM}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.CUSTOM, name)
 
     def select_body(self, name: BodyName) -> MojoDataFrame:
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.BODIES}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.BODIES, name)
 
     def select_joint(self, name: JointName) -> MojoDataFrame:
         """Select all signals belonging to a specific Joint (qpos, qvel, etc.)."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.JOINTS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.JOINTS, name)
 
     def select_site(self, name: SiteName) -> MojoDataFrame:
         """Select all signals recorded at a specific Site."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.SITES}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.SITES, name)
 
     def select_geom(self, name: GeomName) -> MojoDataFrame:
         """Select all signals associated with a specific Geom (contacts, etc.)."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.GEOMS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.GEOMS, name)
 
     def select_sensor(self, name: SensorName) -> MojoDataFrame:
         """Select data from a specific named Sensor."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.SENSORS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.SENSORS, name)
 
     def select_actuator(self, name: ActuatorName) -> MojoDataFrame:
         """Select data from a specific Actuator."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.ACTUATORS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.ACTUATORS, name)
 
     def select_tendon(self, name: TendonName) -> MojoDataFrame:
         """Select data from a specific Tendon."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.TENDONS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.TENDONS, name)
 
     def select_camera(self, name: CameraName) -> MojoDataFrame:
         """Select pose or FOV data from a specific Camera."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.CAMERAS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.CAMERAS, name)
 
     def select_light(self, name: LightName) -> MojoDataFrame:
         """Select pose or intensity data from a specific Light."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.LIGHTS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.LIGHTS, name)
 
     def select_equality(self, name: EqualityName) -> MojoDataFrame:
         """Select force/error data from an Equality constraint."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.CONSTRAINTS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.CONSTRAINTS, name)
 
     def select_plugin(self, name: InstanceName) -> MojoDataFrame:
         """Select custom state data from a specific Plugin Instance."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.PLUGINS}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.PLUGINS, name)
 
     def select_flex(self, name: FlexName) -> MojoDataFrame:
         """Select vertex/stress data from a Deformable Flex object."""
-        return _MojoFrame.from_pl(
-            self._df.select(pl.col(rf"^{SignalCategory.DEFORMABLES}/{name}/.*$"))
-        )
+        return self._select_object(SignalCategory.DEFORMABLES, name)
 
     def _get_base_map(
         self, extra_columns: list[str] | None = None
@@ -305,7 +420,7 @@ class MojoNamespace:
         return {b for b, s in base_map.items() if {"w", "x", "y", "z"}.issubset(s)}
 
     @property
-    def rotatable_columns(self) -> list[tuple[str, str, str]]:
+    def rotatable_columns(self) -> list[str]:
         """Returns column names ending in `:x`, `:y`, or `:z` (excluding quaternions which end with `:w`)."""
         expanded = []
         for base in self.rotatable_bases:
@@ -325,20 +440,31 @@ class MojoNamespace:
     def get_manifest(
         self,
         extra_columns: list[str] | None = None,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
     ) -> ColumnManifest:
-        """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `read_column_metadata()`) to populate `column_units`."""
+        """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `read_column_metadata()`) to populate `column_metadata`, and to leave out any group tagged `scalar`, which is not a vector or a quaternion and so is never offered for rotation (matching `change_frame`)."""
         bm = self._get_base_map(extra_columns)
         all_cols = list(self._df.columns) + (extra_columns or [])
         meta = column_metadata or {}
         col_meta = {col: m for col in all_cols if (m := meta.get(col)) is not None}
+
+        def is_scalar(base: str, first: str) -> bool:
+            tagged = meta.get(f"{base}:{first}")
+            return tagged is not None and tagged.transform_type == TransformType.SCALAR
+
         return {
             "all": all_cols,
             "rotatable_vectors": sorted(
-                b for b, s in bm.items() if {"x", "y", "z"}.issubset(s) and "w" not in s
+                b
+                for b, s in bm.items()
+                if {"x", "y", "z"}.issubset(s)
+                and "w" not in s
+                and not is_scalar(b, "x")
             ),
             "available_quats": sorted(
-                b for b, s in bm.items() if {"w", "x", "y", "z"}.issubset(s)
+                b
+                for b, s in bm.items()
+                if {"w", "x", "y", "z"}.issubset(s) and not is_scalar(b, "w")
             ),
             "column_metadata": col_meta,
         }
@@ -348,7 +474,7 @@ class MojoNamespace:
         target: UnitSystem,
         *,
         path: Path | str | None = None,
-        column_metadata: dict[str, dict[str, Any]] | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
         assume_source: UnitSystem | None = None,
     ) -> MojoDataFrame:
         """
@@ -369,7 +495,7 @@ class MojoNamespace:
         from mujoco_mojo.stochas import ureg
         from mujoco_mojo.utils.filters.filters import UnitFilter
 
-        meta: dict[str, dict[str, Any]]
+        meta: Mapping[str, ColumnMetadata]
         if column_metadata is not None:
             meta = column_metadata
         elif path is not None:
@@ -409,17 +535,21 @@ class MojoNamespace:
 
         exprs = []
         for col in self._df.columns:
-            col_meta = meta.get(col, {})
+            col_meta = meta.get(col)
             src_str: str | None = None
 
-            if "unit" in col_meta:
+            if col_meta is not None and col_meta.unit is not None:
                 try:
-                    dim_dict = dict(ureg.get_dimensionality(col_meta["unit"]))
+                    dim_dict = dict(ureg.get_dimensionality(col_meta.unit))
                 except Exception:
                     continue
-                src_str = col_meta["unit"]
-            elif source_map is not None and "dimension" in col_meta:
-                dim_str = col_meta["dimension"]
+                src_str = col_meta.unit
+            elif (
+                source_map is not None
+                and col_meta is not None
+                and col_meta.dimension is not None
+            ):
+                dim_str = col_meta.dimension
                 if dim_str == "[]":
                     continue
                 try:
@@ -450,26 +580,57 @@ class MojoNamespace:
 
         return _MojoFrame.from_pl(self._df.with_columns(exprs))
 
-    def with_rotation(self, quat_base: str, invert: bool = True) -> MojoDataFrame:
+    def change_frame(
+        self,
+        quat_base: str,
+        origin_base: str,
+        *,
+        path: Path | str | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
+        invert: bool = True,
+    ) -> MojoDataFrame:
         """
-        Rotates all 3D vectors into a new frame using the specified quaternion.
+        Re-expresses every tagged point/vector/quaternion column in this frame relative to the frame defined by `origin_base` (position) and `quat_base` (orientation).
+
+        Applies the correct transform per column by its declared `transform_type`: points are translated then rotated, vectors are rotated only, and quaternions are composed (`q' = q_b^-1 (x) q`). Every rotatable/quaternion column in the frame must be tagged (see `mujoco_mojo.utils.signal_metadata.TransformType`) or this raises - there is no untagged fallback, since guessing the wrong kind is exactly the silent-corruption bug this method exists to prevent.
 
         Args:
-            quat_base (str): Prefix for the [w,x,y,z] quaternion group.
-            invert (bool, optional): If True, performs World to Local transformation (use False with the same `quat_base` to revert the rotation). Defaults to True.
+            quat_base: Prefix for the [x,y,z,w] quaternion group giving the target frame's orientation in world coordinates (e.g. 'Bodies/chassis/xquat').
+            origin_base: Prefix for the [x,y,z] position group giving the target frame's origin in world coordinates (e.g. 'Bodies/chassis/xpos').
+            path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
+            column_metadata: Pre-loaded metadata dict (from `read_column_metadata()`). Takes precedence over `path`.
+            invert: If True (default), performs a world-to-local transform into the target frame; if False, reverses it (local-to-world).
 
         Returns:
-            Self: DataFrame with transformed :x, :y, :z columns.
+            Self: DataFrame with every point/vector/quaternion column re-expressed in the target frame.
+
+        Raises:
+            ValueError: If `quat_base`/`origin_base` aren't valid column groups in this frame, or if any rotatable/quaternion column lacks a `transform_type` tag.
 
         """
         if quat_base not in self.quaternion_bases:
-            logger.warning(
-                f"Rotation failed: Quaternion base '{quat_base}' not found (please see the quaternion_bases property for valid columns)."
-            )
-            return _MojoFrame.from_pl(self._df)
-        rotated = RotationFilter(quat_col=quat_base, invert=invert).apply_to_frame(
-            self._df, self.rotatable_bases
-        )
+            msg = f"change_frame failed: quaternion base '{quat_base}' not found (see the quaternion_bases property for valid columns)."
+            logger.error(msg)
+            raise ValueError(msg)
+        if origin_base not in self.rotatable_bases:
+            msg = f"change_frame failed: origin base '{origin_base}' not found (see the rotatable_bases property for valid columns)."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        meta: Mapping[str, ColumnMetadata]
+        if column_metadata is not None:
+            meta = column_metadata
+        elif path is not None:
+            meta = read_column_metadata(path)
+        else:
+            meta = {}
+
+        points, vectors = _classify_transform_bases(self.rotatable_bases, meta)
+        quats = _classify_quaternion_bases(self.quaternion_bases, meta)
+
+        rf = RotationFilter(quat_col=quat_base, origin_col=origin_base, invert=invert)
+        rotated = rf.apply_to_frame(self._df, vector_bases=vectors, point_bases=points)
+        rotated = rf.compose_to_frame(rotated, quaternion_bases=quats)
         return _MojoFrame.from_pl(rotated)
 
     def with_filter_map(

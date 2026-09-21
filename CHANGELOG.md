@@ -1,5 +1,23 @@
 # Changelog
 
+## Version 2.6.11 (2026-09-20)
+
+- Fixed the return type annotation of `rotatable_columns` (#96)
+- `RotationFilter` now raises on a missing quaternion column or a zero/NaN quaternion, instead of returning unrotated data or NaN (#93)
+- Added `transform_type` (`point`/`vector`/`quaternion`/`scalar`) metadata to built-in signals. `scalar` marks a frame-independent value, and a group tagged `scalar` is left untouched by `change_frame()` and is not offered for rotation in the Dojo (for example three independent angles named `:x/:y/:z`) (#94)
+- Added `change_frame()`, which translates positions, rotates vectors, and composes quaternions according to their `transform_type` (#92, #94)
+- Removed `with_rotation` in favor of `change_frame`, which rotated every vector-shaped column, including positions, without translating them (#92)
+- Dojo reference frames are now an orientation and an origin, chosen with two dropdowns, so positions are translated as well as rotated. Saved profiles using the old single-signal frame are no longer accepted (#92)
+- Added `ColumnMetadata`, a typed model for signal metadata. The metadata helpers now return it instead of dicts (combine them with `|`), while `request(metadata=...)` still accepts dicts
+- Added metadata fields (unit, dimension, quantity, transform type) to the Lab's Signal Out node
+- Added `Column`, a model of a telemetry column's name parts and metadata. A name part containing `/` or `:` now raises (#97)
+- Added `PoseQuat.from_row(row, "Sites/A")`, `df.mojo.pose_at()`, and `df.mojo.pose_arrays()` to read a pose from telemetry (#95)
+- Added `df.mojo.select(*columns)` and `df.mojo.columns` for selecting by `Column` (#97)
+- The typed selectors (`select_body`, ...) now match names literally and include an object's scalar channels (#97)
+- **Breaking:** `SignalManager.post(value, column)` and `track(getter, column)` now take a `Column` in place of `category`, `subgroups`, `attr`, and `metadata`. Build the `Column` once, since `post` runs every timestep (#97)
+- Added a Column Manifest export to the Mosaic export menu
+- Security patches
+
 ## Version 2.6.10 (20206-09-11)
 
 - Added a new option for the rotation filter that will also perform a reference frame translation after the rotation

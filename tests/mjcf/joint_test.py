@@ -125,8 +125,14 @@ def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"] == {"unit": "radian"}
-    assert sm._column_metadata["Joints/elbow:qvel"] == {"unit": "radian / second"}
+    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
+        "unit": "radian",
+        "transform_type": "scalar",
+    }
+    assert sm._column_metadata["Joints/elbow:qvel"].model_dump() == {
+        "unit": "radian / second",
+        "transform_type": "scalar",
+    }
 
 
 def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
@@ -154,8 +160,14 @@ def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
     joint.request(sm, channels=["qpos", "qvel"])
     sm.record(state)
 
-    assert sm._column_metadata["Joints/rail:qpos"] == {"dimension": "[length]"}
-    assert sm._column_metadata["Joints/rail:qvel"] == {"dimension": "[length] / [time]"}
+    assert sm._column_metadata["Joints/rail:qpos"].model_dump() == {
+        "dimension": "[length]",
+        "transform_type": "scalar",
+    }
+    assert sm._column_metadata["Joints/rail:qvel"].model_dump() == {
+        "dimension": "[length] / [time]",
+        "transform_type": "scalar",
+    }
 
 
 def test_joint_request_metadata_override(
@@ -168,8 +180,9 @@ def test_joint_request_metadata_override(
     joint.request(sm, channels={"qpos": {"display_name": "Elbow Angle"}})
     sm.record(state)
 
-    assert sm._column_metadata["Joints/elbow:qpos"] == {
+    assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
         "unit": "radian",
+        "transform_type": "scalar",
         "display_name": "Elbow Angle",
     }
 
@@ -194,3 +207,80 @@ def test_rt_dims_for_free_joint() -> None:
     state = MjState(model, data)
     assert joint.rt_qpos(state).shape == (7,)
     assert joint.rt_qvel(state).shape == (6,)
+
+
+def _joint_state(xml: str, joint_name: str) -> tuple[MjState, Joint]:
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    joint = Joint(name=JointName(joint_name))
+    joint.get_id(model)
+    return MjState(model, data), joint
+
+
+_FREE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="box">
+            <freejoint name="root"/>
+            <geom type="box" size="0.1 0.1 0.1"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+_BALL_XML = """
+<mujoco>
+    <worldbody>
+        <body name="arm">
+            <joint name="shoulder" type="ball"/>
+            <geom type="capsule" size="0.05" fromto="0 0 0 0.3 0 0"/>
+        </body>
+    </worldbody>
+</mujoco>
+"""
+
+
+def test_free_joint_request_tags_transform_types(tmp_path: Path) -> None:
+    """A free joint's split channels are tagged by shape: position as a point, orientation as a quaternion, and every linear/angular rate or force as a free vector."""
+    state, joint = _joint_state(_FREE_XML, "root")
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    joint.request(sm, channels=["qpos", "qvel", "qfrc_actuator"])
+    sm.record(state)
+
+    meta = sm._column_metadata
+    assert meta["Joints/root/pos_qpos:x"].transform_type == "point"
+    assert meta["Joints/root/quat_qpos:w"].transform_type == "quaternion"
+    assert meta["Joints/root/lin_qvel:x"].transform_type == "vector"
+    assert meta["Joints/root/ang_qvel:x"].transform_type == "vector"
+    assert meta["Joints/root/lin_qfrc_actuator:x"].transform_type == "vector"
+    assert meta["Joints/root/ang_qfrc_actuator:x"].transform_type == "vector"
+
+
+def test_ball_joint_request_tags_transform_types(tmp_path: Path) -> None:
+    """A ball joint's qpos is a quaternion, while its qvel/qfrc_* are free (angular) vectors."""
+    state, joint = _joint_state(_BALL_XML, "shoulder")
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    joint.request(sm, channels=["qpos", "qvel", "qfrc_passive"])
+    sm.record(state)
+
+    meta = sm._column_metadata
+    assert meta["Joints/shoulder/qpos:w"].transform_type == "quaternion"
+    assert meta["Joints/shoulder/qvel:x"].transform_type == "vector"
+    assert meta["Joints/shoulder/qfrc_passive:x"].transform_type == "vector"
+
+
+def test_single_dof_joint_scalars_are_tagged_scalar(
+    hinge_setup: tuple[MjState, Joint], tmp_path: Path
+) -> None:
+    """Hinge/slide scalars are never grouped into :x/:y/:z families, so they are tagged `scalar` rather than a vector kind."""
+    state, joint = hinge_setup
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    joint.request(sm, channels=["qpos", "qvel"])
+    sm.record(state)
+
+    assert sm._column_metadata["Joints/elbow:qpos"].transform_type == "scalar"
+    assert sm._column_metadata["Joints/elbow:qvel"].transform_type == "scalar"
