@@ -400,8 +400,48 @@ def test_manifest_leaves_scalar_tagged_groups_out_of_rotation():
     assert manifest["available_quats"] == ["Bodies/a/quat"]
 
 
+def test_change_frame_relative_pose_matches_closed_form_values():
+    """Two frames with closed-form poses: A is +90 degrees about z at (1, 2, 3) and B is +90 degrees about x at (4, 5, 6), so A relative to B is p = (-3, -3, 3) and q = (0.5, -0.5, 0.5, 0.5) in (w, x, y, z)."""
+    half = float(np.sqrt(0.5))
+    df = MojoDataFrame.from_dict(
+        {
+            "Sites/A/xpos:x": [1.0],
+            "Sites/A/xpos:y": [2.0],
+            "Sites/A/xpos:z": [3.0],
+            "Sites/A/quat:w": [half],
+            "Sites/A/quat:x": [0.0],
+            "Sites/A/quat:y": [0.0],
+            "Sites/A/quat:z": [half],
+            "Sites/B/xpos:x": [4.0],
+            "Sites/B/xpos:y": [5.0],
+            "Sites/B/xpos:z": [6.0],
+            "Sites/B/quat:w": [half],
+            "Sites/B/quat:x": [half],
+            "Sites/B/quat:y": [0.0],
+            "Sites/B/quat:z": [0.0],
+        }
+    )
+    meta = {
+        f"Sites/{name}/{col}": tag.metadata
+        for name in "AB"
+        for col, tag in (
+            ("xpos:x", TransformType.POINT),
+            ("quat:w", TransformType.QUATERNION),
+        )
+    }
+    out = df.mojo.change_frame("Sites/B/quat", "Sites/B/xpos", column_metadata=meta)
+
+    p_rel = [out[f"Sites/A/xpos:{a}"][0] for a in "xyz"]
+    q_rel = [out[f"Sites/A/quat:{a}"][0] for a in "wxyz"]
+    assert np.allclose(p_rel, [-3.0, -3.0, 3.0], atol=1e-12)
+    # a quaternion and its negation are the same rotation
+    assert np.allclose(q_rel, [0.5, -0.5, 0.5, 0.5], atol=1e-12) or np.allclose(
+        q_rel, [-0.5, 0.5, -0.5, -0.5], atol=1e-12
+    )
+
+
 def test_change_frame_translates_rotates_and_composes():
-    """End-to-end: change_frame re-expresses a point, a free vector, and a quaternion relative to a target frame, matching an independently computed scipy reference (not the bug report's own numbers, since their component-ordering convention relative to this codebase's is unverified)."""
+    """End-to-end: change_frame re-expresses a point, a free vector, and a quaternion relative to a target frame, matching an independently computed scipy reference."""
     from scipy.spatial.transform import Rotation
 
     p_a = np.array([1.0, 2.0, 3.0])

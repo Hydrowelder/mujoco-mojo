@@ -1049,7 +1049,7 @@ class MojoRunner:
         # initialize the optimization study
         study = optuna.create_study(
             study_name=self.config.study_name,
-            direction=self.config.direction,
+            direction=self.config.direction.value,
             storage=self.config.storage,
             load_if_exists=self.config.resume,
             sampler=self.config._get_sampler(self.seed),
