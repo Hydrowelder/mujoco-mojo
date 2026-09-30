@@ -574,9 +574,11 @@
     </div>
   </div>
 
+  {% if sensai_available %}
   {% include "partials/_sensai.html" %}
   <script type="module"
           src="/mojo-static/dist/sensai.js"></script>
+  {% endif %}
 
   {% block scripts %}{% endblock %}
 
