@@ -3,9 +3,9 @@ from typing import ClassVar
 
 import mujoco
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import SOLIMP_DEFAULT, SOLREF_DEFAULT
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import EqualityName, Vec2, Vec5
 
 
@@ -42,6 +42,7 @@ class EqualityBase(XMLModel, ABC):
         """
         eq_id = self.get_id(mj_state.model)
         mj_state.data.eq_active[eq_id] = 1 if active else 0
+        self.active = active
 
     def enable(self, mj_state: MjState) -> None:
         """Convenience method to enable the constraint at runtime."""

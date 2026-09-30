@@ -44,6 +44,31 @@
 @utility md-inline-code {
   @apply bg-accent-500/15 dark:bg-accent-400/15 text-accent-600 dark:text-accent-400 rounded px-1 font-mono text-[0.9em];
 }
+
+/* Block-level rendered markdown (the What's Changed modal's bullet lists) -
+   Tailwind's preflight strips default <ul>/<ol> styling, and no existing
+   spot renders block-level markdown, only inline text into a <p> (the
+   settings panel's field-description hint bar). */
+@utility md-body {
+  @apply text-sm text-ink-secondary leading-relaxed;
+}
+@layer components {
+  .md-body :where(ul) {
+    @apply list-disc pl-5 space-y-0.5 mb-1;
+  }
+  .md-body :where(ol) {
+    @apply list-decimal pl-5 space-y-0.5 mb-1;
+  }
+  .md-body :where(code) {
+    @apply md-inline-code;
+  }
+  .md-body :where(strong) {
+    @apply text-ink-strong font-bold;
+  }
+  .md-body :where(a) {
+    @apply text-accent-500 hover:underline;
+  }
+}
 @layer components {
   /* ── Surfaces ──────────────────────────────────────────────────────── */
   .card {

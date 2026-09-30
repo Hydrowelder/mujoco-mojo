@@ -342,6 +342,12 @@ class DojoSettings(BaseModel):
         description="Hide saved plot profiles that reference columns not present in the current trial, in the Profiles file browser.",
     )
 
+    show_whats_changed: bool = Field(
+        default=True,
+        title="Show Whats Changed",
+        description='Automatically open the "What\'s Changed" modal on Dojo launch when the changelog shows entries added since you last launched it. Toggleable from inside the modal itself, or here.',
+    )
+
     profile_sort_mode: SortMode = Field(
         default=SortMode.MODIFIED,
         title="Profile Sort Mode",

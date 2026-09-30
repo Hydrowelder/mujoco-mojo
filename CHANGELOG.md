@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 2.6.12 (2026-09-29)
+
+- `EqualityBase.set_active()` now updates the tracked `active` field, not just the live `mjData.eq_active` - it previously went stale after a runtime toggle, so saving the model back to XML wrote the wrong value
+- Added `Light.set_active()`/`enable()`/`disable()`/`is_active()`, matching the existing pattern on `EqualityBase`
+- Fixed Dojo requiring `pydantic-ai` (the `sensai` extra) to start at all; SensAI is now an optional feature that disables itself with a warning when it isn't installed
+- Added `Body.rt_qvel()`: the free joint's raw `mjData.qvel` slice, for the cases where MuJoCo's own (lin, ang) / mixed-frame convention is wanted instead of `rt_spatial_vel`'s
+- Added a "What's Changed" button to the Dojo footer showing the installed version, with a modal listing the live changelog, a pulsing badge when a newer release is available, and a setting to auto-open it on updates
+
 ## Version 2.6.11 (2026-09-20)
 
 - Fixed the return type annotation of `rotatable_columns` (#96)

@@ -2,31 +2,20 @@
 
 from __future__ import annotations
 
-import ipaddress
 from typing import Any, get_args
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import AnyUrl, BaseModel, RootModel, SecretStr, ValidationError
 
+import mujoco_mojo.utils.layers.dojo.shared as shared
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
 from mujoco_mojo.utils.color import Color
 
 router = APIRouter()
 
 
-def _is_localhost(request: Request) -> bool:
-    """Whether the request's direct TCP peer is the loopback interface, regardless of which interface the server itself is bound to."""
-    host = request.client.host if request.client else None
-    if host is None:
-        return False
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def _require_localhost(request: Request) -> None:
-    if not _is_localhost(request):
+    if not shared.is_localhost(request):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Settings can only be changed from the machine running Dojo.",
@@ -192,7 +181,7 @@ async def get_settings(request: Request) -> dict[str, Any]:
     return {
         "schema": _dojo_settings_schema(),
         "color_choices": {member.name: member.value for member in Color},
-        "is_localhost": _is_localhost(request),
+        "is_localhost": shared.is_localhost(request),
         **_settings_payload(settings),
     }
 

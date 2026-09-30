@@ -50,6 +50,23 @@ export interface TimelineBin {
   n_pending: number;
 }
 
+export interface ChangelogEntry {
+  version: string;
+  date: string | null;
+  bullets: string[];
+  is_new: boolean;
+}
+
+export interface ChangelogResponse {
+  entries: ChangelogEntry[];
+  installed_version: string;
+  latest_version: string | null;
+  update_available: boolean;
+  show_whats_changed: boolean;
+  is_localhost: boolean;
+  error: string | null;
+}
+
 export interface JobStatus {
   n_done: number;
   n_success: number;
@@ -241,6 +258,20 @@ export interface NotificationEntry {
 // ---------------------------------------------------------------------------
 
 export interface DojoStore extends SettingsPanelState {
+  changelogOpen: boolean;
+  changelogLoading: boolean;
+  changelogError: string;
+  changelogEntries: ChangelogEntry[];
+  changelogInstalledVersion: string;
+  changelogLatestVersion: string | null;
+  changelogUpdateAvailable: boolean;
+  changelogShowWhatsChanged: boolean;
+  fetchChangelog(): Promise<void>;
+  openChangelog(): void;
+  closeChangelog(): Promise<void>;
+  jumpToChangelogVersion(version: string): void;
+  setShowWhatsChanged(value: boolean): Promise<void>;
+
   isPageReady: boolean;
   isFullscreen: boolean;
   overlayCount: number;

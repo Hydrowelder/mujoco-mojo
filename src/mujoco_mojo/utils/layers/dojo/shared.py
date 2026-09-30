@@ -1,13 +1,22 @@
+import ipaddress
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
-__all__ = ["CURRENT_JOB", "HERE", "set_globals", "static", "templates"]
+__all__ = [
+    "CURRENT_JOB",
+    "HERE",
+    "is_localhost",
+    "set_globals",
+    "static",
+    "templates",
+]
 
 HERE = Path(__file__).parent
 WORKDIR: Path | None = None
@@ -51,6 +60,17 @@ templates.env.globals["default_lab_sort_mode"] = lambda: (
 templates.env.globals["default_lab_sort_dir"] = lambda: (
     MujocoMojoSettings().dojo.lab_sort_dir.value
 )
+
+
+def is_localhost(request: Request) -> bool:
+    """Whether the request's direct TCP peer is the loopback interface, regardless of which interface the server itself is bound to. Shared by every router that gates a write behind "only from the machine running Dojo" (settings, and the What's Changed toggle)."""
+    host = request.client.host if request.client else None
+    if host is None:
+        return False
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def set_globals(workdir: Path, owner: str, job_type: JobType) -> None:

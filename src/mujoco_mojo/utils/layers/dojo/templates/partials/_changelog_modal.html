@@ -1,0 +1,139 @@
+{# ── "What's Changed" modal ─────────────────────────────────────────────
+   Triggered by the version pill in base.html's footer
+   ($store.dojo.openChangelog()). Entries are fetched from GET
+   /changelog/data (store.ts's fetchChangelog(), called once from init()),
+   which also auto-opens this modal when show_whats_changed is on and the
+   changelog has entries newer than the last-launched version.
+   Same backdrop/panel skeleton as _settings_panel.html, sharing its z-950 -
+   the two are mutually exclusive (openChangelog()/openSettings() each
+   close the other), so there's no stacking conflict.
+   ─────────────────────────────────────────────────────────────────────── #}
+
+<div x-data
+     x-show="$store.dojo.changelogOpen"
+     class="fixed inset-0 z-950 flex items-center justify-center p-4"
+     style="display:none;"
+     @keydown.escape.window="$store.dojo.closeChangelog()">
+
+  <div class="modal-backdrop"
+       x-transition:enter="transition duration-150 ease-out"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition duration-100 ease-in"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       @click="$store.dojo.closeChangelog()"></div>
+
+  <div class="relative w-full max-w-3xl h-[80vh] flex flex-col"
+       x-transition:enter="transition duration-150 ease-out"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition duration-100 ease-in"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95">
+    <div class="bg-surface rounded-2xl shadow-2xl ring-2 ring-accent-500 flex flex-col overflow-hidden h-full">
+
+      <!-- header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-line dark:border-subtle shrink-0">
+        <div>
+          <p class="text-base font-black uppercase tracking-widest text-ink-strong">What's Changed</p>
+          <p class="text-xs text-ink-muted mt-0.5"
+             x-text="$store.dojo.changelogUpdateAvailable
+                       ? `A newer version (v${$store.dojo.changelogLatestVersion}) is available - you're on v${$store.dojo.changelogInstalledVersion}`
+                       : `You're on v${$store.dojo.changelogInstalledVersion}`"></p>
+        </div>
+        <button @click="$store.dojo.closeChangelog()"
+                class="btn-icon btn-secondary"
+                title="Close">
+          <svg class="w-4 h-4"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2.5"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- error banner -->
+      <div x-show="$store.dojo.changelogError"
+           class="mx-6 mt-4 px-4 py-3 rounded-lg border border-danger-400 dark:border-danger-500/50 bg-danger-50 dark:bg-danger-900/20 text-xs text-danger-700 dark:text-danger-300 shrink-0"
+           x-text="$store.dojo.changelogError"></div>
+
+      <!-- loading -->
+      <div x-show="$store.dojo.changelogLoading"
+           class="px-6 py-10 text-center text-sm font-mono text-ink-muted">
+        Loading changelog...
+      </div>
+
+      <!-- body: left nav (one entry per version, click = jump to it in
+           the content pane below) + the scrollable entries themselves -
+           same two-pane pattern as _settings_panel.html's own left nav,
+           except this jumps a single continuously-scrolled list rather
+           than switching which section is visible, since "skim
+           everything, jump to one" fits a changelog better than
+           "show one section at a time" does. -->
+      <div x-show="!$store.dojo.changelogLoading"
+           class="flex-1 min-h-0 flex overflow-hidden">
+        <!-- nav: w-fit (not a fixed w-44) so the column sizes to its
+             widest row's own content instead of a fixed width most rows
+             don't need - every button is still w-full, so they all
+             stretch to match that fit-content width and stay aligned. -->
+        <div class="w-fit shrink-0 min-h-0 overflow-y-auto custom-scrollbar border-r border-line dark:border-subtle py-2 px-2 space-y-0.5">
+          <template x-for="entry in $store.dojo.changelogEntries"
+                    :key="entry.version">
+            <button @click="$store.dojo.jumpToChangelogVersion(entry.version)"
+                    class="w-full flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm text-left whitespace-nowrap text-ink-muted hover:text-ink-body hover:bg-control transition-colors">
+              <span x-text="`v${entry.version}`"></span>
+              <span x-show="entry.is_new"
+                    class="px-1.5 py-0.5 rounded-full bg-accent-500 text-[10px] font-black uppercase tracking-widest text-white">New</span>
+            </button>
+          </template>
+        </div>
+
+        <!-- content pane -->
+        <div class="md-body flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-6">
+          <template x-for="entry in $store.dojo.changelogEntries"
+                    :key="entry.version">
+            <div :id="`changelog-v-${entry.version}`"
+                 class="border-b border-line dark:border-subtle pb-4 last:border-0 scroll-mt-4">
+              <div class="flex items-center gap-2 mb-2">
+                <p class="text-sm font-black text-ink-strong"
+                   x-text="`v${entry.version}`"></p>
+                <span x-show="entry.is_new"
+                      class="px-1.5 py-0.5 rounded-full bg-accent-500 text-[10px] font-black uppercase tracking-widest text-white">New</span>
+                <span x-show="entry.date"
+                      class="text-xs text-ink-muted font-mono"
+                      x-text="entry.date"></span>
+              </div>
+              <template x-for="(bullet, idx) in entry.bullets"
+                        :key="idx">
+                <div x-html="$store.dojo.renderMarkdown(bullet)"></div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- footer -->
+      <div class="flex items-center justify-between px-6 py-4 border-t border-line dark:border-subtle shrink-0">
+        <label class="flex items-center gap-2 cursor-pointer"
+               :title="$store.dojo.settingsIsLocalhost ? '' : 'Only changeable from the machine running Dojo'">
+          <button type="button"
+                  @click="$store.dojo.setShowWhatsChanged(!$store.dojo.changelogShowWhatsChanged)"
+                  :disabled="!$store.dojo.settingsIsLocalhost"
+                  class="toggle"
+                  :class="$store.dojo.changelogShowWhatsChanged ? 'toggle-on' : ''">
+            <span class="toggle-thumb"
+                  :class="$store.dojo.changelogShowWhatsChanged ? 'toggle-thumb-on' : ''"></span>
+          </button>
+          <span class="text-xs text-ink-muted">Show Whats Changed on launch</span>
+        </label>
+        <button @click="$store.dojo.closeChangelog()" class="btn-secondary-sm">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>

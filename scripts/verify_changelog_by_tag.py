@@ -3,6 +3,8 @@ import re
 import sys
 from pathlib import Path
 
+from mujoco_mojo.utils.changelog import parse_changelog
+
 
 def main() -> int:
     changelog_path = Path("CHANGELOG.md")
@@ -37,33 +39,31 @@ def main() -> int:
     if not pushed_tags:
         return 0
 
-    changelog_text = changelog_path.read_text()
+    entries_by_version = {
+        entry.version: entry for entry in parse_changelog(changelog_path.read_text())
+    }
     errors = []
 
     for version in pushed_tags:
-        # STRICT MATCH ONLY: ## Version X.X.X (YYYY-MM-DD)
+        # matched via parse_changelog's structured entries, not a string
+        # search - expected_header is only for the error messages below
         expected_header = f"## Version {version} ({today_str})"
+        entry = entries_by_version.get(version)
 
-        # Exact regex search for the strict header format at line start
-        pattern = re.compile(
-            rf"^##\s+Version\s+{re.escape(version)}\s*\((?P<date>\d{{4}}-\d{{2}}-\d{{2}})\)",
-            re.MULTILINE,
-        )
-
-        match = pattern.search(changelog_text)
-
-        if not match:
+        if entry is None:
             errors.append(
                 f"ERROR: Pushed tag 'v{version}' does not have a matching heading in CHANGELOG.md!\n"
                 f"  Expected exact format: {expected_header}"
             )
-            continue
-
-        tag_date = match.group("date")
-        if tag_date != today_str:
+        elif entry.date is None:
+            errors.append(
+                f"ERROR: CHANGELOG.md heading for tag 'v{version}' has a malformed date!\n"
+                f"  Expected exact format: {expected_header}"
+            )
+        elif entry.date != today_str:
             errors.append(
                 f"ERROR: Date mismatch for tag 'v{version}' in CHANGELOG.md!\n"
-                f"  Found date:   {tag_date}\n"
+                f"  Found date:   {entry.date}\n"
                 f"  Today's date: {today_str}\n"
                 f"  Expected exact format: {expected_header}"
             )

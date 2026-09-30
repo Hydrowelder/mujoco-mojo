@@ -6,12 +6,27 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
+from mujoco_mojo.__about__ import __version__
+from mujoco_mojo.utils.log import get_logger
 
 from .favicons import CACHE_DIR as FAVICON_CACHE_DIR
 from .favicons import ensure_favicons
+from .routers import changelog as changelog_router
 from .routers import monitor, morph, mosaic
-from .routers import sensai as _sensai_router
 from .routers import settings as settings_router
+
+logger = get_logger(__name__)
+
+try:
+    # pydantic-ai (the `sensai` optional dependency group) isn't installed by
+    # default, so the whole Dojo must still come up without it - only the
+    # SensAI chat panel goes missing, gated below via `sensai_available`
+    from .routers import sensai as _sensai_router
+except ImportError:
+    _sensai_router = None
+    logger.warning(
+        "SensAI is disabled: install it with `pip install mujoco-mojo[sensai]`."
+    )
 
 security = HTTPBasic(auto_error=False)
 
@@ -169,6 +184,15 @@ dojo_app.include_router(morph.router, prefix="/morph", dependencies=dependencies
 dojo_app.include_router(
     settings_router.router, prefix="/settings", dependencies=dependencies
 )
+if _sensai_router is not None:
+    dojo_app.include_router(
+        _sensai_router.router, prefix="/sensai", dependencies=dependencies
+    )
 dojo_app.include_router(
-    _sensai_router.router, prefix="/sensai", dependencies=dependencies
+    changelog_router.router, prefix="/changelog", dependencies=dependencies
 )
+
+# read once at import time: unlike the settings.toml-backed globals above,
+# whether pydantic-ai is installed can't change without a process restart
+shared.templates.env.globals["sensai_available"] = _sensai_router is not None
+shared.templates.env.globals["mojo_version"] = __version__

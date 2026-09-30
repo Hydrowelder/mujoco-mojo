@@ -310,6 +310,29 @@ class Body(XMLModel):
         """Angular velocity of the body center of mass during runtime  in the world frame."""
         return self.rt_spatial_vel(state)[0:3]
 
+    def rt_qvel(self, state: MjState) -> Vec6:
+        """
+        Raw `mjData.qvel` slice for this body's free joint: `[vx, vy, vz, wx, wy, wz]`, the same layout `set_initial_velocity` writes.
+
+        This is MuJoCo's own free-joint convention, not `rt_spatial_vel`'s: the order is (lin, ang) here versus (ang, lin) there, and the frames differ too - the linear half is in the world frame, but the angular half is in the local frame fixed to the body's current orientation. `rt_spatial_vel`/`rt_ang_vel` give both halves in world-aligned axes at the center of mass, which is what most callers want; reach for this only when you need MuJoCo's raw representation.
+
+        Raises:
+            ValueError: If the body does not have exactly one free joint.
+
+        """
+        bid = self.get_id(state.model)
+        jnt_adr = state.model.body_jntadr[bid]
+        if (
+            state.model.body_jntnum[bid] != 1
+            or state.model.jnt_type[jnt_adr] != mujoco.mjtJoint.mjJNT_FREE
+        ):
+            msg = f"rt_qvel requires exactly one free joint on body {self.name!r}; found {state.model.body_jntnum[bid]} joint(s)."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        qvel_adr = state.model.jnt_dofadr[jnt_adr]
+        return state.data.qvel[qvel_adr : qvel_adr + 6]
+
     def rt_spatial_acc(self, state: MjState) -> Vec6:
         """
         Returns the 6D spatial acceleration (ang, lin) at the body CoM in the world frame.
