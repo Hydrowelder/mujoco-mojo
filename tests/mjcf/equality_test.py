@@ -67,5 +67,7 @@ def test_set_active_false_then_true(
     state, constraint = weld_setup
     constraint.set_active(state, False)
     assert constraint.is_active(state) is False
+    assert constraint.active is False
     constraint.set_active(state, True)
     assert constraint.is_active(state) is True
+    assert constraint.active is True

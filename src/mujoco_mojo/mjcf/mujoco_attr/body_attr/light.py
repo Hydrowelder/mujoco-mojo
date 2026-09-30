@@ -6,6 +6,7 @@ import mujoco
 import numpy as np
 from pydantic import Field
 
+from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
@@ -119,3 +120,29 @@ class Light(XMLModel):
 
     exponent: float = 10
     """Exponent for spotlights. This setting controls the softness of the spotlight cutoff."""
+
+    def set_active(self, mj_state: MjState, active: bool) -> None:
+        """
+        Sets the runtime activation state of the light.
+
+        Args:
+            mj_state: The paired MuJoCo model and data instance.
+            active: True to enable the light, False to disable it.
+
+        """
+        _id = self.get_id(mj_state.model)
+        mj_state.model.light_active[_id] = 1 if active else 0
+        self.active = active
+
+    def enable(self, mj_state: MjState) -> None:
+        """Convenience method to enable the light at runtime."""
+        self.set_active(mj_state, True)
+
+    def disable(self, mj_state: MjState) -> None:
+        """Convenience method to disable the light at runtime."""
+        self.set_active(mj_state, False)
+
+    def is_active(self, mj_state: MjState) -> bool:
+        """Returns the current runtime activation state."""
+        _id = self.get_id(mj_state.model)
+        return bool(mj_state.model.light_active[_id])
