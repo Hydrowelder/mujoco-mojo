@@ -72,7 +72,11 @@ repos:
       - id: verify-changelog-tag
         name: Verify CHANGELOG.md entry and date for current tag push
         entry: python scripts/verify_changelog_by_tag.py
-        language: python
+        # system, not python: this now imports mujoco_mojo.utils.changelog, and
+        # `language: python` would run it in pre-commit's own isolated venv,
+        # which doesn't have the package installed - same reasoning as the
+        # `act -j test` hook above, which needs the real project environment
+        language: system
         stages: [pre-push]
         pass_filenames: false
         always_run: true

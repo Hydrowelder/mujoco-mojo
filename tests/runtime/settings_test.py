@@ -688,6 +688,11 @@ def test_set_project_value_rejects_unknown_path_without_writing(
     assert not project_path.exists()
 
 
+def test_show_whats_changed_defaults_to_true() -> None:
+    """The What's Changed modal's auto-open-on-update behavior is opt-out, not opt-in."""
+    assert DojoSettings().show_whats_changed is True
+
+
 def test_chime_defaults_to_none() -> None:
     """dojo.chime is unset by default, so the Dojo monitor falls back to the built-in chime."""
     assert DojoSettings().chime_source is None

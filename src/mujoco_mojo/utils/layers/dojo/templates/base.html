@@ -520,6 +520,46 @@
         </div>
       </div>
 
+      <!-- version / "What's Changed" - deliberately the same element
+           shape as the connection+sync pill right before it (an
+           unpadded, bordered outer div wrapping a padded inner content
+           div), not a <button>: a <button> carrying its own border and
+           padding kept rendering a couple pixels taller than this
+           row's div-based pills in practice, likely native button-chrome
+           sizing that Tailwind's preflight doesn't fully neutralize.
+           Same clickable-div pattern _macros.html's tab strip already
+           uses (@click + role="button" + tabindex + @keydown.enter). -->
+      <div @click="$store.dojo.openChangelog()"
+           role="button"
+           tabindex="0"
+           @keydown.enter="$store.dojo.openChangelog()"
+           class="flex items-center bg-control/50 rounded-full border border-line hover:border-accent-500/50 transition-colors duration-300 cursor-pointer text-ink-muted hover:text-ink-strong"
+           :title="$store.dojo.changelogUpdateAvailable
+                     ? `Update available: v${$store.dojo.changelogLatestVersion}`
+                     : `What's Changed (v{{ mojo_version }})`">
+        <!-- no text-xs override here (unlike the connection segment's own
+             span) - the sync segment right before this pill doesn't set
+             one either, so it inherits text-sm from the footer's own base
+             class, and *that* larger line-height (not the connection
+             segment's text-xs one) is what actually sets the whole
+             connection+sync pill's height. Overriding to text-xs here
+             made this pill genuinely shorter, not just visually different. -->
+        <div class="flex items-center gap-1.5 px-3 py-1 font-mono">
+          <!-- the dot's own w-2 h-2 box is always in the flex row (never
+               x-show'd away), same as the connection pill's solid dot -
+               only its opacity/ping toggle with the update state, so
+               this row's content height never depends on whether an
+               update happens to be available. -->
+          <span class="relative flex items-center justify-center w-2 h-2">
+            <span x-show="$store.dojo.changelogUpdateAvailable"
+                  class="absolute inline-flex h-2 w-2 rounded-full bg-accent-400 opacity-75 animate-ping"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-accent-500 transition-opacity duration-300"
+                  :class="$store.dojo.changelogUpdateAvailable ? 'opacity-100' : 'opacity-0'"></span>
+          </span>
+          <span>v{{ mojo_version }}</span>
+        </div>
+      </div>
+
       <!-- copyright -->
       <a href="https://www.david-gable.com/"
          target="_blank"
@@ -722,6 +762,7 @@
   </div>
 
   {% include "partials/_settings_panel.html" %}
+  {% include "partials/_changelog_modal.html" %}
 
 </body>
 

@@ -1,5 +1,6 @@
 import Alpine from "alpinejs";
 import { formatTimeAgo, notifTimeAgo } from "./lib/format";
+import { fetchWithTimeout } from "./lib/fetch-timeout";
 import {
   nearestColorName,
   resolveColorHex,
@@ -8,7 +9,12 @@ import {
   createSettingsPanelState,
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
-import type { DojoStore, JobStatus, NotificationEntry } from "./models";
+import type {
+  ChangelogResponse,
+  DojoStore,
+  JobStatus,
+  NotificationEntry,
+} from "./models";
 // window.mojoCreateColorPicker (used by both _settings_panel.html below and
 // _macros.html's color_picker macro) was only ever registered as a side
 // effect of trial-viewer.ts importing this module - fine for the Plot
@@ -49,6 +55,15 @@ window.mojoCollapseColorAlias = collapseColorAlias;
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {
     ...createSettingsPanelState(),
+
+    changelogOpen: false,
+    changelogLoading: false,
+    changelogError: "",
+    changelogEntries: [],
+    changelogInstalledVersion: "",
+    changelogLatestVersion: null,
+    changelogUpdateAvailable: false,
+    changelogShowWhatsChanged: true,
 
     isPageReady: false,
     // Falls back to dojo.default_to_fullscreen (settings.py, seeded onto
@@ -150,6 +165,99 @@ document.addEventListener("alpine:init", () => {
         if (!document.hidden) this.checkServerHealth();
       });
       this._installPlotlyLogCapture();
+      this.fetchChangelog();
+    },
+
+    async fetchChangelog() {
+      this.changelogLoading = true;
+      this.changelogError = "";
+      try {
+        const resp = await fetchWithTimeout("/changelog/data", {}, 8000);
+        if (!resp.ok) throw new Error(`Request failed (${resp.status})`);
+        const data = (await resp.json()) as ChangelogResponse;
+        this.changelogEntries = data.entries;
+        this.changelogInstalledVersion = data.installed_version;
+        this.changelogLatestVersion = data.latest_version;
+        this.changelogUpdateAvailable = data.update_available;
+        this.changelogShowWhatsChanged = data.show_whats_changed;
+        // shared with the Settings panel's own fields - same underlying
+        // fact about this request, whichever endpoint happens to load
+        // first this session should seed it, not just /settings's own
+        if (data.is_localhost) this.settingsIsLocalhost = true;
+        if (data.error) this.changelogError = data.error;
+        // is_new is read fresh from the server's own persisted "last seen
+        // version" file (utils/changelog.py), updated the moment
+        // closeChangelog() marks a version seen - so this alone correctly
+        // stays quiet on a later page load in the same session AND across
+        // a full Dojo restart, with no separate client-side bookkeeping.
+        else if (
+          data.show_whats_changed &&
+          !this.settingsOpen &&
+          data.entries.some((e) => e.is_new)
+        ) {
+          this.openChangelog();
+        }
+      } catch (err) {
+        this.changelogError =
+          err instanceof Error ? err.message : "Failed to load changelog";
+      } finally {
+        this.changelogLoading = false;
+      }
+    },
+
+    openChangelog() {
+      if (this.settingsOpen) this.closeSettings();
+      this.changelogOpen = true;
+      document.body.style.overflow = "hidden";
+    },
+
+    jumpToChangelogVersion(version: string) {
+      document
+        .getElementById(`changelog-v-${version}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+
+    async closeChangelog() {
+      this.changelogOpen = false;
+      document.body.style.overflow = "";
+      // only acknowledge when there was actually something new - no point
+      // writing (and no point clearing the "New" tags) on a plain re-read
+      // of an already-seen changelog
+      if (this.changelogLatestVersion && this.changelogEntries.some((e) => e.is_new)) {
+        try {
+          await fetch("/changelog/mark-seen", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ version: this.changelogLatestVersion }),
+          });
+          this.changelogEntries = this.changelogEntries.map((e) => ({
+            ...e,
+            is_new: false,
+          }));
+        } catch {
+          // best-effort - a failed mark-seen just means the "New" tags and
+          // auto-open may reappear on a later refresh
+        }
+      }
+    },
+
+    async setShowWhatsChanged(value: boolean) {
+      const previous = this.changelogShowWhatsChanged;
+      this.changelogShowWhatsChanged = value;
+      try {
+        const resp = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dojo: { show_whats_changed: value } }),
+        });
+        if (!resp.ok) throw new Error(`Request failed (${resp.status})`);
+      } catch (err) {
+        this.changelogShowWhatsChanged = previous;
+        this.toast(
+          err instanceof Error ? err.message : "Failed to update setting",
+          "error",
+        );
+      }
     },
 
     // plotly.js routes all its logging through loggers that prepend "WARN:"
