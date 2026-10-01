@@ -1,6 +1,7 @@
 import logging
 import os
 import queue
+import shutil
 import sys
 import threading
 import time
@@ -468,11 +469,14 @@ class MojoReloaded:
                         mojo_model.named.model_dump_json()
                     )
 
-                    # overwrite on every reload (rather than write-once like the
-                    # Runner) since the user's generator, and therefore which
-                    # distributions exist, can change between reloads
+                    # clear and rebuild on every reload (rather than write-once like
+                    # the Runner) since the user's generator, and therefore which
+                    # distributions exist (or whether any exist at all), can change
+                    # between reloads; wiping first means a dropped category/dist_type
+                    # or an emptied dists dict doesn't leave stale files behind
+                    stochas_dir = self.workdir / STOCHAS_DIR_NAME
+                    shutil.rmtree(stochas_dir, ignore_errors=True)
                     if mojo_model.dists:
-                        stochas_dir = self.workdir / STOCHAS_DIR_NAME
                         stochas_dir.mkdir(exist_ok=True)
                         mojo_model.dists.to_tables(stochas_dir)
                         tmp = stochas_dir / "dists.tmp.json"

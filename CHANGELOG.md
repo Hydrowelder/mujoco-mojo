@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 2.6.13 (2026-09-30)
+
+- Added support for MuJoCo 3.14.0
+    - Added the `ipc` flag to `<option><flag>`
+- `reloaded`'s `workdir/stochas` directory is now cleared before each reload's regeneration - it previously only overwrote files for the distributions that still existed, so a dropped distribution category/type, or a reload producing no distributions at all, could leave stale CSV tables or a stale `dists.json` behind
+
 ## Version 2.6.12 (2026-09-29)
 
 - `EqualityBase.set_active()` now updates the tracked `active` field, not just the live `mjData.eq_active` - it previously went stale after a runtime toggle, so saving the model back to XML wrote the wrong value

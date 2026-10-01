@@ -29,8 +29,8 @@ class ModelWithGeoms:
     bunny_below_cup_geom: mojo.GeomMesh
     ball_above_cup_geom: mojo.GeomMesh
     cup_geom: mojo.GeomMesh
-    ball_above_cup_site: mojo.SiteMesh
-    """A SiteMesh sharing ball_above_cup_geom's mesh - exercises Proximityable's GeomMesh | SiteMesh union (MuJoCo 3.13.0's <site type="mesh"> support) alongside the existing GeomMesh-only cases."""
+    bunny_in_cup_site: mojo.SiteMesh
+    """A SiteMesh sharing bunny_in_cup_geom's mesh - exercises Proximityable's GeomMesh | SiteMesh union (MuJoCo 3.13.0's <site type="mesh"> support) alongside the existing GeomMesh-only cases. Its pose is explicitly set (in `_model_with_geoms`) to the mesh's baked `mesh_pos`/`mesh_quat` centering/alignment offset, which MuJoCo composes into any referencing geom's pose but never into a site's - without that correction this site and bunny_in_cup_geom would not actually coincide, no matter how "identical" their MJCF poses look."""
 
     def compile(self) -> mojo.MjState:
         # copy assets to shared dir
@@ -137,6 +137,12 @@ def _model_with_geoms(
                 rgba=mojo.utils.Color.ROSE_500.rgba,
             )
         ],
+        sites=[
+            bunny_in_cup_site := mojo.SiteMesh(
+                name=mojo.SiteName("bunny_in_cup_site"),
+                mesh=bunny_mesh.name,
+            )
+        ],
     )
 
     bunny_below_cup = mojo.Body(
@@ -161,12 +167,6 @@ def _model_with_geoms(
                 rgba=mojo.utils.Color.EMERALD_500.rgba,
             )
         ],
-        sites=[
-            ball_above_cup_site := mojo.SiteMesh(
-                name=mojo.SiteName("ball_above_cup_site"),
-                mesh=ball_mesh.name,
-            )
-        ],
     )
 
     mujoco_mjcf = mojo.Mujoco(
@@ -177,9 +177,25 @@ def _model_with_geoms(
         assets=[mojo.Asset(meshes=meshes)],
     )
 
-    # compile and forward sim to add bounding spheres in correct location
+    # compile once to discover geometry-derived facts (bounding spheres below,
+    # and bunny_in_cup_site's pose correction) before the real/final compile
     _init_state = mujoco_mjcf.prep_for_sim()
     _rgba = mojo.utils.Color.WHITE.with_alpha(0.05)
+
+    # MuJoCo centers/aligns every mesh asset to its own center-of-mass and
+    # principal axes of inertia, and composes that offset into the pose of any
+    # *geom* referencing it (mjModel.mesh_pos/mesh_quat) - but never into a
+    # *site* referencing the same mesh, since sites carry no mass/inertia. So
+    # bunny_in_cup_geom and bunny_in_cup_site, despite sharing a body, mesh and
+    # MJCF pose, do NOT end up at the same compiled world pose unless that
+    # offset is copied onto the site explicitly, as done here.
+    _bunny_mesh_id = _init_state.model.geom_dataid[
+        bunny_in_cup_geom.get_id(_init_state.model)
+    ]
+    bunny_in_cup_site.pose = mojo.PoseQuat(
+        pos=_init_state.model.mesh_pos[_bunny_mesh_id].copy(),
+        quat=_init_state.model.mesh_quat[_bunny_mesh_id].copy(),
+    )
 
     viz_targets = [
         (cup_geom, cup.name),
@@ -212,7 +228,7 @@ def _model_with_geoms(
         bunny_below_cup_geom=bunny_below_cup_geom,
         ball_above_cup_geom=ball_above_cup_geom,
         cup_geom=cup_geom,
-        ball_above_cup_site=ball_above_cup_site,
+        bunny_in_cup_site=bunny_in_cup_site,
     )
 
 
@@ -292,10 +308,11 @@ def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel):
     """CONVEX_HULL's narrowphase uses MuJoCo's native mj_geomDistance, which only supports geoms (a SiteMesh's id lives in a separate namespace) - it should raise rather than silently measure against the wrong geom."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
-        volume_2=compiled_model.ball_above_cup_site,
-        # large enough that the sphere-to-sphere broadphase can't short-circuit
-        # before reaching the geom-only narrowphase this is actually testing
-        dist_max=10.0,
+        volume_2=compiled_model.bunny_in_cup_site,
+        # bunny_in_cup overlaps the cup, so the sphere-to-sphere broadphase
+        # can't short-circuit before reaching the geom-only narrowphase this
+        # is actually testing
+        dist_max=1.0,
     )
 
     with pytest.raises(TypeError, match="mj_geomDistance"):
@@ -305,16 +322,16 @@ def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel):
 def test_vertex_to_face_proximity_with_site_mesh_matches_equivalent_geom(
     compiled_model: CompiledModel,
 ):
-    """A SiteMesh gives the same VERTEX_TO_FACE distance as a GeomMesh at the identical pose/mesh (ball_above_cup_geom and ball_above_cup_site share a body, mesh, and default pose) - proves the trimesh-based narrowphase (unlike CONVEX_HULL's) is actually correct for sites, not just shape-checked."""
+    """A SiteMesh gives the same VERTEX_TO_FACE distance as a GeomMesh at the identical compiled pose/mesh (bunny_in_cup_geom and bunny_in_cup_site share a body and mesh, and bunny_in_cup_site's pose is corrected to coincide with the geom's compiled pose - see its docstring on ModelWithGeoms) - proves the trimesh-based narrowphase (unlike CONVEX_HULL's) is actually correct for sites, not just shape-checked."""
     geom_proximity = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
-        volume_2=compiled_model.ball_above_cup_geom,
-        dist_max=10.0,
+        volume_2=compiled_model.bunny_in_cup_geom,
+        dist_max=1.0,
     )
     site_proximity = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
-        volume_2=compiled_model.ball_above_cup_site,
-        dist_max=10.0,
+        volume_2=compiled_model.bunny_in_cup_site,
+        dist_max=1.0,
     )
 
     geom_dist, _, _, _ = geom_proximity.get_vertex_to_face_proximity(
