@@ -1,0 +1,22 @@
+# dependabot version updates for the three ecosystems in this repo
+# docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # python dependencies (pyproject.toml + uv.lock)
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # dojo frontend dependencies (vite, tailwind, alpine, plotly, ...)
+  - package-ecosystem: "npm"
+    directory: "/src/mujoco_mojo/utils/layers/dojo/templates/static/ts"
+    schedule:
+      interval: "weekly"
+
+  # actions used by .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
