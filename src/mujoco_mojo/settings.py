@@ -1,4 +1,4 @@
-"""Global user settings for mujoco_mojo, persisted to ~/.mujoco-mojo/settings.toml."""
+"""Global user settings for mujoco_mojo, `persisted to ~/.mujoco-mojo/settings.toml`."""
 
 from __future__ import annotations
 
@@ -923,7 +923,7 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
 
 class MujocoMojoSettings(BaseSettings):
     """
-    Global user-level settings persisted to ~/.mujoco-mojo/settings.toml, layered with an optional project-local override file - the same User-settings-vs-Workspace-settings model VS Code uses.
+    Global user-level settings persisted to `~/.mujoco-mojo/settings.toml`, layered with an optional project-local override file - the same User-settings-vs-Workspace-settings model VS Code uses.
 
     Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, `<cwd>/.mujoco-mojo/settings.toml`) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
     """
