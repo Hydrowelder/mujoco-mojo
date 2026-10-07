@@ -6,7 +6,7 @@ import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
 from mujoco_mojo.utils.column import Column
-from mujoco_mojo.utils.dataframe import MojoDataFrame, read_column_metadata
+from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
@@ -71,7 +71,7 @@ def test_read_column_metadata_returns_models(tmp_path: Path) -> None:
         },
     )
 
-    meta = read_column_metadata(path)
+    meta = MojoDataFrame.read_column_metadata(path)
     assert meta["a"] == ColumnMetadata.model_validate(
         {"unit": "meter", "transform_type": "point", "note": "x"}
     )
@@ -91,7 +91,7 @@ def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path) -> No
         },
     )
 
-    meta = read_column_metadata(path)
+    meta = MojoDataFrame.read_column_metadata(path)
     assert meta["a"].unit == "not_a_unit"
     assert meta["b"].unit == "meter"
 

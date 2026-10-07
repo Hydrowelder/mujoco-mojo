@@ -6,6 +6,7 @@
 - Added `cg_x`, `cg_y`, and `cg_z` to `Inertial`, and `x`, `y`, and `z` to `Pos`
 - The `time` column is now tagged with the `scalar` `transform_type`, like the other built-in signals
 - Added missing return type annotations across the package, so `get_logger` now returns a `logging.Logger` instead of an unknown type
+- **Breaking:** `read_column_metadata()` is now `MojoDataFrame.read_column_metadata()`
 - Security patches
 
 ## Version 2.6.13 (2026-09-30)

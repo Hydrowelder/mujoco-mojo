@@ -22,7 +22,6 @@ from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
     MojoDataFrame,
-    read_column_metadata,
 )
 from mujoco_mojo.utils.defaults import NAMED_VALUES_FNAME as _NAMED_VALUES_FNAME
 from mujoco_mojo.utils.defaults import STOCHAS_DIR_NAME as _STOCHAS_DIR_NAME
@@ -869,7 +868,7 @@ def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
 @lru_cache(maxsize=128)
 def _get_column_metadata(path: Path, mtime: float) -> dict[str, ColumnMetadata]:
     """Reads per-column signal metadata from the parquet footer, cached by path and mtime."""
-    return read_column_metadata(path)
+    return MojoDataFrame.read_column_metadata(path)
 
 
 @lru_cache(maxsize=128)

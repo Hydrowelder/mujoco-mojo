@@ -45,18 +45,16 @@ from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 logger = get_logger(__name__)
 
 
-def read_column_metadata(path: Path | str) -> dict[str, ColumnMetadata]:
-    """Reads the per-column metadata from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata. An entry that fails validation (for example a unit written by another version) is still loaded, unvalidated, with a warning, so older files keep opening."""
-    file_meta = pq.read_metadata(str(path)).metadata
-    if not file_meta:
-        return {}
-    raw = file_meta.get(b"column_metadata")
-    if raw is None:
-        return {}
-    return {
-        col: ColumnMetadata.lenient(entry, where=f" for column '{col}'")
-        for col, entry in json.loads(raw.decode()).items()
-    }
+def _resolve_column_metadata(
+    path: Path | str | None,
+    column_metadata: Mapping[str, ColumnMetadata] | None,
+) -> Mapping[str, ColumnMetadata]:
+    """Returns `column_metadata` if given, else the metadata in the footer of the parquet file at `path`, else an empty mapping."""
+    if column_metadata is not None:
+        return column_metadata
+    if path is not None:
+        return MojoDataFrame.read_column_metadata(path)
+    return {}
 
 
 def _try_parse(name: str) -> Column | None:
@@ -133,6 +131,20 @@ class _MojoFrame(pl.DataFrame):
         return cls.from_pl(
             pl.read_parquet(source=path, columns=columns, *args, **kwargs)
         )
+
+    @classmethod
+    def read_column_metadata(cls, path: Path | str) -> dict[str, ColumnMetadata]:
+        """Reads the per-column metadata from the parquet file footer written by `SignalManager`. Returns an empty dict if the file has no embedded metadata. An entry that fails validation (for example a unit written by another version) is still loaded, unvalidated, with a warning, so older files keep opening."""
+        file_meta = pq.read_metadata(str(path)).metadata
+        if not file_meta:
+            return {}
+        raw = file_meta.get(b"column_metadata")
+        if raw is None:
+            return {}
+        return {
+            col: ColumnMetadata.lenient(entry, where=f" for column '{col}'")
+            for col, entry in json.loads(raw.decode()).items()
+        }
 
     @classmethod
     def from_pl(cls, df: pl.DataFrame) -> MojoDataFrame:
@@ -442,7 +454,7 @@ class MojoNamespace:
         extra_columns: list[str] | None = None,
         column_metadata: Mapping[str, ColumnMetadata] | None = None,
     ) -> ColumnManifest:
-        """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `read_column_metadata()`) to populate `column_metadata`, and to leave out any group tagged `scalar`, which is not a vector or a quaternion and so is never offered for rotation (matching `change_frame`)."""
+        """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `MojoDataFrame.read_column_metadata()`) to populate `column_metadata`, and to leave out any group tagged `scalar`, which is not a vector or a quaternion and so is never offered for rotation (matching `change_frame`)."""
         bm = self._get_base_map(extra_columns)
         all_cols = list(self._df.columns) + (extra_columns or [])
         meta = column_metadata or {}
@@ -487,7 +499,7 @@ class MojoNamespace:
         Args:
             target: The target unit system (e.g. `UnitSystem.si()`).
             path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
-            column_metadata: Pre-loaded metadata dict (from `read_column_metadata()`). Takes precedence over `path`.
+            column_metadata: Pre-loaded metadata dict (from `MojoDataFrame.read_column_metadata()`). Takes precedence over `path`.
             assume_source: When set, columns with only a `"dimension"` tag (no `"unit"`) are converted as if they were expressed in the corresponding unit from this system.
 
         """
@@ -495,13 +507,7 @@ class MojoNamespace:
         from mujoco_mojo.stochas import ureg
         from mujoco_mojo.utils.filters.filters import UnitFilter
 
-        meta: Mapping[str, ColumnMetadata]
-        if column_metadata is not None:
-            meta = column_metadata
-        elif path is not None:
-            meta = read_column_metadata(path)
-        else:
-            meta = {}
+        meta = _resolve_column_metadata(path, column_metadata)
 
         def _base_map(us: _US) -> dict[str, str]:
             return {
@@ -598,7 +604,7 @@ class MojoNamespace:
             quat_base: Prefix for the [x,y,z,w] quaternion group giving the target frame's orientation in world coordinates (e.g. 'Bodies/chassis/xquat').
             origin_base: Prefix for the [x,y,z] position group giving the target frame's origin in world coordinates (e.g. 'Bodies/chassis/xpos').
             path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
-            column_metadata: Pre-loaded metadata dict (from `read_column_metadata()`). Takes precedence over `path`.
+            column_metadata: Pre-loaded metadata dict (from `MojoDataFrame.read_column_metadata()`). Takes precedence over `path`.
             invert: If True (default), performs a world-to-local transform into the target frame; if False, reverses it (local-to-world).
 
         Returns:
@@ -617,13 +623,7 @@ class MojoNamespace:
             logger.error(msg)
             raise ValueError(msg)
 
-        meta: Mapping[str, ColumnMetadata]
-        if column_metadata is not None:
-            meta = column_metadata
-        elif path is not None:
-            meta = read_column_metadata(path)
-        else:
-            meta = {}
+        meta = _resolve_column_metadata(path, column_metadata)
 
         points, vectors = _classify_transform_bases(self.rotatable_bases, meta)
         quats = _classify_quaternion_bases(self.quaternion_bases, meta)

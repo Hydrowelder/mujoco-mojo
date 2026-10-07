@@ -11,7 +11,7 @@ import pytest
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.utils.column import Column
-from mujoco_mojo.utils.dataframe import read_column_metadata
+from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
@@ -415,7 +415,7 @@ def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
 
 
 def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> None:
-    """What SignalManager writes is what read_column_metadata gives back, typed."""
+    """What SignalManager writes is what `MojoDataFrame.read_column_metadata` gives back, typed."""
     m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
     d: mujoco.MjData = mujoco.MjData(m)
 
@@ -437,7 +437,7 @@ def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> N
     sm.record(MjState(m, d))
     sm.close()
 
-    read = read_column_metadata(sm.export_path)
+    read = MojoDataFrame.read_column_metadata(sm.export_path)
     assert read == sm._column_metadata
     assert read["Bodies/A/xpos:x"].transform_type == TransformType.POINT
     assert read["time"].dimension == "[time]"
