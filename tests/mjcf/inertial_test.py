@@ -29,13 +29,13 @@ def simple_box_inertial() -> Inertial:
     )
 
 
-def test_inertia_matrix_calculation(simple_box_inertial: Inertial):
+def test_inertia_matrix_calculation(simple_box_inertial: Inertial) -> None:
     """Verify diagonal and full inertia matrix reconstruction."""
     expected = np.diag([1 / 6, 1 / 6, 1 / 6])
     assert np.allclose(simple_box_inertial.inertia_matrix, expected)
 
 
-def test_parallel_axis_addition(simple_box_inertial: Inertial):
+def test_parallel_axis_addition(simple_box_inertial: Inertial) -> None:
     """Test adding two identical cubes offset from each other."""
     # Move a second identical cube to [1, 0, 0]
     other = Inertial(
@@ -55,7 +55,7 @@ def test_parallel_axis_addition(simple_box_inertial: Inertial):
     assert combined.i_xx == pytest.approx(1 / 3)  # (1/6 + 1/6)
 
 
-def test_inertial_subtraction(simple_box_inertial: Inertial):
+def test_inertial_subtraction(simple_box_inertial: Inertial) -> None:
     """Test 'carving out' matter."""
     small_mass = Inertial(
         mass=0.5,
@@ -69,7 +69,7 @@ def test_inertial_subtraction(simple_box_inertial: Inertial):
     assert result.i_xx == pytest.approx(1 / 6 - 1 / 12)
 
 
-def test_subtraction_physics_failure(simple_box_inertial: Inertial):
+def test_subtraction_physics_failure(simple_box_inertial: Inertial) -> None:
     """Ensure subtracting a 'larger' inertia than exists raises ValueError."""
     # Impossible: Subtracting more inertia than the base has
     massive_tool = Inertial(
@@ -82,7 +82,7 @@ def test_subtraction_physics_failure(simple_box_inertial: Inertial):
         _ = simple_box_inertial - massive_tool
 
 
-def test_from_random_vector_draw(mojo_model: MojoModel):
+def test_from_random_vector_draw(mojo_model: MojoModel) -> None:
     """Test sampling mass and position as single distributions."""
     m_dist = NormalDistribution(name=DistName("rand_mass"), mu=1.0, sigma=0.1)
     p1_dist = UniformDistribution(name=DistName("rand_pos_x"), low=-1, high=1)
@@ -104,7 +104,7 @@ def test_from_random_vector_draw(mojo_model: MojoModel):
     assert "rand_pos_z" in mojo_model.named
 
 
-def test_from_random_component_draw(mojo_model: MojoModel):
+def test_from_random_component_draw(mojo_model: MojoModel) -> None:
     """Test sampling individual X, Y, Z components of the position."""
     x_dist = UniformDistribution(name=DistName("pos_x"), low=5, high=6)
 
@@ -123,7 +123,7 @@ def test_from_random_component_draw(mojo_model: MojoModel):
     assert "pos_x" in mojo_model.named
 
 
-def test_from_random_max_retries(mojo_model: MojoModel):
+def test_from_random_max_retries(mojo_model: MojoModel) -> None:
     """Verify the retry logic when a distribution is physically impossible."""
     # Force a failure: Mass is positive, but diaginertia is zero/negative
     # (Uniform low=0 effectively creates invalid non-positive-definite matrices)
@@ -141,7 +141,7 @@ def test_from_random_max_retries(mojo_model: MojoModel):
         )
 
 
-def test_from_random_duplicate_distribution_name_raises(mojo_model: MojoModel):
+def test_from_random_duplicate_distribution_name_raises(mojo_model: MojoModel) -> None:
     """Verify that reusing the same distribution name for multiple components raises an error."""
     dup_a = UniformDistribution(name=DistName("dup_inertia"), low=0.1, high=0.2)
     dup_b = UniformDistribution(name=DistName("dup_inertia"), low=0.1, high=0.2)
@@ -155,7 +155,7 @@ def test_from_random_duplicate_distribution_name_raises(mojo_model: MojoModel):
         )
 
 
-def test_fullinertia_orientation_conflict():
+def test_fullinertia_orientation_conflict() -> None:
     """Verify that providing both fullinertia and orientation raises a ValueError."""
     with pytest.raises(
         ValueError, match=r"orientation cannot be provided when using 'fullinertia"
@@ -168,7 +168,7 @@ def test_fullinertia_orientation_conflict():
         )
 
 
-def test_missing_inertia_definition():
+def test_missing_inertia_definition() -> None:
     """Ensure at least one inertia type is provided."""
     with pytest.raises(
         ValueError, match="Either diaginertia or fullinertia must be specified"
@@ -176,7 +176,7 @@ def test_missing_inertia_definition():
         Inertial(mass=1.0, pos=Pos(pos=np.array([0, 0, 0])))
 
 
-def test_fullinertia_matrix_reconstruction():
+def test_fullinertia_matrix_reconstruction() -> None:
     """Verify the Vec6 symmetry mapping into a 3x3 matrix."""
     # M11=2, M22=2, M33=2, M12=0.1, M13=0.2, M23=0.3
     f_vec = np.array([2, 2, 2, 0.1, 0.2, 0.3])
@@ -186,7 +186,7 @@ def test_fullinertia_matrix_reconstruction():
     assert np.allclose(item.inertia_matrix, expected)
 
 
-def test_rotated_principal_axes_shift():
+def test_rotated_principal_axes_shift() -> None:
     """Test get_body_frame_inertia with a 90-degree rotation."""
     # Principal axes: I_xx=0.1, I_yy=0.5, I_zz=0.5
     # Rotate 90 deg about Z so local X becomes body Y
@@ -204,7 +204,7 @@ def test_rotated_principal_axes_shift():
     assert I_body[1, 1] == pytest.approx(0.1)
 
 
-def test_from_random_with_euler_tuple(mojo_model: MojoModel):
+def test_from_random_with_euler_tuple(mojo_model: MojoModel) -> None:
     """Test sampling an Euler orientation via the tuple factory."""
     # Target Euler class, list of distributions, and sequence
     roll_dist = UniformDistribution(name=DistName("roll"), low=0, high=10)
@@ -222,7 +222,7 @@ def test_from_random_with_euler_tuple(mojo_model: MojoModel):
     assert item.orientation.euler[0] > 0
 
 
-def test_non_positive_definite_failure():
+def test_non_positive_definite_failure() -> None:
     """
     Ensure non-physical inertia (negative eigenvalues) raises ValueError.
 
@@ -242,7 +242,7 @@ def test_non_positive_definite_failure():
         )
 
 
-def test_triangle_inequality_failure_diaginertia():
+def test_triangle_inequality_failure_diaginertia() -> None:
     """Ensure a positive-definite diaginertia that violates the triangle inequality raises ValueError."""
     # Eigenvalues are (1, 1, 3); positive definite, but 1 + 1 < 3.
     with pytest.raises(
@@ -255,7 +255,7 @@ def test_triangle_inequality_failure_diaginertia():
         )
 
 
-def test_triangle_inequality_failure_fullinertia():
+def test_triangle_inequality_failure_fullinertia() -> None:
     """Ensure a positive-definite fullinertia that violates the triangle inequality raises ValueError."""
     # Same eigenvalues as the diaginertia case (1, 1, 3), specified via a diagonal fullinertia.
     bad_full = np.array([1.0, 1.0, 3.0, 0.0, 0.0, 0.0])

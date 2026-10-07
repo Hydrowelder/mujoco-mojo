@@ -38,10 +38,10 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.column import MATRIX_ATTRS, Column, fan_out
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
-    MetadataLike,
-    MetadataOverrides,
     ColumnMetadata,
     Dimension,
+    MetadataLike,
+    MetadataOverrides,
     TransformType,
     angular_rate_metadata,
     dim,
@@ -86,6 +86,7 @@ _body_attr = (
     "sleep",
     "simple",
     "user",
+    # "fuse", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
 )
 _body_children = (
     "inertial",
@@ -157,6 +158,9 @@ class Body(XMLModel):
     - **No inertia-bearing tendons**: The body must not contain sites or geoms used as wrap objects by any tendon that has non-zero armature.
 
     Setting this attribute to false disables the optimization for this body. This is necessary for domain randomization workflows where model parameters (such as joint/inertial offsets or angles) are perturbed dynamically during simulation and updated via mj_setConst. Because a body compiled with the simple optimization active cannot dynamically lose its simple state at runtime (which would require reallocation of sparse matrix structures), any runtime parameter change that violates the simple conditions will trigger a validation error unless `simple="false"` was explicitly declared in the XML."""
+
+    # fuse: Fuse = Fuse.AUTO  # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    # """Whether this body can be fused with its parent when static bodies are fused, by the fusestatic compiler option or by mjs_fuseStatic. With the default auto a static body is fused unless one of the conditions listed there prevents it. Setting this attribute to false keeps the body."""
 
     user: VecN | None = None
     """See User parameters. Has length of `nbody_user`"""
@@ -478,7 +482,7 @@ class Body(XMLModel):
             "pe",
             "ke_total",
         ],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -559,7 +563,7 @@ class Body(XMLModel):
                 )
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 match channel:
                     case "xpos":

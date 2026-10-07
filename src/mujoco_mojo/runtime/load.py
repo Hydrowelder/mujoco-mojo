@@ -139,13 +139,13 @@ class SiteLoad(Load):
     _vis: VisualizationSettings = PrivateAttr(default_factory=VisualizationSettings)
     """Visualization color settings, loaded from user settings on resolve."""
 
-    def handle_inactive(self):
+    def handle_inactive(self) -> None:
         # [3] is magnitude
         if not np.isclose(0, self._last_f[3] + self._last_t[3]):
             self._last_f = np.zeros(4)
             self._last_t = np.zeros(4)
 
-    def resolve_ids(self, state: MjState):
+    def resolve_ids(self, state: MjState) -> None:
         """Caches the integer IDs from the compiled MuJoCo model."""
         self._vis = MujocoMojoSettings().visualization
         self.action_site.get_id(state.model)
@@ -173,7 +173,7 @@ class SiteLoad(Load):
 
         """
 
-    def apply_load(self, state: MjState):
+    def apply_load(self, state: MjState) -> None:
         if not self.active:
             self.handle_inactive()
             return
@@ -203,7 +203,7 @@ class SiteLoad(Load):
         signal_manager: SignalManager | None = None,
         channels: list[Literal["force", "torque"]]
         | dict[Literal["force", "torque"], MetadataLike | None] = ["force", "torque"],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -259,7 +259,7 @@ class SiteLoad(Load):
                 )
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 source = self._last_f if channel == "force" else self._last_t
                 for i, col in enumerate(channel_columns(channel, state)):
@@ -322,7 +322,7 @@ class PointToPointForce(SiteLoad):
     _r0_mag: float = PrivateAttr(default=0.0)
     """Rest distance between the two sites, captured at `resolve_ids` time."""
 
-    def resolve_ids(self, state: MjState):
+    def resolve_ids(self, state: MjState) -> None:
         """Caches the integer IDs from the compiled MuJoCo model."""
         super().resolve_ids(state)
         self.xtion_site.get_id(state.model)
@@ -339,7 +339,7 @@ class PointToPointForce(SiteLoad):
             )
         return self
 
-    def apply_load(self, state: MjState):
+    def apply_load(self, state: MjState) -> None:
         if not self.active:
             self.handle_inactive()
             return
@@ -560,12 +560,12 @@ class BodyReactionForce(SiteLoad):
     xtion_body: Body | None = None
     """Body that receives the reaction force. When None, no reaction is applied and the force acts on the world."""
 
-    def resolve_ids(self, state: MjState):
+    def resolve_ids(self, state: MjState) -> None:
         super().resolve_ids(state)
         if self.xtion_body:
             self.xtion_body.get_id(state.model)
 
-    def apply_load(self, state: MjState):
+    def apply_load(self, state: MjState) -> None:
         if not self.active:
             self.handle_inactive()
             return

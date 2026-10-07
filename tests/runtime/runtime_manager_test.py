@@ -17,6 +17,7 @@ from mujoco_mojo.typing import GeomName, JointName, MeshName
 from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.utils.signal_metadata import TransformType
 from mujoco_mojo.utils.statusing import RequirementResult, TrialStatus
+from typing import Never
 
 
 class MockLoad(Load):
@@ -29,7 +30,7 @@ class MockLoad(Load):
         pass
 
 
-def test_runtime_manager_lifecycle(rm: SignalManager):
+def test_runtime_manager_lifecycle(rm: SignalManager) -> None:
     """Verify that __enter__ and __exit__ handle cleanup correctly."""
     # Patch close to ensure it's called
     with patch.object(rm, "close") as mock_close:
@@ -40,7 +41,7 @@ def test_runtime_manager_lifecycle(rm: SignalManager):
         mock_close.assert_called_once()
 
 
-def test_resolution_on_first_step(mj_setup, rm: SignalManager):
+def test_resolution_on_first_step(mj_setup, rm: SignalManager) -> None:
     """Verify that resolve() is automatically called during the first step."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -57,7 +58,7 @@ def test_resolution_on_first_step(mj_setup, rm: SignalManager):
     load.resolve_ids.assert_called_once_with(state)
 
 
-def test_buffer_clearing_hygiene(mj_setup):
+def test_buffer_clearing_hygiene(mj_setup) -> None:
     """CRITICAL: Verify that step() clears the applied force buffers."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -76,7 +77,7 @@ def test_buffer_clearing_hygiene(mj_setup):
     assert np.all(data.ctrl == 0), "ctrl was not cleared"
 
 
-def test_buffer_clearing_is_individually_disableable(mj_setup):
+def test_buffer_clearing_is_individually_disableable(mj_setup) -> None:
     """Each buffer's clearing can be disabled independently via step() arguments."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -98,7 +99,7 @@ def test_buffer_clearing_is_individually_disableable(mj_setup):
     assert data.ctrl[0] == pytest.approx(1.0), "ctrl was cleared"
 
 
-def test_video_capture_with_arrows(mj_setup):
+def test_video_capture_with_arrows(mj_setup) -> None:
     """Verify that recorder captures frames and requests visuals from loads."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -121,7 +122,7 @@ def test_video_capture_with_arrows(mj_setup):
     assert len(kwargs["custom_arrows"]) == 1
 
 
-def test_video_capture_skipped_when_recording_disabled(mj_setup):
+def test_video_capture_skipped_when_recording_disabled(mj_setup) -> None:
     """`_skip_recording` must gate video frame capture the same way it gates telemetry."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -135,7 +136,7 @@ def test_video_capture_skipped_when_recording_disabled(mj_setup):
     assert mgr.recording is False
 
 
-def test_save_recordings_skips_log_when_no_frames_captured(caplog):
+def test_save_recordings_skips_log_when_no_frames_captured(caplog) -> None:
     """save_recordings still saves/closes every recorder (releasing its GL context) but shouldn't claim video was saved when nothing was captured."""
     mock_recorder = MagicMock(frame_count=0)
     mgr = RuntimeManager(video_recorders=[mock_recorder])
@@ -149,7 +150,7 @@ def test_save_recordings_skips_log_when_no_frames_captured(caplog):
 
 
 @patch("mujoco_mojo.runtime.runtime_manager.ThreadPoolExecutor")
-def test_parallel_video_save(mock_executor_cls, rm: SignalManager):
+def test_parallel_video_save(mock_executor_cls, rm: SignalManager) -> None:
     """Verify that save_recordings uses parallel execution."""
     mock_recorder = MagicMock(frame_count=1)
     mgr = RuntimeManager(video_recorders=[mock_recorder])
@@ -161,7 +162,7 @@ def test_parallel_video_save(mock_executor_cls, rm: SignalManager):
     assert mock_executor.submit.called
 
 
-def test_add_load_warns_on_duplicate_name(caplog):
+def test_add_load_warns_on_duplicate_name(caplog) -> None:
     """add_load logs a warning when the same load name is registered twice."""
     mgr = RuntimeManager()
     load_a: Load = MagicMock(spec=Load)
@@ -177,7 +178,7 @@ def test_add_load_warns_on_duplicate_name(caplog):
     assert len(mgr.loads) == 2
 
 
-def test_add_proximity_warns_on_duplicate_pair(caplog):
+def test_add_proximity_warns_on_duplicate_pair(caplog) -> None:
     """add_proximity logs a warning when the same geom pair is registered twice."""
     mgr = RuntimeManager()
     g1 = GeomMesh(name=GeomName("geom_a"), mesh=MeshName("mesh_a"))
@@ -194,7 +195,7 @@ def test_add_proximity_warns_on_duplicate_pair(caplog):
     assert len(mgr.proximities) == 2
 
 
-def test_exit_closes_signal_manager(rm: SignalManager):
+def test_exit_closes_signal_manager(rm: SignalManager) -> None:
     """__exit__ calls close() on the signal_manager."""
     with patch.object(rm, "close") as mock_close:
         with RuntimeManager(signal_manager=rm):
@@ -202,7 +203,7 @@ def test_exit_closes_signal_manager(rm: SignalManager):
         mock_close.assert_called_once()
 
 
-def test_step_records_via_signal_manager(mj_setup, rm: SignalManager):
+def test_step_records_via_signal_manager(mj_setup, rm: SignalManager) -> None:
     """step() calls signal_manager.record() when a signal_manager is attached."""
     model, data = mj_setup
     state = MjState(model, data)
@@ -369,7 +370,7 @@ def test_add_requirement_registers_fn() -> None:
     """add_requirement registers fn under its name in _requirements."""
     mgr = RuntimeManager()
 
-    def fn(m, s, df):
+    def fn(m, s, df) -> tuple[bool, str]:
         return True, "ok"
 
     mgr.add_requirement(fn, name="my_check")
@@ -395,7 +396,7 @@ def test_requirement_decorator_registers_and_returns_fn() -> None:
     mgr = RuntimeManager()
 
     @mgr.requirement("decorated")
-    def check(model, state, df):
+    def check(model, state, df) -> tuple[bool, str]:
         return True, "decorated ok"
 
     assert len(mgr._requirements) == 1
@@ -491,7 +492,7 @@ def test_requirement_exception_recorded_as_failure(tmp_path: Path) -> None:
     mgr._mojo_model = MagicMock()
     mgr._last_state = MagicMock()
 
-    def bad_check(model, state, df):
+    def bad_check(model, state, df) -> Never:
         raise ValueError("boom")
 
     mgr.add_requirement(bad_check, name="bad")
@@ -566,7 +567,7 @@ def test_live_failure_marks_requirement_failed_at_end_of_trial(tmp_path: Path) -
 
     live_results = iter([True, False, True])
 
-    def flaky(model, state, df):
+    def flaky(model, state, df) -> tuple[bool, str]:
         if df is None:
             return next(live_results), "live check"
         return True, "recovered by end of trial"
@@ -628,7 +629,7 @@ def test_undetermined_live_results_excluded_from_failure_count(tmp_path: Path) -
     # determinate ones (True, False, True) should count as "live checks"
     live_results = iter([None, True, False, None, True])
 
-    def flaky(model, state, df):
+    def flaky(model, state, df) -> tuple[bool | None, str]:
         if df is None:
             return next(live_results), "live check"
         return True, "recovered by end of trial"
@@ -662,7 +663,7 @@ def test_last_passed_accepts_function_handle() -> None:
     mgr._mojo_model = MagicMock()
 
     @mgr.requirement(every=1)
-    def upright(model, state, df):
+    def upright(model, state, df) -> tuple[bool, str]:
         return state.data.time > 0.05, "ok"
 
     state = MagicMock()
@@ -677,7 +678,7 @@ def test_last_passed_rejects_unregistered_function() -> None:
     """last_passed raises ValueError for a function that was never registered, rather than silently returning None."""
     mgr = RuntimeManager()
 
-    def never_registered(model, state, df):
+    def never_registered(model, state, df) -> tuple[bool, str]:
         return True, "ok"
 
     with pytest.raises(ValueError, match="never_registered"):
@@ -776,7 +777,7 @@ def test_latch_on_fail_stops_calling_fn_after_first_failure() -> None:
     """latch_on_fail=True stops calling the check function once it fails, at both live and end-of-trial evaluation."""
     calls: list[float] = []
 
-    def flaky(model, state, df):
+    def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
         return state.data.time < 0.25, "check"
 
@@ -800,7 +801,7 @@ def test_latch_on_fail_defaults_to_true() -> None:
     """latch_on_fail is True by default: a live requirement stops being re-evaluated after its first failure even without passing latch_on_fail explicitly, since this changes nothing about the trial's outcome (a live failure is already sticky) and only saves compute."""
     calls: list[float] = []
 
-    def flaky(model, state, df):
+    def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
         return state.data.time < 0.25, "check"
 
@@ -821,7 +822,7 @@ def test_latch_on_fail_can_be_disabled_to_keep_observing() -> None:
     """Passing latch_on_fail=False opts back out of the default, so fn keeps being called after a failure."""
     calls: list[float] = []
 
-    def flaky(model, state, df):
+    def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
         return state.data.time < 0.25, "check"
 
@@ -941,7 +942,7 @@ def test_latch_on_pass_locks_in_success_despite_later_failure() -> None:
     """latch_on_pass=True freezes the verdict at True: later evaluations that would have failed never run at all, so the requirement stays passed for the trial (unlike the default sticky-failure behavior, where any later False would still doom it)."""
     calls: list[float] = []
 
-    def would_fail_after_first_pass(model, state, df):
+    def would_fail_after_first_pass(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
         # passes on the very first evaluation; would fail every time after
         # that if it were ever called again
@@ -979,7 +980,7 @@ def test_latched_verdict_reported_at_end_of_trial_without_calling_fn(
 
     call_count = 0
 
-    def once_only(model, state, df):
+    def once_only(model, state, df) -> tuple[bool, str]:
         nonlocal call_count
         call_count += 1
         if df is not None:

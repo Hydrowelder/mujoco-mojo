@@ -544,7 +544,7 @@ class MojoRunner:
             logger.exception(f"Failed to capture generator details: {e}")
             return (f"{func}", None, None)
 
-    def capture_environment(self):
+    def capture_environment(self) -> None:
         req_path = self.workdir / "requirements.txt"
 
         # 1. Try 'uv' first (since it's the modern standard)
@@ -1183,7 +1183,7 @@ class MojoRunner:
 
         def logging_callback(
             study: optuna.study.Study, frozen_trial: optuna.trial.FrozenTrial
-        ):
+        ) -> None:
             t_num = frozen_trial.number
 
             logger.info(

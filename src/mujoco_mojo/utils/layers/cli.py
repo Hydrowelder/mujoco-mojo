@@ -1,5 +1,7 @@
 """Defines the CLI for mujoco-mojo."""
 
+from __future__ import annotations
+
 import ast
 import importlib
 import logging
@@ -9,7 +11,7 @@ from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, Final, Literal, overload
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, overload
 
 import typer
 from rich.align import Align
@@ -35,6 +37,9 @@ from ..defaults import (
     DEFAULT_SEED,
     DEFAULT_WORKDIR,
 )
+
+if TYPE_CHECKING:
+    from mujoco_mojo.utils.runner import MojoRunner
 
 console = Console()
 
@@ -75,7 +80,7 @@ _SHADES = [
 ]
 
 
-def print_logo():
+def print_logo() -> None:
     body = Text(justify="center")
     for i, (line, shade) in enumerate(zip(_LOGO_LINES, _SHADES)):
         body.append(line, style=f"bold {shade}")
@@ -571,7 +576,7 @@ cli_app = typer.Typer(
 )
 
 
-def version_callback(value: bool):
+def version_callback(value: bool) -> None:
     if value:
         console.print(f"[bold cyan]mujoco-mojo[/bold cyan] [bold white]{VERSION}")
         raise typer.Exit()
@@ -605,7 +610,7 @@ def main(
             help="Show version and exit.",
         ),
     ] = False,
-):
+) -> None:
     """
     [bold cyan]MuJoCo Mojo:[/bold cyan] High-performance and extensible physics simulation manager.
     """
@@ -623,7 +628,7 @@ def _prepare_runner(
     gen_kwargs: GenKwargsType,
     run_args: RunArgsType,
     run_kwargs: RunKwargsType,
-):
+) -> MojoRunner:
     from mujoco_mojo.utils.runner import MojoRunner
 
     assert generator is not None, (
@@ -690,7 +695,7 @@ def run_monte_carlo(
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
-    from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
+    from mujoco_mojo.utils.runner import MonteCarloConfig
 
     logger = _setup_cli_logging(
         verbose=_SETTINGS.general.verbose + verbose,
@@ -738,7 +743,7 @@ def run_monte_carlo(
         )
         n_trial = 0
 
-    runner: MojoRunner = _prepare_runner(
+    runner = _prepare_runner(
         generator=generator,
         runtime=runtime,
         workdir=workdir,
@@ -841,7 +846,7 @@ def run_single(
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
-    from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
+    from mujoco_mojo.utils.runner import MonteCarloConfig
 
     logger = _setup_cli_logging(
         verbose=_SETTINGS.general.verbose + verbose,
@@ -883,7 +888,7 @@ def run_single(
                 f"Global NamedValue overrides had {len(global_overrides)} entries."
             )
 
-    runner: MojoRunner = _prepare_runner(
+    runner = _prepare_runner(
         generator=generator,
         runtime=runtime,
         workdir=workdir,
@@ -1607,7 +1612,7 @@ def run_optimizer(
     from numpydantic import NDArray
 
     from mujoco_mojo.stochas import NamedValueDict
-    from mujoco_mojo.utils.runner import MojoRunner, OptimizerConfig
+    from mujoco_mojo.utils.runner import OptimizerConfig
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -1642,7 +1647,7 @@ def run_optimizer(
             overrides.read_text()
         )
 
-    runner: MojoRunner = _prepare_runner(
+    runner = _prepare_runner(
         generator=generator,
         runtime=runtime,
         workdir=workdir,

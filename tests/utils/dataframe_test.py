@@ -6,14 +6,14 @@ import pytest
 
 from mujoco_mojo.typing import BodyName, SignalCategory
 from mujoco_mojo.utils.column import Column
-from mujoco_mojo.utils.dataframe import MojoDataFrame, read_column_metadata
+from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 
 @pytest.fixture
-def sample_data():
+def sample_data() -> pl.DataFrame:
     """Generates a representative telemetry dataset for testing."""
     data = {
         TIME_COLUMN_NAME: [0.0, 0.1, 0.2],
@@ -36,7 +36,7 @@ def sample_data():
 # --- IO & Initialization Tests ---
 
 
-def test_from_metadata(tmp_path: Path, sample_data: MojoDataFrame):
+def test_from_metadata(tmp_path: Path, sample_data: MojoDataFrame) -> None:
     """Verifies that from_metadata reads 0 rows but preserves schema."""
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
@@ -47,7 +47,7 @@ def test_from_metadata(tmp_path: Path, sample_data: MojoDataFrame):
     assert len(meta_df.columns) == len(sample_data.columns)
 
 
-def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame):
+def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame) -> None:
     """Verifies that only specific columns are loaded."""
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
@@ -58,7 +58,7 @@ def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame):
     assert col_df.height == 3
 
 
-def test_read_column_metadata_returns_models(tmp_path: Path):
+def test_read_column_metadata_returns_models(tmp_path: Path) -> None:
     import json
 
     path = tmp_path / "meta.parquet"
@@ -71,13 +71,13 @@ def test_read_column_metadata_returns_models(tmp_path: Path):
         },
     )
 
-    meta = read_column_metadata(path)
+    meta = MojoDataFrame.read_column_metadata(path)
     assert meta["a"] == ColumnMetadata.model_validate(
         {"unit": "meter", "transform_type": "point", "note": "x"}
     )
 
 
-def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path):
+def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path) -> None:
     """A file written by another version with a unit Pint rejects must still open."""
     import json
 
@@ -91,7 +91,7 @@ def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path):
         },
     )
 
-    meta = read_column_metadata(path)
+    meta = MojoDataFrame.read_column_metadata(path)
     assert meta["a"].unit == "not_a_unit"
     assert meta["b"].unit == "meter"
 
@@ -99,14 +99,14 @@ def test_read_column_metadata_still_loads_an_invalid_entry(tmp_path: Path):
 # --- Selection Logic Tests ---
 
 
-def test_select_category(sample_data: MojoDataFrame):
+def test_select_category(sample_data: MojoDataFrame) -> None:
     """Tests filtering by top-level SignalCategory."""
     bodies = sample_data.mojo.select_category(SignalCategory.BODIES)
     assert all(c.startswith("Bodies/") for c in bodies.columns)
     assert "Joints/hinge_1/qpos" not in bodies.columns
 
 
-def test_select_name(sample_data: MojoDataFrame):
+def test_select_name(sample_data: MojoDataFrame) -> None:
     """Tests filtering by object name across categories."""
     racket = sample_data.mojo.select_name("racket")
     # Should include xpos, xiquat, and nutation
@@ -115,7 +115,7 @@ def test_select_name(sample_data: MojoDataFrame):
     assert "Joints/hinge_1/qpos" not in racket.columns
 
 
-def test_select_attribute(sample_data: MojoDataFrame):
+def test_select_attribute(sample_data: MojoDataFrame) -> None:
     """Tests selecting a specific attribute (vector component) across channels."""
     x_attr = sample_data.mojo.select_attribute("x")
     assert x_attr.columns == [
@@ -129,14 +129,14 @@ def test_select_attribute(sample_data: MojoDataFrame):
     assert nutation.columns == []
 
 
-def test_select_body(sample_data: MojoDataFrame):
+def test_select_body(sample_data: MojoDataFrame) -> None:
     """Tests the specific body selection helper."""
     body_df = sample_data.mojo.select_body(BodyName("racket"))
     assert "Bodies/racket/xpos:x" in body_df.columns
     assert "Joints/hinge_1/qpos" not in body_df.columns
 
 
-def test_select_body_includes_scalar_channels():
+def test_select_body_includes_scalar_channels() -> None:
     """A body's scalar channels (`Bodies/box:ke_trans`) belong to it as much as its vector groups."""
     df = MojoDataFrame.from_dict(
         {
@@ -152,7 +152,7 @@ def test_select_body_includes_scalar_channels():
     ]
 
 
-def test_typed_selectors_match_names_literally():
+def test_typed_selectors_match_names_literally() -> None:
     """Object names are compared as parts, so regex characters in a name do not match other objects."""
     df = MojoDataFrame.from_dict(
         {"Bodies/arm.1/xpos:x": [1.0], "Bodies/armX1/xpos:x": [2.0]}
@@ -167,7 +167,9 @@ def test_typed_selectors_match_names_literally():
     ]
 
 
-def test_columns_parses_the_frame_and_skips_free_form_names(sample_data: MojoDataFrame):
+def test_columns_parses_the_frame_and_skips_free_form_names(
+    sample_data: MojoDataFrame,
+) -> None:
     df = MojoDataFrame.from_dict(
         {TIME_COLUMN_NAME: [0.0], "Bodies/a/xpos:x": [1.0], "My Output//x": [2.0]}
     )
@@ -177,7 +179,7 @@ def test_columns_parses_the_frame_and_skips_free_form_names(sample_data: MojoDat
     ]
 
 
-def test_select_accepts_columns_and_strings(sample_data: MojoDataFrame):
+def test_select_accepts_columns_and_strings(sample_data: MojoDataFrame) -> None:
     by_string = sample_data.mojo.select("Bodies/racket/xpos")
     assert by_string.columns == [
         "Bodies/racket/xpos:x",
@@ -192,7 +194,7 @@ def test_select_accepts_columns_and_strings(sample_data: MojoDataFrame):
 
 def test_select_takes_several_columns_and_an_attr_only_column(
     sample_data: MojoDataFrame,
-):
+) -> None:
     every_x = sample_data.mojo.select(Column(category="Bodies", attr="x"))
     assert every_x.columns == ["Bodies/racket/xpos:x", "Bodies/racket/xiquat:x"]
     both = sample_data.mojo.select(TIME_COLUMN_NAME, "Sensors/gyro")
@@ -204,7 +206,7 @@ def test_select_takes_several_columns_and_an_attr_only_column(
     ]
 
 
-def test_select_with_no_match_is_empty(sample_data: MojoDataFrame):
+def test_select_with_no_match_is_empty(sample_data: MojoDataFrame) -> None:
     assert sample_data.mojo.select("Bodies/nothing").columns == []
 
 
@@ -224,7 +226,7 @@ def _pose_frame() -> MojoDataFrame:
     )
 
 
-def test_pose_at_reads_one_row_by_column_name():
+def test_pose_at_reads_one_row_by_column_name() -> None:
     first = _pose_frame().mojo.pose_at(0, "Sites/A")
     assert np.allclose(first.pos, [1.0, 2.0, 3.0])
     assert np.allclose(first.quat, [1.0, 0.0, 0.0, 0.0])  # w, x, y, z
@@ -234,7 +236,7 @@ def test_pose_at_reads_one_row_by_column_name():
     assert np.allclose(second.quat, [0.0, 0.0, 0.0, 1.0])
 
 
-def test_pose_at_raises_naming_the_missing_columns():
+def test_pose_at_raises_naming_the_missing_columns() -> None:
     df = _pose_frame().drop("Sites/A/quat:w", "Sites/A/xpos:z")
     with pytest.raises(ValueError, match="Sites/A/quat:w") as excinfo:
         df.mojo.pose_at(0, "Sites/A")
@@ -242,7 +244,7 @@ def test_pose_at_raises_naming_the_missing_columns():
     assert "Sites/A/xpos:x" not in str(excinfo.value)
 
 
-def test_pose_arrays_returns_the_whole_trajectory():
+def test_pose_arrays_returns_the_whole_trajectory() -> None:
     pos, quat = _pose_frame().mojo.pose_arrays("Sites/A")
     assert pos.shape == (2, 3)
     assert quat.shape == (2, 4)
@@ -250,12 +252,12 @@ def test_pose_arrays_returns_the_whole_trajectory():
     assert np.allclose(quat, [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
 
-def test_pose_arrays_raises_naming_the_missing_columns():
+def test_pose_arrays_raises_naming_the_missing_columns() -> None:
     with pytest.raises(ValueError, match="Sites/B/xpos:x"):
         _pose_frame().mojo.pose_arrays("Sites/B")
 
 
-def test_pose_at_matches_pose_arrays():
+def test_pose_at_matches_pose_arrays() -> None:
     df = _pose_frame()
     pos, quat = df.mojo.pose_arrays("Sites/A")
     for i in range(df.height):
@@ -267,7 +269,7 @@ def test_pose_at_matches_pose_arrays():
 # --- Discovery & Manifest Tests ---
 
 
-def test_discovery_properties(sample_data: MojoDataFrame):
+def test_discovery_properties(sample_data: MojoDataFrame) -> None:
     """Verifies internal identification of triplets and quaternions."""
     # Bases
     assert "Bodies/racket/xpos" in sample_data.mojo.rotatable_bases
@@ -281,7 +283,7 @@ def test_discovery_properties(sample_data: MojoDataFrame):
     assert "Bodies/racket/xiquat:w" in sample_data.mojo.quaternion_columns
 
 
-def test_get_manifest(sample_data: MojoDataFrame):
+def test_get_manifest(sample_data: MojoDataFrame) -> None:
     """Ensures the manifest dictionary matches frontend expectations."""
     manifest = sample_data.mojo.get_manifest()
     assert manifest["all"] == sample_data.columns
@@ -292,7 +294,7 @@ def test_get_manifest(sample_data: MojoDataFrame):
 # --- Physics Transformation Tests ---
 
 
-def test_change_frame_raises_when_untagged():
+def test_change_frame_raises_when_untagged() -> None:
     """change_frame refuses to guess: any rotatable/quaternion column without a transform_type tag raises, rather than silently applying the wrong transform."""
     df = MojoDataFrame.from_dict(
         {
@@ -319,7 +321,7 @@ def test_change_frame_raises_when_untagged():
         )
 
 
-def test_change_frame_leaves_scalar_tagged_groups_untouched():
+def test_change_frame_leaves_scalar_tagged_groups_untouched() -> None:
     """A group named `:x/:y/:z` (or `:w/:x/:y/:z`) that is not a vector can be tagged `scalar`: change_frame skips it instead of raising or rotating it, while still transforming the tagged point."""
     half = float(np.sqrt(0.5))
     df = MojoDataFrame.from_dict(
@@ -366,7 +368,7 @@ def test_change_frame_leaves_scalar_tagged_groups_untouched():
         assert out[col][0] == df[col][0]
 
 
-def test_manifest_leaves_scalar_tagged_groups_out_of_rotation():
+def test_manifest_leaves_scalar_tagged_groups_out_of_rotation() -> None:
     """The Dojo rotates whatever the manifest lists, so a group tagged `scalar` must not be listed; an untagged group still is."""
     df = MojoDataFrame.from_dict(
         {
@@ -400,7 +402,7 @@ def test_manifest_leaves_scalar_tagged_groups_out_of_rotation():
     assert manifest["available_quats"] == ["Bodies/a/quat"]
 
 
-def test_change_frame_relative_pose_matches_closed_form_values():
+def test_change_frame_relative_pose_matches_closed_form_values() -> None:
     """Two frames with closed-form poses: A is +90 degrees about z at (1, 2, 3) and B is +90 degrees about x at (4, 5, 6), so A relative to B is p = (-3, -3, 3) and q = (0.5, -0.5, 0.5, 0.5) in (w, x, y, z)."""
     half = float(np.sqrt(0.5))
     df = MojoDataFrame.from_dict(
@@ -440,7 +442,7 @@ def test_change_frame_relative_pose_matches_closed_form_values():
     )
 
 
-def test_change_frame_translates_rotates_and_composes():
+def test_change_frame_translates_rotates_and_composes() -> None:
     """End-to-end: change_frame re-expresses a point, a free vector, and a quaternion relative to a target frame, matching an independently computed scipy reference."""
     from scipy.spatial.transform import Rotation
 
@@ -558,7 +560,7 @@ def _two_pose_frame() -> tuple[MojoDataFrame, dict[str, ColumnMetadata]]:
     return df, meta
 
 
-def test_change_frame_round_trips_with_invert_false():
+def test_change_frame_round_trips_with_invert_false() -> None:
     """Re-expressing world -> B's frame -> world recovers the original columns. The frame's own columns are restored between the two calls, since B is itself transformed by the first call."""
     df, meta = _two_pose_frame()
     b_cols = [c for c in df.columns if c.startswith("Bodies/B/")]
@@ -580,7 +582,7 @@ def test_change_frame_round_trips_with_invert_false():
         assert np.allclose(restored[col].to_numpy(), df[col].to_numpy(), atol=1e-10)
 
 
-def test_change_frame_recomputes_point_magnitude():
+def test_change_frame_recomputes_point_magnitude() -> None:
     """A point's :m sibling is recomputed from the transformed x/y/z rather than left as the stale world-frame norm."""
     df, meta = _two_pose_frame()
     result = df.mojo.change_frame(
@@ -596,7 +598,7 @@ def test_change_frame_recomputes_point_magnitude():
     assert not np.isclose(result["Bodies/A/xpos:m"][0], df["Bodies/A/xpos:m"][0])
 
 
-def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path):
+def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path) -> None:
     """change_frame(path=...) reads transform_type tags from the parquet footer, matching an explicit column_metadata call."""
     import json
 
@@ -619,7 +621,7 @@ def test_change_frame_reads_metadata_from_parquet_path(tmp_path: Path):
     assert from_path.equals(from_meta)
 
 
-def test_change_frame_raises_when_quaternion_mistagged():
+def test_change_frame_raises_when_quaternion_mistagged() -> None:
     """A quaternion base tagged as something other than 'quaternion' raises instead of being composed."""
     df, meta = _two_pose_frame()
     meta["Bodies/A/quat:w"] = ColumnMetadata(transform_type=TransformType.VECTOR)
@@ -627,7 +629,7 @@ def test_change_frame_raises_when_quaternion_mistagged():
         df.mojo.change_frame("Bodies/B/quat", "Bodies/B/xpos", column_metadata=meta)
 
 
-def test_change_frame_raises_for_unknown_quat_or_origin_base():
+def test_change_frame_raises_for_unknown_quat_or_origin_base() -> None:
     df, meta = _two_pose_frame()
     with pytest.raises(ValueError, match="quaternion base"):
         df.mojo.change_frame("Bodies/nope/quat", "Bodies/B/xpos", column_metadata=meta)
@@ -638,7 +640,7 @@ def test_change_frame_raises_for_unknown_quat_or_origin_base():
 # --- Filter Logic Tests ---
 
 
-def test_with_filters_omit_time(sample_data: MojoDataFrame):
+def test_with_filters_omit_time(sample_data: MojoDataFrame) -> None:
     """Ensures filters skip the time column by default using real ScaleFilter."""
     # Factor 10, Offset 0 (Linear transform)
     filter_stack: list[AnyFilter] = [ScaleFilter(factor=10.0, offset=0.0)]
@@ -651,7 +653,7 @@ def test_with_filters_omit_time(sample_data: MojoDataFrame):
     assert filtered["Bodies/racket/xpos:x"][0] == 10.0
 
 
-def test_with_filter_map(sample_data: MojoDataFrame):
+def test_with_filter_map(sample_data: MojoDataFrame) -> None:
     """Tests applying specific real filters to specific columns."""
     filter_map: dict[str, list[AnyFilter]] = {
         "Joints/hinge_1/qpos": [ScaleFilter(factor=1.0, offset=1.0)],

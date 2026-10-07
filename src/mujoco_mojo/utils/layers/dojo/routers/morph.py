@@ -32,14 +32,14 @@ class WSGIPrefixRestorer:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def get_optimizer(request: Request):
+async def get_optimizer(request: Request) -> HTMLResponse:
     """Serves the wrapper frame for the Optuna Dashboard."""
     return shared.templates.TemplateResponse(
         request=request, name="morph.html", context={"request": request}
     )
 
 
-def mount_optuna_engine(app: FastAPI, storage_url: str):
+def mount_optuna_engine(app: FastAPI, storage_url: str) -> None:
     """Mounts the Optuna Dashboard as a sub-app at /morph."""
     import warnings
 

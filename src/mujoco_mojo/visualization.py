@@ -35,7 +35,7 @@ class ArrowConfig:
     # any magnitude.
     _MAX_WIDTH_TO_LENGTH_RATIO: ClassVar[float] = 0.25
 
-    def draw_in_scene(self, mj_model: mujoco.MjModel, scene: mujoco.MjvScene):
+    def draw_in_scene(self, mj_model: mujoco.MjModel, scene: mujoco.MjvScene) -> None:
         if scene.ngeom >= scene.maxgeom:
             logger.warning("Unable to draw arrow due to geom. quantity limit")
             return
@@ -105,7 +105,7 @@ class LineConfig:
     color: Vec4
     width: float
 
-    def draw_in_scene(self, scene: mujoco.MjvScene):
+    def draw_in_scene(self, scene: mujoco.MjvScene) -> None:
         if scene.ngeom >= scene.maxgeom:
             logger.warning("Unable to draw line due to geom. quantity limit")
             return

@@ -17,7 +17,7 @@ from mujoco_mojo.utils.layers.dojo.routers.settings import (
 )
 
 
-def test_defaults_are_valid_color_names():
+def test_defaults_are_valid_color_names() -> None:
     """Default values are valid Color member names."""
     s = VisualizationSettings()
     assert s.action_force == "EMERALD_500"
@@ -27,7 +27,7 @@ def test_defaults_are_valid_color_names():
     assert s.clearance_line == "WHITE"
 
 
-def test_defaults_arrow_scales_are_one():
+def test_defaults_arrow_scales_are_one() -> None:
     """Default force/torque length and width scales are 1.0 (no adjustment)."""
     s = VisualizationSettings()
     assert s.force_length_scale == 1.0
@@ -36,31 +36,31 @@ def test_defaults_arrow_scales_are_one():
     assert s.torque_width_scale == 1.0
 
 
-def test_invalid_color_name_raises():
+def test_invalid_color_name_raises() -> None:
     """An unrecognized color name raises ValidationError."""
     with pytest.raises(ValidationError, match="not a valid Color name"):
         VisualizationSettings(action_force="NOT_A_COLOR")
 
 
-def test_empty_string_coerces_to_none():
+def test_empty_string_coerces_to_none() -> None:
     """Empty string input is treated as None (TOML null equivalent)."""
     s = VisualizationSettings(action_force="")
     assert s.action_force is None
 
 
-def test_none_accepted_directly():
+def test_none_accepted_directly() -> None:
     """Explicit None disables the color."""
     s = VisualizationSettings(torque=None)
     assert s.torque is None
 
 
-def test_case_insensitive_acceptance():
+def test_case_insensitive_acceptance() -> None:
     """Lowercase color names are accepted and normalized to uppercase."""
     s = VisualizationSettings(action_force="emerald_500")
     assert s.action_force == "EMERALD_500"
 
 
-def test_none_serializes_as_empty_string():
+def test_none_serializes_as_empty_string() -> None:
     """None round-trips through serialization as `""` for TOML compatibility."""
     s = VisualizationSettings(action_force=None)
     dumped = s.model_dump()

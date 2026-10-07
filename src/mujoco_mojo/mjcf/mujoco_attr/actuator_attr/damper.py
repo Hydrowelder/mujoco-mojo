@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -110,7 +110,7 @@ class ActuatorDamper(ActuatorBase):
         return np.array((0, 0, 0))
 
     @model_validator(mode="after")
-    def validate_position(self):
+    def validate_position(self) -> Self:
         if self.kv < 0:
             msg = "kv cannot be negative"
             logger.error(msg)

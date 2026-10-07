@@ -9,7 +9,6 @@ class FlexCompContact(FlexContact):
     """Same as in flex/contact. All attributes are passed through to the automatically-generated flex."""
 
     attributes = (
-        "internal",
         "selfcollide",
         "activelayers",
         "contype",

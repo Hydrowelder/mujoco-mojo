@@ -133,7 +133,7 @@ class RuntimeManager:
             logger.error(msg)
             raise RuntimeError(msg) from None
 
-    def save_recordings(self):
+    def save_recordings(self) -> None:
         # a recorder can be registered without ever capturing a frame (e.g. this
         # run had recording disabled) - save()/close() below are no-ops for those,
         # but the log shouldn't claim work was done that wasn't
@@ -141,7 +141,7 @@ class RuntimeManager:
         if n_with_frames:
             logger.info(f"Saving {n_with_frames} videos in parallel...")
 
-        def _save_and_close(recorder: VideoRecorder):
+        def _save_and_close(recorder: VideoRecorder) -> None:
             recorder.save()
             recorder.close()
 
@@ -152,13 +152,13 @@ class RuntimeManager:
         if n_with_frames:
             logger.info("All video encoding tasks complete.")
 
-    def resolve(self, state: MjState):
+    def resolve(self, state: MjState) -> None:
         """Call this once after mj_loadXML to prime the caches."""
         for load in self.loads:
             load.resolve_ids(state)
         self._resolved = True
 
-    def add_load(self, load: Load):
+    def add_load(self, load: Load) -> None:
         for _l in self.loads:
             if load.name == _l.name:
                 logger.warning(
@@ -166,7 +166,7 @@ class RuntimeManager:
                 )
         self.loads.append(load)
 
-    def add_proximity(self, proximity: Proximity):
+    def add_proximity(self, proximity: Proximity) -> None:
         # check if the pair is already being checked
         assert proximity.volume_1.name and proximity.volume_2.name
 
@@ -180,10 +180,10 @@ class RuntimeManager:
 
         self.proximities.append(proximity)
 
-    def add_video_recorder(self, video_recorder: VideoRecorder):
+    def add_video_recorder(self, video_recorder: VideoRecorder) -> None:
         self.video_recorders.append(video_recorder)
 
-    def add_tracer(self, tracer: Tracer):
+    def add_tracer(self, tracer: Tracer) -> None:
         self.tracers.append(tracer)
 
     # --- requirements API ---
@@ -303,7 +303,7 @@ class RuntimeManager:
         clear_xfrc_applied: bool = True,
         clear_qfrc_applied: bool = True,
         clear_ctrl: bool = True,
-    ):
+    ) -> None:
         """
         Calculates forces, integratess physics, and handles telemetry.
 

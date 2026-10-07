@@ -295,7 +295,7 @@ class Joint(XMLModel):
             Literal["qpos", "qvel", "qfrc_actuator", "qfrc_constraint", "qfrc_passive"],
             MetadataLike | None,
         ] = ["qpos", "qvel"],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -365,7 +365,7 @@ class Joint(XMLModel):
             builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
-        ):
+        ) -> None:
             """Posts a cartesian 3-vector under x/y/z attrs, plus its magnitude under an m attr."""
             full_vec = np.append(vec3, np.linalg.norm(vec3))
             for v, col in zip(
@@ -379,14 +379,14 @@ class Joint(XMLModel):
             builtin: ColumnMetadata | None,
             *,
             us: UnitSystem | None = None,
-        ):
+        ) -> None:
             """Posts an orientation quaternion under w/x/y/z attrs."""
             for v, col in zip(
                 quat, joint_columns(channel, builtin, "wxyz", us), strict=True
             ):
                 signal_manager.post(float(v), col)
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             jnt_type = self._jnt_type(state)
             u = state.us
 

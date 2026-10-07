@@ -1,8 +1,9 @@
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
@@ -31,7 +32,9 @@ except ImportError:
 security = HTTPBasic(auto_error=False)
 
 
-def validate_dojo_auth(credentials: HTTPBasicCredentials = Depends(security)):
+def validate_dojo_auth(
+    credentials: HTTPBasicCredentials = Depends(security),
+) -> str | None:
     """
     Checks the provided credentials against the CLI-provided password. Username is ignored (or set to 'mojo'), we just care about the password.
     """
@@ -79,7 +82,7 @@ def _cleanup_webm_cache(max_age_seconds: float = 86_400) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # prune stale GIF→WebM cache files from previous sessions
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, _cleanup_webm_cache)
@@ -116,32 +119,32 @@ def _serve_favicon_asset(filename: str) -> FileResponse:
 
 
 @dojo_app.get("/favicon.ico", include_in_schema=False)
-async def favicon_ico():
+async def favicon_ico() -> FileResponse:
     return _serve_favicon_asset("favicon.ico")
 
 
 @dojo_app.get("/apple-touch-icon.png", include_in_schema=False)
-async def apple_touch_icon():
+async def apple_touch_icon() -> FileResponse:
     return _serve_favicon_asset("apple-touch-icon.png")
 
 
 @dojo_app.get("/favicon-32x32.png", include_in_schema=False)
-async def favicon_32x32():
+async def favicon_32x32() -> FileResponse:
     return _serve_favicon_asset("favicon-32x32.png")
 
 
 @dojo_app.get("/favicon-16x16.png", include_in_schema=False)
-async def favicon_16x16():
+async def favicon_16x16() -> FileResponse:
     return _serve_favicon_asset("favicon-16x16.png")
 
 
 @dojo_app.get("/")
-async def root_redirect():
+async def root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/monitor")
 
 
 @dojo_app.exception_handler(status.HTTP_401_UNAUTHORIZED)
-async def auth_exception_handler(request: Request, exc: HTTPException):
+async def auth_exception_handler(request: Request, exc: HTTPException) -> Response:
     """
     Catch 401 errors and render our custom HTML page.
     Crucial: We MUST include the 'WWW-Authenticate' header so the browser
@@ -163,7 +166,7 @@ async def auth_exception_handler(request: Request, exc: HTTPException):
 
 
 @dojo_app.exception_handler(status.HTTP_404_NOT_FOUND)
-async def not_found_exception_handler(request: Request, exc: HTTPException):
+async def not_found_exception_handler(request: Request, exc: HTTPException) -> Response:
     return shared.templates.TemplateResponse(
         request=request,
         name="error.html",

@@ -576,7 +576,7 @@ class SiteBase(XMLModel, ABC):
             "xaccp",
             "xaccr",
         ],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging. Requires a named site.
 
@@ -643,7 +643,7 @@ class SiteBase(XMLModel, ABC):
                 )
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 # Handle attributes that MuJoCo doesn't pre-calculate in mjData
                 match channel:

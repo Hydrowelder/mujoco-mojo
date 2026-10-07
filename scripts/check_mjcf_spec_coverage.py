@@ -336,7 +336,7 @@ def _field_docstrings_for_class(cls: type) -> dict[str, str]:
     return docs
 
 
-def collect_xml_model_classes():
+def collect_xml_model_classes() -> list[type]:
     import mujoco_mojo  # noqa: F401
     from mujoco_mojo.mjcf.xml_model import XMLModel
 

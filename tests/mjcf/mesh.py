@@ -66,7 +66,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     return mojo_model
 
 
-def profile():
+def profile() -> None:
     import cProfile
     import pstats
 

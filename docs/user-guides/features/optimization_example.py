@@ -29,7 +29,7 @@ class Handoff(mojo.UserData):
         box1: mojo.Body,
         box2: mojo.Body,
         mojo_model: mojo.MojoModel,
-    ):
+    ) -> None:
         mult = 1 if loc == "pz" else -1
 
         # Add attachment sites to the bodies
@@ -80,7 +80,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"]):
+    def add_spring_force(self, loc: Literal["pz", "mz"]) -> None:
         base, tip, stiffness, stroke, preload = self.springs[loc]
 
         spring_force = rt.PointToPointForce.stroke_compression_spring(

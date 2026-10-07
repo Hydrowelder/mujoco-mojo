@@ -8,7 +8,7 @@ import mujoco_mojo.typing as mojot
 from mujoco_mojo import mjcf
 
 
-def test_import():
+def test_import() -> None:
     from mujoco_mojo import mjcf
 
     mojo.__name__

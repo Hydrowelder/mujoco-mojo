@@ -45,13 +45,13 @@ def _two_branch_model() -> _TwoBranch:
 # ── registration ──────────────────────────────────────────────────────────────
 
 
-def test_worldbody_is_registered():
+def test_worldbody_is_registered() -> None:
     m = _two_branch_model()
     graph = m.model.pose_context
     assert id(m.worldbody) in graph._registered
 
 
-def test_bodies_and_sites_are_registered():
+def test_bodies_and_sites_are_registered() -> None:
     m = _two_branch_model()
     graph = m.model.pose_context
     assert id(m.arm) in graph._registered
@@ -59,7 +59,7 @@ def test_bodies_and_sites_are_registered():
     assert id(m.sensor) in graph._registered
 
 
-def test_frame_is_registered():
+def test_frame_is_registered() -> None:
     frame = Frame(pose=PoseQuat(pos=np.array([0.0, 0.0, 1.0])))
     arm = Body(pose=PoseQuat(pos=np.array([1.0, 0.0, 0.0])))
     arm.frames.append(frame)
@@ -74,7 +74,7 @@ def test_frame_is_registered():
 # ── local_pose math ───────────────────────────────────────────────────────────
 
 
-def test_local_pose_same_frame_is_identity():
+def test_local_pose_same_frame_is_identity() -> None:
     """Expressing a body in its own frame should give the identity pose."""
     m = _two_branch_model()
     graph = m.model.pose_context
@@ -84,28 +84,28 @@ def test_local_pose_same_frame_is_identity():
     assert np.allclose(result.as_matrix(), np.eye(3), atol=1e-7)
 
 
-def test_local_pose_body_in_worldbody():
+def test_local_pose_body_in_worldbody() -> None:
     """Arm at [1,0,0] expressed in worldbody frame should give [1,0,0]."""
     m = _two_branch_model()
     result = m.model.pose_context.local_pose(m.arm, m.worldbody)
     assert np.allclose(result.pos, [1, 0, 0], atol=1e-7)
 
 
-def test_local_pose_site_in_worldbody():
+def test_local_pose_site_in_worldbody() -> None:
     """Sensor at [0,0,0.5] on arm at [1,0,0] -> world pos [1,0,0.5]."""
     m = _two_branch_model()
     result = m.model.pose_context.local_pose(m.sensor, m.worldbody)
     assert np.allclose(result.pos, [1, 0, 0.5], atol=1e-7)
 
 
-def test_cross_branch_translation():
+def test_cross_branch_translation() -> None:
     """Sensor world pos [1,0,0.5], torso at [-1,0,0] -> [2,0,0.5] in torso frame."""
     m = _two_branch_model()
     result = m.model.pose_context.local_pose(m.sensor, m.torso)
     assert np.allclose(result.pos, [2, 0, 0.5], atol=1e-7)
 
 
-def test_cross_branch_rotation():
+def test_cross_branch_rotation() -> None:
     """
     Arm rotated 90deg around Z at origin; site at [1,0,0] local -> [0,1,0] world.
     Expressed in torso at [0,-1,0], result should be [0,2,0].
@@ -128,7 +128,7 @@ def test_cross_branch_rotation():
     assert np.allclose(result.pos, [0, 2, 0], atol=1e-6)
 
 
-def test_deep_tree_pose():
+def test_deep_tree_pose() -> None:
     """
     Three levels deep: world -> a (1,0,0) -> b (0,1,0) -> c (0,0,1).
     World pos of c should be [1,1,1].
@@ -146,7 +146,7 @@ def test_deep_tree_pose():
     assert np.allclose(result.pos, [1, 1, 1], atol=1e-7)
 
 
-def test_frame_pose_in_worldbody():
+def test_frame_pose_in_worldbody() -> None:
     """Frame at [0,0,1] on arm at [1,0,0] -> world pos [1,0,1]."""
     frame = Frame(pose=PoseQuat(pos=np.array([0.0, 0.0, 1.0])))
     arm = Body(pose=PoseQuat(pos=np.array([1.0, 0.0, 0.0])))
@@ -159,7 +159,7 @@ def test_frame_pose_in_worldbody():
     assert np.allclose(result.pos, [1, 0, 1], atol=1e-7)
 
 
-def test_nested_frame_pose():
+def test_nested_frame_pose() -> None:
     """
     Nested frames: body at [1,0,0], frame_a at [0,1,0], frame_b at [0,0,1].
     frame_b world pos = [1,1,1].
@@ -180,14 +180,14 @@ def test_nested_frame_pose():
 # ── PoseRef ───────────────────────────────────────────────────────────────────
 
 
-def test_pose_ref_to_quat():
+def test_pose_ref_to_quat() -> None:
     """PoseRef.to_quat resolves via the Mujoco instance."""
     m = _two_branch_model()
     result = PoseRef(frame=m.sensor, relative_to=m.torso).to_quat(m.model)
     assert np.allclose(result.pos, [2, 0, 0.5], atol=1e-7)
 
 
-def test_pose_ref_multiple():
+def test_pose_ref_multiple() -> None:
     """Multiple PoseRefs resolved via the same Mujoco instance give consistent results."""
     m = _two_branch_model()
 
@@ -201,7 +201,7 @@ def test_pose_ref_multiple():
 # ── Mujoco.local_pose convenience ────────────────────────────────────────────
 
 
-def test_mujoco_local_pose_matches_graph():
+def test_mujoco_local_pose_matches_graph() -> None:
     """Mujoco.local_pose should give the same result as building the graph manually."""
     m = _two_branch_model()
 
@@ -212,7 +212,7 @@ def test_mujoco_local_pose_matches_graph():
     assert np.allclose(via_method.as_matrix(), via_graph.as_matrix(), atol=1e-7)
 
 
-def test_mujoco_pose_graph_raises_without_worldbody():
+def test_mujoco_pose_graph_raises_without_worldbody() -> None:
     model = Mujoco()
     with pytest.raises(ValueError, match="worldbody"):
         model.pose_context
@@ -221,7 +221,7 @@ def test_mujoco_pose_graph_raises_without_worldbody():
 # ── error cases ───────────────────────────────────────────────────────────────
 
 
-def test_frame_not_in_tree_raises():
+def test_frame_not_in_tree_raises() -> None:
     m = _two_branch_model()
     orphan = Body(pose=PoseQuat(pos=np.array([5.0, 0.0, 0.0])))
     graph = m.model.pose_context
@@ -230,7 +230,7 @@ def test_frame_not_in_tree_raises():
         graph.local_pose(orphan, m.torso)
 
 
-def test_relative_to_not_in_tree_raises():
+def test_relative_to_not_in_tree_raises() -> None:
     m = _two_branch_model()
     orphan = Body(pose=PoseQuat(pos=np.array([5.0, 0.0, 0.0])))
     graph = m.model.pose_context

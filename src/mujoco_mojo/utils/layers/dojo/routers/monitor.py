@@ -1,6 +1,8 @@
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
@@ -21,7 +23,7 @@ AUTOREFRESH_PERIOD = 5.0
 ACTIVE_CONNECTIONS: set[asyncio.Queue] = set()
 
 
-async def broadcast_updates():
+async def broadcast_updates() -> None:
     """
     This function refreshes the CURRENT_JOB and broadcasts to listeners simultaneously.
 
@@ -56,7 +58,7 @@ async def broadcast_updates():
                 # 2. Only perform the heavy disk scan if the job is actually active
                 last_reported = [0]
 
-                def sync_reporter(pct: float):
+                def sync_reporter(pct: float) -> None:
                     if pct >= last_reported[0] + 5 or pct >= 100:
                         last_reported[0] = int(pct // 5) * 5
                         asyncio.run_coroutine_threadsafe(
@@ -86,7 +88,7 @@ async def broadcast_updates():
         await asyncio.sleep(AUTOREFRESH_PERIOD)
 
 
-async def _emit_to_all(message_dict: dict):
+async def _emit_to_all(message_dict: dict) -> None:
     """Helper to push a message to every queue on the bus."""
     if not ACTIVE_CONNECTIONS:
         return
@@ -97,7 +99,7 @@ async def _emit_to_all(message_dict: dict):
 
 
 @router.get("/", response_class=HTMLResponse)
-async def get_monitor(request: Request):
+async def get_monitor(request: Request) -> HTMLResponse:
     """Serves the initial monitor frame."""
     dojo_settings = MujocoMojoSettings().dojo
     chime = dojo_settings.chime_source
@@ -121,7 +123,7 @@ async def get_monitor(request: Request):
 
 
 @router.get("/chime")
-async def get_custom_chime():
+async def get_custom_chime() -> FileResponse:
     """Serves the configured local chime file (dojo.chime_source, when it's a Path) so the browser can play it without direct filesystem access."""
     chime = MujocoMojoSettings().dojo.chime_source
     if not isinstance(chime, Path) or not chime.is_file():
@@ -130,7 +132,7 @@ async def get_custom_chime():
 
 
 @router.get("/api/status/job")
-async def get_job_status():
+async def get_job_status() -> dict:
     """Returns aggregate job status for the monitor and trial viewer pages."""
     if not shared.CURRENT_JOB:
         return {"error": "No job loaded"}
@@ -176,14 +178,14 @@ async def get_trial_status(trial_num: int) -> TrialStatus:
 
 
 @router.get("/api/status/stream")
-async def status_stream(request: Request):
+async def status_stream(request: Request) -> EventSourceResponse:
     """
     Streams job loading progress to the monitor via SSE.
     """
     client_queue = asyncio.Queue()
     ACTIVE_CONNECTIONS.add(client_queue)
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[dict[str, Any]]:
         # a dict with "comment" (not a bare string) so sse_starlette emits a
         # real SSE comment line (": connected", no data: field) instead of
         # wrapping the string as the payload of a data: field -- yielding

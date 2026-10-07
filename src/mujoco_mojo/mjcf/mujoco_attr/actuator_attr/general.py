@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Self
+
 import numpy as np
 from pydantic import model_validator
 
@@ -41,6 +43,7 @@ class ActuatorGeneral(ActuatorBase):
         "ffrange",
         "input",
         "actearly",
+        # "inheritrange", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
     )
 
     actlimited: ActuatorLimited = ActuatorLimited.AUTO
@@ -113,8 +116,11 @@ class ActuatorGeneral(ActuatorBase):
     actearly: bool = False
     """If true, force computation will use the next value of the activation variable rather than the current one. Setting this flag reduces the delay between the control and accelerations by one time-step."""
 
+    # inheritrange: float = 0  # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    # """Identical to position/inheritrange, but sets actrange (which has the same length semantics as the transmission target) rather than ctrlrange (which has velocity semantics)."""
+
     @model_validator(mode="after")
-    def validate_transmission(self):
+    def validate_transmission(self) -> Self:
         fields = [
             self.joint,
             self.jointinparent,

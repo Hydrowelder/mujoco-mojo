@@ -5,14 +5,14 @@ from mujoco_mojo.mjcf.orientation import AxisAngle, Euler, OrientationType, Quat
 from mujoco_mojo.typing import Angle, EulerSeq
 
 
-def test_quat_identity():
+def test_quat_identity() -> None:
     """Verify Quat identity behavior and matrix conversion."""
     q = Quat(quat=np.asarray([1.0, 0.0, 0.0, 0.0]))
     assert np.allclose(q.as_matrix(), np.eye(3))
     assert q.type == OrientationType.QUAT
 
 
-def test_euler_conversions():
+def test_euler_conversions() -> None:
     """Test Euler to matrix and back, including sequence changes."""
     # 90 degrees around Z
     e = Euler(euler=np.asarray([0, 0, 90]), eulerseq=EulerSeq.xyz, angle=Angle.DEGREE)
@@ -28,7 +28,7 @@ def test_euler_conversions():
     assert np.allclose(e_zyx.as_matrix(), expected)
 
 
-def test_axis_angle_with_helpers():
+def test_axis_angle_with_helpers() -> None:
     """Test AxisAngle and its 'with_' modification methods."""
     aa = AxisAngle(axisangle=np.asarray([0, 0, 1, 90]), angle=Angle.DEGREE)
 
@@ -41,7 +41,7 @@ def test_axis_angle_with_helpers():
     assert np.asarray(aa_180.axisangle)[3] == 180.0
 
 
-def test_composition_and_inversion():
+def test_composition_and_inversion() -> None:
     """Test self * other and inv()."""
     # R1: 90 deg around X, R2: 90 deg around Y
     r1 = Euler(euler=np.asarray([90, 0, 0]))
@@ -57,7 +57,7 @@ def test_composition_and_inversion():
     assert np.allclose(identity_check.as_matrix(), np.eye(3), atol=1e-7)
 
 
-def test_angle_between():
+def test_angle_between() -> None:
     """Test the geodesic distance between orientations."""
     r1 = Euler(euler=np.asarray([0, 0, 0]))
     r2 = Euler(euler=np.asarray([0, 0, 90]))
@@ -69,7 +69,7 @@ def test_angle_between():
     assert pytest.approx(dist_rad) == np.pi / 2
 
 
-def test_look_at_factory():
+def test_look_at_factory() -> None:
     """Verify look_at produces the correct pointing vector."""
     # Look from origin toward +X
     target = [1, 0, 0]
@@ -84,7 +84,7 @@ def test_look_at_factory():
     assert np.allclose(world_forward, [1, 0, 0], atol=1e-7)
 
 
-def test_look_at_roll_zero_points_x_toward_world_z():
+def test_look_at_roll_zero_points_x_toward_world_z() -> None:
     """Verify roll=0 places the local X axis as close to world +Z as possible."""
     # Forward (world) = +X, since negative_z=False with target along +X
     q = Quat.look_at(
@@ -97,7 +97,7 @@ def test_look_at_roll_zero_points_x_toward_world_z():
     assert np.allclose(world_x_axis, [0, 0, 1], atol=1e-7)
 
 
-def test_look_at_roll_rotates_about_forward_axis():
+def test_look_at_roll_rotates_about_forward_axis() -> None:
     """Verify a 90 degree roll rotates the secondary axes but not the forward direction."""
     q_no_roll = Quat.look_at(
         target=np.asarray([1, 0, 0]), eye=np.asarray([0, 0, 0]), negative_z=False
@@ -121,7 +121,7 @@ def test_look_at_roll_rotates_about_forward_axis():
     )
 
 
-def test_look_at_roll_radians():
+def test_look_at_roll_radians() -> None:
     """Verify roll accepts radians when angle=Angle.RADIAN."""
     q_deg = Quat.look_at(
         target=np.asarray([1, 0, 0]),
@@ -141,7 +141,7 @@ def test_look_at_roll_radians():
     assert np.allclose(q_deg.as_matrix(), q_rad.as_matrix(), atol=1e-7)
 
 
-def test_look_at_up_overrides_roll():
+def test_look_at_up_overrides_roll() -> None:
     """Verify an explicit up vector takes precedence over roll and matches the legacy convention."""
     q = Quat.look_at(
         target=np.asarray([1, 0, 0]),
@@ -155,7 +155,7 @@ def test_look_at_up_overrides_roll():
     assert np.allclose(world_x_axis, np.cross([0, 0, 1], [1, 0, 0]), atol=1e-7)
 
 
-def test_look_at_roll_handles_forward_colinear_with_world_z():
+def test_look_at_roll_handles_forward_colinear_with_world_z() -> None:
     """Verify look_at falls back gracefully when forward is colinear with world +Z."""
     q = Quat.look_at(
         target=np.asarray([0, 0, 0]), eye=np.asarray([0, 0, 1]), negative_z=True
@@ -164,7 +164,7 @@ def test_look_at_roll_handles_forward_colinear_with_world_z():
     assert np.allclose(q.as_matrix(), np.eye(3), atol=1e-7)
 
 
-def test_universal_casts():
+def test_universal_casts() -> None:
     """Verify we can pivot between any representation."""
     # Start with XYAxes
     xy = XYAxes(xyaxes=np.asarray([0, 1, 0, -1, 0, 0]))  # Rotated 90 deg around Z
@@ -180,7 +180,7 @@ def test_universal_casts():
     assert np.allclose(q.as_matrix(), xy.as_matrix())
 
 
-def test_vector_rotation():
+def test_vector_rotation() -> None:
     """Test the apply() method."""
     q = Euler(euler=np.asarray([0, 0, 90])).as_quat()
     v = [1, 0, 0]

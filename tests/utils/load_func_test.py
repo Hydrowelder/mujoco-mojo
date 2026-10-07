@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from mujoco_mojo.utils.layers.cli import _load_func
 
 
 @pytest.fixture
-def add_to_sys_path(tmp_path: Path):
+def add_to_sys_path(tmp_path: Path) -> Iterator[Path]:
     sys.path.insert(0, str(tmp_path))
     yield tmp_path
     sys.path.remove(str(tmp_path))

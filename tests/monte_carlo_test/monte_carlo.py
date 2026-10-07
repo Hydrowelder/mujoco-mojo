@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 
 
 @lru_cache
-def cached_method(x: str = "asdf"):
+def cached_method(x: str = "asdf") -> None:
     """Memory cached functions do get cached, but only only for each proc used (`--n-proc` 4 will result in this function being called 4 times)."""
     logger.critical("CACHED METHOD CALLED!!")
     return
@@ -70,7 +70,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     return mojo_model
 
 
-def runtime(mojo_model: mojo.MojoModel, *args, **kwargs):
+def runtime(mojo_model: mojo.MojoModel, *args, **kwargs) -> None:
     # print("running nothing!")
     if mojo_model.trial_num == 7:
         raise ValueError("blah blah blah")

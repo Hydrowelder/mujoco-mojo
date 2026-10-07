@@ -5,14 +5,14 @@ import math
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from importlib.metadata import version
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from pydantic import Field, PrivateAttr, computed_field
 from tabulate import tabulate
@@ -214,7 +214,7 @@ class TrialStatus(MojoBaseModel):
         return all(r.passed for r in self.requirements)
 
     @contextmanager
-    def record_step(self, step_name: Step):
+    def record_step(self, step_name: Step) -> Generator[None, Any, None]:
         # get the current step to update
         self.step = step_name
 
@@ -613,7 +613,7 @@ class JobStatus(MojoBaseModel):
             Completion.SUCCESS, Completion.INCOMPLETE, invert=True
         )
 
-    def update_trial(self, status: TrialStatus, save: bool = True):
+    def update_trial(self, status: TrialStatus, save: bool = True) -> None:
         """Updates the internal registry and average trial duration and optionally persists the global status."""
         with self._lock:
             self._cache[status.trial_num] = status

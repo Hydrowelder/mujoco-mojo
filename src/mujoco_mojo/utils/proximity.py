@@ -106,7 +106,7 @@ class Proximity(MojoBaseModel):
             raise ValueError(msg)
         return self
 
-    def update_last(self, p1: Vec3, p2: Vec3, state: MjState):
+    def update_last(self, p1: Vec3, p2: Vec3, state: MjState) -> None:
         self._last_t = state.data.time
         self._last_p1 = p1
         self._last_p2 = p2
@@ -491,7 +491,7 @@ class Proximity(MojoBaseModel):
             "dist",
             "prox_type",
         ],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -574,7 +574,7 @@ class Proximity(MojoBaseModel):
                 columns[channel] = cols
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             dist: float = np.nan
             p1: Vec3 = np.zeros(3)
             p2: Vec3 = np.zeros(3)

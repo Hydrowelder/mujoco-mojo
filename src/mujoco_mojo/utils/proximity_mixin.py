@@ -75,7 +75,9 @@ class ProximityMixin(MojoBaseModel, ABC):
     def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
         """Generates a trimesh object to be used with proximity calculations."""
 
-    def bake_proximity(self, mj_model: mujoco.MjModel, proximity_type: ProximityType):
+    def bake_proximity(
+        self, mj_model: mujoco.MjModel, proximity_type: ProximityType
+    ) -> None:
         """Builds the BVH tree from the comiled MuJoCo mesh data."""
         import trimesh
 
@@ -111,7 +113,7 @@ class ProximityMixin(MojoBaseModel, ABC):
             f"Baked proximity mesh for {volume_self.name} ({len(self._local_faces)} faces)"
         )
 
-    def clear_unpickleable(self):
+    def clear_unpickleable(self) -> None:
         """
         Clear the collision managers and other unpicklable objects.
 

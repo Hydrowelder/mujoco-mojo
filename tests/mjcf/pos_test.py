@@ -3,7 +3,7 @@ import numpy as np
 from mujoco_mojo.mjcf.position import Pos
 
 
-def test_pos_initialization():
+def test_pos_initialization() -> None:
     """Verify initialization with explicit ndarray wrapping."""
     # Wrapping here ensures the IDE sees the 'pos' field receiving an ndarray
     p = Pos(pos=np.asarray([1.0, 2.0, 3.0]))
@@ -14,7 +14,7 @@ def test_pos_initialization():
     assert np.array_equal(arr, [1.0, 2.0, 3.0])
 
 
-def test_pos_indexing():
+def test_pos_indexing() -> None:
     """Verify direct indexing works smoothly for the highlighter."""
     p = Pos(pos=np.asarray([10.0, 20.0, 30.0]))
 
@@ -27,7 +27,7 @@ def test_pos_indexing():
     assert np.array_equal(p[:2], [10.0, 20.0])
 
 
-def test_pos_arithmetic():
+def test_pos_arithmetic() -> None:
     """Test operators return Pos instances with correct values."""
     p1 = Pos(pos=np.asarray([1.0, 2.0, 3.0]))
     p2 = Pos(pos=np.asarray([4.0, 5.0, 6.0]))
@@ -48,7 +48,7 @@ def test_pos_arithmetic():
     assert np.array_equal(np.asarray(rmult_p), [2.0, 4.0, 6.0])
 
 
-def test_pos_equality():
+def test_pos_equality() -> None:
     """Verify __eq__ logic handles array comparisons correctly."""
     p1 = Pos(pos=np.asarray([1.0, 1.0, 1.0]))
     p2 = Pos(pos=np.asarray([1.0, 1.0, 1.0]))
@@ -60,7 +60,7 @@ def test_pos_equality():
     assert not (p1 == "string")
 
 
-def test_pos_math_utilities():
+def test_pos_math_utilities() -> None:
     """Test Euclidean distance and LERP."""
     p_start = Pos(pos=np.asarray([0.0, 0.0, 0.0]))
     p_end = Pos(pos=np.asarray([10.0, 0.0, 0.0]))
@@ -75,7 +75,7 @@ def test_pos_math_utilities():
     assert np.array_equal(np.asarray(mid), [5.0, 0.0, 0.0])
 
 
-def test_pos_collection_interop():
+def test_pos_collection_interop() -> None:
     """Verify arithmetic works with raw lists/arrays through duck typing."""
     p = Pos(pos=np.asarray([1.0, 1.0, 1.0]))
     raw_list = [2.0, 3.0, 4.0]

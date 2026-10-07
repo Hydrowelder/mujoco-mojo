@@ -68,7 +68,7 @@ def test_force_remove_dir_skips_locked_dojo_script(tmp_path: Path) -> None:
 
     real_unlink = os.unlink
 
-    def fake_unlink(path, *args, **kwargs):
+    def fake_unlink(path, *args, **kwargs) -> None:
         if Path(path).name == "dojo.sh":
             raise PermissionError(13, "file is in use by another process")
         return real_unlink(path, *args, **kwargs)
@@ -88,7 +88,7 @@ def test_force_remove_dir_reraises_for_unrelated_locked_file(tmp_path: Path) -> 
 
     real_unlink = os.unlink
 
-    def fake_unlink(path, *args, **kwargs):
+    def fake_unlink(path, *args, **kwargs) -> None:
         if Path(path).name == "other.txt":
             raise PermissionError(13, "simulated unrelated lock")
         return real_unlink(path, *args, **kwargs)

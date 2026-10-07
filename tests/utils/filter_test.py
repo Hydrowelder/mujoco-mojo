@@ -35,7 +35,7 @@ from mujoco_mojo.utils.filters import (
 
 
 @pytest.fixture
-def signal_df():
+def signal_df() -> pl.DataFrame:
     """A basic linear ramp for testing deterministic filters."""
     return pl.DataFrame(
         {"val": [0.0, 1.0, 2.0, 3.0, 4.0], "noise": [-0.001, 0.005, 0.5, -0.5, 0.001]}
@@ -45,21 +45,21 @@ def signal_df():
 # --- Math & Basic Transformation Tests ---
 
 
-def test_scale_filter(signal_df: MojoDataFrame):
+def test_scale_filter(signal_df: MojoDataFrame) -> None:
     f = ScaleFilter(factor=2.0, offset=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     # Expected: (x * 2) + 1 -> [1, 3, 5, 7, 9]
     assert result == [1.0, 3.0, 5.0, 7.0, 9.0]
 
 
-def test_absolute_value_filter():
+def test_absolute_value_filter() -> None:
     df = pl.DataFrame({"x": [-1.0, 0.0, 1.0]})
     f = AbsoluteValueFilter()
     result = df.select(f.apply(pl.col("x")))["x"].to_list()
     assert result == [1.0, 0.0, 1.0]
 
 
-def test_zeroing_filter(signal_df: MojoDataFrame):
+def test_zeroing_filter(signal_df: MojoDataFrame) -> None:
     # Offsets the entire series so the first value is 0
     # Our 'val' already starts at 0, so let's use a shifted version
     df = signal_df.with_columns(pl.col("val") + 10.0)
@@ -71,7 +71,7 @@ def test_zeroing_filter(signal_df: MojoDataFrame):
 # --- Calculus & Signal Processing Tests ---
 
 
-def test_derivative_filter(signal_df: MojoDataFrame):
+def test_derivative_filter(signal_df: MojoDataFrame) -> None:
     # Ramp 0, 1, 2, 3, 4 with dt=1.0 should have derivative of 1.0
     f = DerivativeFilter(dt=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
@@ -79,21 +79,21 @@ def test_derivative_filter(signal_df: MojoDataFrame):
     assert result == [0.0, 1.0, 1.0, 1.0, 1.0]
 
 
-def test_integral_filter(signal_df: MojoDataFrame):
+def test_integral_filter(signal_df: MojoDataFrame) -> None:
     # Integral of [0, 1, 2] with dt=1.0 is cumsum [0, 1, 3]
     f = IntegralFilter(dt=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == [0.0, 1.0, 3.0, 6.0, 10.0]
 
 
-def test_low_pass_filter(signal_df: MojoDataFrame):
+def test_low_pass_filter(signal_df: MojoDataFrame) -> None:
     # Alpha=1.0 should return the original signal (no smoothing)
     f = LowPassFilter(alpha=1.0)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == signal_df["val"].to_list()
 
 
-def test_deadband_filter(signal_df: MojoDataFrame):
+def test_deadband_filter(signal_df: MojoDataFrame) -> None:
     f = DeadbandFilter(threshold=0.1)
     result = signal_df.select(f.apply(pl.col("noise")))["noise"].to_list()
     # noise: [-0.001, 0.005, 0.5, -0.5, 0.001]
@@ -104,13 +104,13 @@ def test_deadband_filter(signal_df: MojoDataFrame):
 # --- Boundary & Circular Tests ---
 
 
-def test_clip_filter(signal_df: MojoDataFrame):
+def test_clip_filter(signal_df: MojoDataFrame) -> None:
     f = ClipFilter(min=1.5, max=3.5)
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert result == [1.5, 1.5, 2.0, 3.0, 3.5]
 
 
-def test_wrap_filter():
+def test_wrap_filter() -> None:
     # Test wrapping around [0, 3]
     f = WrapFilter(lb=0, ub=3)
     df = pl.DataFrame({"x": [3.5, -0.5, 1.0]})
@@ -119,14 +119,14 @@ def test_wrap_filter():
     assert np.allclose(result, [0.5, 2.5, 1.0])
 
 
-def test_normalize_filter(signal_df: MojoDataFrame):
+def test_normalize_filter(signal_df: MojoDataFrame) -> None:
     f = NormalizeFilter()
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
     assert np.allclose(result[0], 0.0)
     assert np.allclose(result[-1], 1.0)
 
 
-def test_rotation_filter_apply_to_frame_missing_quat_columns_raises():
+def test_rotation_filter_apply_to_frame_missing_quat_columns_raises() -> None:
     """apply_to_frame must fail loudly rather than silently returning the frame unchanged."""
     df = pl.DataFrame(
         {
@@ -140,7 +140,7 @@ def test_rotation_filter_apply_to_frame_missing_quat_columns_raises():
         f.apply_to_frame(df, {"Bodies/racket/xpos"})
 
 
-def test_rotation_filter_apply_to_frame_point_bases_without_origin_col_raises():
+def test_rotation_filter_apply_to_frame_point_bases_without_origin_col_raises() -> None:
     df = pl.DataFrame(
         {
             "Bodies/racket/xquat:x": [0.0],
@@ -157,7 +157,9 @@ def test_rotation_filter_apply_to_frame_point_bases_without_origin_col_raises():
         f.apply_to_frame(df, vector_bases=set(), point_bases={"Bodies/target/xpos"})
 
 
-def test_rotation_filter_apply_to_frame_translates_points_and_recomputes_magnitude():
+def test_rotation_filter_apply_to_frame_translates_points_and_recomputes_magnitude() -> (
+    None
+):
     """A point base is translated against origin_col before rotating (unlike a vector base), and its stale :m magnitude sibling is recomputed rather than left untouched - translation changes distance-from-origin, so the old magnitude no longer applies."""
     df = pl.DataFrame(
         {
@@ -187,7 +189,7 @@ def test_rotation_filter_apply_to_frame_translates_points_and_recomputes_magnitu
     assert np.allclose(rotated["Bodies/target/xpos:m"].to_numpy(), [4.0])
 
 
-def test_rotation_filter_compose_to_frame_matches_scipy():
+def test_rotation_filter_compose_to_frame_matches_scipy() -> None:
     """Cross-check the hand-rolled Hamilton-product quaternion composition against scipy as a trusted oracle. Quaternions double-cover rotations (q and -q represent the same rotation), so compare via the resulting rotation matrices rather than raw components."""
     from scipy.spatial.transform import Rotation
 
@@ -231,7 +233,7 @@ def test_rotation_filter_compose_to_frame_matches_scipy():
         assert np.allclose(actual_rot.as_matrix(), expected_rot.as_matrix(), atol=1e-10)
 
 
-def test_rotation_filter_compose_to_frame_missing_quat_col_columns_raises():
+def test_rotation_filter_compose_to_frame_missing_quat_col_columns_raises() -> None:
     df = pl.DataFrame(
         {
             "Bodies/target/quat:x": [0.0],
@@ -245,7 +247,7 @@ def test_rotation_filter_compose_to_frame_missing_quat_col_columns_raises():
         f.compose_to_frame(df, quaternion_bases={"Bodies/target/quat"})
 
 
-def test_rotation_filter_compose_to_frame_zero_quaternion_raises():
+def test_rotation_filter_compose_to_frame_zero_quaternion_raises() -> None:
     df = pl.DataFrame(
         {
             "Bodies/frame/quat:x": [0.0],
@@ -298,7 +300,9 @@ def _apply_per_component(f: RotationFilter, df: pl.DataFrame, base: str) -> np.n
     return np.array(out)
 
 
-def test_rotation_filter_apply_with_context_translates_then_rotates_with_origin():
+def test_rotation_filter_apply_with_context_translates_then_rotates_with_origin() -> (
+    None
+):
     """With origin_col set, a position series is expressed relative to the frame origin: R^T (p - o)."""
     from scipy.spatial.transform import Rotation
 
@@ -313,7 +317,7 @@ def test_rotation_filter_apply_with_context_translates_then_rotates_with_origin(
     assert np.allclose(actual, expected, atol=1e-10)
 
 
-def test_rotation_filter_apply_with_context_only_rotates_without_origin():
+def test_rotation_filter_apply_with_context_only_rotates_without_origin() -> None:
     """Without origin_col the same series is only rotated, keeping its world-frame origin."""
     from scipy.spatial.transform import Rotation
 
@@ -339,7 +343,7 @@ def _rotation_frame(quats: np.ndarray, vecs: np.ndarray) -> pl.DataFrame:
     )
 
 
-def test_rotation_filter_apply_to_frame_matches_scipy():
+def test_rotation_filter_apply_to_frame_matches_scipy() -> None:
     """Cross-check the hand-rolled quaternion rotation against scipy as a trusted oracle."""
     from scipy.spatial.transform import Rotation
 
@@ -363,7 +367,7 @@ def test_rotation_filter_apply_to_frame_matches_scipy():
         assert np.allclose(actual, transformer.apply(vecs), atol=1e-10)
 
 
-def test_rotation_filter_apply_to_frame_works_on_a_single_row():
+def test_rotation_filter_apply_to_frame_works_on_a_single_row() -> None:
     """Polars' to_numpy() can return a read-only zero-copy view for a freshly built single-row frame, which must not break the rotation."""
     df = _rotation_frame(np.array([[0.0, 0.0, 0.0, 1.0]]), np.array([[1.0, 0.0, 0.0]]))
     f = RotationFilter(quat_col="Bodies/racket/xiquat", origin_col=None, invert=False)
@@ -372,7 +376,7 @@ def test_rotation_filter_apply_to_frame_works_on_a_single_row():
     assert np.allclose(rotated["Bodies/racket/xpos:x"].to_numpy(), [1.0])
 
 
-def test_rotation_filter_apply_to_frame_does_not_mutate_the_source():
+def test_rotation_filter_apply_to_frame_does_not_mutate_the_source() -> None:
     df = _rotation_frame(
         np.array([[0.0, 0.0, 0.7071067811865476, 0.7071067811865476]]),
         np.array([[1.0, 0.0, 0.0]]),
@@ -383,7 +387,7 @@ def test_rotation_filter_apply_to_frame_does_not_mutate_the_source():
     assert np.array_equal(df["Bodies/racket/xpos:x"].to_numpy(), before)
 
 
-def test_rotation_filter_apply_to_frame_zero_quaternion_raises():
+def test_rotation_filter_apply_to_frame_zero_quaternion_raises() -> None:
     """A zero (or non-finite) quaternion row must fail loudly instead of propagating NaN."""
     df = _rotation_frame(np.array([[0.0, 0.0, 0.0, 0.0]]), np.array([[1.0, 0.0, 0.0]]))
     f = RotationFilter(quat_col="Bodies/racket/xiquat", origin_col=None, invert=True)
@@ -394,7 +398,7 @@ def test_rotation_filter_apply_to_frame_zero_quaternion_raises():
 # --- Pydantic Validation Tests ---
 
 
-def test_pydantic_constraints():
+def test_pydantic_constraints() -> None:
     # Test Derivative dt > 0
     with pytest.raises(ValidationError):
         DerivativeFilter(dt=0)
@@ -408,7 +412,7 @@ def test_pydantic_constraints():
         WrapFilter(lb=np.pi, ub=-np.pi)
 
 
-def test_filter_adapter_parsing():
+def test_filter_adapter_parsing() -> None:
     from mujoco_mojo.utils.filters.filters import filter_adapter
 
     # Simulate a JSON payload from the frontend
@@ -423,7 +427,7 @@ def test_filter_adapter_parsing():
     assert isinstance(stack_dict["Bodies/racket/xvelr:y"][0], ScaleFilter)
 
 
-def test_filter_chaining_integrity(signal_df: MojoDataFrame):
+def test_filter_chaining_integrity(signal_df: MojoDataFrame) -> None:
     """Verifies that multiple filters can be stacked without side effects."""
     # Recipe: Offset by 10, then zero it out (should return original ramp)
     stack: list[AnyFilter] = [ScaleFilter(factor=1.0, offset=10.0), TaringFilter()]
@@ -436,7 +440,7 @@ def test_filter_chaining_integrity(signal_df: MojoDataFrame):
     assert result == [0.0, 1.0, 2.0, 3.0, 4.0]
 
 
-def test_derivative_integral_roundtrip():
+def test_derivative_integral_roundtrip() -> None:
     """Verifies numerical consistency of calculus filters."""
     # Constant signal
     df = pl.DataFrame({"x": [1.0] * 100})
@@ -454,7 +458,7 @@ def test_derivative_integral_roundtrip():
     assert np.allclose(df_calc["roundtrip"][5:], 1.0)
 
 
-def test_null_handling_persistence():
+def test_null_handling_persistence() -> None:
     """Ensures filters don't crash when encountering nulls/NaNs."""
     df = pl.DataFrame({"x": [1.0, None, 3.0, np.nan, 5.0]})
     f = ScaleFilter(factor=2.0)
@@ -465,7 +469,7 @@ def test_null_handling_persistence():
     assert np.isnan(result[3])
 
 
-def test_high_pass_filter(signal_df: MojoDataFrame):
+def test_high_pass_filter(signal_df: MojoDataFrame) -> None:
     # If alpha is very low, the LowPass part captures the DC offset.
     # Subtracting it should leave us near zero for a constant signal.
     df = pl.DataFrame({"x": [10.0] * 20})  # Constant signal
@@ -476,7 +480,7 @@ def test_high_pass_filter(signal_df: MojoDataFrame):
     assert np.allclose(result[-1], 0.0, atol=1e-2)
 
 
-def test_rolling_mean_filter(signal_df: MojoDataFrame):
+def test_rolling_mean_filter(signal_df: MojoDataFrame) -> None:
     # window=3, center=True on [0, 1, 2, 3, 4]
     # At index 2 (val=2.0), window is [1, 2, 3], mean is 2.0
     f = RollingMeanFilter(window=3, center=True)
@@ -486,7 +490,7 @@ def test_rolling_mean_filter(signal_df: MojoDataFrame):
     assert len(result) == 5
 
 
-def test_rolling_median_filter():
+def test_rolling_median_filter() -> None:
     # Median is great for removing "salt and pepper" noise
     df = pl.DataFrame({"x": [1.0, 1.0, 100.0, 1.0, 1.0]})
     f = RollingMedianFilter(window=3)
@@ -496,7 +500,7 @@ def test_rolling_median_filter():
     assert result[2] == 1.0
 
 
-def test_window_larger_than_data():
+def test_window_larger_than_data() -> None:
     df = pl.DataFrame({"x": [1.0, 2.0]})
     # Window of 10 on 2 rows of data
     f = RollingMeanFilter(window=10)
@@ -507,7 +511,7 @@ def test_window_larger_than_data():
     assert len(result) == 2
 
 
-def test_savitzky_golay_peak_preservation():
+def test_savitzky_golay_peak_preservation() -> None:
     """Verifies SG filter preserves peaks better than Rolling Mean."""
     # A signal with a sharp peak at index 5
     data = [0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -533,7 +537,7 @@ def test_savitzky_golay_peak_preservation():
     # Note: SG results will vary based on order, but it will always be > 2.0 here.
 
 
-def test_savitzky_golay_validation():
+def test_savitzky_golay_validation() -> None:
     """Ensures window/order logic is enforced."""
     # Even window should fail
     with pytest.raises(ValidationError):
@@ -544,7 +548,7 @@ def test_savitzky_golay_validation():
         SavitzkyGolayFilter(window=5, order=5)
 
 
-def test_unit_filter_basic_conversion(signal_df: MojoDataFrame):
+def test_unit_filter_basic_conversion(signal_df: MojoDataFrame) -> None:
     """Verifies standard scaling conversion (e.g., meters to millimeters)."""
     # 1.0 m -> 1000.0 mm
     f = UnitFilter(from_unit="m", to_unit="mm")
@@ -552,7 +556,7 @@ def test_unit_filter_basic_conversion(signal_df: MojoDataFrame):
     assert result == [0.0, 1000.0, 2000.0, 3000.0, 4000.0]
 
 
-def test_unit_filter_rotation_conversion(signal_df: MojoDataFrame):
+def test_unit_filter_rotation_conversion(signal_df: MojoDataFrame) -> None:
     """Verifies angular conversion (radians to degrees)."""
     f = UnitFilter(from_unit="rad", to_unit="deg")
     result = signal_df.select(f.apply(pl.col("val")))["val"].to_list()
@@ -560,7 +564,7 @@ def test_unit_filter_rotation_conversion(signal_df: MojoDataFrame):
     assert np.allclose(result, expected)
 
 
-def test_unit_filter_offset_conversion():
+def test_unit_filter_offset_conversion() -> None:
     """Verifies affine transformations with offsets (e.g., Celsius to Kelvin)."""
     df = pl.DataFrame({"temp_c": [0.0, 100.0]})
     # Pint uses 'degC' for Celsius and 'K' for Kelvin
@@ -571,7 +575,7 @@ def test_unit_filter_offset_conversion():
     assert np.allclose(result, [273.15, 373.15])
 
 
-def test_unit_filter_dimensionality_mismatch():
+def test_unit_filter_dimensionality_mismatch() -> None:
     """Ensures Pydantic prevents incompatible unit conversions (e.g., Length to Time)."""
     # Length to Time should raise ValueError via model_validator
     with pytest.raises(ValidationError) as exc:
@@ -583,14 +587,14 @@ def test_unit_filter_dimensionality_mismatch():
         UnitFilter(from_unit="rad", to_unit="pound_force")
 
 
-def test_unit_filter_undefined_unit():
+def test_unit_filter_undefined_unit() -> None:
     """Ensures Pydantic catches nonsense unit strings that Pint cannot parse."""
     with pytest.raises(ValidationError) as exc:
         UnitFilter(from_unit="rad", to_unit="not_a_physical_unit")
     assert "Unknown unit definition" in str(exc.value)
 
 
-def test_unit_filter_custom_string_fallback():
+def test_unit_filter_custom_string_fallback() -> None:
     """Verifies that strings outside the Literal list but valid in Pint still work."""
     # 'parsec' isn't in our AngleUnit/LenUnit/etc literals, but Pint knows it
     f = UnitFilter(from_unit="m", to_unit="parsec")
@@ -604,7 +608,7 @@ def test_unit_filter_custom_string_fallback():
 # --- Statistics Tests ---
 
 
-def test_max_filter():
+def test_max_filter() -> None:
     # Statistics filters reduce the signal to one value, broadcast to the
     # original length via with_columns (the same mechanism the router/lab
     # executor use to apply filters in place).
@@ -614,35 +618,35 @@ def test_max_filter():
     assert result == [5.0, 5.0, 5.0, 5.0]
 
 
-def test_min_filter():
+def test_min_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
     result = df.with_columns(MinFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [-2.0, -2.0, -2.0, -2.0]
 
 
-def test_mean_filter():
+def test_mean_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]})
     result = df.with_columns(MeanFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [2.5, 2.5, 2.5, 2.5]
 
 
-def test_median_filter():
+def test_median_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]})
     result = df.with_columns(MedianFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [2.5, 2.5, 2.5, 2.5]
 
 
-def test_mode_filter():
+def test_mode_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 2.0, 2.0, 3.0]})
     result = df.with_columns(ModeFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [2.0, 2.0, 2.0, 2.0]
 
 
-def test_standard_deviation_filter():
+def test_standard_deviation_filter() -> None:
     # Polars uses the sample standard deviation (ddof=1) by default.
     df = pl.DataFrame({"x": [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]})
     result = df.with_columns(StandardDeviationFilter().apply(pl.col("x")))[
@@ -653,21 +657,21 @@ def test_standard_deviation_filter():
     assert np.allclose(result, [expected] * 8)
 
 
-def test_first_filter():
+def test_first_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
     result = df.with_columns(FirstFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [1.0, 1.0, 1.0, 1.0]
 
 
-def test_last_filter():
+def test_last_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
     result = df.with_columns(LastFilter().apply(pl.col("x")))["x"].to_list()
 
     assert result == [-2.0, -2.0, -2.0, -2.0]
 
 
-def test_sort_filter():
+def test_sort_filter() -> None:
     df = pl.DataFrame({"x": [1.0, 5.0, 3.0, -2.0]})
 
     ascending = df.with_columns(SortFilter().apply(pl.col("x")))["x"].to_list()

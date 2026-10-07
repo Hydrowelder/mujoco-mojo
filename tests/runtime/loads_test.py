@@ -49,7 +49,9 @@ def basic_mj_setup() -> tuple[mujoco.MjModel, mujoco.MjData]:
     return model, data
 
 
-def test_ideal_spring_magnitude(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_ideal_spring_magnitude(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     model, data = basic_mj_setup
     state = MjState(model, data)
     s1 = SiteSphere(name=SiteName("site1"), size=1)
@@ -71,7 +73,9 @@ def test_ideal_spring_magnitude(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjD
     assert np.allclose(np.asarray(force), [50.0, 0, 0])
 
 
-def test_tension_only_spring(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_tension_only_spring(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     model, data = basic_mj_setup
     state = MjState(model, data)
     s1 = SiteSphere(name=SiteName("site1"), size=1)
@@ -87,7 +91,9 @@ def test_tension_only_spring(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData
     assert np.all(force == 0)  # Should be slack
 
 
-def test_general_force_rotation(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_general_force_rotation(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     model, data = basic_mj_setup
     s1 = SiteSphere(name=SiteName("site1"), size=1)
 
@@ -111,7 +117,7 @@ def test_general_force_rotation(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjD
 
 def test_runtime_manager_integration(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verifies that the manager correctly injects forces into MuJoCo."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -140,7 +146,9 @@ def test_runtime_manager_integration(
     assert _spring._last_f[0] == pytest.approx(50.0)
 
 
-def test_compression_spring_limit(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_compression_spring_limit(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     model, data = basic_mj_setup  # mj_forward already called in fixture
     state = MjState(model, data)
     s1 = SiteSphere(name=SiteName("site1"), size=1)
@@ -171,7 +179,9 @@ def test_compression_spring_limit(basic_mj_setup: tuple[mujoco.MjModel, mujoco.M
     assert np.asarray(force_active)[0] < 0
 
 
-def test_body_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_body_reaction_physics(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     """Verify that VectorForce applies opposite loads to action and reaction bodies."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -196,7 +206,7 @@ def test_body_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjDa
 
 def test_scalar_force_orientation_tracking(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify ScalarForce follows the site's local X-axis as it rotates."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -223,7 +233,7 @@ def test_scalar_force_orientation_tracking(
 
 def test_stroke_compression_spring(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify the three states of a stroke-limited compression spring."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -273,7 +283,7 @@ def test_stroke_compression_spring(
 
 def test_active_toggle_suppression(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Ensure that setting active=False suppresses all forces."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -296,7 +306,7 @@ def test_active_toggle_suppression(
 
 def test_scalar_torque_orientation_tracking(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify ScalarTorque follows the site's local X-axis as it rotates."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -321,7 +331,9 @@ def test_scalar_torque_orientation_tracking(
     assert np.allclose(t_world_rot, [0, 0, -10.0], atol=1e-5)
 
 
-def test_spring_damping_logic(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_spring_damping_logic(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     """Verify that damping correctly opposes relative velocity."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -347,7 +359,9 @@ def test_spring_damping_logic(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjDat
     assert np.allclose(f, [-20.0, 0, 0])
 
 
-def test_torque_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_torque_reaction_physics(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     """Verify that VectorTorque applies opposite torques to action and reaction bodies."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -372,7 +386,7 @@ def test_torque_reaction_physics(basic_mj_setup: tuple[mujoco.MjModel, mujoco.Mj
 
 def test_general_force_6dof_application(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify that GeneralForce applies both F and T correctly in world frame."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -397,7 +411,7 @@ def test_general_force_6dof_application(
     assert np.allclose(t_world, [1, 2, 3])
 
 
-def test_point_to_point_validation_error():
+def test_point_to_point_validation_error() -> None:
     """Verify that PointToPointForce rejects 'rel_to_site' via Pydantic validator."""
     s1 = SiteSphere(name=SiteName("s1"))
     s2 = SiteSphere(name=SiteName("s2"))
@@ -415,7 +429,7 @@ def test_point_to_point_validation_error():
 
 def test_stochastic_named_value_unwrap(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify that stiffness/damping work when passed as NamedValues."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -438,7 +452,9 @@ def test_stochastic_named_value_unwrap(
     assert np.linalg.norm(f) == pytest.approx(250.0)
 
 
-def test_scalar_torque_math(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]):
+def test_scalar_torque_math(
+    basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
+) -> None:
     """Verify ScalarTorque applies torque along the site's local X-axis."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -455,7 +471,7 @@ def test_scalar_torque_math(basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData]
 
 def test_body_reaction_force_to_world(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """Verify that if xtion_body is None, only the action force is applied."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -476,7 +492,7 @@ def test_body_reaction_force_to_world(
 
 def test_handle_inactive_clears_cached_force(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """handle_inactive() zeroes _last_f/_last_t when the load is toggled off with a cached force."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -499,7 +515,7 @@ def test_handle_inactive_clears_cached_force(
 
 def test_get_visuals_returns_action_arrow_after_force(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """get_visuals() returns an ArrowConfig for the action force after a non-zero force is applied."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -520,7 +536,7 @@ def test_get_visuals_returns_action_arrow_after_force(
 
 def test_get_visuals_returns_torque_arrow(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """get_visuals() returns an ArrowConfig with is_torque=True when torque is non-zero."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -543,7 +559,7 @@ def test_get_visuals_returns_torque_arrow(
 
 def test_get_visuals_uses_default_scale_of_one_when_not_overridden(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """get_visuals() falls back to VisualizationSettings' length/width scale (1.0 by default) when the Load doesn't override it."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -562,7 +578,7 @@ def test_get_visuals_uses_default_scale_of_one_when_not_overridden(
 
 def test_get_visuals_respects_per_load_scale_override(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """A Load's own torque_length_scale/torque_width_scale override the global VisualizationSettings default."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -585,7 +601,7 @@ def test_get_visuals_respects_per_load_scale_override(
 
 def test_ptp_get_visuals_includes_reaction_arrow(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
-):
+) -> None:
     """PointToPointForce.get_visuals() includes a reaction arrow at xtion_site with negated direction."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -612,7 +628,7 @@ def test_ptp_get_visuals_includes_reaction_arrow(
 def test_load_request_posts_xyzm_signals(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
     tmp_path,
-):
+) -> None:
     """request() registers a sampler that posts x/y/z/m for force and torque to signal_manager."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -640,7 +656,7 @@ def test_load_request_posts_xyzm_signals(
 def test_load_request_tags_builtin_dimension_metadata(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
     tmp_path,
-):
+) -> None:
     """request() tags force as force-dimension and torque as torque-dimension."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -668,7 +684,7 @@ def test_load_request_tags_builtin_dimension_metadata(
 def test_load_request_metadata_override(
     basic_mj_setup: tuple[mujoco.MjModel, mujoco.MjData],
     tmp_path,
-):
+) -> None:
     """A caller-supplied metadata dict extends the built-in default for a channel."""
     model, data = basic_mj_setup
     state = MjState(model, data)
@@ -801,7 +817,7 @@ def _slide_joint() -> Joint:
 # coulomb_simple
 
 
-def test_coulomb_opposes_positive_velocity():
+def test_coulomb_opposes_positive_velocity() -> None:
     state = _hinge_state(vel=2.0)
     fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
@@ -809,7 +825,7 @@ def test_coulomb_opposes_positive_velocity():
     assert state.data.qfrc_applied[0] == pytest.approx(-5.0)
 
 
-def test_coulomb_opposes_negative_velocity():
+def test_coulomb_opposes_negative_velocity() -> None:
     state = _hinge_state(vel=-3.0)
     fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
@@ -817,7 +833,7 @@ def test_coulomb_opposes_negative_velocity():
     assert state.data.qfrc_applied[0] == pytest.approx(5.0)
 
 
-def test_coulomb_zero_at_standstill():
+def test_coulomb_zero_at_standstill() -> None:
     state = _hinge_state(vel=0.0)
     fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=5.0)
     fric.resolve_ids(state)
@@ -828,7 +844,7 @@ def test_coulomb_zero_at_standstill():
 # viscous_simple
 
 
-def test_viscous_proportional_to_velocity():
+def test_viscous_proportional_to_velocity() -> None:
     state = _slide_state(vel=4.0)
     fric = JointFriction.viscous_simple(name="v", joint=_slide_joint(), damping=3.0)
     fric.resolve_ids(state)
@@ -837,7 +853,7 @@ def test_viscous_proportional_to_velocity():
     assert state.data.qfrc_applied[0] == pytest.approx(-12.0)
 
 
-def test_viscous_zero_at_standstill():
+def test_viscous_zero_at_standstill() -> None:
     state = _slide_state(vel=0.0)
     fric = JointFriction.viscous_simple(name="v", joint=_slide_joint(), damping=10.0)
     fric.resolve_ids(state)
@@ -848,7 +864,7 @@ def test_viscous_zero_at_standstill():
 # coulomb_viscous_simple
 
 
-def test_coulomb_viscous_combined():
+def test_coulomb_viscous_combined() -> None:
     state = _hinge_state(vel=2.0)
     fric = JointFriction.coulomb_viscous_simple(
         name="cv", joint=_hinge_joint(), coulomb=3.0, viscous=1.0
@@ -859,7 +875,7 @@ def test_coulomb_viscous_combined():
     assert state.data.qfrc_applied[0] == pytest.approx(-5.0)
 
 
-def test_coulomb_viscous_zero_velocity_no_coulomb():
+def test_coulomb_viscous_zero_velocity_no_coulomb() -> None:
     state = _hinge_state(vel=0.0)
     fric = JointFriction.coulomb_viscous_simple(
         name="cv", joint=_hinge_joint(), coulomb=10.0, viscous=5.0
@@ -873,7 +889,7 @@ def test_coulomb_viscous_zero_velocity_no_coulomb():
 # stribeck_simple
 
 
-def test_stribeck_static_greater_than_kinetic():
+def test_stribeck_static_greater_than_kinetic() -> None:
     """At low velocity the Stribeck curve produces more friction than the kinetic floor."""
     coulomb, static, vs = 1.0, 5.0, 0.1
     low_vel, high_vel = 1e-4, 10.0
@@ -902,7 +918,7 @@ def test_stribeck_static_greater_than_kinetic():
     assert high_vel_state.data.qfrc_applied[0] == pytest.approx(expected_high, rel=1e-6)
 
 
-def test_stribeck_formula_exact():
+def test_stribeck_formula_exact() -> None:
     """F = -(coulomb + (static-coulomb)*exp(-|v|/vs) + viscous*|v|)*sign(v)."""
     vel = 1.0
     coulomb, static, vs, viscous = 2.0, 5.0, 0.5, 0.3
@@ -922,7 +938,7 @@ def test_stribeck_formula_exact():
     assert state.data.qfrc_applied[0] == pytest.approx(expected, rel=1e-6)
 
 
-def test_stribeck_zero_at_standstill():
+def test_stribeck_zero_at_standstill() -> None:
     state = _hinge_state(vel=0.0)
     fric = JointFriction.stribeck_simple(
         name="s", joint=_hinge_joint(), coulomb=3.0, static=6.0, stribeck_velocity=0.1
@@ -1000,7 +1016,7 @@ def _driven_slide_state(qpos: float = 0.0, vel: float = 0.0) -> MjState:
     return MjState(model, data)
 
 
-def test_rt_bearing_load_hinge_uses_full_reaction_force():
+def test_rt_bearing_load_hinge_uses_full_reaction_force() -> None:
     """For a hinge, rt_bearing_load is the full cfrc_int force magnitude (no limit needed since qfrc_constraint is zero here)."""
     state = _driven_hinge_state(vel=0.0)
     joint = _hinge_joint()
@@ -1010,7 +1026,7 @@ def test_rt_bearing_load_hinge_uses_full_reaction_force():
     assert expected > 0.0  # sanity check: gravity is actually loading the bearing
 
 
-def test_rt_bearing_load_slide_excludes_axial_component():
+def test_rt_bearing_load_slide_excludes_axial_component() -> None:
     """For a slide joint, rt_bearing_load excludes the component along the (frictionless-by-definition) slide axis."""
     state = _driven_slide_state(qpos=0.2, vel=0.0)
     joint = Joint(name=JointName("slide"))
@@ -1022,7 +1038,7 @@ def test_rt_bearing_load_slide_excludes_axial_component():
     assert joint.rt_bearing_load(state) == pytest.approx(expected_radial, rel=1e-6)
 
 
-def test_karnopp_stuck_with_no_driving_force_is_zero():
+def test_karnopp_stuck_with_no_driving_force_is_zero() -> None:
     """Stuck (below velocity_threshold) with nothing pushing on the joint produces no friction, even though the bearing itself is loaded."""
     state = _undriven_hinge_state(vel=0.0)
     bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
@@ -1043,7 +1059,7 @@ def test_karnopp_stuck_with_no_driving_force_is_zero():
     assert state.data.qfrc_applied[0] == pytest.approx(0.0)
 
 
-def test_karnopp_holds_when_static_limit_sufficient():
+def test_karnopp_holds_when_static_limit_sufficient() -> None:
     """Stuck, with a driving force and a static limit well above it: friction exactly cancels the driving force."""
     state = _driven_hinge_state(vel=0.0)
     driving = float(state.data.qfrc_smooth[0])
@@ -1061,7 +1077,7 @@ def test_karnopp_holds_when_static_limit_sufficient():
     assert state.data.qfrc_applied[0] == pytest.approx(-driving, rel=1e-6)
 
 
-def test_karnopp_breaks_away_when_static_limit_insufficient():
+def test_karnopp_breaks_away_when_static_limit_insufficient() -> None:
     """Stuck, with a driving force exceeding the static limit: friction saturates at the limit instead of fully holding."""
     mu_static = 0.01
     state = _driven_hinge_state(vel=0.0)
@@ -1086,7 +1102,7 @@ def test_karnopp_breaks_away_when_static_limit_insufficient():
     assert np.sign(state.data.qfrc_applied[0]) == -np.sign(driving)
 
 
-def test_karnopp_sliding_uses_kinetic_coefficient():
+def test_karnopp_sliding_uses_kinetic_coefficient() -> None:
     """Sliding (at or above velocity_threshold) uses mu_kinetic, ignoring mu_static entirely."""
     mu_kinetic = 0.3
     state = _driven_hinge_state(vel=2.0)
@@ -1106,7 +1122,7 @@ def test_karnopp_sliding_uses_kinetic_coefficient():
     )
 
 
-def test_karnopp_sliding_viscous_term_added():
+def test_karnopp_sliding_viscous_term_added() -> None:
     """The viscous term adds -viscous*v on top of the kinetic term while sliding."""
     mu_kinetic, viscous, vel = 0.3, 1.5, 2.0
     state = _driven_hinge_state(vel=vel)
@@ -1126,7 +1142,7 @@ def test_karnopp_sliding_viscous_term_added():
     assert state.data.qfrc_applied[0] == pytest.approx(expected, rel=1e-6)
 
 
-def test_karnopp_named_value_runtime_mutation():
+def test_karnopp_named_value_runtime_mutation() -> None:
     """Changing the NamedValue mu_kinetic after construction affects the applied force."""
     state = _driven_hinge_state(vel=2.0)
     bearing_load = float(np.linalg.norm(state.data.cfrc_int[1][3:6]))
@@ -1151,7 +1167,7 @@ def test_karnopp_named_value_runtime_mutation():
 # named value runtime mutation
 
 
-def test_coulomb_named_value_runtime_mutation():
+def test_coulomb_named_value_runtime_mutation() -> None:
     """Changing the NamedValue after construction affects the applied force."""
     state = _hinge_state(vel=1.0)
     mag = NamedValue(name=ValueName("mag"), stored_value=4.0)
@@ -1169,7 +1185,7 @@ def test_coulomb_named_value_runtime_mutation():
 # active flag
 
 
-def test_joint_friction_inactive_produces_no_force():
+def test_joint_friction_inactive_produces_no_force() -> None:
     state = _hinge_state(vel=5.0)
     fric = JointFriction.coulomb_simple(name="c", joint=_hinge_joint(), magnitude=10.0)
     fric.active = False
@@ -1181,7 +1197,7 @@ def test_joint_friction_inactive_produces_no_force():
 # telemetry
 
 
-def test_joint_friction_request_registers_sampler(tmp_path):
+def test_joint_friction_request_registers_sampler(tmp_path) -> None:
     state = _hinge_state(vel=2.0)
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
     fric = JointFriction.coulomb_simple(
@@ -1200,7 +1216,7 @@ def test_joint_friction_request_registers_sampler(tmp_path):
     assert sm._data_buffer[0, z_idx] == pytest.approx(-7.0)
 
 
-def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path):
+def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path) -> None:
     """A hinge joint's friction is tagged as torque."""
     state = _hinge_state(vel=2.0)
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
@@ -1219,7 +1235,7 @@ def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path):
     }
 
 
-def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path):
+def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path) -> None:
     """A slide joint's friction is tagged as force."""
     state = _slide_state(vel=2.0)
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
@@ -1235,7 +1251,7 @@ def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path):
     }
 
 
-def test_joint_friction_request_metadata_override(tmp_path):
+def test_joint_friction_request_metadata_override(tmp_path) -> None:
     """A caller-supplied metadata dict extends the built-in default."""
     state = _hinge_state(vel=2.0)
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
@@ -1255,7 +1271,7 @@ def test_joint_friction_request_metadata_override(tmp_path):
     }
 
 
-def test_joint_friction_request_raises_without_joint_name():
+def test_joint_friction_request_raises_without_joint_name() -> None:
     unnamed = Joint()  # no name
     fric = JointFriction.coulomb_simple(name="c", joint=unnamed, magnitude=1.0)
     sm_mock = object()
@@ -1298,7 +1314,7 @@ def _ball_joint() -> Joint:
     return Joint(name=JointName("ball"))
 
 
-def test_joint_friction_rejects_free_joint():
+def test_joint_friction_rejects_free_joint() -> None:
     """Free joints are not physical constraints; JointFriction rejects them."""
     model = mujoco.MjModel.from_xml_string(FREE_XML)
     data = mujoco.MjData(model)
@@ -1315,7 +1331,7 @@ def test_joint_friction_rejects_free_joint():
 # ball joint friction
 
 
-def test_ball_coulomb_opposes_velocity_direction():
+def test_ball_coulomb_opposes_velocity_direction() -> None:
     """Coulomb friction on a ball joint produces a torque exactly opposing omega."""
     omega = (1.0, 2.0, 2.0)  # speed = 3.0
     state = _ball_state(omega=omega)
@@ -1332,7 +1348,7 @@ def test_ball_coulomb_opposes_velocity_direction():
     assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
 
 
-def test_ball_viscous_proportional_to_velocity():
+def test_ball_viscous_proportional_to_velocity() -> None:
     """Viscous friction on a ball joint produces torque proportional to each component."""
     omega = (1.0, -2.0, 3.0)
     damping = 4.0
@@ -1345,7 +1361,7 @@ def test_ball_viscous_proportional_to_velocity():
     assert np.allclose(state.data.qfrc_applied[0:3], expected, atol=1e-10)
 
 
-def test_ball_stribeck_opposes_velocity_direction():
+def test_ball_stribeck_opposes_velocity_direction() -> None:
     """Stribeck on a ball joint: friction magnitude from |omega|, direction from -omega_hat."""
     omega = (3.0, 4.0, 0.0)  # speed = 5.0
     coulomb, static, vs = 1.0, 4.0, 1.0
@@ -1369,7 +1385,7 @@ def test_ball_stribeck_opposes_velocity_direction():
 # custom friction_func receives state
 
 
-def test_friction_func_receives_state():
+def test_friction_func_receives_state() -> None:
     """friction_func signature is (vel, state) -> ndarray; state is the live MjState."""
     captured: list[MjState] = []
 
@@ -1419,7 +1435,7 @@ def _motor() -> ActuatorMotor:
     return ActuatorMotor(name=ActuatorName("motor1"))
 
 
-def test_actuator_load_constant_writes_ctrl():
+def test_actuator_load_constant_writes_ctrl() -> None:
     """constant() writes a fixed set point into mjData.ctrl for the resolved actuator."""
     state = _actuated_slide_state()
     load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.75)
@@ -1429,7 +1445,7 @@ def test_actuator_load_constant_writes_ctrl():
     assert state.data.ctrl[0] == pytest.approx(0.75)
 
 
-def test_actuator_load_constant_named_value_is_mutable_at_runtime():
+def test_actuator_load_constant_named_value_is_mutable_at_runtime() -> None:
     """constant() unwraps a NamedValue each timestep, picking up live updates."""
     state = _actuated_slide_state()
     set_point = NamedValue(name=ValueName("set_point"), stored_value=0.2)
@@ -1444,7 +1460,7 @@ def test_actuator_load_constant_named_value_is_mutable_at_runtime():
     assert state.data.ctrl[0] == pytest.approx(0.9)
 
 
-def test_actuator_load_custom_control_func_receives_state():
+def test_actuator_load_custom_control_func_receives_state() -> None:
     """control_func signature is (user_data, state) -> float; state is the live MjState."""
     captured: list[MjState] = []
 
@@ -1462,7 +1478,7 @@ def test_actuator_load_custom_control_func_receives_state():
     assert state.data.ctrl[0] == pytest.approx(0.5)
 
 
-def test_actuator_load_inactive_does_not_write_ctrl():
+def test_actuator_load_inactive_does_not_write_ctrl() -> None:
     """When inactive, apply_load leaves mjData.ctrl untouched and resets cached telemetry to zero."""
     state = _actuated_slide_state()
     state.data.ctrl[0] = 0.4
@@ -1475,7 +1491,7 @@ def test_actuator_load_inactive_does_not_write_ctrl():
     assert load._last_ctrl == pytest.approx(0.0)
 
 
-def test_actuator_load_runtime_manager_integration():
+def test_actuator_load_runtime_manager_integration() -> None:
     """ActuatorControl survives RuntimeManager's default buffer clearing: apply_load runs after the clear, every step."""
     state = _actuated_slide_state()
     mgr = RuntimeManager()
@@ -1489,7 +1505,7 @@ def test_actuator_load_runtime_manager_integration():
     assert state.data.ctrl[0] == pytest.approx(0.75)
 
 
-def test_actuator_load_request_posts_ctrl_signal(tmp_path):
+def test_actuator_load_request_posts_ctrl_signal(tmp_path) -> None:
     """request() registers a sampler that posts the last applied control value."""
     state = _actuated_slide_state()
     load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
@@ -1505,7 +1521,7 @@ def test_actuator_load_request_posts_ctrl_signal(tmp_path):
     assert sm._data_buffer[0, ctrl_idx] == pytest.approx(0.6)
 
 
-def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path):
+def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path) -> None:
     """Ctrl has no built-in unit default (its units depend on gear/dyntype), only the scalar tag."""
     state = _actuated_slide_state()
     load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)
@@ -1521,7 +1537,7 @@ def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path):
     }
 
 
-def test_actuator_load_request_metadata_override(tmp_path):
+def test_actuator_load_request_metadata_override(tmp_path) -> None:
     """A caller-supplied metadata dict supplies metadata for ctrl since there's no built-in default."""
     state = _actuated_slide_state()
     load = ActuatorControl.constant(name="drive", actuator=_motor(), value=0.6)

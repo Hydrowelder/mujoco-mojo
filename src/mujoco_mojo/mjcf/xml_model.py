@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import (
     ClassVar,
@@ -40,7 +40,7 @@ def _tuple_string(v) -> str:
     Works with list, tuple, or NumPy ndarray.
     """
 
-    def flatten(items):
+    def flatten(items) -> Iterator[str]:
         for item in items:
             if isinstance(item, (list, tuple, np.ndarray)):
                 yield from flatten(item)
@@ -109,7 +109,7 @@ class XMLModel(MojoBaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_name(self):
+    def validate_name(self) -> Self:
         name = getattr(self, "name", None)
         if isinstance(name, str):
             if ":" in name or "/" in name:
@@ -389,7 +389,7 @@ class XMLModel(MojoBaseModel):
         self._id_cache = obj_id
         return obj_id
 
-    def _iter_tree(self):
+    def _iter_tree(self) -> Iterator[XMLModel]:
         """Yields this model and all its XMLModel children recursively."""
         yield self
 

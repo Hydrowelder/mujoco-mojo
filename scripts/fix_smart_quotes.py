@@ -41,7 +41,7 @@ def fix_file(file_path: Path) -> bool:
     return False
 
 
-def stage_file(file_path: Path):
+def stage_file(file_path: Path) -> None:
     """Stage the file in git."""
     subprocess.run(["git", "add", str(file_path)], check=True)
 
@@ -49,7 +49,7 @@ def stage_file(file_path: Path):
 SKIP_DIRS = {"node_modules", "__pycache__", ".venv", ".git"}
 
 
-def main():
+def main() -> None:
     for file_path in SRC_DIR.rglob("*.*"):
         if SKIP_DIRS & set(file_path.parts):
             continue

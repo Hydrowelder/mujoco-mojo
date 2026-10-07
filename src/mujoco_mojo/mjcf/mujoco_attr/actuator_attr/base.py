@@ -294,7 +294,7 @@ class ActuatorBase(XMLModel, ABC):
             "act",
             "act_dot",
         ],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -382,7 +382,7 @@ class ActuatorBase(XMLModel, ABC):
                 columns[(channel, size)] = cols
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 match channel:
                     case "ctrl":

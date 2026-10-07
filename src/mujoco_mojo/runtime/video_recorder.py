@@ -257,7 +257,7 @@ class VideoRecorder:
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
         custom_traces: list[LineConfig],
-    ):
+    ) -> np.ndarray:
         """Updates the scene for the current state and renders it to an image array."""
         self._renderer.update_scene(
             data=state.data,
@@ -360,7 +360,7 @@ class VideoRecorder:
         custom_arrows: list[ArrowConfig],
         custom_lines: list[LineConfig],
         custom_traces: list[LineConfig],
-    ):
+    ) -> None:
         """Captures the current state as a video frame."""
         if state.data.time < self._next_record_time:
             return
@@ -401,7 +401,7 @@ class VideoRecorder:
         custom_arrows: list[ArrowConfig] | None = None,
         custom_lines: list[LineConfig] | None = None,
         custom_traces: list[LineConfig] | None = None,
-    ):
+    ) -> None:
         """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `fps` timing."""
         from PIL import Image
 
@@ -411,7 +411,7 @@ class VideoRecorder:
         Image.fromarray(frame).save(path)
         logger.info(f"Snapshot saved to {path}")
 
-    def save(self):
+    def save(self) -> None:
         """
         Finishes writing the video file.
 
