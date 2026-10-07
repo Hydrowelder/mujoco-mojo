@@ -89,6 +89,18 @@ class Inertial(XMLModel):
         )
 
     @property
+    def cg_x(self) -> float:
+        return self.pos.x
+
+    @property
+    def cg_y(self) -> float:
+        return self.pos.y
+
+    @property
+    def cg_z(self) -> float:
+        return self.pos.z
+
+    @property
     def i_xx(self) -> float:
         return float(self.inertia_matrix[0, 0])
 

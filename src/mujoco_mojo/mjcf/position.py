@@ -92,3 +92,15 @@ class Pos(XMLModel):
     def __array__(self, dtype=None, copy=None) -> np.ndarray:
         """Allows np.asarray(my_pos) to work seamlessly."""
         return np.array(self.pos, dtype=dtype, copy=copy)
+
+    @property
+    def x(self) -> float:
+        return self.pos[0]
+
+    @property
+    def y(self) -> float:
+        return self.pos[1]
+
+    @property
+    def z(self) -> float:
+        return self.pos[2]
