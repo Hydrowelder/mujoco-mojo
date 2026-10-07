@@ -51,6 +51,7 @@ __all__ = [
     "FlexName",
     "FluidShape",
     "FrameName",
+    # "Fuse", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version NEED TO ADD TO __init__.py
     "GainType",
     "GeomGroup",
     "GeomName",
@@ -1474,3 +1475,15 @@ _MODEL_PROVIDER_IDS: dict[ModelProvider, str] = {
     ModelProvider.Z_AI: "zai",
 }
 """Maps each `ModelProvider` member to the provider-id token `pydantic_ai` expects in a `provider:model` string (see `infer_provider_class`) - distinct from the member's own (human-display) `.value`."""
+
+
+# class Fuse(StrEnum): # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+#     """Whether this body can be fused with its parent when static bodies are fused, by the fusestatic compiler option or by mjs_fuseStatic. With the default auto a static body is fused unless one of the conditions listed there prevents it. Setting this attribute to false keeps the body."""
+
+#     FALSE = "false"
+#     """This body can be fused with its parent when static bodies are fused, by the fusestatic compiler option or by mjs_fuseStatic.
+
+#     This option keeps the body."""
+
+#     AUTO = "auto"
+#     """Static body is fused unless one of the conditions listed there prevents it"""

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
@@ -42,6 +44,8 @@ class Compiler(XMLModel):
         "saveinertial",
         "assetdir",
         "alignfree",
+        # "savecompiled", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+        # "savecononical", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
         "conflict",
     )
     children = ("lengthrange",)
@@ -119,6 +123,12 @@ class Compiler(XMLModel):
     saveinertial: bool = False
     """If set to "true", the compiler will save explicit inertial clauses for all bodies."""
 
+    # savecompiled: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    # """This attribute and the next one say how the model is saved as MJCF; like saveinertial, they are not saved themselves. If "true", the values which compilation made of the model are saved: for example the size of a geom which was fitted to a mesh, or the pose of a body after alignment with its free joint. If "false", the model is saved as it is written in the mjSpec, and the saved file compiles to the same model; the spec need not have been compiled."""
+
+    # savecononical: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    # """If "true", orientations are saved as quaternions, angles in radians, sizes and poses which were given with fromto as size, pos and quat, and a fullinertia as diaginertia and quat. If "false", they are saved in the notation in which they were written. This attribute has an effect only if savecompiled is "false": compiled values are always saved in the canonical notation."""
+
     conflict: Conflict = Conflict.WARNING
     """This attribute controls how conflicting global attributes (physics options, sizes, visual settings) are resolved when a child spec is attached to a parent using mjs_attach. A conflict occurs when both the parent and child specify authored values for the same field and those values differ. See Attribute Merging for details and a per-field table.
 
@@ -134,6 +144,7 @@ class Compiler(XMLModel):
 
         Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches.
 
-"""
+    """
 
-    lengthrange: LengthRange = LengthRange()
+    lengthrange: LengthRange = Field(default_factory=LengthRange)
+    """This element controls the computation of actuator length ranges. For an overview of this functionality see Length range section. Note that if this element is omitted the defaults shown below still apply. In order to disable length range computations altogether, include this element and set mode="none"."""
