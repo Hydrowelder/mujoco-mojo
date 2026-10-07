@@ -4,7 +4,7 @@ import pytest
 from mujoco_mojo.utils.color import Color
 
 
-def test_basic_color_constants():
+def test_basic_color_constants() -> None:
     """Verify that fundamental colors convert to the correct normalized RGBA."""
     # Black: #000000 -> [0, 0, 0, 1]
     assert np.allclose(Color.BLACK.rgba, [0.0, 0.0, 0.0, 1.0])
@@ -20,7 +20,7 @@ def test_basic_color_constants():
     assert red_rgba[3] == 1.0  # Default alpha
 
 
-def test_hex_conversions():
+def test_hex_conversions() -> None:
     """Test the static hex utility methods."""
     # Test with and without '#'
     rgba1 = Color.hex_to_rgba("#FF0000")
@@ -37,7 +37,7 @@ def test_hex_conversions():
         Color.hex_to_rgba("ABC")
 
 
-def test_rgba_to_hex_roundtrip():
+def test_rgba_to_hex_roundtrip() -> None:
     """Verify that converting to hex and back preserves the color."""
     original_hex = "#3b82f6"  # BLUE_500
     rgba = Color.hex_to_rgba(original_hex)
@@ -47,7 +47,7 @@ def test_rgba_to_hex_roundtrip():
     assert result_hex.lower() == original_hex.lower()
 
 
-def test_alpha_modifiers():
+def test_alpha_modifiers() -> None:
     """Test properties that modify transparency."""
     blue = Color.BLUE_500
 
@@ -62,7 +62,7 @@ def test_alpha_modifiers():
     assert np.allclose(ghost[:3], blue.rgb)
 
 
-def test_rgba255_conversions():
+def test_rgba255_conversions() -> None:
     """Test conversions between 0-255 and 0-1 ranges."""
     # [R255, G255, B255, Alpha1.0]
     color_255 = np.array([255.0, 127.5, 0.0, 1.0])
@@ -76,7 +76,7 @@ def test_rgba255_conversions():
     assert np.allclose(back_to_255, color_255)
 
 
-def test_random_rgba():
+def test_random_rgba() -> None:
     """Ensure random colors are valid normalized RGBA vectors."""
     for _ in range(10):
         c = Color.random_rgba()
@@ -87,7 +87,7 @@ def test_random_rgba():
         assert c[3] == 1.0
 
 
-def test_rgb_property():
+def test_rgb_property() -> None:
     """Verify the rgb property discards alpha."""
     rgba = Color.PURPLE_500.rgba
     rgb = Color.PURPLE_500.rgb

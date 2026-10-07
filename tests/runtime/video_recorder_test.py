@@ -1,4 +1,5 @@
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 import mujoco
@@ -11,6 +12,7 @@ from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.typing import CameraName
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
+from typing import Never
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 CAM1 = CameraName("cam1")
@@ -29,7 +31,7 @@ def _frames_visually_equal(a: np.ndarray, b: np.ndarray) -> bool:
 
 
 @pytest.fixture
-def cam_setup():
+def cam_setup() -> tuple[mujoco.MjModel, mujoco.MjData]:
     """A minimal scene with a named camera, for VideoRecorder tests."""
     xml = """
     <mujoco>
@@ -48,13 +50,13 @@ def cam_setup():
 
 
 @pytest.fixture
-def state(cam_setup):
+def state(cam_setup) -> MjState:
     model, data = cam_setup
     return MjState(model, data)
 
 
 @pytest.fixture
-def recorder(tmp_path, state):
+def recorder(tmp_path, state) -> Iterator[VideoRecorder]:
     # .gif buffers frames instead of streaming to ffmpeg, so these generic
     # logic tests don't need ffmpeg installed; the actual ffmpeg-streaming
     # path is covered separately by TestSaveEncodesRealVideo.
@@ -83,7 +85,7 @@ def _expected_bbox(
 
 
 class TestSetupValidation:
-    def test_raises_on_unknown_camera(self, state):
+    def test_raises_on_unknown_camera(self, state) -> None:
         rec = VideoRecorder(
             path=Path("unused.mp4"),
             camera_name=CameraName("does_not_exist"),
@@ -93,14 +95,14 @@ class TestSetupValidation:
         with pytest.raises(ValueError, match="does not exist"):
             rec.setup(state)
 
-    def test_raises_on_oversized_render(self, state):
+    def test_raises_on_oversized_render(self, state) -> None:
         rec = VideoRecorder(
             path=Path("unused.mp4"), camera_name=CAM1, width=10_000, height=10_000
         )
         with pytest.raises(ValueError, match="exceeds"):
             rec.setup(state)
 
-    def test_raises_on_out_of_range_encode_speed(self, state):
+    def test_raises_on_out_of_range_encode_speed(self, state) -> None:
         rec = VideoRecorder(
             path=Path("unused.mp4"),
             camera_name=CAM1,
@@ -111,14 +113,16 @@ class TestSetupValidation:
         with pytest.raises(ValueError, match="encode_speed"):
             rec.setup(state)
 
-    def test_raises_on_negative_quality(self, state):
+    def test_raises_on_negative_quality(self, state) -> None:
         rec = VideoRecorder(
             path=Path("unused.mp4"), camera_name=CAM1, width=64, height=48, quality=-1
         )
         with pytest.raises(ValueError, match="quality"):
             rec.setup(state)
 
-    def test_raises_when_ffmpeg_missing_for_streamed_format(self, state, monkeypatch):
+    def test_raises_when_ffmpeg_missing_for_streamed_format(
+        self, state, monkeypatch
+    ) -> None:
         monkeypatch.setattr("shutil.which", lambda name: None)
         rec = VideoRecorder(
             path=Path("unused.mp4"), camera_name=CAM1, width=64, height=48
@@ -126,7 +130,9 @@ class TestSetupValidation:
         with pytest.raises(RuntimeError, match="ffmpeg was not found"):
             rec.setup(state)
 
-    def test_does_not_require_ffmpeg_for_gif(self, state, tmp_path, monkeypatch):
+    def test_does_not_require_ffmpeg_for_gif(
+        self, state, tmp_path, monkeypatch
+    ) -> None:
         monkeypatch.setattr("shutil.which", lambda name: None)
         rec = VideoRecorder(
             path=tmp_path / "out.gif", camera_name=CAM1, width=64, height=48
@@ -135,15 +141,15 @@ class TestSetupValidation:
 
 
 class TestIsDueAndCaptureFrame:
-    def test_is_due_true_immediately(self, recorder, state):
+    def test_is_due_true_immediately(self, recorder, state) -> None:
         assert recorder.is_due(state) is True
 
-    def test_is_due_respects_fps_decimation(self, recorder, state):
+    def test_is_due_respects_fps_decimation(self, recorder, state) -> None:
         recorder.capture_frame(state, [], [], [])  # advances _next_record_time to 0.1
         state.data.time = 0.05
         assert recorder.is_due(state) is False
 
-    def test_is_due_respects_recording_trigger(self, state, tmp_path):
+    def test_is_due_respects_recording_trigger(self, state, tmp_path) -> None:
         rec = VideoRecorder(
             path=tmp_path / "out.gif",
             camera_name=CAM1,
@@ -154,19 +160,21 @@ class TestIsDueAndCaptureFrame:
         assert rec.is_due(state) is False
         rec.close()
 
-    def test_is_due_respects_max_frames(self, recorder, state):
+    def test_is_due_respects_max_frames(self, recorder, state) -> None:
         recorder.max_frames = 1
         recorder.capture_frame(state, [], [], [])
         state.data.time = 10.0  # past the fps gate too, so only max_frames can block it
         assert recorder.is_due(state) is False
 
-    def test_capture_frame_decimates_by_fps(self, recorder, state):
+    def test_capture_frame_decimates_by_fps(self, recorder, state) -> None:
         for i in range(5):
             state.data.time = i * 0.01  # fps=10 -> only t=0 is due among these
             recorder.capture_frame(state, [], [], [])
         assert recorder._frame_count == 1
 
-    def test_capture_frame_warns_once_at_max_frames(self, recorder, state, caplog):
+    def test_capture_frame_warns_once_at_max_frames(
+        self, recorder, state, caplog
+    ) -> None:
         recorder.max_frames = 1
         recorder.capture_frame(state, [], [], [])
         with caplog.at_level("WARNING"):
@@ -182,7 +190,7 @@ class TestIsDueAndCaptureFrame:
 class TestRenderFrameOverlayGating:
     """Each `show_*` flag should gate its matching `custom_*` overlay independently."""
 
-    def test_arrows_only_drawn_when_show_loads(self, recorder, state):
+    def test_arrows_only_drawn_when_show_loads(self, recorder, state) -> None:
         arrow = ArrowConfig(
             # MuJoCo scales arrow length by `force_map / meanmass`, so a unit
             # vector here would render at a sub-pixel fraction of a meter
@@ -199,7 +207,7 @@ class TestRenderFrameOverlayGating:
         enabled = recorder._render_frame(state, [arrow], [], [])
         assert not np.array_equal(baseline, enabled)
 
-    def test_lines_only_drawn_when_show_proximities(self, recorder, state):
+    def test_lines_only_drawn_when_show_proximities(self, recorder, state) -> None:
         line = LineConfig(
             pos1=np.array([-0.5, 0.0, 0.0]),
             pos2=np.array([0.5, 0.0, 0.0]),
@@ -214,7 +222,7 @@ class TestRenderFrameOverlayGating:
         enabled = recorder._render_frame(state, [], [line], [])
         assert not np.array_equal(baseline, enabled)
 
-    def test_traces_only_drawn_when_show_traces(self, recorder, state):
+    def test_traces_only_drawn_when_show_traces(self, recorder, state) -> None:
         trace = LineConfig(
             pos1=np.array([-0.5, 0.0, 0.0]),
             pos2=np.array([0.5, 0.0, 0.0]),
@@ -231,12 +239,12 @@ class TestRenderFrameOverlayGating:
 
 
 class TestDrawLabel:
-    def test_empty_text_is_a_no_op(self, recorder):
+    def test_empty_text_is_a_no_op(self, recorder) -> None:
         frame = np.zeros((48, 64, 3), dtype=np.uint8)
         result = recorder._draw_label(frame, {"text": ""})
         assert result is frame
 
-    def test_draws_visible_text(self, recorder):
+    def test_draws_visible_text(self, recorder) -> None:
         frame = np.zeros((48, 64, 3), dtype=np.uint8)
         result = recorder._draw_label(
             frame,
@@ -250,7 +258,7 @@ class TestDrawLabel:
         assert not np.array_equal(result, frame)
         assert result.max() > 0
 
-    def test_opaque_background_overwrites_exactly(self, recorder):
+    def test_opaque_background_overwrites_exactly(self, recorder) -> None:
         frame = np.full((48, 64, 3), 100, dtype=np.uint8)
         position, font_size, padding = (10, 10), 14, 4
         result = recorder._draw_label(
@@ -267,7 +275,7 @@ class TestDrawLabel:
         expected_rgb = tuple(round(c * 255) for c in Color.BLUE_500.rgba[:3])
         assert tuple(result[y0, x0]) == expected_rgb
 
-    def test_translucent_background_blends_with_frame(self, recorder):
+    def test_translucent_background_blends_with_frame(self, recorder) -> None:
         frame = np.full((48, 64, 3), 100, dtype=np.uint8)
         position, font_size, padding, alpha = (10, 10), 14, 4, 0.5
         result = recorder._draw_label(
@@ -284,7 +292,7 @@ class TestDrawLabel:
         expected = 100 * (1 - alpha) + 0 * alpha
         assert result[y0, x0, 0] == pytest.approx(expected, abs=1)
 
-    def test_no_background_leaves_surroundings_untouched(self, recorder):
+    def test_no_background_leaves_surroundings_untouched(self, recorder) -> None:
         frame = np.full((48, 64, 3), 100, dtype=np.uint8)
         result = recorder._draw_label(
             frame, {"text": "A", "position": (40, 40), "font_size": 12}
@@ -298,7 +306,7 @@ class TestSaveEncodesRealVideo:
     """Exercises the actual mediapy/ffmpeg/PIL encoding paths: the same code path that broke when numpy 2.5.0 shipped without mediapy support."""
 
     @pytest.mark.parametrize("suffix", [".mp4", ".webm", ".gif"])
-    def test_save_writes_a_readable_video(self, tmp_path, state, suffix):
+    def test_save_writes_a_readable_video(self, tmp_path, state, suffix) -> None:
         rec = VideoRecorder(
             path=tmp_path / f"out{suffix}",
             camera_name=CAM1,
@@ -334,7 +342,7 @@ class TestSaveEncodesRealVideo:
         finally:
             rec.close()
 
-    def test_save_is_a_no_op_with_no_frames(self, tmp_path, state):
+    def test_save_is_a_no_op_with_no_frames(self, tmp_path, state) -> None:
         rec = VideoRecorder(
             path=tmp_path / "empty.mp4", camera_name=CAM1, width=64, height=48
         ).setup(state)
@@ -342,7 +350,7 @@ class TestSaveEncodesRealVideo:
         assert not rec.path.exists()
         rec.close()
 
-    def test_close_kills_unfinished_encoder(self, tmp_path, state):
+    def test_close_kills_unfinished_encoder(self, tmp_path, state) -> None:
         """If `save` is never called, `close` must not leave a hung ffmpeg process behind."""
         rec = VideoRecorder(
             path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48, fps=10
@@ -357,8 +365,10 @@ class TestSaveEncodesRealVideo:
 
 
 class TestEncoderMissingFfmpeg:
-    def test_missing_ffmpeg_raises_clear_error(self, tmp_path, state, monkeypatch):
-        def raise_not_found(*args, **kwargs):
+    def test_missing_ffmpeg_raises_clear_error(
+        self, tmp_path, state, monkeypatch
+    ) -> None:
+        def raise_not_found(*args, **kwargs) -> Never:
             raise FileNotFoundError("ffmpeg")
 
         # Pretend ffmpeg is on PATH so setup()'s eager check passes, letting
@@ -380,21 +390,21 @@ class TestEncoderCodecArgs:
     """Verifies `quality`/`encode_speed` reach the ffmpeg command line, without spawning a real process."""
 
     @pytest.fixture
-    def captured_argv(self, monkeypatch):
+    def captured_argv(self, monkeypatch) -> list:
         calls = []
 
         class FakeStdin:
-            def write(self, data):
+            def write(self, data) -> None:
                 pass
 
         class FakeProc:
             stdin = FakeStdin()
             returncode = 0
 
-            def poll(self):
+            def poll(self) -> int:
                 return 0
 
-        def fake_popen(argv, **kwargs):
+        def fake_popen(argv, **kwargs) -> FakeProc:
             calls.append(argv)
             return FakeProc()
 
@@ -404,7 +414,9 @@ class TestEncoderCodecArgs:
         monkeypatch.setattr("subprocess.Popen", fake_popen)
         return calls
 
-    def test_mp4_uses_default_crf_and_preset(self, tmp_path, state, captured_argv):
+    def test_mp4_uses_default_crf_and_preset(
+        self, tmp_path, state, captured_argv
+    ) -> None:
         rec = VideoRecorder(
             path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48
         ).setup(state)
@@ -416,7 +428,7 @@ class TestEncoderCodecArgs:
 
     def test_mp4_quality_and_encode_speed_overrides(
         self, tmp_path, state, captured_argv
-    ):
+    ) -> None:
         rec = VideoRecorder(
             path=tmp_path / "out.mp4",
             camera_name=CAM1,
@@ -433,7 +445,7 @@ class TestEncoderCodecArgs:
 
     def test_webm_quality_and_encode_speed_overrides(
         self, tmp_path, state, captured_argv
-    ):
+    ) -> None:
         rec = VideoRecorder(
             path=tmp_path / "out.webm",
             camera_name=CAM1,
@@ -450,7 +462,7 @@ class TestEncoderCodecArgs:
 
 
 class TestSnapshot:
-    def test_snapshot_writes_a_single_image(self, recorder, state, tmp_path):
+    def test_snapshot_writes_a_single_image(self, recorder, state, tmp_path) -> None:
         snap_path = tmp_path / "snap.png"
         recorder.snapshot(state, snap_path)
         assert snap_path.exists()

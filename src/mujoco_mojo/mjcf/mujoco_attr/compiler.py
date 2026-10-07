@@ -45,7 +45,7 @@ class Compiler(XMLModel):
         "assetdir",
         "alignfree",
         # "savecompiled", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-        # "savecononical", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+        # "savecanonical", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
         "conflict",
     )
     children = ("lengthrange",)
@@ -126,7 +126,7 @@ class Compiler(XMLModel):
     # savecompiled: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
     # """This attribute and the next one say how the model is saved as MJCF; like saveinertial, they are not saved themselves. If "true", the values which compilation made of the model are saved: for example the size of a geom which was fitted to a mesh, or the pose of a body after alignment with its free joint. If "false", the model is saved as it is written in the mjSpec, and the saved file compiles to the same model; the spec need not have been compiled."""
 
-    # savecononical: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    # savecanonical: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
     # """If "true", orientations are saved as quaternions, angles in radians, sizes and poses which were given with fromto as size, pos and quat, and a fullinertia as diaginertia and quat. If "false", they are saved in the notation in which they were written. This attribute has an effect only if savecompiled is "false": compiled values are always saved in the canonical notation."""
 
     conflict: Conflict = Conflict.WARNING

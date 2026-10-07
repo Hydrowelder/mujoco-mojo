@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -510,7 +511,7 @@ def _splice_groups(schema: Schema) -> None:
         element.constraints = expanded_constraints
 
 
-def _tracked(iterator, total: int):
+def _tracked(iterator, total: int) -> Iterator:
     from rich.progress import track
 
     yield from track(

@@ -302,7 +302,7 @@ else:
     MatN = Annotated[NDArray[Shape["*, *"], float | int], ...]  # type: ignore  # noqa: F722
 
 
-def empty_list_field():
+def empty_list_field() -> Any:
     return Field(default_factory=list, exclude_if=is_empty_list)
 
 

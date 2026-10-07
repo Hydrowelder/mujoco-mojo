@@ -160,7 +160,7 @@ def runtime(
     )
 
     # Define a custom signal sampler
-    def sample_nutation(state: mojo.MjState):
+    def sample_nutation(state: mojo.MjState) -> None:
         """Adds the [nutation angle](https://en.wikipedia.org/wiki/Nutation) as an output signal."""
         assert runtime_manager.signal_manager
 

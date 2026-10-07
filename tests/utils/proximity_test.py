@@ -257,7 +257,7 @@ def compiled_model(model_with_geoms: ModelWithGeoms) -> CompiledModel:
 # ============================================================================
 
 
-def test_proximity_type_enum():
+def test_proximity_type_enum() -> None:
     """Test mojo.ProximityType enum values."""
     assert mojo.ProximityType.SPHERE_TO_SPHERE == 0
     assert mojo.ProximityType.CONVEX_HULL == 1
@@ -276,7 +276,7 @@ def test_proximity_type_enum():
 
 def force_sphere_to_sphere(
     compiled_model: CompiledModel, algorithm: mojo.ProximityType
-):
+) -> None:
     dist, _p1, _p2, prox_type = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
         volume_2=compiled_model.bunny_in_cup_geom,
@@ -288,7 +288,7 @@ def force_sphere_to_sphere(
     assert prox_type == mojo.ProximityType.SPHERE_TO_SPHERE
 
 
-def test_convex_hull_proximity(compiled_model: CompiledModel):
+def test_convex_hull_proximity(compiled_model: CompiledModel) -> None:
     """Test convex hull proximity calculation."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -304,7 +304,7 @@ def test_convex_hull_proximity(compiled_model: CompiledModel):
     assert prox_type == mojo.ProximityType.CONVEX_HULL
 
 
-def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel):
+def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel) -> None:
     """CONVEX_HULL's narrowphase uses MuJoCo's native mj_geomDistance, which only supports geoms (a SiteMesh's id lives in a separate namespace) - it should raise rather than silently measure against the wrong geom."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
@@ -321,7 +321,7 @@ def test_convex_hull_proximity_rejects_site_mesh(compiled_model: CompiledModel):
 
 def test_vertex_to_face_proximity_with_site_mesh_matches_equivalent_geom(
     compiled_model: CompiledModel,
-):
+) -> None:
     """A SiteMesh gives the same VERTEX_TO_FACE distance as a GeomMesh at the identical compiled pose/mesh (bunny_in_cup_geom and bunny_in_cup_site share a body and mesh, and bunny_in_cup_site's pose is corrected to coincide with the geom's compiled pose - see its docstring on ModelWithGeoms) - proves the trimesh-based narrowphase (unlike CONVEX_HULL's) is actually correct for sites, not just shape-checked."""
     geom_proximity = mojo.utils.Proximity(
         volume_1=compiled_model.cup_geom,
@@ -344,7 +344,7 @@ def test_vertex_to_face_proximity_with_site_mesh_matches_equivalent_geom(
     assert site_dist == pytest.approx(geom_dist, abs=1e-6)
 
 
-def test_vertex_to_face_proximity(compiled_model: CompiledModel):
+def test_vertex_to_face_proximity(compiled_model: CompiledModel) -> None:
     """Test vertex-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -363,7 +363,7 @@ def test_vertex_to_face_proximity(compiled_model: CompiledModel):
     assert prox_type == mojo.ProximityType.VERTEX_TO_FACE
 
 
-def test_face_to_face_proximity(compiled_model: CompiledModel):
+def test_face_to_face_proximity(compiled_model: CompiledModel) -> None:
     """Test face-to-face proximity calculation."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -379,7 +379,7 @@ def test_face_to_face_proximity(compiled_model: CompiledModel):
     assert prox_type == mojo.ProximityType.FACE_TO_FACE
 
 
-def test_sphere_to_sphere_proximity(compiled_model: CompiledModel):
+def test_sphere_to_sphere_proximity(compiled_model: CompiledModel) -> None:
     """Test sphere-to-sphere (broadphase only) proximity calculation."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -396,7 +396,7 @@ def test_sphere_to_sphere_proximity(compiled_model: CompiledModel):
     assert prox_type == mojo.ProximityType.SPHERE_TO_SPHERE
 
 
-def test_get_proximity_dispatcher(compiled_model: CompiledModel):
+def test_get_proximity_dispatcher(compiled_model: CompiledModel) -> None:
     """Test get_proximity dispatcher method."""
     # Test each algorithm type returns correct mojo.ProximityType
     for algo in list(mojo.ProximityType):
@@ -416,7 +416,7 @@ def test_get_proximity_dispatcher(compiled_model: CompiledModel):
         assert p2.shape == (3,)
 
 
-def test_proximity_reciprocity(compiled_model: CompiledModel):
+def test_proximity_reciprocity(compiled_model: CompiledModel) -> None:
     """
     Test that A -> B distance is identical to B -> A distance, and that contact points (p1, p2) are correctly swapped.
     """
@@ -460,7 +460,7 @@ def test_proximity_reciprocity(compiled_model: CompiledModel):
 # ============================================================================
 
 
-def test_broadphase_cutoff(compiled_model: CompiledModel):
+def test_broadphase_cutoff(compiled_model: CompiledModel) -> None:
     """Test that broadphase cutoff (dist_max) works correctly."""
     for algo in list(mojo.ProximityType):
         force_sphere_to_sphere(compiled_model, algo)
@@ -471,7 +471,7 @@ def test_broadphase_cutoff(compiled_model: CompiledModel):
 # ============================================================================
 
 
-def test_algorithm_distance_ordering(compiled_model: CompiledModel):
+def test_algorithm_distance_ordering(compiled_model: CompiledModel) -> None:
     """
     Test that different proximity algorithms produce consistent relative distances.
 
@@ -506,7 +506,7 @@ def test_algorithm_distance_ordering(compiled_model: CompiledModel):
         # this is mainly a rule of thumb, i dont know how long I will keep this test
 
 
-def test_fromto_returns_valid_points(compiled_model: CompiledModel):
+def test_fromto_returns_valid_points(compiled_model: CompiledModel) -> None:
     """Test that fromto parameter returns valid closest points."""
     # Test each algorithm with fromto=True
     for algo in list(mojo.ProximityType):
@@ -537,7 +537,7 @@ def test_fromto_returns_valid_points(compiled_model: CompiledModel):
 # ============================================================================
 
 
-def test_local_verts_faces_extraction(compiled_model: CompiledModel):
+def test_local_verts_faces_extraction(compiled_model: CompiledModel) -> None:
     """Test that local vertices and faces are correctly extracted from mesh."""
     # Bake proximity to extract mesh data
     compiled_model.bunny_in_cup_geom.bake_proximity(
@@ -566,7 +566,7 @@ def test_local_verts_faces_extraction(compiled_model: CompiledModel):
     assert np.all(faces >= 0), "Face indices should be non-negative"
 
 
-def test_baked_mesh_properties(compiled_model: CompiledModel):
+def test_baked_mesh_properties(compiled_model: CompiledModel) -> None:
     """Test that baked trimesh has correct properties."""
     # Bake proximity
     compiled_model.bunny_in_cup_geom.bake_proximity(
@@ -591,7 +591,7 @@ def test_baked_mesh_properties(compiled_model: CompiledModel):
 # ============================================================================
 
 
-def test_proximity_caching(compiled_model: CompiledModel):
+def test_proximity_caching(compiled_model: CompiledModel) -> None:
     """Test that proximity calculations are cached properly."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -612,7 +612,7 @@ def test_proximity_caching(compiled_model: CompiledModel):
     assert np.isclose(dist1, dist2)
 
 
-def test_get_proximity_caches_per_timestep(compiled_model: CompiledModel):
+def test_get_proximity_caches_per_timestep(compiled_model: CompiledModel) -> None:
     """get_proximity() should only run the underlying calculation once per timestep, regardless of how many times it's called (e.g. once for telemetry, once as a runtime input)."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -647,7 +647,7 @@ def test_get_proximity_caches_per_timestep(compiled_model: CompiledModel):
     spy.assert_called_once()
 
 
-def test_radius_caching(compiled_model: CompiledModel):
+def test_radius_caching(compiled_model: CompiledModel) -> None:
     """Test that bounding radius is cached."""
     # Initially NaN
     assert np.isnan(compiled_model.bunny_in_cup_geom._rad)
@@ -673,7 +673,7 @@ def test_radius_caching(compiled_model: CompiledModel):
 # ============================================================================
 
 
-def test_get_visuals_returns_line_config(compiled_model: CompiledModel):
+def test_get_visuals_returns_line_config(compiled_model: CompiledModel) -> None:
     """get_visuals() returns a LineConfig between the closest points on two geoms."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -693,7 +693,7 @@ def test_get_visuals_returns_line_config(compiled_model: CompiledModel):
     assert np.all(np.isfinite(result.pos2))
 
 
-def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel):
+def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel) -> None:
     """get_visuals() returns None when visualize=False."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,
@@ -705,7 +705,9 @@ def test_get_visuals_returns_none_when_disabled(compiled_model: CompiledModel):
     assert proximity.get_visuals(compiled_model.state) is None
 
 
-def test_get_visuals_uses_cached_result_on_same_timestep(compiled_model: CompiledModel):
+def test_get_visuals_uses_cached_result_on_same_timestep(
+    compiled_model: CompiledModel,
+) -> None:
     """get_visuals() reuses the cached proximity result within the same timestep."""
     proximity = mojo.utils.Proximity(
         volume_1=compiled_model.bunny_in_cup_geom,

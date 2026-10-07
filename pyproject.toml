@@ -113,11 +113,21 @@ packages = ["src/mujoco_mojo"]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
 
 [tool.ruff.lint]
-select = ["D", "RUF", "E", "F", "W", "UP"] # some suggest using "ALL"
+select = [
+    "ANN201",
+    "ANN202",
+    # "ANN",
+    "D",
+    "RUF",
+    "E",
+    "F",
+    "W",
+    "UP",
+] # some suggest using "ALL"
 
 ignore = [
     # modules
-    "ANN", # flake8-annotations
+    # "ANN", # flake8-annotations
     "COM", # flake8-commas
     "C90", # mccabe complexity
     "DJ",  # django

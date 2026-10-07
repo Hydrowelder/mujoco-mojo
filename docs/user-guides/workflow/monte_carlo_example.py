@@ -33,7 +33,7 @@ class Handoff(mojo.UserData):
         box1: mojo.Body,
         box2: mojo.Body,
         mojo_model: mojo.MojoModel,
-    ):
+    ) -> None:
         mult = 1 if loc == "pz" else -1
 
         box1.sites.append(
@@ -79,7 +79,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"]):
+    def add_spring_force(self, loc: Literal["pz", "mz"]) -> None:
         base, tip, stiffness, stroke = self.springs[loc]
 
         # --8<-- [start:forces]

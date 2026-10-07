@@ -14,7 +14,7 @@ class MojoBaseModel(BaseModel):
 
     def dump_to_path(
         self, path: Path, indent: int | None = None, encoding: str = "utf-8"
-    ):
+    ) -> None:
         lock_path = path.with_suffix(path.suffix + ".lock")
         with FileLock(lock_path):
             path.write_text(self.model_dump_json(indent=indent), encoding=encoding)

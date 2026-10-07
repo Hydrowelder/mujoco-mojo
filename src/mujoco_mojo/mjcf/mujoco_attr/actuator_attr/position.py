@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
 import numpy as np
 from pydantic import model_validator
@@ -49,7 +49,7 @@ class ActuatorPosition(ActuatorBase):
     """Damping applied by the actuator. When using this attribute, it is recommended to use the implicitfast or implicit integrators."""
 
     dampratio: float = 0
-    """Damping applied by the actuator, using damping ratio units. This attribute is exclusive with kv and has similar meaning, but instead of units of force/velocity, the units are `2 * sqrt(kp * m)`, corresponding to a harmonic oscillator's damping ratio. A value of 1 corresponds to a critically damped oscillator, which often produces desirable behavior. Values smaller or larger than 1 correspond to underdamped and overdamped oscillations, respectively. The mass mm is computed at the reference configuration mjModel.qpos0, taking into account joint armature. However, passive damping or frictionloss in the affected joints are not taken into account; if they are non-negligible, dampratio values smaller than 1 might be required to achieve desirable motion. When using this attribute, it is recommended to use the implicitfast or implicit integrators."""
+    """Damping applied by the actuator, using damping ratio units. This attribute is exclusive with kv and has similar meaning, but instead of units of force/velocity, the units are `2 * sqrt(kp * m)`, corresponding to a harmonic oscillator's damping ratio. A value of 1 corresponds to a critically damped oscillator, which often produces desirable behavior. Values smaller or larger than 1 correspond to underdamped and overdamped oscillations, respectively. The reflected mass `m = (J M^-1 J^T)^-1` is computed at the reference configuration mjModel.qpos0 from the actuator transmission Jacobian `J` and inertia matrix `M` (averaged across force outputs for multi-output actuators), taking into account joint armature, tendon armature, and actuator armature. However, passive damping or frictionloss in the affected joints or tendons are not taken into account; if they are non-negligible, dampratio values smaller than 1 might be required to achieve desirable motion. When using this attribute, it is recommended to use the implicitfast or implicit integrators."""
 
     timeconst: float = 0
     """Time-constant of optional first-order filter. If larger than zero, the actuator uses the filterexact dynamics type, if zero (the default) no filter is used."""
@@ -114,7 +114,7 @@ class ActuatorPosition(ActuatorBase):
         return np.array((0, -self.kp, -self.kv))
 
     @model_validator(mode="after")
-    def validate_position(self):
+    def validate_position(self) -> Self:
         if self.kv != 0 and self.dampratio != 0:
             msg = "kv and dampratio are mutually exclusive"
             logger.error(msg)

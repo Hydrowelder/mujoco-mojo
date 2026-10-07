@@ -1,3 +1,5 @@
+from typing import Self
+
 from pydantic import model_validator
 
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.base import SensorBase
@@ -75,7 +77,7 @@ class SensorContact(SensorBase):
     """Reduction criterion to use. Also see reduction above."""
 
     @model_validator(mode="after")
-    def validate_contact_sensor(self):
+    def validate_contact_sensor(self) -> Self:
         if self.num < 1:
             msg = "num must be >= 1"
             logger.error(msg)

@@ -482,7 +482,7 @@ class Body(XMLModel):
             "pe",
             "ke_total",
         ],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -563,7 +563,7 @@ class Body(XMLModel):
                 )
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 match channel:
                     case "xpos":

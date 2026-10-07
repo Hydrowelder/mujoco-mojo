@@ -50,12 +50,12 @@ def clean_and_copy_file(source: Path, dest: Path) -> None:
         print(f"Ruff error on {dest.name}: {e.stderr.decode()}")
 
 
-def stage_file(file_path: Path):
+def stage_file(file_path: Path) -> None:
     """Stage the file in git."""
     subprocess.run(["git", "add", str(file_path)], check=True)
 
 
-def main():
+def main() -> None:
     changed_files = [Path(f).resolve() for f in sys.argv[1:]]
 
     processed_any = False

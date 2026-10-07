@@ -9,7 +9,7 @@ import socket
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 
 import polars as pl
 import stochas
@@ -277,7 +277,7 @@ def _format_filter_error(exc: Exception) -> str:
     )
 
 
-def get_network_ip():
+def get_network_ip() -> str:
     """Detects the primary local network IP of the host machine."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -292,7 +292,7 @@ def get_network_ip():
 
 
 @router.get("/", response_class=HTMLResponse)
-async def get_mosaic(request: Request):
+async def get_mosaic(request: Request) -> HTMLResponse:
     """Serves the initial mosiac frame."""
     return shared.templates.TemplateResponse(
         request=request, name="mosaic.html", context={"request": request}
@@ -300,7 +300,7 @@ async def get_mosaic(request: Request):
 
 
 @router.get("/api/trials")
-async def get_valid_trials():
+async def get_valid_trials() -> dict[str, list[str]]:
     """Scans the workdir for folders containing telemetry data."""
     job = shared.CURRENT_JOB
     from mujoco_mojo.runtime.signal_manager import SignalManager
@@ -326,7 +326,7 @@ async def get_valid_trials():
 
 
 @router.get("/{trial_id}", response_class=HTMLResponse)
-async def get_trial_viewer(request: Request, trial_id: str):
+async def get_trial_viewer(request: Request, trial_id: str) -> HTMLResponse:
     """Land here when clicking a trial."""
     job = shared.CURRENT_JOB
 
@@ -372,7 +372,7 @@ async def get_trial_viewer(request: Request, trial_id: str):
 
 
 @router.get("/api/filter-schema")
-async def get_filter_schema():
+async def get_filter_schema() -> list[dict]:
     """
     Returns metadata for all available filter types, derived from Pydantic models.
 
@@ -468,7 +468,7 @@ async def get_filter_schema():
 
 
 @router.get("/api/plot-config-schema")
-async def get_plot_config_schema():
+async def get_plot_config_schema() -> dict[str, Any]:
     """
     Returns PlotConfig's raw JSON schema, descriptions included - single
     source of truth for the Plot Editor's and JSON editor's hover tooltips
@@ -533,7 +533,7 @@ def _resolve_profile_path(name: str) -> Path:
 
 
 @router.get("/api/profiles")
-async def list_profiles():
+async def list_profiles() -> list[dict[str, Any]]:
     """List all saved profiles, including those in sub-folders."""
     d = _get_profiles_dir()
     profiles = [
@@ -568,7 +568,7 @@ def _parse_profile(data: object, name: str) -> _PlotProfile:
 
 
 @router.get("/api/profiles/{name:path}")
-async def get_profile(name: str):
+async def get_profile(name: str) -> dict[str, Any]:
     """Return the saved profile (tabs + active index), validated against the schema."""
     from pydantic import ValidationError
 
@@ -592,7 +592,7 @@ _PROFILE_MAX_BYTES = (
 
 
 @router.post("/api/profiles/{name:path}")
-async def save_profile(name: str, request: Request, body: dict):
+async def save_profile(name: str, request: Request, body: dict) -> dict[str, str]:
     """
     Save the current set of plot tabs as a named profile.
 
@@ -625,7 +625,7 @@ async def save_profile(name: str, request: Request, body: dict):
 
 
 @router.delete("/api/profiles/{name:path}")
-async def delete_profile(name: str):
+async def delete_profile(name: str) -> dict[str, str]:
     """Delete a saved profile."""
     path = _resolve_profile_path(name)
     if not path.exists():
@@ -712,7 +712,7 @@ def _lab_meta(path: Path, d: Path) -> dict:
 
 
 @router.get("/api/lab")
-async def list_labs():
+async def list_labs() -> list[dict]:
     """List all saved lab graphs with their input column requirements and output labels."""
     d = _get_lab_dir()
     return [
@@ -724,7 +724,7 @@ async def list_labs():
 
 
 @router.get("/api/lab/{name:path}")
-async def get_lab(name: str):
+async def get_lab(name: str) -> Any:
     """Return the raw LiteGraph JSON for a saved lab."""
     path = _resolve_lab_path(name)
     if not path.exists():
@@ -733,7 +733,7 @@ async def get_lab(name: str):
 
 
 @router.post("/api/lab/{name:path}")
-async def save_lab(name: str, request: Request):
+async def save_lab(name: str, request: Request) -> dict[str, str]:
     """Save a LiteGraph graph JSON as a named lab."""
     cl = request.headers.get("content-length")
     if cl and int(cl) > _LAB_MAX_BYTES:
@@ -747,7 +747,7 @@ async def save_lab(name: str, request: Request):
 
 
 @router.delete("/api/lab/{name:path}")
-async def delete_lab(name: str):
+async def delete_lab(name: str) -> dict[str, str]:
     """Delete a saved lab."""
     path = _resolve_lab_path(name)
     if not path.exists():
@@ -890,21 +890,21 @@ def _get_column_manifest(path: Path, mtime: float) -> ColumnManifest:
 
 
 @lru_cache(maxsize=2048)
-def _get_atomic_column(path: Path, col_name: str, mtime: float):
+def _get_atomic_column(path: Path, col_name: str, mtime: float) -> list[Any]:
     """
     Fetches a single column. 'mtime' is the cache-breaker. If the file changes, the mtime changes, triggering a fresh read even if the path and column name are the same.
     """
     return pl.scan_parquet(path).select(col_name).collect().to_series().to_list()
 
 
-@router.get("/{trial_id}/data")
+@router.get("/{trial_id}/data", response_model=None)
 async def get_trial_data(
     trial_id: str,
     cols: str = Query(None),
     filters: str = Query(None),
     display_unit_system: str | None = Query(None),
     max_points: int | None = Query(None, gt=0),
-):
+) -> dict[str, Any]:
     """
     Loops over the columns in the trial_id provided and returns their data.
 

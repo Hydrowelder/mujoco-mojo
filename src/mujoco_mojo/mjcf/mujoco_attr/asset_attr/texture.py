@@ -262,7 +262,7 @@ class TextureBuiltIn(TextureBase):
     """If true, images loaded from file are flipped in the vertical direction. Does not affect procedural textures."""
 
     nchannel: int = 3
-    """The number of channels in the texture image file. This allows loading 4-channel textures (RGBA) or single-channel textures (e.g., for Physics-Based Rendering properties such as roughness or metallic)."""
+    """The number of channels in the texture image file. This allows loading 4-channel textures (RGBA) or single-channel textures (e.g., for Physics-Based Rendering properties such as roughness or metallic). Procedural, cube and skybox textures must have 3 channels."""
 
 
 AnyTexture = Annotated[

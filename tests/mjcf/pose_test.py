@@ -6,7 +6,7 @@ from mujoco_mojo.typing import EulerSeq
 from mujoco_mojo.utils.column import Column
 
 
-def test_pose_initialization():
+def test_pose_initialization() -> None:
     """Verify that Pose captures both position and orientation correctly."""
     p = np.asarray([1.0, 2.0, 3.0])
     q = np.asarray([1.0, 0.0, 0.0, 0.0])
@@ -16,7 +16,7 @@ def test_pose_initialization():
     assert np.array_equal(np.asarray(pose.quat), q)
 
 
-def test_pose_apply():
+def test_pose_apply() -> None:
     """Test point transformation (local to world)."""
     # Pose: Translate [1, 1, 1], Rotate 90deg around Z
     pose = PoseEuler(
@@ -34,7 +34,7 @@ def test_pose_apply():
     assert np.allclose(world_pt, [1.0, 2.0, 1.0])
 
 
-def test_pose_multiplication_composition():
+def test_pose_multiplication_composition() -> None:
     """Test composition of two Poses."""
     # P1: Move 1m North (+Y)
     p1 = PoseQuat(pos=np.asarray([0, 1, 0]))
@@ -47,7 +47,7 @@ def test_pose_multiplication_composition():
     assert np.allclose(np.asarray(p_combined.pos), [1.0, 1.0, 0.0])
 
 
-def test_pose_inversion():
+def test_pose_inversion() -> None:
     """Verify P * P.inv() results in the identity pose."""
     pose = PoseEuler(pos=np.asarray([5.0, -2.0, 3.0]), euler=np.asarray([45, 30, 10]))
 
@@ -58,7 +58,7 @@ def test_pose_inversion():
     assert np.allclose(identity.as_matrix(), np.eye(3), atol=1e-7)
 
 
-def test_expressed_in():
+def test_expressed_in() -> None:
     """Test relative coordinate frame transformation."""
     # World frame: Ball at [10, 0, 0], Camera at [2, 0, 0]
     ball_world = PoseQuat(pos=np.asarray([10.0, 0.0, 0.0]))
@@ -70,7 +70,7 @@ def test_expressed_in():
     assert np.allclose(np.asarray(ball_rel.pos), [8.0, 0.0, 0.0])
 
 
-def test_look_at_pose():
+def test_look_at_pose() -> None:
     """Verify Pose.look_at sets both position and pointing direction."""
     eye = np.asarray([0.0, 0.0, 1.0])
     target = np.asarray([0.0, 0.0, 0.0])  # Looking straight down
@@ -85,7 +85,7 @@ def test_look_at_pose():
     assert np.allclose(pose.apply(np.asarray([0, 0, -1])), [0, 0, 0])
 
 
-def test_look_at_pose_roll():
+def test_look_at_pose_roll() -> None:
     """Verify Pose.look_at forwards roll to the underlying orientation, leaving position and forward direction unaffected."""
     eye = np.asarray([0.0, 0.0, 0.0])
     target = np.asarray([1.0, 0.0, 0.0])
@@ -105,7 +105,7 @@ def test_look_at_pose_roll():
     )
 
 
-def test_look_at_pose_up_overrides_roll():
+def test_look_at_pose_up_overrides_roll() -> None:
     """Verify Pose.look_at still accepts an explicit up vector, matching the legacy convention."""
     eye = np.asarray([0.0, 0.0, 0.0])
     target = np.asarray([1.0, 0.0, 0.0])
@@ -118,7 +118,7 @@ def test_look_at_pose_up_overrides_roll():
     assert np.allclose(world_x_axis, np.cross([0, 0, 1], [1, 0, 0]), atol=1e-7)
 
 
-def test_pose_converters():
+def test_pose_converters() -> None:
     """Verify pivoting between Pose types preserves translation."""
     p_orig = np.asarray([7.0, 8.0, 9.0])
     pose_quat = PoseQuat(pos=p_orig, quat=np.asarray([1, 0, 0, 0]))
@@ -146,13 +146,13 @@ _ROW = {
 }
 
 
-def test_from_row_builds_the_pose_from_a_telemetry_row():
+def test_from_row_builds_the_pose_from_a_telemetry_row() -> None:
     pose = PoseQuat.from_row(_ROW, "Sites/A")
     assert np.allclose(pose.pos, [1.0, 2.0, 3.0])
     assert np.allclose(pose.quat, [0.5, 0.5, 0.5, 0.5])
 
 
-def test_from_row_accepts_a_column_and_other_channels():
+def test_from_row_accepts_a_column_and_other_channels() -> None:
     row = {
         k.replace("xpos", "xipos").replace("quat", "xiquat"): v for k, v in _ROW.items()
     }
@@ -165,7 +165,7 @@ def test_from_row_accepts_a_column_and_other_channels():
     assert np.allclose(pose.pos, [1.0, 2.0, 3.0])
 
 
-def test_from_row_reads_quaternion_components_by_name():
+def test_from_row_reads_quaternion_components_by_name() -> None:
     row = {
         **_ROW,
         "Sites/A/quat:w": 1.0,
@@ -176,7 +176,7 @@ def test_from_row_reads_quaternion_components_by_name():
     assert np.allclose(PoseQuat.from_row(row, "Sites/A").quat, [1.0, 0.0, 0.0, 0.0])
 
 
-def test_from_row_raises_naming_every_missing_column():
+def test_from_row_raises_naming_every_missing_column() -> None:
     row = {k: v for k, v in _ROW.items() if not k.endswith(("quat:y", "xpos:z"))}
     with pytest.raises(ValueError, match="Sites/A/quat:y") as excinfo:
         PoseQuat.from_row(row, "Sites/A")
@@ -184,6 +184,6 @@ def test_from_row_raises_naming_every_missing_column():
     assert "request(channels=" in str(excinfo.value)
 
 
-def test_from_row_rejects_a_single_column_source():
+def test_from_row_rejects_a_single_column_source() -> None:
     with pytest.raises(ValueError, match="names a single column"):
         PoseQuat.from_row(_ROW, "Sites/A/xpos:x")

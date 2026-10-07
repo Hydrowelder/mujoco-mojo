@@ -56,7 +56,7 @@ class MeshContainer(XMLModel):
 # --- Tests ---
 
 
-def test_format_value():
+def test_format_value() -> None:
     """Verify standard MJCF string formatting."""
     assert _format_value(True) == "true"
     assert _format_value(False) == "false"
@@ -64,7 +64,7 @@ def test_format_value():
     assert _format_value(1.23) == "1.23"
 
 
-def test_basic_serialization():
+def test_basic_serialization() -> None:
     """Verify a simple model generates correct XML."""
     model = SubModel(value=1.5)
     el = model.to_xml(compiler_degrees=Angle.DEGREE, compiler_eulerseq=EulerSeq.XYZ)
@@ -73,7 +73,7 @@ def test_basic_serialization():
     assert el.get("value") == "1.5"
 
 
-def test_exclude_default():
+def test_exclude_default() -> None:
     """Verify that default values are omitted from XML when requested."""
     model = ParentModel(name="test")  # 'test' is default
 
@@ -94,7 +94,7 @@ def test_exclude_default():
     assert el_incl.get("name") == "test"
 
 
-def test_recursive_flattening():
+def test_recursive_flattening() -> None:
     """Verify that nested XMLModels in 'attributes' are flattened into the parent tag."""
     child = SubModel(value=5.0)
     parent = ParentModel(name="root", sub=child)
@@ -107,7 +107,7 @@ def test_recursive_flattening():
     assert len(el) == 0  # Should not be a child element
 
 
-def test_children_serialization():
+def test_children_serialization() -> None:
     """Verify that fields in 'children' are appended as sub-elements."""
     child1 = SubModel(value=1.0)
     child2 = SubModel(value=2.0)
@@ -120,7 +120,7 @@ def test_children_serialization():
     assert el[1].get("value") == "2.0"
 
 
-def test_exclusive_groups():
+def test_exclusive_groups() -> None:
     """Verify that __exclusive_groups__ raises error on collision."""
     # Valid: only one set
     ExclusiveModel(a=1)
@@ -131,7 +131,7 @@ def test_exclusive_groups():
         ExclusiveModel(a=1, b=2)
 
 
-def test_invalid_names():
+def test_invalid_names() -> None:
     """Verify MuJoCo reserved character validation."""
     # FIX: SubModel now has a 'name' field defined
     with pytest.raises(ValueError, match="Invalid name"):
@@ -141,7 +141,7 @@ def test_invalid_names():
         SubModel(name="bad/name")
 
 
-def test_rgba_warning(caplog):
+def test_rgba_warning(caplog) -> None:
     """Verify that warn_rgba triggers a logger warning for values > 1."""
     # MuJoCo uses 0-1 range. 255 should trigger the warning validator.
     rgba_255 = np.asarray([255, 0, 0, 255])
@@ -153,14 +153,14 @@ def test_rgba_warning(caplog):
     assert "You entered rgba=array([255,   0,   0, 255])" in caplog.text
 
 
-def test_exclusive_groups_none_check():
+def test_exclusive_groups_none_check() -> None:
     """Verify that exclusive groups pass if neither is set."""
     # This should be valid
     model = ExclusiveModel(a=None, b=None)
     assert model.a is None and model.b is None
 
 
-def test_asset_bundling(tmp_path: Path):
+def test_asset_bundling(tmp_path: Path) -> None:
     """Test the asset crawler and file copying logic."""
     # Setup dummy asset
     asset_file = tmp_path / "mesh.stl"
@@ -182,7 +182,7 @@ def test_asset_bundling(tmp_path: Path):
 
 def test_bundle_assets_threads_symlink_setting_to_copy_asset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     """bundle_assets reads MujocoMojoSettings.general.symlink and passes it through to copy_asset, regardless of platform."""
     import mujoco_mojo.mjcf.xml_model as xml_model_module
 
@@ -196,7 +196,9 @@ def test_bundle_assets_threads_symlink_setting_to_copy_asset(
 
     calls: list[bool] = []
 
-    def _fake_copy_asset(source, dest_file, known_checksum=None, prefer_symlinks=False):
+    def _fake_copy_asset(
+        source, dest_file, known_checksum=None, prefer_symlinks=False
+    ) -> None:
         calls.append(prefer_symlinks)
 
     monkeypatch.setattr(xml_model_module, "copy_asset", _fake_copy_asset)
@@ -210,7 +212,7 @@ def test_bundle_assets_threads_symlink_setting_to_copy_asset(
     assert calls == [True]
 
 
-def test_asset_bundling_disambiguates_same_basename_conflicts(tmp_path: Path):
+def test_asset_bundling_disambiguates_same_basename_conflicts(tmp_path: Path) -> None:
     """Two different-content files sharing a basename get distinct, nested destinations instead of one silently overwriting the other."""
     wood_dir = tmp_path / "textures" / "wood"
     steel_dir = tmp_path / "textures" / "steel"
@@ -237,7 +239,7 @@ def test_asset_bundling_disambiguates_same_basename_conflicts(tmp_path: Path):
     assert (target_dir / "steel" / "texture.png").read_text() == "steel content"
 
 
-def test_asset_bundling_dedupes_identical_content_same_basename(tmp_path: Path):
+def test_asset_bundling_dedupes_identical_content_same_basename(tmp_path: Path) -> None:
     """Two byte-identical files sharing a basename collapse to one destination and one copy, rather than being treated as a conflict."""
     dir_a, dir_b = tmp_path / "a", tmp_path / "b"
     dir_a.mkdir()
@@ -262,7 +264,7 @@ def test_asset_bundling_dedupes_identical_content_same_basename(tmp_path: Path):
     assert list(target_dir.rglob("*.png")) == [target_dir / "texture.png"]
 
 
-def test_subclass_validation():
+def test_subclass_validation() -> None:
     """Verify that missing fields in attributes/children are caught at class definition."""
     with pytest.raises(TypeError, match="not defined as a field"):
 
@@ -271,7 +273,7 @@ def test_subclass_validation():
             attributes = ("ghost_field",)
 
 
-def test_flattening_collision():
+def test_flattening_collision() -> None:
     """Verify collision detection when two sub-models define the same attribute name."""
 
     class CollisionChild(XMLModel):

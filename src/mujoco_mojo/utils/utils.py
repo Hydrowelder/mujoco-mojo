@@ -68,7 +68,7 @@ def write_dojo_script(workdir: Path) -> None:
     os.chmod(dest, 0o755)
 
 
-def get_local_ip():
+def get_local_ip() -> str:
     """Returns the actual local IP address of this machine."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:

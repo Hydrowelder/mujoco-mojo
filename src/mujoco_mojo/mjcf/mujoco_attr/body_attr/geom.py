@@ -309,7 +309,7 @@ class GeomBase(XMLModel, ABC):
             Literal["xpos", "xmat", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
             MetadataLike | None,
         ] = ["xpos", "xvelp", "xvelr", "xaccp", "xaccr", "quat"],
-    ):
+    ) -> None:
         """
         Registers specific channels for logging.
 
@@ -376,7 +376,7 @@ class GeomBase(XMLModel, ABC):
                 )
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             for channel in channels:
                 # Manual mapping to avoid getattr
                 match channel:

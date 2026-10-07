@@ -98,7 +98,7 @@ def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
             time.sleep(1 / fps)
 
 
-def recursive_reload(module, project_root: Path, visited: set | None = None):
+def recursive_reload(module, project_root: Path, visited: set | None = None) -> None:
     """Recursively reloads modules, but only if they live inside project_root."""
     import importlib
     import sys
@@ -211,13 +211,13 @@ class MojoReloaded:
 
     _trial_padding_style = "03d"
 
-    def _clear_line(self):
+    def _clear_line(self) -> None:
         """Writes the clear-line escape directly, bypassing rich's markup/highlighting which otherwise mangles raw ANSI control sequences. Caller must hold `_print_lock`."""
         if self._reprint_prompt is not None:
             console.file.write("\r\x1b[2K")
             console.file.flush()
 
-    def _redraw_line(self):
+    def _redraw_line(self) -> None:
         """Reprints the prompt plus any in-progress input line (with the cursor restored to its column), so async output never wipes out what the user was mid-typing. No-op if there's no active prompt. Caller must hold `_print_lock`."""
         if self._reprint_prompt is None:
             return
@@ -229,7 +229,7 @@ class MojoReloaded:
             console.file.write(f"\x1b[{trailing}D")
         console.file.flush()
 
-    def _print(self, *args, **kwargs):
+    def _print(self, *args, **kwargs) -> None:
         """Prints a message, redrawing the persistent prompt below it if the interactive loop is active."""
         with self._print_lock:
             self._clear_line()
@@ -308,7 +308,7 @@ class MojoReloaded:
             return nullcontext()
         return trial_status.record_step(step_name=step_name)
 
-    def validate(self):
+    def validate(self) -> None:
         if self.generator and self.config_path:
             raise ValueError(
                 "Generator option is mutually exclusive with the config option."
@@ -352,7 +352,9 @@ class MojoReloaded:
 
         project_root = Path.cwd()
 
-        def reload_with_check(path_str: str, label: str):
+        def reload_with_check(
+            path_str: str, label: str
+        ) -> Callable[..., Any] | tuple[Callable[..., Any], types.ModuleType]:
             """Internal helper to validate file existance before reloading."""
             try:
                 # attempt to find the module the dotted path resolves against, which may be a
@@ -586,7 +588,7 @@ class MojoReloaded:
 
         return state
 
-    def run(self):
+    def run(self) -> None:
         self.validate()
 
         self.workdir = self.workdir.resolve()
@@ -619,7 +621,7 @@ class MojoReloaded:
         _matrix_rain()
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
-    def _print_help(self):
+    def _print_help(self) -> None:
         runtime_cmd = (
             "- [bold cyan]Any float[/]: Generate and use runtime. Playback speed set by float [dim](i.e., 1.0 for real time, 0.5 for half speed)[/]\n"
             if self.runtime
@@ -649,7 +651,7 @@ class MojoReloaded:
 
     def _interactive_loop(
         self, on_reload_callback: OnReloadCallback, is_running_check: IsRunningCheck
-    ):
+    ) -> None:
         event_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         stop_event = threading.Event()
         watcher_stop_event: threading.Event | None = None
@@ -672,7 +674,7 @@ class MojoReloaded:
             evt = threading.Event()
             watch_path = Path.cwd()
 
-            def _run():
+            def _run() -> None:
                 try:
                     for changes in wf_watch(
                         watch_path, watch_filter=PythonFilter(), stop_event=evt
@@ -684,13 +686,13 @@ class MojoReloaded:
             threading.Thread(target=_run, daemon=True).start()
             return evt
 
-        def stop_watcher():
+        def stop_watcher() -> None:
             nonlocal watcher_stop_event
             if watcher_stop_event is not None:
                 watcher_stop_event.set()
                 watcher_stop_event = None
 
-        def plain_stdin_reader():
+        def plain_stdin_reader() -> None:
             """Fallback used when raw mode isn't available (not a tty, or `termios` is missing, e.g. on Windows). No history/line-editing beyond whatever the terminal driver provides."""
             while not stop_event.is_set():
                 try:
@@ -703,7 +705,7 @@ class MojoReloaded:
                     event_queue.put(("input", "exit"))
                     break
 
-        def raw_stdin_reader(fd: int):
+        def raw_stdin_reader(fd: int) -> None:
             """
             Byte-level input reader that hand-rolls just enough line-editing to support Up/Down history navigation, alongside the Left/Right/Backspace editing a cooked tty already gives users for free.
 
@@ -839,7 +841,7 @@ class MojoReloaded:
                 old_termios = None
                 stdin_fd = None
 
-        def stdin_reader():
+        def stdin_reader() -> None:
             if stdin_fd is not None:
                 raw_stdin_reader(stdin_fd)
             else:
@@ -850,7 +852,7 @@ class MojoReloaded:
         if self.watch:
             watcher_stop_event = start_watcher()
 
-        def print_prompt():
+        def print_prompt() -> None:
             if busy_event.is_set():
                 console.print(
                     "[bold yellow]Running trial...[/bold yellow] "
@@ -875,7 +877,7 @@ class MojoReloaded:
             tuple[logging.Handler, Callable[[logging.LogRecord], None]]
         ] = []
 
-        def _wrap_handler(handler: logging.Handler):
+        def _wrap_handler(handler: logging.Handler) -> None:
             original_emit = handler.emit
 
             def emit(_self: logging.Handler, record: logging.LogRecord) -> None:
@@ -890,11 +892,11 @@ class MojoReloaded:
         for handler in root_logger.handlers:
             _wrap_handler(handler)
 
-        def run_construct(use_runtime: bool):
+        def run_construct(use_runtime: bool) -> None:
             """Runs `generate_construct` in the background, blocking new runs/reloads until it finishes."""
             nonlocal job_thread
 
-            def _job():
+            def _job() -> None:
                 try:
                     start = time.time()
                     new_state = self.generate_construct(
@@ -1082,7 +1084,7 @@ class MojoReloaded:
         for handler, original_emit in wrapped_handlers:
             setattr(handler, "emit", original_emit)
 
-    def run_opengl(self, state: MjState):
+    def run_opengl(self, state: MjState) -> None:
         import mujoco.viewer
 
         with mujoco.viewer.launch_passive(state.model, state.data) as viewer:
@@ -1091,7 +1093,7 @@ class MojoReloaded:
                 s: MjState,
                 arrows: list[ArrowConfig],
                 lines: list[LineConfig],
-            ):
+            ) -> None:
                 assert viewer.user_scn
                 # the viewer's GUI thread reads user_scn while rendering, so edits
                 # must happen under the viewer lock. viewer.sync() locks internally,
@@ -1107,7 +1109,7 @@ class MojoReloaded:
 
                 viewer.sync()
 
-            def reload_handler(s: MjState):
+            def reload_handler(s: MjState) -> None:
                 sim = viewer._get_sim()
                 if sim:
                     assert self._current_trial_dir is not None
@@ -1133,7 +1135,7 @@ class MojoReloaded:
                 is_running_check=viewer.is_running,
             )
 
-    def run_viser(self, state: MjState):
+    def run_viser(self, state: MjState) -> None:
         try:
             import viser
             from mjviser import ViserMujocoScene
@@ -1157,7 +1159,7 @@ class MojoReloaded:
             _l.setLevel(logging.WARNING)
             _l.propagate = False
 
-        def _print_connection_panel():
+        def _print_connection_panel() -> None:
             local_ip = get_local_ip()
 
             connection_info = (
@@ -1206,7 +1208,7 @@ class MojoReloaded:
             "arrow_handle": None,
         }
 
-        def refresh_from_gui():
+        def refresh_from_gui() -> None:
             # gui-triggered re-renders must hold the same lock as physics stepping,
             # mirroring how mjviser's own viewer wires its refresh handler
             with runtime_lock:
@@ -1224,7 +1226,7 @@ class MojoReloaded:
         min_frame_time = 1.0 / 60.0
         last_push = 0.0
 
-        def clear_arrows():
+        def clear_arrows() -> None:
             if viser_state["arrow_handle"] is not None:
                 viser_state["arrow_handle"].remove()
                 viser_state["arrow_handle"] = None
@@ -1233,7 +1235,7 @@ class MojoReloaded:
             s: MjState,
             arrows: list[ArrowConfig],
             lines: list[LineConfig],
-        ):
+        ) -> None:
             nonlocal last_push
             now = time.monotonic()
             if now - last_push < min_frame_time:
@@ -1275,7 +1277,7 @@ class MojoReloaded:
                 thickness=line_width,
             )
 
-        def update_scene(s: MjState):
+        def update_scene(s: MjState) -> ViserMujocoScene:
             clear_arrows()
             viser_state["scene"] = ViserMujocoScene(
                 server=server, mj_model=s.model, num_envs=1

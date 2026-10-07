@@ -15,7 +15,7 @@ from mujoco_mojo.typing import MatN
 from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.signal_metadata import ColumnMetadata
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
 
 logger = get_logger(__name__)
 
@@ -137,9 +137,15 @@ class SignalManager:
 
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
-        time_meta = ColumnMetadata(dimension="[time]")
+        time_meta = ColumnMetadata(
+            dimension="[time]", transform_type=TransformType.SCALAR
+        )
         if self.unit_system is not None and self.unit_system.time is not None:
-            time_meta = ColumnMetadata(dimension="[time]", unit=self.unit_system.time)
+            time_meta = ColumnMetadata(
+                dimension="[time]",
+                unit=self.unit_system.time,
+                transform_type=TransformType.SCALAR,
+            )
         self._columns[TIME_COLUMN_NAME] = Column(
             category=TIME_COLUMN_NAME, metadata=time_meta
         )
@@ -158,13 +164,13 @@ class SignalManager:
             self._rows_for_cols(self._n_cols), self._data_buffer.shape[0]
         )
 
-    def register_sampler(self, task: Callable[[MjState], Any]):
+    def register_sampler(self, task: Callable[[MjState], Any]) -> None:
         self._sample_tasks.append(task)
         logger.debug(
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"
         )
 
-    def track(self, getter: Callable[[], float], column: Column):
+    def track(self, getter: Callable[[], float], column: Column) -> None:
         """
         Registers `getter` to be called and posted on every recorded step, under `column`.
 
@@ -184,7 +190,7 @@ class SignalManager:
 
         """
 
-        def _sample(_: MjState):
+        def _sample(_: MjState) -> None:
             self.post(getter(), column)
 
         self.register_sampler(_sample)
@@ -221,7 +227,7 @@ class SignalManager:
         self._recompute_capacity()
         return idx
 
-    def post(self, value: float, column: Column):
+    def post(self, value: float, column: Column) -> None:
         """
         Injects a value into the telemetry ledger under `column`.
 
@@ -259,7 +265,7 @@ class SignalManager:
         # write value to buffer for next flush
         self._data_buffer[self._buffer_row_idx, idx] = value
 
-    def record(self, state: MjState):
+    def record(self, state: MjState) -> None:
         """Executes all samplers and advances the buffer index. Flushes if due."""
         logger.debug(f"Recording telemetry at t={state.data.time:.6f}")
 
@@ -279,7 +285,7 @@ class SignalManager:
         if self._buffer_row_idx >= self._capacity:
             self.flush()
 
-    def flush(self):
+    def flush(self) -> None:
         """Writes the memory buffer to a new part file; parts are merged into `export_path` on `close()`."""
         if self._buffer_row_idx == 0:
             return
@@ -315,7 +321,7 @@ class SignalManager:
             )
         }
 
-    def _merge_parts(self):
+    def _merge_parts(self) -> None:
         """Streams all part files written this run into `export_path`, then removes the parts."""
         if not self._part_paths:
             return
@@ -350,7 +356,7 @@ class SignalManager:
 
         self._part_paths.clear()
 
-    def close(self):
+    def close(self) -> None:
         # captured before flush()/_merge_parts() reset this state, so the log below
         # doesn't claim data was saved when recording was disabled for this run
         had_data = self._buffer_row_idx > 0 or bool(self._part_paths)

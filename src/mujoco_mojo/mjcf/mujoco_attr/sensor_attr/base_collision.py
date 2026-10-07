@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from typing import Self
 
 from pydantic import model_validator
 
@@ -47,7 +48,7 @@ class SensorCollisionBase(SensorBase, ABC):
     """For all 3 collision sensor types, the two colliding geoms can be specified explicitly using the geom1 and geom2 attributes or implicitly, using body1, body2. In the latter case the sensor will iterate over all geoms of the specified body or bodies (mixed specification like geom1, body2 are allowed), and select the collision with the smallest signed distance."""
 
     @model_validator(mode="after")
-    def validate_targets(self):
+    def validate_targets(self) -> Self:
         if (self.geom1 is None) == (self.body1 is None):
             msg = "Exactly one of geom1 or body1 must be specified"
             logger.error(msg)

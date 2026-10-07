@@ -11,7 +11,7 @@ class OtherData(UserData):
     label: str = "x"
 
 
-def test_trial_dir_raises_before_set():
+def test_trial_dir_raises_before_set() -> None:
     """trial_dir raises RuntimeError when accessed inside the generator (before workspace is created)."""
     model = MojoModel()
     with pytest.raises(
@@ -20,14 +20,14 @@ def test_trial_dir_raises_before_set():
         _ = model.trial_dir
 
 
-def test_trial_dir_returns_path_when_set(tmp_path):
+def test_trial_dir_returns_path_when_set(tmp_path) -> None:
     """trial_dir returns the path once set."""
     model = MojoModel()
     model._trial_dir = tmp_path
     assert model.trial_dir == tmp_path
 
 
-def test_get_user_data_raises_when_none():
+def test_get_user_data_raises_when_none() -> None:
     """`get_user_data` raises ValueError when user_data is None."""
     model = MojoModel()
     assert model.user_data is None
@@ -35,7 +35,7 @@ def test_get_user_data_raises_when_none():
         model.get_user_data(MyData)
 
 
-def test_get_user_data_returns_directly_when_type_matches():
+def test_get_user_data_returns_directly_when_type_matches() -> None:
     """`get_user_data` returns the stored instance unchanged when the type already matches."""
     model = MojoModel()
     data = MyData(value=42)
@@ -45,7 +45,7 @@ def test_get_user_data_returns_directly_when_type_matches():
     assert result.value == 42
 
 
-def test_get_user_data_revalidates_when_type_mismatches():
+def test_get_user_data_revalidates_when_type_mismatches() -> None:
     """`get_user_data` re-validates a base UserData instance into the requested subclass."""
     model = MojoModel()
     # store as plain UserData with extra fields allowed

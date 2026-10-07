@@ -28,13 +28,13 @@ class MojoLogExtra(TypedDict, total=False):
 
 
 class TerminalFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord):
+    def filter(self, record: logging.LogRecord) -> bool:
         # Block if 'file_only' is True
         return not getattr(record, "file_only", False)
 
 
 class FileFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord):
+    def filter(self, record: logging.LogRecord) -> bool:
         # Block if 'terminal_only' is True
         return not getattr(record, "terminal_only", False)
 
@@ -60,7 +60,7 @@ class JsonLogFormatter(logging.Formatter):
         )
 
 
-def get_logger(name: str):
+def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
 
     if not logger.hasHandlers():
@@ -150,7 +150,7 @@ def get_trial_log_handler(
     return handler
 
 
-def worker_init(queue: Any, level: int):
+def worker_init(queue: Any, level: int) -> None:
     """
     Initializes the worker process logger to match the parent's state.
 

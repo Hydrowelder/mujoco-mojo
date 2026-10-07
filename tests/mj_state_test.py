@@ -25,13 +25,13 @@ def state() -> MjState:
     return MjState(model, data)
 
 
-def test_ensure_rne_post_constraint_calls_on_first_read(state: MjState):
+def test_ensure_rne_post_constraint_calls_on_first_read(state: MjState) -> None:
     with patch("mujoco_mojo.mj_state.mujoco.mj_rnePostConstraint") as mock_rne:
         state.ensure_rne_post_constraint()
     mock_rne.assert_called_once_with(state.model, state.data)
 
 
-def test_ensure_rne_post_constraint_skips_repeat_reads(state: MjState):
+def test_ensure_rne_post_constraint_skips_repeat_reads(state: MjState) -> None:
     """A second call before any invalidation reuses the already-fresh result."""
     with patch("mujoco_mojo.mj_state.mujoco.mj_rnePostConstraint") as mock_rne:
         state.ensure_rne_post_constraint()
@@ -39,7 +39,7 @@ def test_ensure_rne_post_constraint_skips_repeat_reads(state: MjState):
     mock_rne.assert_called_once_with(state.model, state.data)
 
 
-def test_invalidate_forces_recompute_on_next_read(state: MjState):
+def test_invalidate_forces_recompute_on_next_read(state: MjState) -> None:
     with patch("mujoco_mojo.mj_state.mujoco.mj_rnePostConstraint") as mock_rne:
         state.ensure_rne_post_constraint()
         state.invalidate_rne_post_constraint()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
 import numpy as np
 from pydantic import field_validator, model_validator
@@ -129,7 +129,7 @@ class ActuatorCylinder(ActuatorBase):
         return v
 
     @model_validator(mode="after")
-    def validate_cylinder(self):
+    def validate_cylinder(self) -> Self:
         if self.diameter is not None:
             # since diameter take precedence if set
             self.area = np.pi / 4 * self.diameter**2

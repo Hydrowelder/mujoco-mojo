@@ -213,7 +213,7 @@ class _ToolResultCapture:
 
 
 @router.post("/chat")
-async def post_chat(body: ChatRequest):
+async def post_chat(body: ChatRequest) -> EventSourceResponse:
     """Runs the SensAI agents and streams the response as SSE."""
     settings = MujocoMojoSettings()
 

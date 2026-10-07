@@ -91,7 +91,7 @@ class OrientationBase(XMLModel, ABC):
         """Casts any orientation to a ZAxis object."""
         return ZAxis.from_matrix(self.as_matrix())
 
-    def as_matrix(self):
+    def as_matrix(self) -> np.ndarray:
         """Returns this orientation as a rotation matrix."""
         return self.to_rotation().as_matrix()
 

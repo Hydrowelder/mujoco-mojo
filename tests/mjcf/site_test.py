@@ -15,7 +15,7 @@ from mujoco_mojo.typing import BodyName, MeshName, SiteName
 
 
 @pytest.fixture
-def two_body_setup():
+def two_body_setup() -> tuple[MjState, SiteSphere, SiteSphere]:
     """Two free bodies with sites, separated by 1 m in X. Both start at rest."""
     xml = """
     <mujoco>
@@ -47,7 +47,7 @@ def two_body_setup():
 # --- velocity ---
 
 
-def test_rt_vel_returns_zero_at_rest(two_body_setup):
+def test_rt_vel_returns_zero_at_rest(two_body_setup) -> None:
     """rt_vel() is [0]*6 when the body is stationary."""
     state, s1, _ = two_body_setup
     vel = s1.rt_vel(state)
@@ -55,7 +55,7 @@ def test_rt_vel_returns_zero_at_rest(two_body_setup):
     assert np.allclose(vel, 0.0)
 
 
-def test_rt_lin_vel_tracks_body_translational_velocity(two_body_setup):
+def test_rt_lin_vel_tracks_body_translational_velocity(two_body_setup) -> None:
     """rt_lin_vel() matches the linear velocity assigned via qvel."""
     state, s1, _ = two_body_setup
     # freejoint body1: qvel[0:3] = linear, [3:6] = angular
@@ -66,7 +66,7 @@ def test_rt_lin_vel_tracks_body_translational_velocity(two_body_setup):
     assert np.allclose(lin_vel, [3.0, 0.0, 0.0], atol=1e-6)
 
 
-def test_rt_ang_vel_tracks_body_angular_velocity(two_body_setup):
+def test_rt_ang_vel_tracks_body_angular_velocity(two_body_setup) -> None:
     """rt_ang_vel() matches the angular velocity assigned via qvel."""
     state, s1, _ = two_body_setup
     state.data.qvel[3:6] = [0.0, 1.0, 0.0]
@@ -76,7 +76,7 @@ def test_rt_ang_vel_tracks_body_angular_velocity(two_body_setup):
     assert np.allclose(ang_vel, [0.0, 1.0, 0.0], atol=1e-6)
 
 
-def test_rt_velocities_relative_between_two_sites(two_body_setup):
+def test_rt_velocities_relative_between_two_sites(two_body_setup) -> None:
     """rt_velocities(other) gives the 6D velocity of self minus other."""
     state, s1, s2 = two_body_setup
     # body1 moves at 3 m/s X, body2 moves at 1 m/s X
@@ -89,7 +89,7 @@ def test_rt_velocities_relative_between_two_sites(two_body_setup):
     assert np.allclose(rel[3:6], [2.0, 0.0, 0.0], atol=1e-6)  # linear part
 
 
-def test_rt_lin_vx_vy_vz_scalars(two_body_setup):
+def test_rt_lin_vx_vy_vz_scalars(two_body_setup) -> None:
     """rt_lin_vx/vy/vz return the correct scalar components of relative velocity."""
     state, s1, _s2 = two_body_setup
     state.data.qvel[0:3] = [2.0, 3.0, 4.0]
@@ -100,7 +100,7 @@ def test_rt_lin_vx_vy_vz_scalars(two_body_setup):
     assert s1.rt_lin_vz(None, state) == pytest.approx(4.0, abs=1e-6)
 
 
-def test_rt_lin_vm_is_magnitude(two_body_setup):
+def test_rt_lin_vm_is_magnitude(two_body_setup) -> None:
     """rt_lin_vm() returns the magnitude of the linear velocity."""
     state, s1, _ = two_body_setup
     state.data.qvel[0:3] = [3.0, 4.0, 0.0]
@@ -109,7 +109,7 @@ def test_rt_lin_vm_is_magnitude(two_body_setup):
     assert s1.rt_lin_vm(None, state) == pytest.approx(5.0, abs=1e-6)
 
 
-def test_rt_ang_vm_is_magnitude(two_body_setup):
+def test_rt_ang_vm_is_magnitude(two_body_setup) -> None:
     """rt_ang_vm() returns the magnitude of the angular velocity."""
     state, s1, _ = two_body_setup
     state.data.qvel[3:6] = [0.0, 3.0, 4.0]
@@ -121,7 +121,7 @@ def test_rt_ang_vm_is_magnitude(two_body_setup):
 # --- acceleration ---
 
 
-def test_rt_acc_returns_finite_6d_vector(two_body_setup):
+def test_rt_acc_returns_finite_6d_vector(two_body_setup) -> None:
     """rt_acc() returns a finite 6-element vector."""
     state, s1, _ = two_body_setup
     acc = s1.rt_acc(state)
@@ -129,7 +129,7 @@ def test_rt_acc_returns_finite_6d_vector(two_body_setup):
     assert np.all(np.isfinite(acc))
 
 
-def test_rt_lin_acc_and_rt_ang_acc_shapes(two_body_setup):
+def test_rt_lin_acc_and_rt_ang_acc_shapes(two_body_setup) -> None:
     """rt_lin_acc / rt_ang_acc slice the 6D vector into (3,) arrays."""
     state, s1, _ = two_body_setup
     lin_acc = s1.rt_lin_acc(state)
@@ -138,7 +138,7 @@ def test_rt_lin_acc_and_rt_ang_acc_shapes(two_body_setup):
     assert ang_acc.shape == (3,)
 
 
-def test_rt_acc_scalar_derivatives(two_body_setup):
+def test_rt_acc_scalar_derivatives(two_body_setup) -> None:
     """rt_lin_ax/ay/az/am and rt_ang_ax/ay/az/am all return finite floats."""
     state, s1, _s2 = two_body_setup
     # exercise all scalar acceleration accessors

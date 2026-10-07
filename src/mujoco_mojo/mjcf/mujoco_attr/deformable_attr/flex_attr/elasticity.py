@@ -32,4 +32,6 @@ class FlexElasticity(XMLModel):
     """Shell thickness, units of length; only for used 2D flexes. Used to scale the stretching stiffness. This thickness can be set equal to 2 times the radius in order to match the geometry, but is exposed separately since the radius might be constrained by considerations related to collision detection."""
 
     elastic2d: FlexElastic2D = FlexElastic2D.NONE
-    """Elastic contribution to passive forces of 2D flexes. "none": none, "bend": bending only, "stretch": stretching only, "both": bending and stretching."""
+    """Elastic contribution to passive forces of 2D flexes. "none": none, "bend": bending only, "stretch": stretching only, "both": bending and stretching.
+
+    Non-interpolated flex elasticity supports vertices attached to articulated bodies, including jointless welded children. A vertex pinned to a moving body follows that body's motion and applies its reaction force and torque to the body. With the `discrete` integrator, use solver `CG` for general attachments. Newton supports fixed attachments and independent slide bodies with local positive X, Y and Z joints in that order and fixed ancestors. Mocap attachments are not supported for non-rigid flexes with elasticity because mocap poses do not provide velocities for elastic damping."""

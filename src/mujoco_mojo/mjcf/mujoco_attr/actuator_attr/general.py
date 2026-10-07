@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Self
+
 import numpy as np
 from pydantic import model_validator
 
@@ -118,7 +120,7 @@ class ActuatorGeneral(ActuatorBase):
     # """Identical to position/inheritrange, but sets actrange (which has the same length semantics as the transmission target) rather than ctrlrange (which has velocity semantics)."""
 
     @model_validator(mode="after")
-    def validate_transmission(self):
+    def validate_transmission(self) -> Self:
         fields = [
             self.joint,
             self.jointinparent,

@@ -5,7 +5,7 @@ from mujoco_mojo.runtime.signal_manager import SignalManager
 
 
 @pytest.fixture
-def mj_setup():
+def mj_setup() -> tuple[mujoco.MjModel, mujoco.MjData]:
     """A minimal 1-body arena for high-speed integration testing."""
     xml = """
     <mujoco>
@@ -28,7 +28,7 @@ def mj_setup():
 
 
 @pytest.fixture
-def rm(tmp_path):
+def rm(tmp_path) -> SignalManager:
     """Isolated SignalManager for testing."""
     db_path = tmp_path / "test_telemetry.parquet"
     return SignalManager(export_path=db_path)

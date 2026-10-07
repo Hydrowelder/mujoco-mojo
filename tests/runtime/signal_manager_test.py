@@ -409,7 +409,7 @@ def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
 
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "time": {"dimension": "[time]"},
+        "time": {"dimension": "[time]", "transform_type": "scalar"},
         "Sensors/Foo": {"dimension": "[length]"},
     }
 
@@ -441,6 +441,7 @@ def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> N
     assert read == sm._column_metadata
     assert read["Bodies/A/xpos:x"].transform_type == TransformType.POINT
     assert read["time"].dimension == "[time]"
+    assert read["time"].transform_type == TransformType.SCALAR
 
 
 def test_a_rejected_column_registers_nothing(sm: SignalManager) -> None:
@@ -489,7 +490,7 @@ def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
 
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "time": {"dimension": "[time]"},
+        "time": {"dimension": "[time]", "transform_type": "scalar"},
         "Sensors/Foo": {"unit": "volt"},
     }
 
@@ -504,7 +505,9 @@ def test_time_metadata_always_in_footer(sm: SignalManager) -> None:
     sm.close()
 
     footer = pl.read_parquet_metadata(sm.export_path)
-    assert json.loads(footer["column_metadata"]) == {"time": {"dimension": "[time]"}}
+    assert json.loads(footer["column_metadata"]) == {
+        "time": {"dimension": "[time]", "transform_type": "scalar"}
+    }
 
 
 def test_track_posts_its_column(sm: SignalManager) -> None:

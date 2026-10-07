@@ -36,7 +36,7 @@ class Handoff(mojo.UserData):
         box1: mojo.Body,
         box2: mojo.Body,
         mojo_model: mojo.MojoModel,
-    ):
+    ) -> None:
         mult = 1 if loc == "pz" else -1
 
         box1.sites.append(
@@ -86,7 +86,7 @@ class Handoff(mojo.UserData):
 
         self.springs.update({loc: (base, tip, stiffness, stroke, preload)})
 
-    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager):
+    def add_spring_force(self, loc: Literal["pz", "mz"], rm: rt.RuntimeManager) -> None:
         assert rm.signal_manager is not None
         base, tip, stiffness, stroke, preload = self.springs[loc]
 
@@ -351,7 +351,7 @@ def objective(
 WORKDIR = (Path(__file__).parent / "mc_bumper_optimize").resolve()
 
 
-def run_study():
+def run_study() -> None:
     mojo.utils.setup_logger()
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 

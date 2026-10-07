@@ -13,7 +13,7 @@ requires_posix = pytest.mark.skipif(
 
 def test_copy_asset_ignores_prefer_symlinks_on_non_posix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     """prefer_symlinks is silently ignored off POSIX; a normal copy is made instead."""
     monkeypatch.setattr("mujoco_mojo.mjcf.dependency_path.os.name", "nt")
     # os.name is a single process-wide attribute, so patching it also fools
@@ -40,7 +40,9 @@ def test_copy_asset_ignores_prefer_symlinks_on_non_posix(
 
 
 @requires_posix
-def test_copy_asset_creates_symlink_when_prefer_symlinks_and_posix(tmp_path: Path):
+def test_copy_asset_creates_symlink_when_prefer_symlinks_and_posix(
+    tmp_path: Path,
+) -> None:
     """On POSIX, prefer_symlinks links to the source instead of copying its bytes."""
     source = tmp_path / "source.txt"
     source.write_text("hello")
@@ -53,7 +55,7 @@ def test_copy_asset_creates_symlink_when_prefer_symlinks_and_posix(tmp_path: Pat
 
 
 @requires_posix
-def test_copy_asset_relinks_when_symlink_target_changes(tmp_path: Path):
+def test_copy_asset_relinks_when_symlink_target_changes(tmp_path: Path) -> None:
     """A symlink already at dest pointing elsewhere is replaced, not left stale."""
     old_source = tmp_path / "old.txt"
     old_source.write_text("old")
@@ -69,7 +71,7 @@ def test_copy_asset_relinks_when_symlink_target_changes(tmp_path: Path):
 
 
 @requires_posix
-def test_copy_asset_replaces_real_file_with_symlink(tmp_path: Path):
+def test_copy_asset_replaces_real_file_with_symlink(tmp_path: Path) -> None:
     """A real, non-symlinked file already at dest (e.g. from a copy-mode bundle) is replaced with a symlink."""
     source = tmp_path / "source.txt"
     source.write_text("hello")

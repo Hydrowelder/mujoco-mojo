@@ -199,7 +199,7 @@ class SensorBase(XMLModel, ABC):
         self,
         signal_manager: SignalManager | None = None,
         metadata: MetadataOverrides | None = None,
-    ):
+    ) -> None:
         """
         Registers the sensor's output for logging.
 
@@ -274,7 +274,7 @@ class SensorBase(XMLModel, ABC):
                 columns[sensor_dim] = cols
             return cols
 
-        def sample(state: MjState):
+        def sample(state: MjState) -> None:
             sid = self.get_id(state.model)
 
             # find where this sensor's data starts and how long it is
