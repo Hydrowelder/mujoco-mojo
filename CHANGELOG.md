@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 2.6.14 (2026-10-06)
+
+- Added support for MuJoCo 3.15.0
+- Added `cg_x`, `cg_y`, and `cg_z` to `Inertial`, and `x`, `y`, and `z` to `Pos`
+- The `time` column is now tagged with the `scalar` `transform_type`, like the other built-in signals
+- Added missing return type annotations across the package, so `get_logger` now returns a `logging.Logger` instead of an unknown type
+- Security patches
+
 ## Version 2.6.13 (2026-09-30)
 
 - Added support for MuJoCo 3.14.0

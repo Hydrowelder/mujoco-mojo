@@ -96,7 +96,7 @@ dev = [
     "scipy-stubs[scipy]>=1.17.0.2",
     "tabulate>=0.10.0",
     "watchfiles>=1.2.0",
-    "zensical>=0.0.59",
+    "zensical>=0.0.68",
 ]
 
 [project.scripts]
