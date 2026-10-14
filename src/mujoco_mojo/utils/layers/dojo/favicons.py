@@ -188,7 +188,13 @@ def ensure_favicons(static_dir: Path, cache_dir: Path = CACHE_DIR) -> None:
         logger.warning("Failed to read %s", _SOURCE_SVG, exc_info=True)
         return
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning(
+            "Skipping favicon generation: could not create %s", cache_dir, exc_info=True
+        )
+        return
     source_hash = hashlib.sha256(svg_bytes).hexdigest()
 
     for filename, size in _FAVICON_TARGETS:

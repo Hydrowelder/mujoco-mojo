@@ -69,6 +69,14 @@ repos:
         files: ^(src/|tests/|pyproject\.toml|uv\.lock)
   - repo: local
     hooks:
+      - id: requirements-no-local-paths
+        name: requirements.txt must not point at local paths
+        # Dependabot rejects `-e ./something` here: the path has to exist in this
+        # repo. It shows up when uv runs inside a parent uv workspace and exports
+        # that workspace's members. `-e .` (this project) is fine.
+        language: pygrep
+        entry: '^-e \.\S'
+        files: ^requirements\.txt$
       - id: verify-changelog-tag
         name: Verify CHANGELOG.md entry and date for current tag push
         entry: python scripts/verify_changelog_by_tag.py
