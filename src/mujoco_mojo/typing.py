@@ -1352,6 +1352,30 @@ if TYPE_CHECKING:
 _ENV_VAR_NAME_PATTERN = re.compile(r"`([A-Z][A-Z0-9_]*)`\s+environment variable")
 
 
+def _pydantic_ai_provider_source(provider_id: str) -> str | None:
+    """Returns the source text of `pydantic_ai`'s module for `provider_id` (for example `google-cloud` is `providers/google_cloud.py`), or `None` if `pydantic_ai` isn't installed or has no such module. Never imports anything: `find_spec` on a top-level name only locates the package, whereas one on `pydantic_ai.providers.<name>` imports its parent packages first and raises when `pydantic_ai` (an optional dependency) is missing."""
+    try:
+        package_spec = importlib.util.find_spec("pydantic_ai")
+    except (ImportError, ValueError):
+        return None
+    if package_spec is None:
+        return None
+
+    module_name = provider_id.replace("-", "_")
+    for location in package_spec.submodule_search_locations or ():
+        providers_dir = Path(location) / "providers"
+        # a provider is a single file in current pydantic_ai, but could become a package
+        for candidate in (
+            providers_dir / f"{module_name}.py",
+            providers_dir / module_name / "__init__.py",
+        ):
+            try:
+                return candidate.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return None
+
+
 class ModelProvider(StrEnum):
     OPEN_AI = "OpenAI"
     ANTHROPIC = "Anthropic"
@@ -1423,21 +1447,15 @@ class ModelProvider(StrEnum):
         """
         Best-effort: the primary environment variable this provider's own `pydantic_ai` module documents for its credentials (e.g. `GOOGLE_API_KEY`, or `AWS_ACCESS_KEY_ID` for Bedrock), or `None` if it doesn't use one this way - OpenAI Codex uses an OAuth device-code flow instead of any single env var.
 
-        `pydantic_ai` has no structured "get this provider's env var" API - every provider module only ever states it as prose, in its own `__init__` docstring and error message. Rather than hand-copying eighteen of those into a lookup table here (exactly the "second copy that can drift out of sync" problem `build_model` above avoids), this reads that provider's own `pydantic_ai.providers.<name>` source file directly and looks for its "`X_Y_Z` environment variable" phrasing - never importing/executing that module, so this works whether or not the provider's optional SDK is installed. Best-effort because it's pattern-matching prose, not calling a documented API: a `pydantic_ai` wording change could stop matching, in which case this returns `None` rather than something wrong.
+        `pydantic_ai` has no structured "get this provider's env var" API - every provider module only ever states it as prose, in its own `__init__` docstring and error message. Rather than hand-copying eighteen of those into a lookup table here (exactly the "second copy that can drift out of sync" problem `build_model` above avoids), this reads that provider's own `pydantic_ai.providers.<name>` source file directly and looks for its "`X_Y_Z` environment variable" phrasing - never importing/executing that module, so this works whether or not the provider's optional SDK is installed, and returns `None` rather than raising when `pydantic_ai` itself isn't installed. Best-effort because it's pattern-matching prose, not calling a documented API: a `pydantic_ai` wording change could stop matching, in which case this returns `None` rather than something wrong.
 
         """
         provider_id = _MODEL_PROVIDER_IDS.get(self)
         if provider_id is None:
             return None
 
-        spec = importlib.util.find_spec(
-            f"pydantic_ai.providers.{provider_id.replace('-', '_')}"
-        )
-        if spec is None or spec.origin is None:
-            return None
-        try:
-            source = Path(spec.origin).read_text(encoding="utf-8")
-        except OSError:
+        source = _pydantic_ai_provider_source(provider_id)
+        if source is None:
             return None
 
         # the first hit is usually a `base_url` env var (documented before `api_key`

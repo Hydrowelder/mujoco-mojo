@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -82,7 +82,7 @@ def _cleanup_webm_cache(max_age_seconds: float = 86_400) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # prune stale GIF→WebM cache files from previous sessions
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, _cleanup_webm_cache)

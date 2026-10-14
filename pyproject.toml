@@ -9,7 +9,7 @@ description = "A complete MJCF lifecycle and trial orchestration suite for MuJoC
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cairosvg>=2.9.0",
+    "cairosvg>=2.9.1",
     "fastapi>=0.134.0",
     "jinja2>=3.1.6",
     "matplotlib>=3.10.8",
@@ -36,7 +36,7 @@ dependencies = [
     "filelock>=3.29.0",
     "pydantic-settings>=2.14.2",
     "pytransform3d>=3.15.0",
-    "tomlkit>=0.15.1",
+    "tomlkit>=0.15.0",
     "python-dotenv>=1.2.3",
 ]
 classifiers = [
@@ -68,7 +68,7 @@ keywords = [
 reloaded = ["mjviser>=0.0.11", "viser>=1.0.26", "watchfiles>=1.1.1"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
-sensai = ["pydantic-ai>=1.102.0", "requests>=2.32.5"]
+sensai = ["pydantic-ai>=2.53.0", "requests>=2.32.5"]
 all = ["mujoco-mojo[reloaded,mesh-decomp,optimize,sensai]"]
 
 [dependency-groups]

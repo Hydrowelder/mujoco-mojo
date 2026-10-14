@@ -27,7 +27,6 @@ import io
 import logging
 from pathlib import Path
 
-import cairosvg
 from PIL import Image
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
@@ -57,8 +56,20 @@ _FAVICON_TARGETS: list[tuple[str, int]] = [
 _FAVICON_ICO_SIZES = (16, 32)
 
 
+def _cairo_available() -> bool:
+    """Returns whether `cairosvg` can be imported, which also needs the Cairo system library (libcairo). cairosvg loads that library at import time, so a machine without it raises `OSError` here rather than `ImportError`."""
+    try:
+        import cairosvg  # noqa: F401
+    except (ImportError, OSError):
+        return False
+    return True
+
+
 def _rasterize(svg_bytes: bytes, size: int) -> bytes:
     """Renders svg_bytes to a square PNG at size x size."""
+    # imported here, not at module level, so a missing libcairo can't stop the dojo from importing
+    import cairosvg
+
     rendered = cairosvg.svg2png(
         bytestring=svg_bytes, output_width=size, output_height=size
     )
@@ -163,13 +174,27 @@ def ensure_favicons(static_dir: Path, cache_dir: Path = CACHE_DIR) -> None:
     if not svg_path.exists():
         return
 
+    if not _cairo_available():
+        logger.warning(
+            "Skipping favicon generation: the Cairo system library (libcairo) could not be loaded. "
+            "The Dojo works without these icons; to get them in Safari, iOS, and bookmarks, install Cairo "
+            "(for example `apt install libcairo2` or `brew install cairo`)."
+        )
+        return
+
     try:
         svg_bytes = svg_path.read_bytes()
     except OSError:
         logger.warning("Failed to read %s", _SOURCE_SVG, exc_info=True)
         return
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning(
+            "Skipping favicon generation: could not create %s", cache_dir, exc_info=True
+        )
+        return
     source_hash = hashlib.sha256(svg_bytes).hexdigest()
 
     for filename, size in _FAVICON_TARGETS:

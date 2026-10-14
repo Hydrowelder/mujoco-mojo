@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 2.6.15 (2026-10-13)
+
+- Fixed `ModelProvider.env_var_name`, and with it the settings schema written whenever settings are saved, raising when the optional `pydantic-ai` package isn't installed
+- The Dojo no longer needs the Cairo system library (`libcairo`) to start. Without it, the raster favicons used by Safari, iOS, and bookmarks are skipped with a warning
+- Lowered the minimum `tomlkit` version to 0.15.0
+- Security patches
+
 ## Version 2.6.14 (2026-10-06)
 
 - Added support for MuJoCo 3.15.0
