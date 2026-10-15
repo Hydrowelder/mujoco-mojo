@@ -156,6 +156,7 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 - **Resource Discovery:** It autodetects your cluster's partitions, CPU limits, memory limits, and maximum array sizes.
 - **Interactive Setup:** You are prompted for job details (Job Name, Partition, Time Limit) with intelligent defaults and safety warnings if your requests exceed node limits. Memory takes any SLURM size, including decimals (`256M`, `1.5G`, `125.9G`), and a bare number is MB. The limit shown beside the prompt is the smallest node in the partition, rounded down to one decimal so the default is never more than the node has. The time limit takes every format `sbatch --time` does (`minutes`, `minutes:seconds`, `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, and `days-hours:minutes:seconds`).
 - **Automatic Scripting:** Mojo generates a `.sh` sbatch script in your workdir, handles `PYTHONPATH` inclusions, and persists global overrides so workers have the correct context.
+- **Submit and Watch:** The last two questions offer to submit the script right away and to [watch the job](#watching-a-job) until it finishes. Submitting saves the SLURM job id in `job_status.json`.
 
 #### The SLURM Worker
 
@@ -164,6 +165,46 @@ Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task correspon
 ???+ tip "Tip: Manual Submissions"
 
     The generated script is saved to your workdir as `mujoco_mojo_submit.sh`. If you prefer to submit manually or need to make custom tweaks to the `#SBATCH` headers, you can simply run `sbatch mujoco_mojo_submit.sh` at any time.
+
+#### Submitting from Python
+
+The CLI always asks the wizard's questions. When you start a job from Python, there is no terminal to ask them, so give the answers as a `SlurmConfig` and call `MojoRunner.submit_slurm`. It does everything the wizard does once its questions are answered: it sets up the workdir (logs folder, `job_status.json`, global overrides), writes `mujoco_mojo_submit.sh`, and submits it.
+
+```python
+--8<-- "docs/user-guides/workflow/running-jobs/slurm_example.py:imports"
+
+--8<-- "docs/user-guides/workflow/running-jobs/slurm_example.py:submit"
+```
+
+The workers are separate `mujoco-mojo` processes that import your functions by name, so set `generator_path` (and `runtime_path`, if you use your own runtime) to the dotted path of each, such as `"sim.generate"`. A missing path is an error before anything is written.
+
+`SlurmConfig` holds what the wizard asks for:
+
+| Field                    | Default                      | Meaning                                                                          |
+| ------------------------ | ---------------------------- | -------------------------------------------------------------------------------- |
+| `job_name`               | `mojo-sim-` and the job's id | Name shown in the queue                                                          |
+| `partition`              | the cluster's default        | Partition to submit to                                                           |
+| `cpus_per_task`          | `1`                          | CPUs for each trial                                                              |
+| `mem`                    | the cluster's default        | Memory for each trial, in any SLURM size (`256M`, `1.5G`, `125.9G`)              |
+| `time_limit`             | `01:00:00`                   | Time limit for each trial, in any `sbatch --time` format                         |
+| `max_concurrent`         | no limit                     | Most array tasks allowed to run at once                                          |
+| `add_root_to_pythonpath` | `True`                       | Adds `project_root` (the current directory) to `PYTHONPATH` on the compute nodes |
+
+A `mem` or `time_limit` that is not a valid SLURM value is rejected when the `SlurmConfig` is created. The resources are also checked against what the cluster reports, the same way the wizard warns you, except a request over a limit raises a `ValueError` and nothing is submitted. Pass `skip_checks=True` to submit anyway. The `[slurm]` settings from your [settings files](#custom-slurm-settings) are added to the script automatically.
+
+`submit_slurm` returns a `SlurmSubmission` (`script_path`, `submitted`, `job_id`, and `message`), or `None` when every trial was already complete. Pass `submit=False` to write the workdir and script without running `sbatch`, so you can read the script and submit it yourself. To keep the status current from Python as well, call `watch_job(workdir)` from `mujoco_mojo.utils.watching`, as described [below](#watching-a-job).
+
+#### Watching a Job
+
+SLURM workers only write their own trial's status, so `job_status.json` stays as it was at submission and [the runtime report](#state-of-health-reporting) is never written. The watcher fixes this by refreshing both files every few seconds, and once every trial is done it writes the final report and exits (local runs already keep both files current themselves).
+
+It can be started in the Slurm wizard or run it on the job's workdir at any time:
+
+```bash
+mujoco-mojo run watch-workdir --workdir path/to/workdir
+```
+
+`Ctrl+C` stops it without affecting the job, and you can start it again later.
 
 #### Custom SLURM Settings
 
@@ -241,7 +282,7 @@ Each line is labeled with the file it came from. Environment variable values are
 
 ## State of Health Reporting
 
-When running in [local mode](#local-mode-local), Mojo will create a file in your workdir which reports the status of the job and settings used to run it. This file is updated during the run for basic reporting.
+When running in [local mode](#local-mode-local), Mojo will create a file in your workdir which reports the status of the job and settings used to run it. This file is updated during the run for basic reporting. For [SLURM jobs](#watching-a-job) the report is written by the watcher.
 
 ???+ example "Example: Runtime Report"
 

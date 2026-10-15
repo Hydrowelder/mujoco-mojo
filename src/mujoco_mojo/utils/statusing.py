@@ -286,6 +286,9 @@ class JobStatus(MojoBaseModel):
     execution_mode: ExecutionMode
     """What execution mode the job was run with."""
 
+    slurm_job_id: str | None = None
+    """The SLURM job id the job was submitted as. Set once `sbatch` accepts the submission, so the job can be looked up in the scheduler later (see `mujoco-mojo run watch-workdir`)."""
+
     workdir: Path
     """Job workdir."""
 
@@ -459,8 +462,26 @@ class JobStatus(MojoBaseModel):
 
             if not self.is_done:
                 self.elapsed = datetime.now(UTC) - self.start_time
+            elif (last_end := self._latest_trial_end()) is not None:
+                # a finished job has nobody left updating `elapsed` (SLURM workers never
+                # touch this file), so read it off the trials; never shorten a value a
+                # run that tracked its own time already stored
+                self.elapsed = max(self.elapsed, last_end - self.start_time)
         if persist:
             self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+
+    def _latest_trial_end(self) -> datetime | None:
+        """When the last finished step of any trial ended, or `None` if no step has finished."""
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        ends = [
+            step.started + timedelta(seconds=step.elapsed)
+            for status in statuses
+            for step in (status.pending, status.generating, status.solving)
+            if step.started is not None and step.elapsed is not None
+        ]
+        return max(ends, default=None)
 
     def total_runtimes(
         self,

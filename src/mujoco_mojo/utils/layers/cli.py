@@ -30,6 +30,7 @@ from mujoco_mojo.typing import Direction, Sampler, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import find_free_port, get_local_ip
+from mujoco_mojo.utils.watching import WatchOutcome, watch_job
 
 from ..defaults import (
     DEFAULT_MC_N_TRIAL,
@@ -952,6 +953,43 @@ def run_single(
             console.print(f"\n{finished_msg}")
 
     raise typer.Exit(code=1 if had_fails else 0)
+
+
+IntervalType = Annotated[
+    float,
+    typer.Option("--interval", "-i", min=1.0, help="Seconds between checks."),
+]
+
+
+@run_app.command(name="watch-workdir")
+def run_job_watch(
+    workdir: WorkdirType = DEFAULT_WORKDIR,
+    interval: IntervalType = 10.0,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
+) -> None:
+    """
+    [bold yellow]Keep a job's status current until it finishes.[/bold yellow]
+
+    For jobs whose trials are run by other processes, such as the tasks of a SLURM job. They only write their own trial's status, so [bold]job_status.json[/bold] (elapsed time, trial durations) and the runtime report would otherwise stay as they were at submission. This checks the trials every few seconds and updates both, and exits by itself once every trial is done. Safe to stop with Ctrl+C and start again; the job is not affected.
+    """
+    _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
+
+    try:
+        outcome = watch_job(
+            workdir, interval=interval, n_proc=max(1, n_proc), console=console
+        )
+    except FileNotFoundError as exc:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped watching.[/yellow] The job keeps running.")
+        raise typer.Exit(code=0)
+    raise typer.Exit(code=0 if outcome is WatchOutcome.DONE else 1)
 
 
 @cli_app.command(name="init")

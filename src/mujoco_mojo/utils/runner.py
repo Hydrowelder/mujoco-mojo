@@ -58,6 +58,20 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DISTS_FNAME,
 )
 from mujoco_mojo.utils.log import get_logger, get_trial_log_handler, worker_init
+from mujoco_mojo.utils.slurm import (
+    UNKNOWN_LIMIT,
+    SlurmConfig,
+    SlurmJob,
+    SlurmSubmission,
+    array_problem,
+    build_submission_script,
+    cpu_problem,
+    mem_problem,
+    normalize_to_mb,
+    parse_job_id,
+    slurm_time_to_seconds,
+    time_problem,
+)
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -68,6 +82,7 @@ from mujoco_mojo.utils.statusing import (
     TrialStatus,
 )
 from mujoco_mojo.utils.utils import write_dojo_script
+from mujoco_mojo.utils.watching import watch_job
 
 if TYPE_CHECKING:
     import optuna
@@ -125,18 +140,21 @@ def _print_slurm_extras(console: Console, slurm: SlurmExtraSettings) -> None:
             'Add entries such as [italic]"sbatch.account" = "proj123"[/italic] under [bold]\\[slurm][/bold] '
             "in one of the files above (or run [italic]mujoco-mojo settings set --project slurm.sbatch.account proj123[/italic])."
         )
-        logger.info("No extra SLURM settings were found.")
+        logger.info("No extra SLURM settings were found.", extra={"file_only": True})
         return
 
     console.print("\n[bold]Extra lines added to the submission script:[/bold]")
     for key, line in zip(sbatch_keys, sbatch_lines, strict=True):
         console.print(f"  {escape(line)}  [dim]({origin(key)})[/dim]")
-        logger.info(f"SLURM extra ({origin(key)}): {line}")
+        logger.info(f"SLURM extra ({origin(key)}): {line}", extra={"file_only": True})
     for key in env_keys:
         console.print(
             f"  export {escape(key)}=[dim]<value hidden>[/dim]  [dim]({origin(key)})[/dim]"
         )
-        logger.info(f"SLURM extra environment variable ({origin(key)}): {key}")
+        logger.info(
+            f"SLURM extra environment variable ({origin(key)}): {key}",
+            extra={"file_only": True},
+        )
 
 
 __all__ = [
@@ -836,15 +854,8 @@ class MojoRunner:
             logger.error(msg)
             raise RuntimeError(msg)
 
-    def run(
-        self,
-        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
-        clean_workdir: bool = False,
-        cleanup_delay: int = 10,
-        execution_mode: ExecutionMode = ExecutionMode.LOCAL,
-        trial_nums: list[int] | None = None,
-    ) -> bool:
-        """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
+    def _prepare_run(self, clean_workdir: bool, cleanup_delay: int) -> None:
+        """The checks and workdir setup shared by every way of starting a job: running it, or submitting it to SLURM."""
         funcs = {
             "generator": self.generator,
             "runtime": self.runtime,
@@ -880,6 +891,17 @@ class MojoRunner:
         if self.slurm_trial_id is None:
             write_dojo_script(self.workdir)
             self.capture_environment()
+
+    def run(
+        self,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
+        clean_workdir: bool = False,
+        cleanup_delay: int = 10,
+        execution_mode: ExecutionMode = ExecutionMode.LOCAL,
+        trial_nums: list[int] | None = None,
+    ) -> bool:
+        """Vectors a job to be either computed locally or to be orchestrated by SLURM."""
+        self._prepare_run(clean_workdir, cleanup_delay)
 
         match execution_mode:
             case ExecutionMode.LOCAL:
@@ -1467,27 +1489,8 @@ class MojoRunner:
 
     @staticmethod
     def normalize_to_mb(mem_str: str) -> int:
-        """Converts SLURM memory strings (e.g., '1000', '1G', '1024M', '125.9G') to integer MB, or 0 if the string isn't a recognizable size. Decimal values are supported, and a bare number is MB like it is for SLURM."""
-        # Split the number from the unit (e.g., '1024M' -> '1024', 'M')
-        match = re.fullmatch(
-            r"\s*(\d+(?:\.\d+)?|\.\d+)\s*([KMGTP]?)B?\s*", mem_str.upper()
-        )
-        if not match:
-            return 0
-
-        number, unit = match.groups()
-        value = float(number)
-
-        # SLURM units are powers of 1024
-        multipliers = {
-            "K": 1 / 1024,  # Kilobytes to MB
-            "M": 1,  # Megabytes
-            "G": 1024,  # Gigabytes to MB
-            "T": 1024**2,  # Terabytes to MB
-            "P": 1024**3,  # Petabytes to MB
-        }
-
-        return int(value * multipliers.get(unit or "M", 1))
+        """Converts SLURM memory strings (e.g., '1000', '1G', '1024M', '125.9G') to integer MB, or 0 if the string isn't a recognizable size. See `mujoco_mojo.utils.slurm.normalize_to_mb`."""
+        return normalize_to_mb(mem_str)
 
     @staticmethod
     def format_bytes(mb_value: int) -> str:
@@ -1572,26 +1575,8 @@ class MojoRunner:
 
     @staticmethod
     def slurm_time_to_seconds(time_str: str) -> int:
-        """Converts a SLURM time limit to total seconds, or -1 for `UNLIMITED`. Accepts every format `--time` does: `minutes`, `minutes:seconds`, `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, and `days-hours:minutes:seconds`."""
-        time_str = time_str.strip()
-        if time_str.upper() in {"UNLIMITED", "INFINITE"}:
-            return -1
-
-        # with a day count, what follows is hours[:minutes[:seconds]]
-        if "-" in time_str:
-            days_part, rest = time_str.split("-", 1)
-            hms = [int(p) for p in rest.split(":")]
-            hours, minutes, seconds = hms + [0] * (3 - len(hms))
-            return int(days_part) * 86400 + hours * 3600 + minutes * 60 + seconds
-
-        parts = [int(p) for p in time_str.split(":")]
-        if len(parts) == 3:  # HH:MM:SS
-            return parts[0] * 3600 + parts[1] * 60 + parts[2]
-        if len(parts) == 2:  # MM:SS
-            return parts[0] * 60 + parts[1]
-        if len(parts) == 1:  # MM
-            return parts[0] * 60
-        return 0
+        """Converts a SLURM time limit to total seconds, or -1 for `UNLIMITED`. See `mujoco_mojo.utils.slurm.slurm_time_to_seconds`."""
+        return slurm_time_to_seconds(time_str)
 
     @staticmethod
     def get_slurm_time_limit(partition_name: str) -> str:
@@ -1623,28 +1608,41 @@ class MojoRunner:
         except Exception:
             return 1001
 
-    def orchestrate_slurm_monte_carlo(
+    # --- SLURM submission ---
+    #
+    # `prepare_slurm_job`, `write_slurm_script`, and `submit_slurm_script` ask nothing, and
+    # `submit_slurm` chains them for submitting from Python. The wizard below only gathers a
+    # `SlurmConfig` from prompts and then uses the same three, so both paths produce the same job.
+
+    @staticmethod
+    def slurm_mojo_command() -> Path:
+        """The `mujoco-mojo` executable next to the running interpreter, which the compute nodes use to run each trial."""
+        return Path(sys.executable).parent.resolve() / "mujoco-mojo"
+
+    def prepare_slurm_job(
         self,
         global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
         trial_nums: list[int] | None = None,
-    ) -> bool:
-        """Orchestrates a Monte Carlo SLURM submission."""
-        from rich.console import Console
-        from rich.prompt import Confirm, Prompt
+    ) -> SlurmJob | None:
+        """
+        Sets up the workdir for a SLURM submission without asking anything.
 
-        console = Console()
+        Creates the logs folder, persists the global overrides for the workers, writes `job_status.json`, and works out which trials still need to run (honoring `resume`).
 
-        project_root = Path.cwd().resolve()
+        Returns:
+            The job, or `None` when every trial was already completed.
+
+        """
+        (self.workdir / "logs").mkdir(parents=True, exist_ok=True)
 
         # persist overrides so workers can access them
         overrides_path = self.workdir.resolve() / "global_overrides.json"
-        if len(global_overrides) > 0:
+        has_overrides = len(global_overrides) > 0
+        if has_overrides:
             logger.info(f"Persisting global overrides to {overrides_path}")
             overrides_path.write_text(global_overrides.model_dump_json())
 
-        # initialize the status tracker
         job_trial_nums = trial_nums if trial_nums else self.config.trial_nums
-
         status_tracker = JobStatus(
             workdir=self.workdir.resolve(),
             job_type=JobType.MONTE_CARLO,
@@ -1669,26 +1667,27 @@ class MojoRunner:
         status_tracker.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
         to_run = status_tracker.pending_trial_nums
-
         if not to_run:
             logger.info("All trials were already completed. Nothing to do.")
-            return False
-        else:
-            logger.info(f"{len(to_run)} trials were identified for running.")
+            return None
+        logger.info(f"{len(to_run)} trials were identified for running.")
 
-        # reconstruct the CLI command for the worker
+        return SlurmJob(
+            status=status_tracker,
+            to_run=to_run,
+            overrides_path=overrides_path,
+            has_overrides=has_overrides,
+        )
+
+    def slurm_worker_command(self, job: SlurmJob) -> str:
+        """What each array task runs: one trial, picked by the array index, on a single process."""
         runtime_flag = f'--runtime "{self.runtime_path}"' if self.runtime_path else ""
         seed_flag = f"--seed {self.seed}" if self.seed is not None else ""
         overrides_flag = (
-            f'--overrides "{overrides_path}"' if len(global_overrides) > 0 else ""
+            f'--overrides "{job.overrides_path}"' if job.has_overrides else ""
         )
-
-        # get the path to the mujoco-mojo CLI executable
-        py_bin_dir = Path(sys.executable).parent.resolve()
-        mojo_cmd = py_bin_dir / "mujoco-mojo"
-
-        cmd = (
-            f"{mojo_cmd} run single "
+        return (
+            f"{self.slurm_mojo_command()} run single "
             f'--generator "{self.generator_path}" '
             f"{runtime_flag} {seed_flag} {overrides_flag} "
             f'--workdir "{self.workdir.resolve()}" '
@@ -1696,8 +1695,185 @@ class MojoRunner:
             f"--padding {self.config.padding_width} "  # name the trial folder like the orchestrator expects
             f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its own trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method
-            f"--n-proc 1"  # A worker only needs 1 process
+            f"--n-proc 1"  # a worker only needs 1 process
         )
+
+    def write_slurm_script(
+        self, job: SlurmJob, config: SlurmConfig, console: Console
+    ) -> Path:
+        """Writes `mujoco_mojo_submit.sh` for `job`, adding the extra `#SBATCH` lines and environment variables from the settings files (and printing what they are)."""
+        from mujoco_mojo.settings import MujocoMojoSettings
+
+        slurm_settings = MujocoMojoSettings().slurm
+        _print_slurm_extras(console, slurm_settings)
+
+        script = build_submission_script(
+            job_name=config.job_name or f"mojo-sim-{job.status.id}",
+            array_range=self.get_slurm_array_string(job.to_run),
+            workdir=self.workdir.resolve(),
+            config=config,
+            worker_command=self.slurm_worker_command(job),
+            extra_sbatch_lines=slurm_settings.sbatch_lines(),
+            extra_env_lines=slurm_settings.env_lines(),
+        )
+        script_path = (self.workdir / "mujoco_mojo_submit.sh").resolve()
+        script_path.write_text(script, encoding="utf-8")
+        logger.info(f"SLURM submission script written to {script_path}")
+        return script_path
+
+    def submit_slurm_script(self, job: SlurmJob, script_path: Path) -> SlurmSubmission:
+        """Runs `sbatch` on the script and, once it is accepted, saves the SLURM job id in `job_status.json` so the job can be looked up (and watched) later."""
+        logger.info(f"Submitting {len(job.to_run)} trials...")
+        try:
+            result = subprocess.run(
+                ["sbatch", "--parsable", str(script_path)],
+                capture_output=True,
+                text=True,
+            )
+        except OSError as exc:
+            return SlurmSubmission(script_path, message=f"Could not run sbatch: {exc}")
+        if result.returncode != 0:
+            return SlurmSubmission(
+                script_path, message=(result.stderr or result.stdout).strip()
+            )
+
+        job_id = parse_job_id(result.stdout)
+        job.status.slurm_job_id = job_id
+        job.status.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+        return SlurmSubmission(
+            script_path,
+            submitted=True,
+            job_id=job_id,
+            message=f"Submitted batch job {job_id}"
+            if job_id
+            else result.stdout.strip(),
+        )
+
+    def slurm_limit_problems(self, job: SlurmJob, config: SlurmConfig) -> list[str]:
+        """Everything in the request that exceeds what the cluster reports (CPUs, memory, and time for the partition, and the array size). Limits SLURM cannot report are not checked."""
+        partition = config.partition or ""
+        checks = (
+            cpu_problem(config.cpus_per_task, self.get_slurm_cpu_limit(partition)),
+            mem_problem(config.mem, self.get_slurm_node_mem_limit(partition)),
+            time_problem(config.time_limit, self.get_slurm_time_limit(partition)),
+            array_problem(len(job.to_run), self.get_max_array_size()),
+        )
+        return [problem for problem in checks if problem is not None]
+
+    def submit_slurm(
+        self,
+        config: SlurmConfig,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
+        trial_nums: list[int] | None = None,
+        clean_workdir: bool = False,
+        cleanup_delay: int = 10,
+        *,
+        submit: bool = True,
+        skip_checks: bool = False,
+        console: Console | None = None,
+    ) -> SlurmSubmission | None:
+        """
+        Initializes a workdir and submits it to SLURM from a `SlurmConfig`, without asking anything.
+
+        Args:
+            config: The resources to request.
+            global_overrides: Overrides persisted for the workers.
+            trial_nums: Specific trials to run, instead of all of them.
+            clean_workdir: Wipe the workdir first.
+            cleanup_delay: Seconds of countdown before wiping.
+            submit: Run `sbatch`. When `False` the workdir and script are written and nothing is submitted.
+            skip_checks: Submit even if the request exceeds a limit the cluster reports.
+            console: Where to print what happened.
+
+        Returns:
+            What was written and submitted, or `None` when every trial was already completed.
+
+        Raises:
+            ValueError: If `generator_path` is not set (or `runtime_path`, when there is a runtime), or the request exceeds a cluster limit and `skip_checks` is not set.
+
+        """
+        from rich.console import Console
+
+        if not isinstance(self.config, MonteCarloConfig):
+            msg = f"A SLURM configuration for {self.config.__class__.__name__} has not been implemented."
+            logger.error(msg)
+            raise NotImplementedError(msg)
+
+        # the workers are separate `mujoco-mojo` processes that import each function by its dotted path
+        missing = []
+        if self.generator_path is None:
+            missing.append("generator_path")
+        if (
+            self.runtime is not None
+            and self.runtime is not DEFAULT_RUNTIME
+            and self.runtime_path is None
+        ):
+            missing.append("runtime_path")
+        if missing:
+            msg = f"Set {' and '.join(missing)} (for example 'sim.generate') so the compute nodes can import the function."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        console = console or Console()
+        self._prepare_run(clean_workdir, cleanup_delay)
+        job = self.prepare_slurm_job(global_overrides, trial_nums)
+        if job is None:
+            console.print(
+                "[green]All trials were already completed.[/] Nothing to submit."
+            )
+            return None
+
+        if not skip_checks:
+            problems = self.slurm_limit_problems(job, config)
+            if problems:
+                msg = (
+                    "The request exceeds what the cluster reports:\n  - "
+                    + "\n  - ".join(problems)
+                    + "\nChange the request, or skip these checks to submit anyway."
+                )
+                logger.error(msg)
+                raise ValueError(msg)
+
+        script_path = self.write_slurm_script(job, config, console)
+        if not submit:
+            console.print(
+                f"\n[yellow]Nothing was submitted.[/] The workdir is ready; submit it with:\n[bold green]sbatch {script_path}[/]"
+            )
+            return SlurmSubmission(script_path)
+
+        submission = self.submit_slurm_script(job, script_path)
+        if submission.submitted:
+            console.print(f"\n[bold green]Success![/] {submission.message}")
+        else:
+            logger.error(f"SLURM Submission Failed: {submission.message}")
+        return submission
+
+    def orchestrate_slurm_monte_carlo(
+        self,
+        global_overrides: NamedValueDict[NDArray] = NamedValueDict[NDArray](),
+        trial_nums: list[int] | None = None,
+    ) -> bool:
+        """
+        Orchestrates a Monte Carlo SLURM submission interactively.
+
+        Prompts for the resources (checking each against the partition's limits), collects them in a `SlurmConfig`, and then hands everything to the same code `submit_slurm` uses. Just before submitting it offers to keep watching the job, which keeps `job_status.json` and the runtime report current (see `watch_job`).
+        """
+        from rich.console import Console
+        from rich.markup import escape
+        from rich.prompt import Confirm, IntPrompt, Prompt
+
+        console = Console()
+        project_root = Path.cwd().resolve()
+
+        job = self.prepare_slurm_job(global_overrides, trial_nums)
+        if job is None:
+            return False
+
+        def proceed_despite(message: str, note: str = "") -> bool:
+            console.print(f"\n[bold red]WARNING:[/] {message}")
+            if note:
+                console.print(f"[red]{note}[/]\n")
+            return Confirm.ask("Do you want to proceed anyway?", default=False)
 
         # ask for sbatch settings with a bunch of console inputs with default values
         available_partitions, default_partition = self.get_slurm_partitions()
@@ -1707,11 +1883,11 @@ class MojoRunner:
         )
         console.print(f"\t            [dim]Python:[/dim] {sys.executable}")
         console.print(f"\t              [dim]Root:[/dim] {project_root}")
-        console.print(f"\t[dim]mujoco-mojo binary:[/dim] {mojo_cmd}\n")
+        console.print(f"\t[dim]mujoco-mojo binary:[/dim] {self.slurm_mojo_command()}\n")
 
         # Standard colors only for Rich compatibility
         job_name = Prompt.ask(
-            "  [white]Job Name[/]", default=f"mojo-sim-{status_tracker.id}"
+            "  [white]Job Name[/]", default=f"mojo-sim-{job.status.id}"
         )
         if available_partitions:
             # Use the actual SLURM default if we found one, otherwise the first in list
@@ -1735,184 +1911,150 @@ class MojoRunner:
         time_limit_hint = self.get_slurm_time_limit(partition)
 
         # === get cpus per task ===
-        cpus_per_task = Prompt.ask(
-            f"  [white]CPUs per task[/] [dim](Node Limit: {cpu_limit})[/]",
-            default="1",
+        cpus_per_task = max(
+            1,
+            IntPrompt.ask(
+                f"  [white]CPUs per task[/] [dim](Node Limit: {cpu_limit})[/]",
+                default=1,
+            ),
         )
-        cpus_per_task = max([1, int(cpus_per_task)])
-        if cpu_limit != "<UNKNOWN>" and cpus_per_task > int(cpu_limit):
-            console.print(
-                f"\n[bold red]WARNING:[/] Requested CPUs ({cpus_per_task}) exceeds "
-                f"the physical node limit ({cpu_limit})."
-            )
-            if not Confirm.ask("Do you want to proceed anyway?", default=False):
+        if problem := cpu_problem(cpus_per_task, cpu_limit):
+            if not proceed_despite(problem):
                 return True
 
         # === get memory ===
-        mem_per_node = Prompt.ask(
-            f"  [white]Memory per node[/] (e.g., 256M or 1.5G) [dim](Node Limit: {mem_limit})[/]",
-            default=mem_limit,
-        )
-        if self.normalize_to_mb(mem_limit) > 0 and self.normalize_to_mb(
-            mem_per_node
-        ) > self.normalize_to_mb(mem_limit):
+        while True:
+            mem_text = Prompt.ask(
+                f"  [white]Memory per node[/] (e.g., 256M or 1.5G) [dim](Node Limit: {mem_limit})[/]",
+                default="" if mem_limit == UNKNOWN_LIMIT else mem_limit,
+            ).strip()
+            if not mem_text or normalize_to_mb(mem_text) > 0:
+                break
             console.print(
-                f"\n[bold red]WARNING:[/] Requested memory ({mem_per_node}) exceeds "
-                f"the partition node limit ({mem_limit})."
+                f"[bold red]ERROR:[/] '{escape(mem_text)}' is not a memory size. "
+                "Use a number with an optional unit, for example 512M or 1.5G."
             )
-            console.print("[red]This job will likely be rejected by SLURM.[/]\n")
-            if not Confirm.ask("Do you want to proceed anyway?", default=False):
+        mem = mem_text or None
+        if problem := mem_problem(mem, mem_limit):
+            if not proceed_despite(
+                problem, "This job will likely be rejected by SLURM."
+            ):
                 return True
 
         # === get time ===
-        time_limit = Prompt.ask(
-            f"  [white]Time limit[/] (HH:MM:SS) [dim](Partition Limit: {time_limit_hint})[/]",
-            default="01:00:00",
-        )
-        if time_limit_hint != "<UNKNOWN>":
-            requested_seconds = self.slurm_time_to_seconds(time_limit)
-            max_seconds = self.slurm_time_to_seconds(time_limit_hint)
-            if requested_seconds > max_seconds and max_seconds != -1:  # -1 == infinite
+        while True:
+            time_limit = Prompt.ask(
+                f"  [white]Time limit[/] (e.g., 01:00:00 or 1-12:00:00) [dim](Partition Limit: {time_limit_hint})[/]",
+                default="01:00:00",
+            ).strip()
+            try:
+                slurm_time_to_seconds(time_limit)
+                break
+            except ValueError:
                 console.print(
-                    f"\n[bold red]WARNING:[/] Requested time ({time_limit}) exceeds "
-                    f"partition MaxTime ({time_limit_hint})."
+                    f"[bold red]ERROR:[/] '{escape(time_limit)}' is not a SLURM time limit."
                 )
-                if not Confirm.ask("Proceed anyway?", default=False):
-                    return True
+        if problem := time_problem(time_limit, time_limit_hint):
+            if not proceed_despite(problem):
+                return True
 
         # === get concurrency throttle ===
-        max_concurrent = Prompt.ask(
+        max_concurrent_text = Prompt.ask(
             "  [white]Max concurrent tasks[/] [dim](blank = no limit, let SLURM decide)[/]",
             default="",
         )
-        if max_concurrent and not max_concurrent.isdigit():
+        if max_concurrent_text and not max_concurrent_text.isdigit():
             console.print(
-                f"\n[bold red]WARNING:[/] '{max_concurrent}' is not a number. Ignoring."
+                f"\n[bold red]WARNING:[/] '{escape(max_concurrent_text)}' is not a number. Ignoring."
             )
-            max_concurrent = ""
+            max_concurrent_text = ""
+        max_concurrent = (
+            int(max_concurrent_text) if max_concurrent_text.strip("0") else None
+        )
 
-        # === get SLURM extras (extra #SBATCH lines / env vars) ===
-        # already the fully-resolved project-over-global value - see
-        # MujocoMojoSettings.slurm and project_settings_file()
-        from mujoco_mojo.settings import MujocoMojoSettings
-
-        slurm_settings = MujocoMojoSettings().slurm
-        _print_slurm_extras(console, slurm_settings)
-
-        extra_sbatch_lines = slurm_settings.sbatch_lines()
-        extra_env_lines = slurm_settings.env_lines()
-
-        current_pythonpath = os.getenv("PYTHONPATH", "")
-        if str(project_root) not in current_pythonpath:
+        # === the project root ===
+        add_root_to_pythonpath = True
+        if str(project_root) not in os.getenv("PYTHONPATH", ""):
             console.print(
                 f"\n[yellow]Warning:[/] Project root [italic]{project_root}[/] is not in your PYTHONPATH."
             )
-            if Confirm.ask(
+            add_root_to_pythonpath = Confirm.ask(
                 "Should Mojo automatically include it in the SLURM submission?",
                 default=True,
-            ):
-                # We'll handle this in the sbatch content generation
-                include_root_in_path = True
-            else:
-                include_root_in_path = False
-        else:
-            include_root_in_path = True
+            )
 
-        partition_line = f"#SBATCH --partition={partition}" if partition else ""
-        python_path_line = (
-            f"export PYTHONPATH=$PYTHONPATH:{project_root}"
-            if include_root_in_path
-            else ""
+        config = SlurmConfig(
+            job_name=job_name,
+            partition=partition or None,
+            cpus_per_task=cpus_per_task,
+            mem=mem,
+            time_limit=time_limit,
+            max_concurrent=max_concurrent,
+            add_root_to_pythonpath=add_root_to_pythonpath,
+            project_root=project_root,
         )
 
-        # generate the .sh script
-        max_array = self.get_max_array_size()
-        if len(to_run) > max_array:
-            console.print(
-                f"\n[bold red]ERROR:[/] Trial count ({len(to_run)}) exceeds "
-                f"SLURM MaxArraySize ({max_array})."
-            )
+        if problem := array_problem(len(job.to_run), self.get_max_array_size()):
+            console.print(f"\n[bold red]ERROR:[/] {problem}")
             if not Confirm.ask("Proceed anyway?", default=False):
                 return True
-        array_range = self.get_slurm_array_string(to_run)
-        if max_concurrent:
-            array_range += f"%{max_concurrent}"
-        script_path = (self.workdir / "mujoco_mojo_submit.sh").resolve()
 
-        extra_sbatch_block = "\n".join(extra_sbatch_lines)
-        extra_env_block = (
-            "\n# Custom environment variables (global and/or project settings.toml)\n"
-            + "\n".join(extra_env_lines)
-            if extra_env_lines
-            else ""
-        )
-
-        sbatch_content = f"""#!/bin/bash
-#SBATCH --job-name={job_name}
-#SBATCH --array={array_range}
-#SBATCH --output={self.workdir.resolve()}/logs/trial_%a.log
-#SBATCH --cpus-per-task={cpus_per_task}
-#SBATCH --mem={mem_per_node}
-#SBATCH --time={time_limit}
-{partition_line}
-{extra_sbatch_block}
-
-# Move to the project root so imports work
-cd {project_root}
-{python_path_line}
-{extra_env_block}
-
-# Avoid concurrent array tasks racing to write .pyc files into the shared venv
-export PYTHONDONTWRITEBYTECODE=1
-
-# Execute the worker command
-{cmd}
-"""
-
-        script_path.write_text(sbatch_content, encoding="utf-8")
-        logger.info(f"SLURM submission script written to {script_path}")
+        script_path = self.write_slurm_script(job, config, console)
 
         # final submission
-        if Confirm.ask(
-            f"\n[cyan]Submit {len(to_run)} trials to SLURM now?[/]", default=True
+        if not Confirm.ask(
+            f"\n[cyan]Submit {len(job.to_run)} trials to SLURM now?[/]", default=True
         ):
-            # automatic submission
-            logger.info(f"Submitting {len(to_run)} trials...")
-            result = subprocess.run(
-                ["sbatch", str(script_path)], capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                job_id_msg = result.stdout.strip()
-                # Extract just the numeric ID if possible (e.g. "Submitted batch job 2" -> "2")
-                job_id = job_id_msg.split()[-1] if job_id_msg else "UNKNOWN"
-
-                console.print(f"\n[bold green]Success![/] {job_id_msg}")
-
-                # === Monitoring Dashboard ===
-                console.print("\n[bold cyan]Monitoring Status:[/bold cyan]")
-                console.print(
-                    f"  - [white]Check status:[/]       [green]squeue -j {job_id}[/]"
-                )
-                console.print(
-                    f"  - [white]Watch live:[/]         [green]watch -n 1 squeue -j {job_id}[/]"
-                )
-                console.print(
-                    f"  - [white]View first log:[/]     [green]tail -f {self.workdir.resolve()}/logs/trial_0.log[/]"
-                )
-                console.print(
-                    f"  - [white]Cancel all trials:[/]  [green]scancel {job_id}[/]"
-                )
-
-                console.print(
-                    f"\n[dim]Logs are being written to: {self.workdir.resolve()}/logs/[/]"
-                )
-                return False
-            else:
-                logger.error(f"SLURM Submission Failed: {result.stderr}")
-                return True
-        else:
-            # deffered submission
+            # deferred submission
             console.print(
                 f"\n[yellow]Orchestration complete.[/] Submit manually with:\n[bold green]sbatch {script_path}[/]"
             )
             return False
+
+        # asked now because the status file the watcher keeps current already exists
+        watch = Confirm.ask(
+            "Keep the job status and runtime report up to date until the job finishes?",
+            default=True,
+        )
+
+        submission = self.submit_slurm_script(job, script_path)
+        if not submission.submitted:
+            logger.error(f"SLURM Submission Failed: {submission.message}")
+            console.print(
+                f"\n[bold red]SLURM submission failed:[/] {escape(submission.message)}"
+            )
+            return True
+
+        job_id = submission.job_id or "UNKNOWN"
+        console.print(f"\n[bold green]Success![/] {submission.message}")
+
+        # === Monitoring Dashboard ===
+        console.print("\n[bold cyan]Monitoring Status:[/bold cyan]")
+        console.print(f"  - [white]Check status:[/]       [green]squeue -j {job_id}[/]")
+        console.print(
+            f"  - [white]Watch live:[/]         [green]watch -n 1 squeue -j {job_id}[/]"
+        )
+        console.print(
+            f"  - [white]View first log:[/]     [green]tail -f {self.workdir.resolve()}/logs/trial_0.log[/]"
+        )
+        console.print(f"  - [white]Cancel all trials:[/]  [green]scancel {job_id}[/]")
+        console.print(
+            f"\n[dim]Logs are being written to: {self.workdir.resolve()}/logs/[/]"
+        )
+
+        watch_cmd = (
+            f'mujoco-mojo run watch-workdir --workdir "{self.workdir.resolve()}"'
+        )
+        if not watch:
+            console.print(
+                f"\n[dim]To keep the status file and runtime report current later, run:[/] [green]{watch_cmd}[/]"
+            )
+            return False
+
+        try:
+            watch_job(self.workdir, n_proc=max(1, self.config.n_proc), console=console)
+        except KeyboardInterrupt:
+            console.print(
+                f"\n[yellow]Stopped watching.[/] The job keeps running. Resume with: [green]{watch_cmd}[/]"
+            )
+        return False

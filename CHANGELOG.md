@@ -10,6 +10,9 @@
 - Fixed SLURM memory sizes with decimals (`125.9G` was read as 125 MB)
 - Fixed SLURM `days-hours` time limits (`1-12` was read as 1 day and 12 minutes)
 - Added `--padding` to `run single`, so SLURM workers name trial folders like the rest of the job (`trial_007`, not `trial_7`)
+- Added `MojoRunner.submit_slurm` and `SlurmConfig` to submit a SLURM job from Python without prompts; the wizard now uses them
+- Added `mujoco-mojo run job-watch` (also offered by the SLURM wizard), which keeps a job's `job_status.json` and runtime report current and exits when every trial is done
+- SLURM submissions now save the job id in `job_status.json`
 
 ## Version 2.6.15 (2026-10-13)
 
