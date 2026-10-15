@@ -24,6 +24,12 @@ mujoco-mojo run single -g sim.generate -r sim.runtime --seed 123
 mujoco-mojo run single -g sim.generate -r sim.runtime --seed 123 --trial-num 42
 ```
 
+A single trial's folder is named from its own number (`trial_42`). Use `--padding` to zero-pad the number to a fixed width so it matches the other trials of a larger job (`--padding 4` writes `trial_0042`). You rarely need it by hand, since the [SLURM worker](#the-slurm-worker) passes it for you.
+
+```bash linenums="0"
+mujoco-mojo run single -g sim.generate -r sim.runtime --trial-num 42 --padding 4
+```
+
 ???+ note "Note: Nominal Run"
 
     Trial number `0` uses each distribution's `nominal_value` (if one was provided). This gives you a deterministic baseline that reflects design intent rather than a stochastic draw.
@@ -97,7 +103,7 @@ mujoco-mojo run monte-carlo \
 
 ???+ info "Info: Smart Parsing"
 
-    Mojo automatically converts strings like `'1.5'` into a `#!python float`, `'True'` into a `#!python bool`, or `'[1, 2, 3]'` into a `#!python list`. If you need to pass a string with special characters, wrap it in single quotes inside the double quotes (e.g., `--gen-kwarg name="'complex-site'"`).
+    Mojo automatically converts strings like `'1.5'` into a `#!python float`, `true` or `false` into a `#!python bool` (in any capitalization, so `True` works too), or `'[1, 2, 3]'` into a `#!python list`. If you need to pass a string with special characters, or a string that would otherwise be converted, wrap it in single quotes inside the double quotes (e.g., `--gen-kwarg name="'complex-site'"`, or `--gen-kwarg flag="'false'"` for the text `false`).
 
 ---
 
@@ -129,12 +135,12 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 
 - **Trial Identification:** Mojo scans your workdir and identifies exactly which trials are pending (fully supporting resume logic).
 - **Resource Discovery:** It autodetects your cluster's partitions, CPU limits, memory limits, and maximum array sizes.
-- **Interactive Setup:** You are prompted for job details (Job Name, Partition, Time Limit) with intelligent defaults and safety warnings if your requests exceed node limits.
+- **Interactive Setup:** You are prompted for job details (Job Name, Partition, Time Limit) with intelligent defaults and safety warnings if your requests exceed node limits. Memory takes any SLURM size, including decimals (`256M`, `1.5G`, `125.9G`), and a bare number is MB. The limit shown beside the prompt is the smallest node in the partition, rounded down to one decimal so the default is never more than the node has. The time limit takes every format `sbatch --time` does (`minutes`, `minutes:seconds`, `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, and `days-hours:minutes:seconds`).
 - **Automatic Scripting:** Mojo generates a `.sh` sbatch script in your workdir, handles `PYTHONPATH` inclusions, and persists global overrides so workers have the correct context.
 
 #### The SLURM Worker
 
-Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial.
+Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial. The command also passes `--padding` with the width of the whole job, so every worker names its folder like the orchestrator expects (`trial_007`, not `trial_7`).
 
 ???+ tip "Tip: Manual Submissions"
 
@@ -176,6 +182,28 @@ Both layers use the same convention:
 - Values must be plain strings/numbers/bools - nested tables or arrays are rejected, since this is meant to describe a flat set of settings, not a tree.
 
 If a key appears in both layers, the project-local value wins - so the example above submits with `account=a-different-allocation` (overridden) but still keeps the global `mail-user` and `MLM_LICENSE_FILE`.
+
+#### Checking What Gets Added
+
+Before the script is written, the wizard prints which settings files it read and exactly what it will add to the submission script:
+
+```text linenums="0"
+SLURM settings
+  global   /home/me/.mujoco-mojo/settings.toml  3 entries under [slurm]
+  project  /home/me/sims/.mujoco-mojo/settings.toml  2 entries under [slurm]
+
+Extra lines added to the submission script:
+  #SBATCH --account=a-different-allocation  (project)
+  #SBATCH --mail-user=me@cluster.edu  (global)
+  #SBATCH --qos=high  (project)
+  export MLM_LICENSE_FILE=<value hidden>  (global)
+```
+
+Each line is labeled with the file it came from. Environment variable values are not printed, only their names, since they are often credentials or license servers; the values are in the generated `mujoco_mojo_submit.sh`.
+
+???+ tip "Tip: Project Settings Not Showing Up?"
+
+    The project file is looked up as `./.mujoco-mojo/settings.toml` relative to the directory the `mujoco-mojo` process starts in, not relative to your workdir or the generator script. Scripts that `cd` first change this: the ones `mujoco-mojo init` writes begin with `cd "$(dirname "${BASH_SOURCE[0]}")"`, so they look next to the script, not where your terminal was. If the file is listed as `not found`, keep `.mujoco-mojo/` in that directory (run `mujoco-mojo settings set --project ...` from there) or launch from the directory that holds it. A file that exists but could not be parsed is reported with the parse error. Keys containing a dot must be quoted in TOML (`"sbatch.account" = "proj123"`); `mujoco-mojo settings set --project slurm.sbatch.account proj123` writes them correctly for you.
 
 ---
 

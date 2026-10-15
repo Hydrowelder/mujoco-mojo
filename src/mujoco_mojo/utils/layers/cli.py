@@ -195,8 +195,14 @@ def _load_func(
     return obj
 
 
+_BOOL_STRINGS = {"true": True, "false": False}
+
+
 def _smart_parse(value: str) -> Any:
-    """Tries to convert CLI strings to Python types (int, float, bool)."""
+    """Tries to convert CLI strings to Python types (int, float, bool). `true` and `false` are matched case-insensitively, so `false` is a bool and not a (truthy) string; Python's `True` and `False` work too, and a quoted value such as `'false'` stays a string."""
+    lowered = value.strip().lower()
+    if lowered in _BOOL_STRINGS:
+        return _BOOL_STRINGS[lowered]
     try:
         # ast.literal_eval handles 10 -> int, 10.5 -> float, True -> bool
         return ast.literal_eval(value)
@@ -379,6 +385,17 @@ if True:
             "--trial-num",
             "-tn",
             help="Specific trial number to run ([italic]-tn 5[/italic])",
+        ),
+    ]
+    PaddingType = Annotated[
+        int | None,
+        typer.Option(
+            "--padding",
+            min=1,
+            help=(
+                "Zero-padding width of the trial folder name ([italic]--padding 3[/italic] gives [italic]trial_007[/italic]). "
+                "Defaults to no padding for a single trial. SLURM workers pass the width of the whole job so their folders match."
+            ),
         ),
     ]
     TrialNumsType = Annotated[
@@ -831,6 +848,7 @@ def run_single(
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
+    padding: PaddingType = None,
     gen_args: GenArgsType = [],
     gen_kwargs: GenKwargsType = [],
     run_args: RunArgsType = [],
@@ -905,7 +923,9 @@ def run_single(
     # a single trial is always just one trial - n_trial only exists on
     # MonteCarloConfig for padding-width bookkeeping, it doesn't affect which
     # trial actually runs (that's `trial_num`, passed explicitly below)
-    runner.config = MonteCarloConfig(n_trial=1, n_proc=n_proc, resume=resume)
+    runner.config = MonteCarloConfig(
+        n_trial=1, n_proc=n_proc, resume=resume, padding=padding
+    )
 
     console.print(f"[bold magenta]Running trial {trial_num}[/bold magenta]...")
     logger.info(f"Running trial {trial_num}...", extra={"file_only": True})

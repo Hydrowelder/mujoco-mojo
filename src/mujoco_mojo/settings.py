@@ -6,7 +6,9 @@ import ast
 import inspect
 import json
 import textwrap
+import tomllib
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -90,6 +92,53 @@ def project_settings_file() -> Path:
 
 
 SlurmScalar = str | int | float | bool
+
+
+@dataclass(frozen=True)
+class SlurmSettingsSource:
+    """One settings file that can contribute `[slurm]` entries."""
+
+    label: str
+    """`global` or `project`."""
+
+    path: Path
+    """Where the file is (or would be) located."""
+
+    exists: bool
+    """Whether the file exists."""
+
+    entries: dict[str, Any] = field(default_factory=dict)
+    """The raw `[slurm]` entries this file defines, empty if it has none or couldn't be read."""
+
+    error: str | None = None
+    """Why the file couldn't be read, if it couldn't."""
+
+
+def slurm_settings_sources() -> list[SlurmSettingsSource]:
+    """
+    The settings files that can contribute `[slurm]` entries, lowest priority first (global, then project), each read on its own.
+
+    `MujocoMojoSettings().slurm` only has the merged result, which hides a project file that wasn't found, since the project file is looked up relative to the current directory. This reports each file separately so a submission can say where it looked and what each one contributed.
+    """
+    sources: list[SlurmSettingsSource] = []
+    for label, path in (
+        ("global", GLOBAL_SETTINGS_FILE),
+        ("project", project_settings_file()),
+    ):
+        if not path.is_file():
+            sources.append(SlurmSettingsSource(label, path, exists=False))
+            continue
+        try:
+            with path.open("rb") as handle:
+                table = tomllib.load(handle).get("slurm", {})
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            sources.append(
+                SlurmSettingsSource(label, path, exists=True, error=str(exc))
+            )
+            continue
+        entries = dict(table) if isinstance(table, dict) else {}
+        sources.append(SlurmSettingsSource(label, path, exists=True, entries=entries))
+    return sources
 
 
 _SBATCH_PREFIX = "sbatch."

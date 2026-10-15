@@ -4,6 +4,7 @@ import inspect
 import itertools
 import json
 import logging
+import math
 import multiprocessing
 import os
 import re
@@ -69,10 +70,67 @@ from mujoco_mojo.utils.utils import write_dojo_script
 
 if TYPE_CHECKING:
     import optuna
+    from rich.console import Console
 
     from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+    from mujoco_mojo.settings import SlurmExtraSettings
 
 logger = get_logger(__name__)
+
+
+def _print_slurm_extras(console: Console, slurm: SlurmExtraSettings) -> None:
+    """
+    Prints which settings files were read and the extra `#SBATCH` lines and environment variables that will be added to the submission script.
+
+    Each file is listed with where it was looked for, since the project file is read from `./.mujoco-mojo/settings.toml` relative to the directory the command was run from. Environment variable values are not printed, only their names, since they are often credentials or license servers; the values are in the generated script.
+    """
+    from rich.markup import escape
+
+    from mujoco_mojo.settings import slurm_settings_sources
+
+    sources = slurm_settings_sources()
+    console.print("\n[bold cyan]SLURM settings[/bold cyan]")
+    for source in sources:
+        if source.error is not None:
+            status = f"[red]could not be read: {escape(source.error)}[/red]"
+        elif not source.exists:
+            status = "[yellow]not found[/yellow]"
+        else:
+            count = len(source.entries)
+            status = f"{count} [dim]{'entry' if count == 1 else 'entries'} under \\[slurm][/dim]"
+        console.print(
+            f"  [white]{source.label:<8}[/white] {escape(str(source.path))}  {status}"
+        )
+
+    # a key set in both files takes the project value, so attribute it to the project
+    project_keys = set(sources[-1].entries) if sources else set()
+
+    def origin(key: str) -> str:
+        return "project" if key in project_keys else "global"
+
+    sbatch_keys = [k for k in slurm.root if k.startswith("sbatch.")]
+    env_keys = [k for k in slurm.root if not k.startswith("sbatch.")]
+    sbatch_lines = slurm.sbatch_lines()
+
+    if not slurm.root:
+        console.print(
+            "\n[yellow]No extra SLURM settings were found.[/yellow] "
+            'Add entries such as [italic]"sbatch.account" = "proj123"[/italic] under [bold]\\[slurm][/bold] '
+            "in one of the files above (or run [italic]mujoco-mojo settings set --project slurm.sbatch.account proj123[/italic])."
+        )
+        logger.info("No extra SLURM settings were found.")
+        return
+
+    console.print("\n[bold]Extra lines added to the submission script:[/bold]")
+    for key, line in zip(sbatch_keys, sbatch_lines, strict=True):
+        console.print(f"  {escape(line)}  [dim]({origin(key)})[/dim]")
+        logger.info(f"SLURM extra ({origin(key)}): {line}")
+    for key in env_keys:
+        console.print(
+            f"  export {escape(key)}=[dim]<value hidden>[/dim]  [dim]({origin(key)})[/dim]"
+        )
+        logger.info(f"SLURM extra environment variable ({origin(key)}): {key}")
+
 
 __all__ = [
     "MojoGenerator",
@@ -141,6 +199,9 @@ class BaseConfig(MojoBaseModel):
     resume: bool = DEFAULT_RESUME
     """Whether to resume a study if the study already exists."""
 
+    padding: int | None = Field(default=None, ge=1)
+    """Zero-padding width of the trial folder names (for example `3` gives `trial_007`). When unset, the width is derived from `n_trial` so every trial in a job sorts consistently; set it when a process only knows about one trial of a larger job, such as a SLURM worker."""
+
     @property
     def is_parallel(self) -> bool:
         return self.n_proc > 1
@@ -155,6 +216,8 @@ class BaseConfig(MojoBaseModel):
 
     @property
     def padding_width(self) -> int:
+        if self.padding is not None:
+            return self.padding
         if self.n_trial == 0:
             return 1
         else:
@@ -1289,14 +1352,16 @@ class MojoRunner:
 
     @staticmethod
     def normalize_to_mb(mem_str: str) -> int:
-        """Converts SLURM memory strings (e.g., '1000', '1G', '1024M') to integer MB."""
+        """Converts SLURM memory strings (e.g., '1000', '1G', '1024M', '125.9G') to integer MB, or 0 if the string isn't a recognizable size. Decimal values are supported, and a bare number is MB like it is for SLURM."""
         # Split the number from the unit (e.g., '1024M' -> '1024', 'M')
-        match = re.match(r"(\d+)([KMGTP]?)", mem_str.upper())
+        match = re.fullmatch(
+            r"\s*(\d+(?:\.\d+)?|\.\d+)\s*([KMGTP]?)B?\s*", mem_str.upper()
+        )
         if not match:
             return 0
 
-        value, unit = match.groups()
-        value = int(value)
+        number, unit = match.groups()
+        value = float(number)
 
         # SLURM units are powers of 1024
         multipliers = {
@@ -1311,21 +1376,22 @@ class MojoRunner:
 
     @staticmethod
     def format_bytes(mb_value: int) -> str:
-        """Scales MB back up to the most readable unit (G, T, etc.)."""
+        """Scales MB back up to the most readable unit (G, T, etc.), with at most one decimal place. The value is rounded down, never up, so a limit shown to the user is never larger than the real limit; `normalize_to_mb` reads the result back."""
         units = ["M", "G", "T", "P"]
         value = float(mb_value)
         unit_index = 0
 
-        # Keep dividing by 1024 as long as it's a clean multiple
+        # keep dividing by 1024 for as long as the next unit is reached
         while value >= 1024 and unit_index < len(units) - 1:
             value /= 1024
             unit_index += 1
 
-        # If it's a whole number (like 1.0G), show it as 1G.
-        # Otherwise, show one decimal place (like 1.5G).
-        if value.is_integer():
-            return f"{int(value)}{units[unit_index]}"
-        return f"{value:.1f}{units[unit_index]}"
+        # floor to one decimal: rounding up could show more memory than the node has
+        floored = math.floor(value * 10) / 10
+        # if it's a whole number (like 1.0G), show it as 1G, otherwise one decimal place (like 1.5G)
+        if floored.is_integer():
+            return f"{int(floored)}{units[unit_index]}"
+        return f"{floored:.1f}{units[unit_index]}"
 
     @staticmethod
     def get_slurm_node_mem_limit(partition_name: str) -> str:
@@ -1350,7 +1416,7 @@ class MojoRunner:
 
             # 3. Find all RealMemory values (capturing optional suffixes)
             # Regex captures digits and any trailing letters (like G or M)
-            mem_matches = re.findall(r"\bRealMemory=(\d+[KMGTP]?)", node_info)
+            mem_matches = re.findall(r"\bRealMemory=(\d+(?:\.\d+)?[KMGTP]?)", node_info)
             if mem_matches:
                 # Normalize every match to MB and find the lowest one
                 min_mb = min(MojoRunner.normalize_to_mb(m) for m in mem_matches)
@@ -1391,23 +1457,25 @@ class MojoRunner:
 
     @staticmethod
     def slurm_time_to_seconds(time_str: str) -> int:
-        """Converts SLURM time (D-HH:MM:SS or HH:MM:SS) to total seconds."""
-        if time_str.upper() == "UNLIMITED":
+        """Converts a SLURM time limit to total seconds, or -1 for `UNLIMITED`. Accepts every format `--time` does: `minutes`, `minutes:seconds`, `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, and `days-hours:minutes:seconds`."""
+        time_str = time_str.strip()
+        if time_str.upper() in {"UNLIMITED", "INFINITE"}:
             return -1
 
-        # Format: Days-Hours:Minutes:Seconds
-        days = 0
+        # with a day count, what follows is hours[:minutes[:seconds]]
         if "-" in time_str:
-            days_part, time_str = time_str.split("-")
-            days = int(days_part)
+            days_part, rest = time_str.split("-", 1)
+            hms = [int(p) for p in rest.split(":")]
+            hours, minutes, seconds = hms + [0] * (3 - len(hms))
+            return int(days_part) * 86400 + hours * 3600 + minutes * 60 + seconds
 
-        parts = list(map(int, time_str.split(":")))
+        parts = [int(p) for p in time_str.split(":")]
         if len(parts) == 3:  # HH:MM:SS
-            return days * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
         if len(parts) == 2:  # MM:SS
-            return days * 86400 + parts[0] * 60 + parts[1]
+            return parts[0] * 60 + parts[1]
         if len(parts) == 1:  # MM
-            return days * 86400 + parts[0] * 60
+            return parts[0] * 60
         return 0
 
     @staticmethod
@@ -1522,6 +1590,7 @@ class MojoRunner:
             f'--workdir "{self.workdir.resolve()}" '
             f"{gen_args_str} {gen_kwargs_str} "
             f"{run_args_str} {run_kwargs_str} "
+            f"--padding {self.config.padding_width} "  # name the trial folder like the orchestrator expects
             f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its own trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method
             f"--n-proc 1"  # A worker only needs 1 process
@@ -1578,7 +1647,7 @@ class MojoRunner:
 
         # === get memory ===
         mem_per_node = Prompt.ask(
-            f"  [white]Memory per node[/] (e.g., 256M) [dim](Node Limit: {mem_limit})[/]",
+            f"  [white]Memory per node[/] (e.g., 256M or 1.5G) [dim](Node Limit: {mem_limit})[/]",
             default=mem_limit,
         )
         if self.normalize_to_mb(mem_limit) > 0 and self.normalize_to_mb(
@@ -1625,11 +1694,7 @@ class MojoRunner:
         from mujoco_mojo.settings import MujocoMojoSettings
 
         slurm_settings = MujocoMojoSettings().slurm
-        if slurm_settings.root:
-            console.print(
-                f"[dim]Applying {len(slurm_settings.root)} SLURM setting(s) from "
-                "~/.mujoco-mojo/settings.toml and/or ./.mujoco-mojo/settings.toml[/dim]"
-            )
+        _print_slurm_extras(console, slurm_settings)
 
         extra_sbatch_lines = slurm_settings.sbatch_lines()
         extra_env_lines = slurm_settings.env_lines()
