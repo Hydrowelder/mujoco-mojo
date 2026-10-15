@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 from bdb import BdbQuit
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
@@ -186,6 +187,93 @@ class MojoObjective(Protocol):
         *args: Any,
         **kwargs: Any,
     ) -> float: ...
+
+
+# --- shared arguments ---
+
+GENERATOR_FIXED_ARGS = 2
+"""Leading positional arguments the runner passes to a generator itself: the model and the overrides."""
+
+RUNTIME_FIXED_ARGS = 3
+"""Leading positional arguments the runner passes to a runtime itself: the model, the runtime manager, and the state."""
+
+OBJECTIVE_FIXED_ARGS = 3
+"""Leading positional arguments the runner passes to an objective itself: the model, the telemetry path, and the state."""
+
+
+def accepted_kwarg_names(
+    func: Callable[..., Any], n_fixed: int, args: Sequence[Any]
+) -> set[str] | None:
+    """
+    The keyword names `func` can take once `n_fixed` leading arguments and the positional `args` are bound to it.
+
+    A name bound positionally is excluded, since passing it again by keyword would raise. Returns `None` when `func` takes `**kwargs`, or its signature cannot be read, because it then accepts anything.
+    """
+    try:
+        parameters = list(inspect.signature(func).parameters.values())
+    except (TypeError, ValueError):
+        return None
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+        return None
+
+    positional = [
+        p
+        for p in parameters
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    bound = {p.name for p in positional[: n_fixed + len(args)]}
+    named = {
+        p.name
+        for p in parameters
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return named - bound
+
+
+def select_kwargs(
+    func: Callable[..., Any],
+    n_fixed: int,
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any],
+) -> dict[str, Any]:
+    """The part of `kwargs` that `func` accepts (all of it if `func` takes `**kwargs`), so one shared set of keyword arguments can go to several functions with different signatures."""
+    names = accepted_kwarg_names(func, n_fixed, args)
+    if names is None:
+        return dict(kwargs)
+    return {key: value for key, value in kwargs.items() if key in names}
+
+
+def validate_shared_kwargs(
+    kwargs: Mapping[str, Any],
+    args: Sequence[Any],
+    targets: Mapping[str, tuple[Callable[..., Any], int]],
+) -> None:
+    """
+    Raises `ValueError` if a keyword argument is accepted by none of `targets`, which maps a role (such as `"generator"`) to its function and its number of fixed leading arguments.
+
+    A function that takes `**kwargs` accepts every key, so nothing is checked when any target does; this catches a misspelled key, which filtering would otherwise silently drop.
+    """
+    if not kwargs or not targets:
+        return
+    accepted: dict[str, set[str]] = {}
+    for role, (func, n_fixed) in targets.items():
+        names = accepted_kwarg_names(func, n_fixed, args)
+        if names is None:
+            return
+        accepted[role] = names
+
+    unknown = sorted(set(kwargs) - set().union(*accepted.values()))
+    if not unknown:
+        return
+    detail = "; ".join(
+        f"{role}: {sorted(names) if names else 'none'}"
+        for role, names in accepted.items()
+    )
+    msg = f"Keyword argument(s) {unknown} are not accepted by the generator, runtime, or objective they are passed to. Keywords each one accepts - {detail}."
+    logger.error(msg)
+    raise ValueError(msg)
 
 
 # --- Models ---
@@ -416,10 +504,8 @@ class Trial:
         runtime: MojoRuntime | None,
         seed: int | None,
         overrides: NamedValueDict[NDArray],
-        gen_args: list[Any],
-        gen_kwargs: dict[str, Any],
-        run_args: list[Any],
-        run_kwargs: dict[str, Any],
+        args: Sequence[Any],
+        kwargs: Mapping[str, Any],
     ) -> tuple[MojoModel | None, TrialStatus, MjState | None]:
         """
         Executes the complete simulation pipeline for this trial.
@@ -434,10 +520,8 @@ class Trial:
             runtime: Optional function to run the simulation (MuJoCo).
             seed: Seed to use to define the trial.
             overrides: Key-value pairs that override random distributions.
-            gen_args: Positional arguments for the generator.
-            gen_kwargs: Keyword arguments for the generator.
-            run_args: Positional arguments for the runtime.
-            run_kwargs: Keyword arguments for the runtime.
+            args: Positional arguments passed to the generator and the runtime.
+            kwargs: Keyword arguments, each function receiving only the ones it accepts.
 
         Returns:
             The `MojoModel` object for the trial or None if there was a failure prior to generating the MojoModel and the status of the trial.
@@ -471,7 +555,12 @@ class Trial:
                     .with_seed(seed=seed)
                     .with_trial_num(self.trial_num)
                 )
-                mojo_model = generator(mojo_model, overrides, *gen_args, **gen_kwargs)
+                mojo_model = generator(
+                    mojo_model,
+                    overrides,
+                    *args,
+                    **select_kwargs(generator, GENERATOR_FIXED_ARGS, args, kwargs),
+                )
                 mojo_model._trial_dir = self.trial_dir
 
                 # 2. Setup Workspace & Save Metadata
@@ -513,8 +602,8 @@ class Trial:
                         mojo_model,
                         runtime_manager,
                         state,
-                        *run_args,
-                        **run_kwargs,
+                        *args,
+                        **select_kwargs(runtime, RUNTIME_FIXED_ARGS, args, kwargs),
                     )
                     status.requirements = runtime_manager.requirement_results
                 else:
@@ -584,10 +673,32 @@ class MojoRunner:
     xml_name: str = DEFAULT_XML_NAME
     config: MonteCarloConfig | OptimizerConfig = field(default_factory=MonteCarloConfig)
 
-    gen_args: list[Any] = field(default_factory=list)
-    gen_kwargs: dict[str, Any] = field(default_factory=dict)
-    run_args: list[Any] = field(default_factory=list)
-    run_kwargs: dict[str, Any] = field(default_factory=dict)
+    args: list[Any] = field(default_factory=list)
+    """Positional arguments passed to the generator, the runtime, and the objective."""
+
+    kwargs: dict[str, Any] = field(default_factory=dict)
+    """Keyword arguments shared by the generator, the runtime, and the objective. Each receives only the ones it accepts (all of them if it takes `**kwargs`)."""
+
+    def shared_argument_flags(self) -> str:
+        """The `--arg` and `--kwarg` options that hand this runner's arguments to another `mujoco-mojo` process, such as a SLURM worker."""
+        flags = [f'--arg "{a}"' for a in self.args]
+        flags += [f'--kwarg "{k}={v}"' for k, v in self.kwargs.items()]
+        return " ".join(flags)
+
+    def validate_kwargs(self) -> None:
+        """
+        Raises `ValueError` if a keyword argument is accepted by none of the generator, the runtime, and the objective.
+
+        Each function is only given the keywords it accepts, so a misspelled one would otherwise be dropped silently. A function that takes `**kwargs` accepts everything, which turns the check off.
+        """
+        targets: dict[str, tuple[Callable[..., Any], int]] = {
+            "generator": (self.generator, GENERATOR_FIXED_ARGS)
+        }
+        if self.runtime is not None:
+            targets["runtime"] = (self.runtime, RUNTIME_FIXED_ARGS)
+        if self.objective is not None:
+            targets["objective"] = (self.objective, OBJECTIVE_FIXED_ARGS)
+        validate_shared_kwargs(self.kwargs, self.args, targets)
 
     @staticmethod
     def inspect_protocol(
@@ -749,6 +860,8 @@ class MojoRunner:
                 raise ValueError(msg)
             seen[fid] = role
 
+        self.validate_kwargs()
+
         if clean_workdir:
             if self.config.resume:
                 msg = "clean_workdir and resume are mutually exclusive with one another. Use one or the other."
@@ -900,10 +1013,8 @@ class MojoRunner:
             runtime=self.runtime,
             seed=seed,
             overrides=overrides,
-            gen_args=self.gen_args,
-            gen_kwargs=self.gen_kwargs,
-            run_args=self.run_args,
-            run_kwargs=self.run_kwargs,
+            args=self.args,
+            kwargs=self.kwargs,
         )
 
         # write distribution tables from this process so they never need to
@@ -965,10 +1076,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            gen_args_used=bool(self.gen_args),
-            gen_kwargs_used=bool(self.gen_kwargs),
-            run_args_used=bool(self.run_args),
-            run_kwargs_used=bool(self.run_kwargs),
+            args_used=bool(self.args),
+            kwargs_used=bool(self.kwargs),
             trial_nums=job_trial_nums,
         )
 
@@ -1158,10 +1267,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            gen_args_used=bool(self.gen_args),
-            gen_kwargs_used=bool(self.gen_kwargs),
-            run_args_used=bool(self.run_args),
-            run_kwargs_used=bool(self.run_kwargs),
+            args_used=bool(self.args),
+            kwargs_used=bool(self.kwargs),
             trial_nums=self.config.trial_nums,
         )
 
@@ -1229,8 +1336,10 @@ class MojoRunner:
                     mojo_model,
                     telemetry_path,
                     state,
-                    *self.run_args,
-                    **self.run_kwargs,
+                    *self.args,
+                    **select_kwargs(
+                        self.objective, OBJECTIVE_FIXED_ARGS, self.args, self.kwargs
+                    ),
                 )
                 trial_scores.append(score)
 
@@ -1546,10 +1655,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            gen_args_used=bool(self.gen_args),
-            gen_kwargs_used=bool(self.gen_kwargs),
-            run_args_used=bool(self.run_args),
-            run_kwargs_used=bool(self.run_kwargs),
+            args_used=bool(self.args),
+            kwargs_used=bool(self.kwargs),
             trial_nums=job_trial_nums,
         )
 
@@ -1570,15 +1677,6 @@ class MojoRunner:
             logger.info(f"{len(to_run)} trials were identified for running.")
 
         # reconstruct the CLI command for the worker
-        gen_args_str = " ".join([f'--gen-arg "{a}"' for a in self.gen_args])
-        gen_kwargs_str = " ".join(
-            [f'--gen-kwarg "{k}={v}"' for k, v in self.gen_kwargs.items()]
-        )
-        run_args_str = " ".join([f'--run-arg "{a}"' for a in self.run_args])
-        run_kwargs_str = " ".join(
-            [f'--run-kwarg "{k}={v}"' for k, v in self.run_kwargs.items()]
-        )
-
         runtime_flag = f'--runtime "{self.runtime_path}"' if self.runtime_path else ""
         seed_flag = f"--seed {self.seed}" if self.seed is not None else ""
         overrides_flag = (
@@ -1594,8 +1692,7 @@ class MojoRunner:
             f'--generator "{self.generator_path}" '
             f"{runtime_flag} {seed_flag} {overrides_flag} "
             f'--workdir "{self.workdir.resolve()}" '
-            f"{gen_args_str} {gen_kwargs_str} "
-            f"{run_args_str} {run_kwargs_str} "
+            f"{self.shared_argument_flags()} "
             f"--padding {self.config.padding_width} "  # name the trial folder like the orchestrator expects
             f"--trial-num $SLURM_ARRAY_TASK_ID "  # execute its own trial_num
             f"--execution-mode local "  # using local since slurm will just send us back to this method

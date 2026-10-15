@@ -1,5 +1,16 @@
 # Changelog
 
+## Version 2.6.16 (2026-10-14)
+
+- **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
+- **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments, and job status files from earlier versions no longer load
+- Command-line `true` and `false` now parse as bools (lowercase `false` used to be a truthy string)
+- The project settings file is now found by searching parent directories, like uv, so it applies from subdirectories
+- The SLURM wizard prints the settings files it read and the lines it adds to the submission script
+- Fixed SLURM memory sizes with decimals (`125.9G` was read as 125 MB)
+- Fixed SLURM `days-hours` time limits (`1-12` was read as 1 day and 12 minutes)
+- Added `--padding` to `run single`, so SLURM workers name trial folders like the rest of the job (`trial_007`, not `trial_7`)
+
 ## Version 2.6.15 (2026-10-13)
 
 - Fixed `ModelProvider.env_var_name`, and with it the settings schema written whenever settings are saved, raising when the optional `pydantic-ai` package isn't installed

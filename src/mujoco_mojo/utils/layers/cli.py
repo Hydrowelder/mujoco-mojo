@@ -325,49 +325,29 @@ if True:
             help="Delete the workdir before running (mutually exclusive with --resume)",
         ),
     ]
-    GenArgsType = Annotated[
+    ArgsType = Annotated[
         list[str],
         typer.Option(
-            "--gen-arg",
-            "-ga",
+            "--arg",
+            "-a",
             help=(
-                "Positional arg for the [bold cyan]generator[/bold cyan]. "
-                "Repeat for multiple values (e.g., [italic]--gen-arg high_friction --gen-arg 1.5[/italic]). "
-                "Values are [bold yellow]smart-parsed[/bold yellow] (e.g., '1.5' becomes a float)."
+                "Positional arg passed to the [bold cyan]generator[/bold cyan], the [bold magenta]runtime[/bold magenta], and the objective. "
+                "Repeat for multiple values (e.g., [italic]--arg high_friction --arg 1.5[/italic]). "
+                "Values are [bold yellow]smart-parsed[/bold yellow] (e.g., '1.5' becomes a float and 'false' a bool). "
+                "All of those functions get the same values, so each must accept them."
             ),
         ),
     ]
-    GenKwargsType = Annotated[
+    KwargsType = Annotated[
         list[str],
         typer.Option(
-            "--gen-kwarg",
-            "-gk",
+            "--kwarg",
+            "-k",
             help=(
-                "Keyword arg (key=value) for the [bold cyan]generator[/bold cyan]. "
-                "Example: [italic]--gen-kwarg mode='fast' --gen-kwarg complexity=10[/italic]. "
+                "Keyword arg (key=value) passed to the [bold cyan]generator[/bold cyan], the [bold magenta]runtime[/bold magenta], and the objective. "
+                "Each function receives only the keywords it accepts, and a keyword that none of them accept is an error. "
+                "Example: [italic]--kwarg mode='fast' --kwarg complexity=10[/italic]. "
                 "Strings with special characters should be [underline]single-quoted[/underline] inside the double quotes."
-            ),
-        ),
-    ]
-    RunArgsType = Annotated[
-        list[str],
-        typer.Option(
-            "--run-arg",
-            "-ra",
-            help=(
-                "Positional arg for the [bold magenta]runtime[/bold magenta]. "
-                "Repeat for multiple values. Useful for passing flags directly to the physics engine."
-            ),
-        ),
-    ]
-    RunKwargsType = Annotated[
-        list[str],
-        typer.Option(
-            "--run-kwarg",
-            "-rk",
-            help=(
-                "Keyword arg (key=value) for the [bold magenta]runtime[/bold magenta]. "
-                "Example: [italic]--run-kwarg solver='Newton' --run-kwarg iterations=5[/italic]."
             ),
         ),
     ]
@@ -642,10 +622,8 @@ def _prepare_runner(
     model_config_name: ModelConfigNameType,
     seed: SeedType,
     xml_name: str,
-    gen_args: GenArgsType,
-    gen_kwargs: GenKwargsType,
-    run_args: RunArgsType,
-    run_kwargs: RunKwargsType,
+    args: ArgsType,
+    kwargs: KwargsType,
 ) -> MojoRunner:
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -654,17 +632,15 @@ def _prepare_runner(
     )
 
     # proccess args and kwargs
-    processed_gen_args = [_smart_parse(a) for a in gen_args]
-    processed_gen_kwargs = _process_kwargs(gen_kwargs)
-    processed_run_args = [_smart_parse(a) for a in run_args]
-    processed_run_kwargs = _process_kwargs(run_kwargs)
+    processed_args = [_smart_parse(a) for a in args]
+    processed_kwargs = _process_kwargs(kwargs)
 
     # resolve code paths
     gen_func = _load_func(generator)
     run_func = _load_func(runtime) if runtime else None
     objective_func = _load_func(objective) if objective else None
 
-    return MojoRunner(
+    runner = MojoRunner(
         generator=gen_func,
         generator_path=generator,  # needed for SLURM
         runtime=run_func,
@@ -675,11 +651,20 @@ def _prepare_runner(
         seed=seed,
         model_config_name=model_config_name,
         xml_name=xml_name,
-        gen_args=processed_gen_args,
-        gen_kwargs=processed_gen_kwargs,
-        run_args=processed_run_args,
-        run_kwargs=processed_run_kwargs,
+        args=processed_args,
+        kwargs=processed_kwargs,
     )
+
+    # a misspelled --kwarg is dropped silently by the per-function filtering, so catch it now
+    try:
+        runner.validate_kwargs()
+    except ValueError as exc:
+        from rich.markup import escape
+
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+
+    return runner
 
 
 @run_app.command(name="monte-carlo")
@@ -698,10 +683,8 @@ def run_monte_carlo(
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_nums: TrialNumsType = [],
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -769,10 +752,8 @@ def run_monte_carlo(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     # 2. build config
@@ -850,10 +831,8 @@ def run_single(
     overrides: OverridesType = None,
     trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
     padding: PaddingType = None,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -915,10 +894,8 @@ def run_single(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     # a single trial is always just one trial - n_trial only exists on
@@ -1459,10 +1436,8 @@ def run_reloaded(
     xml_name: XMLNameType = _SETTINGS.general.xml_name,
     watch: WatchType = _SETTINGS.reloaded.watch,
     record: RecordType = _SETTINGS.reloaded.record,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     host: HostType = _SETTINGS.general.default_host,
     port: PortType = _SETTINGS.general.default_port,
     verbose: VerboseType = 0,
@@ -1484,10 +1459,8 @@ def run_reloaded(
 
     # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
-    processed_gen_args = [_smart_parse(a) for a in gen_args]
-    processed_gen_kwargs = _process_kwargs(gen_kwargs)
-    processed_run_args = [_smart_parse(a) for a in run_args]
-    processed_run_kwargs = _process_kwargs(run_kwargs)
+    processed_args = [_smart_parse(a) for a in args]
+    processed_kwargs = _process_kwargs(kwargs)
 
     MojoReloaded(
         generator=generator,
@@ -1502,10 +1475,8 @@ def run_reloaded(
         xml_name=xml_name,
         watch=watch,
         record=record,
-        gen_args=processed_gen_args,
-        gen_kwargs=processed_gen_kwargs,
-        run_args=processed_run_args,
-        run_kwargs=processed_run_kwargs,
+        args=processed_args,
+        kwargs=processed_kwargs,
         host=host,
         port=port,
     ).run()
@@ -1631,10 +1602,8 @@ def run_optimizer(
     model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
     xml_name: XMLNameType = _SETTINGS.general.xml_name,
     overrides: OverridesType = None,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -1698,10 +1667,8 @@ def run_optimizer(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     runner.config = OptimizerConfig(

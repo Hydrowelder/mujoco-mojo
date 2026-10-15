@@ -315,17 +315,11 @@ class JobStatus(MojoBaseModel):
     objective: tuple[str, Path | None, int | None]
     """What objective function was used. Name of function, Path to the function, and linenumber."""
 
-    gen_args_used: bool
-    """Whether or not *args were used for the generator."""
+    args_used: bool
+    """Whether or not *args were passed to the generator, runtime, and objective."""
 
-    gen_kwargs_used: bool
-    """Whether or not **kwargs were used for the generator."""
-
-    run_args_used: bool
-    """Whether or not *args were used for the runtime."""
-
-    run_kwargs_used: bool
-    """Whether or not **kwargs were used for the runtime."""
+    kwargs_used: bool
+    """Whether or not **kwargs were passed to the generator, runtime, and objective."""
 
     trial_nums: list[int]
     """The exhaustive list of trial identifiers expected for this job."""
@@ -689,10 +683,8 @@ class JobStatus(MojoBaseModel):
             "Generator": _parse_func(*self.generator),
             "Runtime": _parse_func(*self.runtime),
             "Objective": _parse_func(*self.objective),
-            "Generator Args Used?": "✅" if self.gen_args_used else "❌",
-            "Generator Kwargs Used?": "✅" if self.gen_kwargs_used else "❌",
-            "Runtime Args Used?": "✅" if self.run_args_used else "❌",
-            "Runtime Kwargs Used?": "✅" if self.run_kwargs_used else "❌",
+            "Args Used?": "✅" if self.args_used else "❌",
+            "Kwargs Used?": "✅" if self.kwargs_used else "❌",
         }
         if self.requirement_summary:
             n_rp = self.n_requirements_passed

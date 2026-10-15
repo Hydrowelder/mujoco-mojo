@@ -88,22 +88,41 @@ Mojo is built for professional simulations where reliability is key. The runner 
 
 ## Passing Arguments to Scripts
 
-Mojo can pass positional or keyword arguments directly to your Python functions from the CLI.
+Mojo can pass positional or keyword arguments directly to your Python functions from the CLI. One set of values is shared by your generator, your runtime, and, for an optimization, your objective:
 
-- **Generator Args:** `--gen-arg` (`-ga`) and `--gen-kwarg` (`-gk`)
-- **Runtime Args:** `--run-arg` (`-ra`) and `--run-kwarg` (`-rk`)
+- **Positional:** `--arg` (`-a`), repeatable.
+- **Keyword:** `--kwarg` (`-k`) in `key=value` form, repeatable.
 
 ```bash linenums="0"
-# Example: Passing a string keyword and a float to the generator function
+# Example: pass a string keyword and a float
 mujoco-mojo run monte-carlo \
-    -g sim.gen \
-    --gen-kwarg mode='fast' \
-    --gen-arg 1.5
+    -g sim.generate \
+    -r sim.runtime \
+    --kwarg mode='fast' \
+    --arg 1.5
 ```
+
+**Positional arguments** go to every function, after the arguments Mojo passes itself (the model and the overrides for a generator; the model, runtime manager, and state for a runtime; the model, telemetry path, and state for an objective). Each function therefore needs a matching parameter or `*args`.
+
+**Keyword arguments** are filtered per function: each one receives only the keywords its signature accepts, or all of them if it takes `**kwargs`. This lets the generator and the runtime keep their own explicit parameters:
+
+```python
+def generate(mojo_model, overrides, mode="fast"): ...
+def runtime(mojo_model, runtime_manager, state, solver="Newton"): ...
+```
+
+```bash linenums="0"
+# `mode` goes to generate, `solver` goes to runtime
+mujoco-mojo run monte-carlo -g sim.generate -r sim.runtime --kwarg mode='fast' --kwarg solver='PGS'
+```
+
+???+ warning "Warning: Misspelled Keywords"
+
+    A keyword that none of your functions accept is an error, so a typo such as `--kwarg modee='fast'` stops the job before anything runs instead of being dropped silently. If any one of your functions takes `**kwargs`, it accepts every keyword and this check cannot tell a typo from a real one. The scripts written by `mujoco-mojo init` use `*args, **kwargs`.
 
 ???+ info "Info: Smart Parsing"
 
-    Mojo automatically converts strings like `'1.5'` into a `#!python float`, `true` or `false` into a `#!python bool` (in any capitalization, so `True` works too), or `'[1, 2, 3]'` into a `#!python list`. If you need to pass a string with special characters, or a string that would otherwise be converted, wrap it in single quotes inside the double quotes (e.g., `--gen-kwarg name="'complex-site'"`, or `--gen-kwarg flag="'false'"` for the text `false`).
+    Mojo automatically converts strings like `'1.5'` into a `#!python float`, `true` or `false` into a `#!python bool` (in any capitalization, so `True` works too), or `'[1, 2, 3]'` into a `#!python list`. If you need to pass a string with special characters, or a string that would otherwise be converted, wrap it in single quotes inside the double quotes (e.g., `--kwarg name="'complex-site'"`, or `--kwarg flag="'false'"` for the text `false`).
 
 ---
 
@@ -140,7 +159,7 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 
 #### The SLURM Worker
 
-Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial. The command also passes `--padding` with the width of the whole job, so every worker names its folder like the orchestrator expects (`trial_007`, not `trial_7`).
+Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial. The command also passes your `--arg` and `--kwarg` values, and `--padding` with the width of the whole job, so every worker names its folder like the orchestrator expects (`trial_007`, not `trial_7`).
 
 ???+ tip "Tip: Manual Submissions"
 
