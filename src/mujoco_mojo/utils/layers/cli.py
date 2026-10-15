@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 import logging
+import os
 import sys
 from collections.abc import Callable
 from enum import StrEnum
@@ -1095,7 +1096,7 @@ def settings_init(
         typer.Option(
             "--project",
             "-p",
-            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml, in the current directory) instead of the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1105,12 +1106,17 @@ def settings_init(
     Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
     """
     from mujoco_mojo.settings import (
+        PROJECT_SETTINGS_DIR_NAME,
         SETTINGS_DIR,
         MujocoMojoSettings,
-        project_settings_file,
+        find_project_settings_file,
     )
 
-    target_dir = project_settings_file().parent if project else SETTINGS_DIR
+    # --project always creates the file for the current directory (like `uv init`), even
+    # when a parent directory already has one; looked up before anything is written, so
+    # it can only find a file that was there already
+    parent_project_file = find_project_settings_file() if project else None
+    target_dir = Path.cwd() / PROJECT_SETTINGS_DIR_NAME if project else SETTINGS_DIR
     target = target_dir / "settings.toml"
     already_existed = target.exists()
 
@@ -1126,6 +1132,12 @@ def settings_init(
             else f"[green]Project settings written:[/green] {target}"
         )
         extra = "[white]Add only the keys you want to override for this project.\n\n"
+        if parent_project_file is not None and parent_project_file != target:
+            extra = (
+                f"[yellow]Note:[/yellow] {parent_project_file} already applies to this directory. "
+                "This file is nested inside it, so its values win over that one from here down.\n\n"
+                + extra
+            )
         title = "Project Settings Initialized"
     elif already_existed and not force:
         MujocoMojoSettings.write_schema_files(target_dir)
@@ -1207,7 +1219,11 @@ def settings_show(
     import tomlkit
     from rich.syntax import Syntax
 
-    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, project_settings_file
+    from mujoco_mojo.settings import (
+        GLOBAL_SETTINGS_FILE,
+        find_project_settings_file,
+        project_settings_file,
+    )
 
     if scope is not SettingsScope.EFFECTIVE:
         target = (
@@ -1222,8 +1238,13 @@ def settings_show(
                 if scope is SettingsScope.PROJECT
                 else "mujoco-mojo settings init"
             )
+            where = (
+                f" in {Path.cwd()} or any parent directory"
+                if scope is SettingsScope.PROJECT
+                else ""
+            )
             console.print(
-                f"[yellow]No {scope.value} settings file found.[/yellow] "
+                f"[yellow]No {scope.value} settings file found{where}.[/yellow] "
                 f"Run [bold cyan]{init_cmd}[/bold cyan] to create one."
             )
             return
@@ -1264,9 +1285,10 @@ def settings_show(
     else:
         source = "defaults only"
 
-    project_file = project_settings_file()
-    if project_file.exists():
-        source += f" + {project_file.relative_to(Path.cwd()).as_posix()}"
+    # the project file can be in a parent directory, so show it relative to here (`../x`)
+    project_file = find_project_settings_file()
+    if project_file is not None:
+        source += f" + {Path(os.path.relpath(project_file, Path.cwd())).as_posix()}"
 
     toml_str = _pad_for_subtitle(toml_str, source)
 
@@ -1302,7 +1324,7 @@ def settings_set_cmd(
         typer.Option(
             "--project",
             "-p",
-            help="Write to the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+            help="Write to the project-local settings file (the nearest .mujoco-mojo/settings.toml in this or a parent directory, else a new one in ./.mujoco-mojo/) instead of the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1321,7 +1343,7 @@ def settings_set_cmd(
 
     if project:
         try:
-            MujocoMojoSettings.set_project_value(key, parsed)
+            written = MujocoMojoSettings.set_project_value(key, parsed)
         except KeyError:
             console.print(
                 f"[bold red]Error:[/bold red] Unknown settings path: [bold cyan]{key}[/bold cyan]"
@@ -1331,7 +1353,7 @@ def settings_set_cmd(
             console.print(f"[bold red]Validation error:[/bold red] {e}")
             raise typer.Exit(code=1)
         console.print(
-            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}"
+            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r} [dim]({written})[/dim]"
         )
         return
 
@@ -1381,7 +1403,7 @@ def settings_reset(
         typer.Option(
             "--project",
             "-p",
-            help="Delete the project-local settings file (./.mujoco-mojo/settings.toml) instead of resetting the global one.",
+            help="Delete the project-local settings file (the nearest .mujoco-mojo/settings.toml in this or a parent directory) instead of resetting the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1398,7 +1420,8 @@ def settings_reset(
         target = project_settings_file()
         if not target.exists():
             console.print(
-                "[yellow]No project settings file found.[/yellow] Nothing to reset."
+                f"[yellow]No project settings file found[/yellow] in {Path.cwd()} or any parent directory. "
+                "Nothing to reset."
             )
             return
         if not Confirm.ask(

@@ -167,9 +167,9 @@ mujoco-mojo settings set --project slurm.sbatch.account a-different-allocation
 mujoco-mojo settings set --project slurm.sbatch.qos high
 ```
 
-which writes to `./.mujoco-mojo/settings.toml`:
+which writes to your project's `.mujoco-mojo/settings.toml`:
 
-```toml title="./.mujoco-mojo/settings.toml"
+```toml title=".mujoco-mojo/settings.toml"
 [slurm]
 "sbatch.account" = "a-different-allocation"
 "sbatch.qos" = "high"
@@ -182,6 +182,19 @@ Both layers use the same convention:
 - Values must be plain strings/numbers/bools - nested tables or arrays are rejected, since this is meant to describe a flat set of settings, not a tree.
 
 If a key appears in both layers, the project-local value wins - so the example above submits with `account=a-different-allocation` (overridden) but still keeps the global `mail-user` and `MLM_LICENSE_FILE`.
+
+#### Where the Project File Lives
+
+The project file is always `.mujoco-mojo/settings.toml`. The `.mujoco-mojo/` directory belongs to the project, so any other project-local file Mojo needs later will sit beside it.
+
+Mojo finds it by checking the current directory, then each parent directory in turn, and uses the **nearest** one. Files further up are not merged in, and the global `~/.mujoco-mojo` directory is never mistaken for a project. This means you can run Mojo from anywhere inside a project, including from a script that `cd`s into its own folder first (the scripts written by `mujoco-mojo init` do), and still pick up the project's settings.
+
+| Command                                     | Which project file it uses                                                                                                                                                     |
+| :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mujoco-mojo settings set --project ...`    | The one found by the search. If there is none, a new `./.mujoco-mojo/settings.toml` is created in the current directory.                                                       |
+| `mujoco-mojo settings init --project`       | Always creates one in the current directory, even if a parent has one. The nested file takes precedence from that directory down, and the command tells you when this happens. |
+| `mujoco-mojo settings show --scope project` | The one found by the search (or says that none was found and where it looked).                                                                                                 |
+| `mujoco-mojo settings reset --project`      | Deletes the one found by the search, after asking.                                                                                                                             |
 
 #### Checking What Gets Added
 
@@ -203,7 +216,7 @@ Each line is labeled with the file it came from. Environment variable values are
 
 ???+ tip "Tip: Project Settings Not Showing Up?"
 
-    The project file is looked up as `./.mujoco-mojo/settings.toml` relative to the directory the `mujoco-mojo` process starts in, not relative to your workdir or the generator script. Scripts that `cd` first change this: the ones `mujoco-mojo init` writes begin with `cd "$(dirname "${BASH_SOURCE[0]}")"`, so they look next to the script, not where your terminal was. If the file is listed as `not found`, keep `.mujoco-mojo/` in that directory (run `mujoco-mojo settings set --project ...` from there) or launch from the directory that holds it. A file that exists but could not be parsed is reported with the parse error. Keys containing a dot must be quoted in TOML (`"sbatch.account" = "proj123"`); `mujoco-mojo settings set --project slurm.sbatch.account proj123` writes them correctly for you.
+    If the project file is listed as `not found`, neither the current directory nor any of its parents has a `.mujoco-mojo/settings.toml`; the line says where the search started. Run `mujoco-mojo settings show --scope project` from the same place to see which file, if any, is in effect. Keys containing a dot must be quoted in TOML (`"sbatch.account" = "proj123"`); `mujoco-mojo settings set --project slurm.sbatch.account proj123` writes them correctly for you.
 
 ---
 

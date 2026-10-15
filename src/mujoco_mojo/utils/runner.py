@@ -82,7 +82,7 @@ def _print_slurm_extras(console: Console, slurm: SlurmExtraSettings) -> None:
     """
     Prints which settings files were read and the extra `#SBATCH` lines and environment variables that will be added to the submission script.
 
-    Each file is listed with where it was looked for, since the project file is read from `./.mujoco-mojo/settings.toml` relative to the directory the command was run from. Environment variable values are not printed, only their names, since they are often credentials or license servers; the values are in the generated script.
+    Each file is listed with where it was looked for, since the project file is the nearest `.mujoco-mojo/settings.toml` found searching the current directory and its parents. Environment variable values are not printed, only their names, since they are often credentials or license servers; the values are in the generated script.
     """
     from rich.markup import escape
 
@@ -94,7 +94,13 @@ def _print_slurm_extras(console: Console, slurm: SlurmExtraSettings) -> None:
         if source.error is not None:
             status = f"[red]could not be read: {escape(source.error)}[/red]"
         elif not source.exists:
-            status = "[yellow]not found[/yellow]"
+            # the project file is searched for upward from here, so say where it started
+            searched = (
+                f" (searched {escape(str(Path.cwd()))} and its parent directories)"
+                if source.label == "project"
+                else ""
+            )
+            status = f"[yellow]not found[/yellow]{searched}"
         else:
             count = len(source.entries)
             status = f"{count} [dim]{'entry' if count == 1 else 'entries'} under \\[slurm][/dim]"

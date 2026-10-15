@@ -318,6 +318,8 @@ def test_printed_extras_say_when_the_project_file_was_not_found(
     )
 
     assert "not found" in output
+    # the project file is searched for upward, so the output says where that started
+    assert "and its parent directories" in output
     assert str(tmp_path / "project" / ".mujoco-mojo" / "settings.toml") in output
     assert "#SBATCH --account=GLOBAL  (global)" in output
 
