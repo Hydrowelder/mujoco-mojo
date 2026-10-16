@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
 from typer.testing import CliRunner
 
 import mujoco_mojo as mojo
@@ -324,8 +323,8 @@ def test_job_status_records_whether_args_and_kwargs_were_used(tmp_path: Path) ->
     assert not any(key.startswith(("gen_", "run_")) for key in status)
 
 
-def test_a_status_file_from_before_the_change_no_longer_loads(tmp_path: Path) -> None:
-    """The four separate flags were replaced outright, with no compatibility shim."""
+def test_a_status_file_from_before_the_change_still_loads(tmp_path: Path) -> None:
+    """The Dojo reads old workdirs, so a file with the four old flags must open; the old flags are not carried over, so the new ones read as not used."""
     MojoRunner(
         generator=recording_generator,
         workdir=tmp_path,
@@ -342,8 +341,10 @@ def test_a_status_file_from_before_the_change_no_longer_loads(tmp_path: Path) ->
         run_kwargs_used=False,
     )
 
-    with pytest.raises(ValidationError, match="args_used"):
-        JobStatus.model_validate(status)
+    loaded = JobStatus.model_validate(status)
+
+    assert loaded.args_used is False
+    assert loaded.kwargs_used is False
 
 
 def test_the_runtime_report_has_one_row_each_for_args_and_kwargs(

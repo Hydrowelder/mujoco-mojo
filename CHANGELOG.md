@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 2.7.0 (2026-10-15)
+## Version 2.7.0 (2026-10-16)
 
 - Added support for MuJoCo 3.16.0
 - Fixed asset bundling ignoring the compiler's `meshdir`, `texturedir`, `assetdir`, and `strippath`, and crashing when one was a `DepPath`
