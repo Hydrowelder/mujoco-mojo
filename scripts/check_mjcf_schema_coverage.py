@@ -38,8 +38,6 @@ Usage:
 from __future__ import annotations
 
 import sys
-import types
-import typing
 from pathlib import Path
 
 from check_mjcf_spec_coverage import (
@@ -52,6 +50,7 @@ from check_mjcf_spec_coverage import (
     load_ignore_file,
     normalize_field_name,
 )
+from mjcf_python_tree import child_fields
 from mjcf_schema import (
     Attribute,
     Element,
@@ -130,26 +129,6 @@ def schema_child_pairs(schema: Schema, skip_tags: set[str]) -> set[tuple[str, st
     return pairs
 
 
-def _xml_model_classes_in(annotation: object) -> set[type]:
-    """Every `XMLModel` subclass named by a field annotation, looking through `list`, `tuple`, optionals, unions, and `Annotated` (so a discriminated union of geoms resolves to all of its geom classes)."""
-    from mujoco_mojo.mjcf.xml_model import XMLModel
-
-    found: set[type] = set()
-
-    def walk(node: object) -> None:
-        origin = typing.get_origin(node)
-        if origin is typing.Annotated:
-            walk(typing.get_args(node)[0])
-        elif origin in (typing.Union, types.UnionType) or origin is not None:
-            for arg in typing.get_args(node):
-                walk(arg)
-        elif isinstance(node, type) and issubclass(node, XMLModel):
-            found.add(node)
-
-    walk(annotation)
-    return found
-
-
 def python_child_pairs() -> tuple[dict[tuple[str, str], set[str]], list[str]]:
     """
     Every (parent tag, child tag) nesting mojo models, from the fields each class lists in `children`, mapped to the `Class.field` names that provide it.
@@ -162,17 +141,11 @@ def python_child_pairs() -> tuple[dict[tuple[str, str], set[str]], list[str]]:
         parent = getattr(cls, "tag", "")
         if not parent:
             continue
-        for field_name in getattr(cls, "children", ()):
-            field_info = cls.model_fields.get(field_name)
-            classes = (
-                _xml_model_classes_in(field_info.annotation) if field_info else set()
-            )
-            child_tags = {getattr(c, "tag", "") for c in classes} - {""}
-            if not child_tags:
+        for field_name, classes in child_fields(cls):
+            if not classes:
                 unresolved.append(f"{cls.__name__}.{field_name}")
-                continue
-            for child_tag in child_tags:
-                pairs.setdefault((parent, child_tag), set()).add(
+            for child in classes:
+                pairs.setdefault((parent, child.tag), set()).add(
                     f"{cls.__name__}.{field_name}"
                 )
     return pairs, unresolved
