@@ -215,7 +215,7 @@ def _default_mismatch(attr: Attribute, cls: type, field_name: str) -> str | None
     schema_kind, schema_value = schema_result
 
     python_kind, python_value = _python_field_default(cls, field_name)
-    if python_kind in ("composite", "discriminator"):
+    if python_kind in ("composite", "discriminator", "property"):
         return None
 
     if schema_kind == python_kind == "required":
@@ -351,12 +351,15 @@ def main() -> None:
         if f"{pair[0]}>{pair[1]}" not in ignored.get("child_extra", ())
     )
 
-    console.print(
+    console.print()
+    console.rule(
         f"  [bold]In the schema, not modeled by mojo under that parent[/bold] ({len(missing)})"
     )
     for parent, child in missing:
         console.print(f"    [yellow]{escape(parent)} > {escape(child)}[/yellow]")
-    console.print(
+
+    console.print()
+    console.rule(
         f"  [bold]Modeled by mojo, not allowed by the schema under that parent[/bold] ({len(extra)})"
     )
     for parent, child in extra:

@@ -102,8 +102,8 @@ class Compiler(XMLModel):
     """This attribute instructs the compiler to discard all model elements which are purely visual and have no effect on the physics (with one exception, see below). This often enables smaller mjModel structs and faster simulation.
 
     - All materials and textures are discarded, unless they are referenced by a sensor or a custom tuple.
-    - All geoms with contype=conaffinity=0 are discarded, if they are not referenced in another MJCF element. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body.
-    - All meshes which are not referenced by any geom (in particular those discarded above) are discarded.
+    - All geoms with `contype=conaffinity=0` are discarded, if they are not referenced in another MJCF element and do not use the ellipsoid fluid model. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body. This is not possible when inertiafromgeom is "true", which is then a compilation error.
+    - All meshes which are not used by a remaining geom or by a site, and are not referenced in another MJCF element, are discarded (in particular those of the geoms discarded above).
 
     The resulting compiled model will have exactly the same dynamics as the original model. The only engine-level computation which might change is the output of raycasting computations, as used for example by rangefinder sensors, since raycasting reports distances to visual geoms. When visualizing models compiled with this flag, it is important to remember that collision geoms are often placed in a group which is invisible by default.
 

@@ -101,7 +101,7 @@ class Frame(XMLModel):
 
     - meshes always, with an instance of the mesh for each distinct stretch;
     - boxes, ellipsoids, planes and height fields aligned with the frame's axes;
-    - capsules and cylinders aligned with the frame's axes and stretched equally across their own axis. The caps of a capsule stay hemispherical: with aa the factor across its axis and cc the factor along it, its radius rr becomes arar and its half-length hh becomes chch, so that its total length is `2(ch+ar)` rather than `2c(h+r)`;
+    - capsules and cylinders aligned with the frame's axes and stretched equally across their own axis. The caps of a capsule stay hemispherical: with `a` the factor across its axis and `c` the factor along it, its radius `r` becomes arar and its half-length `h` becomes `ch`, so that its total length is `2(ch+ar)` rather than `2c(h+r)`;
     - spheres only when scaled uniformly; use an ellipsoid otherwise.
 
     Hinge and slide joints must also be aligned with the frame's axes. Anything else is a compile error; alignment is checked to within about 2 degrees. Sites are never an error: a site box, ellipsoid, capsule or cylinder is stretched by the factor along each of its own axes, with the radius of a capsule or cylinder taking the geometric mean of the two factors across it, which is approximate when the site is not aligned. Explicit inertias transform exactly. Sphere sites, and lengths without a direction like margins, contact widths and tendon widths, take the geometric mean of the three factors.
@@ -111,7 +111,7 @@ class Frame(XMLModel):
     Pose resolution (`Mujoco.local_pose`) does not support elements inside a frame whose scale is not 1 and raises a `ValueError`."""
 
     scaling: FrameScaling = FrameScaling.SIMILAR
-    """What changes along with size and mass. With ss the scale and mm the massscale:
+    """What changes along with size and mass. With `s` the scale and `m` the massscale:
 
     similar
 

@@ -51,7 +51,7 @@ from rich.markup import escape
 
 SPEC_URL = "https://mujoco.readthedocs.io/en/stable/_sources/XMLreference.rst.txt"
 
-IGNORE_FILE = Path(__file__).with_name("mjcf_spec_ignore.txt")
+IGNORE_FILE = Path(__file__).with_name("mjcf_ignore.txt")
 
 # below this difflib ratio, a description is flagged as likely drifted from the spec
 DOCSTRING_SIMILARITY_THRESHOLD = 0.2
@@ -425,10 +425,14 @@ def _python_field_default(cls: type, field_name: str) -> tuple[str, str | None]:
     fixed value isn't meant to match the spec's generic default for the merged
     element), or ("literal", formatted_value) otherwise, formatted the same way
     `XMLModel.to_xml` formats it for the real XML output.
+
+    A name in `attributes` that is not a model field at all is a property that assembles its value from other fields (a mesh shape's `params`, for example). It has no default of its own to compare, so it is classified as ("property", None).
     """
     from mujoco_mojo.mjcf.xml_model import XMLModel, _format_value
 
-    field_info = cls.model_fields[field_name]
+    field_info = cls.model_fields.get(field_name)
+    if field_info is None:
+        return "property", None
     default = field_info.get_default(call_default_factory=True)
     if default is PydanticUndefined:
         return "required", None
@@ -485,7 +489,7 @@ def _default_mismatch(spec_attr: SpecAttr, cls: type, field_name: str) -> str | 
         return None
 
     python_kind, python_value = _python_field_default(cls, field_name)
-    if python_kind in ("composite", "discriminator"):
+    if python_kind in ("composite", "discriminator", "property"):
         return None
 
     if spec_kind == python_kind == "required":
