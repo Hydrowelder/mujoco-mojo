@@ -33,10 +33,16 @@ logger = get_logger(__name__)
 __all__ = [
     "AnyMesh",
     "Mesh",
+    "MeshBox",
     "MeshCone",
+    "MeshCylinder",
+    "MeshDisc",
+    "MeshEllipsoid",
+    "MeshGrid",
     "MeshHemisphere",
     "MeshPlate",
     "MeshSphere",
+    "MeshSquare",
     "MeshSupersphere",
     "MeshTorus",
     "MeshWedge",
@@ -827,6 +833,129 @@ class MeshPlate(MeshBase):
         return (self.res_x, self.res_y)
 
 
+# every builtin mesh writes its shape and a `params` attribute that packs its per-shape fields
+_builtin_mesh_attr = (*_mesh_attr, "builtin", "params")
+
+
+class _MeshCountSpacing(MeshBase, ABC):
+    """Shared fields of the builtin meshes that are generated from a vertex count and a spacing along each axis. A concrete class sets `builtin` and `attributes` itself, since `builtin` has a different literal value in each."""
+
+    count: tuple[int, int, int]
+    """3 integers: Number of vertices along each axis."""
+
+    spacing: Vec3
+    """3 reals: Spacing along each axis."""
+
+
+class _MeshCountSpacingDim(_MeshCountSpacing, ABC):
+    """Builtin meshes generated from a count, a spacing, and an optional dimensionality."""
+
+    non_xml_fields = ("count", "spacing", "dim")
+
+    dim: Literal[2, 3] = 3
+    """Mesh dimensionality. If 3 (default), creates a volumetric tetrahedral mesh. If 2, creates a triangulated 2D surface mesh. A mesh without volume changes a `legacy` inertia (including an explicit one) to `shell`."""
+
+    @property
+    def params(self) -> tuple[float, ...]:
+        """Packs `count`/`spacing`/`dim` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (*self.count, *self.spacing, self.dim)
+
+
+class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
+    """Builtin meshes generated from a count and a spacing that are always 2D surfaces, so they have no `dim`."""
+
+    non_xml_fields = ("count", "spacing")
+
+    @property
+    def params(self) -> tuple[float, ...]:
+        """Packs `count`/`spacing` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (*self.count, *self.spacing)
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if self.count[0] <= 0 or self.count[1] <= 0:
+            msg = "count must be positive along the first two axes"
+            logger.error(msg)
+            raise ValueError(msg)
+        if self.count[2] != 1:
+            msg = "count[2] must be 1"
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
+
+
+class _MeshShell(_MeshCountSpacingDim, ABC):
+    """Builtin meshes that are a grid projected onto a shape."""
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if any(c < 2 for c in self.count):
+            msg = "count must be at least 2 along every axis"
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
+
+
+class MeshGrid(_MeshCountSpacingDim):
+    """A regular grid of vertices. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangulated 2D surface mesh."""
+
+    builtin: Literal["grid"] = "grid"
+    attributes = _builtin_mesh_attr
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if any(c <= 0 for c in self.count):
+            msg = "count must be positive"
+            logger.error(msg)
+            raise ValueError(msg)
+        for axis, c in enumerate(self.count):
+            if axis >= self.dim and c != 1:
+                msg = "count must be 1 along the axes beyond dim"
+                logger.error(msg)
+                raise ValueError(msg)
+            # MuJoCo reports "Failed to create grid mesh" for a single vertex along an axis within dim
+            if axis < self.dim and c < 2:
+                msg = "count must be at least 2 along the axes within dim"
+                logger.error(msg)
+                raise ValueError(msg)
+        return self
+
+
+class MeshBox(_MeshShell):
+    """A procedural box mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["box"] = "box"
+    attributes = _builtin_mesh_attr
+
+
+class MeshCylinder(_MeshShell):
+    """A procedural cylinder mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["cylinder"] = "cylinder"
+    attributes = _builtin_mesh_attr
+
+
+class MeshEllipsoid(_MeshShell):
+    """A procedural ellipsoid mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["ellipsoid"] = "ellipsoid"
+    attributes = _builtin_mesh_attr
+
+
+class MeshSquare(_MeshCountSpacingFlat):
+    """A 2D triangulated square surface mesh. `count` is the number of vertices along the x and y axes (the last must be 1). Because it has no volume, a `legacy` mesh inertia (including an explicit one) is changed to `shell`."""
+
+    builtin: Literal["square"] = "square"
+    attributes = _builtin_mesh_attr
+
+
+class MeshDisc(_MeshCountSpacingFlat):
+    """A 2D triangulated disc surface mesh. `count` is the number of vertices along the radial and angular directions (the last must be 1). Because it has no volume, a `legacy` mesh inertia (including an explicit one) is changed to `shell`."""
+
+    builtin: Literal["disc"] = "disc"
+    attributes = _builtin_mesh_attr
+
+
 AnyMesh = Annotated[
     MeshSphere
     | MeshHemisphere
@@ -835,6 +964,12 @@ AnyMesh = Annotated[
     | MeshTorus
     | MeshWedge
     | MeshPlate
+    | MeshGrid
+    | MeshBox
+    | MeshCylinder
+    | MeshEllipsoid
+    | MeshSquare
+    | MeshDisc
     | Mesh,
     Field(discriminator="builtin"),
 ]

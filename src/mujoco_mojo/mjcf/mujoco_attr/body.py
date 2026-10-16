@@ -26,6 +26,7 @@ from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     Angle,
     BodyName,
+    Fuse,
     Mat3,
     SignalCategory,
     Simple,
@@ -86,7 +87,7 @@ _body_attr = (
     "sleep",
     "simple",
     "user",
-    # "fuse", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+    "fuse",
 )
 _body_children = (
     "inertial",
@@ -159,8 +160,8 @@ class Body(XMLModel):
 
     Setting this attribute to false disables the optimization for this body. This is necessary for domain randomization workflows where model parameters (such as joint/inertial offsets or angles) are perturbed dynamically during simulation and updated via mj_setConst. Because a body compiled with the simple optimization active cannot dynamically lose its simple state at runtime (which would require reallocation of sparse matrix structures), any runtime parameter change that violates the simple conditions will trigger a validation error unless `simple="false"` was explicitly declared in the XML."""
 
-    # fuse: Fuse = Fuse.AUTO  # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-    # """Whether this body can be fused with its parent when static bodies are fused, by the fusestatic compiler option or by mjs_fuseStatic. With the default auto a static body is fused unless one of the conditions listed there prevents it. Setting this attribute to false keeps the body."""
+    fuse: Fuse = Fuse.AUTO
+    """Whether this body can be fused with its parent when static bodies are fused, by the fusestatic compiler option or by mjs_fuseStatic. With the default auto a static body is fused unless one of the conditions listed there prevents it. Setting this attribute to false keeps the body."""
 
     user: VecN | None = None
     """See User parameters. Has length of `nbody_user`"""
@@ -725,7 +726,7 @@ Frame.model_rebuild(
 
 
 _temp_list = list(_body_children)
-for not_in in ("inertial", "joints"):
+for not_in in ("inertial", "joints", "freejoints"):
     _temp_list.remove(not_in)
 _world_body_children = tuple(_temp_list)
 
@@ -738,9 +739,9 @@ class WorldBody(Body):
     attributes = ()
     children = _world_body_children
 
-    # per the class docstring, the top-level body cannot have any attributes
-    # or the inertial/joints child elements
-    non_xml_fields = (*_body_attr, "inertial", "joints")
+    # the top-level body cannot have any attributes or inertial, joint, or freejoint
+    # child elements (MuJoCo: "World body cannot have joints")
+    non_xml_fields = (*_body_attr, "inertial", "joints", "freejoints")
 
     @staticmethod
     def get_com(

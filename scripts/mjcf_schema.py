@@ -272,7 +272,8 @@ _ATTR_RE = re.compile(
     r"(?:#\s*(?P<comment>.*))?$"
 )
 _TYPE_RE = re.compile(r"^(?P<kind>\w+)(?:<(?P<ref>\w+)>)?(?:\[(?P<arity>[^\]]*)\])?$")
-_FACET_TOKEN_RE = re.compile(r'(?P<key>\w+)(?:=(?P<value>"[^"]*"|\S+))?')
+# an unquoted value ends at whitespace or the comma that separates facets: "xml=contact, output=custom"
+_FACET_TOKEN_RE = re.compile(r'(?P<key>\w+)(?:=(?P<value>"[^"]*"|[^\s,]+))?')
 
 
 def _parse_type(raw: str) -> AttrType:
@@ -532,6 +533,19 @@ def validate_schema(schema: Schema) -> list[str]:
     warnings: list[str] = []
 
     for element in schema.elements.values():
+        # these facets name an XML tag, another element, or a C field, so anything that is not a plain
+        # identifier means the facet list was split wrong (a comma left on a value, for example)
+        for label, value in (
+            ("xml tag", element.xml_tag),
+            ("alias", element.alias),
+            ("field", element.field_name),
+        ):
+            if value is not None and not re.fullmatch(r"\w+", value):
+                warnings.append(
+                    f"element {element.name!r} (line {element.line}): "
+                    f"{label} {value!r} is not a plain identifier, so a facet was probably mis-parsed"
+                )
+
         for group_name in element.used_groups:
             if group_name not in schema.groups:
                 warnings.append(

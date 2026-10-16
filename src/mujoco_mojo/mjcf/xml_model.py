@@ -280,8 +280,8 @@ class XMLModel(MojoBaseModel):
         # Pydantic fields (includes inherited)
         model_fields = set(cls.model_fields.keys())
 
-        # Class-level attributes (ClassVars, constants, etc)
-        class_vars = set(vars(cls).keys())
+        # class-level names (ClassVars, constants, properties), including those inherited from a base class
+        class_vars = set(dir(cls))
 
         valid_names = model_fields | class_vars
 

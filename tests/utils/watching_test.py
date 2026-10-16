@@ -252,7 +252,7 @@ def test_status_files_from_before_the_job_id_existed_still_load(
 # --- the command ---
 
 
-def test_job_watch_exits_cleanly_once_everything_is_done(
+def test_watch_workdir_exits_cleanly_once_everything_is_done(
     cluster: SlurmCluster, monkeypatch: pytest.MonkeyPatch, isolated_logging: None
 ) -> None:
     while cluster.finish_next_trial() is not None:
@@ -268,7 +268,7 @@ def test_job_watch_exits_cleanly_once_everything_is_done(
     assert cluster.on_disk().elapsed > timedelta(0)
 
 
-def test_job_watch_exits_with_an_error_when_the_job_ended_incomplete(
+def test_watch_workdir_exits_with_an_error_when_the_job_ended_incomplete(
     cluster: SlurmCluster, monkeypatch: pytest.MonkeyPatch, isolated_logging: None
 ) -> None:
     cluster.finish_next_trial()
@@ -282,7 +282,7 @@ def test_job_watch_exits_with_an_error_when_the_job_ended_incomplete(
     assert "never finished" in result.output
 
 
-def test_job_watch_explains_a_workdir_with_no_job(
+def test_watch_workdir_explains_a_workdir_with_no_job(
     tmp_path: Path, isolated_logging: None
 ) -> None:
     result = CliRunner().invoke(

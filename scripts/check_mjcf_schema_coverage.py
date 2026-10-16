@@ -16,14 +16,19 @@ For every schema element it reports:
 - attributes the schema marks `required` where the Python field has a non-required default
   (the reverse direction -- python required, schema silent -- is not reported; see
   `_default_mismatch`'s docstring for why that direction is unreliable)
+- child placement: every (parent tag, child tag) nesting the schema declares is compared with the
+  nesting mojo models through each class's `children` fields, in both directions. The tag check
+  above cannot see this, since several classes share a tag (`contact` is the `<contact>` group, the
+  sensor, the flex child, and the flexcomp child)
 
 This is advisory, not a hard gate: the schema legitimately declares several distinct elements
 under the same XML tag depending on context (e.g. `joint` the body child vs `equality_joint`
 (`xml=joint`) vs `composite_joint` (`xml=joint`)), which are merged the same permissive way
 `check_mjcf_spec_coverage.py` merges its own duplicate bare names -- so review the output rather
-than treating it as pass/fail. Reviewed, accepted findings can be silenced via the same
-`mjcf_ignore.txt` used by the RST-based script (categories: "unimplemented", "untagged",
-"coverage_gap", "default_mismatch").
+than treating it as pass/fail. Reviewed, accepted findings can be silenced in
+`mjcf_schema_ignore.txt` (categories: "unimplemented", "untagged", "coverage_gap",
+"default_mismatch", and for child placement "child_missing" and "child_extra", keyed
+`<parent>><child>`).
 
 Usage:
     python scripts/check_mjcf_schema_coverage.py                    # fetch the schema live
@@ -33,6 +38,8 @@ Usage:
 from __future__ import annotations
 
 import sys
+import types
+import typing
 from pathlib import Path
 
 from check_mjcf_spec_coverage import (
@@ -41,6 +48,7 @@ from check_mjcf_spec_coverage import (
     _literals_match,
     _print_classes,
     build_python_registry,
+    collect_xml_model_classes,
     load_ignore_file,
     normalize_field_name,
 )
@@ -94,6 +102,80 @@ def merge_elements_by_tag(schema: Schema) -> dict[str, Element]:
         if not bucket.comment:
             bucket.comment = element.comment
     return merged
+
+
+def schema_child_pairs(schema: Schema, skip_tags: set[str]) -> set[tuple[str, str]]:
+    """
+    Every (parent tag, child tag) nesting the schema declares, from each element's own `child` entries (a child entry names a declaration, which is resolved to its XML tag).
+
+    The `worldbody`, `frame`, and `replicate` elements are not merged with the `body` grammar they alias: the schema says their own child lists record what actually compiles. `default*` elements are skipped because mojo does not implement `<default>`, and so is any pair involving a tag in `skip_tags` (the elements the ignore file lists as intentionally unimplemented).
+    """
+
+    def tag_of(declaration: str) -> str:
+        element = schema.elements.get(declaration)
+        return (element.xml_tag or element.name) if element else declaration
+
+    pairs: set[tuple[str, str]] = set()
+    for element in schema.elements.values():
+        if element.name.startswith("default"):
+            continue
+        parent = element.xml_tag or element.name
+        for child in element.children:
+            if child.name.startswith("default"):
+                continue
+            child_tag = tag_of(child.name)
+            if parent in skip_tags or child_tag in skip_tags:
+                continue
+            pairs.add((parent, child_tag))
+    return pairs
+
+
+def _xml_model_classes_in(annotation: object) -> set[type]:
+    """Every `XMLModel` subclass named by a field annotation, looking through `list`, `tuple`, optionals, unions, and `Annotated` (so a discriminated union of geoms resolves to all of its geom classes)."""
+    from mujoco_mojo.mjcf.xml_model import XMLModel
+
+    found: set[type] = set()
+
+    def walk(node: object) -> None:
+        origin = typing.get_origin(node)
+        if origin is typing.Annotated:
+            walk(typing.get_args(node)[0])
+        elif origin in (typing.Union, types.UnionType) or origin is not None:
+            for arg in typing.get_args(node):
+                walk(arg)
+        elif isinstance(node, type) and issubclass(node, XMLModel):
+            found.add(node)
+
+    walk(annotation)
+    return found
+
+
+def python_child_pairs() -> tuple[dict[tuple[str, str], set[str]], list[str]]:
+    """
+    Every (parent tag, child tag) nesting mojo models, from the fields each class lists in `children`, mapped to the `Class.field` names that provide it.
+
+    Also returns the `Class.field` names listed in `children` that resolve to no `XMLModel` class, so a typo or an unresolved forward reference shows up instead of silently dropping a child.
+    """
+    pairs: dict[tuple[str, str], set[str]] = {}
+    unresolved: list[str] = []
+    for cls in collect_xml_model_classes():
+        parent = getattr(cls, "tag", "")
+        if not parent:
+            continue
+        for field_name in getattr(cls, "children", ()):
+            field_info = cls.model_fields.get(field_name)
+            classes = (
+                _xml_model_classes_in(field_info.annotation) if field_info else set()
+            )
+            child_tags = {getattr(c, "tag", "") for c in classes} - {""}
+            if not child_tags:
+                unresolved.append(f"{cls.__name__}.{field_name}")
+                continue
+            for child_tag in child_tags:
+                pairs.setdefault((parent, child_tag), set()).add(
+                    f"{cls.__name__}.{field_name}"
+                )
+    return pairs, unresolved
 
 
 def _schema_attr_default(attr: Attribute) -> tuple[str, str | None] | None:
@@ -273,6 +355,48 @@ def main() -> None:
                     console.print(
                         f"      [bold cyan]{escape(cls.__name__)}[/bold cyan] [dim]{escape(location)}[/dim]"
                     )
+
+    console.print()
+    console.rule(
+        "[bold]Child element placement[/bold] (a parent/child nesting that differs between the schema and mojo)"
+    )
+    skip_tags = set(ignored.get("unimplemented", ()))
+    schema_pairs = schema_child_pairs(schema, skip_tags)
+    python_pairs, unresolved = python_child_pairs()
+    python_pairs = {
+        pair: names for pair, names in python_pairs.items() if not skip_tags & set(pair)
+    }
+
+    missing = sorted(
+        pair
+        for pair in schema_pairs - set(python_pairs)
+        if f"{pair[0]}>{pair[1]}" not in ignored.get("child_missing", ())
+    )
+    extra = sorted(
+        pair
+        for pair in set(python_pairs) - schema_pairs
+        if f"{pair[0]}>{pair[1]}" not in ignored.get("child_extra", ())
+    )
+
+    console.print(
+        f"  [bold]In the schema, not modeled by mojo under that parent[/bold] ({len(missing)})"
+    )
+    for parent, child in missing:
+        console.print(f"    [yellow]{escape(parent)} > {escape(child)}[/yellow]")
+    console.print(
+        f"  [bold]Modeled by mojo, not allowed by the schema under that parent[/bold] ({len(extra)})"
+    )
+    for parent, child in extra:
+        providers = ", ".join(sorted(python_pairs[(parent, child)]))
+        console.print(
+            f"    [yellow]{escape(parent)} > {escape(child)}[/yellow] [dim]{escape(providers)}[/dim]"
+        )
+    if unresolved:
+        console.print(
+            f"  [bold red]Listed in `children` but resolving to no XMLModel[/bold red] ({len(unresolved)})"
+        )
+        for name in sorted(unresolved):
+            console.print(f"    [red]{escape(name)}[/red]")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,13 @@
+from xml.etree.ElementTree import Element
+
 import mujoco
 import numpy as np
+import pytest
 
 from mujoco_mojo.mjcf import (
     Body,
     Camera,
+    GeomBox,
     GeomSphere,
     Joint,
     Light,
@@ -13,7 +17,15 @@ from mujoco_mojo.mjcf import (
     WorldBody,
 )
 from mujoco_mojo.mjcf.meta.frame import Frame
-from mujoco_mojo.typing import Angle, BodyName, EulerSeq, JointName, JointType, SiteName
+from mujoco_mojo.typing import (
+    Angle,
+    BodyName,
+    EulerSeq,
+    FrameScaling,
+    JointName,
+    JointType,
+    SiteName,
+)
 
 
 def _leg_body(name: str = "leg") -> Body:
@@ -143,3 +155,83 @@ def test_pose_context_registers_bodies_and_sites_wrapped_in_a_frame() -> None:
 
     local = graph.local_pose(leg, frame)
     assert np.allclose(local.pos, (0.0, 0.0, 1.0))
+
+
+def _frame_xml(frame: Frame) -> Element:
+    return frame.to_xml(compiler_degrees=Angle.DEGREE, compiler_eulerseq=EulerSeq.XYZ)
+
+
+def test_frame_scale_attributes_are_omitted_at_their_defaults() -> None:
+    """An unscaled frame writes exactly what it did before scaling existed."""
+    el = _frame_xml(Frame())
+
+    assert not {"scale", "scaling", "massscale"} & set(el.attrib)
+    assert not Frame().is_scaled
+
+
+def test_frame_writes_scale_scaling_and_massscale() -> None:
+    frame = Frame(
+        scale=np.array((1.0, 2.0, 3.0)),
+        scaling=FrameScaling.GEOMETRY,
+        massscale=1.5,
+    )
+
+    el = _frame_xml(frame)
+
+    assert np.allclose([float(v) for v in el.attrib["scale"].split()], (1, 2, 3))
+    assert el.attrib["scaling"] == "geometry"
+    assert float(el.attrib["massscale"]) == 1.5
+    assert frame.is_scaled
+
+
+def test_frame_scale_accepts_a_single_number_for_all_three_axes() -> None:
+    frame = Frame.model_validate({"scale": 2.0})
+
+    assert np.allclose(frame.scale, (2, 2, 2))
+    assert frame.is_scaled
+
+
+@pytest.mark.parametrize("scale", [0, -1, float("nan"), float("inf")])
+def test_frame_scale_must_be_finite_and_positive(scale: float) -> None:
+    with pytest.raises(ValueError, match="scale must be finite and positive"):
+        Frame.model_validate({"scale": scale})
+
+
+@pytest.mark.parametrize("massscale", [-1, float("nan"), float("inf")])
+def test_frame_massscale_must_be_finite_and_non_negative(massscale: float) -> None:
+    with pytest.raises(ValueError, match="massscale must be finite"):
+        Frame.model_validate({"massscale": massscale})
+
+
+def test_stretching_a_frame_needs_geometry_scaling() -> None:
+    with pytest.raises(ValueError, match="scaling=geometry"):
+        Frame.model_validate({"scale": (1, 2, 3)})
+
+    stretched = Frame.model_validate({"scale": (1, 2, 3), "scaling": "geometry"})
+    assert np.allclose(stretched.scale, (1, 2, 3))
+
+
+def test_a_scaled_frame_scales_its_contents_when_compiled() -> None:
+    """The frame's own position is in its parent's coordinates, so only what is inside it is scaled."""
+    frame = Frame(pose=PoseQuat(pos=np.array((1.0, 0.0, 0.0))), scale=2.0)
+    frame.geoms.append(
+        GeomSphere(size=0.1, pose=PoseQuat(pos=np.array((0.0, 0.0, 0.5))))
+    )
+    worldbody = WorldBody()
+    worldbody.frames.append(frame)
+
+    mj_model = Mujoco(worldbody=worldbody).to_mj_model()
+
+    assert np.allclose(mj_model.geom_pos[0], (1.0, 0.0, 1.0))
+    assert np.isclose(mj_model.geom_size[0][0], 0.2)
+
+
+def test_a_stretched_frame_stretches_a_box_along_its_axes() -> None:
+    frame = Frame(scale=np.array((1.0, 2.0, 3.0)), scaling=FrameScaling.GEOMETRY)
+    frame.geoms.append(GeomBox(size=np.array((1.0, 1.0, 1.0))))
+    worldbody = WorldBody()
+    worldbody.frames.append(frame)
+
+    mj_model = Mujoco(worldbody=worldbody).to_mj_model()
+
+    assert np.allclose(mj_model.geom_size[0], (1, 2, 3))

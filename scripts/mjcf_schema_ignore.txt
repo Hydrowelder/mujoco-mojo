@@ -23,3 +23,14 @@ default_mismatch:composite.initial
 # `gainprm`/`biasprm`/`user` siblings in mjcf_ignore.txt (the RST-tool's ignore file).
 default_mismatch:general.dynprm
 default_mismatch:plugin.dynprm
+
+# the schema declares the worldbody child of `mujoco` as `body` (worldbody is an alias of body's
+# grammar, and the schema row for `mujoco` lists `body`), where the XML tag is `worldbody`, which
+# is what mojo's `Mujoco.worldbody` writes
+child_missing:mujoco>body
+child_extra:mujoco>worldbody
+
+# TODO: mojo's `Plugin` has no <config key= value=> children, and `Mesh` has no <plugin> child.
+# Both predate MuJoCo 3.16.0; implement them when plugin configuration is needed.
+child_missing:plugin>config
+child_missing:mesh>plugin

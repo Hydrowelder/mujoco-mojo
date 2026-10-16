@@ -56,31 +56,40 @@ class PoseContext:
 
         self._tm = TransformManager()
         self._registered: set[int] = set()
+        self._inside_scaled: set[int] = set()
         self._build(worldbody)
 
-    def _key(self, obj: object) -> str:
+    def _key(self, obj: object, scaled: bool = False) -> str:
         self._registered.add(id(obj))
+        if scaled:
+            self._inside_scaled.add(id(obj))
         return str(id(obj))
 
-    def _register_posed_children(self, parent_obj: object, parent_key: str) -> None:
+    def _register_posed_children(
+        self, parent_obj: object, parent_key: str, scaled: bool = False
+    ) -> None:
         """Registers sites, cameras, and lights of a body as child frames."""
         for attr in ("sites", "cameras", "lights"):
             for child in getattr(parent_obj, attr, ()):
                 logger.debug(
                     f"registering {attr[:-1]} {getattr(child, 'name', id(child))}"
                 )
-                self._tm.add_transform(self._key(child), parent_key, _to_T(child))
+                self._tm.add_transform(
+                    self._key(child, scaled), parent_key, _to_T(child)
+                )
 
-    def _walk_frames(self, frm: Frame, parent_key: str) -> None:
-        """Recursively registers a Frame, its sites/cameras/lights, and any bodies or nested frames it wraps."""
+    def _walk_frames(self, frm: Frame, parent_key: str, scaled: bool = False) -> None:
+        """Recursively registers a Frame, its sites/cameras/lights, and any bodies or nested frames it wraps. `scaled` is whether the frame already sits inside a scaled frame."""
         logger.debug(f"registering frame {getattr(frm, 'name', id(frm))}")
-        frm_key = self._key(frm)
+        frm_key = self._key(frm, scaled)
         self._tm.add_transform(frm_key, parent_key, _to_T(frm))
-        self._register_posed_children(frm, frm_key)
+        # the frame's own pose is in its parent's coordinates, so only what it contains is scaled
+        contents_scaled = scaled or frm.is_scaled
+        self._register_posed_children(frm, frm_key, contents_scaled)
         for nested in frm.frames:
-            self._walk_frames(nested, frm_key)
+            self._walk_frames(nested, frm_key, contents_scaled)
         for body in frm.bodies:
-            self._walk(body, frm_key)
+            self._walk(body, frm_key, contents_scaled)
 
     def _build(self, worldbody: WorldBody) -> None:
         """Walks the full worldbody tree and registers every posed element."""
@@ -93,16 +102,16 @@ class PoseContext:
         for body in worldbody.bodies:
             self._walk(body, wb_key)
 
-    def _walk(self, body: Body, parent_key: str) -> None:
-        """Recursively registers a body and all its descendants."""
+    def _walk(self, body: Body, parent_key: str, scaled: bool = False) -> None:
+        """Recursively registers a body and all its descendants. `scaled` is whether the body sits inside a scaled frame."""
         logger.debug(f"registering body {getattr(body, 'name', id(body))}")
-        body_key = self._key(body)
+        body_key = self._key(body, scaled)
         self._tm.add_transform(body_key, parent_key, _to_T(body))
-        self._register_posed_children(body, body_key)
+        self._register_posed_children(body, body_key, scaled)
         for frm in body.frames:
-            self._walk_frames(frm, body_key)
+            self._walk_frames(frm, body_key, scaled)
         for child in body.bodies:
-            self._walk(child, body_key)
+            self._walk(child, body_key, scaled)
 
     def local_pose(self, frame: HasPose, relative_to: HasPose) -> PoseQuat:
         """Returns the pose of `frame` expressed in `relative_to`'s coordinate system."""
@@ -114,6 +123,11 @@ class PoseContext:
             msg = "relative_to is not registered in the pose context. Ensure it is part of the worldbody tree before resolving poses."
             logger.error(msg)
             raise ValueError(msg)
+        for label, element in (("frame", frame), ("relative_to", relative_to)):
+            if id(element) in self._inside_scaled:
+                msg = f"{label} is inside a frame whose scale is not 1. Poses are not resolved through scaled frames, since the pose graph composes rigid transforms only."
+                logger.error(msg)
+                raise ValueError(msg)
         try:
             T = self._tm.get_transform(str(id(frame)), str(id(relative_to)))
         except Exception as exc:

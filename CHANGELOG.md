@@ -1,7 +1,8 @@
 # Changelog
 
-## Version 2.6.16 (2026-10-14)
+## Version 2.7.0 (2026-10-15)
 
+- Added support for MuJoCo 3.16.0
 - **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
 - **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments, and job status files from earlier versions no longer load
 - Command-line `true` and `false` now parse as bools (lowercase `false` used to be a truthy string)
@@ -11,7 +12,7 @@
 - Fixed SLURM `days-hours` time limits (`1-12` was read as 1 day and 12 minutes)
 - Added `--padding` to `run single`, so SLURM workers name trial folders like the rest of the job (`trial_007`, not `trial_7`)
 - Added `MojoRunner.submit_slurm` and `SlurmConfig` to submit a SLURM job from Python without prompts; the wizard now uses them
-- Added `mujoco-mojo run job-watch` (also offered by the SLURM wizard), which keeps a job's `job_status.json` and runtime report current and exits when every trial is done
+- Added `mujoco-mojo run watch-workdir` (also offered by the SLURM wizard), which keeps a job's `job_status.json` and runtime report current and exits when every trial is done
 - SLURM submissions now save the job id in `job_status.json`
 
 ## Version 2.6.15 (2026-10-13)

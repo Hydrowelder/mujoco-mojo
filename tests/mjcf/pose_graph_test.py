@@ -237,3 +237,34 @@ def test_relative_to_not_in_tree_raises() -> None:
 
     with pytest.raises(ValueError, match="relative_to is not registered"):
         graph.local_pose(m.sensor, orphan)
+
+
+def _scaled_frame_model() -> tuple[Mujoco, Frame, SiteSphere, Body]:
+    """A scaled frame holding a site, next to an ordinary body that is outside it."""
+    inside = SiteSphere(size=0.05, pose=PoseQuat(pos=np.array([0.0, 0.0, 0.5])))
+    scaled = Frame(pose=PoseQuat(pos=np.array([1.0, 0.0, 0.0])), scale=2.0)
+    scaled.sites.append(inside)
+    outside = Body(pose=PoseQuat(pos=np.array([-1.0, 0.0, 0.0])))
+    worldbody = WorldBody()
+    worldbody.frames.append(scaled)
+    worldbody.bodies.append(outside)
+    return Mujoco(worldbody=worldbody), scaled, inside, outside
+
+
+def test_pose_resolution_inside_a_scaled_frame_raises() -> None:
+    """The pose graph composes rigid transforms only, so it must not silently ignore a frame's scale."""
+    model, _, inside, outside = _scaled_frame_model()
+
+    with pytest.raises(ValueError, match="scale is not 1"):
+        model.local_pose(inside, outside)
+    with pytest.raises(ValueError, match="scale is not 1"):
+        model.local_pose(outside, inside)
+
+
+def test_pose_resolution_outside_a_scaled_frame_still_works() -> None:
+    """The scaled frame's own pose is in its parent's coordinates, so it and anything beside it resolve normally."""
+    model, scaled, _, outside = _scaled_frame_model()
+
+    pose = model.local_pose(scaled, outside)
+
+    assert np.allclose(pose.pos, (2.0, 0.0, 0.0))

@@ -962,7 +962,7 @@ IntervalType = Annotated[
 
 
 @run_app.command(name="watch-workdir")
-def run_job_watch(
+def run_watch_workdir(
     workdir: WorkdirType = DEFAULT_WORKDIR,
     interval: IntervalType = 10.0,
     n_proc: NProcType = _SETTINGS.general.n_proc,
