@@ -62,7 +62,7 @@ def check_max_height(
 # --8<-- [end:end_of_trial_check]
 
 
-def register_directly(runtime_manager: RuntimeManager, state: MjState) -> None:  # pyright: ignore[reportRedeclaration]
+def register_directly(runtime_manager: RuntimeManager, state: MjState) -> None:
     """Registers requirements with plain method calls, then runs the simulation."""
     # --8<-- [start:direct]
     runtime_manager: RuntimeManager

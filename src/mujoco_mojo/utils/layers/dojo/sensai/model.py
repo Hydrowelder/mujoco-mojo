@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from google.genai import errors as google_errors
-from pydantic_ai import ModelAPIError  # pyright: ignore[reportMissingImports]
-from pydantic_ai.models.fallback import (
-    FallbackModel,  # pyright: ignore[reportMissingImports]
-)
+from pydantic_ai import ModelAPIError
+from pydantic_ai.models.fallback import FallbackModel
 
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.typing import ModelProvider

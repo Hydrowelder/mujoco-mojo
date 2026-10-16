@@ -246,6 +246,7 @@ class MeshBase(XMLModel, ABC):
 
         """
         import trimesh
+        import trimesh.visual
 
         # make sure inputs are valid and mkdir
         if save_dir is None and not vertex:
@@ -321,9 +322,9 @@ class MeshBase(XMLModel, ABC):
             for i, (vs, fs) in enumerate(result):
                 p = trimesh.Trimesh(vs, fs)
 
-                p.visual.vertex_colors[:, :3] = (rng.random(3) * 255).astype(  # type: ignore
-                    np.uint8
-                )
+                # a fresh trimesh always has color visuals, this narrows the type
+                assert isinstance(p.visual, trimesh.visual.ColorVisuals)
+                p.visual.vertex_colors[:, :3] = (rng.random(3) * 255).astype(np.uint8)
                 scene.add_geometry(p)
             scene.export(save_preview)
             logger.info(f"Saved decomposition preview to {save_preview}")

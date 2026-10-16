@@ -11,8 +11,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
-from pydantic_ai import RunContext  # pyright: ignore[reportMissingImports]
-from pydantic_ai.messages import (  # pyright: ignore[reportMissingImports]
+from pydantic_ai import RunContext
+from pydantic_ai.messages import (
     AgentStreamEvent,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -238,7 +238,7 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
         "rotatable_vectors": body.rotatable_vectors,
         "available_quats": body.available_quats,
         "column_metadata": body.column_metadata,
-    }  # pyright: ignore[reportAssignmentType]
+    }
 
     deps = SensAIDeps(
         job_status=shared.CURRENT_JOB,

@@ -5,15 +5,9 @@ from __future__ import annotations
 import json
 
 from pydantic import ValidationError
-from pydantic_ai import (  # pyright: ignore[reportMissingImports]
-    Agent,
-    ModelRetry,
-    RunContext,
-)
+from pydantic_ai import Agent, ModelRetry, RunContext
 
-from mujoco_mojo.utils.layers.dojo.plot_config import (
-    PlotConfig,
-)
+from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig
 from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
     _get_profiles_dir,
     _parse_profile,
