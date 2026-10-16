@@ -91,6 +91,7 @@ class MeshBase(XMLModel, ABC):
     tag = "mesh"
 
     attributes = _mesh_attr
+    compiler_asset_dir = "meshdir"
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_MESH
 
     name: MeshName | None = None

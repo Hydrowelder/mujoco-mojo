@@ -84,6 +84,7 @@ class FlexComp(XMLModel):
     """
 
     tag = "flexcomp"
+    compiler_asset_dir = "meshdir"
     attributes = (
         "name",
         "type",

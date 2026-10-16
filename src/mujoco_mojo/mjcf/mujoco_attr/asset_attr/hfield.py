@@ -38,6 +38,7 @@ class HField(XMLModel):
     """
 
     tag = "hfield"
+    compiler_asset_dir = "meshdir"
 
     attributes = (
         "name",

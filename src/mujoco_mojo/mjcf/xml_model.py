@@ -86,6 +86,9 @@ class XMLModel(MojoBaseModel):
     children: ClassVar[tuple[str, ...]] = ()
     """Children of the XML tag."""
 
+    compiler_asset_dir: ClassVar[Literal["meshdir", "texturedir"] | None] = None
+    """Which `compiler` directory MuJoCo puts in front of this element's relative file paths: `meshdir` for meshes, height fields, skins, and flexcomps, `texturedir` for textures, and `None` for elements that use neither (sub-models, includes). `Mujoco.bundle_assets` uses it to find the files the way MuJoCo would."""
+
     non_xml_fields: ClassVar[tuple[str, ...]] = ()
     """Fields that exist on this model but are intentionally not written to XML as an attribute or child (e.g. an attribute documented as never being saved to XML). Every field not covered by `attributes`, `children`, or this tuple is treated as a missed schema entry. Each entry should be accompanied by a comment explaining why it is exempt."""
 
@@ -407,17 +410,21 @@ class XMLModel(MojoBaseModel):
                 if isinstance(item, XMLModel):
                     yield from item._iter_tree()
 
-    def bundle_assets(self, target_dir: Path, rel_to_xml: Path) -> None:
+    def bundle_assets(self, target_dir: Path, rel_to_xml: Path) -> bool:
         """
         Crawls the entire XMLModel tree. Any attribute that is a Path object is copied to target_dir/assets and the model is updated to a relative path.
 
+        Returns:
+            Whether any asset was bundled.
+
         Two different source files sharing a basename (e.g. textures/wood/texture.png and textures/steel/texture.png) are disambiguated by nesting them under real parent directory names; byte-identical files sharing a basename are treated as duplicates and collapse to one destination/one copy. This only covers collisions discovered within this call - a pre-existing, unrelated file already in target_dir from an earlier bundle_assets() call keeps the existing warn-and-overwrite behavior.
+
         """
         target_dir.mkdir(parents=True, exist_ok=True)
 
         slots = collect_asset_slots(self)
         if not slots:
-            return
+            return False
 
         plan = compute_asset_destinations(slots)
         prefer_symlinks = MujocoMojoSettings().general.symlink
@@ -438,3 +445,4 @@ class XMLModel(MojoBaseModel):
             )
 
         apply_asset_destinations(slots, plan.destinations, rel_to_xml)
+        return True

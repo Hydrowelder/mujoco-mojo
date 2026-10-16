@@ -54,6 +54,22 @@ Both files are kept, both are copied correctly, and your model's geoms are updat
 
 Once every destination is decided, Mojo copies exactly one file per unique destination, never one per source, so several `DepPath` fields that resolve to the same byte-identical file only ever trigger a single copy. That one remaining copy is still not guaranteed to happen: the copy phase checks the destination against what is already sitting in the assets folder, first by file size, then by content hash, and skips the copy entirely if it already matches. This means re-generating a model you have already bundled before is fast and does not churn your assets folder with redundant writes.
 
+## Compiler Directories
+
+The `compiler` element can set `meshdir`, `texturedir`, `assetdir`, and `strippath` to tell MuJoCo where to look for a relative file name. Mojo applies them while it looks for your files, the same way MuJoCo does:
+
+- A mesh, height field, skin, or flexcomp file is looked up in `meshdir`, and a texture file in `texturedir`. `assetdir` supplies whichever of the two is not set, and a specific directory wins over `assetdir`.
+- `strippath` drops any directory from the file name before the compiler directory is applied.
+- An absolute file name is used as it is, and a relative compiler directory is relative to your working directory, like every `DepPath`.
+- Sub-model files are not affected by these settings, in MuJoCo or in Mojo.
+
+```python
+compiler = Compiler(meshdir=Path("meshes"))
+mesh = Mesh(name=MeshName("part"), file=DepPath("part.stl"))  # found at ./meshes/part.stl
+```
+
+Bundled files are written with explicit paths relative to the XML. Once anything is bundled, Mojo therefore removes `meshdir`, `texturedir`, `assetdir`, and `strippath` from the compiler, because MuJoCo would put the directory in front of those paths a second time and look in the wrong place.
+
 ## Symlinking Instead of Copying
 
 By default Mojo copies the actual bytes of every dependency file into the bundle. Setting `assets.symlink = true` in your project settings switches the last step from a copy to a symlink pointing back at the original source file instead.

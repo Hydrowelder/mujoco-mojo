@@ -112,8 +112,12 @@ def collect_asset_slots(root: XMLModel) -> list[AssetSlot]:
             for item in items:
                 if isinstance(item, DepPath):
                     resolved = item.resolve()
-                    if resolved.exists():
+                    if resolved.is_file():
                         has_existing_asset = True
+                    elif resolved.exists():
+                        logger.error(
+                            f"Asset path is a directory, not a file: {resolved}"
+                        )
                     else:
                         logger.error(f"Asset file not found: {resolved}")
 
@@ -201,7 +205,7 @@ def compute_asset_destinations(slots: list[AssetSlot]) -> AssetPlan:
         for item in slot.items:
             if isinstance(item, DepPath):
                 resolved = item.resolve()
-                if resolved.exists():
+                if resolved.is_file():
                     all_sources.add(resolved)
 
     by_basename: dict[str, list[Path]] = {}

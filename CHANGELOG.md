@@ -3,6 +3,7 @@
 ## Version 2.7.0 (2026-10-15)
 
 - Added support for MuJoCo 3.16.0
+- Fixed asset bundling ignoring the compiler's `meshdir`, `texturedir`, `assetdir`, and `strippath`, and crashing when one was a `DepPath`
 - **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
 - **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments, and job status files from earlier versions no longer load
 - Command-line `true` and `false` now parse as bools (lowercase `false` used to be a truthy string)
