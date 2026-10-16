@@ -84,7 +84,7 @@ class Frame(XMLModel):
     scale: Vec3 | float = np.array((1, 1, 1))
     """Resizes everything inside the frame. Bodies, geoms, sites, joints and all other contents are scaled about the frame's origin, while the frame's own pos and orientation, which are in its parent's coordinates, are not. Scaling happens at compile time: the spec keeps the authored values, so changing the scale and recompiling starts again from them, and a model saved as written keeps the attribute.
 
-    Three attributes work together. scale sets the factor `s` of lengths, massscale the factor mm of masses, by default `s^3` (the same material), and scaling decides whether forces, stiffnesses and actuator gains follow (similar, the default) or keep their authored values (geometry). Typical uses:
+    Three attributes work together. scale sets the factor `s` of lengths, massscale the factor `m` of masses, by default `s^3` (the same material), and scaling decides whether forces, stiffnesses and actuator gains follow (similar, the default) or keep their authored values (geometry). Typical uses:
 
     | intent                                                                          | attributes                                   |
     |:--------------------------------------------------------------------------------|:---------------------------------------------|

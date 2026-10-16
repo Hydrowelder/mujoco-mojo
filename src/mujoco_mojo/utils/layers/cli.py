@@ -1295,7 +1295,6 @@ def settings_show(
                 GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
             )
         except ValueError:
-            breakpoint()
             source = str(GLOBAL_SETTINGS_FILE)
     else:
         source = "defaults only"

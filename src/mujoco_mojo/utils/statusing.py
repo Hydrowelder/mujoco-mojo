@@ -318,10 +318,10 @@ class JobStatus(MojoBaseModel):
     objective: tuple[str, Path | None, int | None]
     """What objective function was used. Name of function, Path to the function, and linenumber."""
 
-    args_used: bool
+    args_used: bool = False
     """Whether or not *args were passed to the generator, runtime, and objective."""
 
-    kwargs_used: bool
+    kwargs_used: bool = False
     """Whether or not **kwargs were passed to the generator, runtime, and objective."""
 
     trial_nums: list[int]
