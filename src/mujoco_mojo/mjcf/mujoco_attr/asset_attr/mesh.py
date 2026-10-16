@@ -213,7 +213,7 @@ class MeshBase(XMLModel, ABC):
         vertex: bool = False,
         save_dir: DepPath | None = None,
         save_preview: Path | None = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> list[Self]:
         """
         Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD).
@@ -230,7 +230,7 @@ class MeshBase(XMLModel, ABC):
             vertex (bool, optional): If True, the generated meshes will be the vertex type (this is not really suitable for multi-run jobs since the XML file becomes quite large). If False, the save_as parameter becomes required and will save
             save_dir (DepPath, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
             save_preview (Path, optional): Where to save a preview of the generated meshes. The meshes are filled with a random color. Example is `Path("mesh_decomposed.obj")`.
-            **kwargs (dict[str, Any]): Keyword arguments to pass to CoACD.
+            **kwargs (Any): Keyword arguments to pass to CoACD.
 
         Returns:
             list[Mesh]: Resulting mesh objects.
@@ -264,16 +264,20 @@ class MeshBase(XMLModel, ABC):
 
         # load the original mesh
         t_mesh = trimesh.load(path, force="mesh")
+        if not isinstance(t_mesh, trimesh.Trimesh):
+            msg = f"Mesh {path.stem}: expected a single triangle mesh, but loaded a {type(t_mesh).__name__}."
+            logger.error(msg)
+            raise TypeError(msg)
 
         # prepare the CoACD mesh
-        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)  # pyright: ignore[reportAttributeAccessIssue]
+        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)
 
         # decompose
         result = coacd.run_coacd(
             mesh=coacd_mesh,
             threshold=threshold,
             max_convex_hull=max_convex_hulls,
-            **kwargs,  # pyright: ignore[reportArgumentType]
+            **kwargs,
         )
 
         # convert meshes into Mesh objects

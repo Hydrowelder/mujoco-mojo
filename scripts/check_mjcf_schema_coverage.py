@@ -62,6 +62,8 @@ from mjcf_schema import (
 from rich.console import Console
 from rich.markup import escape
 
+from mujoco_mojo.mjcf.xml_model import XMLModel
+
 console = Console(soft_wrap=True)
 
 IGNORE_FILE = Path(__file__).with_name("mjcf_schema_ignore.txt")
@@ -191,7 +193,9 @@ def _schema_attr_default(attr: Attribute) -> tuple[str, str | None] | None:
     return None
 
 
-def _default_mismatch(attr: Attribute, cls: type, field_name: str) -> str | None:
+def _default_mismatch(
+    attr: Attribute, cls: type[XMLModel], field_name: str
+) -> str | None:
     """
     Returns a human-readable mismatch description, or None if the default checks out (or
     isn't checkable -- see `_schema_attr_default`).

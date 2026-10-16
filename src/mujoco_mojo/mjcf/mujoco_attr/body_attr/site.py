@@ -40,7 +40,8 @@ from mujoco_mojo.utils.signal_metadata import (
 )
 
 if TYPE_CHECKING:
-    import trimesh
+    # imported by name: the `trimesh` method below would hide a `trimesh` module in its annotation
+    from trimesh import Trimesh
 
     from mujoco_mojo.runtime.signal_manager import SignalManager
 
@@ -803,7 +804,10 @@ class SiteMesh(SiteBase, ProximityMixin):
     def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
         return mj_model.site_dataid[self.get_id(mj_model)]
 
-    def trimesh(self, mj_model: mujoco.MjModel) -> trimesh.Trimesh:
+    def _proximity_name(self) -> str | None:
+        return self.name
+
+    def trimesh(self, mj_model: mujoco.MjModel) -> Trimesh:
         import trimesh
 
         # get mesh id and data from mujoco

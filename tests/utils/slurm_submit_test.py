@@ -661,29 +661,37 @@ def _custom_runtime(*args: Any, **kwargs: Any) -> Any:
     return None
 
 
-@pytest.mark.parametrize(
-    ("extra", "missing"),
-    [
-        ({"generator_path": None}, "generator_path"),
-        ({"runtime": _custom_runtime}, "runtime_path"),
-    ],
-)
-def test_the_workers_need_import_paths_for_the_functions_they_run(
-    tmp_path: Path, slurm: FakeSlurm, extra: dict[str, Any], missing: str
+def _assert_refused_before_anything_is_written(
+    runner: MojoRunner, slurm: FakeSlurm, missing: str
 ) -> None:
-    workdir = tmp_path / "work"
-    runner = MojoRunner(
-        **{
-            "generator": _generate,
-            "generator_path": "sim.generate",
-            "workdir": workdir,
-            "config": MonteCarloConfig(n_trial=3, n_proc=1, resume=True),
-            **extra,
-        }
-    )
-
     with pytest.raises(ValueError, match=missing):
         runner.submit_slurm(SlurmConfig(), NamedValueDict(), None)
 
-    assert not workdir.exists()
+    assert not runner.workdir.exists()
     assert slurm.sbatch_calls == []
+
+
+def test_the_workers_need_an_import_path_for_the_generator(
+    tmp_path: Path, slurm: FakeSlurm
+) -> None:
+    runner = MojoRunner(
+        generator=_generate,
+        workdir=tmp_path / "work",
+        config=MonteCarloConfig(n_trial=3, n_proc=1, resume=True),
+    )
+
+    _assert_refused_before_anything_is_written(runner, slurm, "generator_path")
+
+
+def test_the_workers_need_an_import_path_for_a_custom_runtime(
+    tmp_path: Path, slurm: FakeSlurm
+) -> None:
+    runner = MojoRunner(
+        generator=_generate,
+        generator_path="sim.generate",
+        runtime=_custom_runtime,
+        workdir=tmp_path / "work",
+        config=MonteCarloConfig(n_trial=3, n_proc=1, resume=True),
+    )
+
+    _assert_refused_before_anything_is_written(runner, slurm, "runtime_path")

@@ -72,12 +72,12 @@ def test_actuator_request_posts_ctrl_signal(
     assert sm._data_buffer[0, idx] == pytest.approx(0.5, abs=1e-6)
 
 
-def test_actuator_request_raises_when_unnamed() -> None:
+def test_actuator_request_raises_when_unnamed(tmp_path: Path) -> None:
     """ActuatorBase.request() raises ValueError when the actuator has no name."""
     unnamed = ActuatorMotor(joint=JointName("elbow"))
-    sm_mock = object()  # won't be reached
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
     with pytest.raises(ValueError, match="unnamed"):
-        unnamed.request(sm_mock)  # type: ignore[arg-type]
+        unnamed.request(sm)
 
 
 @pytest.fixture

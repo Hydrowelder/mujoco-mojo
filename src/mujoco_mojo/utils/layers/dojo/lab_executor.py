@@ -49,6 +49,7 @@ from mujoco_mojo.utils.filters.filters import (
     TranslationFilter,
     TrigFilter,
     WrapFilter,
+    is_trig_func,
 )
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata
@@ -352,21 +353,8 @@ class LabExecutor:
         df: pl.DataFrame,
     ) -> pl.Series:
         # Individual trig nodes (one node per function, no combo widget)
-        _TRIG_FNS = {
-            "sin",
-            "cos",
-            "tan",
-            "asin",
-            "acos",
-            "atan",
-            "sinh",
-            "cosh",
-            "tanh",
-            "degrees",
-            "radians",
-        }
-        if ntype in _TRIG_FNS:
-            filt = TrigFilter(func=ntype)  # type: ignore[arg-type]
+        if is_trig_func(ntype):
+            filt = TrigFilter(func=ntype)
             tmp = pl.DataFrame({"_s": signal.cast(pl.Float64)})
             return tmp.with_columns(filt.apply(pl.col("_s")).alias("_s"))["_s"]
 

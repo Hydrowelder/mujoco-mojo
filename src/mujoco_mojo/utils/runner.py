@@ -730,7 +730,9 @@ class MojoRunner:
 
             # 2. Get the qualified name (e.g., "Experiment.generate")
             # This gives you the class context automatically
-            gen_name = getattr(func, "__qualname__", func.__name__)  # pyright: ignore[reportAttributeAccessIssue]
+            gen_name = getattr(func, "__qualname__", None) or getattr(
+                func, "__name__", type(func).__name__
+            )
 
             # 3. Get the line number
             # getsourcelines returns ([lines], starting_line_number)

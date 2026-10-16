@@ -197,5 +197,5 @@ dojo_app.include_router(
 
 # read once at import time: unlike the settings.toml-backed globals above,
 # whether pydantic-ai is installed can't change without a process restart
-shared.templates.env.globals["sensai_available"] = _sensai_router is not None
-shared.templates.env.globals["mojo_version"] = __version__
+shared.template_globals["sensai_available"] = _sensai_router is not None
+shared.template_globals["mojo_version"] = __version__

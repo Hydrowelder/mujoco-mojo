@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from mujoco_mojo.utils.dataframe import MojoDataFrame
+from mujoco_mojo.utils.filters.filters import TrigFilter, is_trig_func
 from mujoco_mojo.utils.filters import (
     AbsoluteValueFilter,
     AnyFilter,
@@ -681,3 +682,14 @@ def test_sort_filter() -> None:
         "x"
     ].to_list()
     assert descending == [5.0, 3.0, 1.0, -2.0]
+
+
+@pytest.mark.parametrize("name", ["sin", "acos", "tanh", "degrees", "radians"])
+def test_is_trig_func_accepts_what_a_trig_filter_can_apply(name: str) -> None:
+    assert is_trig_func(name)
+    TrigFilter(func=name)
+
+
+@pytest.mark.parametrize("name", ["sec", "SIN", "", "gt"])
+def test_is_trig_func_rejects_other_names(name: str) -> None:
+    assert not is_trig_func(name)

@@ -291,7 +291,7 @@ else:
     Vec6 = Annotated[NDArray[Shape["6"], float | int], ...]
     Vec7 = Annotated[NDArray[Shape["7"], float | int], ...]
     Vec9 = Annotated[NDArray[Shape["9"], float | int], ...]
-    VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # type: ignore  # noqa: F722
+    VecN = Annotated[NDArray[Shape["*"], float | int], ...]  # noqa: F722
 
     Mat2 = Annotated[NDArray[Shape["2, 2"], float | int], ...]
     Mat3 = Annotated[NDArray[Shape["3, 3"], float | int], ...]
@@ -300,7 +300,7 @@ else:
     Mat6 = Annotated[NDArray[Shape["6, 6"], float | int], ...]
     Mat7 = Annotated[NDArray[Shape["7, 7"], float | int], ...]
     Mat9 = Annotated[NDArray[Shape["9, 9"], float | int], ...]
-    MatN = Annotated[NDArray[Shape["*, *"], float | int], ...]  # type: ignore  # noqa: F722
+    MatN = Annotated[NDArray[Shape["*, *"], float | int], ...]  # noqa: F722
 
 
 def empty_list_field() -> Any:
@@ -1437,7 +1437,8 @@ class ModelProvider(StrEnum):
                 # not every Provider subclass's __init__ declares base_url, so this is
                 # checked dynamically via the except below, not something a static
                 # signature could confirm.
-                return provider_cls(**{"base_url": base_url})
+                provider_kwargs: dict[str, Any] = {"base_url": base_url}
+                return provider_cls(**provider_kwargs)
             except TypeError:
                 msg = f"{self.value}'s pydantic_ai provider doesn't accept base_url directly; falling back to its own default construction."
                 logger.warning(msg)

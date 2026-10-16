@@ -9,7 +9,7 @@ import socket
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, TypedDict, get_args
 
 import polars as pl
 import stochas
@@ -415,7 +415,10 @@ async def get_filter_schema() -> list[dict]:
             # alias_generator may be a plain callable (to_camel) or an AliasGenerator
             # object; only call it when it's actually callable.
             ag = cls.model_config.get("alias_generator")
-            alias: str = field_info.alias or (ag(name) if callable(ag) else name)
+            generated = ag(name) if callable(ag) else name
+            alias = field_info.alias or (
+                generated if isinstance(generated, str) else name
+            )
             prop = props.get(alias, props.get(name, {}))
             if "anyOf" in prop:
                 non_null = [s for s in prop["anyOf"] if s.get("type") != "null"]
@@ -771,6 +774,12 @@ def _lab_dir_mtime() -> float:
         return 0.0
 
 
+class _LabEntry(TypedDict):
+    name: str
+    si_cols: set[str]
+    outputs: list[str]
+
+
 @lru_cache(maxsize=32)
 def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list:
     """
@@ -782,7 +791,7 @@ def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list
     from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
 
     d = _get_lab_dir()
-    labs = []
+    labs: list[_LabEntry] = []
     for f in sorted(d.rglob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         try:
             graph = json.loads(f.read_text(encoding="utf-8"))

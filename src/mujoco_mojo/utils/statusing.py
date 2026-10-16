@@ -486,7 +486,11 @@ class JobStatus(MojoBaseModel):
     def total_runtimes(
         self,
     ) -> dict[Literal["pending", "generating", "solving", "total"], float]:
-        totals = {"pending": 0.0, "generating": 0.0, "solving": 0.0}
+        totals: dict[Literal["pending", "generating", "solving", "total"], float] = {
+            "pending": 0.0,
+            "generating": 0.0,
+            "solving": 0.0,
+        }
 
         with self._lock:
             statuses = list(self._cache.values())
@@ -504,7 +508,7 @@ class JobStatus(MojoBaseModel):
                     totals[step_name] += (now - step_obj.started).total_seconds()
 
         totals["total"] = sum(totals.values())
-        return totals  # pyright: ignore[reportReturnType]
+        return totals
 
     def get_trial_nums_with_status(
         self, *status: Completion, invert: bool = False

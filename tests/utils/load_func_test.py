@@ -41,7 +41,8 @@ def test_load_func_resolves_class_method(add_to_sys_path: Path) -> None:
 
     func = _load_func("load_func_class_mod.MyClass.my_method")
 
-    assert func.__name__ == "my_method"
+    # the unbound method, so it is called with an instance (this one does not use it)
+    assert func(None) == "method"
 
 
 def test_load_func_return_module(add_to_sys_path: Path) -> None:

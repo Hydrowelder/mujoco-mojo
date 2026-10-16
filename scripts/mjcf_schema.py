@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import requests
@@ -503,7 +503,7 @@ def _splice_groups(schema: Schema) -> None:
             if group is None:
                 continue
             for attr in group.attributes:
-                spliced = Attribute(**{**attr.__dict__, "source_group": group_name})
+                spliced = replace(attr, source_group=group_name)
                 expanded_attrs.append(spliced)
             expanded_constraints.extend(group.constraints)
         expanded_attrs.extend(element.attributes)

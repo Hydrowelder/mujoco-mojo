@@ -69,12 +69,12 @@ def test_joint_request_posts_qvel_signal(
     assert sm._data_buffer[0, idx] == pytest.approx(2.5, abs=1e-6)
 
 
-def test_joint_request_raises_when_unnamed() -> None:
+def test_joint_request_raises_when_unnamed(tmp_path: Path) -> None:
     """Joint.request() raises ValueError when the joint has no name."""
     unnamed = Joint()
-    sm_mock = object()  # won't be reached
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
     with pytest.raises(ValueError, match="unnamed"):
-        unnamed.request(sm_mock)  # type: ignore[arg-type]
+        unnamed.request(sm)
 
 
 def test_rt_qpos_matches_data(hinge_setup: tuple[MjState, Joint]) -> None:

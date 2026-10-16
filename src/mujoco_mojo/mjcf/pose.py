@@ -50,7 +50,7 @@ class PoseBase(Pos, OrientationBase, ABC):
         # v' = R*v + p
         return self.as_matrix() @ np.asarray(vec, dtype=float) + self.pos
 
-    def __mul__(self, other: Any) -> Any:
+    def __mul__(self, other: Any, /) -> Any:
         # point transform
         if isinstance(other, (np.ndarray, list, tuple)) and len(other) == 3:
             return self.apply(np.asarray(other, dtype=float))

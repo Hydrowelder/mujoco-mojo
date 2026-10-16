@@ -130,7 +130,10 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
 
    ```bash linenums="0"
    pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated
+   pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated
    ```
+
+   The second command adds the stubs for `mujoco.viewer`, which the first does not cover.
 
 2. Recent MuJoCo builds compiled with newer pybind11 versions correctly expose enums as `SupportsInt`. If you encounter Pyright enum type errors, apply the compatibility patch:
 

@@ -75,7 +75,7 @@ class Pos(XMLModel):
         assert isinstance(self.pos, np.ndarray)
         return Pos(self.pos - other_val)
 
-    def __mul__(self, scalar: float) -> Pos:
+    def __mul__(self, scalar: float, /) -> Pos:
         """Multiplies the position by a scalar."""
         assert isinstance(self.pos, np.ndarray)
         return Pos(self.pos * scalar)
