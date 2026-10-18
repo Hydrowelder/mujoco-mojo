@@ -18,6 +18,7 @@ import numpy as np
 import typer
 from numpydantic import NDArray
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
@@ -32,7 +33,15 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DISTS_FNAME,
 )
 from mujoco_mojo.utils.log import get_logger, get_trial_log_handler
-from mujoco_mojo.utils.runner import MojoGenerator, MojoRunner, MojoRuntime
+from mujoco_mojo.utils.runner import (
+    GENERATOR_FIXED_ARGS,
+    RUNTIME_FIXED_ARGS,
+    MojoGenerator,
+    MojoRunner,
+    MojoRuntime,
+    select_kwargs,
+    validate_shared_kwargs,
+)
 from mujoco_mojo.utils.statusing import (
     JOB_STATUS_FNAME,
     TRIAL_STATUS_FNAME,
@@ -183,10 +192,8 @@ class MojoReloaded:
     seed: int | None
     model_config_name: str | None
     xml_name: str
-    gen_args: list[Any]
-    gen_kwargs: dict[str, Any]
-    run_args: list[Any]
-    run_kwargs: dict[str, Any]
+    args: list[Any]
+    kwargs: dict[str, Any]
     host: str
     port: int
 
@@ -290,10 +297,8 @@ class MojoReloaded:
             generator=MojoRunner.inspect_protocol(gen_func),
             runtime=MojoRunner.inspect_protocol(run_func),
             objective=("none defined", None, None),
-            gen_args_used=bool(self.gen_args),
-            gen_kwargs_used=bool(self.gen_kwargs),
-            run_args_used=bool(self.run_args),
-            run_kwargs_used=bool(self.run_kwargs),
+            args_used=bool(self.args),
+            kwargs_used=bool(self.kwargs),
             trial_nums=sorted(on_disk | {self.trial_num}),
         )
         job_status.refresh_from_disk()
@@ -399,6 +404,18 @@ class MojoReloaded:
         if self.runtime:
             run_func = cast(MojoRuntime, reload_with_check(self.runtime, "Runtime"))
 
+        # a misspelled --kwarg is dropped silently by the per-function filtering, so say so
+        shared_targets: dict[str, tuple[Callable[..., Any], int]] = {}
+        if gen_func is not None:
+            shared_targets["generator"] = (gen_func, GENERATOR_FIXED_ARGS)
+        if run_func is not None:
+            shared_targets["runtime"] = (run_func, RUNTIME_FIXED_ARGS)
+        try:
+            validate_shared_kwargs(self.kwargs, self.args, shared_targets)
+        except ValueError as e:
+            self._print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            raise
+
         global_overrides = NamedValueDict[NDArray]()
         if self.overrides_path and self.overrides_path.exists():
             logger.info(
@@ -461,8 +478,10 @@ class MojoReloaded:
                     mojo_model = gen_func(
                         mojo_model,
                         global_overrides,
-                        *self.gen_args,
-                        **self.gen_kwargs,
+                        *self.args,
+                        **select_kwargs(
+                            gen_func, GENERATOR_FIXED_ARGS, self.args, self.kwargs
+                        ),
                     )
                     mojo_model._trial_dir = trial_dir
                     if self.model_config_name:
@@ -538,8 +557,10 @@ class MojoReloaded:
                         mojo_model,
                         runtime_manager,
                         state,
-                        *self.run_args,
-                        **self.run_kwargs,
+                        *self.args,
+                        **select_kwargs(
+                            run_func, RUNTIME_FIXED_ARGS, self.args, self.kwargs
+                        ),
                     )
                     self._print(
                         f"[dim white]Runtime completed in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"

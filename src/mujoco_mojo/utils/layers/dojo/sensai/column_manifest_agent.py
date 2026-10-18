@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic_ai import Agent, RunContext  # pyright: ignore[reportMissingImports]
+from pydantic_ai import Agent, RunContext
 
 from mujoco_mojo.utils.dataframe import ColumnManifest
 

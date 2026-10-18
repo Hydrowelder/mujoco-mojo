@@ -92,6 +92,8 @@ class SensorContact(SensorBase):
             ContactData.POS,
             ContactData.NORMAL,
             ContactData.TANGENT,
+            ContactData.LINVEL,
+            ContactData.ANGVEL,
         ]
 
         # remove duplicates
@@ -102,6 +104,15 @@ class SensorContact(SensorBase):
 
         # normalize order
         self.data = tuple(sorted(self.data, key=lambda d: order.index(d)))
+
+        # the sensor/contact/data reference says linvel and angvel cannot be combined with netforce
+        if self.reduce == ContactReduce.NETFORCE and {
+            ContactData.LINVEL,
+            ContactData.ANGVEL,
+        } & set(self.data):
+            msg = "linvel and angvel data cannot be combined with reduce=netforce"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if self.cutoff:
             print(

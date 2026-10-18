@@ -1,5 +1,23 @@
 # Changelog
 
+## Version 2.7.0 (2026-10-18)
+
+- Added support for [MuJoCo 3.16.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-16-0-october-14-2026)
+- Fixed asset bundling ignoring the compiler's `meshdir`, `texturedir`, `assetdir`, and `strippath`, and crashing when one was a `DepPath`
+- **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
+- **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments
+- Command-line `true` and `false` now parse as bools (lowercase `false` used to be a truthy string)
+- The project settings file is now found by searching parent directories, like uv, so it applies from subdirectories
+- The SLURM wizard prints the settings files it read and the lines it adds to the submission script
+- Fixed SLURM memory sizes with decimals (`125.9G` was read as 125 MB)
+- Fixed SLURM `days-hours` time limits (`1-12` was read as 1 day and 12 minutes)
+- Added `--padding` to `run single`, so SLURM workers name trial folders like the rest of the job (`trial_007`, not `trial_7`)
+- Added `MojoRunner.submit_slurm` and `SlurmConfig` to submit a SLURM job from Python without prompts; the wizard now uses them
+- Added `mujoco-mojo run watch-workdir` (also offered by the SLURM wizard), which keeps a job's `job_status.json` and runtime report current and exits when every trial is done
+- SLURM submissions now save the job id in `job_status.json`
+- `WorldBody` now raises if given `freejoints`, which MuJoCo rejects in the world body
+- Change static type checking to use `ty`
+
 ## Version 2.6.15 (2026-10-13)
 
 - Fixed `ModelProvider.env_var_name`, and with it the settings schema written whenever settings are saved, raising when the optional `pydantic-ai` package isn't installed
@@ -9,7 +27,7 @@
 
 ## Version 2.6.14 (2026-10-06)
 
-- Added support for MuJoCo 3.15.0
+- Added support for [MuJoCo 3.15.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-15-0-october-5-2026)
 - Added `cg_x`, `cg_y`, and `cg_z` to `Inertial`, and `x`, `y`, and `z` to `Pos`
 - The `time` column is now tagged with the `scalar` `transform_type`, like the other built-in signals
 - Added missing return type annotations across the package, so `get_logger` now returns a `logging.Logger` instead of an unknown type
@@ -18,7 +36,7 @@
 
 ## Version 2.6.13 (2026-09-30)
 
-- Added support for MuJoCo 3.14.0
+- Added support for [MuJoCo 3.14.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-14-0-september-22-2026)
     - Added the `ipc` flag to `<option><flag>`
 - `reloaded`'s `workdir/stochas` directory is now cleared before each reload's regeneration - it previously only overwrote files for the distributions that still existed, so a dropped distribution category/type, or a reload producing no distributions at all, could leave stale CSV tables or a stale `dists.json` behind
 
@@ -56,7 +74,7 @@
 
 ## Version 2.6.9 (2026-09-10)
 
-- Added support for MuJoCo 3.13.0
+- Added support for [MuJoCo 3.13.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-13-0-september-8-2026)
 - Fixed transitive dependency issue warned by Dependabot
 - Added changelog
 

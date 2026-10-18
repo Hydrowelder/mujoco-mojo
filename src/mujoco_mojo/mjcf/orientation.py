@@ -99,7 +99,7 @@ class OrientationBase(XMLModel, ABC):
         """Rotates a vector by this orientation."""
         return self.to_rotation().apply(np.asarray(vec, dtype=float))
 
-    def __mul__(self, other: OrientationBase) -> Quat:
+    def __mul__(self, other: OrientationBase, /) -> Quat:
         """Composes two rotations: self * other and returns a Quat."""
         if not isinstance(other, OrientationBase):
             msg = f"Invalid type {type(other)} for multiplication with orientation"
@@ -109,8 +109,12 @@ class OrientationBase(XMLModel, ABC):
         res_mat = self.as_matrix() @ other.as_matrix()
         return Quat.from_matrix(res_mat)
 
-    def inv(self) -> Self:
-        """Returns the inverse orientation."""
+    def inv(self) -> OrientationBase:
+        """
+        Returns the inverse orientation.
+
+        This is an orientation of the same kind for the orientation classes. It is typed as `OrientationBase` rather than `Self` because the pose classes also inherit from `PoseBase`, whose `inv` returns the inverse pose as a `PoseQuat` whatever orientation the pose is written in.
+        """
         return type(self).from_matrix(self.as_matrix().T)
 
     def angle_between(

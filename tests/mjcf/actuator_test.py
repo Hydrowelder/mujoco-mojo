@@ -5,10 +5,11 @@ import numpy as np
 import pytest
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.damper import ActuatorDamper
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.motor import ActuatorMotor
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.position import ActuatorPosition
 from mujoco_mojo.runtime.signal_manager import SignalManager
-from mujoco_mojo.typing import ActuatorName, JointName
+from mujoco_mojo.typing import ActuatorControlLimited, ActuatorName, JointName
 
 
 @pytest.fixture
@@ -72,12 +73,12 @@ def test_actuator_request_posts_ctrl_signal(
     assert sm._data_buffer[0, idx] == pytest.approx(0.5, abs=1e-6)
 
 
-def test_actuator_request_raises_when_unnamed() -> None:
+def test_actuator_request_raises_when_unnamed(tmp_path: Path) -> None:
     """ActuatorBase.request() raises ValueError when the actuator has no name."""
     unnamed = ActuatorMotor(joint=JointName("elbow"))
-    sm_mock = object()  # won't be reached
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
     with pytest.raises(ValueError, match="unnamed"):
-        unnamed.request(sm_mock)  # type: ignore[arg-type]
+        unnamed.request(sm)
 
 
 @pytest.fixture
@@ -268,3 +269,24 @@ def test_actuator_request_metadata_override(
         "unit": "newton",
         "transform_type": "scalar",
     }
+
+
+def test_damper_ctrllimited_is_always_true() -> None:
+    damper = ActuatorDamper(
+        name=ActuatorName("brake"), joint=JointName("elbow"), ctrlrange=np.array((0, 1))
+    )
+
+    assert damper.ctrllimited is ActuatorControlLimited.TRUE
+
+
+@pytest.mark.parametrize(
+    "value", [ActuatorControlLimited.FALSE, ActuatorControlLimited.AUTO]
+)
+def test_damper_rejects_any_other_ctrllimited(value: ActuatorControlLimited) -> None:
+    with pytest.raises(ValueError, match="ctrllimited is always true"):
+        ActuatorDamper(
+            name=ActuatorName("brake"),
+            joint=JointName("elbow"),
+            ctrlrange=np.array((0, 1)),
+            ctrllimited=value,
+        )

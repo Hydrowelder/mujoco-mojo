@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic_ai import Agent, RunContext  # pyright: ignore[reportMissingImports]
-from pydantic_ai.models import Model  # pyright: ignore[reportMissingImports]
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models import Model
 
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig

@@ -13,13 +13,13 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import SiteMesh
 from mujoco_mojo.settings import MujocoMojoSettings, VisualizationSettings
 from mujoco_mojo.typing import ProximityType, SignalCategory, Vec3
 from mujoco_mojo.utils.color import Color
-from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.column import Column, fan_out
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.signal_metadata import (
-    MetadataLike,
-    MetadataOverrides,
     ColumnMetadata,
     Dimension,
+    MetadataLike,
+    MetadataOverrides,
     TransformType,
     dim,
     dimensionless_metadata,
@@ -366,13 +366,13 @@ class Proximity(MojoBaseModel):
         result = self.volume_1._baked_manager.min_distance_other(
             self.volume_2._baked_manager, return_data=True
         )
-        min_dist = float(result[0])  # pyright: ignore[reportIndexIssue]
+        min_dist = float(result[0])
         min_dist = max(0.0, min_dist)  # clip to zero
-        data = result[1]  # pyright: ignore[reportIndexIssue]
+        data = result[1]
 
         assert data
-        p1 = data.point(self.volume_1.name)  # pyright: ignore[reportAttributeAccessIssue]
-        p2 = data.point(self.volume_2.name)  # pyright: ignore[reportAttributeAccessIssue]
+        p1 = data.point(self.volume_1.name)
+        p2 = data.point(self.volume_2.name)
 
         self.update_last(p1, p2, state)
         return min_dist, p1, p2, ProximityType.FACE_TO_FACE

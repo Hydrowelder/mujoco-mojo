@@ -9,6 +9,7 @@ from pydantic import Field
 import mujoco_mojo.utils.utils as utils
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
+from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.extension import Extension
 from mujoco_mojo.mjcf.mujoco_attr.actuator import Actuator
 from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
@@ -37,6 +38,19 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Mujoco"]
+
+
+def _with_compiler_dir(path: Path, directory: Path | None, strippath: bool) -> Path:
+    """
+    Completes a file name the way MuJoCo does: `strippath` removes any directory from it, an absolute path is then used as it is, and otherwise the compiler directory goes in front of it.
+
+    A relative `directory` is relative to the working directory, which is where every `DepPath` is resolved from.
+    """
+    if strippath:
+        path = Path(path.name)
+    if path.is_absolute() or directory is None:
+        return path
+    return directory / path
 
 
 class Mujoco(XMLModel):
@@ -226,6 +240,71 @@ class Mujoco(XMLModel):
         )
         file.write_text(xml, encoding="utf-8")
         return xml
+
+    def _compiler_asset_dirs(self) -> tuple[Path | None, Path | None, bool]:
+        """The effective `meshdir`, `texturedir`, and `strippath` across every compiler element, with `assetdir` standing in for whichever of the two directories is unset (the specific directory wins, as in MuJoCo)."""
+        meshdir = texturedir = assetdir = None
+        strippath = False
+        for compiler in self.compilers:
+            meshdir = compiler.meshdir or meshdir
+            texturedir = compiler.texturedir or texturedir
+            assetdir = compiler.assetdir or assetdir
+            strippath = strippath or compiler.strippath
+        return meshdir or assetdir, texturedir or assetdir, strippath
+
+    def bundle_assets(self, target_dir: Path, rel_to_xml: Path) -> bool:
+        """
+        Bundles the model's `DepPath` assets (see `XMLModel.bundle_assets`), finding each file the way MuJoCo does.
+
+        MuJoCo looks for a mesh, height field, skin, or flexcomp file in `meshdir`, and for a texture file in `texturedir` (`assetdir` sets both), after `strippath` removes any directory from the file name. A relative file name given as a `DepPath` is therefore completed with the matching compiler directory first, with a relative directory taken relative to the working directory like every `DepPath`.
+
+        Bundled files are written with explicit paths relative to the XML, so once anything is bundled `meshdir`, `texturedir`, `assetdir`, and `strippath` are cleared. Left in the XML they would be put in front of those paths again, and MuJoCo would look in the wrong place.
+
+        Returns:
+            Whether any asset was bundled.
+
+        """
+        meshdir, texturedir, strippath = self._compiler_asset_dirs()
+        directories = {"meshdir": meshdir, "texturedir": texturedir}
+        if strippath or meshdir is not None or texturedir is not None:
+            for obj in self._iter_tree():
+                if obj.compiler_asset_dir is None:
+                    continue
+                for attr in obj.attributes:
+                    value = getattr(obj, attr, None)
+                    if isinstance(value, DepPath):
+                        setattr(
+                            obj,
+                            attr,
+                            DepPath(
+                                _with_compiler_dir(
+                                    value,
+                                    directories[obj.compiler_asset_dir],
+                                    strippath,
+                                )
+                            ),
+                        )
+
+        bundled = super().bundle_assets(target_dir, rel_to_xml)
+        if bundled:
+            self._clear_compiler_asset_dirs()
+        return bundled
+
+    def _clear_compiler_asset_dirs(self) -> None:
+        cleared = []
+        for compiler in self.compilers:
+            for name in ("meshdir", "texturedir", "assetdir"):
+                if getattr(compiler, name) is not None:
+                    setattr(compiler, name, None)
+                    cleared.append(name)
+            if compiler.strippath:
+                compiler.strippath = False
+                cleared.append("strippath")
+        if cleared:
+            logger.info(
+                f"Bundled assets are written with explicit paths, so {', '.join(cleared)} "
+                "were removed from the compiler."
+            )
 
     def to_mj_spec(self) -> mujoco.MjSpec:
         """Creates an MjSpec from the Mujoco instance."""

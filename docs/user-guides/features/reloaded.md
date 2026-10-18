@@ -20,19 +20,19 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument           | Shortcut | Description                                                                  |
-| :----------------- | :------- | :--------------------------------------------------------------------------- |
-| `--help`           |          | Describes all available arguments. Used on its own.                          |
-| `--generator`      | `-g`     | Import path to your `generate` function.                                     |
-| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.  |
-| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                             |
-| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).               |
-| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).    |
-| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).            |
-| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                    |
-| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws. |
-| `--gen-arg`        | `-ga`    | Positional argument forwarded to the generator. Repeatable.                  |
-| `--gen-kwarg`      | `-gk`    | Keyword argument (`key=value`) forwarded to the generator. Repeatable.       |
+| Argument           | Shortcut | Description                                                                                                                                                                                                                                               |
+| :----------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--help`           |          | Describes all available arguments. Used on its own.                                                                                                                                                                                                       |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                                                                                                                                                                                                  |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                               |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                          |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                            |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).                                                                                                                                                                                 |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                         |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                                 |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                              |
+| `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                               |
+| `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                       |
 | `--port`           | `-p`     | Port for the web-based viewers. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
 
 ---

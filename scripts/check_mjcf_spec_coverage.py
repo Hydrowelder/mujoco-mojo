@@ -42,16 +42,19 @@ import textwrap
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Literal, get_args, get_origin
+from typing import TYPE_CHECKING, Literal, get_args, get_origin
 
 import requests
 from pydantic_core import PydanticUndefined
 from rich.console import Console
 from rich.markup import escape
 
+if TYPE_CHECKING:
+    from mujoco_mojo.mjcf.xml_model import XMLModel
+
 SPEC_URL = "https://mujoco.readthedocs.io/en/stable/_sources/XMLreference.rst.txt"
 
-IGNORE_FILE = Path(__file__).with_name("mjcf_spec_ignore.txt")
+IGNORE_FILE = Path(__file__).with_name("mjcf_ignore.txt")
 
 # below this difflib ratio, a description is flagged as likely drifted from the spec
 DOCSTRING_SIMILARITY_THRESHOLD = 0.2
@@ -336,13 +339,13 @@ def _field_docstrings_for_class(cls: type) -> dict[str, str]:
     return docs
 
 
-def collect_xml_model_classes() -> list[type]:
+def collect_xml_model_classes() -> list[type[XMLModel]]:
     import mujoco_mojo  # noqa: F401
     from mujoco_mojo.mjcf.xml_model import XMLModel
 
-    seen: set[type] = set()
-    stack = [XMLModel]
-    classes: list[type] = []
+    seen: set[type[XMLModel]] = set()
+    stack: list[type[XMLModel]] = [XMLModel]
+    classes: list[type[XMLModel]] = []
     while stack:
         cls = stack.pop()
         for sub in cls.__subclasses__():
@@ -414,7 +417,9 @@ def build_python_registry() -> dict[str, dict]:
     return registry
 
 
-def _python_field_default(cls: type, field_name: str) -> tuple[str, str | None]:
+def _python_field_default(
+    cls: type[XMLModel], field_name: str
+) -> tuple[str, str | None]:
     """
     Classifies a Python field's default into ("required", None) when no default is
     set, ("optional", None) when the default is None, ("composite", None) when the
@@ -425,10 +430,14 @@ def _python_field_default(cls: type, field_name: str) -> tuple[str, str | None]:
     fixed value isn't meant to match the spec's generic default for the merged
     element), or ("literal", formatted_value) otherwise, formatted the same way
     `XMLModel.to_xml` formats it for the real XML output.
+
+    A name in `attributes` that is not a model field at all is a property that assembles its value from other fields (a mesh shape's `params`, for example). It has no default of its own to compare, so it is classified as ("property", None).
     """
     from mujoco_mojo.mjcf.xml_model import XMLModel, _format_value
 
-    field_info = cls.model_fields[field_name]
+    field_info = cls.model_fields.get(field_name)
+    if field_info is None:
+        return "property", None
     default = field_info.get_default(call_default_factory=True)
     if default is PydanticUndefined:
         return "required", None
@@ -478,14 +487,16 @@ def _literals_match(spec_value: str, python_value: str) -> bool:
     )
 
 
-def _default_mismatch(spec_attr: SpecAttr, cls: type, field_name: str) -> str | None:
+def _default_mismatch(
+    spec_attr: SpecAttr, cls: type[XMLModel], field_name: str
+) -> str | None:
     """Returns a human-readable mismatch description, or None if the default checks out."""
     spec_kind, spec_value = _spec_attr_default(spec_attr)
     if spec_kind == "unparsed":
         return None
 
     python_kind, python_value = _python_field_default(cls, field_name)
-    if python_kind in ("composite", "discriminator"):
+    if python_kind in ("composite", "discriminator", "property"):
         return None
 
     if spec_kind == python_kind == "required":
@@ -502,7 +513,7 @@ def _default_mismatch(spec_attr: SpecAttr, cls: type, field_name: str) -> str | 
     return f"spec marks attribute as {spec_kind} but python default is {python_kind}{python_desc}"
 
 
-def _print_classes(classes: list[tuple[str, str, type]]) -> None:
+def _print_classes(classes: list[tuple[str, str, type[XMLModel]]]) -> None:
     for name, location, *_ in classes:
         console.print(
             f"      [bold cyan]{escape(name)}[/bold cyan] [dim]{escape(location)}[/dim]"

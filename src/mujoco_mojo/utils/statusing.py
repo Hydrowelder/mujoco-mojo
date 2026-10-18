@@ -286,6 +286,9 @@ class JobStatus(MojoBaseModel):
     execution_mode: ExecutionMode
     """What execution mode the job was run with."""
 
+    slurm_job_id: str | None = None
+    """The SLURM job id the job was submitted as. Set once `sbatch` accepts the submission, so the job can be looked up in the scheduler later (see `mujoco-mojo run watch-workdir`)."""
+
     workdir: Path
     """Job workdir."""
 
@@ -315,17 +318,11 @@ class JobStatus(MojoBaseModel):
     objective: tuple[str, Path | None, int | None]
     """What objective function was used. Name of function, Path to the function, and linenumber."""
 
-    gen_args_used: bool
-    """Whether or not *args were used for the generator."""
+    args_used: bool = False
+    """Whether or not *args were passed to the generator, runtime, and objective."""
 
-    gen_kwargs_used: bool
-    """Whether or not **kwargs were used for the generator."""
-
-    run_args_used: bool
-    """Whether or not *args were used for the runtime."""
-
-    run_kwargs_used: bool
-    """Whether or not **kwargs were used for the runtime."""
+    kwargs_used: bool = False
+    """Whether or not **kwargs were passed to the generator, runtime, and objective."""
 
     trial_nums: list[int]
     """The exhaustive list of trial identifiers expected for this job."""
@@ -465,13 +462,35 @@ class JobStatus(MojoBaseModel):
 
             if not self.is_done:
                 self.elapsed = datetime.now(UTC) - self.start_time
+            elif (last_end := self._latest_trial_end()) is not None:
+                # a finished job has nobody left updating `elapsed` (SLURM workers never
+                # touch this file), so read it off the trials; never shorten a value a
+                # run that tracked its own time already stored
+                self.elapsed = max(self.elapsed, last_end - self.start_time)
         if persist:
             self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+
+    def _latest_trial_end(self) -> datetime | None:
+        """When the last finished step of any trial ended, or `None` if no step has finished."""
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        ends = [
+            step.started + timedelta(seconds=step.elapsed)
+            for status in statuses
+            for step in (status.pending, status.generating, status.solving)
+            if step.started is not None and step.elapsed is not None
+        ]
+        return max(ends, default=None)
 
     def total_runtimes(
         self,
     ) -> dict[Literal["pending", "generating", "solving", "total"], float]:
-        totals = {"pending": 0.0, "generating": 0.0, "solving": 0.0}
+        totals: dict[Literal["pending", "generating", "solving", "total"], float] = {
+            "pending": 0.0,
+            "generating": 0.0,
+            "solving": 0.0,
+        }
 
         with self._lock:
             statuses = list(self._cache.values())
@@ -489,7 +508,7 @@ class JobStatus(MojoBaseModel):
                     totals[step_name] += (now - step_obj.started).total_seconds()
 
         totals["total"] = sum(totals.values())
-        return totals  # pyright: ignore[reportReturnType]
+        return totals
 
     def get_trial_nums_with_status(
         self, *status: Completion, invert: bool = False
@@ -689,10 +708,8 @@ class JobStatus(MojoBaseModel):
             "Generator": _parse_func(*self.generator),
             "Runtime": _parse_func(*self.runtime),
             "Objective": _parse_func(*self.objective),
-            "Generator Args Used?": "✅" if self.gen_args_used else "❌",
-            "Generator Kwargs Used?": "✅" if self.gen_kwargs_used else "❌",
-            "Runtime Args Used?": "✅" if self.run_args_used else "❌",
-            "Runtime Kwargs Used?": "✅" if self.run_kwargs_used else "❌",
+            "Args Used?": "✅" if self.args_used else "❌",
+            "Kwargs Used?": "✅" if self.kwargs_used else "❌",
         }
         if self.requirement_summary:
             n_rp = self.n_requirements_passed

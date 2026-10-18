@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pathlib import Path
+
+from pydantic import Field, field_validator
 
 from mujoco_mojo.mjcf.defaults import DEFAULT_ANGLE, DEFAULT_EULERSEQ
-from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.compiler_attr.lengthrange import LengthRange
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
@@ -44,8 +45,8 @@ class Compiler(XMLModel):
         "saveinertial",
         "assetdir",
         "alignfree",
-        # "savecompiled", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-        # "savecanonical", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
+        "savecompiled",
+        "savecanonical",
         "conflict",
     )
     children = ("lengthrange",)
@@ -60,13 +61,15 @@ class Compiler(XMLModel):
     """This attribute imposes a lower bound on the diagonal inertia components of each body except for the world body. Its use is similar to boundmass above."""
 
     settotalmass: float = -1
-    """If this value is positive, the compiler will scale the masses and inertias of all bodies in the model, so that the total mass equals the value specified here. The world body has mass 0 and does not participate in any mass-related computations. This scaling is performed last, after all other operations affecting the body mass and inertia. The same scaling operation can be applied at runtime to the compiled mjModel with the function mj_setTotalmass."""
+    """This attribute is deprecated and will be removed in a future release; compiling a model which sets it gives a warning. If this value is positive, the compiler will scale the masses and inertias of all bodies in the model, so that the total mass equals the value specified here. The world body has mass 0 and does not participate in any mass-related computations. This scaling is performed last, after all other operations affecting the body mass and inertia. The same scaling operation can be applied at runtime to the compiled mjModel with the function mj_setTotalmass, followed by mj_setConst."""
 
     balanceinertia: bool = False
     """A valid diagonal inertia matrix must satisfy A+B>=C for all permutations of the three diagonal elements. Some poorly designed models violate this constraint, which will normally result in a compile error. If this attribute is set to "true", the compiler will silently set all three diagonal elements to their average value whenever the above condition is violated."""
 
     strippath: bool = False
-    """When this attribute is "true", the parser will remove any path information in file names specified in the model. This is useful for loading models created on a different system using a different directory structure."""
+    """When this attribute is "true", the parser will remove any path information in file names specified in the model. This is useful for loading models created on a different system using a different directory structure.
+
+    Like the directories below, it is turned off in the saved XML when assets are bundled."""
 
     coordinate: Coordinate = Coordinate.LOCAL
     """In previous versions, this attribute could be used to specify whether frame positions and orientations are expressed in local or global coordinates, but the "global" option has since been removed, and will cause an error to be generated. In order to convert older models which used the "global" option, load and save them in MuJoCo 2.3.3 or older."""
@@ -80,24 +83,31 @@ class Compiler(XMLModel):
     eulerseq: EulerSeq = DEFAULT_EULERSEQ
     """This attribute specifies the sequence of Euler rotations for all euler attributes of elements that have spatial frames, as explained in Frame orientations. This must be a string with exactly 3 characters from the set {x, y, z, X, Y, Z}. The character at position n determines the axis around which the n-th rotation is performed. Lower case letters denote axes that rotate with the frame (intrinsic), while upper case letters denote axes that remain fixed in the parent frame (extrinsic). The "rpy" convention used in URDF corresponds to "XYZ" in MJCF."""
 
-    meshdir: DepPath | None = None
-    """This attribute instructs the compiler where to look for mesh and height field files. The full path to a file is determined as follows. If the strippath attribute described above is "true", all path information from the file name is removed. The following checks are then applied in order: (1) if the file name contains an absolute path, it is used without further changes; (2) if this attribute is set and contains an absolute path, the full path is the string given here appended with the file name; (3) the full path is the path to the main MJCF model file, appended with the value of this attribute if specified, appended with the file name."""
+    meshdir: Path | None = None
+    """This attribute instructs the compiler where to look for mesh and height field files. The full path to a file is determined as follows. If the strippath attribute described above is "true", all path information from the file name is removed. The following checks are then applied in order: (1) if the file name contains an absolute path, it is used without further changes; (2) if this attribute is set and contains an absolute path, the full path is the string given here appended with the file name; (3) the full path is the path to the main MJCF model file, appended with the value of this attribute if specified, appended with the file name.
 
-    texturedir: DepPath | None = None
-    """This attribute is used to instruct the compiler where to look for texture files. It works in the same way as meshdir above."""
+    When assets are bundled (see `DepPath`), a relative directory is relative to the working directory, and it is removed from the saved XML because bundled files are written with explicit paths."""
 
-    assetdir: DepPath | None = None
-    """This attribute sets the values of both meshdir and texturedir above. Values in the latter attributes take precedence over assetdir."""
+    texturedir: Path | None = None
+    """This attribute is used to instruct the compiler where to look for texture files. It works in the same way as meshdir above.
+
+    Includes when assets are bundled."""
+
+    assetdir: Path | None = None
+    """This attribute sets the values of both meshdir and texturedir above. Values in the latter attributes take precedence over assetdir.
+
+    Like them, it is removed from the saved XML when assets are bundled."""
 
     discardvisual: bool = False
     """This attribute instructs the compiler to discard all model elements which are purely visual and have no effect on the physics (with one exception, see below). This often enables smaller mjModel structs and faster simulation.
 
-    - All materials are discarded.
-    - All textures are discarded.
-    - All geoms with contype=conaffinity=0 are discarded, if they are not referenced in another MJCF element. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body.
-    - All meshes which are not referenced by any geom (in particular those discarded above) are discarded.
+    - All materials and textures are discarded, unless they are referenced by a sensor or a custom tuple.
+    - All geoms with `contype=conaffinity=0` are discarded, if they are not referenced in another MJCF element and do not use the ellipsoid fluid model. If a discarded geom was used for inferring body inertia, an explicit inertial element is added to the body. This is not possible when inertiafromgeom is "true", which is then a compilation error.
+    - All meshes which are not used by a remaining geom or by a site, and are not referenced in another MJCF element, are discarded (in particular those of the geoms discarded above).
 
     The resulting compiled model will have exactly the same dynamics as the original model. The only engine-level computation which might change is the output of raycasting computations, as used for example by rangefinder sensors, since raycasting reports distances to visual geoms. When visualizing models compiled with this flag, it is important to remember that collision geoms are often placed in a group which is invisible by default.
+
+    Discarding is an operation on the model itself, mjs_discardVisual, which is applied before compiling. A model which is saved or compiled again afterwards is the one without the visual elements.
     """
 
     usethread: bool = True
@@ -108,6 +118,12 @@ class Compiler(XMLModel):
 
     - They are referenced by another element in the model.
     - They contain a site which is referenced by a force or torque sensor.
+    - Their fuse attribute is "false".
+    - They have a plugin or a sleep policy.
+    - They have mass, and either a gravcomp different from that of their parent, or the model is in a fluid (non-zero density or viscosity); in a fluid, bodies with an ellipsoid-fluid geom are kept too.
+    - inertiafromgeom is "true" and the compiler adjusted their inertia or their parent's (boundmass, boundinertia, balanceinertia), so that the geoms of both in one body would have a different inertia.
+
+    Fusing is an operation on the model itself, mjs_fuseStatic, which is applied before compiling: each fused body becomes a frame in its parent. A model which is saved or compiled again afterwards is the fused one.
 
     This optimization is particularly useful when importing URDF models which often have many dummy bodies, but can also be used to optimize MJCF models. After optimization, the new model has identical kinematics and dynamics as the original but is faster to simulate."""
 
@@ -123,11 +139,11 @@ class Compiler(XMLModel):
     saveinertial: bool = False
     """If set to "true", the compiler will save explicit inertial clauses for all bodies."""
 
-    # savecompiled: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-    # """This attribute and the next one say how the model is saved as MJCF; like saveinertial, they are not saved themselves. If "true", the values which compilation made of the model are saved: for example the size of a geom which was fitted to a mesh, or the pose of a body after alignment with its free joint. If "false", the model is saved as it is written in the mjSpec, and the saved file compiles to the same model; the spec need not have been compiled."""
+    savecompiled: bool = True
+    """This attribute and the next one say how the model is saved as MJCF; like saveinertial, they are not saved themselves. If "true", the values which compilation made of the model are saved: for example the size of a geom which was fitted to a mesh, or the pose of a body after alignment with its free joint. If "false", the model is saved as it is written in the mjSpec, and the saved file compiles to the same model; the spec need not have been compiled."""
 
-    # savecanonical: bool = True # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-    # """If "true", orientations are saved as quaternions, angles in radians, sizes and poses which were given with fromto as size, pos and quat, and a fullinertia as diaginertia and quat. If "false", they are saved in the notation in which they were written. This attribute has an effect only if savecompiled is "false": compiled values are always saved in the canonical notation."""
+    savecanonical: bool = True
+    """If "true", orientations are saved as quaternions, angles in radians, sizes and poses which were given with fromto as size, pos and quat, and a fullinertia as diaginertia and quat. If "false", they are saved in the notation in which they were written. This attribute has an effect only if savecompiled is "false": compiled values are always saved in the canonical notation."""
 
     conflict: Conflict = Conflict.WARNING
     """This attribute controls how conflicting global attributes (physics options, sizes, visual settings) are resolved when a child spec is attached to a parent using mjs_attach. A conflict occurs when both the parent and child specify authored values for the same field and those values differ. See Attribute Merging for details and a per-field table.
@@ -148,3 +164,9 @@ class Compiler(XMLModel):
 
     lengthrange: LengthRange = Field(default_factory=LengthRange)
     """This element controls the computation of actuator length ranges. For an overview of this functionality see Length range section. Note that if this element is omitted the defaults shown below still apply. In order to disable length range computations altogether, include this element and set mode="none"."""
+
+    @field_validator("meshdir", "texturedir", "assetdir")
+    @classmethod
+    def validate_asset_dir(cls, value: Path | None) -> Path | None:
+        """Keeps these as plain paths: a `DepPath` here (accepted for compatibility) would otherwise be mistaken for a file to bundle."""
+        return None if value is None else Path(value)

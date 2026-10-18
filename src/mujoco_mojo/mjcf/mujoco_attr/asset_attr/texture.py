@@ -54,6 +54,7 @@ class TextureBase(XMLModel, ABC):
     """
 
     tag = "texture"
+    compiler_asset_dir = "texturedir"
 
     attributes = _texture_attr
 

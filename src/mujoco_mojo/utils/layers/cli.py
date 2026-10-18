@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 import logging
+import os
 import sys
 from collections.abc import Callable
 from enum import StrEnum
@@ -29,6 +30,7 @@ from mujoco_mojo.typing import Direction, Sampler, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import find_free_port, get_local_ip
+from mujoco_mojo.utils.watching import WatchOutcome, watch_job
 
 from ..defaults import (
     DEFAULT_MC_N_TRIAL,
@@ -195,8 +197,14 @@ def _load_func(
     return obj
 
 
+_BOOL_STRINGS = {"true": True, "false": False}
+
+
 def _smart_parse(value: str) -> Any:
-    """Tries to convert CLI strings to Python types (int, float, bool)."""
+    """Tries to convert CLI strings to Python types (int, float, bool). `true` and `false` are matched case-insensitively, so `false` is a bool and not a (truthy) string; Python's `True` and `False` work too, and a quoted value such as `'false'` stays a string."""
+    lowered = value.strip().lower()
+    if lowered in _BOOL_STRINGS:
+        return _BOOL_STRINGS[lowered]
     try:
         # ast.literal_eval handles 10 -> int, 10.5 -> float, True -> bool
         return ast.literal_eval(value)
@@ -318,49 +326,29 @@ if True:
             help="Delete the workdir before running (mutually exclusive with --resume)",
         ),
     ]
-    GenArgsType = Annotated[
+    ArgsType = Annotated[
         list[str],
         typer.Option(
-            "--gen-arg",
-            "-ga",
+            "--arg",
+            "-a",
             help=(
-                "Positional arg for the [bold cyan]generator[/bold cyan]. "
-                "Repeat for multiple values (e.g., [italic]--gen-arg high_friction --gen-arg 1.5[/italic]). "
-                "Values are [bold yellow]smart-parsed[/bold yellow] (e.g., '1.5' becomes a float)."
+                "Positional arg passed to the [bold cyan]generator[/bold cyan], the [bold magenta]runtime[/bold magenta], and the objective. "
+                "Repeat for multiple values (e.g., [italic]--arg high_friction --arg 1.5[/italic]). "
+                "Values are [bold yellow]smart-parsed[/bold yellow] (e.g., '1.5' becomes a float and 'false' a bool). "
+                "All of those functions get the same values, so each must accept them."
             ),
         ),
     ]
-    GenKwargsType = Annotated[
+    KwargsType = Annotated[
         list[str],
         typer.Option(
-            "--gen-kwarg",
-            "-gk",
+            "--kwarg",
+            "-k",
             help=(
-                "Keyword arg (key=value) for the [bold cyan]generator[/bold cyan]. "
-                "Example: [italic]--gen-kwarg mode='fast' --gen-kwarg complexity=10[/italic]. "
+                "Keyword arg (key=value) passed to the [bold cyan]generator[/bold cyan], the [bold magenta]runtime[/bold magenta], and the objective. "
+                "Each function receives only the keywords it accepts, and a keyword that none of them accept is an error. "
+                "Example: [italic]--kwarg mode='fast' --kwarg complexity=10[/italic]. "
                 "Strings with special characters should be [underline]single-quoted[/underline] inside the double quotes."
-            ),
-        ),
-    ]
-    RunArgsType = Annotated[
-        list[str],
-        typer.Option(
-            "--run-arg",
-            "-ra",
-            help=(
-                "Positional arg for the [bold magenta]runtime[/bold magenta]. "
-                "Repeat for multiple values. Useful for passing flags directly to the physics engine."
-            ),
-        ),
-    ]
-    RunKwargsType = Annotated[
-        list[str],
-        typer.Option(
-            "--run-kwarg",
-            "-rk",
-            help=(
-                "Keyword arg (key=value) for the [bold magenta]runtime[/bold magenta]. "
-                "Example: [italic]--run-kwarg solver='Newton' --run-kwarg iterations=5[/italic]."
             ),
         ),
     ]
@@ -379,6 +367,17 @@ if True:
             "--trial-num",
             "-tn",
             help="Specific trial number to run ([italic]-tn 5[/italic])",
+        ),
+    ]
+    PaddingType = Annotated[
+        int | None,
+        typer.Option(
+            "--padding",
+            min=1,
+            help=(
+                "Zero-padding width of the trial folder name ([italic]--padding 3[/italic] gives [italic]trial_007[/italic]). "
+                "Defaults to no padding for a single trial. SLURM workers pass the width of the whole job so their folders match."
+            ),
         ),
     ]
     TrialNumsType = Annotated[
@@ -624,10 +623,8 @@ def _prepare_runner(
     model_config_name: ModelConfigNameType,
     seed: SeedType,
     xml_name: str,
-    gen_args: GenArgsType,
-    gen_kwargs: GenKwargsType,
-    run_args: RunArgsType,
-    run_kwargs: RunKwargsType,
+    args: ArgsType,
+    kwargs: KwargsType,
 ) -> MojoRunner:
     from mujoco_mojo.utils.runner import MojoRunner
 
@@ -636,17 +633,15 @@ def _prepare_runner(
     )
 
     # proccess args and kwargs
-    processed_gen_args = [_smart_parse(a) for a in gen_args]
-    processed_gen_kwargs = _process_kwargs(gen_kwargs)
-    processed_run_args = [_smart_parse(a) for a in run_args]
-    processed_run_kwargs = _process_kwargs(run_kwargs)
+    processed_args = [_smart_parse(a) for a in args]
+    processed_kwargs = _process_kwargs(kwargs)
 
     # resolve code paths
     gen_func = _load_func(generator)
     run_func = _load_func(runtime) if runtime else None
     objective_func = _load_func(objective) if objective else None
 
-    return MojoRunner(
+    runner = MojoRunner(
         generator=gen_func,
         generator_path=generator,  # needed for SLURM
         runtime=run_func,
@@ -657,11 +652,20 @@ def _prepare_runner(
         seed=seed,
         model_config_name=model_config_name,
         xml_name=xml_name,
-        gen_args=processed_gen_args,
-        gen_kwargs=processed_gen_kwargs,
-        run_args=processed_run_args,
-        run_kwargs=processed_run_kwargs,
+        args=processed_args,
+        kwargs=processed_kwargs,
     )
+
+    # a misspelled --kwarg is dropped silently by the per-function filtering, so catch it now
+    try:
+        runner.validate_kwargs()
+    except ValueError as exc:
+        from rich.markup import escape
+
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+
+    return runner
 
 
 @run_app.command(name="monte-carlo")
@@ -680,10 +684,8 @@ def run_monte_carlo(
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_nums: TrialNumsType = [],
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -751,10 +753,8 @@ def run_monte_carlo(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     # 2. build config
@@ -831,10 +831,9 @@ def run_single(
     execution_mode: ExecutionModeType = ExecutionMode.LOCAL,
     overrides: OverridesType = None,
     trial_num: TrialNumType = NOMINAL_TRIAL_NUM,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    padding: PaddingType = None,
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -896,16 +895,16 @@ def run_single(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     # a single trial is always just one trial - n_trial only exists on
     # MonteCarloConfig for padding-width bookkeeping, it doesn't affect which
     # trial actually runs (that's `trial_num`, passed explicitly below)
-    runner.config = MonteCarloConfig(n_trial=1, n_proc=n_proc, resume=resume)
+    runner.config = MonteCarloConfig(
+        n_trial=1, n_proc=n_proc, resume=resume, padding=padding
+    )
 
     console.print(f"[bold magenta]Running trial {trial_num}[/bold magenta]...")
     logger.info(f"Running trial {trial_num}...", extra={"file_only": True})
@@ -954,6 +953,43 @@ def run_single(
             console.print(f"\n{finished_msg}")
 
     raise typer.Exit(code=1 if had_fails else 0)
+
+
+IntervalType = Annotated[
+    float,
+    typer.Option("--interval", "-i", min=1.0, help="Seconds between checks."),
+]
+
+
+@run_app.command(name="watch-workdir")
+def run_watch_workdir(
+    workdir: WorkdirType = DEFAULT_WORKDIR,
+    interval: IntervalType = 10.0,
+    n_proc: NProcType = _SETTINGS.general.n_proc,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
+) -> None:
+    """
+    [bold yellow]Keep a job's status current until it finishes.[/bold yellow]
+
+    For jobs whose trials are run by other processes, such as the tasks of a SLURM job. They only write their own trial's status, so [bold]job_status.json[/bold] (elapsed time, trial durations) and the runtime report would otherwise stay as they were at submission. This checks the trials every few seconds and updates both, and exits by itself once every trial is done. Safe to stop with Ctrl+C and start again; the job is not affected.
+    """
+    _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
+
+    try:
+        outcome = watch_job(
+            workdir, interval=interval, n_proc=max(1, n_proc), console=console
+        )
+    except FileNotFoundError as exc:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopped watching.[/yellow] The job keeps running.")
+        raise typer.Exit(code=0)
+    raise typer.Exit(code=0 if outcome is WatchOutcome.DONE else 1)
 
 
 @cli_app.command(name="init")
@@ -1046,7 +1082,8 @@ def init_project(
             "Generate them once for Pylance/Pyright autocomplete:\n\n"
             "[bold yellow]"
             "pip install pybind11-stubgen\n"
-            "pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated"
+            "pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated\n"
+            "pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated"
             "[/bold yellow]\n\n"
             "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]:\n\n"
             "[dim]"
@@ -1075,7 +1112,7 @@ def settings_init(
         typer.Option(
             "--project",
             "-p",
-            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+            help="Initialize the project-local settings file (./.mujoco-mojo/settings.toml, in the current directory) instead of the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1085,12 +1122,17 @@ def settings_init(
     Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
     """
     from mujoco_mojo.settings import (
+        PROJECT_SETTINGS_DIR_NAME,
         SETTINGS_DIR,
         MujocoMojoSettings,
-        project_settings_file,
+        find_project_settings_file,
     )
 
-    target_dir = project_settings_file().parent if project else SETTINGS_DIR
+    # --project always creates the file for the current directory (like `uv init`), even
+    # when a parent directory already has one; looked up before anything is written, so
+    # it can only find a file that was there already
+    parent_project_file = find_project_settings_file() if project else None
+    target_dir = Path.cwd() / PROJECT_SETTINGS_DIR_NAME if project else SETTINGS_DIR
     target = target_dir / "settings.toml"
     already_existed = target.exists()
 
@@ -1106,6 +1148,12 @@ def settings_init(
             else f"[green]Project settings written:[/green] {target}"
         )
         extra = "[white]Add only the keys you want to override for this project.\n\n"
+        if parent_project_file is not None and parent_project_file != target:
+            extra = (
+                f"[yellow]Note:[/yellow] {parent_project_file} already applies to this directory. "
+                "This file is nested inside it, so its values win over that one from here down.\n\n"
+                + extra
+            )
         title = "Project Settings Initialized"
     elif already_existed and not force:
         MujocoMojoSettings.write_schema_files(target_dir)
@@ -1187,7 +1235,11 @@ def settings_show(
     import tomlkit
     from rich.syntax import Syntax
 
-    from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE, project_settings_file
+    from mujoco_mojo.settings import (
+        GLOBAL_SETTINGS_FILE,
+        find_project_settings_file,
+        project_settings_file,
+    )
 
     if scope is not SettingsScope.EFFECTIVE:
         target = (
@@ -1202,8 +1254,13 @@ def settings_show(
                 if scope is SettingsScope.PROJECT
                 else "mujoco-mojo settings init"
             )
+            where = (
+                f" in {Path.cwd()} or any parent directory"
+                if scope is SettingsScope.PROJECT
+                else ""
+            )
             console.print(
-                f"[yellow]No {scope.value} settings file found.[/yellow] "
+                f"[yellow]No {scope.value} settings file found{where}.[/yellow] "
                 f"Run [bold cyan]{init_cmd}[/bold cyan] to create one."
             )
             return
@@ -1239,14 +1296,14 @@ def settings_show(
                 GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
             )
         except ValueError:
-            breakpoint()
             source = str(GLOBAL_SETTINGS_FILE)
     else:
         source = "defaults only"
 
-    project_file = project_settings_file()
-    if project_file.exists():
-        source += f" + {project_file.relative_to(Path.cwd()).as_posix()}"
+    # the project file can be in a parent directory, so show it relative to here (`../x`)
+    project_file = find_project_settings_file()
+    if project_file is not None:
+        source += f" + {Path(os.path.relpath(project_file, Path.cwd())).as_posix()}"
 
     toml_str = _pad_for_subtitle(toml_str, source)
 
@@ -1282,7 +1339,7 @@ def settings_set_cmd(
         typer.Option(
             "--project",
             "-p",
-            help="Write to the project-local settings file (./.mujoco-mojo/settings.toml) instead of the global one.",
+            help="Write to the project-local settings file (the nearest .mujoco-mojo/settings.toml in this or a parent directory, else a new one in ./.mujoco-mojo/) instead of the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1301,7 +1358,7 @@ def settings_set_cmd(
 
     if project:
         try:
-            MujocoMojoSettings.set_project_value(key, parsed)
+            written = MujocoMojoSettings.set_project_value(key, parsed)
         except KeyError:
             console.print(
                 f"[bold red]Error:[/bold red] Unknown settings path: [bold cyan]{key}[/bold cyan]"
@@ -1311,7 +1368,7 @@ def settings_set_cmd(
             console.print(f"[bold red]Validation error:[/bold red] {e}")
             raise typer.Exit(code=1)
         console.print(
-            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r}"
+            f"[green]Updated project setting[/green] [bold cyan]{key}[/bold cyan] = {parsed!r} [dim]({written})[/dim]"
         )
         return
 
@@ -1361,7 +1418,7 @@ def settings_reset(
         typer.Option(
             "--project",
             "-p",
-            help="Delete the project-local settings file (./.mujoco-mojo/settings.toml) instead of resetting the global one.",
+            help="Delete the project-local settings file (the nearest .mujoco-mojo/settings.toml in this or a parent directory) instead of resetting the global one.",
         ),
     ] = False,
 ) -> None:
@@ -1378,7 +1435,8 @@ def settings_reset(
         target = project_settings_file()
         if not target.exists():
             console.print(
-                "[yellow]No project settings file found.[/yellow] Nothing to reset."
+                f"[yellow]No project settings file found[/yellow] in {Path.cwd()} or any parent directory. "
+                "Nothing to reset."
             )
             return
         if not Confirm.ask(
@@ -1416,10 +1474,8 @@ def run_reloaded(
     xml_name: XMLNameType = _SETTINGS.general.xml_name,
     watch: WatchType = _SETTINGS.reloaded.watch,
     record: RecordType = _SETTINGS.reloaded.record,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     host: HostType = _SETTINGS.general.default_host,
     port: PortType = _SETTINGS.general.default_port,
     verbose: VerboseType = 0,
@@ -1441,10 +1497,8 @@ def run_reloaded(
 
     # initialize and resolve
     overrides_path = None if not overrides_path else overrides_path.resolve()
-    processed_gen_args = [_smart_parse(a) for a in gen_args]
-    processed_gen_kwargs = _process_kwargs(gen_kwargs)
-    processed_run_args = [_smart_parse(a) for a in run_args]
-    processed_run_kwargs = _process_kwargs(run_kwargs)
+    processed_args = [_smart_parse(a) for a in args]
+    processed_kwargs = _process_kwargs(kwargs)
 
     MojoReloaded(
         generator=generator,
@@ -1459,10 +1513,8 @@ def run_reloaded(
         xml_name=xml_name,
         watch=watch,
         record=record,
-        gen_args=processed_gen_args,
-        gen_kwargs=processed_gen_kwargs,
-        run_args=processed_run_args,
-        run_kwargs=processed_run_kwargs,
+        args=processed_args,
+        kwargs=processed_kwargs,
         host=host,
         port=port,
     ).run()
@@ -1588,10 +1640,8 @@ def run_optimizer(
     model_config_name: ModelConfigNameType = _SETTINGS.general.model_config_name,
     xml_name: XMLNameType = _SETTINGS.general.xml_name,
     overrides: OverridesType = None,
-    gen_args: GenArgsType = [],
-    gen_kwargs: GenKwargsType = [],
-    run_args: RunArgsType = [],
-    run_kwargs: RunKwargsType = [],
+    args: ArgsType = [],
+    kwargs: KwargsType = [],
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
@@ -1655,10 +1705,8 @@ def run_optimizer(
         model_config_name=model_config_name,
         seed=seed,
         xml_name=xml_name,
-        gen_args=gen_args,
-        gen_kwargs=gen_kwargs,
-        run_args=run_args,
-        run_kwargs=run_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     runner.config = OptimizerConfig(

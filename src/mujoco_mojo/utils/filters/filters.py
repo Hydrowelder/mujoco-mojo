@@ -3,7 +3,15 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Annotated, ClassVar, Literal, Self
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    ClassVar,
+    Literal,
+    Self,
+    TypeGuard,
+    get_args,
+)
 
 import numpy as np
 import pint
@@ -54,6 +62,7 @@ __all__ = [
     "UnitFilter",
     "WrapFilter",
     "filter_adapter",
+    "is_trig_func",
 ]
 
 
@@ -474,7 +483,12 @@ UNIT_GROUPS: list[tuple[str, list[str]]] = [
 # Derived automatically - Literal[tuple_of_strings] is equivalent to Literal["a", "b", ...]
 # in Python 3.9+ because x[a, b] and x[(a, b)] make the same __getitem__ call.
 _ALL_UNITS: tuple[str, ...] = tuple(u for _, us in UNIT_GROUPS for u in us)
-SignalUnit = Literal[_ALL_UNITS] | str
+if TYPE_CHECKING:
+    # a Literal built from a tuple at runtime (so the JSON schema lists every unit) cannot be
+    # written as a static type, and next to `str` it adds nothing to one
+    SignalUnit = str
+else:
+    SignalUnit = Literal[_ALL_UNITS] | str
 
 
 class UnitFilter(BaseFilter):
@@ -486,10 +500,10 @@ class UnitFilter(BaseFilter):
     type: Literal[FilterType.UNIT] = FilterType.UNIT
     """The discriminator type for Pydantic."""
 
-    from_unit: SignalUnit  # pyright: ignore[reportInvalidTypeForm]
+    from_unit: SignalUnit
     """The original unit of the telemetry data (e.g., 'rad')."""
 
-    to_unit: SignalUnit  # pyright: ignore[reportInvalidTypeForm]
+    to_unit: SignalUnit
     """The target unit for analysis/display (e.g., 'deg')."""
 
     @model_validator(mode="after")
@@ -852,6 +866,11 @@ _TRIG_FUNCS = Literal[
     "degrees",
     "radians",
 ]
+
+
+def is_trig_func(name: str) -> TypeGuard[_TRIG_FUNCS]:
+    """Whether `name` is one of the functions a `TrigFilter` can apply."""
+    return name in get_args(_TRIG_FUNCS)
 
 
 class TrigFilter(BaseFilter):

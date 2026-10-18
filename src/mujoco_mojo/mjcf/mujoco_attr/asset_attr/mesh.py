@@ -33,10 +33,16 @@ logger = get_logger(__name__)
 __all__ = [
     "AnyMesh",
     "Mesh",
+    "MeshBox",
     "MeshCone",
+    "MeshCylinder",
+    "MeshDisc",
+    "MeshEllipsoid",
+    "MeshGrid",
     "MeshHemisphere",
     "MeshPlate",
     "MeshSphere",
+    "MeshSquare",
     "MeshSupersphere",
     "MeshTorus",
     "MeshWedge",
@@ -85,6 +91,7 @@ class MeshBase(XMLModel, ABC):
     tag = "mesh"
 
     attributes = _mesh_attr
+    compiler_asset_dir = "meshdir"
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_MESH
 
     name: MeshName | None = None
@@ -206,7 +213,7 @@ class MeshBase(XMLModel, ABC):
         vertex: bool = False,
         save_dir: DepPath | None = None,
         save_preview: Path | None = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> list[Self]:
         """
         Loads a mesh using trimesh before decomposing it using [CoACD](https://github.com/SarahWeiii/CoACD).
@@ -223,7 +230,7 @@ class MeshBase(XMLModel, ABC):
             vertex (bool, optional): If True, the generated meshes will be the vertex type (this is not really suitable for multi-run jobs since the XML file becomes quite large). If False, the save_as parameter becomes required and will save
             save_dir (DepPath, optional): Required when vertex is False. Where to save resulting mesh files if vertex is False. Mesh files are saved with the format `f"{path.stem}_{i}{[path.suffix]}"`.
             save_preview (Path, optional): Where to save a preview of the generated meshes. The meshes are filled with a random color. Example is `Path("mesh_decomposed.obj")`.
-            **kwargs (dict[str, Any]): Keyword arguments to pass to CoACD.
+            **kwargs (Any): Keyword arguments to pass to CoACD.
 
         Returns:
             list[Mesh]: Resulting mesh objects.
@@ -239,6 +246,7 @@ class MeshBase(XMLModel, ABC):
 
         """
         import trimesh
+        import trimesh.visual
 
         # make sure inputs are valid and mkdir
         if save_dir is None and not vertex:
@@ -257,16 +265,20 @@ class MeshBase(XMLModel, ABC):
 
         # load the original mesh
         t_mesh = trimesh.load(path, force="mesh")
+        if not isinstance(t_mesh, trimesh.Trimesh):
+            msg = f"Mesh {path.stem}: expected a single triangle mesh, but loaded a {type(t_mesh).__name__}."
+            logger.error(msg)
+            raise TypeError(msg)
 
         # prepare the CoACD mesh
-        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)  # pyright: ignore[reportAttributeAccessIssue]
+        coacd_mesh = coacd.Mesh(t_mesh.vertices, t_mesh.faces)
 
         # decompose
         result = coacd.run_coacd(
             mesh=coacd_mesh,
             threshold=threshold,
             max_convex_hull=max_convex_hulls,
-            **kwargs,  # pyright: ignore[reportArgumentType]
+            **kwargs,
         )
 
         # convert meshes into Mesh objects
@@ -310,9 +322,9 @@ class MeshBase(XMLModel, ABC):
             for i, (vs, fs) in enumerate(result):
                 p = trimesh.Trimesh(vs, fs)
 
-                p.visual.vertex_colors[:, :3] = (rng.random(3) * 255).astype(  # type: ignore
-                    np.uint8
-                )
+                # a fresh trimesh always has color visuals, this narrows the type
+                assert isinstance(p.visual, trimesh.visual.ColorVisuals)
+                p.visual.vertex_colors[:, :3] = (rng.random(3) * 255).astype(np.uint8)
                 scene.add_geometry(p)
             scene.export(save_preview)
             logger.info(f"Saved decomposition preview to {save_preview}")
@@ -827,6 +839,129 @@ class MeshPlate(MeshBase):
         return (self.res_x, self.res_y)
 
 
+# every builtin mesh writes its shape and a `params` attribute that packs its per-shape fields
+_builtin_mesh_attr = (*_mesh_attr, "builtin", "params")
+
+
+class _MeshCountSpacing(MeshBase, ABC):
+    """Shared fields of the builtin meshes that are generated from a vertex count and a spacing along each axis. A concrete class sets `builtin` and `attributes` itself, since `builtin` has a different literal value in each."""
+
+    count: tuple[int, int, int]
+    """3 integers: Number of vertices along each axis."""
+
+    spacing: Vec3
+    """3 reals: Spacing along each axis."""
+
+
+class _MeshCountSpacingDim(_MeshCountSpacing, ABC):
+    """Builtin meshes generated from a count, a spacing, and an optional dimensionality."""
+
+    non_xml_fields = ("count", "spacing", "dim")
+
+    dim: Literal[2, 3] = 3
+    """Mesh dimensionality. If 3 (default), creates a volumetric tetrahedral mesh. If 2, creates a triangulated 2D surface mesh. A mesh without volume changes a `legacy` inertia (including an explicit one) to `shell`."""
+
+    @property
+    def params(self) -> tuple[float, ...]:
+        """Packs `count`/`spacing`/`dim` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (*self.count, *self.spacing, self.dim)
+
+
+class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
+    """Builtin meshes generated from a count and a spacing that are always 2D surfaces, so they have no `dim`."""
+
+    non_xml_fields = ("count", "spacing")
+
+    @property
+    def params(self) -> tuple[float, ...]:
+        """Packs `count`/`spacing` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
+        return (*self.count, *self.spacing)
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if self.count[0] <= 0 or self.count[1] <= 0:
+            msg = "count must be positive along the first two axes"
+            logger.error(msg)
+            raise ValueError(msg)
+        if self.count[2] != 1:
+            msg = "count[2] must be 1"
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
+
+
+class _MeshShell(_MeshCountSpacingDim, ABC):
+    """Builtin meshes that are a grid projected onto a shape."""
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if any(c < 2 for c in self.count):
+            msg = "count must be at least 2 along every axis"
+            logger.error(msg)
+            raise ValueError(msg)
+        return self
+
+
+class MeshGrid(_MeshCountSpacingDim):
+    """A regular grid of vertices. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangulated 2D surface mesh."""
+
+    builtin: Literal["grid"] = "grid"
+    attributes = _builtin_mesh_attr
+
+    @model_validator(mode="after")
+    def validate_count(self) -> Self:
+        if any(c <= 0 for c in self.count):
+            msg = "count must be positive"
+            logger.error(msg)
+            raise ValueError(msg)
+        for axis, c in enumerate(self.count):
+            if axis >= self.dim and c != 1:
+                msg = "count must be 1 along the axes beyond dim"
+                logger.error(msg)
+                raise ValueError(msg)
+            # MuJoCo reports "Failed to create grid mesh" for a single vertex along an axis within dim
+            if axis < self.dim and c < 2:
+                msg = "count must be at least 2 along the axes within dim"
+                logger.error(msg)
+                raise ValueError(msg)
+        return self
+
+
+class MeshBox(_MeshShell):
+    """A procedural box mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["box"] = "box"
+    attributes = _builtin_mesh_attr
+
+
+class MeshCylinder(_MeshShell):
+    """A procedural cylinder mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["cylinder"] = "cylinder"
+    attributes = _builtin_mesh_attr
+
+
+class MeshEllipsoid(_MeshShell):
+    """A procedural ellipsoid mesh. If `dim` is 3 (default), creates a volumetric tetrahedral mesh. If `dim` is 2, creates a triangular surface mesh."""
+
+    builtin: Literal["ellipsoid"] = "ellipsoid"
+    attributes = _builtin_mesh_attr
+
+
+class MeshSquare(_MeshCountSpacingFlat):
+    """A 2D triangulated square surface mesh. `count` is the number of vertices along the x and y axes (the last must be 1). Because it has no volume, a `legacy` mesh inertia (including an explicit one) is changed to `shell`."""
+
+    builtin: Literal["square"] = "square"
+    attributes = _builtin_mesh_attr
+
+
+class MeshDisc(_MeshCountSpacingFlat):
+    """A 2D triangulated disc surface mesh. `count` is the number of vertices along the radial and angular directions (the last must be 1). Because it has no volume, a `legacy` mesh inertia (including an explicit one) is changed to `shell`."""
+
+    builtin: Literal["disc"] = "disc"
+    attributes = _builtin_mesh_attr
+
+
 AnyMesh = Annotated[
     MeshSphere
     | MeshHemisphere
@@ -835,6 +970,12 @@ AnyMesh = Annotated[
     | MeshTorus
     | MeshWedge
     | MeshPlate
+    | MeshGrid
+    | MeshBox
+    | MeshCylinder
+    | MeshEllipsoid
+    | MeshSquare
+    | MeshDisc
     | Mesh,
     Field(discriminator="builtin"),
 ]

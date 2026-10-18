@@ -109,8 +109,8 @@ pip install mujoco-mojo[all]
 >     --runtime monte_carlo_test.runtime \
 >     --workdir ./mc_test/ \
 >     --no-resume \
->     --gen-arg 123 \
->     --gen-kwarg 'test=1234' \
+>     --arg 123 \
+>     --kwarg 'test=1234' \
 >     --n-trial 10 \
 >     --n-proc 1
 > ```

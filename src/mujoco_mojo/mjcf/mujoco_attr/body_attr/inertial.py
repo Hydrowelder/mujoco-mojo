@@ -532,7 +532,7 @@ class Inertial(XMLModel):
                 if orientation is None:
                     resolved_ori = Quat()
                 elif isinstance(orientation, OrientationBase):
-                    resolved_ori = cast(AnyOrientation, orientation)
+                    resolved_ori = orientation
                 elif isinstance(orientation, tuple):
                     ori_type, ori_data, extra_val = orientation
                     ori_val, ori_nv = _resolve_and_track(ori_data)

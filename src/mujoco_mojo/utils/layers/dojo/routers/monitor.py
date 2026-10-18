@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -67,8 +68,10 @@ async def broadcast_updates() -> None:
 
                 await loop.run_in_executor(
                     None,
-                    lambda: job.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
-                        progress_callback=sync_reporter, persist=False
+                    functools.partial(
+                        job.refresh_from_disk,
+                        progress_callback=sync_reporter,
+                        persist=False,
                     ),
                 )
 
@@ -134,24 +137,21 @@ async def get_custom_chime() -> FileResponse:
 @router.get("/api/status/job")
 async def get_job_status() -> dict:
     """Returns aggregate job status for the monitor and trial viewer pages."""
-    if not shared.CURRENT_JOB:
+    job = shared.CURRENT_JOB
+    if not job:
         return {"error": "No job loaded"}
 
     loop = asyncio.get_running_loop()
 
-    if new_job := await loop.run_in_executor(
-        None, shared.CURRENT_JOB.reload_if_new_run
-    ):
-        shared.CURRENT_JOB = new_job
+    if new_job := await loop.run_in_executor(None, job.reload_if_new_run):
+        shared.CURRENT_JOB = job = new_job
 
     await loop.run_in_executor(
         None,
-        lambda: shared.CURRENT_JOB.refresh_from_disk(  # pyright: ignore[reportOptionalMemberAccess]
-            force_refetch=True, persist=False
-        ),
+        functools.partial(job.refresh_from_disk, force_refetch=True, persist=False),
     )
 
-    return shared.CURRENT_JOB.to_monitor_json()
+    return job.to_monitor_json()
 
 
 @router.get("/api/status/trial/{trial_num}")

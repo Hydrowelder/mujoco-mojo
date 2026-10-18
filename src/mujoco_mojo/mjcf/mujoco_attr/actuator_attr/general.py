@@ -41,9 +41,9 @@ class ActuatorGeneral(ActuatorBase):
         "biasprm",
         "velrange",
         "ffrange",
+        "inheritrange",
         "input",
         "actearly",
-        # "inheritrange", # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
     )
 
     actlimited: ActuatorLimited = ActuatorLimited.AUTO
@@ -110,14 +110,14 @@ class ActuatorGeneral(ActuatorBase):
     ffrange: Vec2 = np.array((0, 0))
     """Range of the feedforward input of a pid actuator."""
 
+    inheritrange: float = 0
+    """Sets the range of a position servo from the range of its joint or tendon, as described in position/inheritrange: the ctrlrange, or the actrange if dyntype is "integrator". It has an effect on an actuator with affine bias and either fixed gain, where `gainprm[0]` equals `-biasprm[1]`, or gaintype "pid": the actuators which the position, intvelocity and pid shortcuts create."""
+
     input: str | None = None
-    """Input signature of the actuator: which controls make up its control block, recorded in `mjModel.actuator_ctrlspec`. For gaintype "so3" it selects the orientation chart: "expmap" (3 controls, the default) or "quat" (4 controls); see orientation/input. For gaintypes "pid" and "dcmotor" it is a token list selecting the input subset; see pid/input and dcmotor/input."""
+    """Input signature of the actuator: which controls make up its control block, recorded in `mjModel.actuator_ctrlspec`. For gaintype "so3" it selects the orientation chart: "expmap" (3 controls, the default) or "quat" (4 controls); see orientation/input. For gaintypes "pid" and "dcmotor" it is a token list selecting the input subset; see pid/input and dcmotor/input. For gaintypes "fixed" and "affine" it declares what the single control is, and does not affect the simulation: "pos", a position setpoint; "vel", a velocity setpoint; "pressure", a pressure, the gain being an area. Without a declaration the control is a command, scaled by the gain. The position, velocity, intvelocity and cylinder shortcuts declare "pos", "vel", "vel" and "pressure" respectively. An input signature inherited from a default class is discarded when the gaintype changes; an empty string restores the gaintype's default."""
 
     actearly: bool = False
     """If true, force computation will use the next value of the activation variable rather than the current one. Setting this flag reduces the delay between the control and accelerations by one time-step."""
-
-    # inheritrange: float = 0  # TODO: DAG 2026-10-06 on time delay until released in future MuJoCo version
-    # """Identical to position/inheritrange, but sets actrange (which has the same length semantics as the transmission target) rather than ctrlrange (which has velocity semantics)."""
 
     @model_validator(mode="after")
     def validate_transmission(self) -> Self:

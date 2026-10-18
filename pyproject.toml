@@ -14,7 +14,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "matplotlib>=3.10.8",
     "mediapy>=1.2.6",
-    "mujoco>=3.15.0",
+    "mujoco>=3.16.0",
     "numpy>=2.4.1",
     "numpydantic>=1.7.0",
     "pillow>=12.3.0",
@@ -65,7 +65,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-reloaded = ["mjviser>=0.0.11", "viser>=1.0.26", "watchfiles>=1.1.1"]
+reloaded = ["mjviser>=0.0.11", "viser>=1.1.0", "watchfiles>=1.1.1"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
 sensai = ["pydantic-ai>=2.53.0", "requests>=2.32.5"]
@@ -95,6 +95,7 @@ dev = [
     "ruff>=0.16.6",
     "scipy-stubs[scipy]>=1.17.0.2",
     "tabulate>=0.10.0",
+    "ty>=0.0.89",
     "watchfiles>=1.2.0",
     "zensical>=0.0.68",
 ]
@@ -165,6 +166,15 @@ stubPath = "./typings"
 venvPath = ".."
 venv = ".venv"
 ignore = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.ty.environment]
+# the dev environment lives next to this project, like [tool.pyright] above
+python = "../.venv"
+# the generated MuJoCo stubs (see CLAUDE.md), which MuJoCo does not ship
+extra-paths = ["typings"]
+
+[tool.ty.src]
+exclude = ["typings", "scripts/templating/sensor_template.py"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

@@ -46,6 +46,7 @@ class DeformableSkin(XMLModel):
     """
 
     tag = "skin"
+    compiler_asset_dir = "meshdir"
 
     attributes = (
         "name",

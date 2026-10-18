@@ -19,10 +19,8 @@
 | Failures               | 0 (0.0%) <progress value="0" max="100" style="accent-color: #f43f5e;">0</progress>                                            |
 | Generator              | `generate` at `user-guides/workflow/monte_carlo_example.py:109` |
 | Runtime                | `runtime` at `user-guides/workflow/monte_carlo_example.py:255`  |
-| Generator Args Used?   | ❌                                                                                                                            |
-| Generator Kwargs Used? | ❌                                                                                                                            |
-| Runtime Args Used?     | ❌                                                                                                                            |
-| Runtime Kwargs Used?   | ❌                                                                                                                            |
+| Args Used?             | ❌                                                                                                                            |
+| Kwargs Used?           | ❌                                                                                                                            |
 
 ---
 

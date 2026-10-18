@@ -14,3 +14,7 @@ import mujoco_mojo as mojo
 
 body = mojo.Body(name=mojo.BodyName("my_body"))
 ```
+
+??? info "Info: Implemented MJCF Tags"
+
+    --8<-- "scripts/generated/implemented_mjcf_tags.md"

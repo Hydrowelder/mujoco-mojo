@@ -6,7 +6,9 @@ import ast
 import inspect
 import json
 import textwrap
+import tomllib
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -52,9 +54,12 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.color import Color
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
-GLOBAL_SETTINGS_FILE = SETTINGS_DIR / "settings.toml"
-SETTINGS_SCHEMA_FILE = SETTINGS_DIR / "settings.schema.json"
-SETTINGS_TAPLO_FILE = SETTINGS_DIR / ".taplo.toml"
+SETTINGS_FILENAME = "settings.toml"
+SCHEMA_FILENAME = "settings.schema.json"
+TAPLO_FILENAME = ".taplo.toml"
+GLOBAL_SETTINGS_FILE = SETTINGS_DIR / SETTINGS_FILENAME
+SETTINGS_SCHEMA_FILE = SETTINGS_DIR / SCHEMA_FILENAME
+SETTINGS_TAPLO_FILE = SETTINGS_DIR / TAPLO_FILENAME
 
 # resolved once, by walking up from *this file's own location* (not the
 # process's current working directory) until a .env is found - "" if none
@@ -76,20 +81,109 @@ _DOTENV_PATH = find_dotenv()
 load_dotenv(_DOTENV_PATH)
 
 
-def project_settings_file() -> Path:
-    """
-    Path to the project-local settings file, `<cwd>/.mujoco-mojo/settings.toml`.
+PROJECT_SETTINGS_DIR_NAME = ".mujoco-mojo"
+"""Name of the directory, at the root of a project, that holds its project-local files. The settings live in `.mujoco-mojo/settings.toml`, and the directory is the place for any other project-local file added later."""
 
-    Computed fresh on every call rather than cached as a module-level constant, since `Path.cwd()` can legitimately differ across calls within one process (e.g. a long-running dashboard server, or tests).
+
+def find_project_settings_file(start: Path | None = None) -> Path | None:
+    """
+    Searches `start` (default: the current directory) and then each parent directory for a project settings file, `.mujoco-mojo/settings.toml`, the way uv looks for its own configuration.
+
+    The nearest file wins and the search stops there: files in further parent directories are not merged in. The global settings directory (`~/.mujoco-mojo`) is skipped, since it holds the global settings and would otherwise be found as the "project" of anything under the home directory. A directory that cannot be read counts as not having a file.
+
+    Args:
+        start: Directory to start from. Defaults to `Path.cwd()`, evaluated on every call rather than cached, since the working directory can legitimately differ across calls within one process (e.g. a long-running dashboard server, a script that `cd`s first, or tests).
 
     Returns:
-        `Path.cwd() / ".mujoco-mojo" / "settings.toml"`.
+        The nearest project settings file, or `None` if there isn't one.
 
     """
-    return Path.cwd() / ".mujoco-mojo" / "settings.toml"
+
+    def resolved(path: Path) -> Path:
+        try:
+            return path.resolve()
+        except OSError:
+            return path
+
+    global_dir = resolved(GLOBAL_SETTINGS_FILE.parent)
+    directory = Path.cwd() if start is None else start
+    for ancestor in (directory, *directory.parents):
+        project_dir = ancestor / PROJECT_SETTINGS_DIR_NAME
+        if resolved(project_dir) == global_dir:
+            continue
+        candidate = project_dir / SETTINGS_FILENAME
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def project_settings_file() -> Path:
+    """
+    Path to the project-local settings file in effect: the nearest `.mujoco-mojo/settings.toml` found by searching the current directory and its parents (see `find_project_settings_file`).
+
+    If there isn't one, this is the file that would be created for the current directory, `<cwd>/.mujoco-mojo/settings.toml`, which is where `settings set --project` writes first.
+
+    Returns:
+        The discovered file, or `Path.cwd() / ".mujoco-mojo" / "settings.toml"` if none exists.
+
+    """
+    found = find_project_settings_file()
+    if found is not None:
+        return found
+    return Path.cwd() / PROJECT_SETTINGS_DIR_NAME / SETTINGS_FILENAME
 
 
 SlurmScalar = str | int | float | bool
+
+
+@dataclass(frozen=True)
+class SlurmSettingsSource:
+    """One settings file that can contribute `[slurm]` entries."""
+
+    label: str
+    """`global` or `project`."""
+
+    path: Path
+    """Where the file is (or would be) located."""
+
+    exists: bool
+    """Whether the file exists."""
+
+    entries: dict[str, Any] = field(default_factory=dict)
+    """The raw `[slurm]` entries this file defines, empty if it has none or couldn't be read."""
+
+    error: str | None = None
+    """Why the file couldn't be read, if it couldn't."""
+
+
+def slurm_settings_sources() -> list[SlurmSettingsSource]:
+    """
+    The settings files that can contribute `[slurm]` entries, lowest priority first (global, then project), each read on its own.
+
+    `MujocoMojoSettings().slurm` only has the merged result, which hides a project file that wasn't found, since the project file is looked up relative to the current directory. This reports each file separately so a submission can say where it looked and what each one contributed.
+    """
+    sources: list[SlurmSettingsSource] = []
+    for label, path in (
+        ("global", GLOBAL_SETTINGS_FILE),
+        ("project", project_settings_file()),
+    ):
+        if not path.is_file():
+            sources.append(SlurmSettingsSource(label, path, exists=False))
+            continue
+        try:
+            with path.open("rb") as handle:
+                table = tomllib.load(handle).get("slurm", {})
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            sources.append(
+                SlurmSettingsSource(label, path, exists=True, error=str(exc))
+            )
+            continue
+        entries = dict(table) if isinstance(table, dict) else {}
+        sources.append(SlurmSettingsSource(label, path, exists=True, entries=entries))
+    return sources
 
 
 _SBATCH_PREFIX = "sbatch."
@@ -681,7 +775,7 @@ class RunSettings(BaseModel):
     optimize: OptimizeRunSettings = Field(default_factory=OptimizeRunSettings)
 
 
-_SCHEMA_HEADER = "#:schema settings.schema.json"
+_SCHEMA_HEADER = f"#:schema {SCHEMA_FILENAME}"
 
 
 def _ensure_schema_header(text: str) -> str:
@@ -923,9 +1017,9 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
 
 class MujocoMojoSettings(BaseSettings):
     """
-    Global user-level settings persisted to `~/.mujoco-mojo/settings.toml`, layered with an optional project-local override file - the same User-settings-vs-Workspace-settings model VS Code uses.
+    Global user-level settings persisted to `~/.mujoco-mojo/settings.toml`, layered with an optional project-local override file, found by searching the current directory and its parents - the same User-settings-vs-Workspace-settings model VS Code uses.
 
-    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, `<cwd>/.mujoco-mojo/settings.toml`) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
+    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, the nearest `.mujoco-mojo/settings.toml` in the current directory or a parent) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
     """
 
     model_config = SettingsConfigDict(
@@ -1014,7 +1108,7 @@ class MujocoMojoSettings(BaseSettings):
         return cls(**field_defaults)
 
     @classmethod
-    def set_project_value(cls, key: str, value: Any) -> None:
+    def set_project_value(cls, key: str, value: Any) -> Path:
         """
         Sets a single dotted-path setting (e.g. "assets.symlink") in the project-local settings file, creating any intermediate tables as needed, without touching anything else already there.
 
@@ -1025,6 +1119,9 @@ class MujocoMojoSettings(BaseSettings):
         Args:
             key: Dotted path, e.g. "dojo.sensai.base_url", "assets.symlink", or "slurm.sbatch.account".
             value: The value to set, already parsed to its target Python type.
+
+        Returns:
+            The project settings file that was written: the one found by searching the current directory and its parents, or a new one in the current directory if there wasn't one.
 
         Raises:
             KeyError: If an intermediate segment of `key` isn't a real settings table.
@@ -1088,6 +1185,7 @@ class MujocoMojoSettings(BaseSettings):
         node[parts[-1]] = coerced_leaf
 
         path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+        return path
 
     def save(self, directory: Path | None = None, *, project: bool = False) -> Path:
         """
@@ -1095,7 +1193,7 @@ class MujocoMojoSettings(BaseSettings):
 
         `project=False` (the default - the global file): every field's current value is merged into `settings.toml` with `tomlkit`, preserving any comments or formatting added by hand. A key that exists in the file but no longer has a corresponding settings value (e.g. a removed `slurm` entry) is left as-is rather than deleted.
 
-        `project=True` (for `<cwd>/.mujoco-mojo/settings.toml`): `self`'s field values are never written - a project file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting (see `set_project_value`) - so an existing file's contents are left completely untouched, and a fresh one gets just the `#:schema` header. Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident.
+        `project=True` (for a project's `.mujoco-mojo/settings.toml`): `self`'s field values are never written - a project file is meant to hold only a small, deliberate diff from the global defaults, not a full mirror of every setting (see `set_project_value`) - so an existing file's contents are left completely untouched, and a fresh one gets just the `#:schema` header. Also drops a `.gitignore` (`*`) next to it if one isn't already there, so a project's local overrides - which may be machine-specific - don't get committed by accident.
 
         Either way, a brand-new file starts with a `#:schema` header pointing at the colocated settings.schema.json - a bare relative filename, resolved by taplo against the TOML file's own directory, rather than a cross-directory reference to another directory's schema. The latter is what broke under SSH/SSHFS-style setups where only one of the two directories was visible to the editor - every settings directory is now self-contained. An existing file that's missing that header (written before schema support existed, or hand-edited to drop the line) gets it prepended on the next save too, except for the already-exists project-file case just above, which skips reading the file at all.
 
@@ -1110,7 +1208,7 @@ class MujocoMojoSettings(BaseSettings):
         if directory is None:
             directory = SETTINGS_DIR
         directory.mkdir(parents=True, exist_ok=True)
-        toml_path = directory / "settings.toml"
+        toml_path = directory / SETTINGS_FILENAME
 
         if project:
             gitignore = directory / ".gitignore"
@@ -1127,7 +1225,7 @@ class MujocoMojoSettings(BaseSettings):
                     text = _ensure_schema_header(toml_path.read_text(encoding="utf-8"))
                     doc = tomlkit.parse(text)
                 else:
-                    doc = tomlkit.parse("#:schema settings.schema.json\n")
+                    doc = tomlkit.parse(f"#:schema {SCHEMA_FILENAME}\n")
 
                 if not project:
                     # mode="json" turns any SecretStr field (e.g. dojo.password)
@@ -1159,8 +1257,8 @@ class MujocoMojoSettings(BaseSettings):
             directory = SETTINGS_DIR
         directory.mkdir(parents=True, exist_ok=True)
 
-        schema_file = directory / "settings.schema.json"
-        taplo_file = directory / ".taplo.toml"
+        schema_file = directory / SCHEMA_FILENAME
+        taplo_file = directory / TAPLO_FILENAME
 
         schema = cls.model_json_schema(schema_generator=GenerateJsonSchemaWithDefaults)
         schema_file.write_text(json.dumps(schema), encoding="utf-8")
@@ -1168,6 +1266,6 @@ class MujocoMojoSettings(BaseSettings):
         # taplo requires a file:// URI for the schema url - a relative path is not supported
         schema_uri = schema_file.as_uri()
         taplo_file.write_text(
-            f'[[rule]]\ninclude = ["settings.toml"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
+            f'[[rule]]\ninclude = ["{SETTINGS_FILENAME}"]\n\n[rule.schema]\nurl = "{schema_uri}"\n',
             encoding="utf-8",
         )

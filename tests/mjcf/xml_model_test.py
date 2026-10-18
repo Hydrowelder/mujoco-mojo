@@ -273,6 +273,36 @@ def test_subclass_validation() -> None:
             attributes = ("ghost_field",)
 
 
+def test_subclass_validation_accepts_names_defined_on_a_base_class() -> None:
+    """A property defined once on a base class is defined on every subclass, so subclasses can list it without repeating it."""
+
+    class Base(XMLModel):
+        tag = "base"
+
+        @property
+        def computed(self) -> str:
+            return "value"
+
+    class Derived(Base):
+        attributes = ("computed",)
+
+    assert Derived().to_xml(Angle.DEGREE, EulerSeq.XYZ).attrib["computed"] == "value"
+
+
+def test_subclass_validation_still_rejects_a_name_no_class_defines() -> None:
+    class Base(XMLModel):
+        tag = "base"
+
+        @property
+        def computed(self) -> str:
+            return "value"
+
+    with pytest.raises(TypeError, match="'ghost' is not defined as a field"):
+
+        class Derived(Base):
+            attributes = ("computed", "ghost")
+
+
 def test_flattening_collision() -> None:
     """Verify collision detection when two sub-models define the same attribute name."""
 

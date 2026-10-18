@@ -79,7 +79,7 @@ def test_dojo_password_never_reveals_plaintext_on_dump() -> None:
     """dojo.password masks the same way api_key does on a mode='json' dump, while staying None by default (unlike api_key, which always has a placeholder value) so 'no password set' round-trips correctly."""
     assert DojoSettings().password is None
 
-    d = DojoSettings(password="hunter2")  # type: ignore[arg-type]
+    d = DojoSettings.model_validate({"password": "hunter2"})
 
     dumped = d.model_dump()
     assert isinstance(dumped["password"], SecretStr)
@@ -127,7 +127,7 @@ def test_settings_save_never_writes_a_real_secret(
     _isolate_project_settings(monkeypatch, tmp_path)
 
     settings = MujocoMojoSettings(
-        dojo=DojoSettings(password="hunter2-but-pretend")  # type: ignore[arg-type]
+        dojo=DojoSettings.model_validate({"password": "hunter2-but-pretend"})
     )
     settings.save()
 
@@ -150,7 +150,7 @@ def test_settings_save_never_writes_a_real_dojo_password(
     _isolate_project_settings(monkeypatch, tmp_path)
 
     settings = MujocoMojoSettings(
-        dojo=DojoSettings(password="hunter2")  # type: ignore[arg-type]
+        dojo=DojoSettings.model_validate({"password": "hunter2"})
     )
     settings.save()
 
@@ -167,7 +167,7 @@ def test_dojo_web_response_never_mentions_secret_fields_at_all() -> None:
     The schema and values payload the Dojo web settings panel actually receives (`_dojo_settings_schema`/`_settings_payload`, as served by `GET/POST /settings`) must not contain the literal field name `password` anywhere - not just mask its value - since the frontend has no legitimate need to know this field exists. Regression test for two bugs found while building this: a nested-model field's schema entry re-embeds a whole-object copy of its default one level up (leaking a secret field's name back in after removing it from `properties`), and a value-based `isinstance(value, SecretStr)` check misses `password`, whose default is `None`, not a `SecretStr` instance.
     """
     settings = MujocoMojoSettings(
-        dojo=DojoSettings(password="SUPER_SECRET_VALUE")  # type: ignore[arg-type]
+        dojo=DojoSettings.model_validate({"password": "SUPER_SECRET_VALUE"})
     )
     combined = json.dumps(
         {"schema": _dojo_settings_schema(), **_settings_payload(settings)}
@@ -700,25 +700,29 @@ def test_chime_defaults_to_none() -> None:
 
 def test_chime_url_string_round_trips_as_http_url() -> None:
     """A web URL is resolved as HttpUrl rather than being mangled into a Path by pydantic's default union matching."""
-    settings = DojoSettings(chime_source="https://example.com/sound.mp3")  # type: ignore[arg-type]
+    settings = DojoSettings.model_validate(
+        {"chime_source": "https://example.com/sound.mp3"}
+    )
     assert isinstance(settings.chime_source, HttpUrl)
     assert str(settings.chime_source) == "https://example.com/sound.mp3"
 
 
 def test_chime_path_string_round_trips_as_path() -> None:
     """A plain local path string is resolved as Path, not misread as a URL."""
-    settings = DojoSettings(chime_source="./my-sound.mp3")  # type: ignore[arg-type]
+    settings = DojoSettings.model_validate({"chime_source": "./my-sound.mp3"})
     assert isinstance(settings.chime_source, Path)
     assert settings.chime_source == Path("./my-sound.mp3")
 
 
 def test_chime_serializes_as_plain_string_in_json_mode() -> None:
     """model_dump(mode="json") turns both the HttpUrl and Path branches into plain strings, so either can be written to TOML."""
-    url_settings = DojoSettings(chime_source="https://example.com/sound.mp3")  # type: ignore[arg-type]
+    url_settings = DojoSettings.model_validate(
+        {"chime_source": "https://example.com/sound.mp3"}
+    )
     assert (
         url_settings.model_dump(mode="json")["chime_source"]
         == "https://example.com/sound.mp3"
     )
 
-    path_settings = DojoSettings(chime_source="./my-sound.mp3")  # type: ignore[arg-type]
+    path_settings = DojoSettings.model_validate({"chime_source": "./my-sound.mp3"})
     assert path_settings.model_dump(mode="json")["chime_source"] == "my-sound.mp3"

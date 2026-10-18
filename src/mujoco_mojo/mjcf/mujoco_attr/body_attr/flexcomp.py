@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import ClassVar
+from typing import ClassVar, Self
 
 import mujoco
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.contact import FlexCompContact
@@ -18,10 +18,21 @@ from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex import Flex
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import FlexCompDOF, FlexCompType, MaterialName, Vec3, Vec4, VecN
+from mujoco_mojo.typing import (
+    FlexCompDOF,
+    FlexCompType,
+    MaterialName,
+    MeshName,
+    Vec3,
+    Vec4,
+    VecN,
+)
+from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list
 
 __all__ = ["FlexComp"]
+
+logger = get_logger(__name__)
 
 
 class FlexComp(XMLModel):
@@ -73,6 +84,7 @@ class FlexComp(XMLModel):
     """
 
     tag = "flexcomp"
+    compiler_asset_dir = "meshdir"
     attributes = (
         "name",
         "type",
@@ -88,6 +100,7 @@ class FlexComp(XMLModel):
         "inertiabox",
         "scale",
         "file",
+        "mesh",
         "point",
         "element",
         "texcoord",
@@ -173,6 +186,9 @@ class FlexComp(XMLModel):
     file: DepPath | None = None
     """The name of the file from which a surface (triangular) or volumetric (tetrahedral) mesh is loaded. For surface meshes, the file extension is used to determine the file format. Supported formats are GMSH and the formats specified in mesh assets, excluding the legacy .msh format. Volumetric meshes are supported only in GMSH format. See here for more information on GMSH files."""
 
+    mesh: MeshName | None = None
+    """The name of a mesh asset from which a surface (triangular) or volumetric (tetrahedral) mesh is referenced. Can be used in place of `file`, but not together with it. If specified without an explicit `type`, the flexcomp type is `mesh`; any type other than `mesh` or `gmsh` is an error. The asset's `scale`, `refpos` and `refquat` are applied to the vertices and volumetric nodes, which are otherwise expressed in the frame of the asset, so that the flex coincides with a geom using the same mesh at the same position. In contrast, `file` uses the raw file coordinates. For `dim` 3, `origin` is expressed in the same frame. The mesh asset is read when the flexcomp is expanded, so later changes to the mesh asset do not affect the flex."""
+
     rigid: bool = False
     """If this is true, all points correspond to vertices within the parent body, and no new bodies are created. This is equivalent to pinning all points. Note that if all points are indeed pinned, the model compiler will detect that the flex is rigid (which behaves is a non-convex mesh in collision detection)."""
 
@@ -250,3 +266,21 @@ class FlexComp(XMLModel):
 
     plugin: Plugin | None = None
     """Plugin for the body."""
+
+    @model_validator(mode="after")
+    def validate_mesh(self) -> Self:
+        if self.mesh is None:
+            return self
+
+        if self.file is not None:
+            msg = "A flexcomp can use either a mesh asset or a file, not both"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if "type" not in self.model_fields_set:
+            self.type = FlexCompType.MESH
+        elif self.type not in (FlexCompType.MESH, FlexCompType.GMSH):
+            msg = f"A mesh asset can only be used with flexcomp type mesh or gmsh, not {self.type.value}"
+            logger.error(msg)
+            raise ValueError(msg)
+        return self

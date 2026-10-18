@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import mujoco
 import numpy as np
 import pytest
@@ -1271,12 +1273,12 @@ def test_joint_friction_request_metadata_override(tmp_path) -> None:
     }
 
 
-def test_joint_friction_request_raises_without_joint_name() -> None:
+def test_joint_friction_request_raises_without_joint_name(tmp_path: Path) -> None:
     unnamed = Joint()  # no name
     fric = JointFriction.coulomb_simple(name="c", joint=unnamed, magnitude=1.0)
-    sm_mock = object()
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
     with pytest.raises(ValueError, match="no name"):
-        fric.request(sm_mock)  # type: ignore[arg-type]
+        fric.request(sm)
 
 
 BALL_XML = """

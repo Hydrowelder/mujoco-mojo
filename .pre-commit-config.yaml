@@ -23,6 +23,21 @@ repos:
         files: ^docs/user-guides/.*\.py$
         additional_dependencies: [ruff==0.15.17]
         stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: gen-mjcf-tags
+        name: Update the implemented MJCF tags checklist
+        entry: uv run --no-project --with-editable . python scripts/gen_mjcf_tags.py
+        # system, not python: this imports mujoco_mojo, which pre-commit's own isolated
+        # venv does not have. A bare `python` is no better, since it is whatever the commit
+        # was started from (a git GUI has no project venv), so uv builds a throwaway
+        # environment holding this package and its dependencies instead (a couple of
+        # seconds once cached). `--no-project` keeps it away from the project's own
+        # environment and uv.lock.
+        language: system
+        files: ^(src/mujoco_mojo/mjcf/.*\.py|scripts/(gen_mjcf_tags\.py|mjcf_python_tree\.py|mjcf_schema_ignore\.txt))$
+        pass_filenames: false
+        stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.15.17
@@ -42,16 +57,25 @@ repos:
     rev: 0.11.21
     hooks:
       - id: uv-export
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.411
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    # ty version.
+    rev: v0.0.89
     hooks:
-      - id: pyright
-      - id: pyright
-        name: Pyright (docs examples)
-        args: [docs/user-guides]
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
+      - id: ty
+        # ty checks against the project environment that `uv check` syncs from uv.lock, not
+        # pre-commit's own, so the optional extras must be installed for their imports to
+        # resolve (pydantic_ai, mjviser, viser); --frozen keeps uv.lock from being updated
+        args: [--frozen, --all-extras]
+  # - repo: https://github.com/RobertCraigie/pyright-python
+  #   rev: v1.1.411
+  #   hooks:
+  #     - id: pyright
+  #     - id: pyright
+  #       name: Pyright (docs examples)
+  #       args: [docs/user-guides]
+  #       pass_filenames: false
+  #       always_run: true
+  #       stages: [pre-commit]
   - repo: local
     hooks:
       - id: act-test
