@@ -1,18 +1,18 @@
 import io
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 from rich.console import Console
-from typer.testing import CliRunner
 
 from mujoco_mojo.settings import (
     MujocoMojoSettings,
     slurm_settings_sources,
 )
-from mujoco_mojo.utils.layers.cli import _process_kwargs, _smart_parse, cli_app
+from mujoco_mojo.utils.layers.cli import _process_kwargs, _smart_parse
 from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig, _print_slurm_extras
 
 # --- CLI value parsing ---
@@ -188,11 +188,8 @@ def test_padding_must_be_positive() -> None:
         MonteCarloConfig(n_trial=1, padding=0)
 
 
-def test_run_single_has_a_padding_option() -> None:
-    result = CliRunner().invoke(cli_app, ["run", "single", "--help"])
-
-    assert result.exit_code == 0
-    assert "--padding" in result.output
+def test_run_single_has_a_padding_option(help_text: Callable[..., str]) -> None:
+    assert "--padding" in help_text("run", "single")
 
 
 # --- SLURM settings from the global and project files ---

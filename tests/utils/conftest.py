@@ -1,8 +1,14 @@
 import logging
-from collections.abc import Iterator
+import re
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
+
+from mujoco_mojo.utils.layers.cli import cli_app
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
@@ -22,3 +28,19 @@ def isolated_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
     root.handlers[:] = handlers
     root.setLevel(level)
     root.propagate = propagate
+
+
+@pytest.fixture
+def help_text() -> Callable[..., str]:
+    """
+    Returns a function that runs `mujoco-mojo <args> --help` and gives back its text without styling.
+
+    Typer styles its help whenever `GITHUB_ACTIONS`, `FORCE_COLOR`, or `PY_COLORS` is set, and Rich highlights an option name in pieces (`-` and `-arg` separately), so a plain `"--arg" in output` check passes on a laptop and fails in CI.
+    """
+
+    def run(*args: str) -> str:
+        result = CliRunner().invoke(cli_app, [*args, "--help"])
+        assert result.exit_code == 0
+        return _ANSI_ESCAPE.sub("", result.output)
+
+    return run

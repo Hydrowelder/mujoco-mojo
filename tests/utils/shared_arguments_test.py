@@ -1,7 +1,7 @@
 import inspect
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -219,22 +219,22 @@ def user_module(tmp_path: Path) -> Iterator[Path]:
 
 
 @pytest.mark.parametrize("command", ["monte-carlo", "single", "optimization"])
-def test_run_commands_take_arg_and_kwarg_not_the_old_options(command: str) -> None:
-    result = CliRunner().invoke(cli_app, ["run", command, "--help"])
+def test_run_commands_take_arg_and_kwarg_not_the_old_options(
+    command: str, help_text: Callable[..., str]
+) -> None:
+    text = help_text("run", command)
 
-    assert result.exit_code == 0
-    assert "--arg" in result.output
-    assert "--kwarg" in result.output
+    assert "--arg" in text
+    assert "--kwarg" in text
     for old in ("--gen-arg", "--gen-kwarg", "--run-arg", "--run-kwarg"):
-        assert old not in result.output
+        assert old not in text
 
 
-def test_reloaded_takes_arg_and_kwarg() -> None:
-    result = CliRunner().invoke(cli_app, ["reloaded", "--help"])
+def test_reloaded_takes_arg_and_kwarg(help_text: Callable[..., str]) -> None:
+    text = help_text("reloaded")
 
-    assert result.exit_code == 0
-    assert "--kwarg" in result.output
-    assert "--gen-kwarg" not in result.output
+    assert "--kwarg" in text
+    assert "--gen-kwarg" not in text
 
 
 @pytest.mark.parametrize(
