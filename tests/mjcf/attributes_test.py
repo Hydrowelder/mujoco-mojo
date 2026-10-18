@@ -1,6 +1,7 @@
 from xml.etree.ElementTree import Element
 
 import numpy as np
+import pytest
 
 from mujoco_mojo.mjcf import (
     Actuator,
@@ -134,3 +135,8 @@ def test_the_worldbody_does_not_write_freejoints() -> None:
 
     assert "freejoint" not in {child.tag for child in _xml(worldbody)}
     Mujoco(worldbody=worldbody).to_mj_model()
+
+
+def test_the_worldbody_rejects_freejoints_at_construction() -> None:
+    with pytest.raises(ValueError, match="Put the FreeJoint on a Body"):
+        WorldBody(freejoints=[FreeJoint()])

@@ -46,7 +46,7 @@ class ActuatorDamper(ActuatorBase):
     """If true, the control input to this actuator is automatically clamped to ctrlrange at runtime. If false, control input clamping is disabled. If "auto" and autolimits is set in compiler, control clamping will automatically be set to true if ctrlrange is defined without explicitly setting this attribute to "true". Note that control input clamping can also be globally disabled with the clampctrl attribute of option/flag.
 
     !!! note "Included for reference only"
-        This field is always true for a damper, so any other value is rejected (on construction and on assignment).
+        This field is always true for a damper, so any other value is rejected when the damper is constructed.
     """
 
     @field_validator("ctrllimited")

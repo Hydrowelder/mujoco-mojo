@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, cast
 
 import mujoco
 import numpy as np
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.meta.frame import Frame
@@ -762,3 +762,15 @@ class WorldBody(Body):
             weighted_pos += m * p
 
         return total_mass, weighted_pos / total_mass if total_mass > 0 else np.zeros(3)
+
+    @field_validator("freejoints")
+    @classmethod
+    def validate_no_freejoints(cls, v: list[FreeJoint]) -> list[FreeJoint]:
+        if len(v) != 0:
+            msg = (
+                f"The worldbody cannot have freejoints (got {len(v)}). MuJoCo rejects any joint "
+                "directly in the worldbody. Put the FreeJoint on a Body inside the worldbody instead."
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+        return v
