@@ -2003,13 +2003,21 @@ class MojoRunner:
 
         script_path = self.write_slurm_script(job, config, console)
 
+        watch_cmd = (
+            f'mujoco-mojo run watch-workdir --workdir "{self.workdir.resolve()}"'
+        )
+
         # final submission
         if not Confirm.ask(
             f"\n[cyan]Submit {len(job.to_run)} trials to SLURM now?[/]", default=True
         ):
-            # deferred submission
+            # deferred submission; the status file already exists, so the watcher works
+            # for a job submitted by hand too
             console.print(
                 f"\n[yellow]Orchestration complete.[/] Submit manually with:\n[bold green]sbatch {script_path}[/]"
+            )
+            console.print(
+                f"\n[dim]To keep the status file and runtime report current once it is running, run:[/] [green]{watch_cmd}[/]"
             )
             return False
 
@@ -2044,9 +2052,6 @@ class MojoRunner:
             f"\n[dim]Logs are being written to: {self.workdir.resolve()}/logs/[/]"
         )
 
-        watch_cmd = (
-            f'mujoco-mojo run watch-workdir --workdir "{self.workdir.resolve()}"'
-        )
         if not watch:
             console.print(
                 f"\n[dim]To keep the status file and runtime report current later, run:[/] [green]{watch_cmd}[/]"

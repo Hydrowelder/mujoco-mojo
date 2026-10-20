@@ -302,7 +302,7 @@ class JobStatus(MojoBaseModel):
     """Seed used to generate the job."""
 
     start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    """Initial start time of the job."""
+    """Initial start time of the job. For a SLURM job watched by `watch_job`, it moves forward to when the job's first trial began, since the job file is created when the wizard starts, long before any trial runs."""
 
     elapsed: timedelta = Field(default=timedelta(0))
     """Time elapsed running the job."""
@@ -389,6 +389,7 @@ class JobStatus(MojoBaseModel):
         progress_callback: Callable[[float], None] | None = None,
         force_refetch: bool = False,
         persist: bool = True,
+        start_from_trials: bool = False,
     ) -> None:
         """
         Scans the workdir to identify which trials still need execution, but only for runs not already in the cache (i.e., completed).
@@ -398,6 +399,7 @@ class JobStatus(MojoBaseModel):
             progress_callback: Optional callback invoked with scan progress (0-100).
             force_refetch: If `True`, clears the cache before scanning so every trial is re-read from disk.
             persist: If `True` (default), writes the refreshed status back to `workdir/JOB_STATUS_FNAME`. Read-only consumers (e.g. the Dojo monitor) should pass `False` so they don't overwrite the file the run owner manages.
+            start_from_trials: If `True`, moves `start_time` forward to when the earliest trial began (see `_move_start_to_first_trial`). For jobs whose trials are run by other processes, since the file's own start is when the job was set up, not when it ran.
 
         """
         if force_refetch:
@@ -451,6 +453,9 @@ class JobStatus(MojoBaseModel):
 
         # post calculations
         with self._lock:
+            if start_from_trials:
+                self._move_start_to_first_trial()
+
             timed_durations = [
                 s.td.total_seconds()
                 for s in self._cache.values()
@@ -469,6 +474,30 @@ class JobStatus(MojoBaseModel):
                 self.elapsed = max(self.elapsed, last_end - self.start_time)
         if persist:
             self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+
+    def _move_start_to_first_trial(self) -> None:
+        """
+        Moves `start_time` forward to the earliest time any trial started a step, and takes the same amount off the stored `elapsed` so the two stay consistent.
+
+        A trial that started before the job file was created belongs to an earlier run of a resumed job, so it is ignored and the start never moves earlier. Nothing changes until a trial has started.
+        """
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        starts = [
+            step.started
+            for status in statuses
+            for step in (status.pending, status.generating, status.solving)
+            if step.started is not None and step.started >= self.start_time
+        ]
+        if not starts:
+            return
+
+        shift = min(starts) - self.start_time
+        if shift <= timedelta(0):
+            return
+        self.start_time += shift
+        self.elapsed = max(timedelta(0), self.elapsed - shift)
 
     def _latest_trial_end(self) -> datetime | None:
         """When the last finished step of any trial ended, or `None` if no step has finished."""

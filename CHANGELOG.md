@@ -6,6 +6,8 @@
 - Added `df.mojo.convert_enums()` to swap those codes for their labels
 - The Dojo plots labeled signals on a right-hand axis named by their labels, and shows the label in the tooltip
 - Proximity types, requirement results (`PASS`/`FAIL`), and `insidesite` sensors are now labeled
+- `watch-workdir` now starts a SLURM job's clock when its first trial begins, not when the wizard started
+- Declining to submit in the SLURM wizard now also prints the `watch-workdir` command
 
 ## Version 2.7.0 (2026-10-18)
 

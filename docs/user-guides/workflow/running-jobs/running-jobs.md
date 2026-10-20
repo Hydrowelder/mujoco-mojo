@@ -196,9 +196,9 @@ A `mem` or `time_limit` that is not a valid SLURM value is rejected when the `Sl
 
 #### Watching a Job
 
-SLURM workers only write their own trial's status, so `job_status.json` stays as it was at submission and [the runtime report](#state-of-health-reporting) is never written. The watcher fixes this by refreshing both files every few seconds, and once every trial is done it writes the final report and exits (local runs already keep both files current themselves).
+SLURM workers only write their own trial's status, so `job_status.json` stays as it was at submission and [the runtime report](#state-of-health-reporting) is never written. The watcher fixes this by refreshing both files every few seconds, and once every trial is done it writes the final report and exits (local runs already keep both files current themselves). The job's start time is set to when its first trial begins, so time spent waiting in the queue is not counted.
 
-It can be started in the Slurm wizard or run it on the job's workdir at any time:
+It can be started in the Slurm wizard (which prints the command if you choose to submit by hand) or run on the job's workdir at any time:
 
 ```bash
 mujoco-mojo run watch-workdir --workdir path/to/workdir

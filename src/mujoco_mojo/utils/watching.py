@@ -42,7 +42,7 @@ def watch_job(
     """
     Keeps a job's `job_status.json` and runtime report current until its trials are done.
 
-    This is for jobs whose trials are run by other processes, such as the array tasks of a SLURM job. Those write only their own trial's status, and nothing else writes the job-level file, so without this it stays exactly as it was at submission (no elapsed time, no trial durations) and the report is never written. Every `interval` seconds this reads the trials' status files, saves the refreshed job status, and rewrites the report when the number of finished trials changed. It returns when every trial is done, or, for a job submitted to SLURM by Mojo, when SLURM no longer has the job; either way the final report, with its alerts, is written.
+    This is for jobs whose trials are run by other processes, such as the array tasks of a SLURM job. Those write only their own trial's status, and nothing else writes the job-level file, so without this it stays exactly as it was at submission (no elapsed time, no trial durations) and the report is never written. Every `interval` seconds this reads the trials' status files, saves the refreshed job status, and rewrites the report when the number of finished trials changed. The job's start time is moved forward to when its first trial began, since the job file is created when the wizard starts, which can be long before the job is submitted or any trial runs; the time a job spends waiting in the queue is therefore not counted. It returns when every trial is done, or, for a job submitted to SLURM by Mojo, when SLURM no longer has the job; either way the final report, with its alerts, is written.
 
     Args:
         workdir: The job's workdir, which holds `job_status.json`.
@@ -79,7 +79,7 @@ def watch_job(
     )
 
     while True:
-        job.refresh_from_disk(n_proc=n_proc, persist=True)
+        job.refresh_from_disk(n_proc=n_proc, persist=True, start_from_trials=True)
 
         if job.n_done != reported:
             reported = job.n_done
@@ -96,7 +96,7 @@ def watch_job(
 
         if job.slurm_job_id is not None and slurm_job_active(job.slurm_job_id) is False:
             # something may have been written between the last scan and the queue check
-            job.refresh_from_disk(n_proc=n_proc, persist=True)
+            job.refresh_from_disk(n_proc=n_proc, persist=True, start_from_trials=True)
             job.generate_report(alert_generation=True)
             if job.is_done:
                 say("All trials finished. Final report written.")
