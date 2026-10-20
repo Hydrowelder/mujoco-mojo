@@ -11,7 +11,11 @@ from mujoco_mojo.stochas import BaseDict
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import MojoDataFrame
-from mujoco_mojo.utils.signal_metadata import TransformType
+from mujoco_mojo.utils.signal_metadata import (
+    ColumnMetadata,
+    TransformType,
+    dimensionless_metadata,
+)
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.statusing import REQUIREMENTS_FNAME, RequirementResult
 
@@ -24,6 +28,13 @@ type RequirementFn = Callable[
 """A requirement check. Returns `(passed, message)` where `passed` is `True` (satisfied), `False` (violated), or `None` (undetermined yet; only meaningful during live checks)."""
 
 logger = get_logger(__name__)
+
+_RESULT_METADATA = (
+    dimensionless_metadata()
+    | ColumnMetadata(enumeration_map={"FAIL": 0, "PASS": 1})
+    | TransformType.SCALAR.metadata
+)
+"""Metadata of a requirement's live `result` signal, which is posted as 1.0 when satisfied and 0.0 when violated."""
 
 __all__ = [
     "RequirementFn",
@@ -125,7 +136,7 @@ class RequirementsManager:
                 category=SignalCategory.REQUIREMENTS,
                 subgroups=(resolved_name,),
                 attr="result",
-                metadata=TransformType.SCALAR.metadata,
+                metadata=_RESULT_METADATA,
             )
             if post_result
             else None

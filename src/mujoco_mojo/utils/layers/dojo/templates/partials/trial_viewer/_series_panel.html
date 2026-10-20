@@ -1380,7 +1380,12 @@
                                     </div>
 
                                     <!-- ── FILTER STACK ── -->
-                                    <div class="space-y-2 pt-2 border-t border-subtle dark:border-subtle/50">
+                                    <p x-show="isEnumCol(col)"
+                                       class="text-xs font-mono italic text-ink-secondary text-center py-2 border border-dashed border-control rounded-md">
+                                        Integer-coded signal - filters do not apply
+                                    </p>
+                                    <div x-show="!isEnumCol(col)"
+                                         class="space-y-2 pt-2 border-t border-subtle dark:border-subtle/50">
                                         <div class="flex items-center justify-between">
                                             <label class="text-sm font-bold text-ink-secondary uppercase tracking-tight flex items-center gap-1">Filters
                                                 {{ field_help_icon("plotDefFieldHelp('YAxisConfig', 'filters')") }}

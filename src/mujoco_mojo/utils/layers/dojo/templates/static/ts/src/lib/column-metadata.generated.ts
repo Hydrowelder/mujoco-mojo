@@ -12,5 +12,6 @@ export interface ColumnMetadata {
   dimension?: string | null;
   quantity?: string | null;
   transform_type?: TransformType | null;
+  enumeration_map?: Record<string, number> | null;
   [key: string]: unknown;
 }

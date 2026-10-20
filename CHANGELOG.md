@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 2.7.1 (2026-10-19)
+
+- Added `ColumnMetadata.enumeration_map` and `ColumnMetadata.from_enum()` to label integer-coded signals
+- Added `df.mojo.convert_enums()` to swap those codes for their labels
+- The Dojo plots labeled signals on a right-hand axis named by their labels, and shows the label in the tooltip
+- Proximity types, requirement results (`PASS`/`FAIL`), and `insidesite` sensors are now labeled
+
 ## Version 2.7.0 (2026-10-18)
 
 - Added support for [MuJoCo 3.16.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-16-0-october-14-2026)

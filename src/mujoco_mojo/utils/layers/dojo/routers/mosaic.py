@@ -184,6 +184,11 @@ def _find_group_unit_by_dimension(dimension: str) -> str | None:
     return None
 
 
+def _is_enum_column(meta: ColumnMetadata | None) -> bool:
+    """True if `meta` labels an integer-coded signal, whose values are codes that no filter can meaningfully act on."""
+    return meta is not None and bool(meta.enumeration_map)
+
+
 def _augment_col_meta(meta: ColumnMetadata) -> ColumnMetadata:
     """Adds group_unit to column metadata if a matching unit group member can be found."""
     unit = meta.unit
@@ -1179,6 +1184,13 @@ async def get_trial_data(
                     break
 
         column_meta = column_manifest["column_metadata"]
+
+        # a filter on a code stream is meaningless, so enum columns keep their raw values
+        col_filters = {
+            col: stack
+            for col, stack in col_filters.items()
+            if not _is_enum_column(column_meta.get(col))
+        }
 
         def _transform_type_of(col: str) -> TransformType | None:
             meta = column_meta.get(col)

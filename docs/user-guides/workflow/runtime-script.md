@@ -125,15 +125,16 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
     Custom requests can also be made using the `SignalManager.post()` method! It takes a value and a `Column`, which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
 
     ```python
-    nutation = mojo.utils.Column(
-        category=mojo.SignalCategory.BODIES,
-        subgroups=("racket",),
-        attr="nutation_deg",
-    )
-
-    def sample_nutation(state: mojo.MjState):
-        signal_manager.post(compute_nutation(state), nutation)
+    --8<-- "docs/user-guides/workflow/runtime_script_doc_examples.py:custom_signal"
     ```
+
+    A signal that holds integer codes, like the state of a controller, can carry labels for them. `ColumnMetadata.from_enum()` builds the labels from an enum class, and the Dojo plots the signal on its own axis named by them:
+
+    ```python
+    --8<-- "docs/user-guides/workflow/runtime_script_doc_examples.py:enum_signal"
+    ```
+
+    In a loaded `MojoDataFrame`, `df.mojo.convert_enums(path=...)` swaps the codes for their labels.
 
 ???+ example "Example: Telemetry Requests"
 

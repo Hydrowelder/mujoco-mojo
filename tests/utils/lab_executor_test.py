@@ -63,6 +63,7 @@ def test_output_metadata_reads_every_field_the_model_declares() -> None:
         "dimension": "[length]",
         "quantity": "length",
         "transform_type": "vector",
+        "enumeration_map": '{"A": 0, "B": 3}',
     }
     assert set(props) - {"label"} == set(ColumnMetadata.model_fields)
     meta = LabExecutor(_graph(props)).output_metadata["x"]
@@ -71,4 +72,16 @@ def test_output_metadata_reads_every_field_the_model_declares() -> None:
         "dimension": "[length]",
         "quantity": "length",
         "transform_type": "vector",
+        "enumeration_map": {"A": 0, "B": 3},
     }
+
+
+def test_output_metadata_keeps_the_rest_when_the_enumeration_map_is_not_json() -> None:
+    """A malformed map drops this node's metadata with a warning, like any other invalid field."""
+    graph = _graph(
+        {"label": "bad", "unit": "meter", "enumeration_map": "A=0"},
+        {"label": "good", "enumeration_map": '{"A": 0}'},
+    )
+    meta = LabExecutor(graph).output_metadata
+    assert set(meta) == {"good"}
+    assert meta["good"].enumeration_map == {"A": 0}

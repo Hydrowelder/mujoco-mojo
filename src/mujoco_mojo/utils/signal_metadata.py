@@ -5,8 +5,9 @@ quantity, so callers don't need to hand-build Pint dimension/unit strings at eve
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
-from enum import StrEnum
+from enum import Enum, StrEnum
 from functools import cache
 from typing import TYPE_CHECKING, Any
 
@@ -117,6 +118,40 @@ class ColumnMetadata(BaseModel):
     transform_type: TransformType | None = None
     """How this signal's grouped `:x/:y/:z` or `:w/:x/:y/:z` components transform under `change_frame()`. Only set it for channels that are grouped into such a family."""
 
+    enumeration_map: dict[str, int] | None = None
+    """Labels for an integer-coded signal, mapping each label to its code, e.g. `{"IDLE": 0, "RUNNING": 1}`. The column still holds the codes (as floats, like all telemetry); `convert_enums()` swaps them for labels and the Dojo shows the labels on the plot. Codes must be unique. Build it from an enum class with `ColumnMetadata.from_enum()`."""
+
+    @field_validator("enumeration_map", mode="before")
+    @classmethod
+    def _enumeration_map_from_json(cls, v: Any) -> Any:
+        # the Signal Lab's Signal Out node edits this as free text
+        if not isinstance(v, str):
+            return v
+        try:
+            return json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f'Invalid signal metadata enumeration_map {v!r}: expected a JSON object such as {{"IDLE": 0, "RUNNING": 1}}'
+            ) from e
+
+    @field_validator("enumeration_map")
+    @classmethod
+    def _enumeration_map_is_unambiguous(
+        cls, v: dict[str, int] | None
+    ) -> dict[str, int] | None:
+        if not v:
+            return None
+        if "" in v:
+            raise ValueError("Signal metadata enumeration_map has an empty label")
+        seen: dict[int, str] = {}
+        for label, code in v.items():
+            if code in seen:
+                raise ValueError(
+                    f"Signal metadata enumeration_map gives code {code} to both {seen[code]!r} and {label!r}; each code needs exactly one label"
+                )
+            seen[code] = label
+        return v
+
     @field_validator("dimension")
     @classmethod
     def _dimension_parses(cls, v: str | None) -> str | None:
@@ -185,7 +220,7 @@ class ColumnMetadata(BaseModel):
         return {**declared, **(self.__pydantic_extra__ or {})}
 
     def __hash__(self) -> int:
-        """Hashes the declared fields only (equal objects still hash equal), so instances can key the per-timestep caches."""
+        """Hashes the declared scalar fields only (equal objects still hash equal), so instances can key the per-timestep caches. `enumeration_map` is left out because a dict is not hashable; equality still compares it."""
         return hash((self.unit, self.dimension, self.quantity, self.transform_type))
 
     def __bool__(self) -> bool:
@@ -197,6 +232,21 @@ class ColumnMetadata(BaseModel):
         if not isinstance(other, ColumnMetadata):
             return NotImplemented
         return self.model_copy(update=other._set_values())
+
+    @classmethod
+    def from_enum(cls, enum_cls: type[Enum]) -> ColumnMetadata:
+        """Builds the metadata for a signal that posts the integer values of `enum_cls`: an `enumeration_map` of every member's name to its value (iterating the class, so aliases are skipped), tagged dimensionless since a code has no unit. Raises `TypeError` if a member's value is not an integer, and `ValueError` if the class has no members."""
+        mapping: dict[str, int] = {}
+        for member in enum_cls:
+            value = member.value
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"{enum_cls.__name__}.{member.name} has value {value!r}; an enumeration_map needs integer codes"
+                )
+            mapping[member.name] = int(value)
+        if not mapping:
+            raise ValueError(f"{enum_cls.__name__} has no members to map")
+        return dimensionless_metadata() | cls(enumeration_map=mapping)
 
     @classmethod
     def validated(cls, value: MetadataLike) -> ColumnMetadata:

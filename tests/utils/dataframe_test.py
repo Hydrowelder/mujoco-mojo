@@ -291,6 +291,173 @@ def test_get_manifest(sample_data: MojoDataFrame) -> None:
     assert "Bodies/racket/xiquat" in manifest["available_quats"]
 
 
+def test_get_manifest_carries_the_enumeration_map(
+    sample_data: MojoDataFrame,
+) -> None:
+    emap = {"IDLE": 0, "RUN": 1}
+    manifest = sample_data.mojo.get_manifest(
+        column_metadata={"Joints/hinge_1/qpos": ColumnMetadata(enumeration_map=emap)}
+    )
+    assert manifest["column_metadata"]["Joints/hinge_1/qpos"].enumeration_map == emap
+
+
+# --- Enum Conversion Tests ---
+
+_MODE_MAP = {"IDLE": 0, "RUN": 1, "FAULT": 7, "UNKNOWN": -1}
+
+
+@pytest.fixture
+def enum_data() -> MojoDataFrame:
+    """A float-coded state column (as telemetry stores it) beside a plain numeric one."""
+    return MojoDataFrame.from_dict(
+        {
+            TIME_COLUMN_NAME: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            "Custom/mode": [0.0, 1.0, 7.0, -1.0, float("nan"), 3.0],
+            "Custom/speed": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+
+
+@pytest.fixture
+def enum_meta() -> dict[str, ColumnMetadata]:
+    return {
+        "Custom/mode": ColumnMetadata(enumeration_map=_MODE_MAP),
+        "Custom/speed": ColumnMetadata(unit="meter / second"),
+    }
+
+
+def test_convert_enums_swaps_codes_for_labels(
+    enum_data: MojoDataFrame, enum_meta: dict[str, ColumnMetadata]
+) -> None:
+    out = enum_data.mojo.convert_enums(column_metadata=enum_meta)
+    # a NaN and a code the map does not name (3) both become null
+    assert out["Custom/mode"].to_list() == [
+        "IDLE",
+        "RUN",
+        "FAULT",
+        "UNKNOWN",
+        None,
+        None,
+    ]
+    # other columns are untouched
+    assert out["Custom/speed"].to_list() == enum_data["Custom/speed"].to_list()
+    assert out[TIME_COLUMN_NAME].to_list() == enum_data[TIME_COLUMN_NAME].to_list()
+
+
+def test_convert_enums_orders_the_categories_by_code(
+    enum_data: MojoDataFrame, enum_meta: dict[str, ColumnMetadata]
+) -> None:
+    """Sorting an enum column follows the codes, not the alphabet."""
+    dtype = enum_data.mojo.convert_enums(column_metadata=enum_meta)["Custom/mode"].dtype
+    assert dtype == pl.Enum(["UNKNOWN", "IDLE", "RUN", "FAULT"])
+
+
+def test_convert_enums_reads_the_map_from_the_parquet_footer(
+    tmp_path: Path, enum_data: MojoDataFrame
+) -> None:
+    import json
+
+    path = tmp_path / "enum.parquet"
+    enum_data.write_parquet(
+        path,
+        metadata={
+            "column_metadata": json.dumps(
+                {"Custom/mode": {"enumeration_map": _MODE_MAP}}
+            )
+        },
+    )
+    out = MojoDataFrame.read_parquet(path).mojo.convert_enums(path=path)
+    assert out["Custom/mode"].dtype == pl.Enum(["UNKNOWN", "IDLE", "RUN", "FAULT"])
+
+
+def test_convert_enums_only_the_named_columns(
+    enum_data: MojoDataFrame, enum_meta: dict[str, ColumnMetadata]
+) -> None:
+    meta = {**enum_meta, "Custom/other": ColumnMetadata(enumeration_map={"A": 0})}
+    frame = enum_data.with_columns(pl.col("Custom/speed").alias("Custom/other"))
+    out = frame.mojo.convert_enums(["Custom/mode"], column_metadata=meta)
+    assert out["Custom/mode"].dtype == pl.Enum(["UNKNOWN", "IDLE", "RUN", "FAULT"])
+    assert out["Custom/other"].dtype == pl.Float64
+
+
+def test_convert_enums_treats_fractional_codes_as_unmapped() -> None:
+    """A 1.5 must not silently truncate onto the label for 1."""
+    df = MojoDataFrame.from_dict({"Custom/mode": [0.0, 1.5, 1.0]})
+    out = df.mojo.convert_enums(
+        column_metadata={
+            "Custom/mode": ColumnMetadata(enumeration_map={"A": 0, "B": 1})
+        }
+    )
+    assert out["Custom/mode"].to_list() == ["A", None, "B"]
+
+
+def test_convert_enums_converts_integer_columns() -> None:
+    df = MojoDataFrame.from_dict({"Custom/mode": [0, 1, 1]})
+    out = df.mojo.convert_enums(
+        column_metadata={
+            "Custom/mode": ColumnMetadata(enumeration_map={"A": 0, "B": 1})
+        }
+    )
+    assert out["Custom/mode"].to_list() == ["A", "B", "B"]
+
+
+def test_convert_enums_strict_names_the_unmapped_codes(
+    enum_data: MojoDataFrame, enum_meta: dict[str, ColumnMetadata]
+) -> None:
+    with pytest.raises(ValueError, match=r"'Custom/mode' holds codes \[3\]"):
+        enum_data.mojo.convert_enums(column_metadata=enum_meta, strict=True)
+
+
+def test_convert_enums_strict_passes_when_every_code_is_named() -> None:
+    df = MojoDataFrame.from_dict({"Custom/mode": [0.0, 1.0, float("nan")]})
+    out = df.mojo.convert_enums(
+        column_metadata={
+            "Custom/mode": ColumnMetadata(enumeration_map={"A": 0, "B": 1})
+        },
+        strict=True,
+    )
+    assert out["Custom/mode"].to_list() == ["A", "B", None]
+
+
+def test_convert_enums_without_any_metadata_source_raises(
+    enum_data: MojoDataFrame,
+) -> None:
+    with pytest.raises(ValueError, match="pass `path` or `column_metadata`"):
+        enum_data.mojo.convert_enums()
+
+
+def test_convert_enums_without_maps_leaves_the_frame_alone(
+    enum_data: MojoDataFrame,
+) -> None:
+    out = enum_data.mojo.convert_enums(column_metadata={})
+    assert out.equals(enum_data)
+
+
+@pytest.mark.parametrize(
+    ("column", "message"),
+    [
+        ("Custom/speed", "has no enumeration_map"),
+        ("Custom/missing", "not found"),
+    ],
+)
+def test_convert_enums_rejects_a_named_column_it_cannot_convert(
+    enum_data: MojoDataFrame,
+    enum_meta: dict[str, ColumnMetadata],
+    column: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        enum_data.mojo.convert_enums([column], column_metadata=enum_meta)
+
+
+def test_convert_enums_rejects_a_column_that_is_already_converted(
+    enum_data: MojoDataFrame, enum_meta: dict[str, ColumnMetadata]
+) -> None:
+    once = enum_data.mojo.convert_enums(column_metadata=enum_meta)
+    with pytest.raises(ValueError, match="not numeric codes"):
+        once.mojo.convert_enums(["Custom/mode"], column_metadata=enum_meta)
+
+
 # --- Physics Transformation Tests ---
 
 

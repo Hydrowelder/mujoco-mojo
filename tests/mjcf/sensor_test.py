@@ -9,6 +9,7 @@ from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.accelerometer import (
 )
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.actuatorfrc import SensorActuatorfrc
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.framequat import SensorFramequat
+from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.insidesite import SensorInsidesite
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.jointpos import SensorJointpos
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.magnetometer import SensorMagnetometer
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.touch import SensorTouch
@@ -54,6 +55,33 @@ _XML = """
 @pytest.fixture
 def state() -> MjState:
     model = mujoco.MjModel.from_xml_string(_XML)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    return MjState(model, data)
+
+
+_INSIDESITE_XML = """
+<mujoco>
+    <worldbody>
+        <body name="b1">
+            <geom name="g1" type="sphere" size="0.1"/>
+            <site name="site1" type="sphere" size="0.5"/>
+        </body>
+        <body name="b2" pos="0.1 0 0">
+            <geom name="g2" type="sphere" size="0.05"/>
+        </body>
+    </worldbody>
+    <sensor>
+        <insidesite name="flag" site="site1" objtype="body" objname="b2"/>
+        <insidesite name="gap" site="site1" objtype="body" objname="b2" enclosed="true"/>
+    </sensor>
+</mujoco>
+"""
+
+
+@pytest.fixture
+def insidesite_state() -> MjState:
+    model = mujoco.MjModel.from_xml_string(_INSIDESITE_XML)
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
     return MjState(model, data)
@@ -109,6 +137,45 @@ def test_framequat_request_tags_dimensionless_metadata(
         "dimension": "[]",
         "transform_type": "quaternion",
     }
+
+
+def test_insidesite_flag_is_labeled(insidesite_state: MjState, tmp_path: Path) -> None:
+    """Without `enclosed` the sensor is a 0/1 flag, so its codes are labeled."""
+    sensor = SensorInsidesite(
+        name=SensorName("flag"),
+        objtype=SensorObjectType.BODY,
+        objname=BodyName("b2"),
+        site=SiteNameType("site1"),
+    )
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    sensor.request(sm)
+    sm.record(insidesite_state)
+
+    assert sm._column_metadata["Sensors/flag:insidesite"].model_dump() == {
+        "dimension": "[]",
+        "transform_type": "scalar",
+        "enumeration_map": {"OUTSIDE": 0, "INSIDE": 1},
+    }
+
+
+def test_insidesite_enclosed_is_not_labeled(
+    insidesite_state: MjState, tmp_path: Path
+) -> None:
+    """With `enclosed` the sensor reports a distance, not a flag, so no labels apply."""
+    sensor = SensorInsidesite(
+        name=SensorName("gap"),
+        objtype=SensorObjectType.BODY,
+        objname=BodyName("b2"),
+        site=SiteNameType("site1"),
+        enclosed=True,
+    )
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    sensor.request(sm)
+    sm.record(insidesite_state)
+
+    assert sm._column_metadata["Sensors/gap:insidesite"].enumeration_map is None
 
 
 def test_jointpos_request_resolves_hinge_to_angle_metadata(

@@ -22,7 +22,6 @@ from mujoco_mojo.utils.signal_metadata import (
     MetadataOverrides,
     TransformType,
     dim,
-    dimensionless_metadata,
     merge_signal_metadata,
 )
 from mujoco_mojo.visualization import LineConfig
@@ -54,7 +53,8 @@ Proximityable = Annotated[
 _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "dist": dim(Dimension.LENGTH) | TransformType.SCALAR.metadata,
     "fromto": dim(Dimension.LENGTH) | TransformType.POINT.metadata,
-    "prox_type": dimensionless_metadata() | TransformType.SCALAR.metadata,
+    "prox_type": ColumnMetadata.from_enum(ProximityType)
+    | TransformType.SCALAR.metadata,
 }
 
 

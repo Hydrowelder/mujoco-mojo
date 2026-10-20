@@ -913,6 +913,8 @@ def test_requirement_posts_to_its_result_column() -> None:
     assert call.kwargs["value"] == 1.0
     assert str(call.kwargs["column"]) == "Requirements/ok_req:result"
     assert call.kwargs["column"].metadata.transform_type == TransformType.SCALAR
+    # the posted 1.0 / 0.0 are labeled so the Dojo shows PASS / FAIL
+    assert call.kwargs["column"].metadata.enumeration_map == {"FAIL": 0, "PASS": 1}
 
 
 def test_latch_logs_once_not_on_every_replay(caplog) -> None:
