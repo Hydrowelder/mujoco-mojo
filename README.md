@@ -12,8 +12,14 @@
   <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml" class="badge-link" style="text-decoration:none;">
     <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg?branch=master" alt="Tests & Release Status">
   </a>
+  <a href="https://github.com/astral-sh/uv" class="badge-link" style="text-decoration:none;">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv">
+  </a>
   <a href="https://github.com/astral-sh/ruff" class="badge-link" style="text-decoration:none;">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff">
+  </a>
+  <a href="https://github.com/astral-sh/ty" class="badge-link" style="text-decoration:none;">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty">
   </a>
   <a href="https://docs.pydantic.dev/latest/" class="badge-link" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2">
