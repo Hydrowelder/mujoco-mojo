@@ -14,6 +14,7 @@ from mujoco_mojo.typing import (
     EulerSeq,
     InertiaFromGeom,
     InertiaGroupRange,
+    Passthrough,
 )
 
 __all__ = ["Compiler"]
@@ -48,6 +49,7 @@ class Compiler(XMLModel):
         "savecompiled",
         "savecanonical",
         "conflict",
+        "passthrough",
     )
     children = ("lengthrange",)
 
@@ -161,6 +163,9 @@ class Compiler(XMLModel):
         Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches.
 
     """
+
+    passthrough: Passthrough = Passthrough.NONE
+    """Which assets the compiler leaves by reference instead of loading into the compiled model. With "textures", a texture loaded from a single file is not read: the model holds its resolved path and the parameters a consumer needs to load it, and no pixels. Textures which the compiler would transform (flipped, composite grids, six separate files), procedural textures, textures given as a buffer and files served from memory by a virtual file system stay embedded. The per-texture `embed` attribute overrides this policy. The policy is that of the model being compiled, so it also applies to the textures of attached models. Only textures can be by reference for now; other asset types will be added to the list of values."""
 
     lengthrange: LengthRange = Field(default_factory=LengthRange)
     """This element controls the computation of actuator length ranges. For an overview of this functionality see Length range section. Note that if this element is omitted the defaults shown below still apply. In order to disable length range computations altogether, include this element and set mode="none"."""

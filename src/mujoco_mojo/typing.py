@@ -49,6 +49,7 @@ __all__ = [
     "FlexCompDOF",
     "FlexCompType",
     "FlexName",
+    "FlexSection",
     "FluidShape",
     "FrameName",
     "FrameScaling",
@@ -85,6 +86,7 @@ __all__ = [
     "MaterialName",
     "MeshName",
     "ModelName",
+    "Passthrough",
     "PluginName",
     "ProximityType",
     "RangefinderData",
@@ -101,6 +103,7 @@ __all__ = [
     "TendonLimited",
     "TendonName",
     "TextureBuiltInType",
+    "TextureEmbed",
     "TextureName",
     "TextureType",
     "TrackingMode",
@@ -775,6 +778,19 @@ class ColorSpace(StrEnum):
     """SRGB color space."""
 
 
+class TextureEmbed(StrEnum):
+    """Whether the pixels of a texture are in the compiled model or the texture is left by reference."""
+
+    FALSE = "false"
+    """Asks for the texture to be by reference whatever the compiler's `passthrough` says. It is a compile error for a texture which cannot be: one which is procedural, given as a buffer or as six separate files, flipped, a composite grid, or whose file is served from memory by a virtual file system."""
+
+    TRUE = "true"
+    """Keeps the pixels in the model whatever the policy says, for example for a texture which is written into at runtime."""
+
+    AUTO = "auto"
+    """Follows the `passthrough` policy of the compiler."""
+
+
 class TextureBuiltInType(StrEnum):
     """This and the remaining attributes control the generation of procedural textures. If the value of this attribute is different from "none", the texture is treated as procedural and any file names are ignored."""
 
@@ -817,7 +833,7 @@ class Mark(StrEnum):
 
     The policies never and allowed constitute user overrides of the automatic compiler policy.
 
-    The init sleep policy can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such models will lead to a compilation error.
+    The init sleep policy can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such a model compiles with a warning and the tree starts awake.
 
     See implementation notes for more details."""
 
@@ -841,7 +857,7 @@ class Sleep(StrEnum):
     """Constitute user overrides of the automatic compiler policy."""
 
     INIT = "init"
-    """Can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such models will lead to a compilation error."""
+    """Can only be specified by the user and means "initialize this tree as asleep". This policy is implemented in mj_resetData and mj_makeData and only applies to the default configuration. If a keyframe changes the configuration of (or assigns nonzero velocity to) a sleeping tree, it will be woken up. This policy is useful for very large models where waiting for the automatic sleeping mechanism to kick in can be expensive. Trees initialized as sleeping can be placed in unstable configurations like deep penetration or in mid-air, but will only move when woken up. Also note that this policy can fail. For example if a tree marked as sleep="init" is in contact with a tree not marked as such (i.e., they are in the same island) then it is impossible to put the tree to sleep; such a model compiles with a warning and the tree starts awake."""
 
 
 class Simple(StrEnum):
@@ -1071,6 +1087,16 @@ class FlexElastic2D(StrEnum):
 
     BOTH = "both"
     "Bending and stretching."
+
+
+class FlexSection(StrEnum):
+    """Cross-section of 1D flexes, used to compute the second moment of area I of the bending stiffness."""
+
+    CIRCLE = "circle"
+    """I = pi r^4 / 4, where r is the flex radius."""
+
+    BOX = "box"
+    """A rectangle with half-sizes given by `sectionsize`. Since the bending model is isotropic, a box uses the second moment of area of its weak axis, I = min(w h^3, h w^3) / 12, where w and h are the full sizes."""
 
 
 class SelfCollide(StrEnum):
@@ -1353,6 +1379,16 @@ class Conflict(StrEnum):
 
     ERROR = "error"
     """Any conflict between authored values results in a compile error. This is the strictest mode and is useful for detecting unintended attribute mismatches."""
+
+
+class Passthrough(StrEnum):
+    """Which assets the compiler leaves by reference instead of loading into the compiled model."""
+
+    NONE = "none"
+    """Every asset is loaded into the model."""
+
+    TEXTURES = "textures"
+    """A texture loaded from a single file is not read: the model holds its resolved path and the parameters a consumer needs to load it, and no pixels. Textures which the compiler would transform (flipped, composite grids, six separate files), procedural textures, textures given as a buffer and files served from memory by a virtual file system stay embedded."""
 
 
 if TYPE_CHECKING:

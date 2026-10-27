@@ -15,6 +15,7 @@ from mujoco_mojo.typing import (
     GridLayoutStr,
     Mark,
     TextureBuiltInType,
+    TextureEmbed,
     TextureMIME,
     TextureName,
     TextureType,
@@ -28,6 +29,7 @@ __all__ = ["Texture", "TextureBuiltIn"]
 
 _texture_attr = (
     "name",
+    "class_",
     "type",
     "colorspace",
     "content_type",
@@ -40,6 +42,7 @@ _texture_attr = (
     "filedown",
     "filefront",
     "fileback",
+    "embed",
 )
 
 
@@ -62,6 +65,9 @@ class TextureBase(XMLModel, ABC):
 
     name: TextureName | None = None
     """As with all other assets, a texture must have a name in order to be referenced. However if the texture is loaded from a single file with the file attribute, the explicit name can be omitted and the file name (without the path and extension) becomes the texture name. If the name after parsing is empty and the texture type is not "skybox", the compiler will generate an error."""
+
+    class_: str | None = None
+    """Defaults class for setting unspecified attributes."""
 
     type: TextureType = TextureType.CUBE
     """This attribute determines how the texture is represented and mapped to objects. It also determines which of the remaining attributes are relevant. The keywords have the following meaning:
@@ -109,6 +115,9 @@ class TextureBase(XMLModel, ABC):
 
     fileback: DepPath | None = None
     """These attributes are used to load the six sides of a cube or skybox texture from separate files, but only if the file attribute is omitted and the builtin attribute is set to "none". If any one of these attributes are omitted, the corresponding side is filled with the color specified by the rgb1 attribute. The coordinate frame here is unusual. When a skybox is viewed with the default free camera in its initial configuration, the Right, Left, Up, Down sides appear where one would expect them. The Back side appears in front of the viewer, because the viewer is in the middle of the box and is facing its back. There is however a complication. In MuJoCo the +Z axis points up, while existing skybox textures (which are non-trivial to design) tend to assume that the +Y axis points up. Changing coordinates cannot be done by merely renaming files; instead one would have to transpose and/or mirror some of the images. To avoid this complication, we render the skybox rotated by 90 deg around the +X axis, in violation of our convention. However we cannot do the same for regular objects. Thus the mapping of skybox and cube textures on regular objects, expressed in the local frame of the object, is as follows: Right = +X, Left = -X, Up = +Y, Down = -Y, Front = +Z, `Back = -Z`."""
+
+    embed: TextureEmbed = TextureEmbed.AUTO
+    """Whether the pixels of this texture are in mjModel or the texture is left by reference. "auto" follows the passthrough policy of the compiler. "true" keeps the pixels in the model whatever the policy says, for example for a texture which is written into at runtime. "false" asks for the texture to be by reference whatever the policy says, and is a compile error for a texture which cannot be: one which is procedural, given as a buffer or as six separate files, flipped, a composite grid, or whose file is served from memory by a virtual file system."""
 
     @model_validator(mode="after")
     def validate_files(self) -> Self:

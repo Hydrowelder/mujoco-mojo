@@ -1,7 +1,8 @@
 # Changelog
 
-## Version 2.7.1 (2026-10-19)
+## Version 2.7.1 (2026-10-26)
 
+- Added support for [MuJoCo 3.17.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-17-0-october-22-2026)
 - Added `ColumnMetadata.enumeration_map` and `ColumnMetadata.from_enum()` to label integer-coded signals
 - Added `df.mojo.convert_enums()` to swap those codes for their labels
 - The Dojo plots labeled signals on a right-hand axis named by their labels, and shows the label in the tooltip
