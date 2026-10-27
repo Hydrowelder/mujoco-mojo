@@ -9,6 +9,7 @@
 - Proximity types, requirement results (`PASS`/`FAIL`), and `insidesite` sensors are now labeled
 - `watch-workdir` now starts a SLURM job's clock when its first trial begins, not when the wizard started
 - Declining to submit in the SLURM wizard now also prints the `watch-workdir` command
+- Security patches
 
 ## Version 2.7.0 (2026-10-18)
 
