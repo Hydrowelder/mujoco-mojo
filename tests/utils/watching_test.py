@@ -1,6 +1,6 @@
 import io
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,12 @@ from typer.testing import CliRunner
 import mujoco_mojo.utils.watching as watching_module
 from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.runner import MojoRunner, MonteCarloConfig
-from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
+from mujoco_mojo.utils.statusing import (
+    JOB_STATUS_FNAME,
+    TRIAL_STATUS_FNAME,
+    JobStatus,
+    TrialStatus,
+)
 from mujoco_mojo.utils.watching import WatchOutcome, watch_job
 
 REPORT = "MOJO_RUNTIME_REPORT.md"
@@ -66,6 +71,22 @@ class SlurmCluster:
         return JobStatus.model_validate_json(
             (self.workdir / JOB_STATUS_FNAME).read_text()
         )
+
+
+def _first_trial_start(job: JobStatus) -> datetime:
+    """The earliest time any step of any trial began, read straight off the trials' status files."""
+    starts: list[datetime] = []
+    for trial_num in job.trial_nums:
+        path = job.trial_num_to_path(trial_num) / TRIAL_STATUS_FNAME
+        if not path.exists():
+            continue
+        status = TrialStatus.model_validate_json(path.read_text())
+        starts += [
+            step.started
+            for step in (status.pending, status.generating, status.solving)
+            if step.started is not None
+        ]
+    return min(starts)
 
 
 @pytest.fixture
@@ -132,6 +153,73 @@ def test_a_stored_elapsed_is_never_shortened(cluster: SlurmCluster) -> None:
     job.refresh_from_disk(persist=False)
 
     assert job.elapsed == timedelta(hours=1)
+
+
+# --- when the job started ---
+
+
+def test_a_plain_refresh_leaves_the_start_alone(cluster: SlurmCluster) -> None:
+    """Only a caller that asks for it (the watcher) moves the start; a local run and the Dojo monitor never do."""
+    while cluster.finish_next_trial() is not None:
+        pass
+    job = cluster.on_disk()
+    job.start_time -= timedelta(hours=1)
+    before = job.start_time
+
+    job.refresh_from_disk(persist=False)
+
+    assert job.start_time == before
+
+
+def test_the_start_moves_to_the_first_trial_that_began(cluster: SlurmCluster) -> None:
+    """The job file is made when the wizard starts, which can be long before anything runs."""
+    while cluster.finish_next_trial() is not None:
+        pass
+    job = cluster.on_disk()
+    job.start_time -= timedelta(hours=1)
+
+    job.refresh_from_disk(persist=False, start_from_trials=True)
+
+    assert job.start_time == _first_trial_start(job)
+    assert job.elapsed < timedelta(minutes=1)
+    assert job.end_time == job.start_time + job.elapsed
+
+
+def test_the_start_waits_until_a_trial_has_begun(cluster: SlurmCluster) -> None:
+    job = cluster.on_disk()
+    before = job.start_time
+
+    job.refresh_from_disk(persist=False, start_from_trials=True)
+
+    assert job.start_time == before
+
+
+def test_trials_from_before_the_job_file_was_made_do_not_move_the_start(
+    cluster: SlurmCluster,
+) -> None:
+    """A resumed job keeps the finished trials of its earlier run, which must not stretch this run back."""
+    cluster.finish_next_trial()
+    job = cluster.on_disk()
+    job.start_time = datetime.now(UTC)
+    before = job.start_time
+
+    job.refresh_from_disk(persist=False, start_from_trials=True)
+
+    assert job.start_time == before
+
+
+def test_aligning_the_start_twice_changes_nothing_more(cluster: SlurmCluster) -> None:
+    while cluster.finish_next_trial() is not None:
+        pass
+    job = cluster.on_disk()
+    job.start_time -= timedelta(hours=1)
+    job.refresh_from_disk(persist=False, start_from_trials=True)
+    start, elapsed = job.start_time, job.elapsed
+
+    job.refresh_from_disk(persist=False, start_from_trials=True, force_refetch=True)
+
+    assert job.start_time == start
+    assert job.elapsed == elapsed
 
 
 # --- the watcher ---
@@ -230,6 +318,42 @@ def test_without_a_saved_job_id_only_the_trials_decide(
 
     assert outcome is WatchOutcome.DONE
     assert asked == []
+
+
+def test_the_watcher_saves_the_start_as_when_the_first_trial_began(
+    cluster: SlurmCluster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scheduler(monkeypatch, True)
+    # the wizard ran an hour before the first trial did
+    job = cluster.on_disk()
+    wizard_start = job.start_time - timedelta(hours=1)
+    job.start_time = wizard_start
+    job.dump_to_path(cluster.workdir / JOB_STATUS_FNAME)
+
+    watch_job(cluster.workdir, interval=0, sleep=cluster.advance)
+
+    saved = cluster.on_disk()
+    assert saved.start_time == _first_trial_start(saved)
+    assert saved.start_time > wizard_start + timedelta(minutes=59)
+    assert saved.elapsed < timedelta(minutes=1)
+
+
+def test_the_watcher_keeps_the_wizard_start_until_a_trial_begins(
+    cluster: SlurmCluster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _scheduler(monkeypatch, True)
+    before = cluster.on_disk().start_time
+
+    class Stop(Exception):
+        pass
+
+    def stop(seconds: float) -> None:
+        raise Stop
+
+    with pytest.raises(Stop):
+        watch_job(cluster.workdir, interval=0, sleep=stop)
+
+    assert cluster.on_disk().start_time == before
 
 
 def test_watching_a_workdir_that_has_no_job_is_a_clear_error(tmp_path: Path) -> None:

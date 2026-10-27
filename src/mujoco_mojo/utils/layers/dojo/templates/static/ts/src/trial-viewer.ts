@@ -1,3 +1,11 @@
+import {
+  enumAxisIds,
+  enumAxisLayout,
+  enumLabels,
+  enumMapOf,
+  enumRange,
+  planEnumAxes,
+} from "./lib/enum-axes";
 import { breakableLabel, formatNum } from "./lib/format";
 import { OPTIONS } from "./lib/options";
 import {
@@ -1009,7 +1017,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           );
       for (const col of requiredCols) {
         const yConfig = this.config.yAxes[col];
-        if (yConfig?.filters && yConfig.filters.length > 0) {
+        if (
+          yConfig?.filters &&
+          yConfig.filters.length > 0 &&
+          !this.isEnumCol(col)
+        ) {
           const active = toActiveFilters(yConfig.filters);
           if (active.length > 0) filtersPayload[col] = active;
         }
@@ -2503,17 +2515,28 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         newRangeX[1] = xMax;
       }
 
-      const fullY = this.calculatePaddedRange(
-        Object.keys(this.config.yAxes),
-        false,
+      // enum columns have axes of their own, so only the numeric ones set the y zoom;
+      // with none, the primary axis is an enum axis and keeps its fixed range
+      const numericY = Object.keys(this.config.yAxes).filter(
+        (k) => !this.isEnumCol(k),
       );
+      this.config.rangeX = newRangeX;
+      if (numericY.length === 0) {
+        void Plotly.relayout(el, {
+          "xaxis.range": newRangeX,
+          "xaxis.autorange": false,
+        });
+        this.saveAndRender();
+        return;
+      }
+
+      const fullY = this.calculatePaddedRange(numericY, false);
       const ySpan = Math.abs(fullY[1] - fullY[0]) * 0.2;
       const newRangeY: [number, number] = [
         ann.y - ySpan / 2,
         ann.y + ySpan / 2,
       ];
 
-      this.config.rangeX = newRangeX;
       this.config.rangeY = newRangeY;
       void Plotly.relayout(el, {
         "xaxis.range": newRangeX,
@@ -4918,9 +4941,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           dash: y.dash ?? "solid",
         }));
         const nextStyle = this.nextAvailableStyle(usedStyles);
-        const initFilters: FilterEntry[] = refFrameActive(this.config.refFrame)
-          ? [buildRefFrameFilter(this.config.refFrame)]
-          : [];
+        // a filter or frame rotation on a code stream is meaningless
+        const initFilters: FilterEntry[] =
+          refFrameActive(this.config.refFrame) && !this.isEnumCol(col)
+            ? [buildRefFrameFilter(this.config.refFrame)]
+            : [];
         this.config.yAxes[col] = {
           color: nextStyle.color,
           label: "",
@@ -4957,7 +4982,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     applyRefFrame(frame: RefFrame) {
       for (const col of Object.keys(this.config.yAxes)) {
         const yConfig = this.config.yAxes[col];
-        if (!yConfig) continue;
+        if (!yConfig || this.isEnumCol(col)) continue;
         yConfig.filters ??= [];
         if (refFrameActive(frame)) {
           const newEntry = buildRefFrameFilter(frame);
@@ -5041,6 +5066,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         i++;
       }
       return styleAt(used.length);
+    },
+
+    // true for an integer-coded column (one with an enumeration_map), which is
+    // drawn on its own labeled axis and never filtered
+    isEnumCol(col: string): boolean {
+      return enumMapOf(this.columnMetadata[col]) !== null;
     },
 
     getYProps(axis: string, index: number) {
@@ -6585,6 +6616,43 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       };
 
       const yKeys = Object.keys(this.config.yAxes);
+
+      // integer-coded columns (those with an enumeration_map) sit on right-hand axes
+      // whose ticks are the enum names, one axis per distinct map (see lib/enum-axes.ts)
+      const enumPlan = planEnumAxes(
+        yKeys.filter((k) => this.data![k]),
+        this.columnMetadata,
+      );
+      const numericKeys = yKeys.filter((k) => !this.isEnumCol(k));
+      // with nothing numeric to draw, the first enum axis takes the primary slot so
+      // the plot is not left with an empty axis on the left
+      const enumPromoted =
+        !isPolar &&
+        enumPlan.groups.length > 0 &&
+        !numericKeys.some((k) => this.data![k]);
+      const hasEnumAxes = !isPolar && enumPlan.groups.length > 0;
+      // a step line, since interpolating between two codes would draw values that never happened
+      const lineShape = (key: string): string =>
+        !enumPlan.groupOf.has(key)
+          ? this.config.interp
+          : isPolar
+            ? "linear"
+            : "hv";
+      // the tooltip shows an enum point as its label (customdata) instead of the raw number
+      const yHover = (key: string, ref: "y" | "r"): string =>
+        enumPlan.groupOf.has(key) ? "%{customdata}" : `%{${ref}:.4f}`;
+      // per-trace extras for an enum column: the label of each point and, outside
+      // polar mode, which right-hand axis the trace belongs to
+      const enumTrace = (key: string, values: number[]): object => {
+        const gi = enumPlan.groupOf.get(key);
+        if (gi === undefined) return {};
+        const traceRef = isPolar ? "y" : enumAxisIds(gi, enumPromoted).traceRef;
+        return {
+          customdata: enumLabels(values, enumPlan.groups[gi]!),
+          ...(traceRef !== "y" ? { yaxis: traceRef } : {}),
+        };
+      };
+
       let traces: object[] = yKeys
         .map((key, i) => {
           const p = this.getYProps(key, i);
@@ -6597,7 +6665,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           const lineStyle = {
             width: p.width,
             color: p.color,
-            shape: this.config.interp,
+            shape: lineShape(key),
             dash: p.dash,
           };
           if (isPolar) {
@@ -6616,7 +6684,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 bordercolor: tooltipBorder,
                 font: { family: "monospace", size: 12, color: tooltipFont },
               },
-              hovertemplate: `<b>${key}</b><br>θ: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`,
+              hovertemplate: `<b>${key}</b><br>θ: %{theta:.4f}<br>r: ${yHover(key, "r")}<extra></extra>`,
+              ...enumTrace(key, this.data![p.name]!),
             };
           }
           return {
@@ -6634,7 +6703,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               bordercolor: tooltipBorder,
               font: { family: "monospace", size: 12, color: tooltipFont },
             },
-            hovertemplate: `<b>${key}</b><br>%{x}: %{y:.4f}<extra></extra>`,
+            hovertemplate: `<b>${key}</b><br>%{x}: ${yHover(key, "y")}<extra></extra>`,
+            ...enumTrace(key, this.data![p.name]!),
           };
         })
         .filter((t): t is NonNullable<typeof t> => t !== null);
@@ -6665,7 +6735,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               const lineStyle = {
                 width: 1,
                 color: p.color,
-                shape: this.config.interp,
+                shape: lineShape(key),
                 dash: "dot",
               };
               const t = isPolar
@@ -6681,7 +6751,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                     opacity: 0.35,
                     marker: { size: 4, symbol: p.marker },
                     hoverlabel: { namelength: -1 },
-                    hovertemplate: `<b>${key}</b> (#${n})<br>θ: %{theta:.4f}<br>r: %{r:.4f}<extra></extra>`,
+                    hovertemplate: `<b>${key}</b> (#${n})<br>θ: %{theta:.4f}<br>r: ${yHover(key, "r")}<extra></extra>`,
+                    ...enumTrace(key, dataset[p.name]!),
                   }
                 : {
                     x: dataset[this.config.xAxis!.col!],
@@ -6695,7 +6766,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                     opacity: 0.35,
                     marker: { size: 4, symbol: p.marker },
                     hoverlabel: { namelength: -1 },
-                    hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: %{y:.4f}<extra></extra>`,
+                    hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: ${yHover(key, "y")}<extra></extra>`,
+                    ...enumTrace(key, dataset[p.name]!),
                   };
               legendTracker.add(key);
               return t;
@@ -6758,7 +6830,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // with several, fall back to just the shared unit (e.g. "N·m") if
       // they all agree on one, since concatenating every column name
       // doesn't read as a title. No fallback (blank) if units disagree.
-      const yCols = Object.keys(this.config.yAxes);
+      // enum columns have axes of their own, so they take no part in the primary axis
+      const yCols = numericKeys;
       const yUnitList = yCols.map((c) => this.effectiveUnit(c));
       const yUnitsShared =
         yUnitList.length > 0 && yUnitList.every((u) => u && u === yUnitList[0])
@@ -6772,10 +6845,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           : (yUnitsShared ?? "");
       const yAxisText = this.config.yAxisTitle || yAxisFallback;
 
-      const resolvedRangeY = this.resolveAxisRange(
-        this.config.rangeY,
-        Object.keys(this.config.yAxes),
-      );
+      // a manual y range means nothing once the primary slot is an enum axis
+      const resolvedRangeY = enumPromoted
+        ? null
+        : this.resolveAxisRange(this.config.rangeY, numericKeys);
 
       const yAxisObj = {
         type: this.config.yScale ?? "linear",
@@ -6810,6 +6883,36 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         spikethickness: -2,
       };
 
+      // one right-hand axis per distinct enum map; when promoted the first one is
+      // keyed `yaxis` and so replaces the (empty) primary axis above
+      const enumLayout: Record<string, unknown> = {};
+      if (!isPolar) {
+        enumPlan.groups.forEach((group, gi) => {
+          const ids = enumAxisIds(gi, enumPromoted);
+          const primary = ids.layoutKey === "yaxis";
+          // a lone signal names the axis; a shared axis just counts its signals. the
+          // text uses the same color as the other axes, since the legend carries the trace colors
+          const only = group.columns.length === 1 ? group.columns[0]! : null;
+          const props = only ? this.getYProps(only, yKeys.indexOf(only)) : null;
+          const title =
+            primary && this.config.yAxisTitle
+              ? this.config.yAxisTitle
+              : props
+                ? props.label
+                : `${group.columns.length} signals`;
+          enumLayout[ids.layoutKey] = enumAxisLayout(group, {
+            title,
+            range: enumRange(
+              group,
+              group.columns.map((c) => this.data![c]!),
+            ),
+            color: textColor,
+            primary,
+            grid: { color: majorGrid, show: this.config.grid !== "none" },
+          });
+        });
+      }
+
       const polarLayout = isPolar
         ? {
             polar: {
@@ -6834,7 +6937,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               },
             },
           }
-        : { xaxis: xAxisObj, yaxis: yAxisObj };
+        : { xaxis: xAxisObj, yaxis: yAxisObj, ...enumLayout };
 
       const layout = {
         uirevision: `${this.trialId}_${this.config.xAxis!.col!}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
@@ -6853,11 +6956,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           : null,
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
+        // beside enum axes the margins are Plotly's to grow (the axes use automargin),
+        // so the fixed legend gutter and the empty left axis are dropped
         margin: {
           t: this.config.title ? 60 : 30,
-          r: this.config.legendPos === "right" ? 150 : 30,
+          r: this.config.legendPos === "right" && !hasEnumAxes ? 150 : 30,
           b: this.config.legendPos === "bottom" ? 80 : 50,
-          l: yAxisText ? 80 : 60,
+          l: enumPromoted ? 30 : yAxisText ? 80 : 60,
         },
         hovermode: isHoverDisabled ? false : this.config.hover,
         hoverlabel: {
@@ -6871,7 +6976,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           this.config.legendPos === "right"
             ? {
                 orientation: "v",
-                x: 1.02,
+                // hanging off the plot edge would sit on the enum axes, so with
+                // them the legend anchors to the container edge and Plotly widens the margin
+                ...(hasEnumAxes
+                  ? { xref: "container", x: 1, xanchor: "right" }
+                  : { x: 1.02 }),
                 y: 1,
                 font: { family: "monospace", size: 14, color: textColor },
                 groupclick: "togglegroup",

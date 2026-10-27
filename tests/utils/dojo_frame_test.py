@@ -3,6 +3,7 @@ import pytest
 from mujoco_mojo.utils.filters import RotationFilter, ScaleFilter
 from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
     _column_metadata_fields,
+    _is_enum_column,
     _origin_for_positions_only,
 )
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata
@@ -33,6 +34,19 @@ def test_origin_is_dropped_for_everything_else(transform_type: str | None) -> No
 def test_other_filters_are_untouched() -> None:
     f = ScaleFilter(factor=2.0, offset=0.0)
     assert _origin_for_positions_only(f, None) is f
+
+
+def test_a_column_with_an_enumeration_map_is_an_enum_column() -> None:
+    assert _is_enum_column(ColumnMetadata(enumeration_map={"A": 0}))
+    assert not _is_enum_column(ColumnMetadata(unit="meter"))
+    assert not _is_enum_column(ColumnMetadata())
+    assert not _is_enum_column(None)
+
+
+def test_signal_out_enumeration_map_is_free_text() -> None:
+    """A dict-valued field has no fixed choices, so the Lab offers a text box (JSON, parsed by the model)."""
+    by_name = {f["name"]: f for f in _column_metadata_fields()}
+    assert by_name["enumeration_map"]["options"] is None
 
 
 def test_signal_out_fields_cover_every_column_metadata_field() -> None:

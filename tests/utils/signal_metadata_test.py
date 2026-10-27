@@ -1,3 +1,6 @@
+import json
+from enum import Enum, IntEnum
+
 import pint
 import pytest
 
@@ -177,13 +180,114 @@ def test_column_metadata_lenient_keeps_an_invalid_entry() -> None:
     assert meta.model_dump() == {"unit": "not_a_unit", "label": "x"}
 
 
+# --- enumeration_map ---
+
+
+class _Mode(IntEnum):
+    IDLE = 0
+    RUNNING = 1
+    FAULT = 7
+    # an alias of RUNNING: iterating the class skips it
+    ACTIVE = 1
+
+
+def test_enumeration_map_round_trips_through_json() -> None:
+    """The map is stored in the parquet footer as JSON, so label keys must survive a round trip."""
+    meta = ColumnMetadata(enumeration_map={"IDLE": 0, "FAULT": 7})
+    dumped = json.loads(json.dumps(meta.model_dump(mode="json")))
+    assert dumped == {"enumeration_map": {"IDLE": 0, "FAULT": 7}}
+    assert ColumnMetadata.validated(dumped) == meta
+
+
+def test_enumeration_map_rejects_two_labels_for_one_code() -> None:
+    with pytest.raises(ValueError, match="code 1 to both 'A' and 'B'"):
+        ColumnMetadata(enumeration_map={"A": 1, "B": 1})
+
+
+def test_enumeration_map_rejects_an_empty_label() -> None:
+    with pytest.raises(ValueError, match="empty label"):
+        ColumnMetadata(enumeration_map={"": 0})
+
+
+def test_enumeration_map_empty_means_unset() -> None:
+    meta = ColumnMetadata(enumeration_map={})
+    assert meta.enumeration_map is None
+    assert not meta
+    assert meta.model_dump() == {}
+
+
+def test_enumeration_map_accepts_a_json_object_string() -> None:
+    """The Signal Lab's Signal Out node edits the map as free text."""
+    meta = ColumnMetadata.model_validate({"enumeration_map": '{"IDLE": 0, "RUN": 2}'})
+    assert meta.enumeration_map == {"IDLE": 0, "RUN": 2}
+
+
+def test_enumeration_map_rejects_text_that_is_not_json() -> None:
+    with pytest.raises(ValueError, match="expected a JSON object"):
+        ColumnMetadata.model_validate({"enumeration_map": "IDLE=0"})
+
+
+def test_enumeration_map_does_not_change_the_hash() -> None:
+    """A dict is not hashable, so the hash covers the scalar fields only; equality still sees the map."""
+    a = ColumnMetadata(enumeration_map={"A": 0})
+    b = ColumnMetadata(enumeration_map={"A": 1})
+    assert hash(a) == hash(b)
+    assert a != b
+    assert a == ColumnMetadata(enumeration_map={"A": 0})
+
+
+def test_enumeration_map_merge_replaces_the_whole_map() -> None:
+    merged = ColumnMetadata(enumeration_map={"A": 0, "B": 1}) | ColumnMetadata(
+        enumeration_map={"Z": 9}
+    )
+    assert merged.enumeration_map == {"Z": 9}
+
+
+def test_from_enum_maps_each_member_name_to_its_value() -> None:
+    meta = ColumnMetadata.from_enum(_Mode)
+    # the ACTIVE alias is skipped, and the code gap (no 2..6) is kept
+    assert meta.enumeration_map == {"IDLE": 0, "RUNNING": 1, "FAULT": 7}
+
+
+def test_from_enum_tags_the_column_dimensionless() -> None:
+    assert ColumnMetadata.from_enum(_Mode).dimension == "[]"
+
+
+def test_from_enum_rejects_non_integer_values() -> None:
+    class Color(Enum):
+        RED = "red"
+
+    with pytest.raises(TypeError, match=r"Color\.RED"):
+        ColumnMetadata.from_enum(Color)
+
+
+def test_from_enum_rejects_bool_values() -> None:
+    class Flag(Enum):
+        ON = True
+
+    with pytest.raises(TypeError, match=r"Flag\.ON"):
+        ColumnMetadata.from_enum(Flag)
+
+
+def test_from_enum_rejects_an_empty_enum() -> None:
+    class Empty(Enum):
+        pass
+
+    with pytest.raises(ValueError, match="no members"):
+        ColumnMetadata.from_enum(Empty)
+
+
 def test_column_metadata_json_schema_lists_the_declared_fields() -> None:
     """The Lab's Signal Out node is generated from this schema, so it must cover every declared field."""
     schema = ColumnMetadata.model_json_schema()
     assert set(schema["properties"]) == set(ColumnMetadata.model_fields)
-    assert {"unit", "dimension", "quantity", "transform_type"} <= set(
-        schema["properties"]
-    )
+    assert {
+        "unit",
+        "dimension",
+        "quantity",
+        "transform_type",
+        "enumeration_map",
+    } <= set(schema["properties"])
     assert all(p.get("description") for p in schema["properties"].values())
 
 

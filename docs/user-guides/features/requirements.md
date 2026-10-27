@@ -103,7 +103,7 @@ By default (`every=None`), requirements are evaluated once at end of trial. Set 
 - `every=N`: evaluate every N steps. Useful for expensive checks or when only coarse monitoring is needed
 - `df` is always `None` during live calls; use `state` for real-time values or cache key values in your `mojo_model.user_data` object
 - Returning `None` records the undetermined verdict for that sim time (so `last_passed()` can tell "evaluated, no verdict yet" apart from "not evaluated at this exact step"), but it never posts telemetry, triggers the sticky-failure rule below, or triggers `terminate_on_fail`/`terminate_on_pass`. Use it when the check has no verdict yet (e.g. "reached the goal" before the goal is reachable), so an unfinished objective is not mistaken for a violation
-- Unless `post_result=False`, each `True`/`False` verdict is recorded in the telemetry parquet under the column `Requirements/{name}:result` (`1.0` = passed, `0.0` = failed), making it plottable in the Dojo alongside other signals. The last known verdict is re-posted on non-evaluation and no-verdict steps so the signal is continuous
+- Unless `post_result=False`, each `True`/`False` verdict is recorded in the telemetry parquet under the column `Requirements/{name}:result` (`1.0` = passed, `0.0` = failed), making it plottable in the Dojo alongside other signals. The Dojo labels the two values `PASS` and `FAIL` on a shared axis. The last known verdict is re-posted on non-evaluation and no-verdict steps so the signal is continuous
 
 ???+ note "Note: Failed Live Requirement"
 

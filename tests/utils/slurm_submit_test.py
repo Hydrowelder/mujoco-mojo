@@ -601,12 +601,34 @@ def test_declining_to_submit_leaves_the_script_and_does_not_watch(
     workdir = tmp_path / "work"
     workdir.mkdir()
     _script_the_wizard(monkeypatch, WIZARD_ANSWERS | {"trials to SLURM now": False})
+    watched: list[Path] = []
+    monkeypatch.setattr(
+        runner_module, "watch_job", lambda path, **kwargs: watched.append(path)
+    )
 
     _runner(workdir).orchestrate_slurm_monte_carlo()
 
     assert (workdir / "mujoco_mojo_submit.sh").exists()
     assert slurm.sbatch_calls == []
+    assert watched == []
     assert json.loads((workdir / JOB_STATUS_FNAME).read_text())["slurm_job_id"] is None
+
+
+def test_declining_to_submit_still_prints_the_watch_command(
+    tmp_path: Path, slurm: FakeSlurm, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whoever submits by hand still needs the watcher to keep the status file and report current."""
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    _script_the_wizard(monkeypatch, WIZARD_ANSWERS | {"trials to SLURM now": False})
+    console, output = _console()
+    monkeypatch.setattr("rich.console.Console", lambda *args, **kwargs: console)
+
+    _runner(workdir).orchestrate_slurm_monte_carlo()
+
+    printed = output.getvalue()
+    assert "sbatch " in printed
+    assert f'mujoco-mojo run watch-workdir --workdir "{workdir.resolve()}"' in printed
 
 
 def test_the_wizard_reprompts_for_a_memory_size_that_is_not_one(

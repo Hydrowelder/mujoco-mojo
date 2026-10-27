@@ -85,6 +85,23 @@ def test_metadata_is_part_of_the_column() -> None:
     assert plain != tagged
 
 
+def test_a_column_carrying_an_enumeration_map_is_hashable_and_compares_by_it() -> None:
+    labeled = Column(
+        category="Sensors",
+        metadata=ColumnMetadata(enumeration_map={"IDLE": 0, "RUN": 1}),
+    )
+    same = Column(
+        category="Sensors",
+        metadata=ColumnMetadata(enumeration_map={"IDLE": 0, "RUN": 1}),
+    )
+    other = Column(
+        category="Sensors", metadata=ColumnMetadata(enumeration_map={"IDLE": 0})
+    )
+    assert labeled == same
+    assert labeled != other
+    assert len({labeled, same}) == 1
+
+
 @pytest.mark.parametrize(
     "name",
     [

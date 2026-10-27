@@ -799,7 +799,7 @@ def _cube_proximity(dist_max: float = 10.0) -> Proximity:
 
 
 def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> None:
-    """request() tags dist/fromto as length and prox_type as dimensionless."""
+    """request() tags dist/fromto as length and prox_type as dimensionless codes labeled by `ProximityType`."""
     state = _separated_state()
     proximity = _cube_proximity()
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
@@ -819,7 +819,16 @@ def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> No
     assert sm._column_metadata[f"Proximities/{pair}:prox_type"].model_dump() == {
         "dimension": "[]",
         "transform_type": "scalar",
+        "enumeration_map": {
+            "SPHERE_TO_SPHERE": 0,
+            "CONVEX_HULL": 1,
+            "VERTEX_TO_FACE": 3,
+            "FACE_TO_FACE": 4,
+        },
     }
+    # the labels cover every member, so a new ProximityType cannot go unlabeled
+    emap = sm._column_metadata[f"Proximities/{pair}:prox_type"].enumeration_map
+    assert emap == {member.name: member.value for member in mojo.ProximityType}
 
 
 def test_proximity_request_metadata_override(tmp_path: Path) -> None:

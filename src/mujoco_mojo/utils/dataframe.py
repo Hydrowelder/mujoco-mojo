@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
@@ -632,6 +632,96 @@ class MojoNamespace:
         rotated = rf.apply_to_frame(self._df, vector_bases=vectors, point_bases=points)
         rotated = rf.compose_to_frame(rotated, quaternion_bases=quats)
         return _MojoFrame.from_pl(rotated)
+
+    def convert_enums(
+        self,
+        columns: Iterable[str] | None = None,
+        *,
+        path: Path | str | None = None,
+        column_metadata: Mapping[str, ColumnMetadata] | None = None,
+        strict: bool = False,
+    ) -> MojoDataFrame:
+        """
+        Replaces the integer codes of every column that has an `enumeration_map` with their labels, as a `pl.Enum` column whose categories are ordered by code.
+
+        Telemetry stores codes as floats, so a NaN, a null, a non-whole number, or a code missing from the map becomes null (the last raises instead with `strict=True`). The map itself stays in the metadata, so the Dojo and any later call can still read it.
+
+        Args:
+            columns: The columns to convert. If None, every column that has an `enumeration_map` in the metadata is converted.
+            path: Path to the parquet file to read column metadata from. Used when `column_metadata` is not passed directly.
+            column_metadata: Pre-loaded metadata dict (from `MojoDataFrame.read_column_metadata()`). Takes precedence over `path`.
+            strict: If True, raise instead of nulling a code that the map does not name.
+
+        Returns:
+            Self: DataFrame with the enum columns holding labels.
+
+        Raises:
+            ValueError: If neither `path` nor `column_metadata` is given (there would be no maps to read), if a named column is missing, is not numeric, or has no `enumeration_map`, or if `strict` is set and a column holds a code the map does not name.
+
+        """
+        if path is None and column_metadata is None:
+            raise ValueError(
+                "convert_enums needs the enumeration maps: pass `path` or `column_metadata`."
+            )
+        meta = _resolve_column_metadata(path, column_metadata)
+
+        if columns is None:
+            targets = [
+                c
+                for c in self._df.columns
+                if (m := meta.get(c)) is not None and m.enumeration_map
+            ]
+        else:
+            targets = list(columns)
+
+        schema = self._df.schema
+        exprs: list[pl.Expr] = []
+        for col in targets:
+            if col not in schema:
+                raise ValueError(f"convert_enums failed: column '{col}' not found.")
+            col_meta = meta.get(col)
+            emap = col_meta.enumeration_map if col_meta is not None else None
+            if not emap:
+                raise ValueError(
+                    f"convert_enums failed: column '{col}' has no enumeration_map metadata."
+                )
+            if not schema[col].is_numeric():
+                raise ValueError(
+                    f"convert_enums failed: column '{col}' is {schema[col]}, not numeric codes (already converted?)."
+                )
+            exprs.append(self._enum_expr(col, emap, strict=strict))
+
+        if not exprs:
+            return _MojoFrame.from_pl(self._df)
+        return _MojoFrame.from_pl(self._df.with_columns(exprs))
+
+    def _enum_expr(self, col: str, emap: Mapping[str, int], *, strict: bool) -> pl.Expr:
+        """The expression turning `col`'s codes into a `pl.Enum` column of the labels in `emap`, ordered by code."""
+        by_code = sorted(emap.items(), key=lambda item: item[1])
+        labels = [label for label, _ in by_code]
+        codes = [code for _, code in by_code]
+
+        raw = pl.col(col)
+        # a NaN or fractional value is not a code, so it becomes null rather than truncating onto a neighbor
+        whole = pl.when(raw == raw.round()).then(raw.cast(pl.Int64, strict=False))
+        if strict:
+            unmapped = (
+                self._df.select(whole.alias(col))
+                .filter(pl.col(col).is_not_null() & ~pl.col(col).is_in(codes))
+                .get_column(col)
+                .unique()
+                .sort()
+                .to_list()
+            )
+            if unmapped:
+                raise ValueError(
+                    f"convert_enums failed: column '{col}' holds codes {unmapped} that its enumeration_map does not name."
+                )
+        return (
+            whole.replace_strict(codes, labels, default=None, return_dtype=pl.String)
+            .cast(pl.Enum(labels))
+            .alias(col)
+        )
 
     def with_filter_map(
         self, filter_map: dict[str, list[AnyFilter]], omit_time: bool = True

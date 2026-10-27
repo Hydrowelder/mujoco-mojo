@@ -6,7 +6,7 @@ from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
     FlexElasticity,
 )
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.typing import FlexElastic2D
+from mujoco_mojo.typing import FlexElastic2D, FlexSection, Vec2
 
 
 class FlexCompElasticity(XMLModel):
@@ -18,6 +18,8 @@ class FlexCompElasticity(XMLModel):
         "damping",
         "thickness",
         "elastic2d",
+        "section",
+        "sectionsize",
     )
 
     young: float = Field(
@@ -49,6 +51,20 @@ class FlexCompElasticity(XMLModel):
     elastic2d: FlexElastic2D = Field(
         default_factory=lambda: deepcopy(
             FlexElasticity.model_fields["elastic2d"].default,
+        ),
+    )
+    """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
+
+    section: FlexSection = Field(
+        default_factory=lambda: deepcopy(
+            FlexElasticity.model_fields["section"].default,
+        ),
+    )
+    """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
+
+    sectionsize: Vec2 = Field(
+        default_factory=lambda: deepcopy(
+            FlexElasticity.model_fields["sectionsize"].default,
         ),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""

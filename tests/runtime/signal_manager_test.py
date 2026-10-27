@@ -10,6 +10,7 @@ import pytest
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.runtime.signal_manager import SignalManager
+from mujoco_mojo.typing import ProximityType
 from mujoco_mojo.utils.column import Column
 from mujoco_mojo.utils.dataframe import MojoDataFrame
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
@@ -442,6 +443,42 @@ def test_footer_round_trips_through_read_column_metadata(sm: SignalManager) -> N
     assert read["Bodies/A/xpos:x"].transform_type == TransformType.POINT
     assert read["time"].dimension == "[time]"
     assert read["time"].transform_type == TransformType.SCALAR
+
+
+def test_enumeration_map_survives_the_footer_round_trip(sm: SignalManager) -> None:
+    """An enum signal is stored as float codes; its label map travels in the footer."""
+    m: mujoco.MjModel = mujoco.MjModel.from_xml_string("<mujoco/>")
+    d: mujoco.MjData = mujoco.MjData(m)
+
+    sm.post(
+        3.0,
+        Column(
+            category="Proximities",
+            subgroups=("A", "B"),
+            attr="prox_type",
+            metadata=ColumnMetadata.from_enum(ProximityType),
+        ),
+    )
+    sm.record(MjState(m, d))
+    sm.close()
+
+    expected = {
+        "SPHERE_TO_SPHERE": 0,
+        "CONVEX_HULL": 1,
+        "VERTEX_TO_FACE": 3,
+        "FACE_TO_FACE": 4,
+    }
+    footer = pl.read_parquet_metadata(sm.export_path)
+    assert (
+        json.loads(footer["column_metadata"])["Proximities/A/B:prox_type"][
+            "enumeration_map"
+        ]
+        == expected
+    )
+
+    read = MojoDataFrame.read_column_metadata(sm.export_path)
+    assert read["Proximities/A/B:prox_type"].enumeration_map == expected
+    assert pl.read_parquet(sm.export_path)["Proximities/A/B:prox_type"][0] == 3.0
 
 
 def test_a_rejected_column_registers_nothing(sm: SignalManager) -> None:

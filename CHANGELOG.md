@@ -1,15 +1,24 @@
 # Changelog
 
+## Version 2.7.1 (2026-10-26)
+
+- Added support for [MuJoCo 3.17.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-17-0-october-22-2026)
+- Added `ColumnMetadata.enumeration_map` and `ColumnMetadata.from_enum()` to label integer-coded signals
+- Added `df.mojo.convert_enums()` to swap those codes for their labels
+- The Dojo plots labeled signals on a right-hand axis named by their labels, and shows the label in the tooltip
+- Proximity types, requirement results (`PASS`/`FAIL`), and `insidesite` sensors are now labeled
+- `watch-workdir` now starts a SLURM job's clock when its first trial begins, not when the wizard started
+- Declining to submit in the SLURM wizard now also prints the `watch-workdir` command
+- Security patches
+
 ## Version 2.7.0 (2026-10-18)
 
 - Added support for [MuJoCo 3.16.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-16-0-october-14-2026)
 - Fixed asset bundling ignoring the compiler's `meshdir`, `texturedir`, `assetdir`, and `strippath`, and crashing when one was a `DepPath`
-- **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
-- **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments
 - Command-line `true` and `false` now parse as bools (lowercase `false` used to be a truthy string)
 - The project settings file is now found by searching parent directories, like uv, so it applies from subdirectories
 - The SLURM wizard prints the settings files it read and the lines it adds to the submission script
-- Fixed SLURM memory sizes with decimals (`125.9G` was read as 125 MB)
+- Fixed SLURM memory sizes with decimals (`123.4G` was read as 123 MB)
 - Fixed SLURM `days-hours` time limits (`1-12` was read as 1 day and 12 minutes)
 - Added `--padding` to `run single`, so SLURM workers name trial folders like the rest of the job (`trial_007`, not `trial_7`)
 - Added `MojoRunner.submit_slurm` and `SlurmConfig` to submit a SLURM job from Python without prompts; the wizard now uses them
@@ -17,6 +26,10 @@
 - SLURM submissions now save the job id in `job_status.json`
 - `WorldBody` now raises if given `freejoints`, which MuJoCo rejects in the world body
 - Change static type checking to use `ty`
+
+> [!WARNING]
+> - **Breaking:** `--arg` and `--kwarg` replace `--gen-arg`, `--gen-kwarg`, `--run-arg`, and `--run-kwarg`. They go to the generator, runtime, and objective, and each function gets only the keywords it accepts
+> - **Breaking:** `MojoRunner` takes `args` and `kwargs` instead of the four `gen_`/`run_` arguments
 
 ## Version 2.6.15 (2026-10-13)
 
@@ -31,8 +44,10 @@
 - Added `cg_x`, `cg_y`, and `cg_z` to `Inertial`, and `x`, `y`, and `z` to `Pos`
 - The `time` column is now tagged with the `scalar` `transform_type`, like the other built-in signals
 - Added missing return type annotations across the package, so `get_logger` now returns a `logging.Logger` instead of an unknown type
-- **Breaking:** `read_column_metadata()` is now `MojoDataFrame.read_column_metadata()`
 - Security patches
+
+> [!WARNING]
+> - **Breaking:** `read_column_metadata()` is now `MojoDataFrame.read_column_metadata()`
 
 ## Version 2.6.13 (2026-09-30)
 
@@ -62,9 +77,11 @@
 - Added `PoseQuat.from_row(row, "Sites/A")`, `df.mojo.pose_at()`, and `df.mojo.pose_arrays()` to read a pose from telemetry (#95)
 - Added `df.mojo.select(*columns)` and `df.mojo.columns` for selecting by `Column` (#97)
 - The typed selectors (`select_body`, ...) now match names literally and include an object's scalar channels (#97)
-- **Breaking:** `SignalManager.post(value, column)` and `track(getter, column)` now take a `Column` in place of `category`, `subgroups`, `attr`, and `metadata`. Build the `Column` once, since `post` runs every timestep (#97)
 - Added a Column Manifest export to the Mosaic export menu
 - Security patches
+
+> [!WARNING]
+> - **Breaking:** `SignalManager.post(value, column)` and `track(getter, column)` now take a `Column` in place of `category`, `subgroups`, `attr`, and `metadata`. Build the `Column` once, since `post` runs every timestep (#97)
 
 ## Version 2.6.10 (20206-09-11)
 
