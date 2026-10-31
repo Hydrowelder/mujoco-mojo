@@ -121,3 +121,14 @@ def find_free_port(host: str, start_port: int, max_tries: int = 50) -> int:
 
     msg = f"No free port found in [{start_port}, {start_port + max_tries}) on {host}"
     raise RuntimeError(msg)
+
+
+def is_ssh_session() -> bool:
+    """
+    Returns if the current session is connected via SSH.
+
+    Returns:
+        bool: True if connected with SSH.
+
+    """
+    return any(var in os.environ for var in ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY"))

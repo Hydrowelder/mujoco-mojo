@@ -534,6 +534,10 @@ kiwisolver==1.4.9 \
     --hash=sha256:f68208a520c3d86ea51acf688a3e3002615a7f0238002cccc17affecc86a8a54 \
     --hash=sha256:f68e4f3eeca8fb22cc3d731f9715a13b652795ef657a13df1ad0c7dc0e9731df
     # via matplotlib
+linkify-it-py==2.2.0 \
+    --hash=sha256:3adc40eb5af300b2605fcfdb968c24e1d780a90f1f2221af7c15e5111e94d443 \
+    --hash=sha256:907acd2d17ac1fbb9ddb62c8957ccbd6158cac602231a15c3b0cd1e215f03cee
+    # via markdown-it-py
 lxml==6.1.1 \
     --hash=sha256:05a82eb6e1530a64f26225b55cbd178113bd0b5af1c2b625f25e5296742c26d2 \
     --hash=sha256:0b7e8a14c8634bf6f7a568634cb395305a6d964aeb5b7ee32248094bed3a7e2c \
@@ -625,7 +629,10 @@ markdown==3.10.1 \
 markdown-it-py==4.0.0 \
     --hash=sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147 \
     --hash=sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3
-    # via rich
+    # via
+    #   mdit-py-plugins
+    #   rich
+    #   textual
 markupsafe==3.0.3 \
     --hash=sha256:0eb9ff8191e8498cca014656ae6b8d61f39da5f95b488805da4bb029cccbfbaf \
     --hash=sha256:1085e7fbddd3be5f89cc898938f42c0b3c711fdcb37d75221de2666af647c175 \
@@ -737,6 +744,10 @@ matplotlib-inline==0.2.1 \
     # via
     #   ipykernel
     #   ipython
+mdit-py-plugins==0.6.1 \
+    --hash=sha256:214c82fb2ac524472ab6a5bcab1de80f73b50443e187f401bfd77efbc7c6481d \
+    --hash=sha256:a2bca0f039f39dbd35fb74ae1b5f998608c437463371f0ff7f49a19a17a114d0
+    # via textual
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
@@ -1061,6 +1072,7 @@ platformdirs==4.5.1 \
     #   mkdocs-get-deps
     #   moocore
     #   pint
+    #   textual
 pluggy==1.6.0 \
     --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
     --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
@@ -1244,6 +1256,7 @@ pygments==2.20.0 \
     #   ipython-pygments-lexers
     #   pytest
     #   rich
+    #   textual
     #   zensical
 pymdown-extensions==11.0.1 \
     --hash=sha256:db3943a62bab7e03af1364f0c4083e64b91fb097675a4b6cceccfbe9a77e5eb2 \
@@ -1421,6 +1434,7 @@ rich==14.3.4 \
     --hash=sha256:817e02727f2b25b40ef56f5aa2217f400c8489f79ca8f46ea2b70dd5e14558a9
     # via
     #   mujoco-mojo
+    #   textual
     #   typer
 rtree==1.4.1 \
     --hash=sha256:12de4578f1b3381a93a655846900be4e3d5f4cd5e306b8b00aa77c1121dc7e8c \
@@ -1592,6 +1606,10 @@ tabulate==0.10.0 \
     --hash=sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d \
     --hash=sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3
     # via mujoco-mojo
+textual==8.2.8 \
+    --hash=sha256:267375fd402dc8d981457212efa71f0e3365fd17bba144ba9bb3ed7563cb374a \
+    --hash=sha256:3f106a9fbc73e39dd266c9712432087de78a6d644084c7c241d6a25c3169115b
+    # via mujoco-mojo
 tinycss2==1.5.1 \
     --hash=sha256:3415ba0f5839c062696996998176c4a3751d18b7edaaeeb658c9ce21ec150661 \
     --hash=sha256:d339d2b616ba90ccce58da8495a78f46e55d4d25f9fd71dfd526f07e7d53f957
@@ -1713,6 +1731,7 @@ typing-extensions==4.15.0 \
     #   pyright
     #   sqlalchemy
     #   starlette
+    #   textual
     #   typing-inspection
 typing-inspection==0.4.2 \
     --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7 \
@@ -1821,6 +1840,7 @@ watchfiles==1.2.0 \
     --hash=sha256:f88af53d6ddaf72179ef613ddc905e6f4785f712b49b80b3bef9f3525e6194b4 \
     --hash=sha256:faea288b6f0ab1902ef08f4ca6de005dccf856c4e0c4f21b8c5fce02d90a1b08 \
     --hash=sha256:fff610d7bb2256a317bb1e96f0d7862c7aa8076733ee5df0fd41bbe76a24a4f4
+    # via mujoco-mojo
 wcwidth==0.6.0 \
     --hash=sha256:1a3a1e510b553315f8e146c54764f4fb6264ffad731b3d78088cdb1478ffbdad \
     --hash=sha256:cdc4e4262d6ef9a1a57e018384cbeb1208d8abbc64176027e2c2455c81313159
@@ -1918,7 +1938,6 @@ wrapt==1.17.3 \
 zensical==0.0.68 \
     --hash=sha256:09cb5caf676375d1586e1d6d114e9b6812e0f153120a477246b80b1478243b0e \
     --hash=sha256:2acf102837eabae9a375106ee729f99c0ac0d36255c00fdcdd64dcf41409965c \
-    --hash=sha256:46e5600dc78ca811f0079c3766038a46419bf6e9bdba30e3e1302a13b8ae9b9b \
     --hash=sha256:5b40756883e6ebe6638f91fffde6146a894731d52aee965d514202b7648be671 \
     --hash=sha256:61fe8425f22a36dfd34962811f651c0a69faaf39e38518c90f55c09b381974df \
     --hash=sha256:ac5015e27c17e8ab02c83b36858c56808dde7891a50c70a9498dbc3edd882874 \

@@ -38,6 +38,8 @@ dependencies = [
     "pytransform3d>=3.15.0",
     "tomlkit>=0.15.0",
     "python-dotenv>=1.2.3",
+    "textual>=8.2.8",
+    "watchfiles>=1.1.1",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -65,11 +67,10 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-reloaded = ["mjviser>=0.0.11", "viser>=1.1.0", "watchfiles>=1.1.1"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
 sensai = ["pydantic-ai>=2.53.0", "requests>=2.32.5"]
-all = ["mujoco-mojo[reloaded,mesh-decomp,optimize,sensai]"]
+all = ["mujoco-mojo[mesh-decomp,optimize,sensai]"]
 
 [dependency-groups]
 # previous dependencies commented out intentionally in case I need them again
@@ -112,6 +113,9 @@ packages = ["src/mujoco_mojo"]
 
 [tool.ruff]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.ruff.format]
+exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [
@@ -175,6 +179,12 @@ extra-paths = ["typings"]
 
 [tool.ty.src]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
+
+[tool.ty.rules]
+dynamic-function-decorator-return = "error"
+missing-type-argument = "error"
+possibly-unresolved-reference = "warn"
+unsound-return-statement = "error"
 
 [tool.pytest.ini_options]
 filterwarnings = [

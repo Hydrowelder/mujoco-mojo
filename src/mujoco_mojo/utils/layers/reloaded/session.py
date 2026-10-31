@@ -107,7 +107,9 @@ def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
             time.sleep(1 / fps)
 
 
-def recursive_reload(module, project_root: Path, visited: set | None = None) -> None:
+def recursive_reload(
+    module, project_root: Path, visited: set[types.ModuleType] | None = None
+) -> None:
     """Recursively reloads modules, but only if they live inside project_root."""
     import importlib
     import sys
@@ -202,17 +204,21 @@ class MojoReloaded:
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
-    _playback_speed: float = 1.0
+    playback_speed: float = 1.0
     _last_command: str = "run"
     _current_trial_dir: Path | None = None
     _job_status: JobStatus | None = None
-    _stop_event: threading.Event = field(default_factory=threading.Event)
+    stop_event: threading.Event = field(default_factory=threading.Event)
     _print_lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False, compare=False
     )
     _reprint_prompt: Callable[[], None] | None = field(
         default=None, repr=False, compare=False
     )
+    output_sink: Callable[[str], None] | None = field(
+        default=None, repr=False, compare=False
+    )
+    """When set, messages that would be printed to the terminal are passed to this callable as rich markup strings instead. The terminal UI uses it to show them in its log pane."""
     _line_buffer: str = field(default="", init=False, repr=False)
     _line_cursor: int = field(default=0, init=False, repr=False)
 
@@ -237,7 +243,10 @@ class MojoReloaded:
         console.file.flush()
 
     def _print(self, *args, **kwargs) -> None:
-        """Prints a message, redrawing the persistent prompt below it if the interactive loop is active."""
+        """Prints a message, redrawing the persistent prompt below it if the interactive loop is active. If an `output_sink` is set, the message goes there instead."""
+        if self.output_sink is not None:
+            self.output_sink(" ".join(str(a) for a in args))
+            return
         with self._print_lock:
             self._clear_line()
             console.print(*args, **kwargs)
@@ -353,7 +362,7 @@ class MojoReloaded:
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
     ) -> MjState:
         """Helper to run a generation."""
-        from .cli import _load_func
+        from ..cli import _load_func
 
         project_root = Path.cwd()
 
@@ -549,8 +558,8 @@ class MojoReloaded:
                         _sync_hook=self._sync_hook,
                         _viewer_lock=self._viewer_lock,
                         _skip_recording=not self.record,
-                        playback_speed=self._playback_speed,
-                        _stop_event=self._stop_event,
+                        playback_speed=self.playback_speed,
+                        _stop_event=self.stop_event,
                     )
                     start = time.time()
                     run_func(
@@ -937,13 +946,13 @@ class MojoReloaded:
                     logger.exception(e)
                     msg = f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
                 finally:
-                    self._stop_event.clear()
+                    self.stop_event.clear()
 
                 # clear busy before printing so the redrawn prompt shows "Awaiting command"
                 busy_event.clear()
                 self._print(msg)
 
-            self._stop_event.clear()
+            self.stop_event.clear()
             busy_event.set()
             job_thread = threading.Thread(target=_job, daemon=True)
             job_thread.start()
@@ -982,7 +991,7 @@ class MojoReloaded:
                     self._print(
                         "[bold yellow]Stopping the current run...[/bold yellow]"
                     )
-                    self._stop_event.set()
+                    self.stop_event.set()
                 else:
                     self._print(
                         "[dim]A run is in progress - type [bold]stop[/bold] or "
@@ -1066,10 +1075,8 @@ class MojoReloaded:
 
             if raw and raw != "gen":
                 try:
-                    self._playback_speed = float(raw)
-                    self._print(
-                        f"[dim]Playback speed set to {self._playback_speed}x[/]"
-                    )
+                    self.playback_speed = float(raw)
+                    self._print(f"[dim]Playback speed set to {self.playback_speed}x[/]")
                 except ValueError:
                     self._print(
                         f"[bold red]Unknown command:[/bold red] '{raw}'. Type [bold cyan]h[/bold cyan] for help."
@@ -1088,7 +1095,7 @@ class MojoReloaded:
         stop_event.set()
 
         if busy_event.is_set():
-            self._stop_event.set()
+            self.stop_event.set()
             if job_thread is not None:
                 job_thread.join(timeout=5)
 
