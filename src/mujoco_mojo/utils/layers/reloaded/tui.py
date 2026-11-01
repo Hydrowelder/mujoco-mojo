@@ -1,15 +1,20 @@
 import asyncio
+import io
 import logging
+import os
 import threading
 import time
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import ClassVar, Literal
 
-from rich.console import Group, RenderableType
+from rich.console import Console, Group, RenderableType
 from rich.errors import MarkupError
 from rich.logging import RichHandler
+from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -271,14 +276,61 @@ LogItem = logging.LogRecord | LogEvent | Text
 _FORMATTER = logging.Formatter()
 
 
-def format_record(record: logging.LogRecord) -> Text:
-    """One logging record as a line for the log pane: time, level, then the message."""
+LOCATION_KEY = "location"
+"""The key, in the style of a log line's `file:line`, that holds the text a click copies. That is the full path, while the line shows the shorter one."""
+
+
+@lru_cache(maxsize=512)
+def _path_for_editor(pathname: str, working_directory: str) -> str:
+    """The file a record came from as it is best typed into an editor: relative to the working directory when it is inside it, and the full path otherwise."""
+    try:
+        return str(Path(pathname).relative_to(working_directory))
+    except ValueError:
+        return pathname
+
+
+def record_location(record: logging.LogRecord) -> str:
+    """Where a record was logged, as `path:line`. Pasted into an editor's quick open (Ctrl+P in VS Code) it jumps to that line."""
+    return f"{_path_for_editor(record.pathname, os.getcwd())}:{record.lineno}"
+
+
+_WRAP_CONSOLE = Console(file=io.StringIO())
+"""Only used to ask Rich where it would break a line, never to print."""
+
+
+def right_aligned(text: Text, tail: Text, width: int | None) -> Text:
+    """`text` followed by `tail` flush with the right edge of a pane `width` cells wide: on the last row `text` takes up once it is wrapped if there is room, and on a row of its own if there is not. With no width to go by, `tail` just follows after two spaces."""
+    if not width:
+        return Text("  ").append_text(tail)
+    rows = text.wrap(_WRAP_CONSOLE, width)
+    used = rows[-1].cell_len if rows else 0
+    room = width - used - tail.cell_len
+    if room >= 2:
+        return Text(" " * room).append_text(tail)
+    return Text("\n" + " " * max(0, width - tail.cell_len)).append_text(tail)
+
+
+def record_full_location(record: logging.LogRecord) -> str:
+    """Where a record was logged, as `path:line` with the file's full path. This is what a click copies, so it works from any folder, while the log shows the shorter `record_location`."""
+    return f"{os.path.abspath(record.pathname)}:{record.lineno}"
+
+
+def format_record(record: logging.LogRecord, width: int | None = None) -> Text:
+    """One logging record as a line for the log pane: time, level, the message, then where it was logged, flush right when the pane's `width` is known. Clicking the location copies it."""
     text = Text()
     text.append(
         time.strftime("%H:%M:%S ", time.localtime(record.created)), style=INK_MUTED
     )
     text.append(f"{record.levelname:<9}", style=_LEVEL_STYLES.get(record.levelno, ""))
     text.append_text(render_markup(record.getMessage()))
+    location = record_location(record)
+    where = Text(
+        location,
+        style=Style(
+            color=str(INK_MUTED), meta={LOCATION_KEY: record_full_location(record)}
+        ),
+    )
+    text.append_text(right_aligned(text, where, width))
     if record.exc_info:
         text.append(
             "\n" + _FORMATTER.formatException(record.exc_info), style=str(DANGER)
@@ -286,14 +338,14 @@ def format_record(record: logging.LogRecord) -> Text:
     return text
 
 
-def render_log_item(item: LogItem) -> Text:
-    """Turns whatever was waiting into text, on the UI side so the thread that logged never pays for it."""
+def render_log_item(item: LogItem, width: int | None = None) -> Text:
+    """Turns whatever was waiting into text, on the UI side so the thread that logged never pays for it. `width` is how wide the log pane is, which lets a record's location sit flush right."""
     try:
         if isinstance(item, Text):
             return item
         if isinstance(item, LogEvent):
             return render_markup(item.message) if item.markup else Text(item.message)
-        return format_record(item)
+        return format_record(item, width)
     except Exception as error:
         return Text(f"(a log line could not be shown: {error})", style=str(DANGER))
 
@@ -502,6 +554,16 @@ class ExplainButton(Button):
         self.tooltip = "Say what the command you have typed will do"
 
 
+CONTROL_ICONS: dict[str, str] = {
+    "gen": "↻",
+    "run": "▶",
+    "pause": "‖",
+    "step": "⇥",
+    "stop": "■",
+}
+"""The symbol on each control button, by the command it types. Each must be one cell wide in a monospace font, or the row stops lining up. Plain geometric and arrow characters are used because they exist in nearly every font, unlike the emoji style media symbols."""
+
+
 class ControlButton(Button):
     """One of the buttons that control a run. Pressing it types its `command`. It never takes focus, so typing carries on."""
 
@@ -556,7 +618,9 @@ class ControlBar(Horizontal):
                 ),
                 None,
             )
-            text = label if key is None else f"{label} [dim]{escape_markup(key)}[/dim]"
+            text = f"{CONTROL_ICONS[command]} {label}"
+            if key is not None:
+                text += f" [dim]{escape_markup(key)}[/dim]"
             yield ControlButton(
                 command, text, tooltip, disabled=not self._enabled[command]
             )
@@ -833,6 +897,14 @@ class ReloadedApp(App[None]):
         if isinstance(event.input, CommandInput):
             self._refresh_explain()
 
+    def on_click(self, event: events.Click) -> None:
+        # a log line's file and line copy themselves, ready to paste into an editor's quick open
+        location = event.style.meta.get(LOCATION_KEY)
+        if isinstance(location, str):
+            event.stop()
+            self.copy_to_clipboard(location)
+            self.notify(location, title="Copied to the clipboard")
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if isinstance(event.button, ExplainButton):
             event.stop()
@@ -905,9 +977,9 @@ class ReloadedApp(App[None]):
             None,
         )
         message = (
-            "Type [b]exit[/b] to quit."
+            "Type [b]quit[/b] to quit."
             if quit_key is None
-            else f"Press [b]{quit_key}[/b], or type [b]exit[/b], to quit."
+            else f"Press [b]{quit_key}[/b], or type [b]quit[/b], to quit."
         )
         self.notify(
             message,
@@ -1000,7 +1072,8 @@ class ReloadedApp(App[None]):
         if log is None:
             return
         items, dropped = self._logs.take(LOG_LINES_PER_FLUSH)
-        lines = [render_log_item(item) for item in items]
+        width = log.scrollable_content_region.width
+        lines = [render_log_item(item, width) for item in items]
         if dropped:
             lines.insert(
                 0,
@@ -1010,7 +1083,8 @@ class ReloadedApp(App[None]):
                 ),
             )
         if lines:
-            log.write(Text("\n").join(lines))
+            # at the pane's own width, so a location flush right is flush with the edge and long lines wrap there
+            log.write(Text("\n").join(lines), width=width or None)
 
     def _install_log_handler(self) -> None:
         root = logging.getLogger()

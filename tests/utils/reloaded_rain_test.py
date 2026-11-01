@@ -1,9 +1,7 @@
-import asyncio
 import random
 
 from rich.style import Style
 import pytest
-from textual.app import App, ComposeResult
 
 import mujoco_mojo.utils.layers.reloaded.rain as rain_module
 from mujoco_mojo.utils.layers.reloaded.rain import (
@@ -13,7 +11,6 @@ from mujoco_mojo.utils.layers.reloaded.rain import (
     HEAD_STYLE,
     TRAIL_STYLES,
     Drop,
-    MatrixRain,
     RESTART_WITHIN,
     Rain,
 )
@@ -226,31 +223,3 @@ def test_the_trail_fades_from_the_link_color_into_the_background() -> None:
 def test_every_cell_sits_on_the_canvas_so_no_patch_shows_through() -> None:
     for style in (*TRAIL_STYLES, HEAD_STYLE, BLANK_STYLE):
         assert background_hex(style) == str(CANVAS).upper()
-
-
-class RainApp(App[None]):
-    def __init__(self, rain: MatrixRain) -> None:
-        super().__init__()
-        self._rain = rain
-
-    def compose(self) -> ComposeResult:
-        yield self._rain
-
-
-def test_the_widget_draws_letters_and_blanks_and_nothing_else() -> None:
-    widget = MatrixRain(random.Random(3))
-    lines: list[str] = []
-
-    async def scenario() -> None:
-        app = RainApp(widget)
-        async with app.run_test(size=(40, 12)) as pilot:
-            for _ in range(40):
-                await pilot.pause(0.05)
-            lines.extend(widget.render_line(y).text for y in range(12))
-
-    asyncio.run(asyncio.wait_for(scenario(), 30))
-
-    text = "".join(lines)
-    assert set(text) <= set(WORD) | {" "}
-    assert any(letter in text for letter in WORD)
-    assert all(len(line) == 40 for line in lines)

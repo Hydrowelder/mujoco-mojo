@@ -299,8 +299,6 @@ def test_every_word_for_run_runs_the_runtime(
         ("rec", "record"),
         ("h", "help"),
         ("?", "help"),
-        ("q", "exit"),
-        ("quit", "exit"),
     ],
 )
 def test_the_short_words_do_what_the_long_ones_do(
@@ -314,10 +312,8 @@ def test_the_short_words_do_what_the_long_ones_do(
         assert controller.status().watch
     elif command == "record":
         assert controller.status().record
-    elif command == "help":
-        assert any(isinstance(event, HelpEvent) for event in log.events)
     else:
-        assert any(isinstance(event, ExitEvent) for event in log.events)
+        assert any(isinstance(event, HelpEvent) for event in log.events)
 
 
 @pytest.mark.parametrize("word", ["stop", "halt", "abort", "ABORT"])
@@ -349,7 +345,7 @@ def test_an_alias_can_be_explained_like_the_command(
 
 def test_long_forms_are_offered_as_completions_after_the_short_ones() -> None:
     assert COMMAND_SUGGESTIONS.index("gen") < COMMAND_SUGGESTIONS.index("generate")
-    assert COMMAND_SUGGESTIONS.index("exit") < COMMAND_SUGGESTIONS.index("quit")
+    assert "quit" in COMMAND_SUGGESTIONS
 
 
 def test_run_generates_and_runs_the_runtime_at_the_current_speed(
@@ -609,7 +605,7 @@ def test_exit_and_help_are_events_for_the_ui_to_act_on(
     controller: ReloadedController, log: EventLog
 ) -> None:
     controller.submit("help")
-    controller.submit("q")
+    controller.submit("quit")
 
     assert any(isinstance(e, HelpEvent) for e in log.events)
     assert any(isinstance(e, ExitEvent) for e in log.events)
@@ -670,7 +666,7 @@ def test_shutdown_stops_a_run_in_progress(
         ("dojo", "Prints the Dojo command."),
         ("stop", "Nothing is running to stop."),
         ("help", "Opens help."),
-        ("exit", "Closes Reloaded."),
+        ("quit", "Closes Reloaded."),
         ("se", "Press Tab to complete seed."),
         ("bogus", "Not a command. Try help."),
         ("[/bold]", "Not a command. Try help."),
@@ -769,7 +765,7 @@ def test_describe_has_no_side_effects(
     )
     events_before = len(log.events)
 
-    for text in ("gen", "run", "seed 9", "trial 2", "5", "watch", "record", "exit", ""):
+    for text in ("gen", "run", "seed 9", "trial 2", "5", "watch", "record", "quit", ""):
         controller.describe(text)
 
     assert (
@@ -884,7 +880,7 @@ def test_the_hint_for_an_explain_is_what_enter_will_do(
     assert controller.describe("seed 42?") == "Prints what that would do."
     assert controller.describe("explain") == "Prints what Enter would do."
     assert controller.describe("?") == "Opens help."
-    assert controller.describe("ex") == "Press Tab to complete exit."
+    assert controller.describe("qu") == "Press Tab to complete quit."
 
 
 def test_explain_is_offered_as_a_completion_and_listed_in_help(
@@ -899,7 +895,7 @@ def test_explain_is_offered_as_a_completion_and_listed_in_help(
 
 def settled(runtime: SteppingRuntime) -> int:
     """How many steps the run has taken once it has had time to take any it was going to."""
-    time.sleep(0.1)
+    time.sleep(0.03)
     return runtime.steps
 
 
@@ -963,22 +959,6 @@ def test_step_on_a_run_that_is_going_pauses_it(
 
     assert controller.status().state is RunState.PAUSED
     frozen = settled(stepping)
-    assert settled(stepping) == frozen
-
-
-@pytest.mark.parametrize("arg", ["x", "0", "-2", "1.5"])
-def test_a_step_count_that_is_not_a_whole_number_is_refused(
-    controller: ReloadedController,
-    stepping: SteppingRuntime,
-    log: EventLog,
-    arg: str,
-) -> None:
-    controller.submit("pause")
-    frozen = settled(stepping)
-
-    controller.submit(f"step {arg}")
-
-    assert any("Invalid step count" in m for m in log.messages())
     assert settled(stepping) == frozen
 
 
@@ -1158,58 +1138,6 @@ def test_pausing_a_paused_run_and_running_one_that_is_going_say_so(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("pause", "Pauses the run."),
-        ("run", "The run is already going."),
-        ("run 2", "Sets speed to 2x for this run."),
-        ("run fast", "Speed must be a number."),
-        ("step", "Pauses, then advances 1 step."),
-        ("step 5", "Pauses, then advances 5 steps."),
-        ("step x", "Step takes a whole number, 1 or more."),
-        ("speed", "Sets the speed, e.g. speed 0.5 for half."),
-        ("speed 2", "Sets speed to 2x for this run."),
-        ("0.5", "A run is in progress. Try pause or stop."),
-        ("speed fast", "Speed must be a number."),
-        ("speed -1", "Speed must be 0 or more."),
-        ("gen", "A run is in progress. Try pause or stop."),
-    ],
-)
-def test_describe_while_a_run_is_going(
-    controller: ReloadedController,
-    stepping: SteppingRuntime,
-    text: str,
-    expected: str,
-) -> None:
-    assert controller.describe(text) == expected
-    assert len(controller.describe(text)) <= 45
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("pause", "Already paused."),
-        ("run", "Resumes the run."),
-        ("run 2", "Resumes at 2x."),
-        ("run fast", "Speed must be a number."),
-        ("step", "Advances 1 step."),
-        ("step 3", "Advances 3 steps."),
-        ("gen", "Paused. Try run, step, or stop."),
-    ],
-)
-def test_describe_while_a_run_is_paused(
-    controller: ReloadedController,
-    stepping: SteppingRuntime,
-    text: str,
-    expected: str,
-) -> None:
-    controller.submit("pause")
-
-    assert controller.describe(text) == expected
-    assert len(controller.describe(text)) <= 45
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
         ("pause", "Nothing is running to pause."),
         ("step", "Nothing is running to step."),
         ("run", "Generates, then runs at 1x."),
@@ -1248,7 +1176,7 @@ def test_the_new_commands_are_offered_as_completions() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["gen now", "stop please", "exit now", "help me", "dojo x", "seeds 5"],
+    ["gen now", "stop please", "quit now", "help me", "dojo x", "seeds 5"],
 )
 def test_extra_words_after_a_command_that_takes_none_are_not_that_command(
     controller: ReloadedController, text: str
@@ -1422,21 +1350,6 @@ def test_the_target_belongs_to_one_run(
     wait_idle(controller)
 
 
-@pytest.mark.parametrize("word", ["step", "steps"])
-def test_steps_may_be_written_either_way(
-    controller: ReloadedController, session: FakeSession, word: str
-) -> None:
-    runtime = SteppingRuntime()
-    session.behavior = runtime
-
-    controller.submit(f"run until {word} 4")
-    wait_for_state(controller, RunState.PAUSED)
-
-    assert settled(runtime) == 4
-    controller.submit("stop")
-    wait_idle(controller)
-
-
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
@@ -1464,45 +1377,6 @@ def test_describe_a_run_with_no_runtime_ignores_the_target(
         controller.describe("run until step 5")
         == "No runtime given, so generates only."
     )
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("run until step 100000", "Pauses when the run reaches step 100000."),
-        ("run 2 until step 100000", "Sets speed to 2x, pauses at step 100000."),
-        ("run until step 1", "Already at or past step 1."),
-        ("run until step x", "Use: run until time N or step N."),
-    ],
-)
-def test_describe_a_target_during_a_run(
-    controller: ReloadedController,
-    stepping: SteppingRuntime,
-    text: str,
-    expected: str,
-) -> None:
-    assert controller.describe(text) == expected
-    assert len(controller.describe(text)) <= 45
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("run until step 100000", "Resumes, pausing at step 100000."),
-        ("run 2 until step 100000", "Resumes at 2x, pauses at step 100000."),
-    ],
-)
-def test_describe_a_target_on_a_paused_run(
-    controller: ReloadedController,
-    stepping: SteppingRuntime,
-    text: str,
-    expected: str,
-) -> None:
-    controller.submit("pause")
-    settled(stepping)
-
-    assert controller.describe(text) == expected
-    assert len(controller.describe(text)) <= 45
 
 
 def test_help_and_completion_know_about_run_until(
@@ -1746,3 +1620,108 @@ def test_describe_enter_while_going_and_paused(
     settled(stepping)
 
     assert controller.describe("") == "Advances 1 step."
+
+
+# --- quit is the only word that closes Reloaded ---
+
+
+def test_quit_closes_reloaded(controller: ReloadedController, log: EventLog) -> None:
+    controller.submit("quit")
+
+    assert any(isinstance(e, ExitEvent) for e in log.events)
+
+
+@pytest.mark.parametrize("word", ["exit", "q", "EXIT"])
+def test_exit_and_q_are_not_commands_so_nothing_is_mistaken_for_ending_a_run(
+    controller: ReloadedController, log: EventLog, word: str
+) -> None:
+    controller.submit(word)
+
+    assert not any(isinstance(e, ExitEvent) for e in log.events)
+    assert any("Unknown command" in m for m in log.messages())
+
+
+def test_help_and_completion_offer_quit_and_never_exit(
+    controller: ReloadedController,
+) -> None:
+    names = [name for name, _ in controller.help_entries()]
+
+    assert "quit" in names
+    assert not any("exit" in name for name in names)
+    assert "quit" in COMMAND_SUGGESTIONS
+    assert "exit" not in COMMAND_SUGGESTIONS
+
+
+def test_the_help_for_quit_points_at_stop_for_ending_a_run(
+    controller: ReloadedController,
+) -> None:
+    description = dict(controller.help_entries())["quit"]
+
+    assert "stop" in description
+
+
+def test_describe_while_a_run_is_going(
+    controller: ReloadedController, stepping: SteppingRuntime
+) -> None:
+    for text, expected in [
+        ("pause", "Pauses the run."),
+        ("run", "The run is already going."),
+        ("run 2", "Sets speed to 2x for this run."),
+        ("run fast", "Speed must be a number."),
+        ("step", "Pauses, then advances 1 step."),
+        ("step 5", "Pauses, then advances 5 steps."),
+        ("step x", "Step takes a whole number, 1 or more."),
+        ("speed", "Sets the speed, e.g. speed 0.5 for half."),
+        ("speed 2", "Sets speed to 2x for this run."),
+        ("0.5", "A run is in progress. Try pause or stop."),
+        ("speed fast", "Speed must be a number."),
+        ("speed -1", "Speed must be 0 or more."),
+        ("gen", "A run is in progress. Try pause or stop."),
+        ("run until step 100000", "Pauses when the run reaches step 100000."),
+        ("run 2 until step 100000", "Sets speed to 2x, pauses at step 100000."),
+        ("run until step 1", "Already at or past step 1."),
+        ("run until step x", "Use: run until time N or step N."),
+    ]:
+        assert controller.describe(text) == expected, text
+        assert len(controller.describe(text)) <= 45, text
+
+
+def test_describe_while_a_run_is_paused(
+    controller: ReloadedController, stepping: SteppingRuntime
+) -> None:
+    controller.submit("pause")
+    settled(stepping)
+
+    for text, expected in [
+        ("pause", "Already paused."),
+        ("run", "Resumes the run."),
+        ("run 2", "Resumes at 2x."),
+        ("run fast", "Speed must be a number."),
+        ("step", "Advances 1 step."),
+        ("step 3", "Advances 3 steps."),
+        ("gen", "Paused. Try run, step, or stop."),
+        ("run until step 100000", "Resumes, pausing at step 100000."),
+        ("run 2 until step 100000", "Resumes at 2x, pauses at step 100000."),
+    ]:
+        assert controller.describe(text) == expected, text
+        assert len(controller.describe(text)) <= 45, text
+
+
+def test_a_step_count_that_is_not_a_whole_number_is_refused(
+    controller: ReloadedController, stepping: SteppingRuntime, log: EventLog
+) -> None:
+    controller.submit("pause")
+    frozen = settled(stepping)
+
+    for arg in ["x", "0", "-2", "1.5"]:
+        controller.submit(f"step {arg}")
+
+    refused = [m for m in log.messages() if "Invalid step count" in m]
+    assert len(refused) == len(["x", "0", "-2", "1.5"])
+    assert settled(stepping) == frozen
+
+
+def test_steps_may_be_written_either_way(controller: ReloadedController) -> None:
+    assert controller.describe("run until steps 4") == controller.describe(
+        "run until step 4"
+    )

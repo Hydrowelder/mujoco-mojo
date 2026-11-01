@@ -61,9 +61,11 @@ Type a command and press `ENTER`. Press `TAB` to complete the one you are typing
 | `explain seed 42`                   | Say what a command would do without running it. Ending a command with `?` does the same.                                                                           |
 | `stop`, `halt`, `abort`             | Abort the run in progress.                                                                                                                                         |
 | `help`, `h`, `?`                    | Show every command and key.                                                                                                                                        |
-| `exit`, `quit`, `q`                 | Safely close the viewer and Reloaded.                                                                                                                              |
+| `quit`                              | Close the viewer and Reloaded. It is the only word that does, so `stop` is the one that ends a run.                                                                |
 
 A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
+
+Anything your code logs with Python's `logging` ends with the file and line that logged it, such as `src/my_sim/robot.py:42`, flush with the right edge of the log. A long message wraps, and the location goes on its last row, or on a row of its own if there is no room beside the end of the message. The path is relative to the folder you launched from when the file is inside it. Click the location to copy it with the full path, so it works from any folder, then paste it into your editor's quick open to jump straight there (`Ctrl+P` in VS Code). Messages from Reloaded itself and anything printed with `print` have no location.
 
 ### Controlling a Run
 
@@ -89,7 +91,7 @@ Pausing holds the run inside `rm.step(...)`, the call your runtime already makes
 | `Esc` | Stop the run in progress.                    |
 | `F10` | Quit.                                        |
 
-The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same as the keys and show the key beside each label. A button that does not apply right now is dimmed, so Stop only lights up during a run and Run lights up again when a run is paused. You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
+The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same as the keys. Each has an icon and shows its key beside the label. A button that does not apply right now is dimmed, so Stop only lights up during a run and Run lights up again when a run is paused. You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
 
 Closing the viewer window also closes Reloaded.
 
@@ -109,7 +111,7 @@ You can also set one from the command line:
 mujoco-mojo settings set reloaded.keys.generate "f5, ctrl+g"
 ```
 
-The actions are `generate`, `run`, `pause`, `step`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. `pause` is `F12` and `step` has no key by default, because no function key is left that an editor terminal passes on, so give it one if you want it. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`. A key can only do one thing, and a list can be empty to leave an action without a key. Typing `exit` always closes Reloaded.
+The actions are `generate`, `run`, `pause`, `step`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. `pause` is `F12` and `step` has no key by default, because no function key is left that an editor terminal passes on, so give it one if you want it. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`. A key can only do one thing, and a list can be empty to leave an action without a key. Typing `quit` always closes Reloaded.
 
 !!! tip
 

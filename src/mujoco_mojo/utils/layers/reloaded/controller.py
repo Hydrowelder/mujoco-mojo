@@ -44,7 +44,6 @@ COMMAND_SUGGESTIONS = (
     "dojo",
     "stop",
     "help",
-    "exit",
     "explain ",
     "generate",
     "quit",
@@ -87,7 +86,6 @@ _COMMAND_WORDS = (
     "step",
     "speed",
     "help",
-    "exit",
     "quit",
     "explain",
 )
@@ -98,7 +96,6 @@ _ALIASES = {
     "record": ("rec",),
     "stop": ("halt", "abort"),
     "help": ("h", "?"),
-    "exit": ("quit", "q"),
     "pause": ("p",),
 }
 """Other words for each command that takes no argument."""
@@ -301,7 +298,7 @@ class ReloadedController:
             ("<cmd>?", "The same, written as a question (a lone ? opens help)"),
             (_words("stop"), "Abort the run in progress"),
             (_words("help"), "Show this list"),
-            (_words("exit"), "Close Reloaded"),
+            ("quit", "Close Reloaded. To end a run, use stop"),
         ]
         return entries
 
@@ -342,7 +339,7 @@ class ReloadedController:
                 return "Generates the model only."
             case ("run", _):
                 return self._describe_run(arg, status.playback_speed)
-            case ("exit", ""):
+            case ("quit", ""):
                 return "Closes Reloaded."
             case ("help", ""):
                 return "Opens help."
@@ -542,7 +539,7 @@ class ReloadedController:
             return
 
         match (command, arg):
-            case ("exit", ""):
+            case ("quit", ""):
                 self._emit(ExitEvent())
             case ("stop", ""):
                 self._log("[dim]No run is currently in progress.[/dim]")

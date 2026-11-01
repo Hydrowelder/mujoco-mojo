@@ -15,8 +15,8 @@ from mujoco_mojo.runtime import (
     TargetKind,
 )
 
-HELD = 0.15
-"""Long enough that a thread which should be blocked has certainly had time to get past a gate that is not holding it."""
+HELD = 0.05
+"""Long enough that a thread which should be blocked has certainly had time to get past a gate that is not holding it. A thread is only given this long once it has started, so a slow machine cannot make a check pass by never getting to run."""
 
 
 @dataclass
@@ -29,18 +29,21 @@ class Waiter:
     steps: int = 0
     held: list[float] = field(default_factory=list)
     done: threading.Event = field(default_factory=threading.Event)
+    started: threading.Event = field(default_factory=threading.Event)
 
     def start(self) -> "Waiter":
         threading.Thread(target=self._wait, daemon=True).start()
         return self
 
     def _wait(self) -> None:
+        self.started.set()
         self.held.append(
             self.control.wait_while_paused(self.stop, self.sim_time, self.steps)
         )
         self.done.set()
 
     def blocked(self) -> bool:
+        assert self.started.wait(5)
         return not self.done.wait(HELD)
 
 
@@ -120,11 +123,10 @@ def test_the_pump_is_called_while_held_and_not_otherwise() -> None:
     control.pause()
     waiter = Waiter(control).start()
     assert waiter.blocked()
-    held_pumps = len(pumps)
+    # a held run keeps being pumped, not just once
+    wait_until(lambda: len(pumps) >= 3)
     control.resume()
     assert waiter.done.wait(5)
-
-    assert held_pumps >= 3
 
 
 def test_a_speed_is_taken_once() -> None:

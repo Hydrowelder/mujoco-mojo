@@ -665,7 +665,7 @@ class ReloadedKeySettings(BaseModel):
     quit: list[str] = Field(
         default_factory=lambda: ["f10", "ctrl+q"],
         title="Quit",
-        description="Keys that close Reloaded. Typing `exit` always works too.",
+        description="Keys that close Reloaded. Typing `quit` always works too.",
     )
 
     @field_validator("*", mode="before")
