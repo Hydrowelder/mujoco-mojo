@@ -982,7 +982,7 @@ class JobStatus(MojoBaseModel):
             )
         return bins
 
-    def to_monitor_json(self, n_proc: int | None = None) -> dict:
+    def to_monitor_json(self, n_proc: int | None = None) -> dict[str, Any]:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         from mujoco_mojo.runtime.signal_manager import SignalManager
 

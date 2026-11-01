@@ -1509,14 +1509,8 @@ class ModelProvider(StrEnum):
         # in most providers' __init__ docstrings), which isn't a credential - skip
         # those rather than trying to anchor on the "api_key" parameter specifically,
         # since a few providers (Bedrock, Snowflake) don't have one at all.
-        return next(
-            (
-                match
-                for match in _ENV_VAR_NAME_PATTERN.findall(source)
-                if not match.endswith("BASE_URL")
-            ),
-            None,
-        )
+        names: list[str] = _ENV_VAR_NAME_PATTERN.findall(source)
+        return next((name for name in names if not name.endswith("BASE_URL")), None)
 
 
 _MODEL_PROVIDER_IDS: dict[ModelProvider, str] = {

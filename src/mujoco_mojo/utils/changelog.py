@@ -97,7 +97,8 @@ def _fetch_remote_text() -> str:
     with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT_SECONDS) as resp:
         if resp.status != 200:
             raise ValueError(f"Fetching {CHANGELOG_URL} returned status {resp.status}")
-        return resp.read().decode("utf-8")
+        body: bytes = resp.read()
+        return body.decode("utf-8")
 
 
 _cache: tuple[float, list[ChangelogEntry]] | None = None

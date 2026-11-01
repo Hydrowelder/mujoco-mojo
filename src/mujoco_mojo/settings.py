@@ -192,7 +192,7 @@ _SBATCH_PREFIX = "sbatch."
 def _is_color_widget_field(info: Any) -> bool:
     """Whether a `model_fields[name]` `FieldInfo` was tagged `json_schema_extra={"x-widget": "color"}` - the same tag the Dojo settings panel uses to pick a color-picker widget, reused here so a field only needs to be marked once to get both the frontend widget and this backend validation, instead of also being hand-listed in a separate tuple."""
     extra = info.json_schema_extra
-    return isinstance(extra, dict) and extra.get("x-widget") == "color"
+    return bool(isinstance(extra, dict) and extra.get("x-widget") == "color")
 
 
 class VisualizationSettings(BaseModel):

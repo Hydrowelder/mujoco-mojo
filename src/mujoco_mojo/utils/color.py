@@ -313,8 +313,8 @@ class Color(StrEnum):
     def rgba_to_hex(cls, rgba: Vec4) -> str:
         """Converts normalized RGBA to '#RRGGBB' (alpha is discarded)."""
         rgba = np.asarray(rgba, dtype=float)
-        rgb255 = (rgba[:3] * 255).astype(int)
-        return "#{:02x}{:02x}{:02x}".format(*rgb255)
+        r, g, b = (int(v) for v in rgba[:3] * 255)
+        return f"#{r:02x}{g:02x}{b:02x}"
 
     @classmethod
     def rgba_to_rgba255(cls, rgba: Vec4) -> Vec4:
@@ -336,9 +336,9 @@ class Color(StrEnum):
             msg = f"{v!r} is not a valid Color name or hex code."
             raise ValueError(msg)
         if _HEX_COLOR_RE.match(v):
-            hex_upper = v.upper()
+            hex_upper: str = v.upper()
             return _HEX_TO_COLOR_NAME.get(hex_upper, hex_upper)
-        upper = v.upper()
+        upper: str = v.upper()
         if upper in cls.__members__:
             return upper
         msg = f"'{v}' is not a valid Color name (e.g. 'ROSE_500') or hex code (e.g. '#F43F5E')."

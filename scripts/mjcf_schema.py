@@ -24,6 +24,7 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 from rich.console import Console
@@ -512,7 +513,7 @@ def _splice_groups(schema: Schema) -> None:
         element.constraints = expanded_constraints
 
 
-def _tracked(iterator, total: int) -> Iterator:
+def _tracked(iterator, total: int) -> Iterator[Any]:
     from rich.progress import track
 
     yield from track(

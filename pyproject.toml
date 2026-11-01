@@ -167,14 +167,12 @@ ignore = [
 
 [tool.pyright]
 stubPath = "./typings"
-venvPath = ".."
+venvPath = "."
 venv = ".venv"
 ignore = ["typings", "scripts/templating/sensor_template.py"]
 
 [tool.ty.environment]
-# the dev environment lives next to this project, like [tool.pyright] above
-python = "../.venv"
-# the generated MuJoCo stubs (see CLAUDE.md), which MuJoCo does not ship
+python = ".venv"
 extra-paths = ["typings"]
 
 [tool.ty.src]

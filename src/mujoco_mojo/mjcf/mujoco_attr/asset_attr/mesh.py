@@ -864,7 +864,7 @@ class _MeshCountSpacingDim(_MeshCountSpacing, ABC):
     @property
     def params(self) -> tuple[float, ...]:
         """Packs `count`/`spacing`/`dim` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
-        return (*self.count, *self.spacing, self.dim)
+        return (*self.count, *(float(v) for v in self.spacing), self.dim)
 
 
 class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
@@ -875,7 +875,7 @@ class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
     @property
     def params(self) -> tuple[float, ...]:
         """Packs `count`/`spacing` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
-        return (*self.count, *self.spacing)
+        return (*self.count, *(float(v) for v in self.spacing))
 
     @model_validator(mode="after")
     def validate_count(self) -> Self:

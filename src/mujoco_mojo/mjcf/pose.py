@@ -57,15 +57,19 @@ class PoseBase(Pos, OrientationBase, ABC):
 
         # pose composition
         if isinstance(other, PoseBase):
-            new_r = self.as_matrix() @ other.as_matrix()
-            new_p = self.as_matrix() @ other.pos + self.pos
-            return Quat.from_matrix(new_r).as_pose(pos=new_p)
+            return self.compose(other)
 
         return NotImplemented
 
+    def compose(self, other: PoseBase) -> PoseQuat:
+        """Returns the pose that applies `other` first and then this one, which is what `self * other` gives for two poses."""
+        new_r = self.as_matrix() @ other.as_matrix()
+        new_p = self.as_matrix() @ other.pos + self.pos
+        return Quat.from_matrix(new_r).as_pose(pos=new_p)
+
     def expressed_in(self, target: PoseBase) -> PoseQuat:
         """Returns this pose expressed relative to a target frame."""
-        return target.inv() * self
+        return target.inv().compose(self)
 
     @property
     def as_pos(self) -> Pos:

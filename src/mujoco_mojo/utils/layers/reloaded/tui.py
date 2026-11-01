@@ -16,10 +16,12 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.content import Content
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.suggester import SuggestFromList
+from textual.widget import Widget
 from textual.widgets import Button, Footer, Input, RichLog, Static
 
 from mujoco_mojo.utils.log import TerminalFilter
@@ -431,7 +433,10 @@ class StatusBar(Horizontal):
 
     def _fit_title(self) -> None:
         # the title takes whatever width the fields leave over
-        title = self.query_one("#title", Static)
+        try:
+            title = self.query_one("#title", Static)
+        except NoMatches:
+            return
         title.update(fit_title(self._title, self._subtitle, title.size.width))
 
 
@@ -745,29 +750,49 @@ class ReloadedApp(App[None]):
         self._refresh_explain()
         self._refresh_placeholder()
 
+    def _find[W: Widget](
+        self, widget_type: type[W], selector: str | None = None
+    ) -> W | None:
+        """The widget, or `None` once the screen is being torn down. Late messages and timer ticks can still arrive then, and must not crash the app on its way out."""
+        try:
+            if selector is None:
+                return self.query_one(widget_type)
+            return self.query_one(selector, widget_type)
+        except NoMatches:
+            return None
+
     def _refresh_explain(self) -> None:
-        hint = self.query_one("#hint", Static)
-        if hint.display:
-            draft = self.query_one(CommandInput).value
-            hint.update(Text(self._controller.describe(draft), style=INK_SECONDARY))
+        hint = self._find(Static, "#hint")
+        command = self._find(CommandInput)
+        if hint is not None and command is not None and hint.display:
+            hint.update(
+                Text(self._controller.describe(command.value), style=INK_SECONDARY)
+            )
 
     def _refresh_placeholder(self) -> None:
         # with the hint showing, it already says what Enter does
-        command = self.query_one(CommandInput)
-        if self.query_one("#hint", Static).display:
+        command = self._find(CommandInput)
+        hint = self._find(Static, "#hint")
+        if command is None or hint is None:
+            return
+        if hint.display:
             command.placeholder = CommandInput.PLACEHOLDER
         else:
             last = self._controller.status().last_command
             command.placeholder = f"Press Enter to repeat '{last}', or type a command"
 
     def _apply_status(self, status: ControllerStatus) -> None:
-        self.query_one("#status", StatusBar).show(status)
+        bar = self._find(StatusBar)
+        if bar is not None:
+            bar.show(status)
         self._refresh_placeholder()
         self._refresh_explain()
-        summary = run_summary(status)
-        self.query_one("#log", RichLog).border_subtitle = (
-            None if summary is None else Content.from_rich_text(summary)
-        )
+        log = self._find(RichLog)
+        if log is not None:
+            summary = run_summary(status)
+            log.border_subtitle = (
+                None if summary is None else Content.from_rich_text(summary)
+            )
 
     def _deliver(self, event: ControllerEvent) -> None:
         # log lines share one ordered buffer with the logging records, so they cannot overtake each other
@@ -777,6 +802,9 @@ class ReloadedApp(App[None]):
             self.post_message(ControllerMessage(event))
 
     def _flush_logs(self) -> None:
+        log = self._find(RichLog)
+        if log is None:
+            return
         items, dropped = self._logs.take(LOG_LINES_PER_FLUSH)
         lines = [render_log_item(item) for item in items]
         if dropped:
@@ -788,7 +816,7 @@ class ReloadedApp(App[None]):
                 ),
             )
         if lines:
-            self.query_one("#log", RichLog).write(Text("\n").join(lines))
+            log.write(Text("\n").join(lines))
 
     def _install_log_handler(self) -> None:
         root = logging.getLogger()

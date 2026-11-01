@@ -68,7 +68,9 @@ class RuntimeManager:
     _stop_event: threading.Event | None = None
 
     _resolved: bool = False
-    _context_token: Token | None = field(default=None, init=False, repr=False)
+    _context_token: Token[RuntimeManager] | None = field(
+        default=None, init=False, repr=False
+    )
 
     _mojo_model: MojoModel | None = field(default=None, init=False, repr=False)
     _last_state: MjState | None = field(default=None, init=False, repr=False)

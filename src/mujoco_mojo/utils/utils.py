@@ -74,7 +74,7 @@ def get_local_ip() -> str:
     try:
         # Does not actually need to connect to 8.8.8.8 to work
         s.connect(("8.8.8.8", 1))
-        ip = s.getsockname()[0]
+        ip: str = s.getsockname()[0]
     except Exception:
         ip = "127.0.0.1"
     finally:

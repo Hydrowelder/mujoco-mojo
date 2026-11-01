@@ -58,7 +58,7 @@ hide:
 
 ---
 
-A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
+A **complete MJCF lifecycle and trial orchestration suite** for [MuJoCo](https://github.com/google-deepmind/mujoco), powered by **Pydantic v2**.
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 
@@ -88,7 +88,6 @@ Install `mujoco-mojo` in your project using the following:
 
     To get the most out of MuJoCo Mojo, select additional extras from this list (or use `[all]` to install all of them):
 
-    - `[reloaded]`: the [hot-reloading development loop](#reloaded), including its OpenGL/Viser visualizers.
     - `[mesh-decomp]`: concave mesh decomposition via CoACD.
     - `[optimize]`: Bayesian optimization studies powered by Optuna.
 

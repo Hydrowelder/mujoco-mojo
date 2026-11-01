@@ -42,7 +42,7 @@ import textwrap
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 import requests
 from pydantic_core import PydanticUndefined
@@ -374,8 +374,8 @@ def _class_location(cls: type) -> str:
     return f"{path}:{line}"
 
 
-def build_python_registry() -> dict[str, dict]:
-    registry: dict[str, dict] = {}
+def build_python_registry() -> dict[str, dict[str, Any]]:
+    registry: dict[str, dict[str, Any]] = {}
     for cls in collect_xml_model_classes():
         tag = getattr(cls, "tag", "")
         if not tag:
@@ -461,7 +461,7 @@ def _spec_attr_default(spec_attr: SpecAttr) -> tuple[str, str | None]:
         return "optional", None
     match = re.match(r'^"([^"]*)"', stripped)
     if match:
-        return "literal", match.group(1)
+        return "literal", str(match.group(1))
     # no `:at-val:` at all, or prose too irregular to parse as a literal/optional/required
     return "unparsed", None
 

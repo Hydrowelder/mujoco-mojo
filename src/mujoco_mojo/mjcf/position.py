@@ -28,16 +28,18 @@ class Pos(XMLModel):
         kwargs["pos"] = pos
         super().__init__(**kwargs)
 
-    def with_pos(self, pos: Pos | Vec3 | list | tuple) -> Self:
+    def with_pos(self, pos: Pos | Vec3 | list[float] | tuple[float, ...]) -> Self:
         """Returns a copy of this object with a new position, keeping all other fields."""
         pos_val = pos.pos if isinstance(pos, Pos) else np.asarray(pos, dtype=float)
         return self.model_copy(update={"pos": pos_val})
 
-    def distance_to(self, other: Pos | Vec3 | list | tuple) -> float:
+    def distance_to(self, other: Pos | Vec3 | list[float] | tuple[float, ...]) -> float:
         """Returns the euclidian distance to another position."""
-        return np.linalg.norm(self - other).astype(float)
+        return float(np.linalg.norm(self - other))
 
-    def lerp(self, other: Pos | Vec3 | list | tuple, t: float) -> Pos:
+    def lerp(
+        self, other: Pos | Vec3 | list[float] | tuple[float, ...], t: float
+    ) -> Pos:
         """
         Linearly interpolates between this position and another.
 
@@ -46,7 +48,7 @@ class Pos(XMLModel):
             t: The interpolation factor (0.0 = self, 1.0 = other).
 
         """
-        return self * (1.0 - t) + np.asarray(other, dtype=float) * t
+        return self * (1.0 - t) + Pos(np.asarray(other, dtype=float) * t)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Pos):
@@ -59,7 +61,7 @@ class Pos(XMLModel):
     def __len__(self) -> int:
         return 3
 
-    def __add__(self, other: Pos | Vec3 | list | tuple) -> Pos:
+    def __add__(self, other: Pos | Vec3 | list[float] | tuple[float, ...]) -> Pos:
         """Adds another position or vecotr to this one."""
         other_val = (
             other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
@@ -67,7 +69,7 @@ class Pos(XMLModel):
         assert isinstance(self.pos, np.ndarray)
         return Pos(self.pos + other_val)
 
-    def __sub__(self, other: Pos | Vec3 | list | tuple) -> Pos:
+    def __sub__(self, other: Pos | Vec3 | list[float] | tuple[float, ...]) -> Pos:
         """Subtracts another position or vector from this one."""
         other_val = (
             other.pos if isinstance(other, Pos) else np.asarray(other, dtype=float)
@@ -95,12 +97,12 @@ class Pos(XMLModel):
 
     @property
     def x(self) -> float:
-        return self.pos[0]
+        return float(self.pos[0])
 
     @property
     def y(self) -> float:
-        return self.pos[1]
+        return float(self.pos[1])
 
     @property
     def z(self) -> float:
-        return self.pos[2]
+        return float(self.pos[2])

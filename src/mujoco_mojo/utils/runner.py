@@ -1013,7 +1013,7 @@ class MojoRunner:
             logger.info(f"Renumbered {folder.name} -> {expected_name}")
 
     def execute_single_trial(
-        self, trial_num: int, seed: int | None, overrides_payload: dict
+        self, trial_num: int, seed: int | None, overrides_payload: dict[str, Any]
     ) -> tuple[MojoModel | None, TrialStatus, MjState | None]:
         """
         Helper to package a Trial and run it.
@@ -1058,7 +1058,7 @@ class MojoRunner:
         return mojo_model, trial_status, state
 
     def _execute_trial_subprocess(
-        self, trial_num: int, seed: int | None, overrides_payload: dict
+        self, trial_num: int, seed: int | None, overrides_payload: dict[str, Any]
     ) -> TrialStatus:
         """
         Subprocess-safe wrapper around `execute_single_trial` for parallel MC.
@@ -1591,7 +1591,7 @@ class MojoRunner:
             # Look for MaxTime= followed by the time string (e.g., 1-00:00:00 or UNLIMITED)
             time_match = re.search(r"\bMaxTime=(\S+)", part_info)
             if time_match:
-                return time_match.group(1)
+                return str(time_match.group(1))
 
         except Exception:
             pass

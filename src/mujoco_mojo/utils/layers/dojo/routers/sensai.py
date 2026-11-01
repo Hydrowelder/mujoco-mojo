@@ -252,7 +252,7 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
     context_block = _build_context_block(deps)
     augmented_message = f"{context_block}\n\n{body.message}"
 
-    async def event_stream() -> AsyncIterator[dict]:
+    async def event_stream() -> AsyncIterator[dict[str, Any]]:
         # undo path: restore previous plot config via client-side history
         if _is_undo_intent(body.message):
             yield {

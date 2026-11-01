@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -52,7 +53,7 @@ def test_empty_parts_are_dropped_like_the_old_key_building() -> None:
     ],
 )
 def test_a_part_that_would_corrupt_the_grammar_is_rejected(
-    kwargs: dict, part: str
+    kwargs: dict[str, Any], part: str
 ) -> None:
     """The error names the offending part, instead of the name silently parsing into different positions."""
     with pytest.raises(ValueError, match=part):

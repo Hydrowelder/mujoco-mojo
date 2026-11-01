@@ -90,7 +90,7 @@ class GearInput(mojo.UserData):
         b = self.SPRING_LEG_OFFSET
         c = self.SPRING_VERT_OFFSET
         angle = np.deg2rad(self.ANGLE + 90)
-        return np.sqrt(b**2 + c**2 - 2 * b * c * np.cos(angle))
+        return float(np.sqrt(b**2 + c**2 - 2 * b * c * np.cos(angle)))
 
 
 class Inputs(mojo.UserData):
@@ -128,13 +128,13 @@ class Side(StrEnum):
         """Angle, in radians, of this side around the tube's Z axis."""
         match self:
             case Side.PX:
-                return np.deg2rad(0)
+                return float(np.deg2rad(0))
             case Side.MX:
-                return np.deg2rad(90)
+                return float(np.deg2rad(90))
             case Side.PY:
-                return np.deg2rad(180)
+                return float(np.deg2rad(180))
             case Side.MY:
-                return np.deg2rad(270)
+                return float(np.deg2rad(270))
 
     @property
     def pos(self) -> mojo.Vec3:

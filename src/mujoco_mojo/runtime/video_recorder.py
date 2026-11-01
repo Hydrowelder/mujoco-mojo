@@ -74,7 +74,7 @@ def _color_to_rgb255_alpha(color: Vec3 | Vec4) -> tuple[tuple[int, int, int], fl
     """Splits a normalized `[0, 1]` RGB(A) color into a `0-255` RGB tuple (for PIL) and a separate `[0, 1]` alpha (for manual blending). RGB-only input is treated as fully opaque."""
     arr = np.asarray(color, dtype=float)
     alpha = float(arr[3]) if arr.shape[0] == 4 else 1.0
-    r, g, b = (round(c * 255) for c in arr[:3])
+    r, g, b = (round(float(c) * 255) for c in arr[:3])
     return (r, g, b), alpha
 
 
@@ -166,14 +166,14 @@ class VideoRecorder:
     encode_speed: int | None = None
     """Override for the `.mp4`/`.webm` encoder's speed-vs-compression trade-off, on a `0`-`8` scale where `0` is slowest/best compression and `8` is fastest/worst (passed straight through as `-cpu-used` for `.webm`; mapped to an x264 `-preset` name for `.mp4`). Defaults to a codec-specific value (`4` for `.mp4`, `2` for `.webm`) when unset. Has no effect on `.gif`."""
 
-    _frames: list = field(default_factory=list)
+    _frames: list[np.ndarray] = field(default_factory=list)
     """Buffered frames awaiting encoding. Only populated for formats outside `STREAMED_VIDEO_FORMAT` (e.g. `.gif`), since those formats can't be written incrementally."""
     _renderer: mujoco.Renderer = field(init=False)
     _vopt: mujoco.MjvOption = field(default_factory=mujoco.MjvOption, init=False)
     _next_record_time: float = field(default=0.0, init=False)
     _max_frames_warned: bool = field(default=False, init=False)
     _frame_count: int = field(default=0, init=False)
-    _encoder_proc: subprocess.Popen | None = field(default=None, init=False)
+    _encoder_proc: subprocess.Popen[bytes] | None = field(default=None, init=False)
     _encode_size: tuple[int, int] = field(default=(0, 0), init=False)
     """Even-rounded `(width, height)` fed to ffmpeg; set once the encoder opens."""
 

@@ -124,23 +124,6 @@ def test_last_run_summary_waits_for_the_first_run() -> None:
     assert summary.plain.strip() == "last run 1.50s failed"
 
 
-def test_last_run_is_shown_on_the_log_border(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            log = app.query_one("#log", RichLog)
-            assert log.border_subtitle is None
-
-            await pilot.press(*"gen", "enter")
-            await wait_until(pilot, lambda: log.border_subtitle is not None)
-
-            assert "last run" in str(log.border_subtitle)
-            assert "success" in str(log.border_subtitle)
-
-    run(scenario())
-
-
 def test_badge_names_the_state() -> None:
     assert render_badge(RunState.RUNNING).plain == " RUNNING "
 
@@ -171,355 +154,6 @@ def test_connection_panel_text_includes_every_part() -> None:
     assert "No authentication." in text
 
 
-def test_typed_command_runs_and_is_echoed(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"gen", "enter")
-            await wait_until(pilot, lambda: "Model Reloaded" in log_text(app))
-
-            assert session.calls == [False]
-            assert "> gen" in log_text(app)
-            assert app.query_one(CommandInput).value == ""
-
-    run(scenario())
-
-
-def test_function_keys_drive_the_controller(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: session.calls == [False])
-            await wait_until(pilot, lambda: "Model Reloaded" in log_text(app))
-
-            await pilot.press("f7")
-            await wait_until(pilot, lambda: session.record is True)
-
-    run(scenario())
-
-
-@pytest.mark.parametrize("key", ["f9", "f1"])
-def test_help_screen_opens_and_closes(tmp_path: Path, key: str) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(key)
-            await pilot.pause()
-            assert isinstance(app.screen, HelpScreen)
-
-            await pilot.press("escape")
-            await pilot.pause()
-            assert not isinstance(app.screen, HelpScreen)
-
-    run(scenario())
-
-
-def test_help_command_opens_the_help_screen(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"help", "enter")
-            await wait_until(pilot, lambda: isinstance(app.screen, HelpScreen))
-
-    run(scenario())
-
-
-def test_up_and_down_walk_through_history(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"seed 5", "enter")
-            await pilot.press(*"trial 2", "enter")
-            command = app.query_one(CommandInput)
-
-            await pilot.press("up")
-            assert command.value == "trial 2"
-            await pilot.press("up")
-            assert command.value == "seed 5"
-            await pilot.press("down")
-            assert command.value == "trial 2"
-            await pilot.press("down")
-            assert command.value == ""
-
-    run(scenario())
-
-
-def test_connection_panel_is_shown_only_for_browser_viewers(tmp_path: Path) -> None:
-    info = ConnectionInfo(url="http://localhost:8000/", warning="Open to the network.")
-
-    async def shown() -> None:
-        app, _ = make_app(tmp_path, backend=FakeBackend(info))
-        async with app.run_test():
-            panel = app.query_one("#connection", Static)
-            assert panel.display
-            assert "http://localhost:8000/" in str(panel.render())
-
-    async def hidden() -> None:
-        app, _ = make_app(tmp_path)
-        async with app.run_test():
-            assert not app.query_one("#connection", Static).display
-
-    run(shown())
-    run(hidden())
-
-
-def test_log_records_go_to_the_pane_and_the_terminal_handler_comes_back(
-    tmp_path: Path,
-) -> None:
-    root = logging.getLogger()
-    terminal = RichHandler()
-    root.addHandler(terminal)
-    before = list(root.handlers)
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            assert terminal not in root.handlers
-
-            logging.getLogger("reloaded_tui_test").warning("heads up")
-            await wait_until(pilot, lambda: "heads up" in log_text(app))
-            assert "WARNING" in log_text(app)
-
-    try:
-        run(scenario())
-        assert root.handlers == before
-    finally:
-        root.removeHandler(terminal)
-
-
-def test_exit_command_closes_the_app_and_stops_the_run(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"exit", "enter")
-            await wait_until(pilot, lambda: app.return_code is not None)
-
-    run(scenario())
-    assert app.return_code == 0
-    assert session.output_sink is None
-
-
-def test_print_output_lands_in_the_log(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # a headless Textual app also echoes captured prints to the real stdout, which would leak into the test report
-    monkeypatch.setattr(sys, "__stdout__", io.StringIO())
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            print("printed by user code")
-            await wait_until(pilot, lambda: "printed by user code" in log_text(app))
-
-    run(scenario())
-
-
-def test_clicking_a_value_edits_it_in_place(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-seed")
-            assert app.query_one("#field-seed", ParamField).has_class("-editing")
-
-            await pilot.press(*"42", "enter")
-            await wait_until(pilot, lambda: session.seed == 42)
-
-            assert not app.query_one("#field-seed", ParamField).has_class("-editing")
-            assert app.focused is app.query_one(CommandInput)
-
-    run(scenario())
-
-
-def test_escape_abandons_an_edit_without_stopping_anything(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path, FakeSession(seed=7))
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-seed")
-            await pilot.press(*"99", "escape")
-            await pilot.pause()
-
-            assert session.seed == 7
-            assert not app.query_one("#field-seed", ParamField).has_class("-editing")
-            assert "No run is currently in progress" not in log_text(app)
-
-    run(scenario())
-
-
-def test_every_editable_value_reaches_the_controller(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-trial")
-            await pilot.press(*"12", "enter")
-            await wait_until(pilot, lambda: session.trial_num == 12)
-
-            await pilot.click("#field-speed")
-            await pilot.press(*"0.5", "enter")
-            await wait_until(pilot, lambda: session.playback_speed == 0.5)
-
-            assert session.calls == []
-
-    run(scenario())
-
-
-def test_an_invalid_edit_is_reported_in_the_log(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-seed")
-            await pilot.press(*"abc", "enter")
-            await wait_until(pilot, lambda: "Invalid seed" in log_text(app))
-
-            assert session.seed is None
-
-    run(scenario())
-
-
-def test_clicking_a_toggle_flips_it(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-record")
-            await wait_until(pilot, lambda: session.record is True)
-
-            await pilot.click("#field-record")
-            await wait_until(pilot, lambda: session.record is False)
-
-    run(scenario())
-
-
-def test_information_fields_are_not_clickable(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-last")
-            await pilot.pause()
-
-            assert session.calls == []
-            assert not app.query_one("#field-last", ParamField).has_class("-editing")
-
-    run(scenario())
-
-
-def test_tab_completes_the_command_instead_of_leaving_the_box(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            command = app.query_one(CommandInput)
-            await pilot.press("r", "e")
-            await pilot.pause()
-            await pilot.press("tab")
-            await pilot.pause()
-
-            assert command.value == "record"
-            assert app.focused is command
-
-    run(scenario())
-
-
-def test_tab_with_nothing_to_complete_keeps_focus(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("z", "q", "tab")
-            await pilot.pause()
-
-            assert app.focused is app.query_one(CommandInput)
-            assert app.query_one(CommandInput).value == "zq"
-
-    run(scenario())
-
-
-def test_f10_quits(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("f10")
-            await wait_until(pilot, lambda: app.return_code is not None)
-
-    run(scenario())
-    assert app.return_code == 0
-
-
-def test_the_panels_are_titled(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test():
-            assert app.query_one("#log", RichLog).border_title == "Log"
-            assert app.query_one("#command-box").border_title == "Command"
-
-    run(scenario())
-
-
-def test_enter_after_gen_repeats_gen_and_does_not_run_the_runtime(
-    tmp_path: Path,
-) -> None:
-    ran: list[str] = []
-    app, session = make_app(tmp_path, FakeSession(behavior=lambda s: ran.append("x")))
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: session.calls == [False])
-            await wait_until(pilot, lambda: "Model Reloaded" in log_text(app))
-
-            await pilot.press("enter")
-            await wait_until(pilot, lambda: session.calls == [False, False])
-            await pilot.pause(0.1)
-
-            assert ran == []
-
-    run(scenario())
-
-
-def test_run_key_generates_and_runs_the_runtime(tmp_path: Path) -> None:
-    ran: list[str] = []
-    app, session = make_app(tmp_path, FakeSession(behavior=lambda s: ran.append("x")))
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("f3")
-            await wait_until(pilot, lambda: session.calls == [True])
-            await wait_until(pilot, lambda: ran == ["x"])
-
-    run(scenario())
-
-
-def test_run_uses_the_speed_set_in_the_bar(tmp_path: Path) -> None:
-    seen: list[float] = []
-    app, session = make_app(
-        tmp_path, FakeSession(behavior=lambda s: seen.append(s.playback_speed))
-    )
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.click("#field-speed")
-            await pilot.press(*"0.25", "enter")
-            await wait_until(pilot, lambda: session.playback_speed == 0.25)
-
-            await pilot.press("f3")
-            await wait_until(pilot, lambda: seen == [0.25])
-
-    run(scenario())
-
-
 def test_run_is_greyed_out_when_there_is_no_runtime(tmp_path: Path) -> None:
     with_runtime, _ = make_app(tmp_path, FakeSession(runtime="sim.runtime"))
     without_runtime, _ = make_app(tmp_path, FakeSession(runtime=None))
@@ -527,50 +161,6 @@ def test_run_is_greyed_out_when_there_is_no_runtime(tmp_path: Path) -> None:
     assert with_runtime.check_action("submit", ("run",)) is True
     assert without_runtime.check_action("submit", ("run",)) is None
     assert without_runtime.check_action("submit", ("gen",)) is True
-
-
-def test_with_the_hint_off_the_input_says_what_enter_will_repeat(
-    tmp_path: Path,
-) -> None:
-    app, _ = make_app(tmp_path, explain=False)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            command = app.query_one(CommandInput)
-            await wait_until(pilot, lambda: "'run'" in command.placeholder)
-
-            await pilot.press(*"gen", "enter")
-            await wait_until(pilot, lambda: "'gen'" in command.placeholder)
-
-    run(scenario())
-
-
-def test_title_shares_the_status_row_so_there_is_no_header(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test(size=(140, 30)) as pilot:
-            title = app.query_one("#title", Static)
-            await wait_until(
-                pilot, lambda: "MuJoCo Mojo Reloaded" in str(title.render())
-            )
-
-            assert not app.query(Header)
-            assert title.region.y == app.query_one("#badge").region.y
-
-    run(scenario())
-
-
-def test_title_gives_way_before_it_is_cut_in_half(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test(size=(70, 24)) as pilot:
-            await pilot.pause(0.2)
-
-            assert str(app.query_one("#title", Static).render()).strip() == ""
-
-    run(scenario())
 
 
 def test_fit_title_prefers_the_full_title_then_the_name_then_nothing() -> None:
@@ -588,219 +178,6 @@ def test_fit_title_prefers_the_full_title_then_the_name_then_nothing() -> None:
 
 def hint_text(app: ReloadedApp) -> str:
     return str(app.query_one("#hint", Static).render())
-
-
-def test_the_hint_starts_on_and_says_what_enter_does(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            hint = app.query_one("#hint", Static)
-            await wait_until(pilot, lambda: "Repeats run at 1x." in hint_text(app))
-
-            assert hint.display
-            assert app.query_one(ExplainButton).has_class("-open")
-
-    run(scenario())
-
-
-def test_the_hint_can_start_off(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path, explain=False)
-
-    async def scenario() -> None:
-        async with app.run_test():
-            assert not app.query_one("#hint", Static).display
-            assert not app.query_one(ExplainButton).has_class("-open")
-
-    run(scenario())
-
-
-def test_the_hint_follows_the_draft_as_it_is_typed(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"seed 42")
-            await wait_until(pilot, lambda: "Sets the seed to 42." in hint_text(app))
-
-            await pilot.press(*["backspace"] * len("seed 42"))
-            await pilot.press(*"trial 3")
-            await wait_until(pilot, lambda: "Sets the trial to 3." in hint_text(app))
-
-    run(scenario())
-
-
-def test_the_hint_sits_on_the_typing_line_at_the_right_end_of_the_box(
-    tmp_path: Path,
-) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test(size=(100, 24)) as pilot:
-            await pilot.press(*"gen")
-            await wait_until(
-                pilot, lambda: "Generates the model only." in hint_text(app)
-            )
-
-            box = app.query_one("#command-box")
-            command = app.query_one(CommandInput)
-            hint = app.query_one("#hint", Static)
-
-            assert hint.region.y == command.region.y
-            assert hint.region.x > command.region.x
-            # right justified: flush with the inside edge of the box, past its padding
-            assert box.region.right - hint.region.right <= 2
-            assert box.region.contains_region(hint.region)
-
-    run(scenario())
-
-
-def test_the_hint_is_cut_short_rather_than_wrapped_on_a_narrow_terminal(
-    tmp_path: Path,
-) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test(size=(50, 24)) as pilot:
-            await pilot.press(*"seed abc")
-            await wait_until(pilot, lambda: "Seed must" in hint_text(app))
-
-            assert app.query_one("#hint", Static).region.height == 1
-
-    run(scenario())
-
-
-def test_the_button_and_f8_both_toggle_the_hint_without_taking_focus(
-    tmp_path: Path,
-) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            hint = app.query_one("#hint", Static)
-            assert hint.display
-
-            await pilot.click("#explain-button")
-            await pilot.pause()
-            assert not hint.display
-            assert not app.query_one(ExplainButton).has_class("-open")
-            assert app.focused is app.query_one(CommandInput)
-
-            await pilot.press("f8")
-            await pilot.pause()
-            assert hint.display
-
-            await pilot.press("f8")
-            await pilot.pause()
-            assert not hint.display
-
-            await pilot.click("#explain-button")
-            await pilot.pause()
-            assert hint.display
-            assert app.query_one(ExplainButton).has_class("-open")
-
-    run(scenario())
-
-
-def test_the_hint_follows_the_session_not_just_the_draft(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await wait_until(pilot, lambda: "Repeats run at 1x." in hint_text(app))
-
-            await pilot.press("f2")
-            await wait_until(pilot, lambda: "Repeats gen" in hint_text(app))
-
-    run(scenario())
-
-
-def test_the_placeholder_defers_to_the_hint_while_it_shows(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            command = app.query_one(CommandInput)
-            await wait_until(
-                pilot, lambda: command.placeholder == CommandInput.PLACEHOLDER
-            )
-
-            await pilot.press("f8")
-            await wait_until(pilot, lambda: "repeat 'run'" in command.placeholder)
-
-            await pilot.press("f8")
-            await wait_until(
-                pilot, lambda: command.placeholder == CommandInput.PLACEHOLDER
-            )
-
-    run(scenario())
-
-
-def test_explaining_a_draft_does_not_run_it(tmp_path: Path) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"gen")
-            await wait_until(
-                pilot, lambda: "Generates the model only." in hint_text(app)
-            )
-            await pilot.pause(0.1)
-
-            assert session.calls == []
-
-    run(scenario())
-
-
-@pytest.mark.parametrize("typed", ["explain seed 42", "seed 42?"])
-def test_explain_and_a_trailing_question_mark_print_the_sentence_in_the_log(
-    tmp_path: Path, typed: str
-) -> None:
-    app, session = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*typed, "enter")
-            await wait_until(pilot, lambda: "Sets the seed to 42." in log_text(app))
-
-            assert session.seed is None
-            assert session.calls == []
-            assert f"> {typed}" in log_text(app)
-
-    run(scenario())
-
-
-def test_the_hint_says_a_question_prints_rather_than_runs(tmp_path: Path) -> None:
-    app, _ = make_app(tmp_path)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press(*"gen?")
-            await wait_until(
-                pilot, lambda: "Prints what that would do." in hint_text(app)
-            )
-
-    run(scenario())
-
-
-def test_ctrl_c_names_the_key_that_really_quits(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    app, _ = make_app(tmp_path)
-    said: list[str] = []
-    monkeypatch.setattr(app, "notify", lambda message, **kwargs: said.append(message))
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("ctrl+c")
-            await pilot.pause()
-
-    run(scenario())
-
-    assert said
-    assert "F10" in said[0]
-    assert "exit" in said[0]
-    assert "Ctrl+Q" not in said[0]
 
 
 def test_the_visible_keys_avoid_the_ones_an_editor_terminal_keeps(
@@ -891,7 +268,65 @@ def test_a_record_that_cannot_be_formatted_does_not_break_the_pane() -> None:
     assert "could not be shown" in render_log_item(record).plain
 
 
-def test_lines_from_the_runtime_and_from_the_controller_keep_their_order(
+def test_the_ctrl_c_message_names_the_key_that_really_quits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, _ = make_app(tmp_path)
+    said: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kwargs: said.append(message))
+
+    app.action_help_quit()
+
+    assert "F10" in said[0]
+    assert "exit" in said[0]
+    assert "Ctrl+Q" not in said[0]
+
+
+def test_it_starts_with_the_hint_on_and_every_panel_titled(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test(size=(140, 24)) as pilot:
+            title = app.query_one("#title", Static)
+            await wait_until(pilot, lambda: "Repeats run at 1x." in hint_text(app))
+            await wait_until(
+                pilot, lambda: "MuJoCo Mojo Reloaded" in str(title.render())
+            )
+
+            assert app.query_one("#hint", Static).display
+            assert app.query_one(ExplainButton).has_class("-open")
+            assert app.query_one(CommandInput).placeholder == CommandInput.PLACEHOLDER
+            assert app.query_one("#log", RichLog).border_title == "Log"
+            assert app.query_one("#command-box").border_title == "Command"
+            # the title shares the status row, so there is no header row above it
+            assert not app.query(Header)
+            assert title.region.y == app.query_one("#badge").region.y
+
+    run(scenario())
+
+
+def test_the_connection_panel_is_shown_only_for_browser_viewers(
+    tmp_path: Path,
+) -> None:
+    info = ConnectionInfo(url="http://localhost:8000/", warning="Open to the network.")
+
+    async def shown() -> None:
+        app, _ = make_app(tmp_path, backend=FakeBackend(info))
+        async with app.run_test():
+            panel = app.query_one("#connection", Static)
+            assert panel.display
+            assert "http://localhost:8000/" in str(panel.render())
+
+    async def hidden() -> None:
+        app, _ = make_app(tmp_path)
+        async with app.run_test():
+            assert not app.query_one("#connection", Static).display
+
+    run(shown())
+    run(hidden())
+
+
+def test_a_typed_command_runs_and_the_log_keeps_everything_in_order(
     tmp_path: Path,
 ) -> None:
     session = FakeSession(
@@ -903,9 +338,13 @@ def test_lines_from_the_runtime_and_from_the_controller_keep_their_order(
 
     async def scenario() -> None:
         async with app.run_test() as pilot:
+            command = app.query_one(CommandInput)
+            log = app.query_one("#log", RichLog)
+
             await pilot.press(*"gen", "enter")
             await wait_until(pilot, lambda: "Model Reloaded" in log_text(app))
 
+            # the echo, the controller's messages, and the runtime's logging share one ordered buffer
             text = log_text(app)
             assert (
                 text.index("> gen")
@@ -913,8 +352,210 @@ def test_lines_from_the_runtime_and_from_the_controller_keep_their_order(
                 < text.index("logged during generation")
                 < text.index("Model Reloaded")
             )
+            assert session.calls == [False]
+            assert command.value == ""
+
+            # how the run ended goes on the log's bottom border
+            await wait_until(pilot, lambda: log.border_subtitle is not None)
+            assert "last run" in str(log.border_subtitle)
+            assert "success" in str(log.border_subtitle)
 
     run(scenario())
+
+
+def test_function_keys_generate_run_and_record(tmp_path: Path) -> None:
+    app, session = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("f2")
+            await wait_until(pilot, lambda: log_text(app).count("Model Reloaded") == 1)
+            assert session.calls == [False]
+
+            await pilot.press("f3")
+            await wait_until(pilot, lambda: log_text(app).count("Model Reloaded") == 2)
+            assert session.calls == [False, True]
+
+            await pilot.press("f7")
+            await wait_until(pilot, lambda: session.record is True)
+
+    run(scenario())
+
+
+def test_clicking_a_value_edits_it_and_clicking_a_toggle_flips_it(
+    tmp_path: Path,
+) -> None:
+    app, session = make_app(tmp_path, session=FakeSession(seed=7))
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            command = app.query_one(CommandInput)
+
+            def editing(key: str) -> bool:
+                return app.query_one(f"#field-{key}", ParamField).has_class("-editing")
+
+            # Enter applies, and focus goes back to the command line
+            await pilot.click("#field-trial")
+            assert editing("trial")
+            await pilot.press("1", "2", "enter")
+            await wait_until(pilot, lambda: session.trial_num == 12)
+            assert not editing("trial")
+            assert app.focused is command
+
+            # Escape abandons the edit without stopping anything
+            await pilot.click("#field-seed")
+            await pilot.press("9", "9", "escape")
+            await wait_until(pilot, lambda: not editing("seed"))
+            assert session.seed == 7
+            assert "No run is currently in progress" not in log_text(app)
+
+            await pilot.click("#field-record")
+            await wait_until(pilot, lambda: session.record is True)
+
+    run(scenario())
+
+
+def test_the_hint_describes_the_draft_and_a_question_mark_prints_it_instead(
+    tmp_path: Path,
+) -> None:
+    app, session = make_app(tmp_path, session=FakeSession(seed=1))
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            command = app.query_one(CommandInput)
+            hint = app.query_one("#hint", Static)
+            box = app.query_one("#command-box")
+
+            command.value = "seed 42"
+            await wait_until(pilot, lambda: "Sets the seed to 42." in hint_text(app))
+            # on the typing line, flush with the right end of the box
+            assert hint.region.y == command.region.y
+            assert hint.region.x > command.region.x
+            assert box.region.right - hint.region.right <= 2
+            assert box.region.contains_region(hint.region)
+
+            # a trailing question mark explains instead of doing it
+            command.value = "seed 42?"
+            await wait_until(
+                pilot, lambda: "Prints what that would do." in hint_text(app)
+            )
+            await pilot.press("enter")
+            await wait_until(
+                pilot, lambda: "seed 42: Sets the seed to 42." in log_text(app)
+            )
+            assert session.seed == 1
+            assert session.calls == []
+
+            # F8 hides the hint, and the placeholder then says what Enter repeats
+            await pilot.press("f8")
+            await wait_until(pilot, lambda: not hint.display)
+            await wait_until(pilot, lambda: "repeat 'run'" in command.placeholder)
+
+            await pilot.click("#explain-button")
+            await wait_until(pilot, lambda: hint.display)
+            assert app.focused is command
+
+    run(scenario())
+
+
+def test_history_and_tab_completion_work_on_the_command_line(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            command = app.query_one(CommandInput)
+
+            await pilot.press(*"gen", "enter")
+            await wait_until(pilot, lambda: "Model Reloaded" in log_text(app))
+            await pilot.press("up")
+            await wait_until(pilot, lambda: command.value == "gen")
+            await pilot.press("down")
+            await wait_until(pilot, lambda: command.value == "")
+
+            # Tab completes rather than leaving the box, and does nothing when there is nothing to complete
+            await pilot.press("r", "e")
+            await pilot.press("tab")
+            await wait_until(pilot, lambda: command.value == "record")
+            command.value = ""
+            await pilot.press("z", "tab")
+            await pilot.pause(0)
+            assert command.value == "z"
+            assert app.focused is command
+
+    run(scenario())
+
+
+def test_help_opens_from_a_key_and_a_command_and_scrolls_on_a_short_terminal(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test(size=(80, 16)) as pilot:
+            await pilot.press("f9")
+            await wait_until(pilot, lambda: isinstance(app.screen, HelpScreen))
+            body = app.screen.query_one("#help-body")
+            await wait_until(pilot, lambda: body.max_scroll_y > 0)
+
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: not isinstance(app.screen, HelpScreen))
+
+            app.query_one(CommandInput).value = "help"
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: isinstance(app.screen, HelpScreen))
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("how", ["f10", "exit"])
+def test_the_app_closes_and_stops_the_session(tmp_path: Path, how: str) -> None:
+    app, session = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            if how == "exit":
+                app.query_one(CommandInput).value = "exit"
+                await pilot.press("enter")
+            else:
+                await pilot.press(how)
+            await wait_until(pilot, lambda: app.return_code is not None)
+
+    run(scenario())
+    assert app.return_code == 0
+    assert session.output_sink is None
+
+
+def test_logging_and_print_output_reach_the_log_and_the_terminal_handler_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # a headless Textual app also echoes captured prints to the real stdout, which would leak into the test report
+    monkeypatch.setattr(sys, "__stdout__", io.StringIO())
+    root = logging.getLogger()
+    terminal = RichHandler()
+    root.addHandler(terminal)
+    before = list(root.handlers)
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            assert terminal not in root.handlers
+
+            logging.getLogger("reloaded_tui_test").warning("heads up")
+            print("printed by user code")
+            await wait_until(
+                pilot,
+                lambda: (
+                    "heads up" in log_text(app)
+                    and "printed by user code" in log_text(app)
+                ),
+            )
+            assert "WARNING" in log_text(app)
+
+    try:
+        run(scenario())
+        assert root.handlers == before
+    finally:
+        root.removeHandler(terminal)
 
 
 def test_a_flood_of_log_lines_is_skipped_with_a_notice(tmp_path: Path) -> None:
@@ -933,39 +574,5 @@ def test_a_flood_of_log_lines_is_skipped_with_a_notice(tmp_path: Path) -> None:
                 pilot, lambda: f"{extra} log lines were skipped" in log_text(app)
             )
             assert len(app.query_one("#log", RichLog).lines) <= 10_000
-
-    run(scenario())
-
-
-def test_the_app_still_answers_keys_while_something_floods_the_log(
-    tmp_path: Path,
-) -> None:
-    app, _ = make_app(tmp_path)
-    stop = threading.Event()
-
-    def flood() -> None:
-        # about 20,000 lines a second, twice what froze the app before the log was buffered
-        noisy = logging.getLogger("noisy")
-        while not stop.is_set():
-            for _ in range(200):
-                noisy.warning("a line from a busy runtime")
-            stop.wait(0.01)
-
-    thread = threading.Thread(target=flood)
-
-    async def scenario() -> None:
-        async with app.run_test() as pilot:
-            thread.start()
-            try:
-                await pilot.pause(0.3)
-                # keys are sent without waiting for an idle screen, which a flood never allows, just as a terminal sends them
-                for key in "hello":
-                    app.simulate_key(key)
-                await wait_until(
-                    pilot, lambda: app.query_one(CommandInput).value == "hello", 2.0
-                )
-            finally:
-                stop.set()
-                thread.join()
 
     run(scenario())

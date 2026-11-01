@@ -528,12 +528,14 @@ class UnitFilter(BaseFilter):
         # b (offset) is the value of 0.0 in the target unit
 
         # zero-point offset (e.g., 273.15 for C -> K)
-        b = ureg.Quantity(0.0, self.from_unit).to(self.to_unit).magnitude
+        b = float(ureg.Quantity(0.0, self.from_unit).to(self.to_unit).magnitude)
 
         # the scaling factor (the slope)
         # for meters -> mm, this is (1000 - 0) = 1000
         # for Celsius -> Kelvin, this is (274.15 - 273.15) = 1.0
-        val_at_one = ureg.Quantity(1.0, self.from_unit).to(self.to_unit).magnitude
+        val_at_one = float(
+            ureg.Quantity(1.0, self.from_unit).to(self.to_unit).magnitude
+        )
         m = val_at_one - b
 
         return (expr * m) + b

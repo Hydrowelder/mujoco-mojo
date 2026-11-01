@@ -484,7 +484,9 @@ class Inertial(XMLModel):
         if isinstance(orientation, tuple):
             _seed_dist(orientation[1])
 
-        def _resolve_and_track(input_val: Any) -> tuple[np.ndarray, list[NamedValue]]:
+        def _resolve_and_track(
+            input_val: Any,
+        ) -> tuple[np.ndarray, list[NamedValue[Any]]]:
             """Samples distributions and prepares NamedValues for registration."""
             resolved_values = []
             pending_named_values = []

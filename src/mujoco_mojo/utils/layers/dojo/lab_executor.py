@@ -101,17 +101,19 @@ class LabExecutor:
     """
 
     def __init__(self, graph: dict[str, Any]) -> None:
-        self._raw_nodes: list[dict] = graph.get("nodes", [])
-        self.nodes: dict[int, dict] = {n["id"]: n for n in self._raw_nodes}
+        self._raw_nodes: list[dict[str, Any]] = graph.get("nodes", [])
+        self.nodes: dict[int, dict[str, Any]] = {n["id"]: n for n in self._raw_nodes}
         # links keyed by link_id → [link_id, from_node, from_slot, to_node, to_slot, type]
-        self.links: dict[int, list] = {lnk[0]: lnk for lnk in graph.get("links", [])}
+        self.links: dict[int, list[Any]] = {
+            lnk[0]: lnk for lnk in graph.get("links", [])
+        }
 
     # ── public helpers ────────────────────────────────────────────────────────
 
     @staticmethod
-    def _bare_type(node: dict) -> str:
+    def _bare_type(node: dict[str, Any]) -> str:
         """Strip the LiteGraph category prefix, e.g. 'Signal/signal_in' → 'signal_in'."""
-        return node.get("type", "").split("/")[-1]
+        return str(node.get("type", "")).split("/")[-1]
 
     @property
     def signal_in_columns(self) -> list[str]:
@@ -330,7 +332,7 @@ class LabExecutor:
 
     def _get_input(
         self,
-        node: dict,
+        node: dict[str, Any],
         slot: int,
         slot_data: dict[int, dict[int, pl.Series]],
     ) -> pl.Series | None:
@@ -347,7 +349,7 @@ class LabExecutor:
     def _apply(
         self,
         ntype: str,
-        props: dict,
+        props: dict[str, Any],
         signal: pl.Series,
         wrt: pl.Series | None,
         df: pl.DataFrame,

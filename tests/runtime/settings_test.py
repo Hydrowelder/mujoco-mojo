@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import BaseModel, Field, HttpUrl, SecretStr, ValidationError
@@ -71,7 +72,7 @@ def test_none_serializes_as_empty_string() -> None:
 def test_color_value_serializes_as_string() -> None:
     """Set color names serialize back as their string name."""
     s = VisualizationSettings(action_force="ROSE_500")
-    dumped: dict = s.model_dump()
+    dumped: dict[str, Any] = s.model_dump()
     assert dumped["action_force"] == "ROSE_500"
 
 
@@ -405,11 +406,11 @@ def test_dict_shaped_settings_section_keeps_its_ref(tmp_path: Path) -> None:
 _MAX_DESCRIPTION_LENGTH = 200
 
 
-def _collect_schema_descriptions(schema: dict) -> dict[str, str]:
+def _collect_schema_descriptions(schema: dict[str, Any]) -> dict[str, str]:
     """Maps a dotted path (e.g. "MujocoMojoSettings.slurm" or "$defs.SlurmExtraSettings") to its `description`, for every property across the top-level schema and every named definition - the two places settings-panel.ts (buildGroup/buildField) ever reads a description from. The schema's own root-level description (MujocoMojoSettings' class docstring) is deliberately excluded - parseSettingsSchema only ever reads `schema.properties`, never `schema.description` itself, so nothing in the settings panel can ever show it."""
     descriptions: dict[str, str] = {}
 
-    def walk(node: dict, prefix: str, *, include_self: bool = True) -> None:
+    def walk(node: dict[str, Any], prefix: str, *, include_self: bool = True) -> None:
         if include_self:
             description = node.get("description")
             if description:

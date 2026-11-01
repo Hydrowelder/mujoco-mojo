@@ -18,7 +18,7 @@
 
 ---
 
-A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
+A **complete MJCF lifecycle and trial orchestration suite** for [MuJoCo](https://github.com/google-deepmind/mujoco), powered by **Pydantic v2**.
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 

@@ -69,7 +69,7 @@ class FakeSlurm:
 
     def __call__(
         self, command: list[str], **kwargs: Any
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(command))
         if command[0] == "sbatch":
             return subprocess.CompletedProcess(
@@ -255,7 +255,7 @@ def test_slurm_job_active(
     stderr: str,
     expected: bool | None,
 ) -> None:
-    def fake(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    def fake(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
     monkeypatch.setattr(subprocess, "run", fake)
@@ -266,7 +266,7 @@ def test_slurm_job_active(
 def test_slurm_job_active_is_unknown_without_squeue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def missing(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    def missing(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         raise FileNotFoundError("squeue")
 
     monkeypatch.setattr(subprocess, "run", missing)
@@ -408,7 +408,7 @@ def test_a_failed_sbatch_is_reported_and_no_job_id_is_saved(
 def test_submit_without_sbatch_installed_says_so(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def missing(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    def missing(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if command[0] == "sbatch":
             raise FileNotFoundError("sbatch")
         return subprocess.CompletedProcess(command, 1, "", "")
