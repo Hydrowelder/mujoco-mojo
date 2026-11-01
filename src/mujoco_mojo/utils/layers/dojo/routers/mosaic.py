@@ -15,6 +15,7 @@ import polars as pl
 import stochas
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from pint.errors import PintError
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
@@ -1574,6 +1575,42 @@ def _extract_sampled_values(named_raw: dict[str, Any], name: str) -> list[float]
         return None
 
 
+def _stored_unit(named_raw: dict[str, Any], name: str) -> str | None:
+    """The unit a NamedValue's `stored_value` is expressed in, or `None` if none was recorded. Sampling converts a drawn value into the model's base unit and records that unit on the NamedValue, while the distribution keeps the unit it was declared in."""
+    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
+    unit = entry.get("unit") if entry else None
+    if isinstance(unit, dict):
+        unit = unit.get("name")
+    return unit if isinstance(unit, str) and unit else None
+
+
+def _in_unit(
+    values: list[float], from_unit: str | None, to_unit: str | None
+) -> list[float]:
+    """Re-expresses `values` from `from_unit` in `to_unit`. They come back as they were when either unit is unknown, when the units are the same, or when pint cannot convert between them, so an unrecognized unit leaves the number visible instead of hiding the row."""
+    if not from_unit or not to_unit or from_unit == to_unit:
+        return values
+    import numpy as np
+
+    try:
+        converted = _ureg.Quantity(np.asarray(values, dtype=float), from_unit).to(
+            to_unit
+        )
+    except (PintError, ValueError, TypeError):
+        return values
+    return [float(v) for v in np.ravel(converted.magnitude)]
+
+
+def _sampled_values_in_dist_unit(
+    named_raw: dict[str, Any], dist: stochas.AnyDist
+) -> list[float] | None:
+    """The drawn scalars for `dist`, in the unit `dist` was declared in. A distribution's parameters, nominal, and chart are all in its declared unit, so the drawn value has to be too, or the z-score and percentile compare a base-unit number against declared-unit parameters."""
+    values = _extract_sampled_values(named_raw, dist.name)
+    if values is None or dist.unit is None:
+        return values
+    return _in_unit(values, _stored_unit(named_raw, dist.name), str(dist.unit))
+
+
 def _extract_sampled_labels(named_raw: dict[str, Any], name: str) -> list[str] | None:
     """Pull every drawn label out of a NamedValue's stored_value for non-numeric distributions (e.g. categorical)."""
     entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
@@ -1643,7 +1680,7 @@ async def get_trial_dists(trial_id: str) -> dict[str, Any]:
             sampled_values = (
                 None
                 if is_permutation
-                else _extract_sampled_values(named_raw, dist.name)
+                else _sampled_values_in_dist_unit(named_raw, dist)
             )
             sampled = sampled_values[0] if sampled_values else None
             sampled_labels = (
