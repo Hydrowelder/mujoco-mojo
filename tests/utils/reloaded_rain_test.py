@@ -9,6 +9,7 @@ import mujoco_mojo.utils.layers.reloaded.rain as rain_module
 from mujoco_mojo.utils.layers.reloaded.rain import (
     BLANK_STYLE,
     WORD,
+    repeating_text,
     HEAD_STYLE,
     TRAIL_STYLES,
     Drop,
@@ -114,10 +115,10 @@ def test_every_lit_cell_holds_a_letter_of_the_word() -> None:
 
     lit = visible_cells(rain)
     assert lit
-    assert {rain.letters[row][column] for row, column in lit} <= set(WORD)
+    assert {rain.letters[row][column] for row, column in lit} <= set(repeating_text())
 
 
-def test_a_trail_spells_the_word_from_top_to_bottom() -> None:
+def test_a_trail_spells_the_word_from_the_bottom_up() -> None:
     rain = make_rain()
     for _ in range(60):
         rain.step()
@@ -125,10 +126,55 @@ def test_a_trail_spells_the_word_from_top_to_bottom() -> None:
     spelled = []
     for column in rain.drops:
         rows = [row for row in range(HEIGHT) if rain.trail(row, column) is not None]
-        spelled.append("".join(rain.letters[row][column] for row in rows))
+        top_to_bottom = "".join(rain.letters[row][column] for row in rows)
+        spelled.append(top_to_bottom[::-1])
 
-    assert any(len(text) >= len(WORD) for text in spelled)
-    assert all(text in WORD * 10 for text in spelled)
+    assert any(len(text.strip()) >= 6 for text in spelled)
+    assert all(text in repeating_text() * 5 for text in spelled)
+
+
+def test_the_head_sets_the_letter_before_the_one_above_it() -> None:
+    """Going down a row steps back a letter in the text, which is what makes it read upward."""
+    rain = make_rain()
+    column = 0
+    rain.drops[column] = Drop(head=-1, length=11, period=1, phase=4)
+
+    for _ in range(6):
+        rain.step()
+
+    bottom_up = "".join(rain.letters[row][column] for row in range(5, -1, -1))
+    assert bottom_up in repeating_text() * 2
+
+
+def test_without_a_gap_the_word_runs_straight_into_the_next_and_nothing_is_blank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(rain_module, "WORD_GAP", 0)
+    rain = make_rain()
+
+    for _ in range(80):
+        rain.step()
+        lit = visible_cells(rain)
+        assert {rain.letters[row][column] for row, column in lit} <= set(WORD)
+
+    assert repeating_text() == WORD
+
+
+@pytest.mark.parametrize("gap", [0, 1, 4])
+def test_the_gap_sets_how_many_blank_cells_separate_the_readings(
+    monkeypatch: pytest.MonkeyPatch, gap: int
+) -> None:
+    monkeypatch.setattr(rain_module, "WORD_GAP", gap)
+    rain = make_rain()
+    column = 0
+    rain.drops[column] = Drop(head=-1, length=60, period=1, phase=0)
+
+    for _ in range(HEIGHT):
+        rain.step()
+
+    bottom_up = "".join(rain.letters[row][column] for row in range(HEIGHT - 2, -1, -1))
+    assert bottom_up in repeating_text() * 4
+    assert repeating_text() == WORD + " " * gap
 
 
 def test_neighboring_columns_do_not_all_spell_it_in_step() -> None:

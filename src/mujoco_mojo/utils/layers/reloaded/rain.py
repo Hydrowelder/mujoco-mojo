@@ -1,7 +1,7 @@
 """
 The digital rain Reloaded plays as it closes.
 
-Every drop spells the word, so a trail reads "mojo" from top to bottom, each column starting at a different letter. It is kept calm on purpose. A letter is set once, when a drop reaches it, and then holds still as the trail fades, and the trail fades from the accent color into the background. A fresh random glyph in every cell on every frame is what makes rain look blotchy.
+Every drop spells the word, so a trail reads "mujoco-mojo" from the bottom up, each column starting at a different letter. The head is the bright bottom end, so the start of the word is what shows brightest and the end is what fades. It is kept calm on purpose. A letter is set once, when a drop reaches it, and then holds still as the trail fades, and the trail fades from the accent color into the background. A fresh random glyph in every cell on every frame is what makes rain look blotchy.
 """
 
 import random
@@ -20,10 +20,12 @@ from .theme import CANVAS, INK_STRONG, LINK
 __all__ = ["TRAIL_STYLES", "MatrixRain", "Rain", "RainScreen"]
 
 WORD: str = "mujoco-mojo"
-"""What the drops spell, over and over down each trail."""
+"""What the drops spell, read from the bottom of a trail up, over and over."""
+WORD_GAP: int = 4
+"""Blank cells between one reading of the word and the next. 0 runs them together."""
 COLUMN_SPACING: int = 2
 """Only every this many columns carries a drop, so 2 leaves a blank column between drops."""
-TRAIL_LENGTH: tuple[int, int] = (6, 16)
+TRAIL_LENGTH: tuple[int, int] = (len(WORD), 16)
 """The shortest and longest trail a drop can have."""
 RESTART_WITHIN: float = 1 / 3
 """A drop that has left the screen starts again within this fraction of the screen height above it, which sets how closely one follows another."""
@@ -48,6 +50,17 @@ HEAD_STYLE = Style(color=str(INK_STRONG), bgcolor=str(CANVAS), bold=True)
 BLANK_STYLE = Style(bgcolor=str(CANVAS))
 
 
+def repeating_text() -> str:
+    """The word followed by its gap, which a trail repeats from the bottom up."""
+    return WORD + " " * WORD_GAP
+
+
+def letter_at(row: int, phase: int) -> str:
+    """The letter a head sets on `row`. The text reads from the bottom up, so each row down is one letter back."""
+    text = repeating_text()
+    return text[(phase - row) % len(text)]
+
+
 @dataclass
 class Drop:
     """One falling trail."""
@@ -59,7 +72,7 @@ class Drop:
     period: int
     """It falls one row every this many steps, so some drops are slower than others."""
     phase: int = 0
-    """Which letter of the word sits on row 0, so neighboring columns do not spell it in step."""
+    """Which letter of the text sits on row 0, so neighboring columns do not spell it in step."""
 
 
 @dataclass(eq=False)
@@ -89,20 +102,18 @@ class Rain:
             head=-self.rng.randint(1, max(1, within)),
             length=self.rng.randint(*TRAIL_LENGTH),
             period=self.rng.choice((1, 1, 2)),
-            phase=self.rng.randrange(len(WORD)),
+            phase=self.rng.randrange(len(repeating_text())),
         )
 
     def step(self) -> None:
-        """Moves every drop down, setting the next letter of the word where a head arrives and sending a drop that has left the screen back above it."""
+        """Moves every drop down, setting the letter of the text where a head arrives and sending a drop that has left the screen back above it."""
         self._step += 1
         for column, drop in self.drops.items():
             if self._step % drop.period:
                 continue
             drop.head += 1
             if 0 <= drop.head < self.height:
-                self.letters[drop.head][column] = WORD[
-                    (drop.head + drop.phase) % len(WORD)
-                ]
+                self.letters[drop.head][column] = letter_at(drop.head, drop.phase)
             if drop.head - drop.length > self.height:
                 self.drops[column] = self._new_drop(int(self.height * RESTART_WITHIN))
 
