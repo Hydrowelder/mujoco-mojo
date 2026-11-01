@@ -28,6 +28,17 @@ Running `mujoco-mojo init` produces three files in the current directory:
 
 Both shell scripts are made executable and resolve their paths relative to their own location, so they can be invoked from any working directory.
 
+### Choosing the Viewer
+
+`reloaded.sh` does not name a viewer. Reloaded takes it from the `reloaded.ui` setting, which defaults to the right one for the machine you run it on:
+
+| Machine                                  | Default viewer           |
+| ---------------------------------------- | ------------------------ |
+| A desktop session                        | `studio` (native window) |
+| An SSH session, or Linux with no display | `web` (in a browser)     |
+
+A machine reached over SSH gets the browser viewer even when X forwarding is on, because that is the better experience over a network link. Because nothing is written into the script, the same project works on your desktop and on a remote machine. To pin a viewer, set `reloaded.ui` in your settings, or add `-ui studio` or `-ui web` to the command in `reloaded.sh`.
+
 ---
 
 ## Monte Carlo (default)

@@ -150,6 +150,15 @@ ParamField.-toggle:hover {
     text-style: bold;
 }
 
+RainScreen {
+    background: $background;
+}
+
+MatrixRain {
+    width: 100%;
+    height: 100%;
+}
+
 HelpScreen {
     align: center middle;
     background: $scrim 70%;

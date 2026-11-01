@@ -25,7 +25,7 @@ The `reloaded` command is highly flexible, allowing you to specify different vie
 | `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                        |
 | `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                   |
 | `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                     |
-| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (the classic MuJoCo window), `studio` (MuJoCo Studio in a native window), or `web` (MuJoCo Studio in a browser).                                                                                                      |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (the classic MuJoCo window), `studio` (MuJoCo Studio in a native window), or `web` (MuJoCo Studio in a browser). Defaults to `studio`, or `web` over SSH or with no display (the `reloaded.ui` setting).              |
 | `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                  |
 | `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                          |
 | `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                       |
@@ -41,42 +41,64 @@ Once Reloaded is running, your terminal becomes a command center with a status b
 
 ### Commands
 
-Type a command and press `ENTER`. Press `TAB` to complete the one you are typing, and use the up and down arrows to step through earlier commands.
+Type a command and press `ENTER`. Press `TAB` to complete the one you are typing (`explain hel` becomes `explain help`), and use the up and down arrows to step through earlier commands.
 
-| Command              | Action                                                                                       |
-| :------------------- | :------------------------------------------------------------------------------------------- |
-| `ENTER`              | Repeat the last command (perfect for rapid iteration).                                       |
-| `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
-| `run`                | Generate and run the `runtime` at the current speed (only if a `runtime` was provided).      |
-| `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
-| `seed 42`            | Set the seed. `seed none` clears it.                                                         |
-| `trial 3`            | Set the trial number.                                                                        |
-| `watch`              | Turn reloading on or off when your `*.py` files change.                                      |
-| `record`             | Turn telemetry and video recording on or off.                                                |
-| `dojo`               | Print the command that opens the Dojo for this session.                                      |
-| `explain seed 42`    | Say what a command would do without running it. Ending a command with `?` does the same.     |
-| `stop`               | Abort the run in progress.                                                                   |
-| `help`               | Show every command and key.                                                                  |
-| `exit`               | Safely close the viewer and Reloaded.                                                        |
+| Command                 | Action                                                                                       |
+| :---------------------- | :------------------------------------------------------------------------------------------- |
+| `ENTER`                 | Repeat the last command (perfect for rapid iteration).                                       |
+| `gen`, `g`, `generate`  | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
+| `run`, `r`              | Generate and run the `runtime` at the current speed (only if a `runtime` was provided).      |
+| `1.0` (or any float)    | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
+| `seed 42`               | Set the seed. `seed none` clears it.                                                         |
+| `trial 3`               | Set the trial number.                                                                        |
+| `watch`, `w`            | Turn reloading on or off when your `*.py` files change.                                      |
+| `record`, `rec`         | Turn telemetry and video recording on or off.                                                |
+| `dojo`                  | Print the command that opens the Dojo for this session.                                      |
+| `explain seed 42`       | Say what a command would do without running it. Ending a command with `?` does the same.     |
+| `stop`, `halt`, `abort` | Abort the run in progress.                                                                   |
+| `help`, `h`, `?`        | Show every command and key.                                                                  |
+| `exit`, `quit`, `q`     | Safely close the viewer and Reloaded.                                                        |
 
 A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
 
 ### Keys and Clicks
 
-| Key   | Action                     |
-| :---- | :------------------------- |
-| `F2`  | Generate only.             |
-| `F3`  | Generate and run.          |
-| `F4`  | Turn watching on or off.   |
-| `F7`  | Turn recording on or off.  |
-| `F8`  | Show or hide the hint.     |
-| `F9`  | Show help.                 |
-| `Esc` | Stop the run in progress.  |
-| `F10` | Quit.                      |
+| Key   | Action                    |
+| :---- | :------------------------ |
+| `F2`  | Generate only.            |
+| `F3`  | Generate and run.         |
+| `F4`  | Turn watching on or off.  |
+| `F7`  | Turn recording on or off. |
+| `F8`  | Show or hide the hint.    |
+| `F9`  | Show help.                |
+| `Esc` | Stop the run in progress. |
+| `F10` | Quit.                     |
 
 You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
 
 Closing the viewer window also closes Reloaded.
+
+### Changing the Keys
+
+The keys come from the `reloaded.keys` settings, a list for each action. The first key in a list is the one the footer shows, and the others work too.
+
+```toml linenums="0"
+[reloaded.keys]
+generate = ["f5", "ctrl+g"]
+help = ["f9"]
+```
+
+You can also set one from the command line:
+
+```bash linenums="0"
+mujoco-mojo settings set reloaded.keys.generate "f5, ctrl+g"
+```
+
+The actions are `generate`, `run`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`. A key can only do one thing, and a list can be empty to leave an action without a key. Typing `exit` always closes Reloaded.
+
+!!! tip
+
+    A terminal inside an editor hands some keys to the editor before Reloaded sees them. The terminal in VS Code keeps `F1`, `F5`, `F6`, `F10`, `F11`, `Ctrl+P`, and `Ctrl+Q` for itself, which is why the defaults lean on other function keys.
 
 ---
 

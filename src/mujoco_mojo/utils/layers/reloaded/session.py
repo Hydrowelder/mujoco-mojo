@@ -20,6 +20,7 @@ from rich.markup import escape
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
+from mujoco_mojo.settings import ReloadedKeySettings
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.typing import UserInterface
 from mujoco_mojo.utils.defaults import (
@@ -62,44 +63,6 @@ from .tui import ReloadedApp
 
 logger = get_logger(__name__)
 console = Console()
-
-
-def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
-    """Plays a brief Matrix-style digital rain animation, e.g. on exit."""
-    import random
-
-    from rich.live import Live
-    from rich.text import Text
-
-    width, height = console.size
-    if width <= 0 or height <= 0:
-        return
-
-    drops = [random.randint(-height, 0) for _ in range(width)]
-    trail_length = 8
-
-    with Live(console=console, refresh_per_second=fps, screen=True) as live:
-        for _ in range(int(duration * fps)):
-            frame = Text()
-            for row in range(height):
-                for col in range(width):
-                    head = drops[col]
-                    if row == head:
-                        frame.append(random.choice("01"), style="bold white")
-                    elif 0 <= head - row <= trail_length:
-                        frame.append(random.choice("01"), style="green")
-                    else:
-                        frame.append(" ")
-                if row < height - 1:
-                    frame.append("\n")
-
-            for col in range(width):
-                drops[col] += 1
-                if drops[col] - height > random.randint(0, height):
-                    drops[col] = random.randint(-height, 0)
-
-            live.update(frame)
-            time.sleep(1 / fps)
 
 
 def recursive_reload(
@@ -195,6 +158,7 @@ class MojoReloaded:
 
     watch: bool = False
     record: bool = False
+    keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
@@ -614,7 +578,6 @@ class MojoReloaded:
             raise typer.Exit(1)
 
         self._run_tui(backend, initial_state)
-        _matrix_rain()
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
     def _create_backend(self) -> ViewerBackend:
@@ -640,7 +603,10 @@ class MojoReloaded:
             self._viewer_lock = backend.viewer_lock
             controller = ReloadedController(self, backend)
             ReloadedApp(
-                controller, backend, subtitle=f"{self.ui.value} | {self.workdir}"
+                controller,
+                backend,
+                keys=self.keys,
+                subtitle=f"{self.ui.value} | {self.workdir}",
             ).run()
         finally:
             self._sync_hook = None

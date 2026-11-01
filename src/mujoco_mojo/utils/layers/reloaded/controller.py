@@ -45,6 +45,8 @@ COMMAND_SUGGESTIONS = (
     "help",
     "exit",
     "explain ",
+    "generate",
+    "quit",
 )
 """Command names offered as completions by the terminal UI."""
 
@@ -54,6 +56,7 @@ _BUSY_HINT = (
 )
 _COMMAND_WORDS = (
     "gen",
+    "generate",
     "run",
     "seed",
     "trial",
@@ -67,10 +70,29 @@ _COMMAND_WORDS = (
     "quit",
     "explain",
 )
-_STOP_WORDS = ("stop", "halt")
-_EXIT_WORDS = ("exit", "quit", "q")
-_HELP_WORDS = ("h", "help", "?")
-_WATCH_WORDS = ("watch", "w")
+_ALIASES = {
+    "gen": ("g", "generate"),
+    "run": ("r",),
+    "watch": ("w",),
+    "record": ("rec",),
+    "stop": ("halt", "abort"),
+    "help": ("h", "?"),
+    "exit": ("quit", "q"),
+}
+"""Other words for each command that takes no argument."""
+_CANONICAL = {
+    alias: command for command, aliases in _ALIASES.items() for alias in aliases
+}
+
+
+def _canonical(word: str) -> str:
+    """The command a word stands for, so `g` and `generate` both read as `gen`. Anything that is not an alias comes back unchanged."""
+    return _CANONICAL.get(word, word)
+
+
+def _words(command: str) -> str:
+    """A command and its aliases, as shown in the help."""
+    return " / ".join((command, *_ALIASES[command]))
 
 
 class RunState(StrEnum):
@@ -207,11 +229,11 @@ class ReloadedController:
         """Command and description pairs for the help screen."""
         entries = [
             ("ENTER", "Repeat the last command"),
-            ("gen", "Generate only"),
+            (_words("gen"), "Generate only"),
         ]
         if self.session.runtime:
             entries += [
-                ("run", "Generate and run the runtime at the current speed"),
+                (_words("run"), "Generate and run the runtime at the current speed"),
                 (
                     "<float>",
                     "Set the speed, then generate and run (1.0 is real time, 0.5 is half speed)",
@@ -220,14 +242,17 @@ class ReloadedController:
         entries += [
             ("seed <N>", "Set the seed (seed none clears it)"),
             ("trial <N>", "Set the trial number"),
-            ("watch", "Toggle reloading when *.py files change"),
-            ("record", "Toggle telemetry for mujoco-mojo dojo and video recording"),
+            (_words("watch"), "Toggle reloading when *.py files change"),
+            (
+                _words("record"),
+                "Toggle telemetry for mujoco-mojo dojo and video recording",
+            ),
             ("dojo", "Print the command that opens the Dojo for this session"),
             ("explain <cmd>", "Say what a command would do, without running it"),
             ("<cmd>?", "The same, written as a question (a lone ? opens help)"),
-            ("stop / halt", "Abort the run in progress"),
-            ("help", "Show this list"),
-            ("exit / q", "Close Reloaded"),
+            (_words("stop"), "Abort the run in progress"),
+            (_words("help"), "Show this list"),
+            (_words("exit"), "Close Reloaded"),
         ]
         return entries
 
@@ -237,7 +262,7 @@ class ReloadedController:
 
         It only reads the session's state and changes nothing, so the terminal UI can call it on every keystroke.
         """
-        raw = text.strip().lower()
+        raw = _canonical(text.strip().lower())
         status = self.status()
 
         target = self._explain_target(text)
@@ -249,7 +274,7 @@ class ReloadedController:
             )
 
         if status.state is not RunState.IDLE:
-            if raw in _STOP_WORDS:
+            if raw == "stop":
                 return "Aborts the current run."
             return "A run is in progress. Only stop works."
 
@@ -265,13 +290,13 @@ class ReloadedController:
             if not self.has_runtime:
                 return "No runtime given, so generates only."
             return f"Generates, then runs at {status.playback_speed:g}x."
-        if raw in _EXIT_WORDS:
+        if raw == "exit":
             return "Closes Reloaded."
-        if raw in _HELP_WORDS:
+        if raw == "help":
             return "Opens help."
-        if raw in _STOP_WORDS:
+        if raw == "stop":
             return "Nothing is running to stop."
-        if raw in _WATCH_WORDS:
+        if raw == "watch":
             return f"Turns auto reload {'off' if status.watch else 'on'}."
         if raw == "record":
             return f"Turns recording {'off' if status.record else 'on'}."
@@ -295,7 +320,7 @@ class ReloadedController:
     @staticmethod
     def _describe_seed(arg: str) -> str:
         if arg == "":
-            return "Needs a number, or none."
+            return "Sets the seed, e.g. seed 42 or seed none."
         if arg in ("none", "null"):
             return "Clears the seed."
         try:
@@ -306,7 +331,7 @@ class ReloadedController:
     @staticmethod
     def _describe_trial(arg: str) -> str:
         if arg == "":
-            return "Needs a number."
+            return "Sets the trial number, e.g. trial 3."
         try:
             return f"Sets the trial to {int(arg)}."
         except ValueError:
@@ -343,7 +368,7 @@ class ReloadedController:
 
     def submit(self, text: str) -> None:
         """Handles one line typed by the user. An empty line repeats the last command."""
-        raw = text.strip().lower()
+        raw = _canonical(text.strip().lower())
 
         target = self._explain_target(text)
         if target is not None:
@@ -351,19 +376,19 @@ class ReloadedController:
             return
 
         if self.status().state is not RunState.IDLE:
-            if raw in _STOP_WORDS:
+            if raw == "stop":
                 self._request_stop()
             else:
                 self._log(_BUSY_HINT)
             return
 
-        if raw in _EXIT_WORDS:
+        if raw == "exit":
             self._emit(ExitEvent())
-        elif raw in _STOP_WORDS:
+        elif raw == "stop":
             self._log("[dim]No run is currently in progress.[/dim]")
-        elif raw in _HELP_WORDS:
+        elif raw == "help":
             self._emit(HelpEvent())
-        elif raw in _WATCH_WORDS:
+        elif raw == "watch":
             self.toggle_watch()
         elif raw == "dojo":
             self._show_dojo_hint()

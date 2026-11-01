@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Self, cast
 
 import tomlkit
 from dotenv import find_dotenv, load_dotenv
@@ -53,6 +53,7 @@ from mujoco_mojo.typing import (
     UserInterface,
 )
 from mujoco_mojo.utils.color import Color
+from mujoco_mojo.utils.utils import headless_reason
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILENAME = "settings.toml"
@@ -596,6 +597,93 @@ class GeneralSettings(BaseModel):
     )
 
 
+def default_user_interface() -> UserInterface:
+    """The viewer for this machine: Studio in a native window where one can be shown, and Studio in a browser where it cannot (over SSH, or on Linux with no display)."""
+    return UserInterface.STUDIO if headless_reason() is None else UserInterface.WEB
+
+
+class ReloadedKeySettings(BaseModel):
+    """Keyboard shortcuts of the Reloaded terminal UI. Each action takes a list of Textual key names such as `f2` or `ctrl+g`, and the first one is shown in the footer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="Keys")
+
+    # function keys by default: the focused command line owns the common Ctrl chords, and a terminal inside an editor hands some keys to the editor before Reloaded sees them. VS Code does that for F1 (command palette), F5 and F10 (debugging), F6, and F11 (full screen), and Ctrl+P and Ctrl+Q never arrive either. So the keys shown in the footer skip those, apart from F10 which only matters during a VS Code debug session. F1 and Ctrl+Q stay as extra keys for terminals that do pass them along
+    generate: list[str] = Field(
+        default_factory=lambda: ["f2"],
+        title="Generate",
+        description="Keys that generate the model without running it.",
+    )
+
+    run: list[str] = Field(
+        default_factory=lambda: ["f3"],
+        title="Run",
+        description="Keys that generate the model and run the runtime.",
+    )
+
+    watch: list[str] = Field(
+        default_factory=lambda: ["f4"],
+        title="Watch",
+        description="Keys that turn reloading on source changes on or off.",
+    )
+
+    record: list[str] = Field(
+        default_factory=lambda: ["f7"],
+        title="Record",
+        description="Keys that turn telemetry and video recording on or off.",
+    )
+
+    explain: list[str] = Field(
+        default_factory=lambda: ["f8"],
+        title="Explain",
+        description="Keys that show or hide the hint on what the typed command does.",
+    )
+
+    help: list[str] = Field(
+        default_factory=lambda: ["f9", "f1"],
+        title="Help",
+        description="Keys that open the help.",
+    )
+
+    stop: list[str] = Field(
+        default_factory=lambda: ["escape"],
+        title="Stop",
+        description="Keys that stop the run in progress.",
+    )
+
+    quit: list[str] = Field(
+        default_factory=lambda: ["f10", "ctrl+q"],
+        title="Quit",
+        description="Keys that close Reloaded. Typing `exit` always works too.",
+    )
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _split_text(cls, value: Any) -> Any:
+        """The Dojo settings panel and `mujoco-mojo settings set` give a list as text such as `f2, f3`."""
+        if isinstance(value, str):
+            return value.split(",")
+        return value
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def _tidy(cls, keys: list[str]) -> list[str]:
+        """Key names are lowercase, so `F2` and `f2` are the same key, and a repeated or empty entry means nothing."""
+        return list(
+            dict.fromkeys(key for key in (k.strip().lower() for k in keys) if key)
+        )
+
+    @model_validator(mode="after")
+    def _one_action_per_key(self) -> Self:
+        owners: dict[str, str] = {}
+        for action in type(self).model_fields:
+            for key in getattr(self, action):
+                if key in owners:
+                    msg = f"`{key}` is bound to both `{owners[key]}` and `{action}`. A key can only do one thing."
+                    raise ValueError(msg)
+                owners[key] = action
+        return self
+
+
 class ReloadedSettings(BaseModel):
     """Settings for `mujoco-mojo reloaded`."""
 
@@ -612,9 +700,9 @@ class ReloadedSettings(BaseModel):
     )
 
     ui: UserInterface = Field(
-        default=UserInterface.OPENGL,
+        default_factory=default_user_interface,
         title="UI Backend",
-        description="Which viewer to show the model in: `opengl` (the classic MuJoCo window), `studio` (a native MuJoCo Studio window), or `web` (MuJoCo Studio in a browser).",
+        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser). Defaults to `studio`, or `web` over SSH or with no display.",
     )
 
     @field_validator("ui", mode="before")
@@ -640,6 +728,8 @@ class ReloadedSettings(BaseModel):
         title="Record",
         description="Record telemetry to a per-trial `telemetry.parquet` and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.",
     )
+
+    keys: ReloadedKeySettings = Field(default_factory=ReloadedKeySettings)
 
 
 class _RunDefaults(BaseModel):

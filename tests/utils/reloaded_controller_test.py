@@ -48,12 +48,12 @@ def test_help_lists_the_float_command_only_with_a_runtime(
     """A speed command makes no sense without a runtime function, so help leaves it out."""
     names = [name for name, _ in controller.help_entries()]
     assert "<float>" in names
-    assert "run" in names
+    assert "run / r" in names
 
     session.runtime = None
     names = [name for name, _ in controller.help_entries()]
     assert "<float>" not in names
-    assert "run" not in names
+    assert "run / r" not in names
 
 
 def test_seed_command_sets_and_clears_the_seed(
@@ -217,6 +217,88 @@ def test_gen_generates_without_the_runtime(
 
     assert session.calls == [False]
     assert controller.status().last_command == "gen"
+
+
+@pytest.mark.parametrize("word", ["gen", "g", "generate", "G", " Generate "])
+def test_every_word_for_generate_generates_without_the_runtime(
+    controller: ReloadedController, session: FakeSession, word: str
+) -> None:
+    controller.submit(word)
+    wait_idle(controller)
+
+    assert session.calls == [False]
+    assert controller.status().last_command == "gen"
+
+
+@pytest.mark.parametrize("word", ["run", "r", "R"])
+def test_every_word_for_run_runs_the_runtime(
+    controller: ReloadedController, session: FakeSession, word: str
+) -> None:
+    controller.submit(word)
+    wait_idle(controller)
+
+    assert session.calls == [True]
+    assert controller.status().last_command == "run"
+
+
+@pytest.mark.parametrize(
+    ("word", "command"),
+    [
+        ("w", "watch"),
+        ("rec", "record"),
+        ("h", "help"),
+        ("?", "help"),
+        ("q", "exit"),
+        ("quit", "exit"),
+    ],
+)
+def test_the_short_words_do_what_the_long_ones_do(
+    controller: ReloadedController, log: EventLog, word: str, command: str
+) -> None:
+    assert controller.describe(word) == controller.describe(command)
+
+    controller.submit(word)
+
+    if command == "watch":
+        assert controller.status().watch
+    elif command == "record":
+        assert controller.status().record
+    elif command == "help":
+        assert any(isinstance(event, HelpEvent) for event in log.events)
+    else:
+        assert any(isinstance(event, ExitEvent) for event in log.events)
+
+
+@pytest.mark.parametrize("word", ["stop", "halt", "abort", "ABORT"])
+def test_every_word_for_stop_interrupts_a_run_in_progress(
+    controller: ReloadedController, session: FakeSession, word: str
+) -> None:
+    def wait_for_stop(s: FakeSession) -> None:
+        assert s.stop_event.wait(5)
+        raise rt.SimulationStopped
+
+    session.behavior = wait_for_stop
+    controller.submit("run")
+    assert session.started.wait(5)
+    assert controller.describe(word) == "Aborts the current run."
+
+    controller.submit(word)
+    wait_idle(controller)
+
+    assert controller.status().last_outcome is Outcome.STOPPED
+
+
+def test_an_alias_can_be_explained_like_the_command(
+    controller: ReloadedController,
+) -> None:
+    assert controller.describe("g") == "Generates the model only."
+    assert controller.describe("g?") == "Prints what that would do."
+    assert controller.describe("explain generate") == "Prints what that would do."
+
+
+def test_long_forms_are_offered_as_completions_after_the_short_ones() -> None:
+    assert COMMAND_SUGGESTIONS.index("gen") < COMMAND_SUGGESTIONS.index("generate")
+    assert COMMAND_SUGGESTIONS.index("exit") < COMMAND_SUGGESTIONS.index("quit")
 
 
 def test_run_generates_and_runs_the_runtime_at_the_current_speed(
@@ -525,10 +607,10 @@ def test_shutdown_stops_a_run_in_progress(
         ("seed 42", "Sets the seed to 42."),
         ("seed none", "Clears the seed."),
         ("seed abc", "Seed must be an integer or none."),
-        ("seed", "Needs a number, or none."),
+        ("seed", "Sets the seed, e.g. seed 42 or seed none."),
         ("trial 3", "Sets the trial to 3."),
         ("trial x", "Trial must be an integer."),
-        ("trial", "Needs a number."),
+        ("trial", "Sets the trial number, e.g. trial 3."),
         ("watch", "Turns auto reload on."),
         ("record", "Turns recording on."),
         ("dojo", "Prints the Dojo command."),
@@ -674,6 +756,29 @@ def test_a_question_mark_explains_a_run_instead_of_starting_it(
     assert session.calls == []
     assert any("Generates, then runs at 1x." in m for m in log.messages())
     assert any("Generates the model only." in m for m in log.messages())
+
+
+@pytest.mark.parametrize(
+    ("typed", "sentence"),
+    [
+        ("explain seed", "Sets the seed, e.g. seed 42 or seed none."),
+        ("seed?", "Sets the seed, e.g. seed 42 or seed none."),
+        ("explain trial", "Sets the trial number, e.g. trial 3."),
+        ("trial?", "Sets the trial number, e.g. trial 3."),
+    ],
+)
+def test_explaining_a_command_that_takes_a_number_does_not_need_the_number(
+    controller: ReloadedController,
+    session: FakeSession,
+    log: EventLog,
+    typed: str,
+    sentence: str,
+) -> None:
+    controller.submit(typed)
+
+    assert any(sentence in m for m in log.messages())
+    assert session.seed == 1
+    assert session.trial_num == 0
 
 
 def test_a_bare_explain_says_what_enter_does(

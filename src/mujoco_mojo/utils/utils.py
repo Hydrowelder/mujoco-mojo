@@ -17,6 +17,7 @@ from mujoco_mojo.utils.log import get_logger
 __all__ = [
     "get_checksum",
     "get_local_ip",
+    "headless_reason",
     "is_empty_list",
     "to_pretty_xml",
     "write_dojo_script",
@@ -66,6 +67,21 @@ def write_dojo_script(workdir: Path) -> None:
         tmpl.joinpath("dojo.sh").read_text(encoding="utf-8"), encoding="utf-8"
     )
     os.chmod(dest, 0o755)
+
+
+def headless_reason() -> str | None:
+    """
+    Says why a native window probably cannot be shown on this machine, or returns `None` if one can.
+
+    A machine reached over SSH counts as headless even with X forwarding, since the viewer is then far better served in a browser. Only Linux is checked for a display, because macOS and Windows always have one.
+    """
+    if is_ssh_session():
+        return "this is an SSH session"
+    if sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        return "no display was found"
+    return None
 
 
 def get_local_ip() -> str:

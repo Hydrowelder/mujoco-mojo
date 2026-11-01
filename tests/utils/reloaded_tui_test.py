@@ -11,21 +11,25 @@ from typing import Any
 
 import pytest
 from reloaded_fakes import FakeBackend, FakeSession
+from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
-from textual.binding import Binding
 from textual.pilot import Pilot
 from textual.widgets import Header, RichLog, Static
 
+from mujoco_mojo.settings import ReloadedKeySettings
 from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
 from mujoco_mojo.utils.layers.reloaded.controller import (
+    COMMAND_SUGGESTIONS,
     ControllerStatus,
     Outcome,
     ReloadedController,
     RunState,
 )
+from mujoco_mojo.utils.layers.reloaded.rain import RainScreen
 from mujoco_mojo.utils.layers.reloaded.tui import (
     CommandInput,
+    CommandSuggester,
     ExplainButton,
     HelpScreen,
     LOG_BACKLOG,
@@ -55,11 +59,21 @@ def make_app(
     backend: FakeBackend | None = None,
     *,
     explain: bool = True,
+    keys: ReloadedKeySettings | None = None,
+    rain_seconds: float = 0.0,
 ) -> tuple[ReloadedApp, FakeSession]:
     session = session if session is not None else FakeSession()
     backend = backend if backend is not None else FakeBackend()
     controller = ReloadedController(session, backend, watch_path=tmp_path)
-    return ReloadedApp(controller, backend, subtitle="test", explain=explain), session
+    app = ReloadedApp(
+        controller,
+        backend,
+        keys=keys,
+        subtitle="test",
+        explain=explain,
+        rain_seconds=rain_seconds,
+    )
+    return app, session
 
 
 def log_text(app: ReloadedApp) -> str:
@@ -188,11 +202,7 @@ def test_the_visible_keys_avoid_the_ones_an_editor_terminal_keeps(
     app, _ = make_app(tmp_path)
     taken = {"f1", "f5", "f6", "f11", "ctrl+p", "ctrl+q"}
 
-    shown = [
-        binding.key
-        for binding in app.BINDINGS
-        if isinstance(binding, Binding) and binding.show
-    ]
+    shown = [binding.key for binding in app.shortcuts if binding.show]
 
     assert shown
     assert not taken & set(shown)
@@ -282,6 +292,83 @@ def test_the_ctrl_c_message_names_the_key_that_really_quits(
     assert "F10" in said[0]
     assert "exit" in said[0]
     assert "Ctrl+Q" not in said[0]
+
+
+def test_the_default_keys_are_the_ones_the_footer_has_always_shown(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path)
+
+    assert [(b.key, b.show) for b in app.shortcuts] == [
+        ("f2", True),
+        ("f3", True),
+        ("f4", True),
+        ("f7", True),
+        ("f8", True),
+        ("f9", True),
+        ("f1", False),
+        ("escape", True),
+        ("f10", True),
+        ("ctrl+q", False),
+    ]
+    assert {b.key: b.key_display for b in app.shortcuts}["escape"] == "Esc"
+
+
+def test_a_key_from_settings_runs_its_command_and_the_old_key_stops_working(
+    tmp_path: Path,
+) -> None:
+    app, session = make_app(
+        tmp_path, keys=ReloadedKeySettings(generate=["f12"], run=["ctrl+g"])
+    )
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("f2")
+            await pilot.pause(0.1)
+            assert session.calls == []
+
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: session.calls == [False])
+            await wait_until(
+                pilot, lambda: app._controller.status().state is RunState.IDLE
+            )
+
+            await pilot.press("ctrl+g")
+            await wait_until(pilot, lambda: session.calls == [False, True])
+
+    run(scenario())
+
+
+def test_the_help_lists_every_key_of_an_action_and_the_same_key_closes_it(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path, keys=ReloadedKeySettings(help=["f12", "ctrl+h"]))
+
+    async def scenario() -> None:
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: isinstance(app.screen, HelpScreen))
+            console = Console(width=100, record=True, file=io.StringIO())
+            console.print(app.screen.query_one("#help-body").query_one(Static).content)
+            assert "F12 / Ctrl+H" in console.export_text()
+
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: not isinstance(app.screen, HelpScreen))
+
+    run(scenario())
+
+
+def test_without_a_quit_key_the_ctrl_c_message_says_to_type_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, _ = make_app(tmp_path, keys=ReloadedKeySettings(quit=[]))
+    said: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kwargs: said.append(message))
+
+    app.action_help_quit()
+
+    assert not [b for b in app.shortcuts if b.action == "quit"]
+    assert said == ["Type [b]exit[/b] to quit."]
 
 
 def test_it_starts_with_the_hint_on_and_every_panel_titled(tmp_path: Path) -> None:
@@ -487,6 +574,43 @@ def test_history_and_tab_completion_work_on_the_command_line(tmp_path: Path) -> 
     run(scenario())
 
 
+@pytest.mark.parametrize(
+    ("typed", "completed"),
+    [
+        ("re", "record"),
+        ("gene", "generate"),
+        ("explain hel", "explain help"),
+        ("explain g", "explain gen"),
+        ("explain se", "explain seed "),
+        ("explain gene", "explain generate"),
+        ("explain zz", None),
+        ("explain ", None),
+        ("explain", "explain "),
+        ("z", None),
+    ],
+)
+def test_completion_offers_the_command_after_explain_too(
+    typed: str, completed: str | None
+) -> None:
+    suggester = CommandSuggester(COMMAND_SUGGESTIONS)
+
+    assert asyncio.run(suggester.get_suggestion(typed)) == completed
+
+
+def test_tab_completes_the_command_being_explained(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            command = app.query_one(CommandInput)
+
+            await pilot.press(*"explain hel", "tab")
+
+            await wait_until(pilot, lambda: command.value == "explain help")
+
+    run(scenario())
+
+
 def test_help_opens_from_a_key_and_a_command_and_scrolls_on_a_short_terminal(
     tmp_path: Path,
 ) -> None:
@@ -520,6 +644,27 @@ def test_the_app_closes_and_stops_the_session(tmp_path: Path, how: str) -> None:
                 await pilot.press("enter")
             else:
                 await pilot.press(how)
+            await wait_until(pilot, lambda: app.return_code is not None)
+
+    run(scenario())
+    assert app.return_code == 0
+    assert session.output_sink is None
+
+
+@pytest.mark.parametrize("how", ["f10", "exit"])
+def test_the_app_plays_the_rain_on_the_way_out_and_then_closes(
+    tmp_path: Path, how: str
+) -> None:
+    app, session = make_app(tmp_path, rain_seconds=0.3)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            if how == "exit":
+                app.query_one(CommandInput).value = "exit"
+                await pilot.press("enter")
+            else:
+                await pilot.press(how)
+            await wait_until(pilot, lambda: isinstance(app.screen, RainScreen))
             await wait_until(pilot, lambda: app.return_code is not None)
 
     run(scenario())

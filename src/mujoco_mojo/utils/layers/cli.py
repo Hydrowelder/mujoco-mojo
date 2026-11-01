@@ -1513,6 +1513,7 @@ def run_reloaded(
         xml_name=xml_name,
         watch=watch,
         record=record,
+        keys=_SETTINGS.reloaded.keys,
         args=processed_args,
         kwargs=processed_kwargs,
         host=host,

@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
 import mujoco_mojo.utils.layers.reloaded.session as session_module
-from mujoco_mojo.settings import ReloadedSettings
+from mujoco_mojo.settings import ReloadedKeySettings, ReloadedSettings
 from mujoco_mojo.typing import UserInterface
 from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.layers.reloaded import MojoReloaded
@@ -139,14 +139,20 @@ class AppProbe:
 
     session: MojoReloaded
     backend: FakeBackend | None = None
+    keys: ReloadedKeySettings | None = None
     subtitle: str = ""
     fail_with: Exception | None = None
     seen: dict[str, object] = field(default_factory=dict)
 
     def __call__(
-        self, controller: object, backend: FakeBackend, subtitle: str = ""
+        self,
+        controller: object,
+        backend: FakeBackend,
+        keys: ReloadedKeySettings | None = None,
+        subtitle: str = "",
     ) -> "AppProbe":
         self.backend = backend
+        self.keys = keys
         self.subtitle = subtitle
         return self
 
@@ -181,6 +187,14 @@ def test_the_viewer_is_open_and_wired_to_the_runtime_while_the_app_runs(
     assert probe.seen["sync_hook"] == backend.sync_hook
     assert probe.seen["viewer_lock"] is nullcontext
     assert probe.subtitle == f"opengl | {probe.session.workdir}"
+
+
+def test_the_keys_from_settings_reach_the_app(probe: AppProbe) -> None:
+    probe.session.keys = ReloadedKeySettings(generate=["f12"])
+
+    probe.session._run_tui(LockedBackend(), make_state())
+
+    assert probe.keys is probe.session.keys
 
 
 def test_the_viewer_is_closed_and_unwired_once_the_app_returns(probe: AppProbe) -> None:

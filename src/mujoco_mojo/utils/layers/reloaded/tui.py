@@ -16,14 +16,15 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, VerticalScroll
-from textual.css.query import NoMatches
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.suggester import SuggestFromList
+from textual.suggester import Suggester
 from textual.widget import Widget
 from textual.widgets import Button, Footer, Input, RichLog, Static
 
+from mujoco_mojo.settings import ReloadedKeySettings
 from mujoco_mojo.utils.log import TerminalFilter
 
 from .backends.base import ConnectionInfo, ViewerBackend
@@ -39,6 +40,7 @@ from .controller import (
     RunState,
     StatusEvent,
 )
+from .rain import RainScreen
 from .theme import (
     ACCENT,
     DANGER,
@@ -117,6 +119,31 @@ def render_markup(message: str) -> Text:
 def key_label(key: str) -> str:
     """Display form of a Textual key name, e.g. `ctrl+q` becomes `Ctrl+Q` and `f1` becomes `F1`."""
     return "+".join(part.capitalize() for part in key.split("+"))
+
+
+def shortcut_bindings(keys: ReloadedKeySettings) -> list[Binding]:
+    """One binding per configured key. The first key of an action is shown in the footer, and any others only work."""
+    actions = (
+        ("Generate", "submit('gen')", keys.generate),
+        ("Run", "submit('run')", keys.run),
+        ("Watch", "submit('watch')", keys.watch),
+        ("Record", "submit('record')", keys.record),
+        ("Explain", "toggle_explain", keys.explain),
+        ("Help", "help", keys.help),
+        ("Stop", "submit('stop')", keys.stop),
+        ("Quit", "quit", keys.quit),
+    )
+    return [
+        Binding(
+            key,
+            action,
+            description,
+            show=position == 0,
+            key_display="Esc" if key == "escape" else key_label(key),
+        )
+        for description, action, names in actions
+        for position, key in enumerate(names)
+    ]
 
 
 @dataclass(frozen=True)
@@ -455,6 +482,33 @@ class ExplainButton(Button):
         self.tooltip = "Say what the command you have typed will do"
 
 
+class CommandSuggester(Suggester):
+    """Completes the command being typed, and also the command after `explain`, so `explain hel` becomes `explain help`."""
+
+    EXPLAIN = "explain "
+
+    def __init__(self, commands: Iterable[str]) -> None:
+        super().__init__(case_sensitive=False)
+        self._commands = tuple(commands)
+
+    async def get_suggestion(self, value: str) -> str | None:
+        if value.startswith(self.EXPLAIN):
+            rest = value.removeprefix(self.EXPLAIN)
+            if not rest:
+                return None
+            return next(
+                (
+                    self.EXPLAIN + command
+                    for command in self._commands
+                    if command != self.EXPLAIN and command.startswith(rest)
+                ),
+                None,
+            )
+        return next(
+            (command for command in self._commands if command.startswith(value)), None
+        )
+
+
 class CommandInput(Input):
     """Command line with Up and Down history and Tab completion."""
 
@@ -469,7 +523,7 @@ class CommandInput(Input):
     def __init__(self, suggestions: Iterable[str], *, id: str | None = None) -> None:
         super().__init__(
             placeholder=self.PLACEHOLDER,
-            suggester=SuggestFromList(suggestions, case_sensitive=False),
+            suggester=CommandSuggester(suggestions),
             id=id,
         )
         self._history: list[str] = []
@@ -516,16 +570,24 @@ class CommandInput(Input):
 class HelpScreen(ModalScreen[None]):
     """Lists the commands and key bindings."""
 
-    BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape,f1,f9,q", "dismiss", "Close")
-    ]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape,q", "dismiss", "Close")]
 
     def __init__(
-        self, commands: list[tuple[str, str]], keys: list[tuple[str, str]]
+        self,
+        commands: list[tuple[str, str]],
+        keys: list[tuple[str, str]],
+        close_keys: list[str],
     ) -> None:
+        """`close_keys` are the keys that opened the help, which close it too. A modal screen does not pass keys on to the app, so it has to bind them itself."""
         super().__init__()
         self._commands = commands
         self._keys = keys
+        self._close_keys = close_keys
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key in self._close_keys:
+            event.stop()
+            self.dismiss()
 
     def compose(self) -> ComposeResult:
         body = VerticalScroll(Static(self._render_body()), id="help-body")
@@ -542,8 +604,6 @@ class HelpScreen(ModalScreen[None]):
             return table
 
         return Group(
-            Text("MuJoCo Mojo Reloaded", style=f"bold {ACCENT}"),
-            Text(""),
             Text("Commands", style=f"bold {INK_STRONG}"),
             grid(self._commands),
             Text(""),
@@ -565,33 +625,31 @@ class ReloadedApp(App[None]):
     # Ctrl+P is Quick Open in VS Code, and the palette has nothing of ours in it
     ENABLE_COMMAND_PALETTE = False
 
-    # function keys on purpose: the focused command line owns the common Ctrl chords, and a terminal inside an editor hands some keys to the editor before this app sees them. VS Code does that for F1 (command palette), F5 and F10 (debugging), F6, and F11 (full screen), and Ctrl+P and Ctrl+Q never arrive either. So the keys shown below skip those, apart from F10 which only matters during a VS Code debug session. Every binding is also clickable in the footer
-    BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("f2", "submit('gen')", "Generate", key_display="F2"),
-        Binding("f3", "submit('run')", "Run", key_display="F3"),
-        Binding("f4", "submit('watch')", "Watch", key_display="F4"),
-        Binding("f7", "submit('record')", "Record", key_display="F7"),
-        Binding("f8", "toggle_explain", "Explain", key_display="F8"),
-        Binding("f9", "help", "Help", key_display="F9"),
-        Binding("escape", "submit('stop')", "Stop", key_display="Esc"),
-        Binding("f10", "quit", "Quit", key_display="F10"),
-        # the usual keys for help and quit, for terminals that do pass them along
-        Binding("f1", "help", "Help", show=False),
-        Binding("ctrl+q", "quit", "Quit", show=False),
-    ]
-
     def __init__(
         self,
         controller: ReloadedController,
         backend: ViewerBackend,
         *,
+        keys: ReloadedKeySettings | None = None,
         subtitle: str = "",
         watch_css: bool = False,
         explain: bool = True,
+        rain_seconds: float = 1.5,
     ) -> None:
-        """`watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, and `explain` sets whether the hint on what the typed command does starts out showing."""
+        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, and `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it."""
         super().__init__(watch_css=watch_css)
+        self.shortcuts = shortcut_bindings(keys or ReloadedKeySettings())
+        """The keys bound to actions, in the order the footer shows them."""
+        for binding in self.shortcuts:
+            self.bind(
+                binding.key,
+                binding.action,
+                description=binding.description,
+                show=binding.show,
+                key_display=binding.key_display,
+            )
         self._explain_at_start = explain
+        self._rain_seconds = rain_seconds
         self._controller = controller
         self._backend = backend
         self.sub_title = subtitle
@@ -713,13 +771,16 @@ class ReloadedApp(App[None]):
             self._logs.put(Text(text, style=str(DANGER) if event.stderr else INK_BODY))
 
     def action_help(self) -> None:
-        keys = [
-            (key_label(binding.key), binding.description)
-            for binding in self.BINDINGS
-            if isinstance(binding, Binding) and binding.show
-        ]
+        labels: dict[str, list[str]] = {}
+        for binding in self.shortcuts:
+            labels.setdefault(binding.description, []).append(key_label(binding.key))
+        keys = [(" / ".join(names), action) for action, names in labels.items()]
         self.push_screen(
-            HelpScreen(self._controller.help_entries(), keys + _EXTRA_KEY_HELP)
+            HelpScreen(
+                self._controller.help_entries(),
+                keys + _EXTRA_KEY_HELP,
+                close_keys=[b.key for b in self.shortcuts if b.action == "help"],
+            )
         )
 
     def action_submit(self, command: str) -> None:
@@ -734,15 +795,18 @@ class ReloadedApp(App[None]):
         quit_key = next(
             (
                 binding.key_display or key_label(binding.key)
-                for binding in self.BINDINGS
-                if isinstance(binding, Binding)
-                and binding.action == "quit"
-                and binding.show
+                for binding in self.shortcuts
+                if binding.action == "quit" and binding.show
             ),
-            "F10",
+            None,
+        )
+        message = (
+            "Type [b]exit[/b] to quit."
+            if quit_key is None
+            else f"Press [b]{quit_key}[/b], or type [b]exit[/b], to quit."
         )
         self.notify(
-            f"Press [b]{quit_key}[/b], or type [b]exit[/b], to quit.",
+            message,
             title="Do you want to quit?",
         )
 
@@ -752,6 +816,12 @@ class ReloadedApp(App[None]):
         self._quitting = True
         # stopping a run can take a moment, so keep the event loop free while it winds down
         await asyncio.to_thread(self._controller.shutdown)
+        if self._rain_seconds > 0:
+            self.push_screen(RainScreen(self._rain_seconds), self._leave)
+        else:
+            self.exit()
+
+    def _leave(self, _result: None) -> None:
         self.exit()
 
     async def _check_viewer(self) -> None:
