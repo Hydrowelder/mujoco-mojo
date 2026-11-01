@@ -1,6 +1,7 @@
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from watchfiles import PythonFilter, watch
@@ -15,14 +16,18 @@ logging.getLogger("watchfiles").setLevel(logging.WARNING)
 __all__ = ["FileWatcher"]
 
 
+@dataclass(eq=False)
 class FileWatcher:
     """Watches a directory tree for `*.py` changes on a background thread and reports how many files changed in each batch."""
 
-    def __init__(self, path: Path, on_change: Callable[[int], None]) -> None:
-        self.path = path
-        self._on_change = on_change
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+    path: Path
+    """The directory to watch, including everything under it."""
+    on_change: Callable[[int], None]
+    """Called from the watcher's thread with the number of files that changed."""
+    _stop: threading.Event = field(
+        default_factory=threading.Event, init=False, repr=False
+    )
+    _thread: threading.Thread | None = field(default=None, init=False, repr=False)
 
     @property
     def running(self) -> bool:
@@ -54,6 +59,6 @@ class FileWatcher:
             for changes in watch(
                 self.path, watch_filter=PythonFilter(), stop_event=stop
             ):
-                self._on_change(len(changes))
+                self.on_change(len(changes))
         except Exception:
             logger.exception(f"File watcher for {self.path} stopped unexpectedly")

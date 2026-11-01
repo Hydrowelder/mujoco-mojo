@@ -1,6 +1,4 @@
 import logging
-import os
-import queue
 import shutil
 import sys
 import threading
@@ -11,15 +9,13 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, cast, runtime_checkable
+from typing import Any, assert_never, cast
 
 import mujoco
-import numpy as np
 import typer
 from numpydantic import NDArray
 from rich.console import Console
 from rich.markup import escape
-from rich.panel import Panel
 
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
@@ -53,20 +49,19 @@ from mujoco_mojo.utils.statusing import (
     TrialStatus,
 )
 from mujoco_mojo.utils.utils import write_dojo_script
-from mujoco_mojo.visualization import ArrowConfig, LineConfig
+
+from .backends import (
+    OnReloadCallback,
+    OpenGLBackend,
+    ViewerBackend,
+    ViewerUnavailableError,
+    raise_studio_unavailable,
+)
+from .controller import ReloadedController
+from .tui import ReloadedApp
 
 logger = get_logger(__name__)
 console = Console()
-
-
-@runtime_checkable
-class OnReloadCallback(Protocol):
-    def __call__(self, state: MjState) -> Any: ...
-
-
-@runtime_checkable
-class IsRunningCheck(Protocol):
-    def __call__(self) -> Any: ...
 
 
 def _matrix_rain(duration: float = 1.5, fps: int = 20) -> None:
@@ -112,7 +107,6 @@ def recursive_reload(
 ) -> None:
     """Recursively reloads modules, but only if they live inside project_root."""
     import importlib
-    import sys
 
     if visited is None:
         visited = set()
@@ -205,52 +199,22 @@ class MojoReloaded:
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
     playback_speed: float = 1.0
-    _last_command: str = "run"
     _current_trial_dir: Path | None = None
     _job_status: JobStatus | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
-    _print_lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False, compare=False
-    )
-    _reprint_prompt: Callable[[], None] | None = field(
-        default=None, repr=False, compare=False
-    )
     output_sink: Callable[[str], None] | None = field(
         default=None, repr=False, compare=False
     )
     """When set, messages that would be printed to the terminal are passed to this callable as rich markup strings instead. The terminal UI uses it to show them in its log pane."""
-    _line_buffer: str = field(default="", init=False, repr=False)
-    _line_cursor: int = field(default=0, init=False, repr=False)
 
     _trial_padding_style = "03d"
 
-    def _clear_line(self) -> None:
-        """Writes the clear-line escape directly, bypassing rich's markup/highlighting which otherwise mangles raw ANSI control sequences. Caller must hold `_print_lock`."""
-        if self._reprint_prompt is not None:
-            console.file.write("\r\x1b[2K")
-            console.file.flush()
-
-    def _redraw_line(self) -> None:
-        """Reprints the prompt plus any in-progress input line (with the cursor restored to its column), so async output never wipes out what the user was mid-typing. No-op if there's no active prompt. Caller must hold `_print_lock`."""
-        if self._reprint_prompt is None:
-            return
-        self._reprint_prompt()
-        if self._line_buffer:
-            console.file.write(self._line_buffer)
-        trailing = len(self._line_buffer) - self._line_cursor
-        if trailing > 0:
-            console.file.write(f"\x1b[{trailing}D")
-        console.file.flush()
-
     def _print(self, *args, **kwargs) -> None:
-        """Prints a message, redrawing the persistent prompt below it if the interactive loop is active. If an `output_sink` is set, the message goes there instead."""
+        """Prints a message to the terminal, or, once the terminal UI has taken over the screen, hands it to `output_sink` as rich markup."""
         if self.output_sink is not None:
             self.output_sink(" ".join(str(a) for a in args))
             return
-        with self._print_lock:
-            self._clear_line()
-            console.print(*args, **kwargs)
-            self._redraw_line()
+        console.print(*args, **kwargs)
 
     def trial_dir_for(self, trial_num: int) -> Path:
         """
@@ -627,6 +591,13 @@ class MojoReloaded:
         write_dojo_script(self.workdir)
         self._trial_padding_style = self._infer_padding_style()
 
+        # picked before the first generation, so a viewer that cannot run here fails at once instead of after the wait
+        try:
+            backend = self._create_backend()
+        except ViewerUnavailableError as e:
+            console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            raise typer.Exit(1)
+
         try:
             start = time.time()
             with console.status(
@@ -641,687 +612,37 @@ class MojoReloaded:
         except Exception as e:
             console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
             raise typer.Exit(1)
-        match self.ui:
-            case UserInterface.OPENGL:
-                self.run_opengl(initial_state)
-            case UserInterface.MJVISER | UserInterface.VISER:
-                self.run_viser(initial_state)
-            case _:
-                console.print(f"Invalid viewer option selected {self.ui}")
+
+        self._run_tui(backend, initial_state)
         _matrix_rain()
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
 
-    def _print_help(self) -> None:
-        runtime_cmd = (
-            "- [bold cyan]Any float[/]: Generate and use runtime. Playback speed set by float [dim](i.e., 1.0 for real time, 0.5 for half speed)[/]\n"
-            if self.runtime
-            else ""
-        )
-        watch_status = "[bold blue]on[/bold blue]" if self.watch else "[dim]off[/dim]"
-        record_status = "[bold blue]on[/bold blue]" if self.record else "[dim]off[/dim]"
-        self._print(
-            Panel(
-                "[bold green]MuJoCo Mojo Reloaded is Live![/bold green]\n\n"
-                "- [bold yellow]ENTER[/]: Repeat last command\n"
-                "- [bold magenta]gen[/]: Generate only\n"
-                f"{runtime_cmd}"
-                "- [bold white]seed <N>[/]: Set seed to N [dim](use [bold]seed none[/bold] to clear)[/dim]\n"
-                "- [bold white]trial <N>[/]: Set trial number to N\n"
-                f"- [bold blue]watch[/bold blue]: Toggle auto-watch on [dim].py[/dim] changes (currently {watch_status})\n"
-                f"- [bold blue]record[/bold blue]: Toggle telemetry (for [dim]mujoco-mojo dojo[/dim]) and video recording (currently {record_status})\n"
-                "- [bold blue]dojo[/bold blue]: Print a command to launch the Dojo monitor for this session\n"
-                "- [bold red]stop[/bold red] / [bold red]halt[/bold red]: Abort a run in progress\n"
-                "- [bold cyan]h[/] / [bold cyan]help[/]: Show this panel\n"
-                "- [bold red]exit[/] / [bold red]q[/]: Close",
-                title="Interactive Controls",
-                border_style="cyan",
-                expand=False,
-            )
-        )
-
-    def _interactive_loop(
-        self, on_reload_callback: OnReloadCallback, is_running_check: IsRunningCheck
-    ) -> None:
-        event_queue: queue.Queue[tuple[str, str]] = queue.Queue()
-        stop_event = threading.Event()
-        watcher_stop_event: threading.Event | None = None
-        busy_event = threading.Event()
-        job_thread: threading.Thread | None = None
-
-        def start_watcher() -> threading.Event | None:
-            try:
-                from watchfiles import PythonFilter
-                from watchfiles import watch as wf_watch
-            except ImportError:
-                self._print(
-                    "[bold yellow]Warning:[/bold yellow] watchfiles not installed. "
-                    "Install [bold]mujoco-mojo[reloaded][/bold] to use --watch."
-                )
-                return None
-            # silence watchfiles' own "N changes detected" log; we print our own below
-            logging.getLogger("watchfiles").setLevel(logging.WARNING)
-
-            evt = threading.Event()
-            watch_path = Path.cwd()
-
-            def _run() -> None:
-                try:
-                    for changes in wf_watch(
-                        watch_path, watch_filter=PythonFilter(), stop_event=evt
-                    ):
-                        event_queue.put(("reload", str(len(changes))))
-                except Exception:
-                    pass
-
-            threading.Thread(target=_run, daemon=True).start()
-            return evt
-
-        def stop_watcher() -> None:
-            nonlocal watcher_stop_event
-            if watcher_stop_event is not None:
-                watcher_stop_event.set()
-                watcher_stop_event = None
-
-        def plain_stdin_reader() -> None:
-            """Fallback used when raw mode isn't available (not a tty, or `termios` is missing, e.g. on Windows). No history/line-editing beyond whatever the terminal driver provides."""
-            while not stop_event.is_set():
-                try:
-                    line = sys.stdin.readline()
-                    if not line:
-                        event_queue.put(("input", "exit"))
-                        break
-                    event_queue.put(("input", line.strip()))
-                except (KeyboardInterrupt, EOFError):
-                    event_queue.put(("input", "exit"))
-                    break
-
-        def raw_stdin_reader(fd: int) -> None:
-            """
-            Byte-level input reader that hand-rolls just enough line-editing to support Up/Down history navigation, alongside the Left/Right/Backspace editing a cooked tty already gives users for free.
-
-            Runs with local echo and canonical mode off, so every visible character is one we wrote ourselves via `_redraw_line` - that's what lets history navigation (and async output from other threads) safely rewrite the in-progress line without fighting the tty driver's own buffering.
-            """
-            import select
-
-            history: list[str] = []
-            history_index: int | None = None
-            pending_line = ""
-
-            while not stop_event.is_set():
-                try:
-                    ch = os.read(fd, 1)
-                except OSError:
-                    # e.g. EINTR from a signal landing on this thread; just retry
-                    continue
-                if not ch:
-                    event_queue.put(("input", "exit"))
-                    break
-
-                if ch == b"\x03":  # Ctrl-C (only reachable if ISIG is somehow off)
-                    event_queue.put(("input", "exit"))
-                    break
-
-                if ch in (b"\r", b"\n"):
-                    with self._print_lock:
-                        console.file.write("\r\n")
-                        console.file.flush()
-                        line = self._line_buffer
-                        self._line_buffer = ""
-                        self._line_cursor = 0
-                    if line and (not history or history[-1] != line):
-                        history.append(line)
-                    history_index = None
-                    pending_line = ""
-                    event_queue.put(("input", line.strip()))
-                    continue
-
-                if ch in (b"\x7f", b"\x08"):  # backspace
-                    if self._line_cursor > 0:
-                        with self._print_lock:
-                            self._line_buffer = (
-                                self._line_buffer[: self._line_cursor - 1]
-                                + self._line_buffer[self._line_cursor :]
-                            )
-                            self._line_cursor -= 1
-                            self._clear_line()
-                            self._redraw_line()
-                    continue
-
-                if ch == b"\x1b":
-                    # arrow keys (and other CSI sequences) arrive as ESC '[' <letter>;
-                    # give the rest a brief window so a bare Escape keypress (which sends
-                    # no follow-up bytes) doesn't block waiting for more input
-                    rest = (
-                        os.read(fd, 2) if select.select([fd], [], [], 0.05)[0] else b""
-                    )
-
-                    if rest == b"[A":  # up
-                        if history:
-                            if history_index is None:
-                                pending_line = self._line_buffer
-                                history_index = len(history) - 1
-                            elif history_index > 0:
-                                history_index -= 1
-                            with self._print_lock:
-                                self._line_buffer = history[history_index]
-                                self._line_cursor = len(self._line_buffer)
-                                self._clear_line()
-                                self._redraw_line()
-                    elif rest == b"[B":  # down
-                        if history_index is not None:
-                            if history_index < len(history) - 1:
-                                history_index += 1
-                                text = history[history_index]
-                            else:
-                                history_index = None
-                                text = pending_line
-                            with self._print_lock:
-                                self._line_buffer = text
-                                self._line_cursor = len(self._line_buffer)
-                                self._clear_line()
-                                self._redraw_line()
-                    elif rest == b"[C":  # right
-                        if self._line_cursor < len(self._line_buffer):
-                            with self._print_lock:
-                                self._line_cursor += 1
-                                self._clear_line()
-                                self._redraw_line()
-                    elif rest == b"[D":  # left
-                        if self._line_cursor > 0:
-                            with self._print_lock:
-                                self._line_cursor -= 1
-                                self._clear_line()
-                                self._redraw_line()
-                    continue
-
-                if ch < b"\x20":
-                    # other control characters (tab, etc.) aren't supported; ignore
-                    continue
-
-                char = ch.decode("ascii", errors="ignore")
-                if not char:
-                    continue
-                with self._print_lock:
-                    self._line_buffer = (
-                        self._line_buffer[: self._line_cursor]
-                        + char
-                        + self._line_buffer[self._line_cursor :]
-                    )
-                    self._line_cursor += 1
-                    self._clear_line()
-                    self._redraw_line()
-
-        old_termios = None
-        stdin_fd: int | None = None
-        if sys.stdin.isatty():
-            try:
-                import atexit
-                import termios
-
-                fd = sys.stdin.fileno()
-                old_termios = termios.tcgetattr(fd)
-                new_termios = termios.tcgetattr(fd)
-                new_termios[3] &= ~(termios.ICANON | termios.ECHO)
-                termios.tcsetattr(fd, termios.TCSADRAIN, new_termios)
-                # belt-and-suspenders: guarantees the terminal gets restored even if
-                # this function exits via an exception that skips its normal cleanup
-                atexit.register(termios.tcsetattr, fd, termios.TCSADRAIN, old_termios)
-                stdin_fd = fd
-            except Exception:
-                old_termios = None
-                stdin_fd = None
-
-        def stdin_reader() -> None:
-            if stdin_fd is not None:
-                raw_stdin_reader(stdin_fd)
-            else:
-                plain_stdin_reader()
-
-        threading.Thread(target=stdin_reader, daemon=True).start()
-
-        if self.watch:
-            watcher_stop_event = start_watcher()
-
-        def print_prompt() -> None:
-            if busy_event.is_set():
-                console.print(
-                    "[bold yellow]Running trial...[/bold yellow] "
-                    "[dim](type stop/halt to abort)[/dim][white] > [/white]",
-                    end="",
-                )
-                return
-
-            watch_indicator = " | [bold blue]W[/bold blue]" if self.watch else ""
-            console.print(
-                f"[bold green]Awaiting command[/bold green] [dim](last: {self._last_command} | seed: {self.seed} | trial: {self.trial_num}{watch_indicator})[/dim][white] > [/white]",
-                end="",
-            )
-
-        self._reprint_prompt = print_prompt
-        self._print_help()
-
-        # logging handlers write directly to the terminal, bypassing `self._print`'s
-        # prompt-clearing - wrap them so log lines don't step on the prompt either
-        root_logger = logging.getLogger()
-        wrapped_handlers: list[
-            tuple[logging.Handler, Callable[[logging.LogRecord], None]]
-        ] = []
-
-        def _wrap_handler(handler: logging.Handler) -> None:
-            original_emit = handler.emit
-
-            def emit(_self: logging.Handler, record: logging.LogRecord) -> None:
-                with self._print_lock:
-                    self._clear_line()
-                    original_emit(record)
-                    self._redraw_line()
-
-            setattr(handler, "emit", types.MethodType(emit, handler))
-            wrapped_handlers.append((handler, original_emit))
-
-        for handler in root_logger.handlers:
-            _wrap_handler(handler)
-
-        def run_construct(use_runtime: bool) -> None:
-            """Runs `generate_construct` in the background, blocking new runs/reloads until it finishes."""
-            nonlocal job_thread
-
-            def _job() -> None:
-                try:
-                    start = time.time()
-                    new_state = self.generate_construct(
-                        use_runtime=use_runtime, on_reload_callback=on_reload_callback
-                    )
-                    on_reload_callback(new_state)
-                    msg = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
-                except rt.RequirementSatisfied as e:
-                    msg = f"[bold green]Run ended early, requirement satisfied: {e}[/bold green]"
-                except rt.RequirementTerminated as e:
-                    msg = (
-                        f"[bold yellow]Run terminated by requirement: {e}[/bold yellow]"
-                    )
-                except rt.SimulationStopped:
-                    msg = "[bold yellow]Run stopped by user.[/bold yellow]"
-                except Exception as e:
-                    logger.exception(e)
-                    msg = f"[bold red]Reload Failed:[/bold red]\n[white]{e}[/white]"
-                finally:
-                    self.stop_event.clear()
-
-                # clear busy before printing so the redrawn prompt shows "Awaiting command"
-                busy_event.clear()
-                self._print(msg)
-
-            self.stop_event.clear()
-            busy_event.set()
-            job_thread = threading.Thread(target=_job, daemon=True)
-            job_thread.start()
-
-        while is_running_check():
-            try:
-                event_type, data = event_queue.get(timeout=0.2)
-            except queue.Empty:
-                continue
-            except (KeyboardInterrupt, BdbQuit):
-                break
-
-            if event_type == "reload":
-                count = int(data) if data.isdigit() else 0
-                plural = "s" if count != 1 else ""
-
-                if busy_event.is_set():
-                    self._print(
-                        f"\n[dim]{count} change{plural} detected, but a run is in "
-                        "progress - ignoring. Save again once it finishes to "
-                        "reload.[/dim]"
-                    )
-                    continue
-
-                self._print(
-                    f"\n[dim]{count} change{plural} detected, reloading with last command...[/dim]"
-                )
-                use_runtime = self._last_command != "gen"
-                run_construct(use_runtime)
-                continue
-
-            raw = data.lower()
-
-            if busy_event.is_set():
-                if raw in ("stop", "halt"):
-                    self._print(
-                        "[bold yellow]Stopping the current run...[/bold yellow]"
-                    )
-                    self.stop_event.set()
-                else:
-                    self._print(
-                        "[dim]A run is in progress - type [bold]stop[/bold] or "
-                        "[bold]halt[/bold] to cancel it.[/dim]"
-                    )
-                continue
-
-            if raw in ("exit", "quit", "q"):
-                break
-
-            if raw in ("stop", "halt"):
-                self._print("[dim]No run is currently in progress.[/dim]")
-                continue
-
-            if raw in ("h", "help"):
-                self._print_help()
-                continue
-
-            if raw in ["watch", "w"]:
-                self.watch = not self.watch
-                if self.watch:
-                    watcher_stop_event = start_watcher()
-                    if watcher_stop_event is None:
-                        self.watch = False
-                    else:
-                        self._print("[dim]Auto-watch enabled[/dim]")
-                else:
-                    stop_watcher()
-                    self._print("[dim]Auto-watch disabled[/dim]")
-                continue
-
-            if raw == "dojo":
-                hint = (
-                    "\n[dim]Note: telemetry recording is currently off, so the "
-                    "Dojo won't have trial data until you enable [bold]record[/bold].[/dim]"
-                    if not self.record
-                    else ""
-                )
-                self._print(
-                    "[dim]Run this in another terminal to monitor this session:[/dim]\n"
-                    f'[bold cyan]mujoco-mojo dojo "{self.workdir}"[/bold cyan]'
-                    f"{hint}"
-                )
-                continue
-
-            if raw == "record":
-                self.record = not self.record
-                if self.record:
-                    self._print(
-                        "[dim]Telemetry recording enabled - "
-                        "the next reload will be visible in `mujoco-mojo dojo`.[/dim]"
-                    )
-                else:
-                    self._print("[dim]Telemetry recording disabled[/dim]")
-                continue
-
-            if raw.startswith("seed "):
-                seed_arg = raw[5:].strip()
-                if seed_arg in ("none", "null"):
-                    self.seed = None
-                    self._print("[dim]Seed cleared.[/dim]")
-                else:
-                    try:
-                        self.seed = int(seed_arg)
-                        self._print(f"[dim]Seed set to {self.seed}.[/dim]")
-                    except ValueError:
-                        self._print(
-                            "[bold red]Invalid seed.[/bold red] Use: seed <integer> or seed none"
-                        )
-                continue
-
-            if raw.startswith("trial "):
-                try:
-                    self.trial_num = int(raw[6:].strip())
-                    self._print(f"[dim]Trial number set to {self.trial_num}.[/dim]")
-                except ValueError:
-                    self._print(
-                        "[bold red]Invalid trial number.[/bold red] Use: trial <integer>"
-                    )
-                continue
-
-            if raw and raw != "gen":
-                try:
-                    self.playback_speed = float(raw)
-                    self._print(f"[dim]Playback speed set to {self.playback_speed}x[/]")
-                except ValueError:
-                    self._print(
-                        f"[bold red]Unknown command:[/bold red] '{raw}'. Type [bold cyan]h[/bold cyan] for help."
-                    )
-                    continue
-
-            cmd = raw if raw else self._last_command
-            self._last_command = cmd
-
-            use_runtime = cmd != "gen"
-
-            self._print("[dim]Processing...[/dim]")
-            run_construct(use_runtime)
-
-        stop_watcher()
-        stop_event.set()
-
-        if busy_event.is_set():
-            self.stop_event.set()
-            if job_thread is not None:
-                job_thread.join(timeout=5)
-
-        # restore the tty ourselves rather than relying on raw_stdin_reader's own
-        # cleanup - it's a daemon thread blocked on os.read() until the next
-        # keystroke, so it may never get a chance to run its own restore
-        if old_termios is not None and stdin_fd is not None:
-            import termios
-
-            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_termios)
-
-        self._reprint_prompt = None
-
-        for handler, original_emit in wrapped_handlers:
-            setattr(handler, "emit", original_emit)
-
-    def run_opengl(self, state: MjState) -> None:
-        import mujoco.viewer
-
-        with mujoco.viewer.launch_passive(state.model, state.data) as viewer:
-
-            def sync(
-                s: MjState,
-                arrows: list[ArrowConfig],
-                lines: list[LineConfig],
-            ) -> None:
-                assert viewer.user_scn
-                # the viewer's GUI thread reads user_scn while rendering, so edits
-                # must happen under the viewer lock. viewer.sync() locks internally,
-                # so it stays outside to avoid nesting
-                with viewer.lock():
-                    viewer.user_scn.ngeom = 0
-
-                    for arrow in arrows:
-                        arrow.draw_in_scene(mj_model=s.model, scene=viewer.user_scn)
-
-                    for line in lines:
-                        line.draw_in_scene(scene=viewer.user_scn)
-
-                viewer.sync()
-
-            def reload_handler(s: MjState) -> None:
-                sim = viewer._get_sim()
-                if sim:
-                    assert self._current_trial_dir is not None
-                    if viewer.user_scn and s.data.time == 0.0:
-                        # ensure the custom visual layer is wiped on every model reload
-                        with viewer.lock():
-                            viewer.user_scn.ngeom = 0
-                    sim.load(
-                        s.model,
-                        s.data,
-                        str(self._current_trial_dir / self.xml_name),
-                    )
-                    viewer.sync()
-
-            reload_handler(state)
-
-            self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
-            # the viewer's GUI thread reads model/data under this lock (e.g. the
-            # sensor/profiler panels), so physics stepping must hold it too
-            self._viewer_lock = viewer.lock
-            self._interactive_loop(
-                lambda state: reload_handler(state),
-                is_running_check=viewer.is_running,
-            )
-
-    def run_viser(self, state: MjState) -> None:
+    def _create_backend(self) -> ViewerBackend:
+        """The viewer to show the model in, chosen by `ui`. The terminal UI drives every one of them the same way."""
+        match self.ui:
+            case UserInterface.OPENGL:
+                return OpenGLBackend(xml_path=self._trial_xml_path)
+            case UserInterface.STUDIO | UserInterface.WEB:
+                raise_studio_unavailable(self.ui)
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _trial_xml_path(self) -> Path:
+        """The file the current model was written to."""
+        assert self._current_trial_dir is not None
+        return self._current_trial_dir / self.xml_name
+
+    def _run_tui(self, backend: ViewerBackend, state: MjState) -> None:
+        """Opens the viewer on `state` and runs the terminal UI over it until the user quits or the viewer is closed."""
+        backend.start(state)
         try:
-            import viser
-            from mjviser import ViserMujocoScene
-        except ImportError:
-            console.print(
-                "The [bold]mjviser[/bold] UI option requires you to install [bold]mjviser[/bold] separately."
-            )
-            raise typer.Exit(1)
-        import contextlib
-        import io
-
-        from mujoco_mojo.utils.color import Color
-        from mujoco_mojo.utils.utils import get_local_ip
-
-        class ViserState(TypedDict):
-            scene: ViserMujocoScene
-            arrow_handle: viser.LineSegmentsHandle | None
-
-        for name in ["websockets", "matplotlib.font_manager"]:
-            _l = logging.getLogger(name)
-            _l.setLevel(logging.WARNING)
-            _l.propagate = False
-
-        def _print_connection_panel() -> None:
-            local_ip = get_local_ip()
-
-            connection_info = (
-                f"Local: [bold cyan u]http://127.0.0.1:{self.port}[/bold cyan u]"
-            )
-
-            if self.host == "0.0.0.0":
-                connection_info += f"\nMobile: [bold cyan u]http://{local_ip}:{self.port}[/bold cyan u]"
-            else:
-                connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
-
-            console.print(
-                Panel(
-                    f"""{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
-                    border_style="yellow",
-                    title="Connection Info.",
-                    expand=False,
-                )
-            )
-
-        with contextlib.redirect_stdout(io.StringIO()):
-            server = viser.ViserServer(
-                host=self.host,
-                port=self.port,
-                label=f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})",
-                verbose=False,
-            )
-        brand_rgb = (Color.CYAN_500.rgb * 255).round()
-        # dark_mode is a server-wide setting broadcast to every client - viser has no
-        # way to detect a client's browser/OS theme preference, so we default to dark.
-        server.gui.configure_theme(
-            dark_mode=True,
-            show_logo=False,
-            brand_color=(int(brand_rgb[0]), int(brand_rgb[1]), int(brand_rgb[2])),
-        )
-
-        server.scene.reset()
-
-        # shared between the runtime job thread (which steps physics) and viser's
-        # websocket thread (which runs GUI callbacks that re-render from live MjData,
-        # e.g. contact decor). RuntimeManager holds it while mutating model/data
-        runtime_lock = threading.RLock()
-
-        viser_state: ViserState = {
-            "scene": ViserMujocoScene(server=server, mj_model=state.model, num_envs=1),
-            "arrow_handle": None,
-        }
-
-        def refresh_from_gui() -> None:
-            # gui-triggered re-renders must hold the same lock as physics stepping,
-            # mirroring how mjviser's own viewer wires its refresh handler
-            with runtime_lock:
-                viser_state["scene"].refresh_visualization()
-
-        viser_state["scene"].set_refresh_handler(refresh_from_gui)
-        # create_visualization_gui already includes the scene (camera) controls tab
-        viser_state["scene"].create_visualization_gui()
-
-        # cap how often scene updates are pushed to clients. the runtime calls the
-        # sync hook on every physics step (often 1000+ Hz), and pushing a full scene
-        # update plus a websocket flush at that rate overwhelms connected browsers as
-        # soon as they also handle interaction such as camera movement. mjviser's own
-        # viewer targets the same 60 Hz render rate
-        min_frame_time = 1.0 / 60.0
-        last_push = 0.0
-
-        def clear_arrows() -> None:
-            if viser_state["arrow_handle"] is not None:
-                viser_state["arrow_handle"].remove()
-                viser_state["arrow_handle"] = None
-
-        def sync(
-            s: MjState,
-            arrows: list[ArrowConfig],
-            lines: list[LineConfig],
-        ) -> None:
-            nonlocal last_push
-            now = time.monotonic()
-            if now - last_push < min_frame_time:
-                return
-            last_push = now
-
-            viser_state["scene"].update_from_mjdata(s.data)
-
-            if not arrows and not lines:
-                # no arrows this frame; clear the batch and exit
-                clear_arrows()
-                return
-
-            all_segments = []
-            all_colors = []
-            line_width = 2.0
-
-            for arrow in arrows:
-                seg_start, seg_end, w = arrow.resolve_arrow_coords(mj_model=s.model)
-
-                line_width = w * 200.0
-                all_segments.append(np.stack([seg_start, seg_end]))
-                color_uint8 = tuple(int(x * 255) for x in arrow.color[:3])
-                all_colors.append([color_uint8, color_uint8])
-
-            for line in lines:
-                line_width = line.width * 200.0
-                all_segments.append(np.stack([line.pos1, line.pos2]))
-                color_uint8 = tuple(int(x * 255) for x in line.color[:3])
-                all_colors.append([color_uint8, color_uint8])
-
-            points_batch = np.array(all_segments, dtype=np.float32)
-            colors_batch = np.array(all_colors, dtype=np.uint8)
-
-            viser_state["arrow_handle"] = server.scene.add_line_segments(
-                name="mojo_arrows",
-                points=points_batch,
-                colors=colors_batch,
-                thickness=line_width,
-            )
-
-        def update_scene(s: MjState) -> ViserMujocoScene:
-            clear_arrows()
-            viser_state["scene"] = ViserMujocoScene(
-                server=server, mj_model=s.model, num_envs=1
-            )
-            viser_state["scene"].set_refresh_handler(refresh_from_gui)
-            viser_state["scene"].update_from_mjdata(s.data)
-            server.gui.set_panel_label(
-                f"MuJoCo Mojo Reloaded (seed: {self.seed}, trial: {self.trial_num})"
-            )
-            return viser_state["scene"]
-
-        # initial render
-        update_scene(state)
-        _print_connection_panel()
-
-        self._sync_hook = lambda state, arrows, lines: sync(state, arrows, lines)
-        self._viewer_lock = lambda: runtime_lock
-        self._interactive_loop(lambda state: update_scene(state), lambda: True)
-        server.stop()
+            self._sync_hook = backend.sync_hook
+            self._viewer_lock = backend.viewer_lock
+            controller = ReloadedController(self, backend)
+            ReloadedApp(
+                controller, backend, subtitle=f"{self.ui.value} | {self.workdir}"
+            ).run()
+        finally:
+            self._sync_hook = None
+            self._viewer_lock = None
+            backend.close()

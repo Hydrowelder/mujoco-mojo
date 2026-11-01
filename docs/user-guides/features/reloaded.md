@@ -4,8 +4,6 @@
 
     **Mojo Reloaded** is the definitive rapid prototyping tool for MuJoCo Mojo. It allows you to modify your model architecture and physics logic on the fly without ever closing your visualizer. By tightening the feedback loop between code changes and visual results, Reloaded transforms the development process from "Compile and Wait" to "Save and See."
 
-    To get the most out of this feature, install Mojo with `uv add mujoco-mojo[reloaded]` or `pip install mujoco-mojo[reloaded]`!
-
 ---
 
 ## Getting Started
@@ -20,33 +18,65 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument           | Shortcut | Description                                                                                                                                                                                                                                               |
-| :----------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--help`           |          | Describes all available arguments. Used on its own.                                                                                                                                                                                                       |
-| `--generator`      | `-g`     | Import path to your `generate` function.                                                                                                                                                                                                                  |
-| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                               |
-| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                          |
-| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                            |
-| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).                                                                                                                                                                                 |
-| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                         |
-| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                                 |
-| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                              |
-| `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                               |
-| `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                       |
-| `--port`           | `-p`     | Port for the web-based viewers. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
+| Argument           | Shortcut | Description                                                                                                                                                                                                                                        |
+| :----------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--help`           |          | Describes all available arguments. Used on its own.                                                                                                                                                                                                |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                                                                                                                                                                                           |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                        |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                   |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                     |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (the classic MuJoCo window), `studio` (MuJoCo Studio in a native window), or `web` (MuJoCo Studio in a browser).                                                                                                      |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                  |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                          |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                       |
+| `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                        |
+| `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                |
+| `--port`           | `-p`     | Port for the web viewer. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
 
 ---
 
-## Interactive Controls
+## The Terminal UI
 
-Once Reloaded is running, your terminal becomes an interactive command center. You can trigger reloads and control simulation speed without restarting the process.
+Once Reloaded is running, your terminal becomes a command center with a status bar at the top, a log of everything that happens in the middle, and a command line at the bottom. You can trigger reloads and control simulation speed without restarting the process.
+
+### Commands
+
+Type a command and press `ENTER`. Press `TAB` to complete the one you are typing, and use the up and down arrows to step through earlier commands.
 
 | Command              | Action                                                                                       |
 | :------------------- | :------------------------------------------------------------------------------------------- |
 | `ENTER`              | Repeat the last command (perfect for rapid iteration).                                       |
 | `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
+| `run`                | Generate and run the `runtime` at the current speed (only if a `runtime` was provided).      |
 | `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
-| `exit`               | Safely close the server and visualizer.                                                      |
+| `seed 42`            | Set the seed. `seed none` clears it.                                                         |
+| `trial 3`            | Set the trial number.                                                                        |
+| `watch`              | Turn reloading on or off when your `*.py` files change.                                      |
+| `record`             | Turn telemetry and video recording on or off.                                                |
+| `dojo`               | Print the command that opens the Dojo for this session.                                      |
+| `explain seed 42`    | Say what a command would do without running it. Ending a command with `?` does the same.     |
+| `stop`               | Abort the run in progress.                                                                   |
+| `help`               | Show every command and key.                                                                  |
+| `exit`               | Safely close the viewer and Reloaded.                                                        |
+
+A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
+
+### Keys and Clicks
+
+| Key   | Action                     |
+| :---- | :------------------------- |
+| `F2`  | Generate only.             |
+| `F3`  | Generate and run.          |
+| `F4`  | Turn watching on or off.   |
+| `F7`  | Turn recording on or off.  |
+| `F8`  | Show or hide the hint.     |
+| `F9`  | Show help.                 |
+| `Esc` | Stop the run in progress.  |
+| `F10` | Quit.                      |
+
+You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
+
+Closing the viewer window also closes Reloaded.
 
 ---
 
@@ -99,4 +129,8 @@ Once the world looks right, it's time to test your forces. By providing a `--run
 
 !!! success
 
-    Use the **Viser** UI (`--ui viser`, available in the `mujoco-mojo[reloaded]` dependency group) if you want to develop on one machine and view the simulation on another (such as on an SSH connection, phone, or tablet) via your local network. Reloaded will automatically display the local and mobile URLs in your terminal.
+    Use the **web** UI (`-ui web`) if you want to develop on a machine with no display, such as over an SSH connection. Forward the viewer's port to your own machine (for example `ssh -L 8000:localhost:8000 user@host`) and open `http://localhost:8000` in your browser.
+
+!!! warning
+
+    The MuJoCo Studio web viewer listens on every network interface of the machine it runs on and has no password. Only use it on a network you trust, or keep the port closed to others and reach it through an SSH tunnel.

@@ -495,8 +495,8 @@ if True:
             "--user-interface",
             "-ui",
             help=(
-                "Which viewer type to use. OpenGL requires X11 forwarding but is ideal for local development. The Viser viewers require you to install those dependencies (they are available in the "
-                r"[bold]mujoco-mojo\[reloaded][/bold] group)"
+                "Which viewer to show the model in. [bold]opengl[/bold] is the classic MuJoCo window: it needs a display (X11 forwarding over SSH) but is ideal for local development. "
+                "[bold]studio[/bold] is a native MuJoCo Studio window and [bold]web[/bold] is MuJoCo Studio in a browser, which works over SSH and without a display."
             ),
             case_sensitive=False,
         ),
@@ -1482,9 +1482,9 @@ def run_reloaded(
     quiet: QuietType = 0,
 ) -> None:
     """
-    [bold yellow]Run a development session with the native OpenGL viewer or a web browser based GUI.[/bold yellow]
+    [bold yellow]Run a development session in a terminal UI, with the model shown in a MuJoCo viewer.[/bold yellow]
 
-    Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
+    Regenerates and reloads the MJCF model on command, or whenever your source files change, for rapid prototyping.
     """
     from .reloaded import MojoReloaded
 

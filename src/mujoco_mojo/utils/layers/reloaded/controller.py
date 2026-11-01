@@ -2,7 +2,7 @@ import math
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -13,8 +13,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.utils.log import get_logger
 
-from .backends.base import ViewerBackend
-from .session import OnReloadCallback
+from .backends.base import OnReloadCallback, ViewerBackend
 from .watcher import FileWatcher
 
 logger = get_logger(__name__)
@@ -151,6 +150,11 @@ class ReloadedSession(Protocol):
     ) -> MjState: ...
 
 
+def _discard(event: ControllerEvent) -> None:
+    pass
+
+
+@dataclass(eq=False)
 class ReloadedController:
     """
     Holds the state of a Reloaded session and turns commands into jobs, without knowing how either is displayed.
@@ -158,45 +162,43 @@ class ReloadedController:
     The terminal UI sends typed commands to `submit` and receives `ControllerEvent`s through the sink. The sink is called from whichever thread produced the event (the caller of `submit`, the job thread, or the file watcher), so it must be thread safe.
     """
 
-    def __init__(
-        self,
-        session: ReloadedSession,
-        backend: ViewerBackend,
-        *,
-        watch_path: Path | None = None,
-        sink: EventSink | None = None,
-    ) -> None:
-        self._session = session
-        self._backend = backend
-        self._watch_path = watch_path if watch_path is not None else Path.cwd()
-        self._sink: EventSink = sink if sink is not None else _discard
+    session: ReloadedSession
+    """What the controller reads and changes, and whose `generate_construct` it runs."""
+    backend: ViewerBackend
+    """The viewer a generated model is shown in."""
+    watch_path: Path = field(default_factory=Path.cwd, kw_only=True)
+    """The directory watched for `*.py` changes when watching is on. Defaults to the current directory."""
+    sink: EventSink = field(default=_discard, kw_only=True)
+    """Receives every `ControllerEvent`, from whichever thread produced it."""
 
-        self._lock = threading.RLock()
-        self._state = RunState.IDLE
-        self._last_command = "run" if session.runtime else "gen"
-        self._last_duration: float | None = None
-        self._last_outcome: Outcome | None = None
-        self._job_thread: threading.Thread | None = None
-        self._watcher: FileWatcher | None = None
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False
+    )
+    _state: RunState = field(default=RunState.IDLE, init=False, repr=False)
+    _last_command: str = field(init=False, repr=False)
+    _last_duration: float | None = field(default=None, init=False, repr=False)
+    _last_outcome: Outcome | None = field(default=None, init=False, repr=False)
+    _job_thread: threading.Thread | None = field(default=None, init=False, repr=False)
+    _watcher: FileWatcher | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._last_command = "run" if self.session.runtime else "gen"
 
     @property
     def has_runtime(self) -> bool:
         """Whether the session was given a runtime function, i.e. whether `run` has anything to run."""
-        return bool(self._session.runtime)
-
-    def set_sink(self, sink: EventSink) -> None:
-        self._sink = sink
+        return bool(self.session.runtime)
 
     def status(self) -> ControllerStatus:
         with self._lock:
             return ControllerStatus(
                 state=self._state,
                 last_command=self._last_command,
-                seed=self._session.seed,
-                trial_num=self._session.trial_num,
-                playback_speed=self._session.playback_speed,
-                watch=self._session.watch,
-                record=self._session.record,
+                seed=self.session.seed,
+                trial_num=self.session.trial_num,
+                playback_speed=self.session.playback_speed,
+                watch=self.session.watch,
+                record=self.session.record,
                 last_duration=self._last_duration,
                 last_outcome=self._last_outcome,
             )
@@ -207,7 +209,7 @@ class ReloadedController:
             ("ENTER", "Repeat the last command"),
             ("gen", "Generate only"),
         ]
-        if self._session.runtime:
+        if self.session.runtime:
             entries += [
                 ("run", "Generate and run the runtime at the current speed"),
                 (
@@ -319,8 +321,8 @@ class ReloadedController:
 
     def start(self) -> None:
         """Routes the session's own messages to the sink and starts the file watcher if enabled."""
-        self._session.output_sink = self._on_session_output
-        if self._session.watch:
+        self.session.output_sink = self._on_session_output
+        if self.session.watch:
             self._start_watcher()
         self._log(
             "[bold green]MuJoCo Mojo Reloaded is live.[/bold green] Type [bold cyan]help[/bold cyan] for commands."
@@ -334,10 +336,10 @@ class ReloadedController:
             thread = self._job_thread
             busy = self._state is not RunState.IDLE
         if busy:
-            self._session.stop_event.set()
+            self.session.stop_event.set()
             if thread is not None:
                 thread.join(timeout=5)
-        self._session.output_sink = None
+        self.session.output_sink = None
 
     def submit(self, text: str) -> None:
         """Handles one line typed by the user. An empty line repeats the last command."""
@@ -428,7 +430,7 @@ class ReloadedController:
             command = raw if raw else self._last_command
             self._last_command = command
 
-        if command != "gen" and not self._session.runtime:
+        if command != "gen" and not self.session.runtime:
             self._log(
                 "[dim]No runtime was given, so there is nothing to run. Generating only.[/dim]"
             )
@@ -441,17 +443,17 @@ class ReloadedController:
             return
         arg = arg.strip().lower()
         if arg in ("", "none", "null"):
-            self._session.seed = None
+            self.session.seed = None
             self._log("[dim]Seed cleared.[/dim]")
         else:
             try:
-                self._session.seed = int(arg)
+                self.session.seed = int(arg)
             except ValueError:
                 self._log(
                     "[bold red]Invalid seed.[/bold red] Use: seed <integer> or seed none"
                 )
                 return
-            self._log(f"[dim]Seed set to {self._session.seed}.[/dim]")
+            self._log(f"[dim]Seed set to {self.session.seed}.[/dim]")
         self._emit_status()
 
     def set_trial(self, arg: str) -> None:
@@ -459,11 +461,11 @@ class ReloadedController:
         if not self._idle_or_hint():
             return
         try:
-            self._session.trial_num = int(arg.strip())
+            self.session.trial_num = int(arg.strip())
         except ValueError:
             self._log("[bold red]Invalid trial number.[/bold red] Use: trial <integer>")
             return
-        self._log(f"[dim]Trial number set to {self._session.trial_num}.[/dim]")
+        self._log(f"[dim]Trial number set to {self.session.trial_num}.[/dim]")
         self._emit_status()
 
     def set_speed(self, arg: str) -> None:
@@ -484,8 +486,8 @@ class ReloadedController:
         """Turns telemetry recording on or off. Refused while a run is in progress."""
         if not self._idle_or_hint():
             return
-        self._session.record = not self._session.record
-        if self._session.record:
+        self.session.record = not self.session.record
+        if self.session.record:
             self._log(
                 "[dim]Telemetry recording enabled - "
                 "the next reload will be visible in `mujoco-mojo dojo`.[/dim]"
@@ -498,8 +500,8 @@ class ReloadedController:
         """Turns reloading on file changes on or off. Refused while a run is in progress."""
         if not self._idle_or_hint():
             return
-        self._session.watch = not self._session.watch
-        if self._session.watch:
+        self.session.watch = not self.session.watch
+        if self.session.watch:
             self._start_watcher()
             self._log("[dim]Auto-watch enabled[/dim]")
         else:
@@ -525,7 +527,7 @@ class ReloadedController:
         )
 
     def _apply_speed(self, speed: float) -> None:
-        self._session.playback_speed = speed
+        self.session.playback_speed = speed
         self._log(f"[dim]Playback speed set to {speed:g}x[/dim]")
         self._emit_status()
 
@@ -533,18 +535,18 @@ class ReloadedController:
         hint = (
             "\n[dim]Note: telemetry recording is currently off, so the "
             "Dojo won't have trial data until you enable [bold]record[/bold].[/dim]"
-            if not self._session.record
+            if not self.session.record
             else ""
         )
         self._log(
             "[dim]Run this in another terminal to monitor this session:[/dim]\n"
-            f'[bold cyan]mujoco-mojo dojo "{escape(str(self._session.workdir))}"[/bold cyan]'
+            f'[bold cyan]mujoco-mojo dojo "{escape(str(self.session.workdir))}"[/bold cyan]'
             f"{hint}"
         )
 
     def _start_watcher(self) -> None:
         if self._watcher is None:
-            self._watcher = FileWatcher(self._watch_path, self.on_file_change)
+            self._watcher = FileWatcher(self.watch_path, self.on_file_change)
         self._watcher.start()
 
     def _stop_watcher(self) -> None:
@@ -557,7 +559,7 @@ class ReloadedController:
             if self._state is RunState.IDLE:
                 return
             self._state = RunState.STOPPING
-        self._session.stop_event.set()
+        self.session.stop_event.set()
         self._log("[bold yellow]Stopping the current run...[/bold yellow]")
         self._emit_status()
 
@@ -566,7 +568,7 @@ class ReloadedController:
         with self._lock:
             if self._state is not RunState.IDLE:
                 return
-            self._session.stop_event.clear()
+            self.session.stop_event.clear()
             self._state = RunState.RUNNING
             thread = threading.Thread(
                 target=self._job,
@@ -582,10 +584,10 @@ class ReloadedController:
         start = time.time()
         outcome = Outcome.FAILED
         try:
-            new_state = self._session.generate_construct(
-                use_runtime=use_runtime, on_reload_callback=self._backend.on_reload
+            new_state = self.session.generate_construct(
+                use_runtime=use_runtime, on_reload_callback=self.backend.on_reload
             )
-            self._backend.on_reload(new_state)
+            self.backend.on_reload(new_state)
             outcome = Outcome.SUCCESS
             message = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
         except rt.RequirementSatisfied as e:
@@ -603,7 +605,7 @@ class ReloadedController:
                 f"[bold red]Reload Failed:[/bold red]\n[white]{escape(str(e))}[/white]"
             )
         finally:
-            self._session.stop_event.clear()
+            self.session.stop_event.clear()
             with self._lock:
                 self._state = RunState.IDLE
                 self._last_duration = time.time() - start
@@ -622,8 +624,4 @@ class ReloadedController:
         self._emit(StatusEvent(status=self.status()))
 
     def _emit(self, event: ControllerEvent) -> None:
-        self._sink(event)
-
-
-def _discard(event: ControllerEvent) -> None:
-    pass
+        self.sink(event)

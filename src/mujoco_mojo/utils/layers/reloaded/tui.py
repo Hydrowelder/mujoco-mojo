@@ -4,7 +4,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal
 
 from rich.console import Group, RenderableType
@@ -67,6 +67,8 @@ LOG_LINES_PER_FLUSH = 300
 """The most lines shown per flush, so a flood can never keep the UI from handling keys and clicks."""
 LOG_BACKLOG = 5000
 """How many lines may wait to be shown. When a producer outruns the screen the oldest are skipped, with a notice, rather than growing without bound."""
+VIEWER_CHECK_SECONDS = 0.5
+"""How often to check that the viewer is still open, so closing its window ends the session."""
 
 FieldKind = Literal["edit", "toggle", "info"]
 
@@ -249,6 +251,7 @@ def render_log_item(item: LogItem) -> Text:
         return Text(f"(a log line could not be shown: {error})", style=str(DANGER))
 
 
+@dataclass(eq=False)
 class LogBuffer:
     """
     Thread safe, bounded queue between everything that writes to the log pane and the UI.
@@ -256,18 +259,20 @@ class LogBuffer:
     Any thread can `put`, and it never blocks and never grows past `capacity`. When it is full the oldest item is dropped and counted. The UI `take`s a few at a time.
     """
 
-    def __init__(self, capacity: int = LOG_BACKLOG) -> None:
-        self._items: deque[LogItem] = deque()
-        self._capacity = capacity
-        self._dropped = 0
-        self._lock = threading.Lock()
+    capacity: int = LOG_BACKLOG
+    """How many items may wait. Past this the oldest are dropped."""
+    _items: deque[LogItem] = field(default_factory=deque, init=False, repr=False)
+    _dropped: int = field(default=0, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def __len__(self) -> int:
         return len(self._items)
 
     def put(self, item: LogItem) -> None:
         with self._lock:
-            if len(self._items) >= self._capacity:
+            if len(self._items) >= self.capacity:
                 self._items.popleft()
                 self._dropped += 1
             self._items.append(item)
@@ -426,8 +431,8 @@ class StatusBar(Horizontal):
         self._status = status
         self.query_one("#badge", Static).update(render_badge(status.state))
         views = {view.key: view for view in status_fields(status)}
-        for field in self.query(ParamField):
-            field.show(views[field.key])
+        for param in self.query(ParamField):
+            param.show(views[param.key])
         # the fields just changed width, which changes how much room the title has
         self.call_after_refresh(self._fit_title)
 
@@ -593,7 +598,8 @@ class ReloadedApp(App[None]):
         self._saved_handlers: list[logging.Handler] = []
         self._log_handler: TuiLogHandler | None = None
         self._logs = LogBuffer()
-        controller.set_sink(self._deliver)
+        self._quitting = False
+        controller.sink = self._deliver
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         # the Run key has nothing to do without a runtime function, so grey it out
@@ -637,6 +643,7 @@ class ReloadedApp(App[None]):
         self.begin_capture_print(self)
         self._install_log_handler()
         self.set_interval(LOG_FLUSH_SECONDS, self._flush_logs)
+        self.set_interval(VIEWER_CHECK_SECONDS, self._check_viewer)
         self._set_explain(self._explain_at_start)
 
         info = self._backend.connection_info()
@@ -740,9 +747,16 @@ class ReloadedApp(App[None]):
         )
 
     async def action_quit(self) -> None:
+        if self._quitting:
+            return
+        self._quitting = True
         # stopping a run can take a moment, so keep the event loop free while it winds down
         await asyncio.to_thread(self._controller.shutdown)
         self.exit()
+
+    async def _check_viewer(self) -> None:
+        if not self._backend.is_running():
+            await self.action_quit()
 
     def _set_explain(self, shown: bool) -> None:
         self.query_one("#hint", Static).display = shown

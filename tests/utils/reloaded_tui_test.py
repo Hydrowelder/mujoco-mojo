@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -241,6 +242,7 @@ def test_the_log_handler_only_stores_the_record_and_formats_it_later() -> None:
     """The thread that logs, which may be the physics thread, must not pay for formatting."""
     formatted: list[int] = []
 
+    @dataclass
     class Counted:
         def __str__(self) -> str:
             formatted.append(1)
@@ -523,6 +525,19 @@ def test_the_app_closes_and_stops_the_session(tmp_path: Path, how: str) -> None:
     run(scenario())
     assert app.return_code == 0
     assert session.output_sink is None
+
+
+def test_the_app_closes_when_the_viewer_window_is_closed(tmp_path: Path) -> None:
+    backend = FakeBackend()
+    app, _ = make_app(tmp_path, backend=backend)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            backend.closed = True
+            await wait_until(pilot, lambda: app.return_code is not None)
+
+    run(scenario())
+    assert app.return_code == 0
 
 
 def test_logging_and_print_output_reach_the_log_and_the_terminal_handler_returns(

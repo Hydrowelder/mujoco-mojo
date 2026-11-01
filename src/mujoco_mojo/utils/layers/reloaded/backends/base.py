@@ -6,7 +6,13 @@ from typing import Any, Protocol
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
-__all__ = ["ConnectionInfo", "ViewerBackend"]
+__all__ = ["ConnectionInfo", "OnReloadCallback", "ViewerBackend"]
+
+
+class OnReloadCallback(Protocol):
+    """Called with the model once it has been generated, so a viewer can show it."""
+
+    def __call__(self, state: MjState) -> Any: ...
 
 
 @dataclass(frozen=True)

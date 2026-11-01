@@ -7,6 +7,7 @@ import inspect
 import json
 import textwrap
 import tomllib
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -613,8 +614,20 @@ class ReloadedSettings(BaseModel):
     ui: UserInterface = Field(
         default=UserInterface.OPENGL,
         title="UI Backend",
-        description="Which viewer backend to use.",
+        description="Which viewer to show the model in: `opengl` (the classic MuJoCo window), `studio` (a native MuJoCo Studio window), or `web` (MuJoCo Studio in a browser).",
     )
+
+    @field_validator("ui", mode="before")
+    @classmethod
+    def _migrate_removed_viewers(cls, value: Any) -> Any:
+        """`viser` and `mjviser` no longer exist, and a settings file that still names one would otherwise stop every `mujoco-mojo` command from starting, so both now mean the browser viewer."""
+        if isinstance(value, str) and value.lower() in ("viser", "mjviser"):
+            warnings.warn(
+                f'The `{value}` viewer was removed, so `reloaded.ui = "{value}"` in your settings now means `web`. Update the setting to `web`.',
+                stacklevel=2,
+            )
+            return "web"
+        return value
 
     watch: bool = Field(
         default=True,

@@ -24,7 +24,7 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 !!! tip "Optional Extras"
 
-    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, and `mujoco-mojo[reloaded]` for the Viser-based live viewer. Install `mujoco-mojo[all]` to get everything.
+    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization and `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition. Install `mujoco-mojo[all]` to get everything.
 
 ---
 

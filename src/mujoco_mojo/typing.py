@@ -427,16 +427,16 @@ class LayerRole(StrEnum):
 
 
 class UserInterface(StrEnum):
-    """Which viewer backend `mujoco-mojo reloaded` renders with."""
+    """Which viewer `mujoco-mojo reloaded` shows the model in. The terminal UI that controls the session is the same for all of them."""
 
     OPENGL = "opengl"
-    """Native OpenGL window. Requires X11 forwarding over SSH, but is ideal for local development."""
+    """The classic MuJoCo viewer, a native window drawn with OpenGL. Requires X11 forwarding over SSH, but is ideal for local development."""
 
-    MJVISER = "mjviser"
-    """Browser-based viewer built on `mjviser`. Requires the `mujoco-mojo[reloaded]` extra."""
+    STUDIO = "studio"
+    """A native MuJoCo Studio window."""
 
-    VISER = "viser"
-    """Browser-based viewer built directly on `viser`. Requires the `mujoco-mojo[reloaded]` extra."""
+    WEB = "web"
+    """MuJoCo Studio in a browser, served from the machine running Reloaded, so it works over SSH and without a display."""
 
 
 class Direction(StrEnum):

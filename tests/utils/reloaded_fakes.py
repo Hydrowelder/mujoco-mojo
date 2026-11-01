@@ -63,15 +63,17 @@ class FakeSession:
         return state
 
 
+@dataclass
 class FakeBackend:
     """Satisfies `ViewerBackend` and records what it was asked to show."""
 
-    def __init__(self, info: ConnectionInfo | None = None) -> None:
-        self.info = info
-        self.reloads: list[MjState] = []
-        self.closed = False
+    info: ConnectionInfo | None = None
+    reloads: list[MjState] = field(default_factory=list)
+    started: bool = False
+    closed: bool = False
 
     def start(self, state: MjState) -> None:
+        self.started = True
         self.reloads.append(state)
 
     def close(self) -> None:
@@ -99,12 +101,14 @@ class FakeBackend:
         return self.info
 
 
+@dataclass
 class EventLog:
     """Thread safe sink that remembers every controller event and lets a test wait for one."""
 
-    def __init__(self) -> None:
-        self.events: list[ControllerEvent] = []
-        self._condition = threading.Condition()
+    events: list[ControllerEvent] = field(default_factory=list)
+    _condition: threading.Condition = field(
+        default_factory=threading.Condition, init=False, repr=False
+    )
 
     def __call__(self, event: ControllerEvent) -> None:
         with self._condition:

@@ -186,8 +186,8 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
 
 - **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
-- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
-- **Multiple Viewer Backends:** Drive the same reload/sync pipeline through either the native MuJoCo OpenGL viewer or a Viser web viewer.
+- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across the native OpenGL viewer and video recordings.
+- **Terminal UI:** Drive the reload/sync pipeline from a terminal UI with clickable settings, command completion, and a log of every run.
 - **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
 - **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
 - **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
