@@ -620,6 +620,18 @@ class ReloadedKeySettings(BaseModel):
         description="Keys that generate the model and run the runtime.",
     )
 
+    pause: list[str] = Field(
+        default_factory=lambda: ["f12"],
+        title="Pause",
+        description="Keys that pause a run in progress, and resume it when it is paused.",
+    )
+
+    step: list[str] = Field(
+        default_factory=list,
+        title="Step",
+        description="Keys that advance a run by one step, pausing it first. None by default, since no function key is left that an editor terminal passes on.",
+    )
+
     watch: list[str] = Field(
         default_factory=lambda: ["f4"],
         title="Watch",

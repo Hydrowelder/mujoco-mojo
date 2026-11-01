@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from reloaded_fakes import FakeBackend, FakeSession
+from reloaded_fakes import FakeBackend, FakeSession, SteppingRuntime
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.text import Text
@@ -30,6 +30,7 @@ from mujoco_mojo.utils.layers.reloaded.rain import RainScreen
 from mujoco_mojo.utils.layers.reloaded.tui import (
     CommandInput,
     CommandSuggester,
+    ControlButton,
     ExplainButton,
     HelpScreen,
     LOG_BACKLOG,
@@ -39,6 +40,7 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     key_label,
     render_connection,
     ParamField,
+    control_states,
     fit_title,
     render_badge,
     render_log_item,
@@ -139,8 +141,9 @@ def test_last_run_summary_waits_for_the_first_run() -> None:
     assert summary.plain.strip() == "last run 1.50s failed"
 
 
-def test_badge_names_the_state() -> None:
-    assert render_badge(RunState.RUNNING).plain == " RUNNING "
+@pytest.mark.parametrize("state", list(RunState))
+def test_badge_names_the_state(state: RunState) -> None:
+    assert render_badge(state).plain == f" {state.value.upper()} "
 
 
 def test_key_labels_are_readable() -> None:
@@ -302,6 +305,7 @@ def test_the_default_keys_are_the_ones_the_footer_has_always_shown(
     assert [(b.key, b.show) for b in app.shortcuts] == [
         ("f2", True),
         ("f3", True),
+        ("f12", True),
         ("f4", True),
         ("f7", True),
         ("f8", True),
@@ -318,7 +322,7 @@ def test_a_key_from_settings_runs_its_command_and_the_old_key_stops_working(
     tmp_path: Path,
 ) -> None:
     app, session = make_app(
-        tmp_path, keys=ReloadedKeySettings(generate=["f12"], run=["ctrl+g"])
+        tmp_path, keys=ReloadedKeySettings(generate=["f11"], run=["ctrl+g"])
     )
 
     async def scenario() -> None:
@@ -327,7 +331,7 @@ def test_a_key_from_settings_runs_its_command_and_the_old_key_stops_working(
             await pilot.pause(0.1)
             assert session.calls == []
 
-            await pilot.press("f12")
+            await pilot.press("f11")
             await wait_until(pilot, lambda: session.calls == [False])
             await wait_until(
                 pilot, lambda: app._controller.status().state is RunState.IDLE
@@ -339,20 +343,215 @@ def test_a_key_from_settings_runs_its_command_and_the_old_key_stops_working(
     run(scenario())
 
 
+def test_the_pause_key_holds_a_run_and_the_badge_says_so(tmp_path: Path) -> None:
+    runtime = SteppingRuntime()
+    app, session = make_app(tmp_path, FakeSession(behavior=runtime))
+
+    def badge() -> str:
+        return str(app.query_one("#badge", Static).render())
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            assert app.check_action("toggle_pause", ()) is None
+
+            await pilot.press("f3")
+            await wait_until(pilot, lambda: runtime.steps > 3)
+            assert app.check_action("toggle_pause", ()) is True
+
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: "PAUSED" in badge())
+            await pilot.pause(0.1)
+            held = runtime.steps
+            await pilot.pause(0.1)
+            assert runtime.steps == held
+
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: "RUNNING" in badge())
+            await wait_until(pilot, lambda: runtime.steps > held + 3)
+
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: "IDLE" in badge())
+
+    run(scenario())
+    assert session.calls == [True]
+
+
+@pytest.mark.parametrize(
+    ("state", "has_runtime", "enabled"),
+    [
+        (RunState.IDLE, True, {"gen", "run"}),
+        (RunState.IDLE, False, {"gen"}),
+        (RunState.RUNNING, True, {"pause", "step", "stop"}),
+        (RunState.PAUSED, True, {"run", "step", "stop"}),
+        (RunState.PAUSED, False, {"step", "stop"}),
+        (RunState.STOPPING, True, set()),
+    ],
+)
+def test_the_control_buttons_apply_only_when_they_make_sense(
+    state: RunState, has_runtime: bool, enabled: set[str]
+) -> None:
+    states = control_states(state, has_runtime)
+
+    assert set(states) == {"gen", "run", "pause", "step", "stop"}
+    assert {command for command, on in states.items() if on} == enabled
+
+
+def button_labels(app: ReloadedApp) -> dict[str, str]:
+    return {b.command: str(b.label) for b in app.query(ControlButton)}
+
+
+def test_the_control_row_sits_under_the_status_bar_with_each_buttons_key(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause(0)
+            assert button_labels(app) == {
+                "gen": "Gen F2",
+                "run": "Run F3",
+                "pause": "Pause F12",
+                "step": "Step",
+                "stop": "Stop Esc",
+            }
+            status = app.query_one("#status").region
+            for button in app.query(ControlButton):
+                assert button.region.height == 1
+                assert button.region.y == status.y + 1
+                assert button.region.right <= 100
+
+    run(scenario())
+
+
+def test_the_buttons_show_the_keys_from_settings(tmp_path: Path) -> None:
+    keys = ReloadedKeySettings(stop=["f11"], step=["ctrl+n"], pause=[])
+    app, _ = make_app(tmp_path, keys=keys)
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause(0)
+            labels = button_labels(app)
+            assert labels["stop"] == "Stop F11"
+            assert labels["step"] == "Step Ctrl+N"
+            assert labels["pause"] == "Pause"
+
+    run(scenario())
+
+
+def disabled_buttons(app: ReloadedApp) -> set[str]:
+    return {b.command for b in app.query(ControlButton) if b.disabled}
+
+
+def test_only_gen_and_run_are_lit_when_nothing_is_running(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause(0)
+            assert disabled_buttons(app) == {"pause", "step", "stop"}
+
+    run(scenario())
+
+
+def test_run_is_greyed_out_without_a_runtime(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path, FakeSession(runtime=None))
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause(0)
+            assert disabled_buttons(app) == {"run", "pause", "step", "stop"}
+
+    run(scenario())
+
+
+def test_clicking_the_buttons_runs_pauses_steps_carries_on_and_stops(
+    tmp_path: Path,
+) -> None:
+    runtime = SteppingRuntime()
+    app, session = make_app(tmp_path, FakeSession(behavior=runtime))
+
+    def badge() -> str:
+        return str(app.query_one("#badge", Static).render())
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.click("#control-run")
+            await wait_until(pilot, lambda: runtime.steps > 3)
+            await wait_until(pilot, lambda: disabled_buttons(app) == {"gen", "run"})
+
+            await pilot.click("#control-pause")
+            await wait_until(pilot, lambda: "PAUSED" in badge())
+            await wait_until(pilot, lambda: disabled_buttons(app) == {"gen", "pause"})
+            await pilot.pause(0.1)
+            held = runtime.steps
+            await pilot.pause(0.1)
+            assert runtime.steps == held
+
+            await pilot.click("#control-step")
+            await wait_until(pilot, lambda: runtime.steps == held + 1)
+
+            # a button ignores a second click for a moment after it is pressed
+            await pilot.pause(0.3)
+            await pilot.click("#control-run")
+            await wait_until(pilot, lambda: "RUNNING" in badge())
+            await wait_until(pilot, lambda: runtime.steps > held + 4)
+
+            await pilot.click("#control-stop")
+            await wait_until(pilot, lambda: "IDLE" in badge())
+            await wait_until(
+                pilot, lambda: disabled_buttons(app) == {"pause", "step", "stop"}
+            )
+
+    run(scenario())
+    assert session.calls == [True]
+
+
+def test_a_typed_run_until_pauses_the_run_and_the_badge_follows(tmp_path: Path) -> None:
+    runtime = SteppingRuntime()
+    app, _ = make_app(tmp_path, FakeSession(behavior=runtime))
+
+    def badge() -> str:
+        return str(app.query_one("#badge", Static).render())
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            app.query_one(CommandInput).value = "run until step 8"
+            await pilot.press("enter")
+
+            await wait_until(pilot, lambda: "PAUSED" in badge())
+            await pilot.pause(0.1)
+            assert runtime.steps == 8
+            assert "reached step 8" in log_text(app)
+            assert disabled_buttons(app) == {"gen", "pause"}
+
+    run(scenario())
+
+
+def test_the_pause_and_step_keys_are_greyed_out_when_nothing_is_running(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path)
+
+    assert app.check_action("toggle_pause", ()) is None
+    assert app.check_action("submit", ("step",)) is None
+    assert app.check_action("submit", ("gen",)) is True
+
+
 def test_the_help_lists_every_key_of_an_action_and_the_same_key_closes_it(
     tmp_path: Path,
 ) -> None:
-    app, _ = make_app(tmp_path, keys=ReloadedKeySettings(help=["f12", "ctrl+h"]))
+    app, _ = make_app(tmp_path, keys=ReloadedKeySettings(help=["f11", "ctrl+h"]))
 
     async def scenario() -> None:
         async with app.run_test(size=(120, 40)) as pilot:
-            await pilot.press("f12")
+            await pilot.press("f11")
             await wait_until(pilot, lambda: isinstance(app.screen, HelpScreen))
             console = Console(width=100, record=True, file=io.StringIO())
             console.print(app.screen.query_one("#help-body").query_one(Static).content)
-            assert "F12 / Ctrl+H" in console.export_text()
+            assert "F11 / Ctrl+H" in console.export_text()
 
-            await pilot.press("f12")
+            await pilot.press("f11")
             await wait_until(pilot, lambda: not isinstance(app.screen, HelpScreen))
 
     run(scenario())
@@ -653,9 +852,17 @@ def test_the_app_closes_and_stops_the_session(tmp_path: Path, how: str) -> None:
 
 @pytest.mark.parametrize("how", ["f10", "exit"])
 def test_the_app_plays_the_rain_on_the_way_out_and_then_closes(
-    tmp_path: Path, how: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str
 ) -> None:
     app, session = make_app(tmp_path, rain_seconds=0.3)
+    pushed: list[object] = []
+    push_screen = app.push_screen
+
+    def spy(screen: Any, *args: Any, **kwargs: Any) -> Any:
+        pushed.append(screen)
+        return push_screen(screen, *args, **kwargs)
+
+    monkeypatch.setattr(app, "push_screen", spy)
 
     async def scenario() -> None:
         async with app.run_test() as pilot:
@@ -664,10 +871,10 @@ def test_the_app_plays_the_rain_on_the_way_out_and_then_closes(
                 await pilot.press("enter")
             else:
                 await pilot.press(how)
-            await wait_until(pilot, lambda: isinstance(app.screen, RainScreen))
             await wait_until(pilot, lambda: app.return_code is not None)
 
     run(scenario())
+    assert any(isinstance(screen, RainScreen) for screen in pushed)
     assert app.return_code == 0
     assert session.output_sink is None
 
@@ -734,5 +941,78 @@ def test_a_flood_of_log_lines_is_skipped_with_a_notice(tmp_path: Path) -> None:
                 pilot, lambda: f"{extra} log lines were skipped" in log_text(app)
             )
             assert len(app.query_one("#log", RichLog).lines) <= 10_000
+
+    run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("speed", "shown", "raw"),
+    [
+        (1.0, "1x", "1"),
+        (0.5, "0.5x", "0.5"),
+        (0.0, "manual", "0"),
+        (float("inf"), "inf", "inf"),
+    ],
+)
+def test_the_speed_field_shows_manual_and_inf_by_name(
+    speed: float, shown: str, raw: str
+) -> None:
+    field = next(
+        f for f in status_fields(status(playback_speed=speed)) if f.key == "speed"
+    )
+
+    assert field.value == shown
+    assert field.raw == raw
+
+
+def test_the_placeholder_says_enter_steps_while_a_run_is_paused(tmp_path: Path) -> None:
+    runtime = SteppingRuntime()
+    app, _ = make_app(tmp_path, FakeSession(behavior=runtime), explain=False)
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            command = app.query_one(CommandInput)
+            await pilot.pause(0)
+            assert "repeat" in command.placeholder
+
+            await pilot.press("f3")
+            await wait_until(pilot, lambda: runtime.steps > 3)
+            await pilot.press("f12")
+            await wait_until(pilot, lambda: "Enter to step" in command.placeholder)
+
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: "repeat" in command.placeholder)
+
+    run(scenario())
+
+
+def test_enter_steps_a_run_held_at_speed_zero_and_the_field_says_manual(
+    tmp_path: Path,
+) -> None:
+    runtime = SteppingRuntime()
+    session = FakeSession(behavior=runtime)
+    session.playback_speed = 0.0
+    app, _ = make_app(tmp_path, session)
+
+    def badge() -> str:
+        return str(app.query_one("#badge", Static).render()).strip()
+
+    async def scenario() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.press("f3")
+            await wait_until(pilot, lambda: badge() == "PAUSED")
+            assert runtime.steps == 0
+
+            for expected in (1, 2):
+                await pilot.press("enter")
+                await wait_until(pilot, lambda e=expected: runtime.steps == e)
+                await pilot.pause(0.1)
+                assert runtime.steps == expected
+
+            speed = next(f for f in app.query(ParamField) if f.key == "speed")
+            assert str(speed.query_one(".value", Static).render()) == "manual"
+
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: badge() == "IDLE")
 
     run(scenario())

@@ -166,6 +166,8 @@ class MojoReloaded:
     _current_trial_dir: Path | None = None
     _job_status: JobStatus | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
+    run_control: rt.RunControl = field(default_factory=rt.RunControl)
+    """How the interface pauses, steps, and changes the speed of a run in progress. Handed to every `RuntimeManager` this session creates."""
     output_sink: Callable[[str], None] | None = field(
         default=None, repr=False, compare=False
     )
@@ -488,6 +490,7 @@ class MojoReloaded:
                         _skip_recording=not self.record,
                         playback_speed=self.playback_speed,
                         _stop_event=self.stop_event,
+                        _run_control=self.run_control,
                     )
                     start = time.time()
                     run_func(
@@ -601,6 +604,7 @@ class MojoReloaded:
         try:
             self._sync_hook = backend.sync_hook
             self._viewer_lock = backend.viewer_lock
+            self.run_control.pump = backend.pump
             controller = ReloadedController(self, backend)
             ReloadedApp(
                 controller,
@@ -611,4 +615,5 @@ class MojoReloaded:
         finally:
             self._sync_hook = None
             self._viewer_lock = None
+            self.run_control.pump = None
             backend.close()

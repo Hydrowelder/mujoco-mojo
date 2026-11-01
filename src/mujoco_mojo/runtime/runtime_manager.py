@@ -19,6 +19,7 @@ from mujoco_mojo.runtime.requirements_manager import (
     SimulationStopped,
     _RequirementSpec,
 )
+from mujoco_mojo.runtime.run_control import RunControl
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.runtime.tracer import Tracer
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
@@ -66,6 +67,7 @@ class RuntimeManager:
     _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
     _skip_recording: bool = False
     _stop_event: threading.Event | None = None
+    _run_control: RunControl | None = None
 
     _resolved: bool = False
     _context_token: Token[RuntimeManager] | None = field(
@@ -74,6 +76,7 @@ class RuntimeManager:
 
     _mojo_model: MojoModel | None = field(default=None, init=False, repr=False)
     _last_state: MjState | None = field(default=None, init=False, repr=False)
+    _steps_taken: int = field(default=0, init=False, repr=False)
 
     # --- backward-compat shims (thin delegation to self.requirements) ---
 
@@ -89,6 +92,13 @@ class RuntimeManager:
     def recording(self) -> bool:
         """Whether telemetry and video frames are currently being captured (the `reloaded` `record` setting flips this via `_skip_recording`). Runtime code can check this before doing optional recording work that `step()` doesn't already gate, e.g. registering a `VideoRecorder` or calling `snapshot`."""
         return not self._skip_recording
+
+    def set_playback_speed(self, speed: float) -> None:
+        """Changes the speed of a run in progress. Pacing is anchored again at the current simulation time, so the run carries on at the new speed from here rather than racing or stalling to make up for the old one."""
+        if self._last_state is not None:
+            self._start_sim_time = self._last_state.data.time
+            self._start_wall_time = time.time()
+        self.playback_speed = speed
 
     # --- context manager ---
 
@@ -318,6 +328,16 @@ class RuntimeManager:
         """
         logger.debug(f"Computing simulation step t={state.data.time:.6f}")
 
+        if self._run_control is not None:
+            # held here while paused. the time spent is added to the wall clock anchor so pacing does not
+            # take it as time to make up, and a speed asked for meanwhile applies from this step on
+            self._start_wall_time += self._run_control.wait_while_paused(
+                self._stop_event, state.data.time, self._steps_taken
+            )
+            requested_speed = self._run_control.take_speed()
+            if requested_speed is not None:
+                self.set_playback_speed(requested_speed)
+
         if self._stop_event is not None and self._stop_event.is_set():
             logger.debug("'stop_event' is set; raising SimulationStopped")
             raise SimulationStopped("Simulation stopped by user request.")
@@ -414,6 +434,7 @@ class RuntimeManager:
             # integrate physics and advance the time
             state.invalidate_rne_post_constraint()
             mujoco.mj_step(state.model, state.data)
+            self._steps_taken += 1
             logger.debug(f"Physics integrated; new t={state.data.time:.6f}")
 
         if self._sync_hook:

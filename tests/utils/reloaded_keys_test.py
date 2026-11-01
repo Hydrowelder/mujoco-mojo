@@ -32,6 +32,8 @@ def test_the_default_keys_are_the_ones_the_footer_has_always_shown() -> None:
     assert ReloadedKeySettings().model_dump() == {
         "generate": ["f2"],
         "run": ["f3"],
+        "pause": ["f12"],
+        "step": [],
         "watch": ["f4"],
         "record": ["f7"],
         "explain": ["f8"],
@@ -96,6 +98,8 @@ def test_the_schema_names_each_action_so_editors_and_the_dojo_can_show_them() ->
     assert list(schema["properties"]) == [
         "generate",
         "run",
+        "pause",
+        "step",
         "watch",
         "record",
         "explain",

@@ -18,6 +18,7 @@ from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, VerticalScroll
 from textual.content import Content
 from textual.css.query import NoMatches
+from textual.markup import escape as escape_markup
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.suggester import Suggester
@@ -39,6 +40,7 @@ from .controller import (
     ReloadedController,
     RunState,
     StatusEvent,
+    speed_label,
 )
 from .rain import RainScreen
 from .theme import (
@@ -77,6 +79,7 @@ FieldKind = Literal["edit", "toggle", "info"]
 _STATE_STYLES = {
     RunState.IDLE: ("IDLE", f"bold {ON_ACCENT} on {SUCCESS}"),
     RunState.RUNNING: ("RUNNING", f"bold {ON_ACCENT} on {WARNING}"),
+    RunState.PAUSED: ("PAUSED", f"bold {ON_ACCENT} on {LINK}"),
     RunState.STOPPING: ("STOPPING", f"bold {ON_ACCENT} on {DANGER}"),
 }
 
@@ -126,6 +129,8 @@ def shortcut_bindings(keys: ReloadedKeySettings) -> list[Binding]:
     actions = (
         ("Generate", "submit('gen')", keys.generate),
         ("Run", "submit('run')", keys.run),
+        ("Pause", "toggle_pause", keys.pause),
+        ("Step", "submit('step')", keys.step),
         ("Watch", "submit('watch')", keys.watch),
         ("Record", "submit('record')", keys.record),
         ("Explain", "toggle_explain", keys.explain),
@@ -173,6 +178,7 @@ def status_fields(status: ControllerStatus) -> list[FieldView]:
     watch, watch_style = on_off(status.watch)
     record, record_style = on_off(status.record)
     speed = f"{status.playback_speed:g}"
+    speed_shown = speed_label(status.playback_speed)
 
     fields = [
         FieldView(
@@ -191,12 +197,26 @@ def status_fields(status: ControllerStatus) -> list[FieldView]:
             "edit",
             raw=str(status.trial_num),
         ),
-        FieldView("speed", "speed", f"{speed}x", str(INK_STRONG), "edit", raw=speed),
+        FieldView("speed", "speed", speed_shown, str(INK_STRONG), "edit", raw=speed),
         FieldView("watch", "watch", watch, watch_style, "toggle"),
         FieldView("record", "record", record, record_style, "toggle"),
         FieldView("last", "last", status.last_command, str(INK_STRONG), "info"),
     ]
     return fields
+
+
+def control_states(state: RunState, has_runtime: bool) -> dict[str, bool]:
+    """Which control buttons apply in `state`, by the command each one types. A button that does not apply is greyed out."""
+    idle = state is RunState.IDLE
+    running = state is RunState.RUNNING
+    paused = state is RunState.PAUSED
+    return {
+        "gen": idle,
+        "run": has_runtime and (idle or paused),
+        "pause": running,
+        "step": running or paused,
+        "stop": running or paused,
+    }
 
 
 def run_summary(status: ControllerStatus) -> Text | None:
@@ -482,6 +502,71 @@ class ExplainButton(Button):
         self.tooltip = "Say what the command you have typed will do"
 
 
+class ControlButton(Button):
+    """One of the buttons that control a run. Pressing it types its `command`. It never takes focus, so typing carries on."""
+
+    can_focus = False
+
+    def __init__(
+        self, command: str, label: str, tooltip: str, *, disabled: bool
+    ) -> None:
+        super().__init__(
+            label, id=f"control-{command}", compact=True, disabled=disabled
+        )
+        self.command = command
+        self.tooltip = tooltip
+
+
+class ControlBar(Horizontal):
+    """The row of buttons that start, hold, step, and stop a run, each showing its key and lit only when it applies."""
+
+    BUTTONS: ClassVar[tuple[tuple[str, str, str, str], ...]] = (
+        # the command it types, its label, the action its key is bound to, and its tooltip
+        ("gen", "Gen", "submit('gen')", "Generate the model without running it"),
+        (
+            "run",
+            "Run",
+            "submit('run')",
+            "Generate and run the runtime, or carry a paused run on",
+        ),
+        ("pause", "Pause", "toggle_pause", "Hold the run where it is"),
+        ("step", "Step", "submit('step')", "Advance the run by one step"),
+        ("stop", "Stop", "submit('stop')", "Abort the run"),
+    )
+
+    def __init__(
+        self,
+        shortcuts: list[Binding],
+        state: RunState,
+        has_runtime: bool,
+        *,
+        id: str | None = None,
+    ) -> None:
+        super().__init__(id=id)
+        self._shortcuts = shortcuts
+        self._enabled = control_states(state, has_runtime)
+
+    def compose(self) -> ComposeResult:
+        for command, label, action, tooltip in self.BUTTONS:
+            key = next(
+                (
+                    b.key_display
+                    for b in self._shortcuts
+                    if b.action == action and b.show
+                ),
+                None,
+            )
+            text = label if key is None else f"{label} [dim]{escape_markup(key)}[/dim]"
+            yield ControlButton(
+                command, text, tooltip, disabled=not self._enabled[command]
+            )
+
+    def show(self, state: RunState, has_runtime: bool) -> None:
+        enabled = control_states(state, has_runtime)
+        for button in self.query(ControlButton):
+            button.disabled = not enabled[button.command]
+
+
 class CommandSuggester(Suggester):
     """Completes the command being typed, and also the command after `explain`, so `explain hel` becomes `explain help`."""
 
@@ -667,6 +752,13 @@ class ReloadedApp(App[None]):
             and not self._controller.has_runtime
         ):
             return None
+        # and Pause and Step have nothing to hold unless a run is going or paused
+        if action == "toggle_pause" or (action == "submit" and parameters == ("step",)):
+            running = self._controller.status().state in (
+                RunState.RUNNING,
+                RunState.PAUSED,
+            )
+            return True if running else None
         return True
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
@@ -679,6 +771,12 @@ class ReloadedApp(App[None]):
             title=APP_TITLE,
             subtitle=self.sub_title,
             id="status",
+        )
+        yield ControlBar(
+            self.shortcuts,
+            self._controller.status().state,
+            self._controller.has_runtime,
+            id="controls",
         )
         connection = Static(id="connection")
         connection.border_title = "Browser viewer"
@@ -739,6 +837,9 @@ class ReloadedApp(App[None]):
         if isinstance(event.button, ExplainButton):
             event.stop()
             self.action_toggle_explain()
+        elif isinstance(event.button, ControlButton):
+            event.stop()
+            self._controller.submit(event.button.command)
 
     def on_param_field_edited(self, message: ParamField.Edited) -> None:
         match message.key:
@@ -785,6 +886,9 @@ class ReloadedApp(App[None]):
 
     def action_submit(self, command: str) -> None:
         self._controller.submit(command)
+
+    def action_toggle_pause(self) -> None:
+        self._controller.toggle_pause()
 
     def action_toggle_explain(self) -> None:
         self._set_explain(not self.query_one("#hint", Static).display)
@@ -861,6 +965,8 @@ class ReloadedApp(App[None]):
             return
         if hint.display:
             command.placeholder = CommandInput.PLACEHOLDER
+        elif self._controller.status().state is RunState.PAUSED:
+            command.placeholder = "Press Enter to step, or type a command"
         else:
             last = self._controller.status().last_command
             command.placeholder = f"Press Enter to repeat '{last}', or type a command"
@@ -871,6 +977,10 @@ class ReloadedApp(App[None]):
             bar.show(status)
         self._refresh_placeholder()
         self._refresh_explain()
+        self.refresh_bindings()
+        controls = self._find(ControlBar)
+        if controls is not None:
+            controls.show(status.state, self._controller.has_runtime)
         log = self._find(RichLog)
         if log is not None:
             summary = run_summary(status)

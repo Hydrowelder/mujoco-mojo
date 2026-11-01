@@ -1,5 +1,8 @@
 import re
-from collections.abc import Callable
+import sys
+import threading
+import time
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +18,7 @@ from typer.testing import CliRunner
 
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
 import mujoco_mojo.utils.layers.reloaded.session as session_module
+from mujoco_mojo.runtime import RunTarget, TargetKind
 from mujoco_mojo.settings import ReloadedKeySettings, ReloadedSettings
 from mujoco_mojo.typing import UserInterface
 from mujoco_mojo.utils.layers.cli import cli_app
@@ -163,6 +167,7 @@ class AppProbe:
             "closed": self.backend.closed,
             "sync_hook": self.session._sync_hook,
             "viewer_lock": self.session._viewer_lock,
+            "pump": self.session.run_control.pump,
         }
         if self.fail_with is not None:
             raise self.fail_with
@@ -190,7 +195,7 @@ def test_the_viewer_is_open_and_wired_to_the_runtime_while_the_app_runs(
 
 
 def test_the_keys_from_settings_reach_the_app(probe: AppProbe) -> None:
-    probe.session.keys = ReloadedKeySettings(generate=["f12"])
+    probe.session.keys = ReloadedKeySettings(generate=["f11"])
 
     probe.session._run_tui(LockedBackend(), make_state())
 
@@ -363,3 +368,103 @@ def test_a_backend_that_was_never_started_is_idle(backend: OpenGLBackend) -> Non
     assert backend.connection_info() is None
     backend.pump()
     backend.close()
+
+
+def test_the_backend_pump_is_wired_for_the_run_control_while_the_app_runs(
+    probe: AppProbe,
+) -> None:
+    backend = LockedBackend()
+
+    probe.session._run_tui(backend, make_state())
+
+    assert probe.seen["pump"] == backend.pump
+    assert probe.session.run_control.pump is None
+
+
+@pytest.fixture
+def stepping_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """A user module whose runtime takes a thousand `step`s, counting them in `progress`."""
+    (tmp_path / "pause_sim.py").write_text(
+        "progress = {'steps': 0}\n\n"
+        "def generate(mojo_model, overrides):\n"
+        "    return mojo_model\n\n"
+        "def runtime(mojo_model, rm, state):\n"
+        "    for _ in range(1000):\n"
+        "        rm.step(state)\n"
+        "        progress['steps'] += 1\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    yield "pause_sim"
+    sys.modules.pop("pause_sim", None)
+
+
+def steps_taken(module: str) -> int:
+    return int(sys.modules[module].progress["steps"])
+
+
+def test_a_real_run_is_held_and_released_by_the_sessions_run_control(
+    tmp_path: Path, stepping_module: str
+) -> None:
+    """The whole path: the session's `RunControl` reaches the `RuntimeManager` it creates, whose `step` is where the user's loop is held."""
+    session = make_session(tmp_path, UserInterface.OPENGL)
+    session.generator = f"{stepping_module}.generate"
+    session.runtime = f"{stepping_module}.runtime"
+    session.playback_speed = 0
+    session.run_control.pause()
+    run = threading.Thread(
+        target=session.generate_construct,
+        kwargs={"use_runtime": True, "on_reload_callback": None},
+        daemon=True,
+    )
+    run.start()
+
+    time.sleep(0.3)
+    assert steps_taken(stepping_module) == 0
+
+    session.run_control.step(5)
+    deadline = time.monotonic() + 5
+    while steps_taken(stepping_module) < 5:
+        assert time.monotonic() < deadline
+        time.sleep(0.005)
+    time.sleep(0.2)
+    assert steps_taken(stepping_module) == 5
+
+    session.run_control.resume()
+    run.join(30)
+    assert not run.is_alive()
+    assert steps_taken(stepping_module) == 1000
+
+
+def test_a_real_run_pauses_itself_at_its_target_and_the_controller_is_told(
+    tmp_path: Path, stepping_module: str
+) -> None:
+    session = make_session(tmp_path, UserInterface.OPENGL)
+    session.generator = f"{stepping_module}.generate"
+    session.runtime = f"{stepping_module}.runtime"
+    session.playback_speed = 0
+    reasons: list[str | None] = []
+    session.run_control.on_hold = reasons.append
+    session.run_control.run_until(RunTarget(TargetKind.STEP, 20))
+    run = threading.Thread(
+        target=session.generate_construct,
+        kwargs={"use_runtime": True, "on_reload_callback": None},
+        daemon=True,
+    )
+    run.start()
+
+    deadline = time.monotonic() + 5
+    while not session.run_control.paused:
+        assert time.monotonic() < deadline
+        time.sleep(0.005)
+    time.sleep(0.2)
+
+    assert steps_taken(stepping_module) == 20
+    assert len(reasons) == 1
+    reason = reasons[0]
+    assert reason is not None
+    assert reason.startswith("reached step 20 (time ")
+    session.run_control.resume()
+    run.join(30)
+    assert not run.is_alive()
+    assert steps_taken(stepping_module) == 1000

@@ -10,6 +10,8 @@ from typing import Any
 
 import mujoco
 
+import mujoco_mojo.runtime as rt
+
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
 from mujoco_mojo.utils.layers.reloaded.controller import (
@@ -39,6 +41,7 @@ class FakeSession:
     record: bool = False
     playback_speed: float = 1.0
     stop_event: threading.Event = field(default_factory=threading.Event)
+    run_control: rt.RunControl = field(default_factory=rt.RunControl)
     output_sink: Callable[[str], None] | None = None
 
     generation_behavior: Callable[["FakeSession"], object] | None = None
@@ -61,6 +64,27 @@ class FakeSession:
         if use_runtime and self.runtime and self.behavior is not None:
             self.behavior(self)
         return state
+
+
+@dataclass
+class SteppingRuntime:
+    """Stands in for a runtime function: it takes steps the way `RuntimeManager.step` does, asking the run control before each one, so a test can pause it, step it, and stop it."""
+
+    limit: int = 1_000_000
+    step_time: float = 0.01
+    """How much simulation time each step adds."""
+    steps: int = 0
+    """How many steps have been taken."""
+
+    def __call__(self, session: FakeSession) -> None:
+        for _ in range(self.limit):
+            session.run_control.wait_while_paused(
+                session.stop_event, self.steps * self.step_time, self.steps
+            )
+            if session.stop_event.is_set():
+                raise rt.SimulationStopped("stopped")
+            self.steps += 1
+            time.sleep(0.001)
 
 
 @dataclass

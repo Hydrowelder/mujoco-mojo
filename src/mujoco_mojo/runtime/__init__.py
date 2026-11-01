@@ -13,6 +13,7 @@ from .load import (
     VectorTorque,
 )
 from .requirements_manager import RequirementSatisfied, RequirementTerminated
+from .run_control import RunControl, RunTarget, TargetKind
 from .runtime_manager import RuntimeManager, SimulationStopped
 from .signal_manager import SignalManager
 from .tracer import Tracer
@@ -29,12 +30,15 @@ __all__ = [
     "PointToPointForce",
     "RequirementSatisfied",
     "RequirementTerminated",
+    "RunControl",
+    "RunTarget",
     "RuntimeManager",
     "ScalarForce",
     "ScalarTorque",
     "SignalManager",
     "SimulationStopped",
     "SiteLoad",
+    "TargetKind",
     "Tracer",
     "VectorForce",
     "VectorTorque",
