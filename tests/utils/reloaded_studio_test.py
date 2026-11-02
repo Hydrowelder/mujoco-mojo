@@ -18,6 +18,7 @@ from mujoco.studio import launch_native, launch_web, messages, sim
 from reloaded_fakes import make_state
 
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
+from mujoco_mojo.typing import StudioGraphics
 from mujoco_mojo.utils.layers.reloaded.backends import (
     StudioBackend,
     ViewerUnavailableError,
@@ -36,6 +37,12 @@ from mujoco_mojo.visualization import ArrowConfig, LineConfig
 def no_settling(monkeypatch: pytest.MonkeyPatch) -> None:
     """Starting the browser viewer waits a moment for it to settle, which only costs time here."""
     monkeypatch.setattr(studio_module, "SETTLE_SECONDS", 0)
+
+
+@pytest.fixture(autouse=True)
+def display_works(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The native window needs a display to open on, and these tests must not depend on the machine having one."""
+    monkeypatch.setattr(studio_module, "display_problem", lambda: None)
 
 
 PAUSED = sim.PauseState.NORMAL_PAUSED
@@ -540,6 +547,8 @@ class FakeHandle:
     models: list[tuple[Any, str, Any]] = field(default_factory=list)
     syncs: int = 0
     sent: list[Any] = field(default_factory=list)
+    configs: list[Any] = field(default_factory=list)
+    """What the viewer was launched with, one `ViewerConfig` per launch."""
     closed: bool = False
 
     def is_running(self) -> bool:
@@ -579,6 +588,7 @@ def fake_viewer(monkeypatch: pytest.MonkeyPatch, listener: int) -> Iterator[Fake
     handle = FakeHandle()
 
     def launch(*args: Any, **kwargs: Any) -> FakeHandle:
+        handle.configs.append(args[0])
         print("MuJoCo Web Viewer running at: http://localhost/")
         return handle
 
@@ -592,9 +602,12 @@ def fake_viewer(monkeypatch: pytest.MonkeyPatch, listener: int) -> Iterator[Fake
 
 
 def started_backend(
-    controls: FakeControls, tmp_path: Path, web: bool = True
+    controls: FakeControls,
+    tmp_path: Path,
+    web: bool = True,
+    gfx: StudioGraphics = StudioGraphics.DEFAULT,
 ) -> StudioBackend:
-    backend = StudioBackend(xml_path=lambda: tmp_path / "model.xml", web=web)
+    backend = StudioBackend(xml_path=lambda: tmp_path / "model.xml", web=web, gfx=gfx)
     backend.attach(controls)
     return backend
 
@@ -669,6 +682,33 @@ def test_over_ssh_the_connection_includes_the_command_that_forwards_the_port(
     assert info.url == f"http://localhost:{listener}/"
     assert info.tunnel_command is not None
     assert info.tunnel_command.startswith(f"ssh -L {listener}:localhost:{listener} ")
+
+
+@pytest.mark.parametrize("gfx", list(StudioGraphics))
+def test_the_native_window_is_drawn_in_the_mode_asked_for(
+    fake_viewer: FakeHandle, controls: FakeControls, tmp_path: Path, gfx: StudioGraphics
+) -> None:
+    backend = started_backend(controls, tmp_path, web=False, gfx=gfx)
+
+    backend.start(make_state())
+
+    # Studio reads an empty mode as its own default
+    expected = "" if gfx is StudioGraphics.DEFAULT else gfx.value
+    assert fake_viewer.configs[0].gfx == expected
+    backend.close()
+
+
+def test_the_browser_viewer_ignores_the_graphics_mode(
+    fake_viewer: FakeHandle, controls: FakeControls, tmp_path: Path
+) -> None:
+    backend = started_backend(
+        controls, tmp_path, web=True, gfx=StudioGraphics.OPENGL_SOFTWARE
+    )
+
+    backend.start(make_state())
+
+    assert fake_viewer.configs[0].gfx == "web"
+    backend.close()
 
 
 def test_the_native_window_needs_no_address_and_no_port(

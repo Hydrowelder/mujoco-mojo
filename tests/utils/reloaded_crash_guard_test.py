@@ -20,9 +20,7 @@ pytestmark = pytest.mark.skipif(
 
 GUARD = Path(crash_guard_module.__file__)
 
-# a command that supervises itself the way `mujoco-mojo reloaded` does. run again as the child, it puts the
-# terminal in the raw mode the terminal UI uses and then does `work`
-_PROGRAM = """
+_HEADER = """
 import importlib.util, os, pathlib, signal, sys, time, tty
 spec = importlib.util.spec_from_file_location("crash_guard", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
@@ -32,10 +30,21 @@ crash = pathlib.Path(sys.argv[2])
 status = module.run_supervised(crash)
 if status is not None:
     sys.exit(status)
+"""
+
+# a command that supervises itself the way `mujoco-mojo reloaded` does. run again as the child, it puts the
+# terminal in the raw mode the terminal UI uses and then does `work`
+_PROGRAM = (
+    _HEADER
+    + """
 with module.CrashGuard(crash):
     tty.setraw(0)
     {work}
 """
+)
+
+# the same, but it fails before the terminal UI session starts, e.g. on a bad argument
+_EARLY_PROGRAM = _HEADER + "sys.exit(2)\n"
 
 
 class Terminal:
@@ -100,6 +109,7 @@ def test_a_segfault_leaves_the_stack_of_every_thread_and_a_usable_terminal(
     shown = terminal.output(until="saved to")
     assert crash_guard_module.RESET_TERMINAL in shown
     assert "stopped without cleaning up" in shown
+    assert "killed by SIGSEGV" in shown
     assert f"saved to {crash}" in shown
     assert "Segmentation fault" in crash.read_text()
     assert terminal.settings_restored()
@@ -120,6 +130,36 @@ def test_a_program_killed_without_a_trace_still_gets_the_terminal_put_right(
     # there is no stack to point to
     assert "saved to" not in terminal.output(timeout=0.2)
     assert terminal.settings_restored()
+
+
+def test_native_code_that_exits_the_process_still_gets_the_terminal_put_right(
+    terminal: Terminal, tmp_path: Path
+) -> None:
+    """A library that gives up with a plain `exit` ends the process at once, so the terminal UI never switches anything back."""
+    crash = tmp_path / "crash.log"
+    script = program(tmp_path, "os._exit(1)")
+
+    status = run_on(terminal, script, crash)
+
+    # an exit is not a signal, so the status is the program's own
+    assert status == 1
+    shown = terminal.output(until="stopped without cleaning up")
+    assert crash_guard_module.RESET_TERMINAL in shown
+    assert "exit status 1" in shown
+    assert terminal.settings_restored()
+
+
+def test_a_program_that_fails_before_the_terminal_ui_starts_is_left_alone(
+    terminal: Terminal, tmp_path: Path
+) -> None:
+    """A bad argument, say, ends the command without the terminal ever having been changed, so there is nothing to say."""
+    script = tmp_path / "program.py"
+    script.write_text(_EARLY_PROGRAM)
+
+    status = run_on(terminal, script, tmp_path / "crash.log")
+
+    assert status == 2
+    assert terminal.output(timeout=0.3) == ""
 
 
 def test_a_normal_exit_touches_nothing_and_its_status_is_passed_on(

@@ -22,7 +22,7 @@ from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
 from mujoco_mojo.settings import ReloadedKeySettings
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
-from mujoco_mojo.typing import UserInterface
+from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     NAMED_VALUES_FNAME,
@@ -158,6 +158,7 @@ class MojoReloaded:
     host: str
     port: int
 
+    gfx: StudioGraphics = StudioGraphics.DEFAULT
     watch: bool = False
     record: bool = False
     keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
@@ -604,6 +605,7 @@ class MojoReloaded:
                     xml_path=self._trial_xml_path,
                     web=self.ui is UserInterface.WEB,
                     port=self.port,
+                    gfx=self.gfx,
                 )
             case _ as unreachable:
                 assert_never(unreachable)

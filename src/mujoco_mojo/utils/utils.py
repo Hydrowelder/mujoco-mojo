@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import hashlib
 import os
 import random
 import socket
 import sys
+import threading
 import time
 from importlib.resources import files
 from pathlib import Path
@@ -15,6 +18,9 @@ from xml.etree.ElementTree import tostring
 from mujoco_mojo.utils.log import get_logger
 
 __all__ = [
+    "display_answers",
+    "display_listens",
+    "display_problem",
     "get_checksum",
     "get_local_ip",
     "headless_reason",
@@ -69,19 +75,97 @@ def write_dojo_script(workdir: Path) -> None:
     os.chmod(dest, 0o755)
 
 
+def display_listens(
+    display: str, socket_dir: str = "/tmp/.X11-unix", timeout: float = 0.5
+) -> bool | None:
+    """
+    Whether something accepts connections on the X `display`, such as `:0` or `localhost:10.0`, or `None` for a display of a kind that is not checked here.
+
+    This is only a connection. An SSH forward accepts one even when nothing is behind it, so it does not mean that windows can be opened.
+    """
+    host, _, rest = display.rpartition(":")
+    number = rest.split(".")[0]
+    if not number.isdigit() or "/" in host:
+        return None
+    try:
+        if host in ("", "unix"):
+            with socket.socket(socket.AF_UNIX) as unix:
+                unix.settimeout(timeout)
+                unix.connect(f"{socket_dir}/X{number}")
+        else:
+            socket.create_connection(
+                (host.strip("[]"), 6000 + int(number)), timeout
+            ).close()
+    except OSError:
+        return False
+    return True
+
+
+def _x_library_opens(display: str, timeout: float) -> bool:
+    """Whether the X library can open `display`, with the login, which is all a native window needs. Counts as opening when the library is not installed, since that cannot be told."""
+    name = ctypes.util.find_library("X11")
+    if name is None:
+        return True
+    try:
+        x11 = ctypes.CDLL(name)
+    except OSError:
+        return True
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    outcome: list[bool] = []
+
+    def attempt() -> None:
+        handle = x11.XOpenDisplay(display.encode())
+        if handle:
+            x11.XCloseDisplay(handle)
+        outcome.append(bool(handle))
+
+    # the library has no time limit of its own, and a server that accepts but never replies would otherwise hold up whatever asked
+    opener = threading.Thread(target=attempt, daemon=True)
+    opener.start()
+    opener.join(timeout)
+    return bool(outcome and outcome[0])
+
+
+def display_answers(
+    display: str,
+    socket_dir: str = "/tmp/.X11-unix",
+    timeout: float = 0.5,
+    open_timeout: float = 1.0,
+) -> bool:
+    """Whether windows can be opened on the X `display`: something listens on it, and the X library gets a connection from it. Displays of a kind that is not checked here count as answering."""
+    listens = display_listens(display, socket_dir, timeout)
+    if listens is None:
+        return True
+    return listens and _x_library_opens(display, open_timeout)
+
+
+def display_problem() -> str | None:
+    """
+    Says why a window cannot be opened on this machine's own display, or returns `None` if one probably can.
+
+    Only Linux is checked, because macOS and Windows always have a display. A `DISPLAY` is believed only if something answers on it: an old value left in a shell profile, or the address of an SSH forward that has since gone, makes native viewers give up at once.
+    """
+    if not sys.platform.startswith("linux") or os.environ.get("WAYLAND_DISPLAY"):
+        return None
+    display = os.environ.get("DISPLAY")
+    if not display:
+        return "no display was found"
+    if not display_answers(display):
+        return f"nothing answers on the display `{display}`"
+    return None
+
+
 def headless_reason() -> str | None:
     """
     Says why a native window probably cannot be shown on this machine, or returns `None` if one can.
 
-    A machine reached over SSH counts as headless even with X forwarding, since the viewer is then far better served in a browser. Only Linux is checked for a display, because macOS and Windows always have one.
+    A machine reached over SSH counts as headless even with X forwarding, since the viewer is then far better served in a browser. Otherwise the display is checked, on Linux only.
     """
     if is_ssh_session():
         return "this is an SSH session"
-    if sys.platform.startswith("linux") and not (
-        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
-    ):
-        return "no display was found"
-    return None
+    return display_problem()
 
 
 def get_local_ip() -> str:

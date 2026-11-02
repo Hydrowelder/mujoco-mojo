@@ -100,6 +100,7 @@ __all__ = [
     "SiteName",
     "Sleep",
     "Solver",
+    "StudioGraphics",
     "TendonLimited",
     "TendonName",
     "TextureBuiltInType",
@@ -437,6 +438,25 @@ class UserInterface(StrEnum):
 
     WEB = "web"
     """MuJoCo Studio in a browser, served from the machine running Reloaded, so it works over SSH and without a display."""
+
+
+class StudioGraphics(StrEnum):
+    """How the native MuJoCo Studio window is drawn. These are Studio's own `--gfx` modes, and they do not apply to the browser viewer."""
+
+    DEFAULT = "default"
+    """Studio's own choice."""
+
+    OPENGL = "opengl"
+    """OpenGL, drawn by the machine's graphics driver."""
+
+    OPENGL_SOFTWARE = "opengl_software"
+    """OpenGL, drawn by the processor. Use this where the display only has software OpenGL, such as a remote desktop, and the default mode fails to draw."""
+
+    VULKAN = "vulkan"
+    """Vulkan, drawn by the machine's graphics driver."""
+
+    VULKAN_SOFTWARE = "vulkan_software"
+    """Vulkan, drawn by the processor."""
 
 
 class Direction(StrEnum):

@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.typing import UserInterface
+from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.utils import find_free_port, is_ssh_session
+from mujoco_mojo.utils.utils import display_problem, find_free_port, is_ssh_session
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .base import ConnectionInfo, ViewerControls
@@ -88,6 +88,12 @@ def check_studio_available(ui: UserInterface) -> None:
         raise ViewerUnavailableError(
             "The `web` viewer needs the Studio browser client, and this MuJoCo build does not have it. Use `-ui studio` or `-ui opengl`, or set MUJOCO_WEB_VIEWER_DIST to a directory with a built client."
         )
+    # the native window exits the whole process if it cannot open the display, so this must be known before it starts
+    problem = display_problem() if ui is UserInterface.STUDIO else None
+    if problem is not None:
+        raise ViewerUnavailableError(
+            f"The `studio` viewer opens a window on this machine, but {problem}. Run Reloaded from a terminal on the machine's own desktop, check that `DISPLAY` is not being overridden (for example in ~/.bashrc), or use `-ui web` to see the model in a browser."
+        )
 
 
 class _ForwardToRoot(logging.Handler):
@@ -137,6 +143,8 @@ class StudioBackend:
     """Whether to show Studio in a browser instead of a native window."""
     port: int = 8080
     """The first port to try for the browser viewer."""
+    gfx: StudioGraphics = StudioGraphics.DEFAULT
+    """How the native window is drawn. The browser viewer ignores it."""
     title: str = "MuJoCo Mojo Reloaded"
 
     _controls: ViewerControls | None = field(default=None, init=False, repr=False)
@@ -192,7 +200,11 @@ class StudioBackend:
                 self._wait_for_web_viewer(banner)
                 route_web_server_logs()
             else:
-                config = viewer_protocol.ViewerConfig(title=self.title)
+                config = viewer_protocol.ViewerConfig(
+                    title=self.title,
+                    # Studio reads an empty mode as its own default
+                    gfx="" if self.gfx is StudioGraphics.DEFAULT else self.gfx.value,
+                )
                 self._handle = launch_native.launch(config, plugins=plugins)
 
         self.on_reload(state)

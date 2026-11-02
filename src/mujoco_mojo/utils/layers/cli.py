@@ -26,7 +26,7 @@ from rich.text import Text
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
-from mujoco_mojo.typing import Direction, Sampler, UserInterface
+from mujoco_mojo.typing import Direction, Sampler, StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import find_free_port, get_local_ip
@@ -498,6 +498,18 @@ if True:
                 "Which viewer to show the model in. [bold]opengl[/bold] is the classic MuJoCo window: it needs a display (X11 forwarding over SSH) but is ideal for local development. "
                 "[bold]studio[/bold] is a native MuJoCo Studio window and [bold]web[/bold] is MuJoCo Studio in a browser, which works over SSH and without a display."
             ),
+            case_sensitive=False,
+        ),
+    ]
+
+    _opts = ", ".join([f"[bold]{o.value}[/bold]" for o in StudioGraphics])
+    GfxType = Annotated[
+        StudioGraphics,
+        typer.Option(
+            "--gfx",
+            # the choices are in the help text, because a metavar never wraps and the longest one sets the width of the whole column
+            metavar="See desc.",
+            help=f"How the native MuJoCo Studio window is drawn (Studio's own [dim]--gfx[/dim] option): {_opts} where the display only has software OpenGL, such as a remote desktop, and the default fails to draw. Ignored by the [bold]web[/bold] and [bold]opengl[/bold] viewers.",
             case_sensitive=False,
         ),
     ]
@@ -1467,6 +1479,7 @@ def run_reloaded(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     ui: UIType = _SETTINGS.reloaded.ui,
+    gfx: GfxType = _SETTINGS.reloaded.gfx,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
@@ -1514,6 +1527,7 @@ def run_reloaded(
         runtime=runtime,
         workdir=workdir,
         ui=ui,
+        gfx=gfx,
         overrides_path=overrides_path,
         config_path=config_path,
         trial_num=trial_num,

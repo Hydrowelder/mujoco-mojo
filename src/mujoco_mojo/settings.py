@@ -50,6 +50,7 @@ from mujoco_mojo.typing import (
     Sampler,
     SortDirection,
     SortMode,
+    StudioGraphics,
     UserInterface,
 )
 from mujoco_mojo.utils.color import Color
@@ -728,6 +729,12 @@ class ReloadedSettings(BaseModel):
             )
             return "web"
         return value
+
+    gfx: StudioGraphics = Field(
+        default=StudioGraphics.DEFAULT,
+        title="Studio Graphics",
+        description="How the native Studio window (`studio`) is drawn, as Studio's `--gfx`. Use `opengl_software` where the display only has software OpenGL, such as a remote desktop. Ignored by `web` and `opengl`.",
+    )
 
     watch: bool = Field(
         default=True,

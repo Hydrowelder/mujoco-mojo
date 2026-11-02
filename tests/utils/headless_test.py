@@ -1,10 +1,20 @@
+import ctypes.util
+import socket
 import sys
+import threading
+from pathlib import Path
 
 import pytest
 
 from mujoco_mojo.settings import ReloadedSettings, default_user_interface
 from mujoco_mojo.typing import UserInterface
-from mujoco_mojo.utils.utils import headless_reason
+import mujoco_mojo.utils.utils as utils_module
+from mujoco_mojo.utils.utils import (
+    display_answers,
+    display_listens,
+    display_problem,
+    headless_reason,
+)
 
 
 def set_environment(
@@ -14,9 +24,11 @@ def set_environment(
     ssh: str | None = None,
     display: str | None = None,
     wayland: str | None = None,
+    answering: bool = True,
 ) -> None:
-    """Makes this machine look like the one described, whatever it really is."""
+    """Makes this machine look like the one described, whatever it really is. `answering` is whether anything listens on its display."""
     monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(utils_module, "display_answers", lambda display: answering)
     for name in (
         "SSH_CONNECTION",
         "SSH_CLIENT",
@@ -49,6 +61,101 @@ def test_linux_without_a_display_is_headless(monkeypatch: pytest.MonkeyPatch) ->
     set_environment(monkeypatch, platform="linux")
 
     assert headless_reason() == "no display was found"
+
+
+def test_a_display_nothing_listens_on_is_headless(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For example `DISPLAY` left in a shell profile, or the address of an SSH forward that has gone."""
+    set_environment(
+        monkeypatch, platform="linux", display="localhost:10.0", answering=False
+    )
+
+    assert headless_reason() == "nothing answers on the display `localhost:10.0`"
+    assert default_user_interface() is UserInterface.WEB
+
+
+def test_a_dead_x_display_does_not_matter_on_a_wayland_desktop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_environment(
+        monkeypatch,
+        platform="linux",
+        display=":0",
+        wayland="wayland-0",
+        answering=False,
+    )
+
+    assert display_problem() is None
+
+
+def test_a_unix_display_listens_when_its_socket_accepts(tmp_path: Path) -> None:
+    with socket.socket(socket.AF_UNIX) as server:
+        server.bind(str(tmp_path / "X7"))
+        server.listen()
+
+        assert display_listens(":7.0", socket_dir=str(tmp_path))
+        assert display_listens("unix:7", socket_dir=str(tmp_path))
+        assert display_listens(":8", socket_dir=str(tmp_path)) is False
+
+
+def test_a_tcp_display_listens_when_its_port_accepts() -> None:
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        port = server.getsockname()[1]
+
+        assert display_listens(f"localhost:{port - 6000}.0")
+    # closed again, so the same address now refuses
+    assert display_listens(f"localhost:{port - 6000}.0") is False
+
+
+@pytest.mark.skipif(
+    ctypes.util.find_library("X11") is None, reason="needs the X library"
+)
+@pytest.mark.parametrize("reply", [False, True], ids=["closes", "stays silent"])
+def test_a_forwarded_display_with_nothing_behind_it_does_not_answer(
+    reply: bool,
+) -> None:
+    """What an SSH forward does when the X server on the other end is gone: it accepts the connection and then closes it, or never says anything."""
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        number = server.getsockname()[1] - 6000
+        clients: list[socket.socket] = []
+        stop = threading.Event()
+
+        def serve() -> None:
+            server.settimeout(0.1)
+            while not stop.is_set():
+                try:
+                    client, _ = server.accept()
+                except OSError:
+                    continue
+                if reply:
+                    clients.append(client)
+                else:
+                    client.close()
+
+        worker = threading.Thread(target=serve, daemon=True)
+        worker.start()
+        try:
+            display = f"localhost:{number}.0"
+            assert display_listens(display)
+            assert not display_answers(display, open_timeout=0.5)
+        finally:
+            stop.set()
+            worker.join()
+            for client in clients:
+                client.close()
+
+
+@pytest.mark.parametrize("display", ["/tmp/launch/org.xquartz:0", "host/unix:0", ":x"])
+def test_a_display_of_a_kind_that_is_not_checked_counts_as_answering(
+    display: str,
+) -> None:
+    assert display_listens(display) is None
+    assert display_answers(display)
 
 
 @pytest.mark.parametrize("platform", ["darwin", "win32"])

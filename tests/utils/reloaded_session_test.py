@@ -1,3 +1,4 @@
+import logging
 import re
 import sys
 import threading
@@ -6,6 +7,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import mujoco
@@ -16,11 +18,13 @@ import typer
 from reloaded_fakes import FakeBackend, make_state
 from typer.testing import CliRunner
 
+import mujoco_mojo.utils.layers.cli as cli_module
+import mujoco_mojo.utils.layers.reloaded as reloaded_package
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
 import mujoco_mojo.utils.layers.reloaded.session as session_module
 from mujoco_mojo.runtime import RunTarget, TargetKind
 from mujoco_mojo.settings import ReloadedKeySettings, ReloadedSettings
-from mujoco_mojo.typing import UserInterface
+from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.layers.reloaded import MojoReloaded
 from mujoco_mojo.utils.layers.reloaded.backends import (
@@ -33,12 +37,17 @@ from mujoco_mojo.visualization import ArrowConfig, LineConfig
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
-def make_session(tmp_path: Path, ui: UserInterface) -> MojoReloaded:
+def make_session(
+    tmp_path: Path,
+    ui: UserInterface,
+    gfx: StudioGraphics = StudioGraphics.DEFAULT,
+) -> MojoReloaded:
     return MojoReloaded(
         generator="pkg.module:generate",
         runtime=None,
         workdir=tmp_path / "work",
         ui=ui,
+        gfx=gfx,
         overrides_path=None,
         config_path=None,
         trial_num=0,
@@ -56,6 +65,7 @@ def make_session(tmp_path: Path, ui: UserInterface) -> MojoReloaded:
 def studio_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Released MuJoCo has no Studio, but a build from source does, and these tests must not depend on which one is installed."""
     monkeypatch.setattr(studio_module, "studio_available", lambda: False)
+    monkeypatch.setattr(studio_module, "display_problem", lambda: None)
 
 
 def test_the_viewers_to_choose_from_are_opengl_studio_and_web() -> None:
@@ -113,6 +123,83 @@ def test_studio_viewers_explain_that_they_need_studio(
     assert "-ui opengl" in message
 
 
+def test_the_graphics_mode_goes_to_the_studio_viewer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+
+    backend = make_session(
+        tmp_path, UserInterface.STUDIO, StudioGraphics.OPENGL_SOFTWARE
+    )._create_backend()
+
+    assert isinstance(backend, StudioBackend)
+    assert backend.gfx is StudioGraphics.OPENGL_SOFTWARE
+
+
+def test_studio_graphics_default_to_studios_own_choice() -> None:
+    assert ReloadedSettings().gfx is StudioGraphics.DEFAULT
+
+
+def test_a_settings_file_can_choose_the_studio_graphics() -> None:
+    settings = ReloadedSettings.model_validate({"gfx": "opengl_software"})
+
+    assert settings.gfx is StudioGraphics.OPENGL_SOFTWARE
+    with pytest.raises(ValueError):
+        ReloadedSettings.model_validate({"gfx": "hologram"})
+
+
+def test_the_command_line_rejects_an_unknown_graphics_mode() -> None:
+    result = CliRunner().invoke(cli_app, ["reloaded", "--gfx", "hologram"])
+
+    assert result.exit_code == 2
+    output = _ANSI_ESCAPE.sub("", result.output)
+    for choice in ("default", "opengl_software", "vulkan_software"):
+        assert choice in output
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ([], StudioGraphics.DEFAULT),
+        (["--gfx", "opengl_software"], StudioGraphics.OPENGL_SOFTWARE),
+        (["--gfx", "VULKAN"], StudioGraphics.VULKAN),
+    ],
+)
+def test_the_command_line_passes_the_graphics_mode_on(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    arguments: list[str],
+    expected: StudioGraphics,
+) -> None:
+    created: list[dict[str, Any]] = []
+
+    def fake_session(**kwargs: Any) -> SimpleNamespace:
+        created.append(kwargs)
+        return SimpleNamespace(run=lambda: None)
+
+    monkeypatch.setattr(reloaded_package, "MojoReloaded", fake_session)
+    # the real one opens log files, and nothing here needs them
+    monkeypatch.setattr(
+        cli_module, "_setup_cli_logging", lambda **kwargs: logging.getLogger("test")
+    )
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(
+        cli_app,
+        [
+            "reloaded",
+            "-g",
+            "pkg.module:generate",
+            "-w",
+            str(tmp_path / "work"),
+            *arguments,
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert created[0]["gfx"] is expected
+
+
 def test_studio_is_chosen_when_the_installed_mujoco_has_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -125,6 +212,29 @@ def test_studio_is_chosen_when_the_installed_mujoco_has_it(
     assert isinstance(native, StudioBackend) and not native.web
     assert isinstance(web, StudioBackend) and web.web
     assert web.port == 8080
+
+
+def test_the_native_window_explains_that_the_display_does_not_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Studio's own window code ends the whole process when it cannot open the display, so this has to be caught first."""
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+    monkeypatch.setattr(studio_module, "web_client_available", lambda: True)
+    monkeypatch.setattr(
+        studio_module,
+        "display_problem",
+        lambda: "nothing answers on the display `localhost:10.0`",
+    )
+
+    with pytest.raises(ViewerUnavailableError) as raised:
+        make_session(tmp_path, UserInterface.STUDIO)._create_backend()
+
+    message = str(raised.value)
+    assert "localhost:10.0" in message
+    assert "~/.bashrc" in message
+    assert "-ui web" in message
+    # a browser needs no display on this machine
+    assert make_session(tmp_path, UserInterface.WEB)._create_backend()
 
 
 def test_the_browser_viewer_explains_that_it_needs_the_browser_client(
