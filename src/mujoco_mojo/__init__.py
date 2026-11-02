@@ -12,6 +12,7 @@ MuJoCo does not ship Python type stubs. Generate them once with pybind11-stubgen
     pip install pybind11-stubgen
     pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated
     pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated
+    pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated
 
 Run this from the project root. The `typings/` directory is gitignored. Then add to pyproject.toml:
 
@@ -108,16 +109,16 @@ from .mjcf import (
     Light,
     Material,
     Mesh,
-    MeshCone,
-    MeshHemisphere,
-    MeshPlate,
     MeshBox,
+    MeshCone,
     MeshCylinder,
     MeshDisc,
     MeshEllipsoid,
     MeshGrid,
-    MeshSquare,
+    MeshHemisphere,
+    MeshPlate,
     MeshSphere,
+    MeshSquare,
     MeshSupersphere,
     MeshTorus,
     MeshWedge,
