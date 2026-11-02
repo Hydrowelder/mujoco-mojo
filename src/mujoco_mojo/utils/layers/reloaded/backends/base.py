@@ -6,13 +6,39 @@ from typing import Any, Protocol
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
-__all__ = ["ConnectionInfo", "OnReloadCallback", "ViewerBackend"]
+__all__ = ["ConnectionInfo", "OnReloadCallback", "ViewerBackend", "ViewerControls"]
 
 
 class OnReloadCallback(Protocol):
     """Called with the model once it has been generated, so a viewer can show it."""
 
     def __call__(self, state: MjState) -> Any: ...
+
+
+class ViewerControls(Protocol):
+    """What a viewer's own buttons can ask of Reloaded. The controller implements it, so a button and the same word typed in the terminal do the same thing."""
+
+    @property
+    def paused(self) -> bool:
+        """Whether the run in progress is being held."""
+        ...
+
+    @property
+    def speed(self) -> float:
+        """The playback speed: a multiple of real time, 0 for stepping by hand, or `inf`."""
+        ...
+
+    def pause(self) -> None: ...
+
+    def resume(self) -> None: ...
+
+    def step(self, arg: str = "") -> None: ...
+
+    def set_speed(self, arg: str) -> None: ...
+
+    def rerun(self) -> None:
+        """Runs the last command again, if nothing is running."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -36,6 +62,10 @@ class ViewerBackend(Protocol):
     A backend only shows state. It never owns the command loop, so the terminal UI and the unit tests can drive every backend the same way.
     """
 
+    def attach(self, controls: ViewerControls) -> None:
+        """Hands the viewer what its own buttons may ask for. Called once, before `start`."""
+        ...
+
     def start(self, state: MjState) -> None:
         """Opens the viewer on the initial model."""
         ...
@@ -46,6 +76,11 @@ class ViewerBackend(Protocol):
 
     def is_running(self) -> bool:
         """Whether the viewer is still alive, e.g. its window has not been closed."""
+        ...
+
+    @property
+    def failure(self) -> str | None:
+        """Why the viewer stopped when it was not the user closing it, or `None`."""
         ...
 
     def on_reload(self, state: MjState) -> None:

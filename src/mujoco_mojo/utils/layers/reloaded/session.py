@@ -51,12 +51,14 @@ from mujoco_mojo.utils.statusing import (
 )
 from mujoco_mojo.utils.utils import write_dojo_script
 
+from ..crash_guard import CrashGuard
 from .backends import (
     OnReloadCallback,
     OpenGLBackend,
+    StudioBackend,
     ViewerBackend,
     ViewerUnavailableError,
-    raise_studio_unavailable,
+    check_studio_available,
 )
 from .controller import ReloadedController
 from .tui import ReloadedApp
@@ -580,8 +582,16 @@ class MojoReloaded:
             console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
             raise typer.Exit(1)
 
-        self._run_tui(backend, initial_state)
+        try:
+            self._run_tui(backend, initial_state)
+        except ViewerUnavailableError as e:
+            console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
+            raise typer.Exit(1)
         console.print("\n[bold yellow]Exiting MuJoCo Mojo Reloaded[/bold yellow]")
+        if backend.failure is not None:
+            console.print(
+                f"[bold red]The viewer stopped:[/bold red] {escape(backend.failure)}"
+            )
 
     def _create_backend(self) -> ViewerBackend:
         """The viewer to show the model in, chosen by `ui`. The terminal UI drives every one of them the same way."""
@@ -589,7 +599,12 @@ class MojoReloaded:
             case UserInterface.OPENGL:
                 return OpenGLBackend(xml_path=self._trial_xml_path)
             case UserInterface.STUDIO | UserInterface.WEB:
-                raise_studio_unavailable(self.ui)
+                check_studio_available(self.ui)
+                return StudioBackend(
+                    xml_path=self._trial_xml_path,
+                    web=self.ui is UserInterface.WEB,
+                    port=self.port,
+                )
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -600,20 +615,23 @@ class MojoReloaded:
 
     def _run_tui(self, backend: ViewerBackend, state: MjState) -> None:
         """Opens the viewer on `state` and runs the terminal UI over it until the user quits or the viewer is closed."""
-        backend.start(state)
-        try:
-            self._sync_hook = backend.sync_hook
-            self._viewer_lock = backend.viewer_lock
-            self.run_control.pump = backend.pump
-            controller = ReloadedController(self, backend)
-            ReloadedApp(
-                controller,
-                backend,
-                keys=self.keys,
-                subtitle=f"{self.ui.value} | {self.workdir}",
-            ).run()
-        finally:
-            self._sync_hook = None
-            self._viewer_lock = None
-            self.run_control.pump = None
-            backend.close()
+        controller = ReloadedController(self, backend)
+        backend.attach(controller)
+        # if native code in the viewer crashes the process, this saves where, and puts the terminal right
+        with CrashGuard(self.workdir / "crash.log"):
+            backend.start(state)
+            try:
+                self._sync_hook = backend.sync_hook
+                self._viewer_lock = backend.viewer_lock
+                self.run_control.pump = backend.pump
+                ReloadedApp(
+                    controller,
+                    backend,
+                    keys=self.keys,
+                    subtitle=f"{self.ui.value} | {self.workdir}",
+                ).run()
+            finally:
+                self._sync_hook = None
+                self._viewer_lock = None
+                self.run_control.pump = None
+                backend.close()

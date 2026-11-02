@@ -1486,6 +1486,14 @@ def run_reloaded(
 
     Regenerates and reloads the MJCF model on command, or whenever your source files change, for rapid prototyping.
     """
+    from .crash_guard import run_supervised
+
+    # first of all: the work is done by a child process that this one waits for, so that if the child is killed
+    # (by a crash in the viewer, say) the terminal is put right before the shell has it back
+    status = run_supervised(Path(workdir).resolve() / "crash.log")
+    if status is not None:
+        raise typer.Exit(status)
+
     from .reloaded import MojoReloaded
 
     port = find_free_port(host, port)

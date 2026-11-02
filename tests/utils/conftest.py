@@ -7,6 +7,10 @@ import pytest
 from typer.testing import CliRunner
 
 from mujoco_mojo.utils.layers.cli import cli_app
+from mujoco_mojo.utils.layers.reloaded.backends import studio_available
+
+# these import `mujoco.studio`, which released builds of MuJoCo do not have yet
+collect_ignore = [] if studio_available() else ["reloaded_studio_test.py"]
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 

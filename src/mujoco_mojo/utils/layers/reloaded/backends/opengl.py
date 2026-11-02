@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
-from .base import ConnectionInfo
+from .base import ConnectionInfo, ViewerControls
 
 if TYPE_CHECKING:
     import mujoco.viewer
@@ -28,6 +28,14 @@ class OpenGLBackend:
     xml_path: Callable[[], Path]
     """Gives the file the current model was written to, which the viewer shows in its title and reloads from."""
     _viewer: mujoco.viewer.Handle | None = field(default=None, init=False, repr=False)
+
+    def attach(self, controls: ViewerControls) -> None:
+        # the classic viewer has no buttons of its own for pausing or stepping
+        pass
+
+    @property
+    def failure(self) -> str | None:
+        return None
 
     def start(self, state: MjState) -> None:
         import mujoco.viewer

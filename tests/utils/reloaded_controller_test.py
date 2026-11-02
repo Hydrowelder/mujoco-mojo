@@ -13,6 +13,8 @@ from reloaded_fakes import (
 )
 
 import mujoco_mojo.runtime as rt
+import mujoco_mojo.utils.layers.reloaded.watcher as watcher_module
+from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
 from mujoco_mojo.utils.layers.reloaded.controller import (
     COMMAND_SUGGESTIONS,
     ExitEvent,
@@ -21,6 +23,7 @@ from mujoco_mojo.utils.layers.reloaded.controller import (
     ReloadedController,
     RunState,
     StatusEvent,
+    connection_lines,
     speed_label,
 )
 
@@ -48,6 +51,114 @@ def controller(
     controller.start()
     yield controller
     controller.shutdown()
+
+
+def test_nothing_about_a_browser_is_said_for_a_native_viewer(
+    controller: ReloadedController, log: EventLog
+) -> None:
+    assert len(log.messages()) == 1
+    assert "is live" in log.messages()[0]
+
+
+def test_how_to_connect_is_said_right_after_the_start_message_and_the_help_hint(
+    session: FakeSession, tmp_path: Path
+) -> None:
+    info = ConnectionInfo(
+        url="http://localhost:8082/",
+        tunnel_command="ssh -L 8082:localhost:8082 me@box",
+        warning="Nobody checks who connects.",
+    )
+    log = EventLog()
+    controller = ReloadedController(
+        session, FakeBackend(info), watch_path=tmp_path, sink=log
+    )
+
+    controller.start()
+    controller.shutdown()
+
+    first, *rest = log.messages()
+    assert "is live" in first and "help" in first
+    assert len(rest) == 3
+    assert "http://localhost:8082/" in rest[0]
+    assert "ssh -L 8082:localhost:8082 me@box" in rest[1]
+    assert "Nobody checks who connects." in rest[2]
+
+
+def test_each_part_of_the_connection_is_left_out_when_there_is_none() -> None:
+    assert len(connection_lines(ConnectionInfo(url="http://localhost:1/"))) == 1
+    lines = connection_lines(
+        ConnectionInfo(url="http://localhost:1/", warning="[not markup]")
+    )
+    assert len(lines) == 2
+    assert "\\[not markup]" in lines[1]
+
+
+def test_the_controller_tells_a_viewer_whether_a_run_is_held_and_how_fast(
+    controller: ReloadedController, stepping: SteppingRuntime
+) -> None:
+    assert not controller.paused
+    assert controller.speed == 1.0
+
+    controller.pause()
+    assert controller.paused
+
+    controller.set_speed("0.5")
+    assert controller.speed == 0.5
+
+    controller.resume()
+    assert not controller.paused
+
+
+def test_rerun_starts_the_last_command_when_nothing_is_running(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    controller.submit("gen")
+    wait_idle(controller)
+    started = len(session.calls)
+
+    controller.rerun()
+    wait_idle(controller)
+
+    assert len(session.calls) == started + 1
+    assert session.calls[-1] == session.calls[started - 1]
+
+
+def test_rerun_leaves_a_run_in_progress_alone_and_says_how_to_end_it(
+    controller: ReloadedController,
+    session: FakeSession,
+    stepping: SteppingRuntime,
+    log: EventLog,
+) -> None:
+    started = len(session.calls)
+
+    controller.rerun()
+
+    assert len(session.calls) == started
+    assert any("stop" in message for message in log.messages())
+
+
+def test_a_watcher_that_fails_is_switched_off_and_the_log_says_why(
+    controller: ReloadedController,
+    session: FakeSession,
+    log: EventLog,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing_watch(
+        *args: object, **kwargs: object
+    ) -> Iterator[set[tuple[int, str]]]:
+        raise OSError("OS file watch limit reached (kind: MaxFilesWatch)")
+
+    monkeypatch.setattr(watcher_module, "watch", failing_watch)
+
+    controller.submit("watch")
+
+    assert log.wait_for(
+        lambda _: any("File watching stopped" in m for m in log.messages())
+    )
+    assert not session.watch
+    assert not controller.status().watch
+    assert any("limit on watched files" in m for m in log.messages())
+    assert any("watch" in m and "try again" in m for m in log.messages())
 
 
 def test_help_lists_run_only_with_a_runtime_and_no_bare_number_ever(

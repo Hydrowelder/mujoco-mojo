@@ -13,7 +13,10 @@ import mujoco
 import mujoco_mojo.runtime as rt
 
 from mujoco_mojo.mj_state import MjState
-from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
+from mujoco_mojo.utils.layers.reloaded.backends.base import (
+    ConnectionInfo,
+    ViewerControls,
+)
 from mujoco_mojo.utils.layers.reloaded.controller import (
     ControllerEvent,
     LogEvent,
@@ -95,8 +98,21 @@ class FakeBackend:
     reloads: list[MjState] = field(default_factory=list)
     started: bool = False
     closed: bool = False
+    controls: ViewerControls | None = None
+    """What the viewer's buttons were handed."""
+    controls_at_start: ViewerControls | None = None
+    """What the viewer had been handed by the time it started."""
+    failure: str | None = None
+    start_error: Exception | None = None
+    """Raised by `start`, as a viewer that cannot come up would."""
+
+    def attach(self, controls: ViewerControls) -> None:
+        self.controls = controls
 
     def start(self, state: MjState) -> None:
+        if self.start_error is not None:
+            raise self.start_error
+        self.controls_at_start = self.controls
         self.started = True
         self.reloads.append(state)
 

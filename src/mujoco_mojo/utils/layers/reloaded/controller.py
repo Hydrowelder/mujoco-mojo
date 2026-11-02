@@ -13,7 +13,7 @@ import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.utils.log import get_logger
 
-from .backends.base import OnReloadCallback, ViewerBackend
+from .backends.base import ConnectionInfo, OnReloadCallback, ViewerBackend
 from .watcher import FileWatcher
 
 logger = get_logger(__name__)
@@ -31,6 +31,7 @@ __all__ = [
     "ReloadedSession",
     "RunState",
     "StatusEvent",
+    "connection_lines",
     "speed_label",
 ]
 
@@ -206,6 +207,20 @@ def _discard(event: ControllerEvent) -> None:
     pass
 
 
+def connection_lines(info: ConnectionInfo) -> list[str]:
+    """How to reach a browser viewer, as rich markup lines for the log: where to open it, how to forward its port from another machine, and the standing warning."""
+    lines = [
+        f"Open [bold underline]{escape(info.url)}[/bold underline] in a browser to see the model."
+    ]
+    if info.tunnel_command is not None:
+        lines.append(
+            f"From your computer, forward the port first: [bold]{escape(info.tunnel_command)}[/bold]"
+        )
+    if info.warning is not None:
+        lines.append(f"[yellow]{escape(info.warning)}[/yellow]")
+    return lines
+
+
 @dataclass(eq=False)
 class ReloadedController:
     """
@@ -240,6 +255,28 @@ class ReloadedController:
     def has_runtime(self) -> bool:
         """Whether the session was given a runtime function, i.e. whether `run` has anything to run."""
         return bool(self.session.runtime)
+
+    @property
+    def paused(self) -> bool:
+        """Whether the run in progress is being held, which is what a viewer's pause button shows."""
+        return self.status().state is RunState.PAUSED
+
+    @property
+    def speed(self) -> float:
+        """The playback speed, which is what a viewer's speed slider shows."""
+        return self.session.playback_speed
+
+    def rerun(self) -> None:
+        """Runs the last command again, which is what a viewer's Reset and Reload buttons ask for. A run in progress has to be stopped first."""
+        with self._lock:
+            idle = self._state is RunState.IDLE
+            last_command = self._last_command
+        if idle:
+            self._start(last_command)
+        else:
+            self._log(
+                "[dim]A run is in progress - type [bold]stop[/bold] to end it, then run it again.[/dim]"
+            )
 
     def status(self) -> ControllerStatus:
         with self._lock:
@@ -506,6 +543,10 @@ class ReloadedController:
         self._log(
             "[bold green]MuJoCo Mojo Reloaded is live.[/bold green] Type [bold cyan]help[/bold cyan] for commands."
         )
+        info = self.backend.connection_info()
+        if info is not None:
+            for line in connection_lines(info):
+                self._log(line)
         self._emit_status()
 
     def shutdown(self) -> None:
@@ -919,8 +960,23 @@ class ReloadedController:
 
     def _start_watcher(self) -> None:
         if self._watcher is None:
-            self._watcher = FileWatcher(self.watch_path, self.on_file_change)
+            self._watcher = FileWatcher(
+                self.watch_path,
+                self.on_file_change,
+                on_stopped=self._on_watcher_stopped,
+            )
         self._watcher.start()
+
+    def _on_watcher_stopped(self, reason: str) -> None:
+        """The watcher gave up, which is called from its thread. Watching is switched off, so the status bar does not claim files are still being watched."""
+        with self._lock:
+            self._watcher = None
+            self.session.watch = False
+        self._log(
+            f"[bold red]File watching stopped:[/bold red] {escape(reason)} "
+            "Type [bold]watch[/bold] to try again."
+        )
+        self._emit_status()
 
     def _stop_watcher(self) -> None:
         if self._watcher is not None:

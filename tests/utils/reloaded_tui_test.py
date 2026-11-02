@@ -14,9 +14,11 @@ from reloaded_fakes import FakeBackend, FakeSession, SteppingRuntime
 from rich.cells import cell_len
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
 from textual.pilot import Pilot
+from textual.strip import Strip
 from textual.widgets import RichLog, Static
 
 import mujoco_mojo.utils.layers.reloaded.tui as tui_module
@@ -44,9 +46,9 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     ControlButton,
     LogBuffer,
     ReloadedApp,
+    SelectableLog,
     TuiLogHandler,
     key_label,
-    render_connection,
     control_states,
     fit_title,
     render_badge,
@@ -56,6 +58,7 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     render_log_item,
     render_markup,
     run_summary,
+    selected_text,
     status_fields,
 )
 
@@ -168,18 +171,141 @@ def test_malformed_markup_is_shown_literally() -> None:
     assert render_markup("[bold]ok[/bold]").plain == "ok"
 
 
-def test_connection_panel_text_includes_every_part() -> None:
-    text = render_connection(
-        ConnectionInfo(
-            url="http://localhost:8000/",
-            tunnel_command="ssh -L 8000:localhost:8000 me@box",
-            warning="No authentication.",
-        )
-    ).plain
+def test_the_log_opens_with_how_to_connect_right_after_the_start_message_and_the_help_hint(
+    tmp_path: Path,
+) -> None:
+    info = ConnectionInfo(
+        url="http://localhost:8000/",
+        tunnel_command="ssh -L 8000:localhost:8000 me@box",
+        warning="Open to the network.",
+    )
 
-    assert "http://localhost:8000/" in text
-    assert "ssh -L 8000:localhost:8000 me@box" in text
-    assert "No authentication." in text
+    async def scenario() -> None:
+        app, _ = make_app(tmp_path, backend=FakeBackend(info))
+        async with app.run_test(size=(140, 30)) as pilot:
+            await wait_until(pilot, lambda: "Open to the network." in log_text(app))
+            lines = log_text(app).splitlines()
+
+            assert "is live" in lines[0] and "help" in lines[0]
+            assert "http://localhost:8000/" in lines[1]
+            assert "ssh -L 8000:localhost:8000 me@box" in lines[2]
+            assert "Open to the network." in lines[3]
+
+    run(scenario())
+
+
+def a_record_line() -> Strip:
+    """A log line as it is drawn: the message, the padding that pushes the location to the right edge, and the location."""
+    location = Style(meta={LOCATION_KEY: "/project/robot.py:12"})
+    return Strip(
+        [
+            Segment("12:00:01 INFO     moved the arm"),
+            Segment(" " * 20),
+            Segment("robot.py:12", location),
+        ]
+    )
+
+
+def test_a_whole_line_is_pasted_with_two_spaces_where_the_padding_was() -> None:
+    assert (
+        selected_text(a_record_line(), 0, -1)
+        == "12:00:01 INFO     moved the arm  robot.py:12"
+    )
+
+
+def test_a_selection_inside_the_message_or_inside_the_location_is_taken_as_it_is() -> (
+    None
+):
+    line = a_record_line()
+
+    assert selected_text(line, 9, 13) == "INFO"
+    assert selected_text(line, 29 + 20, -1) == "robot.py:12"
+
+
+def test_a_selection_that_ends_in_the_padding_stops_at_the_message() -> None:
+    assert selected_text(a_record_line(), 0, 40) == "12:00:01 INFO     moved the arm"
+
+
+def test_a_selection_that_starts_in_the_padding_takes_only_the_location() -> None:
+    assert selected_text(a_record_line(), 35, -1) == "robot.py:12"
+
+
+def test_a_line_with_no_location_loses_only_its_trailing_spaces() -> None:
+    assert selected_text(Strip([Segment("> gen" + " " * 30)]), 0, -1) == "> gen"
+
+
+def test_dragging_across_the_log_highlights_and_copies_the_whole_lines_it_touches(
+    tmp_path: Path,
+) -> None:
+    record = logging.LogRecord(
+        "mojo", logging.INFO, "/project/robot.py", 12, "moved the arm", None, None
+    )
+
+    async def scenario() -> None:
+        app, _ = make_app(tmp_path)
+        async with app.run_test(size=(100, 30)) as pilot:
+            log = app.query_one("#log", SelectableLog)
+            await wait_until(pilot, lambda: "is live" in log_text(app))
+            log.clear()
+            for text in ("alpha one", "beta two"):
+                log.write(Text(text), width=40)
+            log.write(render_log_item(record, 60), width=60)
+            log.write(Text("delta four"), width=40)
+            await pilot.pause()
+            left = log.content_region.x - log.region.x
+            top = log.content_region.y - log.region.y
+            # clicking focuses the log, which tints its background, so start from there
+            log.focus()
+            await pilot.pause()
+            before = [log.render_line(row) for row in range(4)]
+
+            # from the middle of the first line to the middle of the third, which ends in a location
+            await pilot.mouse_down(log, offset=(left + 2, top))
+            await pilot.hover(log, offset=(left + 30, top + 2))
+            await pilot.mouse_up(log, offset=(left + 30, top + 2))
+            await pilot.pause()
+
+            # whole lines are taken, however much of each the drag covered
+            wanted = "alpha one\nbeta two\n" + selected_text(log.lines[2], 0, -1)
+            assert app.screen.get_selected_text() == wanted
+            assert wanted.endswith("moved the arm  /project/robot.py:12")
+            assert app.clipboard == wanted
+
+            # the lines taken are shown with a different background and the text keeps its colors
+            highlight = app.screen.get_component_rich_style(
+                "screen--selection", partial=True
+            )
+            assert highlight.bgcolor is not None
+            for row in range(3):
+                after = log.render_line(row)
+                assert [seg.text for seg in after] == [seg.text for seg in before[row]]
+                for seg_before, seg_after in zip(before[row], after, strict=True):
+                    assert seg_after.style is not None and seg_before.style is not None
+                    assert seg_after.style.bgcolor == highlight.bgcolor
+                    assert seg_after.style.bgcolor != seg_before.style.bgcolor
+                    assert seg_after.style.color == seg_before.style.color
+            # the line the drag did not reach is left alone
+            assert [seg.style for seg in log.render_line(3)] == [
+                seg.style for seg in before[3]
+            ]
+
+            # a drag inside one line takes that whole line
+            await pilot.click(log, offset=(left + 1, top + 8))
+            await pilot.mouse_down(log, offset=(left + 2, top + 3))
+            await pilot.hover(log, offset=(left + 5, top + 3))
+            await pilot.mouse_up(log, offset=(left + 5, top + 3))
+            await pilot.pause()
+            assert app.clipboard == "delta four"
+
+            # a plain click clears the selection again
+            await pilot.click(log, offset=(left + 1, top + 8))
+            await pilot.pause()
+            assert not app.screen.get_selected_text()
+            assert [seg.style for seg in log.render_line(3)] == [
+                seg.style for seg in before[3]
+            ]
+
+    run(scenario())
 
 
 def test_run_is_greyed_out_when_there_is_no_runtime(tmp_path: Path) -> None:
@@ -528,23 +654,6 @@ def test_without_a_quit_key_the_ctrl_c_message_says_to_type_exit(
     assert said == ["Type [b]quit[/b] to quit."]
 
 
-def test_the_connection_panel_shows_the_address_and_the_warning_for_browser_viewers(
-    tmp_path: Path,
-) -> None:
-    info = ConnectionInfo(url="http://localhost:8000/", warning="Open to the network.")
-
-    async def scenario() -> None:
-        app, _ = make_app(tmp_path, backend=FakeBackend(info))
-        async with app.run_test():
-            panel = app.query_one("#connection", Static)
-            assert panel.display
-            text = str(panel.render())
-            assert "http://localhost:8000/" in text
-            assert "Open to the network." in text
-
-    run(scenario())
-
-
 @pytest.mark.parametrize(
     ("typed", "completed"),
     [
@@ -633,8 +742,6 @@ def test_the_app_starts_with_its_panels_the_hint_and_a_control_row(
                 assert button.region.y == row
                 assert button.region.right <= 140
             assert disabled_buttons(app) == {"pause", "step", "stop"}
-            # there is no connection panel without a browser viewer
-            assert not app.query_one("#connection", Static).display
 
     run(scenario())
 

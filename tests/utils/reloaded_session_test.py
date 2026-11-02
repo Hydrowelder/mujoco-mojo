@@ -25,6 +25,7 @@ from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.layers.reloaded import MojoReloaded
 from mujoco_mojo.utils.layers.reloaded.backends import (
     OpenGLBackend,
+    StudioBackend,
     ViewerUnavailableError,
 )
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
@@ -112,6 +113,32 @@ def test_studio_viewers_explain_that_they_need_studio(
     assert "-ui opengl" in message
 
 
+def test_studio_is_chosen_when_the_installed_mujoco_has_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+    monkeypatch.setattr(studio_module, "web_client_available", lambda: True)
+
+    native = make_session(tmp_path, UserInterface.STUDIO)._create_backend()
+    web = make_session(tmp_path, UserInterface.WEB)._create_backend()
+
+    assert isinstance(native, StudioBackend) and not native.web
+    assert isinstance(web, StudioBackend) and web.web
+    assert web.port == 8080
+
+
+def test_the_browser_viewer_explains_that_it_needs_the_browser_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+    monkeypatch.setattr(studio_module, "web_client_available", lambda: False)
+
+    # the native window needs no client, so only the browser viewer is refused
+    assert make_session(tmp_path, UserInterface.STUDIO)._create_backend()
+    with pytest.raises(ViewerUnavailableError, match="MUJOCO_WEB_VIEWER_DIST"):
+        make_session(tmp_path, UserInterface.WEB)._create_backend()
+
+
 def test_a_viewer_that_cannot_run_stops_before_the_model_is_generated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -192,6 +219,50 @@ def test_the_viewer_is_open_and_wired_to_the_runtime_while_the_app_runs(
     assert probe.seen["sync_hook"] == backend.sync_hook
     assert probe.seen["viewer_lock"] is nullcontext
     assert probe.subtitle == f"opengl | {probe.session.workdir}"
+
+
+def test_the_viewer_is_given_the_controller_before_it_starts(probe: AppProbe) -> None:
+    backend = LockedBackend()
+
+    probe.session._run_tui(backend, make_state())
+
+    assert backend.controls is not None
+    assert backend.controls_at_start is backend.controls
+    assert backend.controls.paused is False
+    assert backend.controls.speed == probe.session.playback_speed
+
+
+def test_a_viewer_that_fails_to_start_ends_the_session_with_its_reason(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Whatever stops a viewer from starting (a taken port, no display), the user is told why and gets an exit code, not a traceback, and no terminal UI is opened."""
+    session = probe.session
+    backend = FakeBackend(
+        start_error=ViewerUnavailableError("The viewer could not open.")
+    )
+    monkeypatch.setattr(session, "_create_backend", lambda: backend)
+    monkeypatch.setattr(session, "generate_construct", lambda **_: make_state())
+
+    with pytest.raises(typer.Exit) as raised:
+        session.run()
+
+    assert raised.value.exit_code == 1
+    # a terminal with color on tints numbers and the like, which splits the text
+    assert "The viewer could not open." in _ANSI_ESCAPE.sub("", capsys.readouterr().out)
+    assert probe.backend is None
+
+
+def test_a_viewer_that_stopped_on_its_own_says_why_after_the_app_exits(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    session = probe.session
+    backend = FakeBackend(failure="the viewer thread died")
+    monkeypatch.setattr(session, "_create_backend", lambda: backend)
+    monkeypatch.setattr(session, "generate_construct", lambda **_: make_state())
+
+    session.run()
+
+    assert "the viewer thread died" in _ANSI_ESCAPE.sub("", capsys.readouterr().out)
 
 
 def test_the_keys_from_settings_reach_the_app(probe: AppProbe) -> None:

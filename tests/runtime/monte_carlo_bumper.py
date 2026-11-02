@@ -14,7 +14,7 @@ BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 # toggled by profile() to A/B tracer overhead against an otherwise-identical run
-TRACERS_ENABLED = True
+TRACERS_ENABLED = False
 
 
 def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:

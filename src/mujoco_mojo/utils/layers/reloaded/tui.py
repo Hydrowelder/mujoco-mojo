@@ -14,6 +14,7 @@ from typing import ClassVar, Literal
 from rich.console import Console, Group, RenderableType
 from rich.errors import MarkupError
 from rich.logging import RichHandler
+from rich.segment import Segment
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
@@ -26,6 +27,8 @@ from textual.css.query import NoMatches
 from textual.markup import escape as escape_markup
 from textual.message import Message
 from textual.screen import ModalScreen
+from textual.selection import Selection
+from textual.strip import Strip
 from textual.suggester import Suggester
 from textual.widget import Widget
 from textual.widgets import Button, Footer, Input, RichLog, Static
@@ -33,7 +36,7 @@ from textual.widgets import Button, Footer, Input, RichLog, Static
 from mujoco_mojo.settings import ReloadedKeySettings
 from mujoco_mojo.utils.log import TerminalFilter
 
-from .backends.base import ConnectionInfo, ViewerBackend
+from .backends.base import ViewerBackend
 from .controller import (
     COMMAND_SUGGESTIONS,
     ControllerEvent,
@@ -248,20 +251,6 @@ def fit_title(title: str, subtitle: str, available: int) -> Text:
     return Text("")
 
 
-def render_connection(info: ConnectionInfo) -> Text:
-    """Where to open a browser viewer, how to tunnel to it, and any standing warning."""
-    text = Text()
-    text.append("Viewer ", style=INK_SECONDARY)
-    text.append(info.url, style=f"bold underline {LINK}")
-    if info.tunnel_command is not None:
-        text.append("\nFrom your computer ", style=INK_SECONDARY)
-        text.append(info.tunnel_command, style=INK_STRONG)
-    if info.warning is not None:
-        text.append("\n")
-        text.append(info.warning, style=str(WARNING))
-    return text
-
-
 class ControllerMessage(Message):
     """Carries a controller event onto the app's event loop. Posting is thread safe and never blocks the sender."""
 
@@ -348,6 +337,70 @@ def render_log_item(item: LogItem, width: int | None = None) -> Text:
         return format_record(item, width)
     except Exception as error:
         return Text(f"(a log line could not be shown: {error})", style=str(DANGER))
+
+
+def selected_text(strip: Strip, start: int, end: int) -> str:
+    """
+    The text of `strip` from character `start` to `end` (to the end of the line if `end` is -1), the way it should be pasted.
+
+    The log pads a record out so its location sits flush right. That padding is for the eye, so a selection that takes in the location gets the message and the location with two spaces between them, and trailing spaces never come along.
+    """
+    text = strip.text
+    end = len(text) if end < 0 else min(end, len(text))
+    location_at: int | None = None
+    offset = 0
+    for segment in strip:
+        if location_at is None and segment.style and LOCATION_KEY in segment.style.meta:
+            location_at = offset
+        offset += len(segment.text)
+    if location_at is None:
+        return text[start:end].rstrip()
+    body_end = len(text[:location_at].rstrip())
+    body = text[start : min(end, body_end)] if start < body_end else ""
+    location = text[max(start, location_at) : end] if end > location_at else ""
+    return "  ".join(part for part in (body, location) if part).rstrip()
+
+
+def highlighted(strip: Strip, style: Style) -> Strip:
+    """`strip` with `style` laid over every segment. `Strip.apply_style` puts a style underneath what a segment already has, which would leave a line's own colors showing."""
+    return Strip(
+        [
+            Segment(segment.text, segment.style + style if segment.style else style)
+            for segment in strip
+        ],
+        strip.cell_length,
+    )
+
+
+class SelectableLog(RichLog):
+    """
+    A `RichLog` whose lines can be selected with the mouse and copied.
+
+    Textual only selects text in widgets that say where each piece of text is, and a plain `RichLog` does not, so dragging across it just scrolled. This one marks every line with its position and highlights the lines a drag touched in full. A line is either selected or not, so what is highlighted is exactly what gets copied. Copying hands over the text cleaned up for pasting.
+    """
+
+    def render_line(self, y: int) -> Strip:
+        strip = super().render_line(y)
+        scroll_x, scroll_y = self.scroll_offset
+        line_y = scroll_y + y
+        if line_y >= len(self.lines):
+            return strip
+        selection = self.text_selection
+        if selection is not None and selection.get_span(line_y) is not None:
+            # only the background, so the text keeps its own colors and stays readable
+            strip = highlighted(
+                strip,
+                self.screen.get_component_rich_style("screen--selection", partial=True),
+            )
+        return strip.apply_offsets(scroll_x, line_y)
+
+    def get_selection(self, selection: Selection) -> tuple[str, str] | None:
+        pieces = [
+            selected_text(strip, 0, -1)
+            for y, strip in enumerate(self.lines)
+            if selection.get_span(y) is not None
+        ]
+        return "\n".join(pieces), "\n"
 
 
 @dataclass(eq=False)
@@ -842,10 +895,7 @@ class ReloadedApp(App[None]):
             self._controller.has_runtime,
             id="controls",
         )
-        connection = Static(id="connection")
-        connection.border_title = "Browser viewer"
-        yield connection
-        log = RichLog(id="log", wrap=True, highlight=False, max_lines=10_000)
+        log = SelectableLog(id="log", wrap=True, highlight=False, max_lines=10_000)
         log.border_title = "Log"
         yield log
         with Horizontal(id="command-row"):
@@ -865,12 +915,6 @@ class ReloadedApp(App[None]):
         self.set_interval(LOG_FLUSH_SECONDS, self._flush_logs)
         self.set_interval(VIEWER_CHECK_SECONDS, self._check_viewer)
         self._set_explain(self._explain_at_start)
-
-        info = self._backend.connection_info()
-        if info is not None:
-            panel = self.query_one("#connection", Static)
-            panel.update(render_connection(info))
-            panel.display = True
 
         self._controller.start()
 
@@ -897,7 +941,21 @@ class ReloadedApp(App[None]):
         if isinstance(event.input, CommandInput):
             self._refresh_explain()
 
+    def on_text_selected(self, event: events.TextSelected) -> None:
+        # letting go of a drag over the log copies what it selected, so copying is not a separate step
+        text = self.screen.get_selected_text()
+        if text:
+            self.copy_to_clipboard(text)
+            count = text.count("\n") + 1
+            self.notify(
+                f"{count} line{'s' if count != 1 else ''}",
+                title="Copied to the clipboard",
+            )
+
     def on_click(self, event: events.Click) -> None:
+        # a drag that ends over a location is a selection, not a click on the location
+        if self.screen.get_selected_text():
+            return
         # a log line's file and line copy themselves, ready to paste into an editor's quick open
         location = event.style.meta.get(LOCATION_KEY)
         if isinstance(location, str):

@@ -95,6 +95,33 @@ The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same a
 
 Closing the viewer window also closes Reloaded.
 
+### Copying from the Log
+
+Drag across the log with the mouse to select text. Every line the drag touches is highlighted in full, and letting go copies those lines to the clipboard and says how many were copied. `Ctrl+C` copies again. This is how to pass a log on, for example when reporting a problem. The gap that pushes a line's location to the right edge is not copied: you get the message, two spaces, and the location. Clicking a location without dragging copies just its full path and line.
+
+### Watching for Changes
+
+With `watch` on, saving a `*.py` file reloads with the last command. Reloaded watches the folder it was started in and the folders of the project modules your generator and runtime import, which are the files a reload picks up, so a module that is first imported later is watched from then on. Folders that nothing imports, such as virtual environments and build trees, are left alone. That keeps the number of watches small, because your operating system has a limit that your editor shares. If watching does stop, Reloaded says why in the log and turns `watch` off.
+
+### If Reloaded Crashes
+
+The Studio viewers run compiled code, and if that code crashes it takes Reloaded down with it. Reloaded then puts your terminal back as it was, so you do not have to close the shell, and says where it saved the Python stack of every thread, `crash.log` in your workdir. Send that file along when reporting a crash. It is removed again after a normal exit. To do this, `mujoco-mojo reloaded` runs your session in a child process and waits for it, so two `mujoco-mojo` processes show up, and it starts about a second slower.
+
+### The Studio Viewers
+
+With `-ui studio` or `-ui web` the model is shown in MuJoCo Studio, and Studio's own buttons control the run the same way the terminal does, so the two always agree:
+
+| In Studio        | Same as in the terminal                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pause and play   | `pause` and `run`. The terminal's status bar changes too, and so does Studio's button when you pause in the terminal.                                                             |
+| Step             | `step`.                                                                                                                                                                           |
+| Speed slider     | `speed`. The slider runs from 0.1% to 100% of real time, so a speed above real time, `inf`, and manual stepping all show as 100%. Moving the slider sets a speed up to real time. |
+| Reset and Reload | `ENTER`: runs the last command again once nothing is running. During a run they only remind you to `stop` it first.                                                               |
+
+Your generator builds the model, so a model file dropped onto Studio is ignored, and Studio's control noise setting has no effect.
+
+With `-ui web`, the address to open is printed at the top of the log, right after the line that says Reloaded is live. Over SSH it is followed by the command that forwards the port. Reloaded takes the first free port from `--port` upward.
+
 ### Changing the Keys
 
 The keys come from the `reloaded.keys` settings, a list for each action. The first key in a list is the one the footer shows, and the others work too.
@@ -168,7 +195,7 @@ Once the world looks right, it's time to test your forces. By providing a `--run
 
 !!! success
 
-    Use the **web** UI (`-ui web`) if you want to develop on a machine with no display, such as over an SSH connection. Forward the viewer's port to your own machine (for example `ssh -L 8000:localhost:8000 user@host`) and open `http://localhost:8000` in your browser.
+    Use the **web** UI (`-ui web`) if you want to develop on a machine with no display, such as over an SSH connection. Reloaded prints the address and the command that forwards the viewer's port to your own machine (for example `ssh -L 8000:localhost:8000 user@host`) at the top of its log. Run it on your computer, then open `http://localhost:8000` in your browser.
 
 !!! warning
 

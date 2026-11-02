@@ -139,3 +139,76 @@ class TestLineConfig:
         assert np.allclose(line.pos2, p2)
         assert np.allclose(line.color, color)
         assert line.width == pytest.approx(0.005)
+
+
+class TestFillGeom:
+    """A viewer that keeps its own list of decorative geoms fills standalone `MjvGeom`s, and the classic viewer fills slots of a scene, so both must come out the same."""
+
+    @staticmethod
+    def an_arrow() -> ArrowConfig:
+        return ArrowConfig(
+            pos=np.array([1.0, 2.0, 3.0]),
+            vec=np.array([0.0, 0.0, 5.0]),
+            color=np.array([0.2, 0.8, 0.3, 0.9]),
+            is_torque=False,
+        )
+
+    @staticmethod
+    def a_line() -> LineConfig:
+        return LineConfig(
+            pos1=np.array([0.0, 0.0, 0.0]),
+            pos2=np.array([1.0, 2.0, 3.0]),
+            color=np.array([0.0, 1.0, 0.0, 1.0]),
+            width=2.0,
+        )
+
+    def test_an_arrow_fills_a_standalone_geom(self, mj_model: mujoco.MjModel) -> None:
+        geom = mujoco.MjvGeom()
+
+        self.an_arrow().fill_geom(geom, mj_model)
+
+        assert geom.type == mujoco.mjtGeom.mjGEOM_ARROW
+        assert np.allclose(geom.rgba, [0.2, 0.8, 0.3, 0.9])
+        assert np.all(geom.size > 0)
+
+    def test_a_line_fills_a_standalone_geom(self) -> None:
+        geom = mujoco.MjvGeom()
+
+        self.a_line().fill_geom(geom)
+
+        assert geom.type == mujoco.mjtGeom.mjGEOM_LINE
+        assert np.allclose(geom.rgba, [0.0, 1.0, 0.0, 1.0])
+
+    def test_a_scene_slot_comes_out_the_same_as_a_standalone_geom(
+        self, mj_model: mujoco.MjModel
+    ) -> None:
+        scene = mujoco.MjvScene(mj_model, maxgeom=10)
+        arrow, line = self.an_arrow(), self.a_line()
+        alone_arrow, alone_line = mujoco.MjvGeom(), mujoco.MjvGeom()
+
+        arrow.draw_in_scene(mj_model, scene)
+        line.draw_in_scene(scene)
+        arrow.fill_geom(alone_arrow, mj_model)
+        line.fill_geom(alone_line)
+
+        assert scene.ngeom == 2
+        for in_scene, alone in (
+            (scene.geoms[0], alone_arrow),
+            (scene.geoms[1], alone_line),
+        ):
+            assert in_scene.type == alone.type
+            assert np.allclose(in_scene.pos, alone.pos)
+            assert np.allclose(in_scene.mat, alone.mat)
+            assert np.allclose(in_scene.size, alone.size)
+            assert np.allclose(in_scene.rgba, alone.rgba)
+
+    def test_a_full_scene_gets_nothing_more_and_says_so(
+        self, mj_model: mujoco.MjModel
+    ) -> None:
+        scene = mujoco.MjvScene(mj_model, maxgeom=1)
+
+        self.an_arrow().draw_in_scene(mj_model, scene)
+        self.an_arrow().draw_in_scene(mj_model, scene)
+        self.a_line().draw_in_scene(scene)
+
+        assert scene.ngeom == 1
