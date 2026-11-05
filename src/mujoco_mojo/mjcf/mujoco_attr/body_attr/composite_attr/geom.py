@@ -63,6 +63,7 @@ _composite_geom_attr = (
 # fields inherited from GeomBase that composite geoms deliberately don't expose,
 # per the module docstring above (lazily inherited from the respective Geom class)
 _composite_geom_non_xml = (
+    "castshadow",
     "class_",
     "fitscale",
     "fluidcoef",

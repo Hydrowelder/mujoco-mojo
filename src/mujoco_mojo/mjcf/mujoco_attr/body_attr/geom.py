@@ -100,6 +100,7 @@ _geom_attr = (
     "pose",
     "fitscale",
     "rgba",
+    "castshadow",
     "fluidshape",
     "fluidcoef",
     "user",
@@ -204,6 +205,9 @@ class GeomBase(XMLModel, ABC):
 
     fitscale: float = 1
     """This attribute is used only when a primitive geometric type is being fitted to a mesh asset. The scale specified here is relative to the output of the automated fitting procedure. The default value of 1 leaves the result unchanged, a value of 2 makes all sizes of the fitted geom two times larger."""
+
+    castshadow: bool = True
+    """If this attribute is true, the geom casts shadows when illuminated by shadow-casting lights (those with castshadow set to true). Setting this to false disables shadow casting for this geom while still allowing it to receive shadows and be lit normally."""
 
     fluidshape: FluidShape = FluidShape.NONE
     """"ellipsoid" activates the geom-level fluid interaction model based on an ellipsoidal approximation of the geom shape. When active, the model based on body inertia sizes is disabled for the body in which the geom is defined. See section on ellipsoid-based fluid interaction model for details."""

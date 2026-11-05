@@ -209,10 +209,10 @@ class FlexComp(XMLModel):
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 
-    material: MaterialName | None = Field(
+    material: MaterialName | list[MaterialName] | None = Field(
         default_factory=lambda: deepcopy(Flex.model_fields["material"].default),
     )
-    """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates.
+    """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates. A single material name is applied to all elements of the flex, or a list gives one material name per element.
 
     Directly passed through to the automatically-generated flex object and have the same meaning."""
 

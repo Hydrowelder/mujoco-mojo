@@ -20,8 +20,10 @@ class FlexElasticity(XMLModel):
     attributes = (
         "young",
         "poisson",
+        "shear",
         "damping",
         "thickness",
+        "yield_",
         "elastic2d",
         "section",
         "sectionsize",
@@ -33,11 +35,17 @@ class FlexElasticity(XMLModel):
     poisson: float = 0
     """Poisson's ratio, the ratio of transverse deformation to applied longitudinal strain. This unitless quantity is in the range [0,0.5)[0,0.5). Small or large values imply compressibility or incompressiblity, respectively."""
 
+    shear: float = 0
+    """Shear modulus G used for the torsional stiffness of 1D flexes, units of pressure=force/area. Must be non-negative. If zero, the isotropic value `G = E / (2 (1 + nu))` is computed from young and poisson; if positive, it overrides that value. Ignored for 2D and 3D flexes."""
+
     damping: float = 0
     """Rayleigh's damping coefficient, units of time. This quantity scales the stiffness defined by Young's modulus to produce the damping matrix."""
 
     thickness: float = -1
     """Shell thickness, units of length; only for used 2D flexes. Used to scale the stretching stiffness. This thickness can be set equal to 2 times the radius in order to match the geometry, but is exposed separately since the radius might be constrained by considerations related to collision detection."""
+
+    yield_: float | Vec2 = np.array((0, 0))
+    """Dimensionless plastic yield strain thresholds for stretching and bending of 2D and 3D flexes, as `(stretching, bending)`. A mode (stretching or bending) is plastic if its threshold is positive at compile time; its plastic state is then allocated in `mjData.plastic` and the bit of the mode is set in `mjModel.flex_plasticmode[f]` (1: bending, 2: stretching). A mode whose threshold is zero has no plastic state and remains purely elastic, e.g., `(0.01, 0)` makes only stretching plastic. As for joints and tendons, setting the threshold of a plastic mode to zero at runtime in `mjModel.flex_yield` (which has two columns) corresponds to zero yield strain (full plastic flow). If the stretching threshold is positive, each element's (or interpolated cell's/face's) elastic stretching strain tensor is bounded by the von Mises (J2) yield criterion (3D isochoric in 3D, plane-stress with out-of-plane thinning in tension in 2D) via radial return mapping. If the bending threshold is positive, which requires a non-interpolated 2D flex (a compiler error otherwise), for shells with bending enabled (elastic2d `bend` or `both`), each interior hinge's outer-fiber bending strain `t/2 |dkappa_e| <= yield` is bounded via return mapping in dihedral angle space (assuming an initially flat rest configuration). For example, `(0, 0.001)` makes a shell yield in bending while its stretching remains elastic. 1D flexes do not support plasticity (both values must be zero). In `mjData.plastic` at `flex_plasticadr[f]`, a non-interpolated flex stores its stretching plastic metric offsets first (`3 * elemnum` entries in 2D or `6 * elemnum` entries in 3D when stretching is plastic), followed by `edgenum` bending plastic entries in 2D when bending is plastic. An interpolated flex with cellcount (cx, cy, cz) stores one dimensionless plastic stretching strain per grid cell (`6 * cx * cy * cz` entries in 3D) or per outer grid face in 2D shell mode (`3 * 2 * (cy*cz + cx*cz + cx*cy)` entries); the elastic strain is measured in the corotated frame of the polar decomposition of the physical deformation gradient. Bending plasticity is not supported for interpolated flexes: with elastic2d `bend`, yield is ignored and the flex remains purely elastic."""
 
     elastic2d: FlexElastic2D = FlexElastic2D.NONE
     """Elastic contribution to passive forces of 2D flexes. "none": none, "bend": bending only, "stretch": stretching only, "both": bending and stretching.

@@ -86,6 +86,7 @@ class Joint(XMLModel):
         "margin",
         "ref",
         "springref",
+        "springyield",
         "armature",
         "damping",
         "frictionloss",
@@ -164,6 +165,9 @@ class Joint(XMLModel):
 
     springref: float = 0
     """The joint position or angle in which the joint spring (if any) achieves equilibrium. Similar to the vector mjModel.qpos0 which stores all joint reference values specified with the ref attribute above, all spring reference values specified with this attribute are stored in the vector mjModel.qpos_spring. The model configuration corresponding to mjModel.qpos_spring is also used to compute the spring reference lengths of all tendons, stored in mjModel.tendon_lengthspring. This is because tendons can also have springs."""
+
+    springyield: float = 0
+    """Elastic yield threshold for the joint spring. Available on slide, hinge, and ball joints (not supported on free joints). For hinge and ball joints, the threshold is specified in degrees or radians depending on the angle attribute of compiler. When positive, the joint spring reference is allocated in the mutable state vector `mjData.plastic` at offset `mjModel.jnt_plasticadr[j]` (1 entry for slide/hinge, 4 quaternion entries for ball, initialized from `mjModel.qpos_spring`) and shifts permanently whenever the spring displacement exceeds springyield (ideal elasto-plasticity). When 0 (default), plasticity is disabled (`mjModel.jnt_plasticadr[j] == -1`) and the spring is purely elastic; setting `mjModel.jnt_springyield[j] = 0` at runtime on an already-plastic joint (`jnt_plasticadr[j] >= 0`) corresponds to zero yield threshold (full plastic slip)."""
 
     armature: float = 0
     """Additional inertia associated with movement of the joint that is not due to body mass. This added inertia is usually due to a rotor (a.k.a armature) spinning faster than the joint itself due to a geared transmission. In the illustration, we compare (left) a 2-dof system with an armature body (purple box), coupled with a gear ratio of 33 to the pendulum using a joint equality constraint, and (right) a simple 1-dof pendulum with an equivalent armature. Because the gear ratio appears twice, multiplying both forces and lengths, the effect is known as "reflected inertia" and the equivalent value is the inertia of the spinning body multiplied by the square of the gear ratio, in this case 9=329=32. The value applies to all degrees of freedom created by this joint.

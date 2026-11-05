@@ -11,7 +11,17 @@ class Key(XMLModel):
 
     tag = "key"
 
-    attributes = ("name", "time", "qpos", "qvel", "act", "mpos", "mquat", "ctrl")
+    attributes = (
+        "name",
+        "time",
+        "qpos",
+        "qvel",
+        "act",
+        "mpos",
+        "mquat",
+        "ctrl",
+        "plastic",
+    )
 
     _mjt_obj: ClassVar[mujoco.mjtObj | None] = mujoco.mjtObj.mjOBJ_KEY
 
@@ -38,3 +48,6 @@ class Key(XMLModel):
 
     mquat: VecN | None = None
     """Vector of mocap body quaternions, copied into mjData.mocap_quat when the simulation state is set to this keyframe."""
+
+    plastic: VecN | None = None
+    """Vector of plastic states, copied into mjData.plastic when the simulation state is set to this keyframe."""
