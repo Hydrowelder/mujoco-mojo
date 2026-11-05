@@ -90,4 +90,10 @@ class FlexContact(XMLModel):
     """Same meaning as regular geom attributes."""
 
     passive: bool = False
-    """When enabled, the contact is not added to the contact solver but it is instead used to compute passive (spring-damper) contact forces. All contacts, regardless of the specified condim, are frictionless (condim 1). This is an experimental feature."""
+    """When enabled, contact of this flex with another flex, with itself, or with static geometry is not added to the contact solver and is instead applied as a passive normal force. Contact with a body that can move is left on the constraint solver.
+
+    Friction is not modeled on this path: every passive contact is frictionless (condim 1) regardless of the specified condim, and the force is purely normal. A flex therefore slides freely over static geometry, so a cloth will not stay draped over a fixed shape and will not come to rest on a slope. Where friction matters more than non-penetration, leave this option off.
+
+    The force is a penalty on penetration depth whose stiffness is chosen as a natural frequency scaled by the participating vertex mass (or for interpolated flexes, the effective cage node mass at the contact point scaled by the node-to-vertex ratio), so a single value is appropriate across model scales and mesh resolutions; it is not user-specified. That stiffness is integrated implicitly, its curvature being carried by the effective metric, and is therefore far stiffer than an explicit force at the same timestep could be. It follows that the feature requires the `discrete` integrator, with the `CG` or `Newton` solver, no noslip iterations and the sleep flag disabled. A model requesting passive flex collisions otherwise is rejected with an error.
+
+    Being a penalty force, it does not guarantee non-penetration: a thin flex moving fast enough to cross another within one step will pass through it. This is an experimental feature."""

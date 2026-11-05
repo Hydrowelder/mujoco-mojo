@@ -13,7 +13,7 @@ class FlexEdge(XMLModel):
     attributes = ("stiffness", "damping")
 
     stiffness: float = 0
-    """Stiffness of all edges. Only for 1D flex. For 2D and 3D, plugins must be used."""
+    """Stiffness of all edges. Only for 1D flex. Integrated explicitly; not supported by the discrete integrator (use elasticity or edge equality instead)."""
 
     damping: float = 0
-    """Damping of all edges."""
+    """Damping of all edges. Integrated explicitly; not supported by the discrete integrator (use elasticity/damping instead)."""

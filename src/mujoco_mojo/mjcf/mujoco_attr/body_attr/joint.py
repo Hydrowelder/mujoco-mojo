@@ -145,7 +145,7 @@ class Joint(XMLModel):
     """This attribute specifies if the joint has limits. It interacts with the range attribute. If this attribute is "false", joint limits are disabled. If this attribute is "true", joint limits are enabled. If this attribute is "auto", and autolimits is set in compiler, joint limits will be enabled if range is defined."""
 
     actuatorfrcrange: Vec2 = np.array((0, 0))
-    """Range for clamping total actuator forces acting on this joint. See Force limits for details. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints.
+    """Range for clamping total actuator forces acting on this joint. See Force limits for details; to limit several commands of one physical actuator, prefer a single multi-input actuator such as pid with forcerange. It is available only for scalar joints (hinge and slider) and ignored for ball and free joints.
 
     The compiler expects the first value to be smaller than the second value. Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
 

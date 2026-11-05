@@ -37,11 +37,11 @@ logger = get_logger(__name__)
 
 class FlexComp(XMLModel):
     """
-    Similar to composite, this element (new in MuJoCo 3.0) is not a model element, but rather a macro which expands into multiple model elements representing a deformable entity. In particular this macro creates one flex element, a number of bodies that are children of the body in which the flexcomp is defined, and optionally one flex equality which constrains all flex edges to their initial length. A number of attributes are specified here and then passed through to the automatically-constructed flex. The primary role of flexcomp is to automate the creation of a (possibly large) collection of moving bodies with corresponding joints, and connect them with stretchable flex elements. See flex and deformable objects documentation for specifics on how flexes work. Here we only describe the automated construction process.
+    This element is not a model element, but rather a macro which expands into multiple model elements representing a deformable entity. In particular this macro creates one flex element, a number of bodies that are children of the body in which the flexcomp is defined, and optionally one flex equality which constrains all flex edges to their initial length. A number of attributes are specified here and then passed through to the automatically-constructed flex. The primary role of flexcomp is to automate the creation of a (possibly large) collection of moving bodies with corresponding joints, and connect them with stretchable flex elements. See flex and deformable objects documentation for specifics on how flexes work. Here we only describe the automated construction process.
 
     An important distinction between flex and flexcomp is that the flex references bodies and specifies vertex coordinates in the frames of those bodies, while the flexcomp defines points. Each flexcomp point corresponds to one body and one vertex in the underlying flex. If the flexcomp point is pinned, the corresponding flex body is the parent body of the flexcomp, while the corresponding flex vertex coordinates equal the flexcomp point coordinates. If the flexcomp point is not pinned, a new child body is created at the coordinates of the flexcomp point (within the flexcomp parent body), and then the coordinates of the flex vertex within that new body are (0,0,0). The mechanism for pinning flexcomp points is explained below.
 
-    Composite objects (available prior to MuJoCo 3.0) needed bodies with geoms for collisions, and sites for connecting tendons which generated shape-preserving forces. In contrast, flexes generate their own collisions and shape-preserving forces (as well as rendering), thus the bodies created here are much simpler: no geoms, sites or tendons are needed. Most of the bodies created here have 3 orthogonal slider joints, corresponding to freely moving point masses. In some cases we generate radial slider joints, allowing only expansion and contraction. Since no geoms are generated, the bodies need to have explicit inertial parameters.
+    Flexes generate their own collisions and shape-preserving forces, so the bodies created here need no geoms, sites or tendons. Most of the bodies created here have 3 orthogonal slider joints, corresponding to freely moving point masses. In some cases we generate radial slider joints, allowing only expansion and contraction, and for open-chain elastic 1D rods with `n >= 2` edges, extra per-edge `<name>_twist_0`, ..., `<name>_twist_{n-2}`, `<name>_twist` bodies and hinge joints are created under the world body to represent the edge twist angles (omitting `<name>_twist_0` when the first edge is clamped via `<pin id="0 1"/>`, and `<name>_twist` when the last two points of a rod with `n >= 3` edges are pinned). Since no geoms are generated, the bodies need to have explicit inertial parameters.
 
     Below is a simple example of a flexcomp, modeling a (somewhat flexible) double pendulum with one end pinned to the world:
 
@@ -136,6 +136,8 @@ class FlexComp(XMLModel):
     - `quadratic`: Three translational dofs per corner, edge, face, and volume of the bounding box of the flex, for a total of 81 dofs for the entire flex, independent of the number of vertices. The positions of the vertices are updated using quadratic interpolation over the bounding box. While this option requires more degrees of freedom than trilinear flexes, it enables curved deformation modes, while the only modes achievable for trilinear flexes are strech/compression and shear.
 
     Note that a higher interpolation order generally requires a smaller time step for stability, although usually not as large as with the "full" option and a fine mesh.
+
+    For `full`, `trilinear`, and `quadratic` parametrizations (with `rigid="false"`), the generated vertex or node child bodies already carry 3 orthogonal translational slide joints. Unless at least one active vertex or node is pinned to the parent body, the parent body (and its ancestor bodies) must not have a `<freejoint/>` or other joints.
     """
 
     type: FlexCompType = FlexCompType.GRID
@@ -143,7 +145,7 @@ class FlexComp(XMLModel):
 
     `grid` generates a rectangular grid of points in 1D, 2D or 3D as specified by dim. The number of points in each dimension is determined by count while the grid spacing in each dimension is determined by spacing. Make sure the spacing is sufficiently large relative to radius to avoid permanent contacts. In 2D and 3D the grid is automatically triangulated, and corresponding flex elements are created (triangles or tetrahedra). In 1D the elements are capsules connecting consecutive pairs of points.
 
-    `box` generates a 3D box object, however flex bodies are only generated on the outer shell. Each flex body has a radial slider joint allowing it to move in and out from the center of the box. The parent body would normally be a floating body. The box surface is triangulated, and each flex element is a tetrahedron connecting the center of the box with one triangle face. count and spacing determine the count and spacing of the flex bodies, similar to the grid type in 3D. Note that the resulting flex has the same topology as the box generated by composite.
+    `box` generates a 3D box object, however flex bodies are only generated on the outer shell. Each flex body has a radial slider joint allowing it to move in and out from the center of the box. The parent body would normally be a floating body. The box surface is triangulated, and each flex element is a tetrahedron connecting the center of the box with one triangle face. count and spacing determine the count and spacing of the flex bodies, similar to the grid type in 3D.
 
     `cylinder` is the same as box, except the points are projected on the surface of a cylinder.
 
@@ -163,7 +165,7 @@ class FlexComp(XMLModel):
     """The number of automatically generated points in each dimension. This and the next attribute only apply to types grid, box, cylinder, ellipsoid."""
 
     cellcount: tuple[int, int, int] = (1, 1, 1)
-    """Specifies the number of cells in each dimension for the background interpolation grid when using **trilinear** or **quadratic** dofs."""
+    """Specifies the number of cells in each dimension for the background interpolation grid when using **trilinear** or **quadratic** dofs. Compilation and simulation cost scale with cellcount and the interpolation order (dof); compiled cell stiffness and cut-cell quadrature weights are cached across recompilations."""
 
     spacing: Vec3 = np.array((0.02, 0.02, 0.02))
     """The spacing between the automatically generated points in each dimension. The spacing should be sufficiently large compared to the radius, to avoid permanent contacts."""

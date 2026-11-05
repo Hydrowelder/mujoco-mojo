@@ -26,7 +26,7 @@ class FlexCompEdge(XMLModel):
     )
 
     equality: EdgeEquality = EdgeEquality.FALSE
-    """The type of equality constraint applied to this edge. If false, no equality constraint is applied. If true, then edge constraints are enforced. If strain, then a constraint is added to enforce that the invariants of the strain tensor do not change; this is only equality constraint type supported for trilinear and quadratic dofs elements and here."""
+    """The type of equality constraint applied to this edge. If false, no equality constraint is applied. If true, then edge constraints are enforced. If strain, then a constraint is added to enforce that the invariants of the strain tensor do not change; this is the only equality constraint type supported for trilinear and quadratic dofs elements, see here."""
 
     solref: Vec2 = SOLREF_DEFAULT
     """The standard constraint parameters, passed through to the automatically generated equality constraint."""
