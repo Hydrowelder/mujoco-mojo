@@ -6,6 +6,7 @@
 - `reloaded` now shows your model in MuJoCo Studio, either in its own window (`-ui studio`) or in a web browser (`-ui web`), which also works over SSH. The classic viewer is still there as `-ui opengl`
 - `reloaded` now opens the browser viewer by default when you're connected over SSH or have no display
 - `reloaded` now has a new terminal screen, with a status bar, a log you can copy from, and new `pause`, `step`, `speed` , and `explain` commands
+- Updated `Inertial.from_random` to use `stochas` transations instead of the more complex hand-rolled random draw method
 
 > [!WARNING]
 > - **Breaking:** The `viser` and `mjviser` viewers are gone. A settings file that still names one now opens the browser viewer
