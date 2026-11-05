@@ -11,6 +11,7 @@
         - [x] asset/⁠mesh
         - [x] asset/⁠hfield
         - [x] asset/⁠skin
+            - [x] skin/⁠bone
         - [x] asset/⁠texture
         - [x] asset/⁠material
             - [x] material/⁠layer
@@ -21,13 +22,6 @@
         - [x] worldbody/⁠site
         - [x] worldbody/⁠camera
         - [x] worldbody/⁠light
-        - [x] worldbody/⁠composite
-            - [x] composite/⁠joint
-            - [x] composite/⁠skin
-            - [x] composite/⁠geom
-                - [x] geom/⁠plugin
-            - [x] composite/⁠site
-            - [x] composite/⁠plugin
         - [x] worldbody/⁠flexcomp
             - [x] flexcomp/⁠contact
             - [x] flexcomp/⁠edge
@@ -44,7 +38,6 @@
             - [x] frame/⁠site
             - [x] frame/⁠camera
             - [x] frame/⁠light
-            - [x] frame/⁠composite
             - [x] frame/⁠flexcomp
             - [x] frame/⁠plugin
             - [x] frame/⁠attach
@@ -58,7 +51,6 @@
             - [x] body/⁠site
             - [x] body/⁠camera
             - [x] body/⁠light
-            - [x] body/⁠composite
             - [x] body/⁠flexcomp
             - [x] body/⁠plugin
             - [x] body/⁠attach
@@ -70,7 +62,6 @@
             - [x] flex/⁠edge
             - [x] flex/⁠elasticity
         - [x] deformable/⁠skin
-            - [x] skin/⁠bone
     - [x] contact
         - [x] contact/⁠pair
         - [x] contact/⁠exclude
@@ -80,7 +71,6 @@
         - [x] equality/⁠joint
         - [x] equality/⁠tendon
         - [x] equality/⁠flex
-        - [x] equality/⁠flexvert
         - [x] equality/⁠flexstrain
     - [x] tendon
         - [x] tendon/⁠spatial

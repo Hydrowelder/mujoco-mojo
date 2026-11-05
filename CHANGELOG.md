@@ -2,6 +2,7 @@
 
 ## Unreleased Version
 
+- Added support for [MuJoCo <VERSION NUMBER>](some-website.com)
 - `reloaded` now shows your model in MuJoCo Studio, either in its own window (`-ui studio`) or in a web browser (`-ui web`), which also works over SSH. The classic viewer is still there as `-ui opengl`
 - `reloaded` now opens the browser viewer by default when you're connected over SSH or have no display
 - `reloaded` now has a new terminal screen, with a status bar, a log you can copy from, and new `pause`, `step`, `speed` , and `explain` commands

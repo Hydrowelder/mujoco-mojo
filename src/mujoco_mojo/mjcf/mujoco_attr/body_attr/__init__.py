@@ -2,13 +2,6 @@
 
 from .attach import Attach
 from .camera import Camera
-from .composite import Composite
-from .composite_attr import (
-    AnyCompositeGeom,
-    CompositeJoint,
-    CompositeSite,
-    CompositeSkin,
-)
 from .flexcomp import FlexComp
 from .flexcomp_attr import (
     FlexCompContact,
@@ -43,15 +36,10 @@ from .site import (
 )
 
 __all__ = [
-    "AnyCompositeGeom",
     "AnyGeom",
     "AnySite",
     "Attach",
     "Camera",
-    "Composite",
-    "CompositeJoint",
-    "CompositeSite",
-    "CompositeSkin",
     "FlexComp",
     "FlexCompContact",
     "FlexCompEdge",

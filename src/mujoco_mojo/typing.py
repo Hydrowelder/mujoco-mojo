@@ -32,9 +32,6 @@ __all__ = [
     "CameraOutput",
     "CameraProjection",
     "ColorSpace",
-    "CompositeInitial",
-    "CompositeJointKind",
-    "CompositeType",
     "Cone",
     "Conflict",
     "ContactExcludeName",
@@ -1029,20 +1026,6 @@ class LightType(StrEnum):
     """Not supported by default native renderer"""
 
 
-class CompositeType(StrEnum):
-    CABLE = "cable"
-
-
-class CompositeInitial(StrEnum):
-    FREE = "free"
-    BALL = "ball"
-    NONE = "none"
-
-
-class CompositeJointKind(StrEnum):
-    MAIN = "main"
-
-
 class FlexCompDOF(StrEnum):
     """The parametrization of the flex's degrees of freedom (dofs)."""
 
@@ -1360,9 +1343,6 @@ class EdgeEquality(StrEnum):
 
     FALSE = "false"
     """Edge constraints are enforced."""
-
-    VERT = "vert"
-    """Averaged constraint is used, see flexvert."""
 
     STRAIN = "strain"
     """A constraint is added to enforce that the invariants of the strain tensor do not change; this is only equality constraint type supported for trilinear and quadratic dofs elements and here."""

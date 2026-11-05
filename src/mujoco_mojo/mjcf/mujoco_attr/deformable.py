@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
+from mujoco_mojo.mjcf.mujoco_attr.asset import Asset
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex import Flex
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.skin import DeformableSkin
 from mujoco_mojo.mjcf.xml_model import XMLModel
@@ -28,3 +29,7 @@ class Deformable(XMLModel):
         exclude_if=is_empty_list,
     )
     """Skins defined in the deformable."""
+
+
+# asset's skins are deformable skins, which asset.py can't import itself (see the note there)
+Asset.model_rebuild(_types_namespace={"DeformableSkin": DeformableSkin})

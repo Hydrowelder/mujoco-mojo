@@ -27,7 +27,6 @@ from mujoco_mojo.mjcf import (
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.general import ActuatorGeneral
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.pid import ActuatorPid
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.geom import CompositeSphere
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
     FlexCompElasticity,
 )
@@ -335,11 +334,6 @@ def test_the_flexcomp_elasticity_defaults_follow_the_flex() -> None:
 
     assert flexcomp.shear == flex.shear == 0
     assert np.array_equal(flexcomp.yield_, flex.yield_)
-
-
-def test_a_composite_geom_does_not_write_castshadow() -> None:
-    """MuJoCo's `composite` geom has no such attribute, though mojo builds it on the regular geom."""
-    assert "castshadow" not in _xml(CompositeSphere(size=0.1, castshadow=False)).attrib
 
 
 @pytest.mark.parametrize(

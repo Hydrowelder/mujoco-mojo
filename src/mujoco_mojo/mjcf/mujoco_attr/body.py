@@ -11,7 +11,6 @@ from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import AnyGeom
@@ -97,7 +96,6 @@ _body_children = (
     "sites",
     "cameras",
     "lights",
-    "composites",
     "flexcomps",
     "plugins",
     "attaches",
@@ -204,12 +202,6 @@ class Body(XMLModel):
         exclude_if=is_empty_list,
     )
     """Lights assigned to body."""
-
-    composites: list[Composite] = Field(
-        default_factory=list,
-        exclude_if=is_empty_list,
-    )
-    """Composites assigned to body."""
 
     flexcomps: list[FlexComp] = Field(
         default_factory=list,
@@ -713,7 +705,6 @@ Frame.model_rebuild(
         "Body": Body,
         "Attach": Attach,
         "Camera": Camera,
-        "Composite": Composite,
         "FlexComp": FlexComp,
         "FreeJoint": FreeJoint,
         "AnyGeom": AnyGeom,

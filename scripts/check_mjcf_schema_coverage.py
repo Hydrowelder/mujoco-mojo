@@ -23,7 +23,7 @@ For every schema element it reports:
 
 This is advisory, not a hard gate: the schema legitimately declares several distinct elements
 under the same XML tag depending on context (e.g. `joint` the body child vs `equality_joint`
-(`xml=joint`) vs `composite_joint` (`xml=joint`)), which are merged the same permissive way
+(`xml=joint`) vs `fixed_joint` (`xml=joint`)), which are merged the same permissive way
 `check_mjcf_spec_coverage.py` merges its own duplicate bare names -- so review the output rather
 than treating it as pass/fail. Reviewed, accepted findings can be silenced in
 `mjcf_schema_ignore.txt` (categories: "unimplemented", "untagged", "coverage_gap",
@@ -75,7 +75,7 @@ def merge_elements_by_tag(schema: Schema) -> dict[str, Element]:
     declaration name), unioning attributes/children/constraints across every declaration that
     shares a tag. Mirrors `check_mjcf_spec_coverage.merge_by_bare_name`'s permissive merge for
     the RST spec, and for the same reason: several schema elements share a tag by design (e.g.
-    `equality_joint`/`fixed_joint`/`composite_joint` all render as `<joint>` in different
+    `equality_joint`/`fixed_joint` both render as `<joint>` in different
     contexts).
 
     `default_*`-named elements (e.g. `default_equality (xml=equality)`, `default_tendon
