@@ -48,6 +48,8 @@ from mujoco_mojo.utils.statusing import (
     JobType,
     Step,
     TrialStatus,
+    describe_args,
+    describe_kwargs,
 )
 from mujoco_mojo.utils.utils import write_dojo_script
 
@@ -239,8 +241,8 @@ class MojoReloaded:
             generator=MojoRunner.inspect_protocol(gen_func),
             runtime=MojoRunner.inspect_protocol(run_func),
             objective=("none defined", None, None),
-            args_used=bool(self.args),
-            kwargs_used=bool(self.kwargs),
+            args_used=describe_args(self.args),
+            kwargs_used=describe_kwargs(self.kwargs),
             trial_nums=sorted(on_disk | {self.trial_num}),
         )
         job_status.refresh_from_disk()

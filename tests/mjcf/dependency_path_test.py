@@ -4,7 +4,6 @@ import warnings
 from pathlib import Path
 
 import mujoco
-import numpy as np
 import pytest
 from PIL import Image
 
@@ -14,7 +13,6 @@ from mujoco_mojo.mjcf import (
     Compiler,
     GeomMesh,
     GeomSphere,
-    Joint,
     Mesh,
     Mujoco,
     WorldBody,
@@ -29,8 +27,6 @@ from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     BodyName,
     FlexCompType,
-    JointName,
-    JointType,
     MeshName,
     TextureName,
     TextureType,
@@ -282,9 +278,7 @@ def test_a_flexcomp_file_is_found_through_meshdir(project: _Project) -> None:
     project.add("meshes/cube.obj")
     body = Body(name=BodyName("b"))
     body.geoms.append(GeomSphere(size=0.1))
-    body.joints.append(
-        Joint(name=JointName("j"), type=JointType.SLIDE, axis=np.array((1, 0, 0)))
-    )
+    # the vertices of an unpinned flexcomp carry its dofs, so its parent body must not have joints
     body.flexcomps.append(
         FlexComp(name="f", type=FlexCompType.MESH, file=DepPath("cube.obj"), mass=1)
     )

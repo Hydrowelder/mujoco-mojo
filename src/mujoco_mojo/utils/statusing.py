@@ -5,7 +5,7 @@ import math
 import threading
 import time
 import uuid
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -14,7 +14,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
-from pydantic import Field, PrivateAttr, computed_field
+from pydantic import Field, PrivateAttr, computed_field, field_validator
 from tabulate import tabulate
 
 from mujoco_mojo.base import MojoBaseModel
@@ -53,10 +53,10 @@ class JobType(StrEnum):
     """Which `mujoco-mojo run` subcommand (or the reloaded viewer) produced a job."""
 
     MONTE_CARLO = "monte_carlo"
-    """A `mujoco-mojo run monte_carlo` job: many trials sampled from randomized parameters."""
+    """A `mujoco-mojo run monte-carlo` job: many trials sampled from randomized parameters."""
 
     OPTIMIZE = "optimize"
-    """A `mujoco-mojo run optimize` job: trials driven by a parameter search/optimizer."""
+    """A `mujoco-mojo run optimization` job: trials driven by a parameter search/optimizer."""
 
     RELOADED = "reloaded"
     """A `mujoco-mojo reloaded` job: interactive live-reload viewer, not a batch of trials."""
@@ -263,6 +263,29 @@ class TrialStatus(MojoBaseModel):
         return pending + generating + solving
 
 
+def _json_value(value: object) -> object:
+    """The value itself when it is plain JSON, so `1.5` stays a number and `'fast'` a string, and its `repr` for anything else, so the status file can always be written."""
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else repr(value)
+    if isinstance(value, list | tuple):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return {key: _json_value(item) for key, item in value.items()}
+    return repr(value)
+
+
+def describe_args(args: Sequence[object]) -> list[Any]:
+    """The positional arguments as `JobStatus.args_used` records them."""
+    return [_json_value(arg) for arg in args]
+
+
+def describe_kwargs(kwargs: Mapping[str, object]) -> dict[str, Any]:
+    """The keyword arguments as `JobStatus.kwargs_used` records them."""
+    return {name: _json_value(value) for name, value in kwargs.items()}
+
+
 class JobStatus(MojoBaseModel):
     """
     Orchestrates the global state of a job.
@@ -318,11 +341,23 @@ class JobStatus(MojoBaseModel):
     objective: tuple[str, Path | None, int | None]
     """What objective function was used. Name of function, Path to the function, and linenumber."""
 
-    args_used: bool = False
-    """Whether or not *args were passed to the generator, runtime, and objective."""
+    args_used: list[Any] = Field(default_factory=list)
+    """Each positional argument (`--arg`) passed to the generator, runtime, and objective, in order. A value that is not plain JSON is recorded as its `repr`."""
 
-    kwargs_used: bool = False
-    """Whether or not **kwargs were passed to the generator, runtime, and objective."""
+    kwargs_used: dict[str, Any] = Field(default_factory=dict)
+    """Each keyword argument (`--kwarg`) passed to the generator, runtime, and objective, by name. A value that is not plain JSON is recorded as its `repr`."""
+
+    @field_validator("args_used", mode="before")
+    @classmethod
+    def _read_legacy_args_flag_as_empty(cls, value: object) -> object:
+        """Status files from before the arguments were listed hold a flag, which does not say what they were, so it reads as an empty list."""
+        return [] if isinstance(value, bool) else value
+
+    @field_validator("kwargs_used", mode="before")
+    @classmethod
+    def _read_legacy_kwargs_flag_as_empty(cls, value: object) -> object:
+        """Status files from before the arguments were listed hold a flag, which does not say what they were, so it reads as no keywords."""
+        return {} if isinstance(value, bool) else value
 
     trial_nums: list[int]
     """The exhaustive list of trial identifiers expected for this job."""
@@ -709,6 +744,13 @@ class JobStatus(MojoBaseModel):
             uri = path.as_uri()
             return f"`{name}` at [`{'/'.join(path.parts[-2:])}:{line}`]({uri})"
 
+        def _format_arguments(items: list[str]) -> str:
+            if not items:
+                return "none"
+            # a pipe would end the table cell
+            cleaned = [item.replace("|", "\\|") for item in items]
+            return ", ".join(f"`{item}`" for item in cleaned)
+
         data = {
             "Started By": self.started_by,
             "Workdir": f"`{self.workdir.as_posix()}`",
@@ -737,8 +779,10 @@ class JobStatus(MojoBaseModel):
             "Generator": _parse_func(*self.generator),
             "Runtime": _parse_func(*self.runtime),
             "Objective": _parse_func(*self.objective),
-            "Args Used?": "✅" if self.args_used else "❌",
-            "Kwargs Used?": "✅" if self.kwargs_used else "❌",
+            "Args": _format_arguments([repr(arg) for arg in self.args_used]),
+            "Kwargs": _format_arguments(
+                [f"{name}={value!r}" for name, value in self.kwargs_used.items()]
+            ),
         }
         if self.requirement_summary:
             n_rp = self.n_requirements_passed

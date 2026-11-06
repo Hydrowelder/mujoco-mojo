@@ -6,6 +6,6 @@ mujoco-mojo run monte-carlo \
     -r simulation.runtime \
     -nt 100 \
     --no-resume \
-    -cw \
+    --clean-workdir \
     -np 4 \
     --seed 42

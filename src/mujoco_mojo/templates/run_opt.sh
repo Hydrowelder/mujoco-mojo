@@ -7,6 +7,6 @@ mujoco-mojo run optimization \
     -ob simulation.objective \
     -nt 100 \
     --no-resume \
-    -cw \
+    --clean-workdir \
     -np 4 \
     --seed 42

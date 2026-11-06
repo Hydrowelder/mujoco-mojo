@@ -28,6 +28,8 @@ Running `mujoco-mojo init` produces three files in the current directory:
 
 Both shell scripts are made executable and resolve their paths relative to their own location, so they can be invoked from any working directory.
 
+It also creates a `.mujoco-mojo/` folder holding the project's settings file (`settings.toml`) and a schema that gives TOML-aware editors completion for it. If you have no global settings file yet, `init` asks whether to create one with the defaults. See [Where the Project File Lives](running-jobs/running-jobs.md#where-the-project-file-lives) for how project settings are found.
+
 ### Choosing the Viewer
 
 `reloaded.sh` does not name a viewer. Reloaded takes it from the `reloaded.ui` setting, which defaults to the right one for the machine you run it on:

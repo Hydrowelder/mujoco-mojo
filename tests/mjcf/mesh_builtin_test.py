@@ -10,7 +10,6 @@ from mujoco_mojo.mjcf import (
     Body,
     GeomMesh,
     GeomSphere,
-    Joint,
     Mujoco,
     WorldBody,
 )
@@ -24,7 +23,7 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import (
     MeshSquare,
 )
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
-from mujoco_mojo.typing import Angle, BodyName, EulerSeq, JointName, JointType, MeshName
+from mujoco_mojo.typing import Angle, BodyName, EulerSeq, MeshName
 
 BuiltinMesh = MeshGrid | MeshBox | MeshCylinder | MeshEllipsoid | MeshSquare | MeshDisc
 
@@ -36,11 +35,8 @@ def _model(mesh: BuiltinMesh, *, as_flexcomp: bool) -> Mujoco:
     """A model whose only use of `mesh` is as a geom (convex hull) or as the source of a flexcomp."""
     body = Body(name=BodyName("b"))
     if as_flexcomp:
-        # a flexcomp needs a parent body that has mass and can move
+        # the vertices of an unpinned flexcomp carry its dofs, so its parent body must not have joints
         body.geoms.append(GeomSphere(size=0.1))
-        body.joints.append(
-            Joint(name=JointName("j"), type=JointType.SLIDE, axis=np.array((1, 0, 0)))
-        )
         body.flexcomps.append(FlexComp(name="f", mesh=NAME, mass=1))
     else:
         body.geoms.append(GeomMesh(mesh=NAME))

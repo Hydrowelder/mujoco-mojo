@@ -103,7 +103,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ note "Note: Squeezing `NamedValues`"
 
-    The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.sqeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)
+    The `mojo_model.sample_dist` method returns a `NamedValue` which works like a numpy array. You can use the `.squeeze()` method to compact it (i.e., `[1.0].squeeze() == 1.0`)
 
 ???+ tip "Tip: Unit Systems"
 

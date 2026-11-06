@@ -1018,7 +1018,7 @@ def init_project(
     """
     [bold yellow]Initialize a new empty mujoco-mojo project.[/bold yellow]
 
-    Writes a [bold cyan]simulation.py[/bold cyan] scaffold to the current directory containing stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
+    Writes a [bold cyan]simulation.py[/bold cyan] scaffold, the [bold cyan]run.sh[/bold cyan] and [bold cyan]reloaded.sh[/bold cyan] scripts, and a project settings file to the current directory. The scaffold contains stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
     """
     import os
     from importlib.resources import files
@@ -1091,22 +1091,25 @@ def init_project(
         console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
         console.print(
             "[bold white]MuJoCo does not ship Python type stubs.[/bold white] "
-            "Generate them once for Pylance/Pyright autocomplete:\n\n"
+            "Generate them once for Pylance, Pyright, or ty autocomplete:\n\n"
             "[bold yellow]"
             "pip install pybind11-stubgen\n"
             "pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated\n"
             "pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated\n"
             "pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated"
             "[/bold yellow]\n\n"
-            "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]:\n\n"
+            "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]. For Pyright:\n\n"
             "[dim]"
             "\\[tool.pyright]\n"
             'stubPath = "typings"\n'
             'venvPath = "."\n'
             'venv    = ".venv"'
             "[/dim]\n\n"
-            "[dim]Enum errors? Run: "
-            "python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi[/dim]"
+            "For ty:\n\n"
+            "[dim]"
+            "\\[tool.ty.environment]\n"
+            'extra-paths = ["typings"]'
+            "[/dim]"
         )
 
 

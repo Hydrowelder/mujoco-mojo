@@ -445,7 +445,7 @@ class Mesh(MeshBase):
             height (float): Total height of the frustum.
             sections (int): Number of radial segments.
             wall_thickness (float): Thickness of the walls (makes a hollow frustum if not equal to zero).
-            engine (BooleanEngineType): Which engine to use for boolean subtraction (only used for hollow volumes, reccomended to use "manifold" but requires `manifold3d`).
+            engine (BooleanEngineType): Which engine to use for boolean subtraction (only used for hollow volumes, recommended to use "manifold" but requires `manifold3d`).
             base_at_zero (bool): Whether or not to shift the volume so it sits on z=0 instead of underground.
             **kwargs (MeshAttributes): Standard MuJoCo mesh attributes (name, inertia, etc.)
 

@@ -40,7 +40,7 @@ The stat cards at the top of the page provide an instantaneous look at your run'
 
 ## Trial List
 
-Below the job statistics card, lists of the successful and failed trials is shown. These chips are intractable so that when clicked, Dojo will switch to a **Mosaic** view where you can inspect its telemetry signals (if available).
+Below the job statistics card, lists of the successful and failed trials is shown. These chips are interactive, so when clicked, Dojo will switch to a **Mosaic** view where you can inspect its telemetry signals (if available).
 
 ---
 

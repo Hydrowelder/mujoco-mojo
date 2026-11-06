@@ -14,7 +14,7 @@ MuJoCo does not ship Python type stubs. Generate them once with pybind11-stubgen
     pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated
     pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated
 
-Run this from the project root. The `typings/` directory is gitignored. Then add to pyproject.toml:
+Run this from the project root. The `typings/` directory is gitignored. Then point your type checker at it by adding to pyproject.toml. For Pyright:
 
 .. code-block:: toml
     [tool.pyright]
@@ -22,10 +22,11 @@ Run this from the project root. The `typings/` directory is gitignored. Then add
     venvPath = "."
     venv = ".venv"
 
-If you encounter Pyright enum errors on recent MuJoCo builds, apply the compatibility patch that ships alongside the stubs:
+For ty, which finds a `.venv` in the project root on its own:
 
-.. code-block:: bash
-    python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi
+.. code-block:: toml
+    [tool.ty.environment]
+    extra-paths = ["typings"]
 """
 
 from mujoco_mojo.__about__ import __version__  # noqa: F401
@@ -304,6 +305,7 @@ from .typing import (
     GeomType,
     GridLayoutStr,
     HFieldName,
+    # HeadlightActive, # TODO: This will be enabled in a future update when it is relevant (11/6/26)
     Inertia,
     InertiaFromGeom,
     InertiaGroupRange,
@@ -496,6 +498,7 @@ __all__ = [
     "HField",
     "HFieldName",
     "HasPose",
+    # "HeadlightActive", # TODO: This will be enabled in a future update when it is relevant (11/6/26)
     "HypergeometricDistribution",
     "Inertia",
     "InertiaFromGeom",

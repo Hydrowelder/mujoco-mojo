@@ -1,10 +1,12 @@
 import inspect
 import json
+import re
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from typer.testing import CliRunner
 
@@ -307,7 +309,7 @@ def test_a_lowercase_false_reaches_the_generator_as_a_bool(
 # --- the job status file ---
 
 
-def test_job_status_records_whether_args_and_kwargs_were_used(tmp_path: Path) -> None:
+def test_job_status_lists_the_args_and_kwargs_it_ran_with(tmp_path: Path) -> None:
     MojoRunner(
         generator=recording_generator,
         workdir=tmp_path,
@@ -318,13 +320,45 @@ def test_job_status_records_whether_args_and_kwargs_were_used(tmp_path: Path) ->
 
     status = json.loads((tmp_path / JOB_STATUS_FNAME).read_text())
 
-    assert status["args_used"] is True
-    assert status["kwargs_used"] is True
+    assert status["args_used"] == ["a"]
+    assert status["kwargs_used"] == {"mode": "slow"}
     assert not any(key.startswith(("gen_", "run_")) for key in status)
 
 
+def test_job_status_keeps_plain_values_as_they_are_and_describes_the_rest(
+    tmp_path: Path,
+) -> None:
+    """A value JSON cannot hold, like an array passed from Python, is recorded as its `repr` so the status file can still be written."""
+    MojoRunner(
+        generator=takes_everything,
+        workdir=tmp_path,
+        config=MonteCarloConfig(n_trial=1, n_proc=1),
+        args=[3, np.array([1, 2])],
+        kwargs={
+            "scale": 1.5,
+            "flag": True,
+            "ids": [1, 2],
+            "nothing": None,
+            "limit": float("inf"),
+            "table": np.zeros(2),
+        },
+    ).run()
+
+    status = json.loads((tmp_path / JOB_STATUS_FNAME).read_text())
+
+    assert status["args_used"] == [3, "array([1, 2])"]
+    assert status["kwargs_used"] == {
+        "scale": 1.5,
+        "flag": True,
+        "ids": [1, 2],
+        "nothing": None,
+        "limit": "inf",
+        "table": "array([0., 0.])",
+    }
+
+
 def test_a_status_file_from_before_the_change_still_loads(tmp_path: Path) -> None:
-    """The Dojo reads old workdirs, so a file with the four old flags must open; the old flags are not carried over, so the new ones read as not used."""
+    """The Dojo reads old workdirs, so a file with the four old flags must open; the old flags are not carried over, so the new ones read as empty."""
     MojoRunner(
         generator=recording_generator,
         workdir=tmp_path,
@@ -343,23 +377,80 @@ def test_a_status_file_from_before_the_change_still_loads(tmp_path: Path) -> Non
 
     loaded = JobStatus.model_validate(status)
 
-    assert loaded.args_used is False
-    assert loaded.kwargs_used is False
+    assert loaded.args_used == []
+    assert loaded.kwargs_used == {}
 
 
-def test_the_runtime_report_has_one_row_each_for_args_and_kwargs(
+def test_a_status_file_that_only_flagged_the_arguments_loads_them_as_empty(
     tmp_path: Path,
 ) -> None:
+    """Before the arguments were listed the file held a true or false for each, which cannot say what they were."""
     MojoRunner(
         generator=recording_generator,
         workdir=tmp_path,
         config=MonteCarloConfig(n_trial=1, n_proc=1),
         args=["a"],
     ).run()
+    status = json.loads((tmp_path / JOB_STATUS_FNAME).read_text())
+    status.update(args_used=True, kwargs_used=False)
+
+    loaded = JobStatus.model_validate(status)
+
+    assert loaded.args_used == []
+    assert loaded.kwargs_used == {}
+
+
+def test_the_runtime_report_lists_the_args_and_kwargs(tmp_path: Path) -> None:
+    MojoRunner(
+        generator=recording_generator,
+        workdir=tmp_path,
+        config=MonteCarloConfig(n_trial=1, n_proc=1),
+        args=["a"],
+        kwargs={"mode": "slow"},
+    ).run()
 
     report = (tmp_path / "MOJO_RUNTIME_REPORT.md").read_text(encoding="utf-8")
 
-    assert "| Args Used?" in report
-    assert "| Kwargs Used?" in report
-    assert "Generator Args Used?" not in report
-    assert "Runtime Kwargs Used?" not in report
+    assert report.count("| Args ") == 1
+    assert report.count("| Kwargs ") == 1
+    assert "`'a'`" in report
+    assert "`mode='slow'`" in report
+    assert "Generator Args" not in report
+    assert "Runtime Kwargs" not in report
+
+
+def test_the_runtime_report_says_when_there_were_no_args_or_kwargs(
+    tmp_path: Path,
+) -> None:
+    MojoRunner(
+        generator=takes_everything,
+        workdir=tmp_path,
+        config=MonteCarloConfig(n_trial=1, n_proc=1),
+    ).run()
+
+    report = (tmp_path / "MOJO_RUNTIME_REPORT.md").read_text(encoding="utf-8")
+
+    assert re.search(r"\| Args\s+\| none", report)
+    assert re.search(r"\| Kwargs\s+\| none", report)
+
+
+def test_a_pipe_or_line_break_in_an_argument_stays_inside_its_report_row(
+    tmp_path: Path,
+) -> None:
+    """A pipe would end the table cell and a line break would end the row."""
+    MojoRunner(
+        generator=recording_generator,
+        workdir=tmp_path,
+        config=MonteCarloConfig(n_trial=1, n_proc=1),
+        args=[np.array([[1, 2], [3, 4]])],
+        kwargs={"mode": "a|b"},
+    ).run()
+
+    report = (tmp_path / "MOJO_RUNTIME_REPORT.md").read_text(encoding="utf-8")
+    rows = [
+        line for line in report.splitlines() if line.startswith(("| Args", "| Kwargs"))
+    ]
+
+    assert len(rows) == 2
+    assert "array([[1, 2]," in rows[0]
+    assert "`mode='a\\|b'`" in rows[1]
