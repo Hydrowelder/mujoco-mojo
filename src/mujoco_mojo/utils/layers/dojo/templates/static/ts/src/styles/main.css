@@ -12,6 +12,11 @@
    so this also picks up templates/partials/**). */
 @source "../../../../";
 
+/* the unit tests sit inside that scanned tree and quote class names in their
+   assertions (a test that a log level's classes contain "text-success", say),
+   which would otherwise get those utilities generated into the shipped CSS */
+@source not "../**/*.test.ts";
+
 /* Tailwind v4's `dark:` variant defaults to prefers-color-scheme; switching it
    to a class selector lets the header toggle (see main.ts) force either mode
    regardless of system preference. */

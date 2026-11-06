@@ -6,7 +6,80 @@ import {
   enumRange,
   planEnumAxes,
 } from "./lib/enum-axes";
-import { breakableLabel, formatNum } from "./lib/format";
+import {
+  breakableLabel,
+  formatNum,
+  formatPercentile,
+  formatSampled,
+  formatSigFig,
+  relativeTime,
+} from "./lib/format";
+import { evalMathExpr } from "./lib/math-expr";
+import {
+  filterColumns,
+  isSearchSegmentActive,
+  quatBases,
+  rotatableColumns,
+  searchActiveLevels,
+  searchAvailableSuffixes,
+  searchSegmentsAtDepth,
+  smartSort,
+  toggleSearchSegment,
+} from "./lib/column-search";
+import {
+  buildRefFrameFilter,
+  refFrameActive,
+  refFrameAvailable,
+  refFrameLabel,
+  sameRefFrame,
+  sanitizeRefFrame,
+  withRefFrameFilter,
+  type RefFrame,
+} from "./lib/ref-frame";
+import { jsonPathAt, jsonRangeForPath } from "./lib/json-editor";
+import { decodeShareConfig, encodeShareConfig, extractShareBlob } from "./lib/share-link";
+import {
+  filterLogEntries,
+  formatLogTime,
+  logLevelClass,
+  logLevelsOf,
+  logSourceFull,
+  logSourceShort,
+} from "./lib/log-entries";
+import { paddedRange, selectVsDatasets } from "./lib/plot-range";
+import { validatePlotConfig } from "./lib/config-validate";
+import { countInRange, countWithPinned, presetRange, togglePinned, trialBounds } from "./lib/vs-range";
+import { pushSnapshot } from "./lib/history";
+import { countBy, distinctSorted, filterDists, toggleFacet } from "./lib/dist-table";
+import { highlightJson } from "./lib/json-highlight";
+import {
+  addFilter,
+  duplicateFilter,
+  effectiveUnit as unitAfterFilters,
+  filterSummary,
+  getUnitOptions,
+  groupFilterSchemas,
+  moveFilter,
+  removeFilter,
+  setFilterParam,
+} from "./lib/filter-stack";
+import { nextAvailableStyle as pickNextStyle } from "./lib/plot-style";
+import {
+  errorStep as trialErrorStep,
+  stepDotClass as trialStepDotClass,
+  stepTextClass as trialStepTextClass,
+  type TrialStep,
+} from "./lib/trial-status";
+import { reorderYAxes } from "./lib/y-axes";
+import { applyRangeBound, rangeBoundText, resolveAxisRange as resolveRange } from "./lib/axis-range";
+import {
+  DEFAULT_CONFIG,
+  hasPlotDefault,
+  isPlotFieldDefault,
+  plotDefaultCopy,
+  shapeDefName,
+  withDefaultNote,
+} from "./lib/plot-defaults";
 import { OPTIONS } from "./lib/options";
 import {
   buildTreeRows,
@@ -39,7 +112,6 @@ import {
   type JsonSchemaNode,
 } from "./lib/json-schema";
 import Plotly from "./lib/plotly";
-import LZString from "lz-string";
 import "./lib/color-picker";
 import {
   EditorView,
@@ -57,7 +129,6 @@ import {
   hoverTooltip,
   syntaxTree,
   type Tooltip,
-  type SyntaxNode,
   type Diagnostic,
 } from "./lib/codemirror";
 import { DASH_STYLE_VALUES } from "./lib/plot-config.generated";
@@ -65,7 +136,7 @@ import {
   attachVerticalResizeHandle,
   restorePersistedHeight,
 } from "./lib/resize";
-import { validateAgainstSchema, collectSchemaDiagnostics, type SchemaPathSegment } from "./lib/schema-validate";
+import { collectSchemaDiagnostics } from "./lib/schema-validate";
 import { createToastMixin } from "./lib/toast";
 import type { AlpineMagics } from "./types/global";
 import type {
@@ -87,117 +158,11 @@ import type {
   TrialMediaFile,
   TrialMediaResponse,
   TrialStatus,
-  UnitGroup,
   YAxisConfig,
 } from "./models";
 
-// matches Python's logging severity ordering
-const LOG_LEVEL_SEVERITY: Record<string, number> = {
-  DEBUG: 10,
-  INFO: 20,
-  WARNING: 30,
-  ERROR: 40,
-  CRITICAL: 50,
-};
-
 // how many recently-closed plot tabs reopenLastClosedPlotTab() can recover
 const _MAX_CLOSED_PLOT_TABS = 10;
-
-const DEFAULT_CONFIG: PlotConfig = {
-  xAxis: { col: "time", filters: [] },
-  yAxes: {},
-  refFrame: [null, null],
-  grid: "all",
-  lineMode: "lines+markers",
-  interp: "linear",
-  hover: "closest",
-  title: "",
-  xAxisTitle: "",
-  yAxisTitle: "",
-  showSpike: true,
-  legendPos: "bottom",
-  rangeX: null,
-  rangeY: null,
-  xScale: "linear",
-  yScale: "linear",
-  xLogBase: null,
-  yLogBase: null,
-  plotType: "cartesian",
-  annotations: [],
-  shapes: [],
-  displayUnitSystem: null,
-  maxPoints: null,
-};
-
-// A reference frame is (quaternion base, origin base); either half may be
-// null and (null, null) is the world frame. The server decides which series
-// actually get translated to the origin (positions) and which are only
-// rotated (free vectors), so every series gets the same pair.
-type RefFrame = [string | null, string | null];
-
-function refFrameActive(frame: RefFrame): boolean {
-  return frame[0] !== null || frame[1] !== null;
-}
-
-function sameRefFrame(a: RefFrame, b: RefFrame): boolean {
-  return a[0] === b[0] && a[1] === b[1];
-}
-
-function refFrameLabel(frame: RefFrame): string {
-  const [quat, origin] = frame;
-  if (quat && origin) return `${quat} @ ${origin}`;
-  return quat ?? (origin ? `@ ${origin}` : "world");
-}
-
-// each half of a frame that is set must exist in the trial: the quaternion as
-// a :w family, the origin as an :x/:y/:z family
-function refFrameAvailable(
-  frame: RefFrame,
-  quats: Set<string>,
-  cols: Set<string>,
-): boolean {
-  const [quat, origin] = frame;
-  return (!quat || quats.has(quat)) && (!origin || cols.has(`${origin}:x`));
-}
-
-function buildRefFrameFilter(frame: RefFrame): FilterEntry {
-  return {
-    type: "rotation",
-    quatCol: frame[0],
-    originCol: frame[1],
-    invert: true,
-    enabled: true,
-  };
-}
-
-// A saved config from before the frame became a (quat, origin) pair stores
-// null (world) or a plain string; both reset to the world frame instead of
-// being misread as a pair.
-function sanitizeRefFrame<T extends { refFrame?: unknown }>(cfg: T): T {
-  const v = cfg.refFrame;
-  if (v === undefined) return cfg;
-  const valid =
-    Array.isArray(v) &&
-    v.length === 2 &&
-    v.every((x) => x === null || typeof x === "string");
-  return valid ? cfg : { ...cfg, refFrame: [null, null] };
-}
-
-// Renders one DEFAULT_CONFIG value for a "Default: `X`." tooltip line
-// (plotFieldHelp above), matching the exact rendering
-// GenerateJsonSchemaWithDefaults (settings.py) uses server-side for
-// Pydantic-level defaults - "true"/"false" for booleans, str(x) otherwise,
-// which for Python's None is the literal text "None" - so a
-// frontend-sourced default reads identically to a schema-sourced one
-// rather than looking like a different kind of value. Empty string
-// (title/xAxisTitle/yAxisTitle's actual default) renders as "(empty)"
-// instead of nothing visibly between the backticks.
-function formatDefaultValue(value: unknown): string {
-  if (value === null || value === undefined) return "None";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value === "" ? "(empty)" : value;
-  return JSON.stringify(value);
-}
 
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
@@ -215,125 +180,6 @@ const _cm: {
 
 // miniplayer RAF state - kept outside Alpine to avoid proxy overhead
 const _mini: { rafId: number | null } = { rafId: null };
-
-// smartSort's comparator - a module-level Intl.Collator instance, reused
-// across every call rather than passing {sensitivity: "base"} straight to
-// String.prototype.localeCompare on each pairwise comparison. The two look
-// equivalent but aren't: localeCompare with an options object builds a fresh
-// collator internally on every single call, while Collator.prototype.compare
-// builds it once. For a column-tree toggle this runs an O(n log n) sort
-// (getFilteredCols -> smartSort) synchronously on every folder click across
-// however many columns are loaded - with the options-object form this was
-// slow enough to read as a real delay before the row's own CSS transition
-// even started, since the browser can't paint the class change until this
-// synchronous sort finishes.
-const _smartSortCollator = new Intl.Collator(undefined, { sensitivity: "base" });
-
-// JSON editor hover tooltips (initCodeMirror's hoverTooltip extension) - the
-// path of JSON object keys enclosing document position `pos`, read from
-// CodeMirror's own Lezer parse tree rather than any text-based/regex
-// approach, which would be fragile against nested strings, escaped quotes,
-// etc. lib/json-schema.ts's describeSchemaPath then walks
-// plotConfigSchema alongside this same path to find that field's
-// description.
-//
-// @codemirror/lang-json's grammar (@lezer/json) only names three node
-// types relevant here: "Property" (a key:value pair), "PropertyName" (a
-// Property's own key, still-quoted string), and "Array" - object keys
-// versus array items are structurally different in JSON (a key is text,
-// an index is just position), so PropertyName is read for the former and
-// a plain "" placeholder pushed for the latter; describeSchemaPath already
-// treats any segment as "descend into .items" once the schema node it's
-// standing on is itself an array, so the placeholder's actual value is
-// never read, it's a pure step-marker. Walking bottom-up from `pos` (via
-// resolveInner, which finds the innermost node covering that position)
-// through every such ancestor and prepending each is what turns, e.g.,
-// hovering the "color" in `{"yAxes": {"ax1": {"color": "#fff"}}}` into
-// the path ["yAxes", "ax1", "color"] - "ax1" is an arbitrary dict key
-// (PlotConfig.yAxes is dict[str, YAxisConfig]), captured the same way as
-// any other PropertyName even though describeSchemaPath will treat it as
-// a dict-value step rather than a fixed field lookup.
-function jsonPathAt(state: EditorState, pos: number): string[] {
-  const path: string[] = [];
-  let cur: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
-  while (cur) {
-    if (cur.name === "Property") {
-      const nameNode = cur.getChild("PropertyName");
-      if (nameNode) {
-        const raw = state.doc.sliceString(nameNode.from, nameNode.to);
-        try {
-          path.unshift(JSON.parse(raw) as string);
-        } catch {
-          path.unshift(raw.slice(1, -1));
-        }
-      }
-    } else if (cur.name === "Array") {
-      path.unshift("");
-    }
-    cur = cur.parent;
-  }
-  return path;
-}
-
-// the concrete node types @lezer/json ever uses for a JSON *value* position
-// (as opposed to punctuation like "{", ",", ":" - which are themselves
-// nodes in the tree, just not ones a value path ever points at).
-const JSON_VALUE_NODE_NAMES = new Set(["Object", "Array", "String", "Number", "True", "False", "Null"]);
-
-function decodePropertyName(state: EditorState, nameNode: SyntaxNode): string {
-  const raw = state.doc.sliceString(nameNode.from, nameNode.to);
-  try {
-    return JSON.parse(raw) as string;
-  } catch {
-    return raw.slice(1, -1);
-  }
-}
-
-// Reverse of jsonPathAt: walks a *structured* path (real object keys and
-// array indices, as produced by collectSchemaDiagnostics - not
-// jsonPathAt's own "" placeholder for an array step, which only needs to
-// know "inside some array" for a schema lookup, not which element) down
-// from the document root to the exact node it names, so a schema
-// validation error can underline the specific offending value instead of
-// just being listed as text. Returns null if the path doesn't resolve
-// (e.g. a stale diagnostic from before the day's last edit, or a key that
-// was itself renamed/removed).
-function jsonRangeForPath(
-  state: EditorState,
-  path: SchemaPathSegment[],
-): { from: number; to: number } | null {
-  let node: SyntaxNode | null = syntaxTree(state).topNode.firstChild;
-  for (const seg of path) {
-    if (!node) return null;
-    if (typeof seg === "number") {
-      if (node.name !== "Array") return null;
-      let child: SyntaxNode | null = node.firstChild;
-      let index = -1;
-      let found: SyntaxNode | null = null;
-      while (child) {
-        if (JSON_VALUE_NODE_NAMES.has(child.name)) {
-          index += 1;
-          if (index === seg) {
-            found = child;
-            break;
-          }
-        }
-        child = child.nextSibling;
-      }
-      node = found;
-    } else {
-      if (node.name !== "Object") return null;
-      const match = node
-        .getChildren("Property")
-        .find((prop) => {
-          const nameNode = prop.getChild("PropertyName");
-          return nameNode ? decodePropertyName(state, nameNode) === seg : false;
-        });
-      node = match?.lastChild ?? null;
-    }
-  }
-  return node ? { from: node.from, to: node.to } : null;
-}
 
 // ---------------------------------------------------------------------------
 // Lab tab state
@@ -595,10 +441,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // schema's description doesn't already carry a default.
     plotFieldHelp(key: string): string {
       const description = describeSchemaPath(this.plotConfigSchema, [key]);
-      if (!description || description.includes("\n\nDefault:")) return description;
-      if (!(key in DEFAULT_CONFIG)) return description;
-      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
-      return `${description}\n\nDefault: \`${formatDefaultValue(value)}\`.`;
+      return withDefaultNote(description, key);
     },
     // Same schema, but for one option within a dropdown (e.g. field "grid",
     // value "all" -> GridMode.ALL's own docstring) rather than the field as
@@ -629,11 +472,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Shape editor whose defName has to follow shapeDraft.type rather than
     // being fixed per call site (fields like x0/y0/dash/color are shared
     // across more than one shape type, each with its own description).
-    shapeDefName(type: string): string {
-      if (type === "vline") return "VlineShape";
-      if (type === "hline") return "HlineShape";
-      return "RectShape";
-    },
+    shapeDefName,
     // --- PER-FIELD RESET (Plot Editor) ---
     // Whether config[key] currently matches DEFAULT_CONFIG[key] - drives
     // the per-field reset icon's x-show (_macros.html's field_reset_icon),
@@ -643,25 +482,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // (rangeX/rangeY) are small arrays, not primitives - reference
     // equality would never match even when the values are identical.
     plotFieldIsDefault(key: string): boolean {
-      if (!(key in DEFAULT_CONFIG)) return true;
-      const current = (this.config as unknown as Record<string, unknown>)[key];
-      const def = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
-      return JSON.stringify(current) === JSON.stringify(def);
+      return isPlotFieldDefault(this.config, key);
     },
     resetPlotField(key: string) {
-      if (!(key in DEFAULT_CONFIG)) return;
-      const value = (DEFAULT_CONFIG as unknown as Record<string, unknown>)[key];
-      // deep-clone any object/array default (rangeX/rangeY are the only
-      // such fields among the Plot Editor's own, but this stays correct
-      // if a future field needs it too) so resetting two fields back to
-      // back can never have one's reset mutate DEFAULT_CONFIG's own
-      // array/object and silently change the other's "default" out from
-      // under it.
-      const cloned =
-        typeof value === "object" && value !== null
-          ? (JSON.parse(JSON.stringify(value)) as unknown)
-          : value;
-      (this.config as unknown as Record<string, unknown>)[key] = cloned;
+      if (!hasPlotDefault(key)) return;
+      (this.config as unknown as Record<string, unknown>)[key] = plotDefaultCopy(key);
       this.saveAndRender();
     },
 
@@ -927,12 +752,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // -----------------------------------------------------------------------
     pushHistory() {
       if (this.isUndoing) return;
-      const snapshot = JSON.stringify(this.config);
-      if (this.historyStack[this.historyIndex] === snapshot) return;
-      this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
-      this.historyStack.push(snapshot);
-      if (this.historyStack.length > this.maxHistory) this.historyStack.shift();
-      this.historyIndex = this.historyStack.length - 1;
+      const next = pushSnapshot(
+        { stack: this.historyStack, index: this.historyIndex },
+        JSON.stringify(this.config),
+        this.maxHistory,
+      );
+      if (!next) return;
+      this.historyStack = next.stack;
+      this.historyIndex = next.index;
       this.persistHistory();
     },
 
@@ -974,20 +801,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     shiftY(index: number, direction: number, isWarp = false) {
-      const keys = Object.keys(this.config.yAxes);
-      if (keys.length < 2) return;
-      const newKeys = [...keys];
-      const movedKey = newKeys.splice(index, 1)[0]!;
-      if (isWarp) {
-        direction === -1 ? newKeys.unshift(movedKey) : newKeys.push(movedKey);
-      } else {
-        newKeys.splice(index + direction, 0, movedKey);
-      }
-      const newYAxes: Record<string, YAxisConfig> = {};
-      newKeys.forEach((k) => {
-        newYAxes[k] = this.config.yAxes[k]!;
-      });
-      this.config.yAxes = newYAxes;
+      const reordered = reorderYAxes(this.config.yAxes, index, direction, isWarp);
+      if (!reordered) return;
+      this.config.yAxes = reordered;
       this.saveAndRender();
     },
 
@@ -1132,33 +948,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // that can't be used either. `started` is reliable instead: generating
     // and solving run strictly sequentially, so whichever one has `started`
     // set *last* is the one that was in flight when the trial errored.
-    errorStep(): "generating" | "solving" | null {
-      if (!this.trialStatus || this.trialStatus.completion !== "error")
-        return null;
-      if (this.trialStatus.solving.started !== null) return "solving";
-      if (this.trialStatus.generating.started !== null) return "generating";
-      return null;
+    errorStep(): TrialStep | null {
+      return trialErrorStep(this.trialStatus);
     },
 
-    stepDotClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "bg-control";
-      const step = this.trialStatus[stepName];
-      if (this.errorStep() === stepName) return "bg-warning-500";
-      if (step.elapsed !== null) return "bg-success-500";
-      if (this.trialStatus.step === stepName)
-        return "bg-accent-400 animate-pulse";
-      return "bg-control";
+    stepDotClass(stepName: TrialStep): string {
+      return trialStepDotClass(this.trialStatus, stepName);
     },
 
-    stepTextClass(stepName: "generating" | "solving"): string {
-      if (!this.trialStatus) return "text-ink-disabled";
-      const step = this.trialStatus[stepName];
-      if (this.errorStep() === stepName)
-        return "text-warning-500 dark:text-warning-400";
-      if (step.elapsed !== null) return "text-ink-secondary";
-      if (this.trialStatus.step === stepName)
-        return "text-accent-500 dark:text-accent-400";
-      return "text-ink-disabled";
+    stepTextClass(stepName: TrialStep): string {
+      return trialStepTextClass(this.trialStatus, stepName);
     },
 
     async fetchTrialLogs() {
@@ -1489,50 +1288,34 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Distributions: sorting, filtering & column resize
     // -----------------------------------------------------------------------
     get distCategories(): string[] {
-      return Array.from(new Set(this.dists.map((d) => d.category))).sort();
+      return distinctSorted(this.dists.map((d) => d.category));
     },
 
     get distTypes(): string[] {
-      return Array.from(new Set(this.dists.map((d) => d.dist_type))).sort();
+      return distinctSorted(this.dists.map((d) => d.dist_type));
     },
 
     get distUnits(): string[] {
-      return Array.from(new Set(this.dists.map((d) => d.units))).sort();
+      return distinctSorted(this.dists.map((d) => d.units));
     },
 
     // signal counts per dropdown option, shown right-justified next to each
     // checkbox so users can see how many rows a filter choice covers
     get distCategoryCounts(): Record<string, number> {
-      const counts: Record<string, number> = {};
-      for (const d of this.dists)
-        counts[d.category] = (counts[d.category] ?? 0) + 1;
-      return counts;
+      return countBy(this.dists.map((d) => d.category));
     },
 
     get distTypeCounts(): Record<string, number> {
-      const counts: Record<string, number> = {};
-      for (const d of this.dists)
-        counts[d.dist_type] = (counts[d.dist_type] ?? 0) + 1;
-      return counts;
+      return countBy(this.dists.map((d) => d.dist_type));
     },
 
     get distUnitCounts(): Record<string, number> {
-      const counts: Record<string, number> = {};
-      for (const d of this.dists) counts[d.units] = (counts[d.units] ?? 0) + 1;
-      return counts;
+      return countBy(this.dists.map((d) => d.units));
     },
 
-    // null = all selected; toggling derives the explicit set from the
-    // current selection (defaulting to "all" the first time) and only
-    // collapses back to null once it matches the full set again - it never
-    // re-expands to "all" just because the set happens to become empty
+    // see toggleFacet for how a selection becomes (and stops being) "all"
     toggleDistCategoryFilter(cat: string) {
-      const all = this.distCategories;
-      const current = this.distFilterCategories ?? all;
-      const next = current.includes(cat)
-        ? current.filter((c) => c !== cat)
-        : [...current, cat];
-      this.distFilterCategories = next.length === all.length ? null : next;
+      this.distFilterCategories = toggleFacet(this.distFilterCategories, this.distCategories, cat);
     },
 
     selectAllDistCategories() {
@@ -1544,12 +1327,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     toggleDistTypeFilter(type: string) {
-      const all = this.distTypes;
-      const current = this.distFilterTypes ?? all;
-      const next = current.includes(type)
-        ? current.filter((t) => t !== type)
-        : [...current, type];
-      this.distFilterTypes = next.length === all.length ? null : next;
+      this.distFilterTypes = toggleFacet(this.distFilterTypes, this.distTypes, type);
     },
 
     selectAllDistTypes() {
@@ -1561,12 +1339,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     toggleDistUnitFilter(unit: string) {
-      const all = this.distUnits;
-      const current = this.distFilterUnits ?? all;
-      const next = current.includes(unit)
-        ? current.filter((u) => u !== unit)
-        : [...current, unit];
-      this.distFilterUnits = next.length === all.length ? null : next;
+      this.distFilterUnits = toggleFacet(this.distFilterUnits, this.distUnits, unit);
     },
 
     selectAllDistUnits() {
@@ -1578,55 +1351,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     get filteredDists(): DistEntry[] {
-      const name = this.distFilterName.trim().toLowerCase();
-      const filtered = this.dists.filter((d) => {
-        if (name && !d.name.toLowerCase().includes(name)) return false;
-        if (
-          this.distFilterCategories !== null &&
-          !this.distFilterCategories.includes(d.category)
-        )
-          return false;
-        if (
-          this.distFilterTypes !== null &&
-          !this.distFilterTypes.includes(d.dist_type)
-        )
-          return false;
-        if (
-          this.distFilterUnits !== null &&
-          !this.distFilterUnits.includes(d.units)
-        )
-          return false;
-        return true;
-      });
-      const dir = this.distSortAsc ? 1 : -1;
-      return filtered.slice().sort((a, b) => {
-        switch (this.distSortKey) {
-          case "name":
-            return dir * a.name.localeCompare(b.name);
-          case "category":
-            return dir * a.category.localeCompare(b.category);
-          case "dist_type":
-            return dir * a.dist_type.localeCompare(b.dist_type);
-          case "nominal": {
-            const av = a.nominal ?? -Infinity;
-            const bv = b.nominal ?? -Infinity;
-            return dir * (av - bv);
-          }
-          case "sampled_value": {
-            const av = a.sampled_value ?? -Infinity;
-            const bv = b.sampled_value ?? -Infinity;
-            return dir * (av - bv);
-          }
-          case "stat": {
-            const av =
-              a.z_score ??
-              (a.percentile != null ? a.percentile / 100 : -Infinity);
-            const bv =
-              b.z_score ??
-              (b.percentile != null ? b.percentile / 100 : -Infinity);
-            return dir * (av - bv);
-          }
-        }
+      return filterDists(this.dists, {
+        name: this.distFilterName,
+        categories: this.distFilterCategories,
+        types: this.distFilterTypes,
+        units: this.distFilterUnits,
+        sortKey: this.distSortKey,
+        sortAsc: this.distSortAsc,
       });
     },
 
@@ -1730,47 +1461,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Logs: sorting, filtering & styling
     // -----------------------------------------------------------------------
     get filteredLogEntries(): LogEntry[] {
-      const text = this.logFilterMessage.trim();
-      let regex: RegExp | null = null;
-      if (text && this.logFilterRegex) {
-        try {
-          regex = new RegExp(text, "i");
-        } catch {
-          regex = null;
-        }
-      }
-
-      const filtered = this.logEntries.filter((e) => {
-        if (
-          this.logFilterLevels.length > 0 &&
-          !this.logFilterLevels.includes(e.level)
-        )
-          return false;
-        if (text) {
-          if (regex) {
-            if (!regex.test(e.message)) return false;
-          } else if (!e.message.toLowerCase().includes(text.toLowerCase())) {
-            return false;
-          }
-        }
-        return true;
-      });
-
-      const dir = this.logSortAsc ? 1 : -1;
-      return filtered.slice().sort((a, b) => {
-        if (this.logSortKey === "level") {
-          const av = LOG_LEVEL_SEVERITY[a.level] ?? 0;
-          const bv = LOG_LEVEL_SEVERITY[b.level] ?? 0;
-          return av === bv ? a.timestamp - b.timestamp : (av - bv) * dir;
-        }
-        return (a.timestamp - b.timestamp) * dir;
+      return filterLogEntries(this.logEntries, {
+        levels: this.logFilterLevels,
+        message: this.logFilterMessage,
+        regex: this.logFilterRegex,
+        sortKey: this.logSortKey,
+        sortAsc: this.logSortAsc,
       });
     },
 
     get logLevels(): string[] {
-      return Array.from(new Set(this.logEntries.map((e) => e.level))).sort(
-        (a, b) => (LOG_LEVEL_SEVERITY[a] ?? 0) - (LOG_LEVEL_SEVERITY[b] ?? 0),
-      );
+      return logLevelsOf(this.logEntries);
     },
 
     toggleLogSort(key: "timestamp" | "level") {
@@ -1823,39 +1524,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       window.addEventListener("mouseup", onUp);
     },
 
-    // format a number with 4 significant figures, switching to exponential
-    // notation when the exponent is < -4 or >= 4 (matches Python's g format)
-    fmtSigFig(v: number | null): string {
-      if (v === null) return "—";
-      if (v === 0) return "0";
-      const abs = Math.abs(v);
-      const exp = Math.floor(Math.log10(abs));
-      if (exp < -4 || exp >= 4) return v.toExponential(3);
-      return parseFloat(v.toPrecision(4)).toString();
-    },
-
-    // formats every drawn value for a dist table row, regardless of whether it
-    // sampled numbers, labels, or (for permutations) a list of items per draw
-    fmtSampled(entry: DistEntry): string {
-      if (entry.sampled_permutations && entry.sampled_permutations.length > 0) {
-        return entry.sampled_permutations
-          .map((perm) => `[${perm.join(", ")}]`)
-          .join("; ");
-      }
-      if (entry.sampled_values && entry.sampled_values.length > 0) {
-        return entry.sampled_values.map((v) => this.fmtSigFig(v)).join(", ");
-      }
-      if (entry.sampled_labels && entry.sampled_labels.length > 0) {
-        return entry.sampled_labels.join(", ");
-      }
-      return "—";
-    },
-
-    // formats a percentile in the standard P{x} notation (e.g. P95.7) rather
-    // than the nonstandard "%ile" shorthand
-    fmtPercentile(p: number): string {
-      return `P${p.toFixed(1)}`;
-    },
+    fmtSigFig: formatSigFig,
+    fmtSampled: formatSampled,
+    fmtPercentile: formatPercentile,
 
     _measureTextWidth(text: string, refEl: HTMLElement): number {
       const canvas = (this._logMeasureCanvas ??=
@@ -1912,40 +1583,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this._persistLogColWidths();
     },
 
-    logSourceShort(entry: LogEntry): string {
-      const file = entry.pathname.split("/").pop() ?? "";
-      return entry.lineno != null ? `${file}:${entry.lineno}` : file;
-    },
+    logSourceShort,
 
-    logSourceFull(entry: LogEntry): string {
-      return entry.lineno != null
-        ? `${entry.pathname}:${entry.lineno}`
-        : entry.pathname;
-    },
+    logSourceFull,
 
-    logLevelClass(level: string): string {
-      switch (level) {
-        case "CRITICAL":
-          return "bg-danger-500 dark:bg-danger-900/50 text-white dark:text-white";
-        case "ERROR":
-          return "bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400";
-        case "WARNING":
-          return "bg-warning-100 dark:bg-warning-900/50 text-warning-700 dark:text-warning-400";
-        case "INFO":
-          return "bg-success-100 dark:bg-success-900/50 text-success-700 dark:text-success-400";
-        case "DEBUG":
-          return "bg-accent-100 dark:bg-accent-900/50 text-accent-700 dark:text-accent-400";
-        default:
-          return "bg-chip text-ink-secondary";
-      }
-    },
+    logLevelClass,
 
-    formatLogTime(timestamp: number, _tick?: number): string {
-      const diff = Date.now() - timestamp;
-      if (diff < 24 * 60 * 60 * 1000)
-        return window.notifTimeAgo(timestamp, _tick);
-      return new Date(timestamp).toLocaleString();
-    },
+    formatLogTime,
 
     _updateIsScrubbable() {
       const sel = this.selectedMedia?.toLowerCase() ?? "";
@@ -2567,15 +2211,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     get selectableYColumns(): string[] {
       if (!this.columns) return [];
       if (!refFrameActive(this.config.refFrame)) return this.columns;
-      return this.columns.filter((col) => {
-        const parts = col.split(":");
-        const suffix = parts.pop();
-        const family = parts.join(":");
-        return (
-          ["x", "y", "z"].includes(suffix ?? "") &&
-          (this.rotateableVectors ?? []).includes(family)
-        );
-      });
+      return rotatableColumns(this.columns, this.rotateableVectors ?? []);
     },
 
     get frameActive(): boolean {
@@ -2584,9 +2220,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     get availableQuats(): string[] {
       if (!this.columns || !Array.isArray(this.columns)) return [];
-      return this.columns
-        .filter((c) => c.endsWith(":w"))
-        .map((c) => c.replace(":w", ""));
+      return quatBases(this.columns);
     },
 
     // -----------------------------------------------------------------------
@@ -3665,23 +3299,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // per caller (setVsAll/isVsAll used to each redo this independently,
     // and setVsPreset skipped it entirely - see its own comment).
     vsTrialBounds(): { min: number; max: number } | null {
-      const nums = this.allTrials
-        .map((t) => parseInt(t.split("_").pop() ?? ""))
-        .filter((n) => !isNaN(n));
-      if (!nums.length) return null;
-      return { min: Math.min(...nums), max: Math.max(...nums) };
+      return trialBounds(this.allTrials);
     },
 
     setVsPreset(delta: number) {
-      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
-      const bounds = this.vsTrialBounds();
-      // clamp each edge independently to the real trial range rather than
-      // just cur +/- delta - viewing trial 0 with "+/-10" should land on
-      // [0, 10], not [-10, 10] (trial numbers can't go negative, and more
-      // generally shouldn't run past whichever trial is actually last).
-      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
-      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
-      this.vsDraft.range = [lo, hi];
+      this.vsDraft.range = presetRange(this.trialId, delta, this.vsTrialBounds());
     },
 
     setVsAll() {
@@ -3691,10 +3313,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     isVsPreset(delta: number): boolean {
-      const cur = parseInt(this.trialId.split("_").pop() ?? "0");
-      const bounds = this.vsTrialBounds();
-      const lo = bounds ? Math.max(bounds.min, cur - delta) : cur - delta;
-      const hi = bounds ? Math.min(bounds.max, cur + delta) : cur + delta;
+      const [lo, hi] = presetRange(this.trialId, delta, this.vsTrialBounds());
       const [a, b] = this.vsDraft.range;
       return Math.min(a, b) === lo && Math.max(a, b) === hi;
     },
@@ -3707,47 +3326,21 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     vsInRangeCount(): number {
-      const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const cur = parseInt(this.trialId.split("_").pop() ?? "");
-      return this.allTrials.filter((id) => {
-        const n = parseInt(id.split("_").pop() ?? "");
-        return n >= lo && n <= hi && n !== cur;
-      }).length;
+      return countInRange(this.allTrials, this.vsDraft.range, this.trialId);
     },
 
     vsTotalCount(): number {
-      const lo = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const hi = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const cur = parseInt(this.trialId.split("_").pop() ?? "");
-      const pinnedSet = new Set(this.vsDraft.pinned);
-      return this.allTrials.filter((id) => {
-        const n = parseInt(id.split("_").pop() ?? "");
-        return ((n >= lo && n <= hi) || pinnedSet.has(n)) && n !== cur;
-      }).length;
+      return countWithPinned(this.allTrials, this.vsDraft.range, this.vsDraft.pinned, this.trialId);
     },
 
     toggleVsPin(n: number) {
-      const idx = this.vsDraft.pinned.indexOf(n);
-      if (idx === -1) {
-        this.vsDraft.pinned = [...this.vsDraft.pinned, n].sort((a, b) => a - b);
-      } else {
-        this.vsDraft.pinned = this.vsDraft.pinned.filter((x) => x !== n);
-      }
+      this.vsDraft.pinned = togglePinned(this.vsDraft.pinned, n);
     },
 
     // -----------------------------------------------------------------------
     // Column filtering & search
     // -----------------------------------------------------------------------
-    smartSort(list: string[]): string[] {
-      return list.sort((a, b) => {
-        const aT = a.toLowerCase() === "time";
-        const bT = b.toLowerCase() === "time";
-        if (aT && !bT) return -1;
-        if (!aT && bT) return 1;
-        return _smartSortCollator.compare(a, b);
-      });
-    },
+    smartSort,
 
     getFilteredCols(field: string): string[] {
       if (!this.columns || !Array.isArray(this.columns)) return [];
@@ -3761,19 +3354,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      if (!search) return this.smartSort([...base]);
-      try {
-        let pattern = search.replace(/\*/g, ".*").replace(/\/?:/g, ".*:");
-        if (pattern.endsWith("/")) pattern = pattern.replace(/\/$/, "\\/?");
-        if (pattern.startsWith(":")) pattern = ".*" + pattern;
-        if (pattern.toLowerCase() === "time") pattern = "^time$";
-        const query = new RegExp(pattern, "i");
-        return this.smartSort(base.filter((c) => query.test(c)));
-      } catch {
-        return this.smartSort(
-          base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
-        );
-      }
+      return filterColumns(base, search);
     },
 
     // Folder-tree view (lib/tree.ts) over getFilteredCols(field) - a second,
@@ -3899,43 +3480,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     ) {
       const key = field + "Search";
       const self = this as unknown as Record<string, string>;
-      let [pathPart = "", suffixPart = ""] = (self[key] ?? "").split(":");
-
-      if (depth === "suffix") {
-        const cleanSeg = segment.replace(":", "");
-        let items = (suffixPart ?? "")
-          .replace(/[()]/g, "")
-          .split("|")
-          .filter(Boolean);
-        items = items.includes(cleanSeg)
-          ? items.filter((i) => i !== cleanSeg)
-          : [...items, cleanSeg];
-        suffixPart =
-          items.length > 1 ? `(${items.sort().join("|")})` : (items[0] ?? "");
-      } else {
-        let parts = (pathPart ?? "").split("/").filter((p) => p !== "");
-        let target = parts[depth] ?? "";
-        let items = target.replace(/[()]/g, "").split("|").filter(Boolean);
-        items = items.includes(segment)
-          ? items.filter((i) => i !== segment)
-          : [...items, segment];
-        if (items.length === 0) {
-          parts = parts.slice(0, depth);
-        } else {
-          parts[depth] =
-            items.length === 1
-              ? (items[0] ?? "")
-              : `(${items.sort().join("|")})`;
-        }
-        pathPart = parts.join("/");
-        if (pathPart && pathPart.toLowerCase() !== "time") {
-          const isFolder = this.columns.some((c) =>
-            c.toLowerCase().startsWith(pathPart!.toLowerCase() + "/"),
-          );
-          if (isFolder) pathPart += "/";
-        }
-      }
-      self[key] = (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
+      self[key] = toggleSearchSegment(self[key] ?? "", segment, depth, this.columns);
     },
 
     getSegmentsAtDepth(field: string, depth: number): string[] {
@@ -3949,23 +3494,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      const pathSearch = search.split(":")[0] ?? "";
-      const parts = pathSearch.split("/").filter((p) => p !== "");
-      const selected = (parts[depth] ?? "")
-        .replace(/[()]/g, "")
-        .split("|")
-        .filter(Boolean);
-      const prefixParts = parts.slice(0, depth);
-      const prefix = prefixParts.join("/").replace(/\//g, "\\/?");
-      const regex = new RegExp("^" + (prefix ? prefix : ""), "i");
-      const segments = base
-        .filter((c) => regex.test(c))
-        .map((c) => {
-          const p = c.split(":")[0]!.split("/");
-          return p[depth] ?? null;
-        })
-        .filter(Boolean) as string[];
-      return this.smartSort([...new Set([...selected, ...segments])]);
+      return searchSegmentsAtDepth(base, search, depth);
     },
 
     getAvailableSuffixes(field: string): string[] {
@@ -3979,21 +3508,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      const [pathPart = "", suffixPart = ""] = search.split(":");
-      const selected = (suffixPart ?? "")
-        .replace(/[()]/g, "")
-        .split("|")
-        .filter(Boolean)
-        .map((s) => ":" + s);
-      const pathRegex = new RegExp(
-        "^" + (pathPart ?? "").replace(/\//g, "\\/?"),
-        "i",
-      );
-      const matches = base.filter((c) => pathRegex.test(c));
-      const available = matches
-        .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))
-        .filter(Boolean) as string[];
-      return this.smartSort([...new Set([...selected, ...available])]);
+      return searchAvailableSuffixes(base, search);
     },
 
     isSegmentActive(
@@ -4003,118 +3518,32 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     ): boolean {
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      if (depth === "suffix") {
-        const suffixPart = search.split(":")[1] ?? "";
-        const items = suffixPart
-          .replace(/[()]/g, "")
-          .split("|")
-          .filter(Boolean);
-        return items.includes(seg.replace(":", ""));
-      } else {
-        const pathPart = search.split(":")[0] ?? "";
-        const levels = pathPart.split("/").filter((p) => p !== "");
-        const levelContent = levels[depth] ?? "";
-        const items = levelContent
-          .replace(/[()]/g, "")
-          .split("|")
-          .filter(Boolean);
-        return items.includes(seg);
-      }
+      return isSearchSegmentActive(search, seg, depth);
     },
 
     getActiveLevels(field: string): number[] {
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      const pathOnly = search.split(":")[0] ?? "";
-      const parts = pathOnly.split("/").filter((p) => p !== "");
-      return Array.from({ length: parts.length + 1 }, (_, i) => i);
+      return searchActiveLevels(search);
     },
 
     // -----------------------------------------------------------------------
     // JSON editor
     // -----------------------------------------------------------------------
     get highlightedJson(): string {
-      if (!this.configRaw) return "";
-      let html = this.configRaw
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-      const regex =
-        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])|(\S+)/g;
-      return html.replace(
-        regex,
-        (match, _token, _i1, _i2, _i3, garbage: string | undefined) => {
-          if (garbage)
-            return `<span class="text-danger-500 underline decoration-wavy underline-offset-2 font-bold">${garbage}</span>`;
-          let cls = "text-ink-secondary";
-          if (/^"/.test(match)) {
-            cls = /:$/.test(match)
-              ? "text-accent-600 dark:text-accent-300"
-              : "text-success-600 dark:text-success-400";
-          } else if (/true|false/.test(match)) {
-            cls = "text-secondary-600 dark:text-secondary-400";
-          } else if (/null/.test(match)) {
-            cls = "text-danger-500";
-          } else if (/-?\d/.test(match)) {
-            cls = "text-warning-600 dark:text-warning-500";
-          }
-          return `<span class="${cls}">${match}</span>`;
-        },
-      );
+      return highlightJson(this.configRaw);
     },
 
     validateConfig(cfg: PlotConfig): string[] {
-      // schema-level checks (types, required fields, enums, discriminated
-      // unions, ...) - against plotConfigSchema (fetched once from
-      // /mosaic/api/plot-config-schema, the same schema the Plot Editor's
-      // and JSON editor's hover tooltips already read), not a second copy
-      // baked into the bundle at build time. Skips this pass entirely
-      // before that fetch resolves rather than blocking on it - the
-      // hand-written semantic checks below still run regardless. The cast
-      // is just bridging two structurally-equivalent-but-nominally-
-      // different JsonSchemaNode types (this file's own, from
-      // lib/json-schema.ts, vs. validateAgainstSchema's own loosely-typed
-      // Record<string, unknown> from lib/schema-validate.ts) - not
-      // papering over a real mismatch, since both represent the same
-      // arbitrary JSON Schema object at different strictness levels.
-      const errors: string[] = this.plotConfigSchema
-        ? validateAgainstSchema(cfg, this.plotConfigSchema as Record<string, unknown>)
-        : [];
-      const labsNoted = new Set<string>();
-      const schemasLoaded = this.labSchemas.length > 0;
-
-      const checkCol = (col: string, label: string) => {
-        if (col.startsWith("Lab/")) {
-          if (!schemasLoaded) return; // wait for schemas before reporting Lab issues
-          // lab names may contain '/' (nested folders); the output label is
-          // always the final segment, so split from the right
-          const labRest = col.slice(4);
-          const labSplitIdx = labRest.lastIndexOf("/");
-          const labName =
-            labSplitIdx >= 0 ? labRest.slice(0, labSplitIdx) : labRest;
-          if (labsNoted.has(labName)) return;
-          const lab = this.labSchemas.find((l) => l.name === labName);
-          if (!lab) {
-            labsNoted.add(labName);
-            errors.push(`Lab "${labName}" not found.`);
-          } else if (lab.missing.length > 0) {
-            labsNoted.add(labName);
-            errors.push(
-              `Lab "${labName}" requires: ${lab.signal_in_columns.join(", ")}; missing: ${lab.missing.join(", ")}.`,
-            );
-          }
-        } else if (!this.columns.includes(col)) {
-          errors.push(`${label} "${col}" not found in telemetry.`);
-        }
-      };
-
-      if (cfg.xAxis?.col) checkCol(cfg.xAxis.col, "X-Axis");
-      if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
-        errors.push("yAxes must be a hashmap.");
-      } else {
-        Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));
-      }
-      return errors;
+      // the cast bridges two structurally-equivalent-but-nominally-different
+      // JsonSchemaNode types (this file's own, from lib/json-schema.ts, and the
+      // looser Record<string, unknown> lib/schema-validate.ts takes): both are
+      // the same arbitrary JSON Schema object at different strictness levels
+      return validatePlotConfig(cfg, {
+        schema: this.plotConfigSchema as Record<string, unknown> | null,
+        labSchemas: this.labSchemas,
+        columns: this.columns,
+      });
     },
 
     updateFromRaw() {
@@ -4196,9 +3625,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     hydrateFromUrl(blob: string) {
       try {
-        const decoded = LZString.decompressFromEncodedURIComponent(blob);
-        if (!decoded) throw new Error("Decompression failed");
-        const parsed = sanitizeRefFrame(JSON.parse(decoded) as Partial<PlotConfig>);
+        const parsed = decodeShareConfig(blob);
         this.config = { ...this.config, ...parsed };
         this.notify("Shared view loaded", "success");
       } catch {
@@ -4212,9 +3639,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // -----------------------------------------------------------------------
     copyShareLink() {
       try {
-        const encoded = LZString.compressToEncodedURIComponent(
-          JSON.stringify(this.config),
-        );
+        const encoded = encodeShareConfig(this.config);
         const shareBase = this.externalUrl + window.location.pathname;
         void this.copyToClipboard(
           `${shareBase}?v=${encoded}`,
@@ -4232,18 +3657,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Accepts either a bare shared-link code (the ?v= value alone) or a
     // full URL containing one, so pasting the whole copied link just
     // works without the user having to trim it down themselves.
-    _extractShareBlob(input: string): string | null {
-      const trimmed = input.trim();
-      if (!trimmed) return null;
-      try {
-        const url = new URL(trimmed);
-        const v = url.searchParams.get("v");
-        if (v) return v;
-      } catch {
-        // not a parseable URL - fall through and treat it as a bare code
-      }
-      return trimmed;
-    },
+    _extractShareBlob: extractShareBlob,
 
     // Adds a shared link as a NEW tab instead of replacing the session the
     // way opening a ?v= link in a fresh page load does (hydrateFromUrl) -
@@ -4256,9 +3670,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         return;
       }
       try {
-        const decoded = LZString.decompressFromEncodedURIComponent(blob);
-        if (!decoded) throw new Error("Decompression failed");
-        const parsed = sanitizeRefFrame(JSON.parse(decoded) as Partial<PlotConfig>);
+        const parsed = decodeShareConfig(blob);
         const config = {
           ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
           ...parsed,
@@ -4984,28 +4396,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const yConfig = this.config.yAxes[col];
         if (!yConfig || this.isEnumCol(col)) continue;
         yConfig.filters ??= [];
-        if (refFrameActive(frame)) {
-          const newEntry = buildRefFrameFilter(frame);
-          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
-          if (idx >= 0) {
-            // Replace in-place to preserve the user's chosen position in the stack
-            yConfig.filters = [
-              ...yConfig.filters.slice(0, idx),
-              newEntry,
-              ...yConfig.filters.slice(idx + 1),
-            ];
-          } else {
-            yConfig.filters = [newEntry, ...yConfig.filters];
-          }
-        } else {
-          const idx = yConfig.filters.findIndex((f) => f.type === "rotation");
-          if (idx >= 0) {
-            yConfig.filters = [
-              ...yConfig.filters.slice(0, idx),
-              ...yConfig.filters.slice(idx + 1),
-            ];
-          }
-        }
+        const next = withRefFrameFilter(yConfig.filters, frame);
+        if (next !== yConfig.filters) yConfig.filters = next;
       }
     },
 
@@ -5050,22 +4442,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       color: string;
       dash: DashStyle;
     } {
-      const usedKeys = new Set(used.map((u) => `${u.color}|${u.dash}`));
-      const numColors = this.plotColors.length;
-      const numCombos = numColors * this.dashStyles.length;
-      const styleAt = (i: number) => ({
-        color: this.getSignalColor(i % numColors),
-        dash: this.dashStyles[
-          Math.floor(i / numColors) % this.dashStyles.length
-        ]!,
-      });
-      let i = 0;
-      while (i < numCombos) {
-        const style = styleAt(i);
-        if (!usedKeys.has(`${style.color}|${style.dash}`)) return style;
-        i++;
-      }
-      return styleAt(used.length);
+      return pickNextStyle(used, this.plotColors.length, (i) => this.getSignalColor(i), this.dashStyles);
     },
 
     // true for an integer-coded column (one with an enumeration_map), which is
@@ -5098,205 +4475,40 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       category: string;
       schemas: FilterSchema[];
     }[] {
-      const ORDER = [
-        "Smoothing",
-        "Arithmetic",
-        "Trigonometry",
-        "Calculus",
-        "Vector",
-        "Comparison",
-        "Bounding",
-        "Misc",
-      ];
-      const groups: Record<string, FilterSchema[]> = {};
-      for (const s of this.filterSchemas) {
-        const cat = s.category ?? "Misc";
-        (groups[cat] ??= []).push(s);
-      }
-      return ORDER.filter((c) => groups[c]?.length).map((c) => ({
-        category: c,
-        schemas: groups[c],
-      }));
+      return groupFilterSchemas(this.filterSchemas);
     },
 
-    evalMathExpr(expr: string): number | null {
-      const s = String(expr ?? "").trim();
-      if (!s) return null;
-      const n = Number(s);
-      if (!isNaN(n)) return n;
-      try {
-        // Expose a safe math context - no access to globals beyond these names.
-        const fn = new Function(
-          "pi",
-          "e",
-          "sin",
-          "cos",
-          "tan",
-          "asin",
-          "acos",
-          "atan",
-          "atan2",
-          "sqrt",
-          "cbrt",
-          "log",
-          "log2",
-          "log10",
-          "abs",
-          "floor",
-          "ceil",
-          "round",
-          "sign",
-          "pow",
-          "exp",
-          "max",
-          "min",
-          `"use strict"; return (${s})`,
-        );
-        const result = fn(
-          Math.PI,
-          Math.E,
-          Math.sin,
-          Math.cos,
-          Math.tan,
-          Math.asin,
-          Math.acos,
-          Math.atan,
-          Math.atan2,
-          Math.sqrt,
-          Math.cbrt,
-          Math.log,
-          Math.log2,
-          Math.log10,
-          Math.abs,
-          Math.floor,
-          Math.ceil,
-          Math.round,
-          Math.sign,
-          Math.pow,
-          Math.exp,
-          Math.max,
-          Math.min,
-        ) as unknown;
-        if (typeof result === "number" && isFinite(result)) return result;
-      } catch {
-        // invalid expression - fall through
-      }
-      return null;
-    },
+    evalMathExpr,
 
-    getUnitOptions(
-      groups: UnitGroup[] | undefined,
-      fromUnit: string | null | undefined,
-      colDimension?: string | null,
-    ): UnitGroup[] {
-      if (!groups) return [];
-      // normalize Pint canonical strings ("m / s ** 2") to compact ("m/s^2") for matching
-      const normalize = (u: string) =>
-        u.replace(/\s+/g, "").replace(/\*\*/g, "^");
-      if (fromUnit) {
-        const norm = normalize(fromUnit);
-        const match = groups.find((g) =>
-          g.units.some((u) => u === fromUnit || u === norm),
-        );
-        if (match) return [match];
-      }
-      // fall back to dimension-based group filtering when column dimension is known
-      if (colDimension && groups.some((g) => g.dimension)) {
-        const compatible = groups.filter((g) => g.dimension === colDimension);
-        if (compatible.length > 0) return compatible;
-      }
-      return groups;
-    },
+    getUnitOptions,
 
     // returns the concrete unit of col after walking its active filter stack;
     // starts from column_metadata and updates when a unit filter's toUnit changes it;
     // pass filtersOverride for axes (e.g. x-axis) that store filters outside config.yAxes
     effectiveUnit(col: string, filtersOverride?: FilterEntry[]): string | null {
-      let unit: string | null = this.columnMetadata[col]?.unit ?? null;
-      const filters = filtersOverride ?? this.config.yAxes[col]?.filters ?? [];
-      for (const f of filters) {
-        if (f.enabled === false || f.type !== "unit") continue;
-        const to = (f as Record<string, unknown>)["toUnit"] as
-          | string
-          | undefined;
-        if (to) unit = to;
-      }
-      return unit;
+      return unitAfterFilters(
+        this.columnMetadata[col]?.unit ?? null,
+        filtersOverride ?? this.config.yAxes[col]?.filters ?? [],
+      );
     },
 
     getFilterSummary(entry: FilterEntry): string {
-      const schema = this.filterSchemas.find((s) => s.type === entry.type);
-      if (!schema || schema.params.length === 0) return "";
-      if (entry.type === "unit")
-        return `${entry["from_unit"] ?? "?"} → ${entry["to_unit"] ?? "?"}`;
-      const parts = schema.params
-        .filter((p) => (entry as Record<string, unknown>)[p.name] != null)
-        .map((p) => {
-          const val = (entry as Record<string, unknown>)[p.name];
-          if (typeof val === "boolean")
-            return `${p.name}=${val ? "on" : "off"}`;
-          if (typeof val === "number") return `${p.name}=${formatNum(val)}`;
-          return `${p.name}=${val as string}`;
-        });
-      return parts.slice(0, 3).join(", ");
+      return filterSummary(entry, this.filterSchemas.find((s) => s.type === entry.type));
     },
 
     addFilterToTemp(temp: YAxisConfig, filterType: string, col?: string) {
       const schema = this.filterSchemas.find((s) => s.type === filterType);
-      if (!schema) return;
-      if (!temp.filters) temp.filters = [];
-      if (
-        filterType === "rotation" &&
-        temp.filters.some((f) => f.type === "rotation")
-      )
-        return;
-      const entry: FilterEntry = { type: filterType, enabled: true };
-      for (const p of schema.params) {
-        (entry as Record<string, unknown>)[p.name] = p.default;
-      }
-      // prefill fromUnit with a known unit group string; prefer group_unit (pre-resolved by
-      // Python to the nearest group equivalent), then unit (when a display unit system is
-      // active), so the dropdown shows a valid pre-selected option rather than "- select -"
-      if (filterType === "unit" && col) {
-        const meta = this.columnMetadata[col];
-        const metaUnit = meta?.group_unit ?? meta?.unit;
-        if (metaUnit) {
-          (entry as Record<string, unknown>)["fromUnit"] = metaUnit;
-        }
-      }
-      temp.filters.push(entry);
+      const meta = col ? this.columnMetadata[col] : undefined;
+      addFilter(temp, schema, filterType, meta?.group_unit ?? meta?.unit);
     },
 
-    removeFilterFromTemp(temp: YAxisConfig, index: number) {
-      if (!temp.filters) return;
-      temp.filters.splice(index, 1);
-    },
+    removeFilterFromTemp: removeFilter,
 
-    moveFilterInTemp(temp: YAxisConfig, index: number, direction: number) {
-      if (!temp.filters) return;
-      const newIdx = index + direction;
-      if (newIdx < 0 || newIdx >= temp.filters.length) return;
-      const [item] = temp.filters.splice(index, 1);
-      if (item) temp.filters.splice(newIdx, 0, item);
-    },
+    moveFilterInTemp: moveFilter,
 
-    setFilterParamOnTemp(
-      temp: YAxisConfig,
-      filterIndex: number,
-      paramName: string,
-      value: unknown,
-    ) {
-      if (!temp.filters?.[filterIndex]) return;
-      (temp.filters[filterIndex] as Record<string, unknown>)[paramName] = value;
-    },
+    setFilterParamOnTemp: setFilterParam,
 
-    duplicateFilterInTemp(temp: YAxisConfig, index: number) {
-      if (!temp.filters?.[index]) return;
-      const copy = JSON.parse(
-        JSON.stringify(temp.filters[index]),
-      ) as FilterEntry;
-      temp.filters.splice(index + 1, 0, copy);
-    },
+    duplicateFilterInTemp: duplicateFilter,
 
     // -----------------------------------------------------------------------
     // Profiles
@@ -5307,16 +4519,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     // ── Lab ──────────────────────────────────────────────────────────────────
-    relTime(ms: number): string {
-      const diff = Date.now() - ms;
-      const min = Math.floor(diff / 60000);
-      if (min < 1) return "just now";
-      if (min < 60) return `${min}m ago`;
-      const h = Math.floor(min / 60);
-      if (h < 24) return `${h}h ago`;
-      const d = Math.floor(h / 24);
-      return d === 1 ? "yesterday" : `${d}d ago`;
-    },
+    relTime: relativeTime,
 
     async loadLabSchemas() {
       try {
@@ -6455,36 +5658,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Range helpers
     // -----------------------------------------------------------------------
     calculatePaddedRange(keys: string[], padding = true): [number, number] {
-      let globalMin = Infinity;
-      let globalMax = -Infinity;
-      const activeDatasets: Array<Record<string, number[]>> = [this.data ?? {}];
-
+      const datasets: Array<Record<string, number[]>> = [this.data ?? {}];
       if (this.vs.enabled) {
-        const [start, end] = this.vs.range;
-        const pinnedSet = new Set(this.vs.pinned ?? []);
-        Object.entries(this.vsDatasets).forEach(([vsId, dataset]) => {
-          const n = parseInt(vsId.split("_").pop() ?? "");
-          if ((n >= start && n <= end) || pinnedSet.has(n))
-            activeDatasets.push(dataset);
-        });
+        datasets.push(...selectVsDatasets(this.vsDatasets, this.vs.range, this.vs.pinned ?? []));
       }
-
-      activeDatasets.forEach((dataset) => {
-        keys.forEach((key) => {
-          const series = dataset[key];
-          if (!series) return;
-          for (let j = 0; j < series.length; j++) {
-            const val = series[j] ?? 0;
-            if (val < globalMin) globalMin = val;
-            if (val > globalMax) globalMax = val;
-          }
-        });
-      });
-
-      if (globalMin === Infinity) return [0, 1];
-      if (globalMin === globalMax) return [globalMin - 1, globalMax + 1];
-      const pad = padding ? (globalMax - globalMin) / 16 : 0;
-      return [globalMin - pad, globalMax + pad];
+      return paddedRange(datasets, keys, padding);
     },
 
     formatNum,
@@ -6492,27 +5670,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     // reads the manual x/y axis min/max fields as strings for display; empty means autoscale
     rangeBoundValue(axis: "x" | "y", bound: "min" | "max"): string {
-      const range = axis === "x" ? this.config.rangeX : this.config.rangeY;
-      if (!range) return "";
-      const val = bound === "min" ? range[0] : range[1];
-      return val === null ? "" : String(val);
+      return rangeBoundText(axis === "x" ? this.config.rangeX : this.config.rangeY, bound);
     },
 
     // sets a single x/y axis min/max field; an empty value reverts that side to autoscale
     setRangeBound(axis: "x" | "y", bound: "min" | "max", value: string) {
-      const trimmed = value.trim();
-      const num = trimmed === "" ? null : this.evalMathExpr(trimmed);
-      if (trimmed !== "" && num === null) return;
-
-      const current =
-        (axis === "x" ? this.config.rangeX : this.config.rangeY) ??
-        ([null, null] as [number | null, number | null]);
-      const next: [number | null, number | null] =
-        bound === "min" ? [num, current[1]] : [current[0], num];
-
-      const resolved = next[0] === null && next[1] === null ? null : next;
-      if (axis === "x") this.config.rangeX = resolved;
-      else this.config.rangeY = resolved;
+      const current = axis === "x" ? this.config.rangeX : this.config.rangeY;
+      const applied = applyRangeBound(current, bound, value);
+      if (!applied) return;
+      if (axis === "x") this.config.rangeX = applied.range;
+      else this.config.rangeY = applied.range;
       void this.saveAndRender();
     },
 
@@ -6522,12 +5689,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       configRange: [number | null, number | null] | null,
       keys: string[],
     ): [number, number] | null {
-      if (!configRange || (configRange[0] === null && configRange[1] === null))
-        return null;
-      const [min, max] = configRange;
-      if (min !== null && max !== null) return [min, max];
-      const auto = this.calculatePaddedRange(keys);
-      return [min ?? auto[0], max ?? auto[1]];
+      return resolveRange(configRange, () => this.calculatePaddedRange(keys));
     },
 
     // (re)attaches the Plotly event handlers that drive zoom/pan range tracking,

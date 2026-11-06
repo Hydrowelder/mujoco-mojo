@@ -3,22 +3,16 @@ import { themeColor } from "./lib/theme-colors";
 import Plotly from "./lib/plotly";
 import confetti from "canvas-confetti";
 import { fetchWithRetry } from "./lib/fetch-timeout";
-
-interface StatCard {
-  label: string;
-  value: string;
-  color: string;
-  subValue: string;
-  tooltip: string;
-}
-
-interface HolidayTheme {
-  name: string;
-  emojis?: string[];
-  colors?: string[];
-  isSnow?: boolean;
-  audioUrl?: string;
-}
+import {
+  completionNotification,
+  holidayTheme,
+  outcomeGradient,
+  progressTitle,
+  statCards,
+  trialNotification,
+  type HolidayTheme,
+  type StatCard,
+} from "./lib/monitor-stats";
 
 function monitor() {
   return {
@@ -105,129 +99,24 @@ function monitor() {
       if (this.status.is_complete) {
         this.handleCompletion();
       } else if (wasInit) {
-        const newDone = data.n_done - prev.n_done;
-        if (newDone > 0) {
-          const newFailed = data.n_failed - prev.n_failed;
-          const newError = data.n_error - prev.n_error;
-          const store = Alpine.store("dojo") as DojoStore;
-          if (newDone === 1) {
-            let verb = "succeeded";
-            let trialId = data.success_tns.at(-1);
-            if (newError === 1) {
-              verb = "errored";
-              trialId = data.error_tns.at(-1);
-            } else if (newFailed === 1) {
-              verb = "failed requirements";
-              trialId = data.failure_tns.at(-1);
-            }
-            store.addNotification(
-              `Trial ${trialId} ${verb}`,
-              verb === "succeeded" ? "success" : "error",
-            );
-          } else {
-            const newOk = newDone - newFailed - newError;
-            store.addNotification(
-              `${newDone} trials done - ${newOk} ok, ${newFailed} failed, ${newError} errored`,
-              newFailed + newError > 0 ? "error" : "success",
-            );
-          }
-        }
+        const note = trialNotification(prev, data);
+        if (note) (Alpine.store("dojo") as DojoStore).addNotification(note.message, note.type);
       }
     },
 
     refreshStats() {
-      const totalDone = this.status.n_done || 0;
-      const n_trial = this.status.n_trial || 1;
-      const progress = ((totalDone / n_trial) * 100).toFixed(1);
-
-      document.title = `${this.status.is_complete ? "✓" : `(${progress}%)`} Monitor | MuJoCo Mojo`;
-
-      const pctOfTotal = (n: number) => ((n / n_trial) * 100).toFixed(1);
-
-      const lastSuccess = this.status.last_success_tn ?? "None";
-      const lastFailure = this.status.last_failure_tn ?? "None";
-      const lastError = this.status.last_error_tn ?? "None";
-
-      this.stats = [
-        {
-          label: "Successes",
-          value: `${this.status.n_success} (${pctOfTotal(this.status.n_success)}%)`,
-          color: "text-success-500",
-          subValue: `Last Success: Trial ${lastSuccess}`,
-          tooltip: `Trials that completed and passed every registered requirement (or had none). Percentage is of all ${n_trial} trials.`,
-        },
-        {
-          label: "Failures",
-          value: `${this.status.n_failed} (${pctOfTotal(this.status.n_failed)}%)`,
-          color: "text-danger-500",
-          subValue: `Last Failure: Trial ${lastFailure}`,
-          tooltip:
-            "Trials that ran but failed one or more requirement checks, including early terminations triggered by a failing requirement. Not runtime errors.",
-        },
-        {
-          label: "Errors",
-          value: `${this.status.n_error} (${pctOfTotal(this.status.n_error)}%)`,
-          color: "text-warning-500",
-          subValue: `Last Error: Trial ${lastError}`,
-          tooltip:
-            "Trials that raised an unhandled runtime error while being processed. These runs broke; they were never judged against requirements.",
-        },
-        {
-          label: "Time Elapsed",
-          value: this.status.elapsed,
-          color: "text-ink-secondary",
-          subValue: `Started: ${this.status.start_time}`,
-          tooltip: "Wall-clock time since the job started.",
-        },
-        {
-          label: "Remaining",
-          value: `${this.status.n_remaining} (${pctOfTotal(this.status.n_remaining)}%)`,
-          color: "text-accent-500",
-          subValue: `${this.status.throughput} trials/min - ${n_trial} trials total`,
-          tooltip:
-            "Trials that have not finished yet. Throughput is derived from the average duration of completed trials (successes and failures; errors excluded) and the number of processors.",
-        },
-        {
-          label: this.status.is_complete ? "Finished" : "Est. Remaining",
-          value: this.status.is_complete
-            ? "00:00:00"
-            : this.status.time_remaining,
-          color: "text-ink-secondary",
-          subValue: this.status.is_complete
-            ? `Finished: ${this.status.end_time}`
-            : `ETA: ${this.status.end_time}`,
-          tooltip: this.status.is_complete
-            ? "The job has finished. Shows the local time at which the job completed."
-            : "Estimated wall-clock time until all trials finish, based on the average completed-trial duration (errors excluded). ETA is the projected local completion time.",
-        },
-      ];
+      document.title = progressTitle(this.status);
+      this.stats = statCards(this.status);
     },
 
     // builds a single left-to-right gradient across the filled bar: solid
     // color in the middle of each outcome's share, soft blends at boundaries
     progressGradient(): string {
-      const segs = [
+      return outcomeGradient([
         { color: themeColor("success"), n: this.status.n_success },
         { color: themeColor("danger"), n: this.status.n_failed },
         { color: themeColor("warning"), n: this.status.n_error },
-      ].filter((seg) => seg.n > 0);
-      if (segs.length === 0) return "transparent";
-      if (segs.length === 1) return segs[0].color;
-
-      const total = segs.reduce((sum, seg) => sum + seg.n, 0);
-      const blend = 5; // half-width of each blend zone, in % of the filled bar
-      const stops: string[] = [];
-      let acc = 0;
-      segs.forEach((seg, i) => {
-        const start = (acc / total) * 100;
-        acc += seg.n;
-        const end = (acc / total) * 100;
-        const mid = (start + end) / 2;
-        const lo = i === 0 ? 0 : Math.min(start + blend, mid);
-        const hi = i === segs.length - 1 ? 100 : Math.max(end - blend, mid);
-        stops.push(`${seg.color} ${lo.toFixed(2)}%`, `${seg.color} ${hi.toFixed(2)}%`);
-      });
-      return `linear-gradient(to right, ${stops.join(", ")})`;
+      ]);
     },
 
     renderTimeline() {
@@ -357,10 +246,8 @@ function monitor() {
       this.hasCelebrated = true;
 
       const store = Alpine.store("dojo") as DojoStore;
-      store.addNotification(
-        `Job complete in ${this.status.elapsed} - ${this.status.n_success} succeeded, ${this.status.n_failed} failed, ${this.status.n_error} errored`,
-        this.status.n_failed + this.status.n_error > 0 ? "error" : "success",
-      );
+      const done = completionNotification(this.status);
+      store.addNotification(done.message, done.type);
       const theme = this.getHolidayTheme();
       const chime = document.getElementById("chime") as HTMLAudioElement | null;
       // dojo.chime (settings.py) - a global, server-side enable/disable
@@ -384,52 +271,7 @@ function monitor() {
     },
 
     getHolidayTheme(): HolidayTheme {
-      const now = new Date();
-      const m = now.getMonth();
-      const d = now.getDate();
-
-      if ((m === 11 && d === 31) || (m === 0 && d <= 2)) {
-        return {
-          name: "New Year",
-          emojis: ["🎆", "✨", "🥂"],
-          colors: ["#ffcc00", "#ffffff"],
-        };
-      }
-      if (m === 2 && d === 14) {
-        return { name: "Pi Day", emojis: ["π", "🥧"], colors: ["#ff9900"] };
-      }
-      if (m === 2 && d === 17) {
-        return {
-          name: "St. Patrick's Day",
-          emojis: ["🍀", "🌈"],
-          colors: ["#22c55e", "#166534"],
-        };
-      }
-      if (m === 4 && d === 4) {
-        return {
-          name: "May the 4th",
-          emojis: ["⚔️", "🌌", "✨"],
-          colors: ["#FFE81F", "#2dd4bf"],
-        };
-      }
-      if ((m === 9 && d >= 25) || (m === 10 && d === 1)) {
-        return {
-          name: "Halloween",
-          emojis: ["🎃", "👻", "🦇"],
-          colors: ["#ff6600", "#9437ff"],
-        };
-      }
-      if (m === 11 || (m === 0 && d <= 15)) {
-        return {
-          name: "Winter Snow",
-          emojis: ["❄️", "⛄", "🌨️"],
-          isSnow: true,
-        };
-      }
-      return {
-        name: "Standard Mojo",
-        colors: ["#06b6d4", "#3b82f6", "#22c55e"],
-      };
+      return holidayTheme(new Date());
     },
 
     fireConfetti(theme: HolidayTheme = { name: "Standard Mojo" }) {
