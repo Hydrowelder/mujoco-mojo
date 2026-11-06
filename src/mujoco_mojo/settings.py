@@ -586,7 +586,7 @@ class GeneralSettings(BaseModel):
     default_host: str = Field(
         default="127.0.0.1",
         title="Default Host",
-        description="Default host IP for `mujoco-mojo dojo` and `mujoco-mojo reloaded`'s web-based viewers.",
+        description="Default host IP for `mujoco-mojo dojo`.",
     )
 
     default_port: int = Field(
