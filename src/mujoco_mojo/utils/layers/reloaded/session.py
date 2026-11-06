@@ -145,40 +145,87 @@ def recursive_reload(
 
 @dataclass
 class MojoReloaded:
+    """A `reloaded` session: regenerates the model on command, runs the runtime on it, and shows it in a viewer while the terminal UI controls it."""
+
     generator: str | None
+    """Import path of the `generate` function, such as `sim.Experiment.generate`. Mutually exclusive with `config_path`."""
+
     runtime: str | None
+    """Import path of the `runtime` function to run on the generated model, or `None` to only generate."""
+
     workdir: Path
+    """Workspace directory that the trial folders and the job status are written to."""
+
     ui: UserInterface
+    """Which viewer shows the model: the classic `opengl` window, a native `studio` window, or `web` for Studio in a browser."""
+
     overrides_path: Path | None
+    """A JSON file of `NamedValue` overrides applied to the generated model, or `None` for no overrides."""
+
     config_path: Path | None
+    """A saved `model_config.json` to load instead of calling a generator. Its seed and trial number replace `seed` and `trial_num`, and its folder becomes the `workdir` when that is still the default."""
+
     trial_num: int
+    """The trial whose random draws are generated."""
+
     seed: int | None
+    """The seed that the random draws are tied to, or `None` when no seed was given."""
+
     model_config_name: str | None
+    """File name the model's config is saved under in each trial folder, or `None` to not save it."""
+
     xml_name: str
+    """File name the generated MJCF is written to in each trial folder."""
+
     args: list[Any]
+    """Positional arguments (`--arg`) passed to the generator and the runtime after the ones Mojo passes itself."""
+
     kwargs: dict[str, Any]
-    host: str
-    port: int
+    """Keyword arguments (`--kwarg`) passed to the generator and the runtime, each receiving only the ones it accepts."""
+
+    port: int | None
+    """The first port to try for the browser viewer, or `None` to start from the viewer's default. Only `web` uses it."""
 
     gfx: StudioGraphics = StudioGraphics.DEFAULT
+    """How the native Studio window is drawn. The `web` and `opengl` viewers ignore it."""
+
     watch: bool = False
+    """Whether saving a `*.py` file reloads with the last command. The `watch` command turns it on and off during the session."""
+
     record: bool = False
+    """Whether telemetry is recorded to each trial's `telemetry.parquet` and video recorders capture frames. The `record` command turns it on and off during the session."""
+
     keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
+    """The keys that trigger the terminal UI's actions, from the `reloaded.keys` settings."""
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
+    """Called by the runtime manager after every step with the state and the arrows and lines to draw, so the viewer follows the run. Set from the viewer backend while the session runs."""
+
     _viewer_lock: Callable[[], AbstractContextManager[Any]] | None = None
+    """Gives the context manager that the runtime manager holds while it steps, so the viewer is not drawing a state that is changing. Set from the viewer backend while the session runs."""
+
     playback_speed: float = 1.0
+    """Speed handed to each run's `RuntimeManager`: 1 is real time, 0 waits at every step, and `inf` runs as fast as it can."""
+
     _current_trial_dir: Path | None = None
+    """Folder of the trial being run, which holds the model file the viewer shows. `None` until the first run."""
+
     _job_status: JobStatus | None = None
+    """Status of the job that holds this session's trials, created the first time it is needed and reused after that."""
+
     stop_event: threading.Event = field(default_factory=threading.Event)
+    """Set to abort the run in progress. Handed to every `RuntimeManager` this session creates."""
+
     run_control: rt.RunControl = field(default_factory=rt.RunControl)
     """How the interface pauses, steps, and changes the speed of a run in progress. Handed to every `RuntimeManager` this session creates."""
+
     output_sink: Callable[[str], None] | None = field(
         default=None, repr=False, compare=False
     )
     """When set, messages that would be printed to the terminal are passed to this callable as rich markup strings instead. The terminal UI uses it to show them in its log pane."""
 
     _trial_padding_style = "03d"
+    """Format spec that zero-pads trial numbers in folder names, such as `trial_007`. Matched to the folders already in the workdir when the session starts."""
 
     def _print(self, *args, **kwargs) -> None:
         """Prints a message to the terminal, or, once the terminal UI has taken over the screen, hands it to `output_sink` as rich markup."""

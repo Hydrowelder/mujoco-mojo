@@ -1493,7 +1493,6 @@ def run_reloaded(
     record: RecordType = _SETTINGS.reloaded.record,
     args: ArgsType = [],
     kwargs: KwargsType = [],
-    host: HostType = _SETTINGS.general.default_host,
     port: PortType = _SETTINGS.general.default_port,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
@@ -1513,7 +1512,7 @@ def run_reloaded(
 
     from .reloaded import MojoReloaded
 
-    port = find_free_port(host, port)
+    web_port = find_free_port("0.0.0.0", port) if ui == UserInterface.WEB else None
 
     _logger = _setup_cli_logging(
         verbose=_SETTINGS.general.verbose + verbose,
@@ -1542,8 +1541,7 @@ def run_reloaded(
         keys=_SETTINGS.reloaded.keys,
         args=processed_args,
         kwargs=processed_kwargs,
-        host=host,
-        port=port,
+        port=web_port,
     ).run()
 
 

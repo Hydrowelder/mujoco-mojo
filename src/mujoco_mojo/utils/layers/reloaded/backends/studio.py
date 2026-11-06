@@ -49,6 +49,8 @@ START_TIMEOUT = 5.0
 SETTLE_SECONDS = 0.5
 """How long the browser viewer is given, after the first model is published, before anything can connect to it. Studio's own code crashes, intermittently and without a Python error, if a page's UI connection arrives within the first few tenths of a second."""
 WEB_WARNING = "The browser viewer has no authentication or encryption: anyone who can reach this port can see and control it."
+DEFAULT_WEB_PORT = 8080
+"""The first port tried for the browser viewer when none is given."""
 
 
 class ViewerUnavailableError(RuntimeError):
@@ -141,8 +143,8 @@ class StudioBackend:
     """Gives the file the current model was written to, which Studio shows in its title and keeps its camera by."""
     web: bool
     """Whether to show Studio in a browser instead of a native window."""
-    port: int = 8080
-    """The first port to try for the browser viewer."""
+    port: int | None = None
+    """The first port to try for the browser viewer, or `DEFAULT_WEB_PORT` when not given."""
     gfx: StudioGraphics = StudioGraphics.DEFAULT
     """How the native window is drawn. The browser viewer ignores it."""
     title: str = "MuJoCo Mojo Reloaded"
@@ -190,7 +192,10 @@ class StudioBackend:
         with contextlib.redirect_stdout(banner):
             if self.web:
                 try:
-                    self._chosen_port = find_free_port("0.0.0.0", self.port)
+                    self._chosen_port = find_free_port(
+                        "0.0.0.0",
+                        DEFAULT_WEB_PORT if self.port is None else self.port,
+                    )
                 except RuntimeError as e:
                     raise ViewerUnavailableError(str(e)) from e
                 config = viewer_protocol.ViewerConfig(
