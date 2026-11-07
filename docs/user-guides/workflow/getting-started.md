@@ -24,7 +24,7 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 !!! tip "Optional Extras"
 
-    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization and `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition. Install `mujoco-mojo[all]` to get everything.
+    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, and `mujoco-mojo[sensai]` for the Dojo's SensAI assistant. Install `mujoco-mojo[all]` to get everything.
 
 ---
 
@@ -40,9 +40,9 @@ Before writing code, it is helpful to understand the three pillars of a Mojo pro
 
     ```python
     import mujoco_mojo as mojo
+    import mujoco_mojo.runtime as rt
 
-    def generate(
-        mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+    def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         # Add geoms, sites, and sample distributions here
         return mojo_model
 
@@ -83,7 +83,7 @@ This design ensures that there is "no magic". You are simply building a MuJoCo m
 
     Some attributes in this package make use of default values. Wherever possible, the default values match what is stated in the [XML Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#xml-reference){:target="_blank"}.
 
-    The `to_xml` method found in all `XMLModel` (which is most objects in `mujoco_mojo.mjcf`) has an argument (`exclude_defaults`) which will omit serializing fields set as default.
+    The `to_xml` method found in all `XMLModel` (which is most objects in `mujoco_mojo.mjcf`) has an argument (`exclude_default`) which will omit serializing fields set as default.
 
     If you have a specific use case which is dependent on a value you leave as default, it is highly recommended that you pin that value as opposed to use the default. MuJoCo may change their defaults, and this package may fall behind. In that case, you would be using a "default" which is no longer the default.
 
@@ -122,7 +122,7 @@ Mojo treats stochasticity as a first-class citizen. Instead of using `np.random`
 
 ## MuJoCo Syntax Highlighting
 
-MuJoCo does not currently ship first-party Python typing stubs. To enable proper autocomplete and static type checking (Pylance/Pyright), generate local stubs using `pybind11-stubgen`.
+MuJoCo does not currently ship first-party Python typing stubs. To enable proper autocomplete and static type checking (Pylance, Pyright, or ty), generate local stubs using `pybind11-stubgen`.
 
 > Thanks to the work by [@kevinzakka](https://github.com/google-deepmind/mujoco/issues/1292#issuecomment-1874138201) and [@mluogh-xdof](https://github.com/google-deepmind/mujoco/issues/1292#issuecomment-3208219200) for figuring all this out!
 
@@ -134,19 +134,20 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
    pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated
    ```
 
-2. Recent MuJoCo builds compiled with newer pybind11 versions correctly expose enums as `SupportsInt`. If you encounter Pyright enum type errors, apply the compatibility patch:
-
-   ```bash linenums="0"
-   python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi
-   ```
-
-3. Then in `pyproject.toml` (for me, VSCode already type hints correctly, but this should fix things if you use `pyright` with your pre-commit hooks):
+2. Then point your type checker at them in `pyproject.toml`. Pylance in VSCode picks up `typings/` on its own, but a checker run from the command line or a pre-commit hook needs to be told. For Pyright:
 
    ```toml title="pyproject.toml"
    [tool.pyright]
    stubPath = "typings"
    venvPath = "."
    venv = ".venv"
+   ```
+
+   For ty, which finds a `.venv` in the project root on its own:
+
+   ```toml title="pyproject.toml"
+   [tool.ty.environment]
+   extra-paths = ["typings"]
    ```
 
 ---

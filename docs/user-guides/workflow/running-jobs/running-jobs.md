@@ -78,7 +78,7 @@ The `monte-carlo` command is the workhorse of the `mujoco-mojo run` CLI.
 Mojo is built for professional simulations where reliability is key. The runner manages the state of your `workdir` to prevent data loss.
 
 - `--resume`: This is the default. Mojo will search the trial status files to in your workdir and only execute trials that are missing or incomplete. Jobs with a failed or success status will be ignored.
-- `--clean-workdir` (`-cw`): Wipes the directory before starting. Use this when you've fundamentally changed your MJCF structure and want a fresh start.
+- `--clean-workdir`: Wipes the directory before starting. Use this when you've fundamentally changed your MJCF structure and want a fresh start.
 
 ???+ tip "Tip: T-Minus 10, 9, 8, ..."
 

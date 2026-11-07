@@ -6,7 +6,6 @@ import importlib
 import importlib.util
 import io
 import logging
-import os
 import socket
 import threading
 import time
@@ -21,7 +20,12 @@ import mujoco
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.utils import display_problem, find_free_port, is_ssh_session
+from mujoco_mojo.utils.utils import (
+    display_problem,
+    find_free_port,
+    is_ssh_session,
+    web_client_available,
+)
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .base import ConnectionInfo, ViewerControls
@@ -49,6 +53,8 @@ START_TIMEOUT = 5.0
 SETTLE_SECONDS = 0.5
 """How long the browser viewer is given, after the first model is published, before anything can connect to it. Studio's own code crashes, intermittently and without a Python error, if a page's UI connection arrives within the first few tenths of a second."""
 WEB_WARNING = "The browser viewer has no authentication or encryption: anyone who can reach this port can see and control it."
+DEFAULT_WEB_PORT = 8080
+"""The first port tried for the browser viewer when none is given."""
 
 
 class ViewerUnavailableError(RuntimeError):
@@ -62,20 +68,6 @@ def studio_available() -> bool:
     except ImportError:
         return False
     return True
-
-
-def web_client_available() -> bool:
-    """Whether the browser viewer has a client to serve: the one built into the MuJoCo package, or the one `MUJOCO_WEB_VIEWER_DIST` points at."""
-    override = os.environ.get("MUJOCO_WEB_VIEWER_DIST")
-    if override and Path(override).is_dir():
-        return True
-    spec = importlib.util.find_spec("mujoco.studio.web")
-    if spec is None:
-        return False
-    return any(
-        (Path(location) / "dist").is_dir()
-        for location in spec.submodule_search_locations or []
-    )
 
 
 def check_studio_available(ui: UserInterface) -> None:
@@ -141,8 +133,8 @@ class StudioBackend:
     """Gives the file the current model was written to, which Studio shows in its title and keeps its camera by."""
     web: bool
     """Whether to show Studio in a browser instead of a native window."""
-    port: int = 8080
-    """The first port to try for the browser viewer."""
+    port: int | None = None
+    """The first port to try for the browser viewer, or `DEFAULT_WEB_PORT` when not given."""
     gfx: StudioGraphics = StudioGraphics.DEFAULT
     """How the native window is drawn. The browser viewer ignores it."""
     title: str = "MuJoCo Mojo Reloaded"
@@ -190,7 +182,10 @@ class StudioBackend:
         with contextlib.redirect_stdout(banner):
             if self.web:
                 try:
-                    self._chosen_port = find_free_port("0.0.0.0", self.port)
+                    self._chosen_port = find_free_port(
+                        "0.0.0.0",
+                        DEFAULT_WEB_PORT if self.port is None else self.port,
+                    )
                 except RuntimeError as e:
                     raise ViewerUnavailableError(str(e)) from e
                 config = viewer_protocol.ViewerConfig(

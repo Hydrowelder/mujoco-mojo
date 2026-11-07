@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import hashlib
+import importlib.util
 import os
 import random
 import socket
@@ -26,6 +27,7 @@ __all__ = [
     "headless_reason",
     "is_empty_list",
     "to_pretty_xml",
+    "web_client_available",
     "write_dojo_script",
 ]
 
@@ -166,6 +168,26 @@ def headless_reason() -> str | None:
     if is_ssh_session():
         return "this is an SSH session"
     return display_problem()
+
+
+def web_client_available() -> bool:
+    """
+    Whether the browser viewer can run: MuJoCo has its native `state_payload` bindings, and there is a client to serve, either the one built into the MuJoCo package or the one `MUJOCO_WEB_VIEWER_DIST` points at.
+
+    Some builds (e.g. the 4.0.0 Windows wheel) have neither, and a client from `MUJOCO_WEB_VIEWER_DIST` cannot make up for missing bindings.
+    """
+    if importlib.util.find_spec("mujoco.studio.web.state_payload") is None:
+        return False
+    override = os.environ.get("MUJOCO_WEB_VIEWER_DIST")
+    if override and Path(override).is_dir():
+        return True
+    spec = importlib.util.find_spec("mujoco.studio.web")
+    if spec is None:
+        return False
+    return any(
+        (Path(location) / "dist").is_dir()
+        for location in spec.submodule_search_locations or []
+    )
 
 
 def get_local_ip() -> str:

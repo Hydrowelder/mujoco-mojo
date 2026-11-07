@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import mujoco_mojo.settings as settings_module
 from mujoco_mojo.settings import ReloadedSettings, default_user_interface
 from mujoco_mojo.typing import UserInterface
 import mujoco_mojo.utils.utils as utils_module
@@ -72,7 +73,6 @@ def test_a_display_nothing_listens_on_is_headless(
     )
 
     assert headless_reason() == "nothing answers on the display `localhost:10.0`"
-    assert default_user_interface() is UserInterface.WEB
 
 
 def test_a_dead_x_display_does_not_matter_on_a_wayland_desktop(
@@ -185,25 +185,34 @@ def test_ssh_wins_on_machines_that_always_have_a_display(
     assert headless_reason() == "this is an SSH session"
 
 
-def test_the_viewer_is_studio_on_a_machine_that_can_show_a_window(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    set_environment(monkeypatch, platform="linux", display=":0")
-
-    assert default_user_interface() is UserInterface.STUDIO
-    assert ReloadedSettings().ui is UserInterface.STUDIO
-
-
 @pytest.mark.parametrize(
-    ("ssh", "display"), [("10.0.0.2 5000 10.0.0.3 22", ":0"), (None, None)]
+    ("ssh", "display"),
+    [(None, ":0"), ("10.0.0.2 5000 10.0.0.3 22", ":0"), (None, None)],
 )
-def test_the_viewer_is_web_on_a_headless_machine(
+def test_the_viewer_is_web_wherever_the_browser_viewer_can_run(
     monkeypatch: pytest.MonkeyPatch, ssh: str | None, display: str | None
 ) -> None:
+    """The machine's display does not matter: the browser viewer is used on a desktop and a headless machine alike."""
     set_environment(monkeypatch, platform="linux", ssh=ssh, display=display)
+    monkeypatch.setattr(settings_module, "web_client_available", lambda: True)
 
     assert default_user_interface() is UserInterface.WEB
     assert ReloadedSettings().ui is UserInterface.WEB
+
+
+@pytest.mark.parametrize(
+    ("ssh", "display"),
+    [(None, ":0"), ("10.0.0.2 5000 10.0.0.3 22", ":0"), (None, None)],
+)
+def test_the_viewer_is_opengl_where_the_browser_viewer_cannot_run(
+    monkeypatch: pytest.MonkeyPatch, ssh: str | None, display: str | None
+) -> None:
+    """Such as the 4.0.0 Windows wheel. The native Studio window is never the automatic choice."""
+    set_environment(monkeypatch, platform="linux", ssh=ssh, display=display)
+    monkeypatch.setattr(settings_module, "web_client_available", lambda: False)
+
+    assert default_user_interface() is UserInterface.OPENGL
+    assert ReloadedSettings().ui is UserInterface.OPENGL
 
 
 @pytest.mark.parametrize("ui", list(UserInterface))

@@ -56,7 +56,6 @@ def make_session(
         xml_name="model.xml",
         args=[],
         kwargs={},
-        host="127.0.0.1",
         port=8080,
     )
 

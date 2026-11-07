@@ -54,7 +54,7 @@ from mujoco_mojo.typing import (
     UserInterface,
 )
 from mujoco_mojo.utils.color import Color
-from mujoco_mojo.utils.utils import headless_reason
+from mujoco_mojo.utils.utils import web_client_available
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILENAME = "settings.toml"
@@ -586,7 +586,7 @@ class GeneralSettings(BaseModel):
     default_host: str = Field(
         default="127.0.0.1",
         title="Default Host",
-        description="Default host IP for `mujoco-mojo dojo` and `mujoco-mojo reloaded`'s web-based viewers.",
+        description="Default host IP for `mujoco-mojo dojo`.",
     )
 
     default_port: int = Field(
@@ -599,8 +599,8 @@ class GeneralSettings(BaseModel):
 
 
 def default_user_interface() -> UserInterface:
-    """The viewer for this machine: Studio in a native window where one can be shown, and Studio in a browser where it cannot (over SSH, or on Linux with no display)."""
-    return UserInterface.STUDIO if headless_reason() is None else UserInterface.WEB
+    """The viewer for this machine: Studio in a browser where this MuJoCo build can serve it, and the classic OpenGL window where it cannot. The native Studio window is never chosen automatically, but `studio` can still be set."""
+    return UserInterface.WEB if web_client_available() else UserInterface.OPENGL
 
 
 class ReloadedKeySettings(BaseModel):
@@ -715,7 +715,7 @@ class ReloadedSettings(BaseModel):
     ui: UserInterface = Field(
         default_factory=default_user_interface,
         title="UI Backend",
-        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser). Defaults to `studio`, or `web` over SSH or with no display.",
+        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser). Defaults to `web` where this MuJoCo build can serve it, and `opengl` where it cannot.",
     )
 
     @field_validator("ui", mode="before")

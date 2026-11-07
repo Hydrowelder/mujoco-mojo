@@ -1,4 +1,4 @@
-"""The cross-section of a 1D flex, which MuJoCo 3.17.0 uses for its bending elasticity (`section` and `sectionsize` on `<elasticity>`)."""
+"""The cross-section of a 1D flex, which MuJoCo 3.17.0 uses for its bending elasticity (`section` and `sectionsize` on `<elasticity>`). Its `shear` modulus sets the torsional stiffness."""
 
 import numpy as np
 import pytest
@@ -26,6 +26,7 @@ def _attributes(element: FlexElasticity | FlexCompElasticity) -> dict[str, str]:
 def _rod(
     *,
     young: float = YOUNG,
+    shear: float = 0.0,
     section: FlexSection = FlexSection.CIRCLE,
     sectionsize: tuple[float, float] = (0.0, 0.0),
 ) -> Mujoco:
@@ -38,7 +39,10 @@ def _rod(
         mass=1,
         elasticities=[
             FlexCompElasticity(
-                young=young, section=section, sectionsize=np.array(sectionsize)
+                young=young,
+                shear=shear,
+                section=section,
+                sectionsize=np.array(sectionsize),
             )
         ],
     )
@@ -50,10 +54,13 @@ def _rod(
 def _bending(
     *,
     young: float = YOUNG,
+    shear: float = 0.0,
     section: FlexSection = FlexSection.CIRCLE,
     sectionsize: tuple[float, float] = (0.0, 0.0),
 ) -> np.ndarray:
-    model = _rod(young=young, section=section, sectionsize=sectionsize).to_mj_model()
+    model = _rod(
+        young=young, shear=shear, section=section, sectionsize=sectionsize
+    ).to_mj_model()
     return np.asarray(model.flex_bending)
 
 
@@ -116,12 +123,26 @@ def test_the_section_sets_how_stiff_the_rod_is() -> None:
     assert not np.allclose(box, thicker)
 
 
-def test_a_box_section_uses_the_weak_axis() -> None:
-    """The half-sizes are interchangeable, because only the weaker of the two axes counts."""
+def test_swapping_the_half_sizes_of_a_box_section_keeps_its_stiffness() -> None:
+    """Which half-size is which does not change the principal stiffnesses; only the sign of the box's minor half-size, which says which way the box is turned, flips."""
     one_way = _bending(section=FlexSection.BOX, sectionsize=(0.01, 0.02))
-    other_way = _bending(young=YOUNG, section=FlexSection.BOX, sectionsize=(0.02, 0.01))
+    other_way = _bending(section=FlexSection.BOX, sectionsize=(0.02, 0.01))
 
-    assert np.allclose(one_way, other_way)
+    turned = ~np.isclose(one_way, other_way)
+
+    assert turned.any()
+    assert np.allclose(one_way[turned], -other_way[turned])
+
+
+def test_a_larger_shear_modulus_stiffens_the_torsion_of_a_rod() -> None:
+    softer = _bending(shear=2e4)
+    stiffer = _bending(shear=8e4)
+
+    changed = ~np.isclose(softer, stiffer)
+
+    # only the torsional stiffness depends on it, and it goes up
+    assert changed.any()
+    assert (stiffer[changed] > softer[changed]).all()
 
 
 def test_a_box_section_needs_a_sectionsize() -> None:

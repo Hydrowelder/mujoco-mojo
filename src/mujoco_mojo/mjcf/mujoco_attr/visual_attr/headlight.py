@@ -26,3 +26,19 @@ class VisualHeadlight(XMLModel):
 
     active: int = 1
     """This attribute enables and disables the headlight. A value of 0 means disabled, any other value means enabled."""
+
+    # TODO: This will be enabled in a future update when it is relevant (11/6/26)
+    # active: HeadlightActive = HeadlightActive.AUTO
+    # """This attribute enables and disables the headlight. A value of 0 means disabled, any other value means enabled."""
+
+    # @field_validator("active", mode="before")
+    # @classmethod
+    # def _accept_integers(cls, value: object) -> object:
+    #     """MJCF takes 0, 1 and 2 for `false`, `true` and `auto`, and so does this, which also keeps `active=1` and `active=True` from older versions working."""
+    #     if isinstance(value, int):
+    #         return {
+    #             0: HeadlightActive.FALSE,
+    #             1: HeadlightActive.TRUE,
+    #             2: HeadlightActive.AUTO,
+    #         }[value]
+    #     return value

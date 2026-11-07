@@ -57,6 +57,7 @@ __all__ = [
     "GeomType",
     "GridLayoutStr",
     "HFieldName",
+    # "HeadlightActive",
     "Inertia",
     "InertiaFromGeom",
     "InertiaGroupRange",
@@ -966,6 +967,20 @@ class ActuatorLimited(StrEnum):
 
     AUTO = "auto"
     """If `autolimits` is set in compiler, activation clamping will automatically be set to true if `actrange` is defined without explicitly setting this attribute to "true"."""
+
+
+# TODO: This will be enabled in a future update when it is relevant (11/6/26)
+# class HeadlightActive(StrEnum):
+#     """Specifies whether the built-in headlight is on."""
+
+#     FALSE = "false"
+#     """The headlight is off."""
+
+#     TRUE = "true"
+#     """The headlight is on."""
+
+#     AUTO = "auto"
+#     """The runtime decides whether the headlight is on. For example, some tools turn it on if there are no other lights in the scene. For backwards compatibility, legacy renderers assume an "auto" headlight is always on."""
 
 
 class Align(StrEnum):

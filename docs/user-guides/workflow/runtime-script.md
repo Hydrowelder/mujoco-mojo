@@ -21,7 +21,7 @@
 
 Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
 
-???+ example "Example: MojoGenerate Handle"
+???+ example "Example: MojoRuntime Handle"
 
     ```python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:runtime-handle"

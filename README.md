@@ -48,6 +48,7 @@ pip install mujoco-mojo[all]
 >
 > - `[mesh-decomp]`: concave mesh decomposition via CoACD.
 > - `[optimize]`: Bayesian optimization studies powered by Optuna.
+> - `[sensai]`: the SensAI assistant in the Dojo.
 
 ---
 
@@ -103,12 +104,12 @@ pip install mujoco-mojo[all]
 - **Bayesian Search:** Intelligent design space navigation powered by Optuna integration.
 - **Design Variables:** Continuous (`DesignFloat`) and discrete (`DesignCategorical`) parameters evolved by the solver.
 - **Adaptive Refinement:** "Zoom" into promising neighborhoods by aggressively shrinking search bounds on resume.
-- **mujoco-mojotic Robustness:** Multi-evaluation trials that average scores over different seeds to filter out noisy physics outliers.
+- **Stochastic Robustness:** Multi-evaluation trials that average scores over different seeds to filter out noisy physics outliers.
 
 > [!TIP]
 >
 > ```bash
-> mujoco-mojo run optimiztion \
+> mujoco-mojo run optimization \
 >     -g sim.generate \
 >     -r sim.runtime \
 >     --objective sim.objective \
@@ -144,7 +145,7 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
 
 - **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
-- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across the native OpenGL viewer and video recordings.
+- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across the viewer (the classic OpenGL window, MuJoCo Studio, or Studio in a browser) and video recordings.
 - **Terminal UI:** Drive the reload/sync pipeline from a terminal UI with clickable settings, command completion, and a log of every run.
 - **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
 - **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
