@@ -99,6 +99,25 @@ export function toggleSearchSegment(
   return (pathPart ?? "") + (suffixPart ? ":" + suffixPart : "");
 }
 
+// a regex matching the columns whose names start with the path typed so far:
+// `/` may be missing from a name, `*` is a wildcard as it is in filterColumns,
+// and `(a|b)` is a choice. text that is not a valid regex (an unbalanced
+// bracket, say) is matched as written instead of throwing from the chip rows
+function pathPrefixRegex(path: string): RegExp {
+  try {
+    return new RegExp(
+      "^" + path.replace(/\*/g, ".*").replace(/\//g, "\\/?"),
+      "i",
+    );
+  } catch {
+    const literal = path
+      .split("/")
+      .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("\\/?");
+    return new RegExp("^" + literal, "i");
+  }
+}
+
 // the chips to offer at path level `depth`: that level's name in every column
 // consistent with the levels chosen above it, plus anything already chosen
 export function searchSegmentsAtDepth(
@@ -113,8 +132,7 @@ export function searchSegmentsAtDepth(
     .split("|")
     .filter(Boolean);
   const prefixParts = parts.slice(0, depth);
-  const prefix = prefixParts.join("/").replace(/\//g, "\\/?");
-  const regex = new RegExp("^" + (prefix ? prefix : ""), "i");
+  const regex = pathPrefixRegex(prefixParts.join("/"));
   const segments = base
     .filter((c) => regex.test(c))
     .map((c) => {
@@ -134,10 +152,7 @@ export function searchAvailableSuffixes(base: string[], search: string): string[
     .split("|")
     .filter(Boolean)
     .map((s) => ":" + s);
-  const pathRegex = new RegExp(
-    "^" + (pathPart ?? "").replace(/\//g, "\\/?"),
-    "i",
-  );
+  const pathRegex = pathPrefixRegex(pathPart ?? "");
   const matches = base.filter((c) => pathRegex.test(c));
   const available = matches
     .map((c) => (c.includes(":") ? ":" + c.split(":").pop() : null))

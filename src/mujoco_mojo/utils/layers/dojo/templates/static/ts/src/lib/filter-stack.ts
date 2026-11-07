@@ -75,7 +75,7 @@ export function effectiveUnit(recordedUnit: string | null, filters: FilterEntry[
 // for a filter with no parameters, or one the server has no schema for
 export function filterSummary(entry: FilterEntry, schema: FilterSchema | undefined): string {
   if (!schema || schema.params.length === 0) return "";
-  if (entry.type === "unit") return `${entry["from_unit"] ?? "?"} → ${entry["to_unit"] ?? "?"}`;
+  if (entry.type === "unit") return `${entry["fromUnit"] ?? "?"} → ${entry["toUnit"] ?? "?"}`;
   const parts = schema.params
     .filter((p) => (entry as Record<string, unknown>)[p.name] != null)
     .map((p) => {

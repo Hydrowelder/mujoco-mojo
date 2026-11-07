@@ -56,7 +56,7 @@ export function validatePlotConfig(cfg: PlotConfig, { schema, labSchemas, column
   };
 
   if (cfg.xAxis?.col) checkCol(cfg.xAxis.col, "X-Axis");
-  if (typeof cfg.yAxes !== "object" || Array.isArray(cfg.yAxes)) {
+  if (typeof cfg.yAxes !== "object" || cfg.yAxes === null || Array.isArray(cfg.yAxes)) {
     errors.push("yAxes must be a hashmap.");
   } else {
     Object.keys(cfg.yAxes).forEach((y) => checkCol(y, "Y-Axis"));

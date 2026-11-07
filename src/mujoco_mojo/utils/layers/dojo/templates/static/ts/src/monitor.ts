@@ -3,7 +3,16 @@ import { themeColor } from "./lib/theme-colors";
 import Plotly from "./lib/plotly";
 import confetti from "canvas-confetti";
 import { fetchWithRetry } from "./lib/fetch-timeout";
+import { confettiPlan, confettiShots } from "./lib/confetti";
 import {
+  isNarrowTimeline,
+  timelineLayout,
+  timelineTraces,
+  type TimelineColors,
+} from "./lib/timeline";
+import {
+  celebrationKey,
+  chimeChoice,
   completionNotification,
   holidayTheme,
   outcomeGradient,
@@ -124,7 +133,6 @@ function monitor() {
       const el = document.getElementById("timeline-chart");
       if (!el || bins.length === 0) return;
 
-      const x = bins.map((b) => b.label);
       // same tokens trial-viewer.ts's renderPlot() uses, so this chart's
       // chrome matches every other Plotly chart in the app instead of
       // improvising its own: --color-ink-muted at 15% alpha (the previous
@@ -133,91 +141,21 @@ function monitor() {
       // the opposite of --color-chart-grid-major/-minor's dedicated dark
       // values, which are deliberately darker than the surface so gridlines
       // sit recessed rather than glowing.
-      const fontColor = themeColor("chart-text");
-      const gridColor = themeColor("chart-grid-major");
-
-      const traces = [
-        {
-          name: "Success",
-          x,
-          y: bins.map((b) => b.n_success),
-          type: "bar",
-          marker: { color: themeColor("success") },
-        },
-        {
-          name: "Failure",
-          x,
-          y: bins.map((b) => b.n_failed),
-          type: "bar",
-          marker: { color: themeColor("danger") },
-        },
-        {
-          name: "Error",
-          x,
-          y: bins.map((b) => b.n_error),
-          type: "bar",
-          marker: { color: themeColor("warning") },
-        },
-        {
-          name: "Running",
-          x,
-          y: bins.map((b) => b.n_running),
-          type: "bar",
-          marker: { color: themeColor("info") },
-        },
-        {
-          name: "Pending",
-          x,
-          y: bins.map((b) => b.n_pending),
-          type: "bar",
-          marker: { color: themeColor("accent-500") },
-        },
-      ];
-
+      const colors: TimelineColors = {
+        font: themeColor("chart-text"),
+        grid: themeColor("chart-grid-major"),
+        success: themeColor("success"),
+        danger: themeColor("danger"),
+        warning: themeColor("warning"),
+        info: themeColor("info"),
+        accent: themeColor("accent-500"),
+        tooltipBg: themeColor("chart-tooltip-bg"),
+        tooltipFont: themeColor("chart-tooltip-font"),
+      };
+      const traces = timelineTraces(bins, colors);
       // on narrow screens the horizontal legend doesn't fit above the plot,
       // so move it below the x-axis where it can wrap freely
-      const narrow = el.offsetWidth > 0 && el.offsetWidth < 560;
-
-      const layout = {
-        autosize: true,
-        barmode: "stack",
-        bargap: 0.15,
-        margin: { l: 45, r: 10, t: 10, b: narrow ? 110 : 55 },
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        font: { color: fontColor, family: "monospace", size: 11 },
-        xaxis: {
-          // bin labels carry microsecond precision so distinct bins never
-          // collide onto the same x position; force a real date axis (rather
-          // than letting plotly infer a categorical string axis) and control
-          // the tick format so it still reads as a plain clock time
-          type: "date",
-          tickformat: "%H:%M:%S",
-          gridcolor: gridColor,
-          tickangle: -45,
-          nticks: 8,
-          showspikes: true,
-          spikemode: "across",
-          spikelinecolor: themeColor("accent-500"),
-          spikethickness: -2,
-        },
-        yaxis: { gridcolor: gridColor, title: { text: "trials" } },
-        legend: narrow
-          ? { orientation: "h", x: 0.5, xanchor: "center", y: -0.45, yanchor: "top", font: { size: 10 } }
-          : { orientation: "h", y: 1.15, x: 0 },
-        hovermode: "x unified",
-        hoverlabel: {
-          bgcolor: themeColor("chart-tooltip-bg"),
-          bordercolor: themeColor("accent-500"),
-          font: {
-            color: themeColor("chart-tooltip-font"),
-            family: "monospace",
-            size: 12,
-          },
-          align: "left",
-        },
-        showlegend: true,
-      };
+      const layout = timelineLayout(isNarrowTimeline(el.offsetWidth), colors);
 
       // defer one frame so the x-show'd container has a real width before
       // plotly measures it, then force a resize in case it was still hidden
@@ -237,7 +175,7 @@ function monitor() {
 
       // Use localStorage so the notification only fires once per job across all page navigations.
       // The key is the job's start_time - unique per job run.
-      const celebKey = `mojo_celebrated_${this.status.start_time}`;
+      const celebKey = celebrationKey(this.status.start_time);
       if (localStorage.getItem(celebKey)) {
         this.hasCelebrated = true; // sync in-memory flag so future calls within this session are fast
         return;
@@ -257,13 +195,16 @@ function monitor() {
       // not "keep seasonal sounds but drop the default one."
       const chimeEnabled = chime?.dataset.chimeEnabled !== "false";
 
-      if (chimeEnabled && !(Alpine.store("dojo") as DojoStore).isMuted) {
-        if (theme.audioUrl) {
-          const holidaySound = new Audio(theme.audioUrl);
-          holidaySound.play().catch(() => chime?.play().catch(() => {}));
-        } else {
-          chime?.play().catch(() => {});
-        }
+      const sound = chimeChoice(
+        chimeEnabled,
+        (Alpine.store("dojo") as DojoStore).isMuted,
+        theme.audioUrl,
+      );
+      if (sound === "holiday") {
+        const holidaySound = new Audio(theme.audioUrl);
+        holidaySound.play().catch(() => chime?.play().catch(() => {}));
+      } else if (sound === "default") {
+        chime?.play().catch(() => {});
       }
 
       setTimeout(() => this.fireConfetti(theme), 300);
@@ -275,18 +216,15 @@ function monitor() {
     },
 
     fireConfetti(theme: HolidayTheme = { name: "Standard Mojo" }) {
-      const themeName = theme.name ?? "Standard Mojo";
-      const isSpecial = !!theme.emojis;
-      const isSnow = theme.isSnow ?? false;
+      const plan = confettiPlan(theme);
 
       console.log(
-        `%c 🎊 Mojo Celebration: ${themeName} `,
+        `%c 🎊 Mojo Celebration: ${plan.themeName} `,
         "background: #06b6d4; color: #fff; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
       );
 
-      const duration = 3000;
-      const animationEnd = Date.now() + duration;
-      const colors = theme.colors ?? ["#06b6d4", "#3b82f6", "#22c55e"];
+      const animationEnd = Date.now() + plan.duration;
+      const colors = plan.colors;
 
       let shapes: confetti.Shape[] = ["circle", "square"];
       if (theme.emojis) {
@@ -299,43 +237,21 @@ function monitor() {
         zIndex: 1000,
         shapes,
         colors,
-        ticks: isSpecial ? 200 : 100,
-        scalar: isSpecial ? 5 : 1,
-        gravity: isSnow ? 0.4 : isSpecial ? 0.4 : 1.2,
+        ticks: plan.ticks,
+        scalar: plan.scalar,
+        gravity: plan.gravity,
       };
 
-      const interval = setInterval(
-        () => {
-          const timeLeft = animationEnd - Date.now();
-          if (timeLeft <= 0) {
-            clearInterval(interval);
-            return;
-          }
-
-          if (isSnow) {
-            confetti({
-              ...defaults,
-              particleCount: 1,
-              startVelocity: 0,
-              drift: (Math.random() - 0.5) * 1.5,
-              origin: { x: Math.random(), y: -0.2 },
-            });
-          } else {
-            const countMultiplier = isSpecial ? 40 : 150;
-            const particleCount = countMultiplier * (timeLeft / duration);
-            for (let i = 0; i < 3; i++) {
-              confetti({
-                ...defaults,
-                particleCount: Math.ceil(particleCount / 3),
-                spread: isSpecial ? 90 : 360,
-                startVelocity: isSpecial ? 15 : 45,
-                origin: { x: Math.random(), y: Math.random() - 0.2 },
-              });
-            }
-          }
-        },
-        isSpecial ? 400 : 250,
-      );
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          return;
+        }
+        for (const shot of confettiShots(plan, timeLeft, Math.random)) {
+          confetti({ ...defaults, ...shot });
+        }
+      }, plan.intervalMs);
     },
   };
 }

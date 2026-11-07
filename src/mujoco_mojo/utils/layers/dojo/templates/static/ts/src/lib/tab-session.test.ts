@@ -28,13 +28,30 @@ afterEach(() => {
 });
 
 describe("newTabId", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("is a short lowercase token starting with t", () => {
     expect(newTabId()).toMatch(/^t[0-9a-z]+$/);
   });
 
-  // not asserted: uniqueness within one millisecond. only three random
-  // characters follow the timestamp, so a burst of calls can collide; a tab
-  // strip never creates ids that fast.
+  it("never repeats within a page, even in one millisecond with the same random digits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    vi.spyOn(Math, "random").mockReturnValue(0.123456);
+    const made = Array.from({ length: 5000 }, () => newTabId());
+    expect(new Set(made).size).toBe(made.length);
+  });
+
+  it("carries the time, so ids made at different times differ", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const first = newTabId();
+    vi.setSystemTime(new Date("2026-01-01T00:00:01Z"));
+    expect(newTabId().slice(1, 9)).not.toBe(first.slice(1, 9));
+  });
 });
 
 describe("loadTabsFromStorage", () => {

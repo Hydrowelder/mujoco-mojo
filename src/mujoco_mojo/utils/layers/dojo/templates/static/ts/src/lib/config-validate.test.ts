@@ -50,6 +50,15 @@ describe("signals in the telemetry", () => {
     expect(validatePlotConfig(config("time", []), context())).toEqual(["yAxes must be a hashmap."]);
     expect(validatePlotConfig(config("time", "text"), context())).toEqual(["yAxes must be a hashmap."]);
   });
+
+  it("says so for a yAxes that is null or missing, rather than throwing", () => {
+    expect(validatePlotConfig(config("time", null), context())).toEqual(["yAxes must be a hashmap."]);
+    expect(validatePlotConfig(config("time", undefined), context())).toEqual(["yAxes must be a hashmap."]);
+  });
+
+  it("accepts an empty map", () => {
+    expect(validatePlotConfig(config("time", {}), context())).toEqual([]);
+  });
 });
 
 describe("Lab signals", () => {

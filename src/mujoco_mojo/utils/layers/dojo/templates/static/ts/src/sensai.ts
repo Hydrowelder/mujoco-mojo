@@ -1,4 +1,3 @@
-import { marked, type Tokens } from 'marked';
 import type { AlpineMagics } from "./types/global";
 import {
   EditorView,
@@ -7,29 +6,28 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
 } from "./lib/codemirror";
-
-interface SensAIMessage {
-  role: "user" | "assistant";
-  content: string;
-  error?: boolean;
-  plot_config_update?: object | null;
-  routed_to?: string;
-  ts: number;
-}
+import { renderMarkdown } from "./lib/markdown";
+import {
+  chatRequestBody,
+  composerSize,
+  createSseParser,
+  enabledFromSettings,
+  historyExport,
+  historyFileName,
+  isAtBottom,
+  loadMessages,
+  messageLayout,
+  resultContent,
+  revealStep,
+  saveMessages,
+  storedMessages,
+  type SensAIMessage,
+  type SseEvent,
+} from "./lib/sensai";
 
 interface SensAIConfig {
   enabled: boolean;
 }
-
-interface SensAIResultPayload {
-  message?: string;
-  plot_config_update?: object | null;
-  routed_to?: string;
-  detail?: string;
-  label?: string;
-}
-
-const STORAGE_KEY = "sensai-messages";
 
 function sensai() {
   return {
@@ -67,8 +65,8 @@ function sensai() {
       // _applySettingsWrite for the dispatch side.
       window.addEventListener("mojo-settings-saved", (e) => {
         const detail = (e as CustomEvent<{ dojo?: { sensai?: { enabled?: boolean } } }>).detail;
-        const next = detail?.dojo?.sensai?.enabled;
-        if (typeof next === "boolean") this.enabled = next;
+        const next = enabledFromSettings(detail);
+        if (next !== undefined) this.enabled = next;
       });
     },
 
@@ -103,24 +101,14 @@ function sensai() {
       this._scrollToBottom();
 
       try {
-        const history = this.messages
-          .slice(0, -1)   // exclude the just-pushed user message
-          .slice(-20)
-          .map(m => ({ role: m.role, content: m.content }));
-
         const currentPlotConfigJson = localStorage.getItem("mojo_mosaic_config");
 
         const response = await fetch("/sensai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message,
-            message_history: history,
-            all_columns: [],
-            rotatable_vectors: [],
-            available_quats: [],
-            current_plot_config_json: currentPlotConfigJson,
-          }),
+          body: JSON.stringify(
+            chatRequestBody(message, this.messages, currentPlotConfigJson),
+          ),
         });
 
         if (!response.ok || !response.body) {
@@ -155,82 +143,69 @@ function sensai() {
       }
     },
 
+    // applies one event from the server's stream; a throw while applying it
+    // is ignored, like a malformed line
+    _handleSseEvent({ type: eventType, payload }: SseEvent) {
+      try {
+        if (eventType === "tool_call" && typeof payload.label === "string") {
+          this.thinkingLabel = payload.label;
+        } else if (eventType === "text_delta" && typeof payload.delta === "string") {
+          if (!this.streaming) {
+            this.streaming = true;
+            this.thinkingLabel = null;
+          }
+          this._revealQueue += payload.delta;
+          this._startReveal();
+        } else if (eventType === "result") {
+          this._flushReveal();
+          const content = resultContent(payload.message, this.streamingContent);
+          this.messages.push({
+            role: "assistant",
+            content,
+            plot_config_update: payload.plot_config_update ?? null,
+            routed_to: payload.routed_to,
+            ts: Date.now(),
+          });
+          if (payload.plot_config_update) {
+            window.dispatchEvent(new CustomEvent("mojo-sensai-plot-config", {
+              detail: payload.plot_config_update,
+            }));
+          }
+          if (payload.routed_to === "undo") {
+            window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
+          }
+          this.thinkingLabel = null;
+          this.streaming = false;
+          this.streamingContent = "";
+        } else if (eventType === "error") {
+          this._flushReveal();
+          this.messages.push({
+            role: "assistant",
+            content: payload.detail ?? "An error occurred.",
+            error: true,
+            ts: Date.now(),
+          });
+          this.thinkingLabel = null;
+          this.streaming = false;
+          this.streamingContent = "";
+        }
+      } catch { /* ignore */ }
+    },
+
     async _streamSse(body: ReadableStream<Uint8Array>) {
       const reader = body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let eventType = "";
-
-      const handleLine = async (line: string) => {
-        const trimmed = line.trimEnd();
-        if (trimmed.startsWith("event: ")) {
-          eventType = trimmed.slice(7);
-        } else if (trimmed.startsWith("data: ")) {
-          try {
-            const payload = JSON.parse(trimmed.slice(6)) as SensAIResultPayload & { delta?: string };
-            if (eventType === "tool_call" && typeof payload.label === "string") {
-              this.thinkingLabel = payload.label;
-            } else if (eventType === "text_delta" && typeof payload.delta === "string") {
-              if (!this.streaming) {
-                this.streaming = true;
-                this.thinkingLabel = null;
-              }
-              this._revealQueue += payload.delta;
-              this._startReveal();
-            } else if (eventType === "result") {
-              this._flushReveal();
-              const content = typeof payload.message === "string"
-                ? payload.message || this.streamingContent || "(no response)"
-                : this.streamingContent || "(no response)";
-              this.messages.push({
-                role: "assistant",
-                content,
-                plot_config_update: payload.plot_config_update ?? null,
-                routed_to: payload.routed_to,
-                ts: Date.now(),
-              });
-              if (payload.plot_config_update) {
-                window.dispatchEvent(new CustomEvent("mojo-sensai-plot-config", {
-                  detail: payload.plot_config_update,
-                }));
-              }
-              if (payload.routed_to === "undo") {
-                window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
-              }
-              this.thinkingLabel = null;
-              this.streaming = false;
-              this.streamingContent = "";
-            } else if (eventType === "error") {
-              this._flushReveal();
-              this.messages.push({
-                role: "assistant",
-                content: payload.detail ?? "An error occurred.",
-                error: true,
-                ts: Date.now(),
-              });
-              this.thinkingLabel = null;
-              this.streaming = false;
-              this.streamingContent = "";
-            }
-          } catch { /* ignore malformed SSE lines */ }
-        } else if (trimmed === "") {
-          eventType = "";
-        }
-      };
+      const parser = createSseParser();
 
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let newline: number;
-          while ((newline = buffer.indexOf("\n")) !== -1) {
-            await handleLine(buffer.slice(0, newline));
-            buffer = buffer.slice(newline + 1);
+          for (const event of parser.feed(decoder.decode(value, { stream: true }))) {
+            this._handleSseEvent(event);
           }
         }
-        // flush any remaining content in the buffer
-        if (buffer) await handleLine(buffer);
+        for (const event of parser.end()) this._handleSseEvent(event);
       } finally {
         reader.releaseLock();
       }
@@ -241,21 +216,16 @@ function sensai() {
       const wasAtBottom = this.atBottom;
       el.style.height = "auto";
       el.style.overflowY = "hidden";
-      const lineHeight = parseInt(getComputedStyle(el).lineHeight, 10) || 20;
-      const maxHeight = lineHeight * 6;
-      if (el.scrollHeight > maxHeight) {
-        el.style.height = maxHeight + "px";
-        el.style.overflowY = "auto";
-      } else {
-        el.style.height = el.scrollHeight + "px";
-      }
+      const size = composerSize(el.scrollHeight, getComputedStyle(el).lineHeight);
+      el.style.height = size.height;
+      el.style.overflowY = size.overflowY;
       if (wasAtBottom && msgEl) {
         msgEl.scrollTop = msgEl.scrollHeight;
       }
     },
 
     onScroll(el: HTMLElement) {
-      this.atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+      this.atBottom = isAtBottom(el.scrollHeight, el.scrollTop, el.clientHeight);
       if (this.atBottom) this.hasNewResponse = false;
     },
 
@@ -267,19 +237,12 @@ function sensai() {
     },
 
     _loadMessages() {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as SensAIMessage[];
-          this.messages = parsed.map(m => ({ ...m, ts: m.ts ?? Date.now() }));
-        }
-      } catch { /* ignore */ }
+      const loaded = loadMessages();
+      if (loaded) this.messages = loaded;
     },
 
     _saveMessages() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.messages));
-      } catch { /* ignore */ }
+      saveMessages(this.messages);
     },
 
     _scrollToBottom() {
@@ -294,8 +257,9 @@ function sensai() {
     // (especially Gemini) often streams only a couple of large bursts per
     // reply rather than per-token, and dumping each straight into
     // streamingContent looked like it was appearing in big jumps. The step
-    // size grows with the backlog so a large burst still drains in well
-    // under a second instead of trailing behind the rest of the stream.
+    // size grows with the backlog so a large burst still drains in a second or
+    // two (a thirtieth of what is left every 16 ms) instead of trailing far
+    // behind the rest of the stream.
     _startReveal() {
       if (this._revealTimer !== null) return;
       this._revealTimer = window.setInterval(() => {
@@ -304,7 +268,7 @@ function sensai() {
           this._revealTimer = null;
           return;
         }
-        const step = Math.max(1, Math.ceil(this._revealQueue.length / 30));
+        const step = revealStep(this._revealQueue.length);
         this.streamingContent += this._revealQueue.slice(0, step);
         this._revealQueue = this._revealQueue.slice(step);
         if (this.open && this.atBottom) this._scrollToBottom();
@@ -329,33 +293,14 @@ function sensai() {
 window.sensai = sensai;
 
 function downloadSensAIHistory(): void {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  let messages: SensAIMessage[] = [];
-  try {
-    if (stored) messages = JSON.parse(stored) as SensAIMessage[];
-  } catch { /* ignore */ }
-
   const now = new Date();
-  const payload = {
-    exported_at: now.toISOString(),
-    messages: messages.map(m => {
-      const entry: Record<string, unknown> = {
-        timestamp: new Date(m.ts).toISOString(),
-        sender: m.role === "user" ? "user" : "sensai",
-        message: m.content,
-      };
-      if (m.error) entry["error"] = true;
-      if (m.routed_to) entry["routed_to"] = m.routed_to;
-      if (m.plot_config_update !== undefined) entry["plot_config_update"] = m.plot_config_update;
-      return entry;
-    }),
-  };
+  const payload = historyExport(storedMessages(), now);
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `sensai-chat-${now.toISOString().slice(0, 10)}.json`;
+  a.download = historyFileName(now);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -375,22 +320,6 @@ window.downloadSensAIHistory = downloadSensAIHistory;
 // markdown rendering — used by assistant message bubbles
 // ---------------------------------------------------------------------------
 
-marked.use({
-  renderer: {
-    code({ text, lang }: Tokens.Code): string {
-      const encoded = encodeURIComponent(text);
-      const langAttr = lang ? ` data-lang="${encodeURIComponent(lang)}"` : "";
-      return `<div class="sensai-cm-block" data-code="${encoded}"${langAttr}></div>`;
-    },
-    codespan({ text }: Tokens.Codespan): string {
-      return `<code class="md-inline-code">${text}</code>`;
-    },
-  },
-});
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string;
-}
 
 function initSensAICodeBlocks(container: HTMLElement): void {
   try {
@@ -442,9 +371,13 @@ function sensaiMsgData(role: string) {
         self.$el.querySelector("p")
       ) as HTMLElement | null;
       if (!content || content.scrollHeight === 0) return;
-      const lh = parseFloat(getComputedStyle(content).lineHeight) || 22;
-      self.single = content.scrollHeight <= Math.ceil(lh * 2.5);
-      self.open = self.single || self._role !== "user";
+      const layout = messageLayout(
+        self._role,
+        content.scrollHeight,
+        getComputedStyle(content).lineHeight,
+      );
+      self.single = layout.single;
+      self.open = layout.open;
     },
   };
 }

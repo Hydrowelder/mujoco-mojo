@@ -10,8 +10,15 @@ export interface TabLike {
   id: string;
 }
 
+// ids made in this page never repeat, whatever the clock and the random digits
+// do, because each carries the number of ids made before it. the time and the
+// random digits keep ids made by other pages (or windows) sharing the same
+// saved tab list apart
+let idsMade = 0;
+
 export function newTabId(): string {
-  return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const made = (idsMade++).toString(36);
+  return `t${Date.now().toString(36)}${made}${Math.random().toString(36).slice(2, 5)}`;
 }
 
 export function loadTabsFromStorage<T extends TabLike>(

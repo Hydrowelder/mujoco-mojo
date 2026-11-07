@@ -184,23 +184,59 @@ describe("searchActiveLevels", () => {
   });
 });
 
-// known bug, found while writing these tests: filterColumns turns * into a
-// wildcard and falls back to a substring match for an invalid regex, but the
-// two chip functions build a regex from the raw search text with no such
-// guard. so typing the wildcard syntax the filter itself accepts (`B/*:x`), or
-// an unbalanced bracket, throws from the chip rows. `it.fails` passes while
-// that is true and starts failing once it is fixed, as the cue to turn these
-// into ordinary tests.
+// the chip rows read the same search text filterColumns does, so the wildcard
+// it accepts and a half-typed bracket must give chips instead of throwing
 describe("a search with regex characters in it", () => {
-  it.fails("lets searchSegmentsAtDepth return something instead of throwing", () => {
-    // from depth 1 down; level 0 builds no regex from the text, so it can't throw
-    expect(() => searchSegmentsAtDepth(COLUMNS, "*", 1)).not.toThrow();
-    expect(() => searchSegmentsAtDepth(COLUMNS, "f(", 1)).not.toThrow();
+  it("treats * as a wildcard in the levels above the chips", () => {
+    expect(searchSegmentsAtDepth(COLUMNS, "*", 1)).toEqual(["A", "B", "s1", "s2"]);
+    expect(searchSegmentsAtDepth(COLUMNS, "Bodies/*/", 2)).toEqual(["quat", "xpos"]);
+    expect(searchSegmentsAtDepth(COLUMNS, "Sen*/", 1)).toEqual(["s1", "s2"]);
   });
 
-  it.fails("lets searchAvailableSuffixes return something instead of throwing", () => {
-    expect(() => searchAvailableSuffixes(COLUMNS, "B/*:x")).not.toThrow();
-    expect(() => searchAvailableSuffixes(COLUMNS, "Bodies/(")).not.toThrow();
+  it("treats * as a wildcard in the path before the suffixes", () => {
+    expect(searchAvailableSuffixes(COLUMNS, "B/*:x")).toEqual([":w", ":x", ":y", ":z"]);
+    expect(searchAvailableSuffixes(COLUMNS, "Bodies/*/quat")).toEqual([":w"]);
+  });
+
+  it("matches an unbalanced bracket as written, so nothing matches it", () => {
+    expect(searchSegmentsAtDepth(COLUMNS, "f(", 1)).toEqual([]);
+    expect(searchSegmentsAtDepth(COLUMNS, "Bodies/[", 2)).toEqual([]);
+    expect(searchAvailableSuffixes(COLUMNS, "Bodies/(")).toEqual([]);
+    expect(searchAvailableSuffixes(COLUMNS, "Bodies/B/xpos[")).toEqual([]);
+  });
+
+  it("finds a column whose name has the half-typed bracket in it", () => {
+    const odd = ["a(1)/b:x", "a(1)/c:y", "other/d:x"];
+    expect(searchSegmentsAtDepth(odd, "a(", 1)).toEqual(["b", "c"]);
+    expect(searchAvailableSuffixes(odd, "a(1")).toEqual([":x", ":y"]);
+  });
+
+  it("keeps the slashes optional when it matches a half-typed bracket as written", () => {
+    const odd = ["a(1)/b(2):x", "a(1)b(2):y"];
+    expect(searchAvailableSuffixes(odd, "a(1)/b(2")).toEqual([":x", ":y"]);
+  });
+
+  it("matches the half-typed text from the start of a name, not anywhere in it", () => {
+    expect(searchAvailableSuffixes(["zz(a:x", "(a:y"], "(a")).toEqual([":y"]);
+    expect(searchSegmentsAtDepth(["zz(a/q:x", "(a/r:y"], "(a/", 1)).toEqual(["r"]);
+  });
+
+  it("reads a balanced bracket as a group of choices, not as part of a name", () => {
+    const odd = ["a(1)/b:x", "a1/c:y"];
+    expect(searchSegmentsAtDepth(odd, "a(1)/", 1)).toEqual(["c"]);
+    expect(searchAvailableSuffixes(odd, "a(1)/b")).toEqual([]);
+  });
+
+  it("keeps a choice already made when the text is half typed", () => {
+    expect(searchSegmentsAtDepth(COLUMNS, "Bodies/(A", 1)).toEqual(["A", "B"]);
+  });
+
+  it("matches a literal bracket, dot or plus the way it was typed", () => {
+    const names = ["a.b/c:x", "axb/c:y", "a+b/c:z"];
+    expect(searchAvailableSuffixes(names, "a.b/c")).toEqual([":x", ":y", ":z"]);
+    expect(searchAvailableSuffixes(names, "a+")).toEqual([":x", ":y", ":z"]);
+    expect(searchAvailableSuffixes(names, "a+b[")).toEqual([]);
+    expect(searchAvailableSuffixes(names, "a.b[")).toEqual([]);
   });
 });
 

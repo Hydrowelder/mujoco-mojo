@@ -204,3 +204,21 @@ export function holidayTheme(now: Date): HolidayTheme {
     colors: ["#06b6d4", "#3b82f6", "#22c55e"],
   };
 }
+
+// the key that remembers a job's completion was celebrated, so reloading or
+// opening another page does not celebrate it again
+export function celebrationKey(startTime: string | number | undefined): string {
+  return `mojo_celebrated_${startTime}`;
+}
+
+// which sound a completion plays: none when the chime is switched off on the
+// server or muted in this browser (a holiday sound is a chime too), the
+// theme's own sound when it has one, else the default chime.
+export function chimeChoice(
+  chimeEnabled: boolean,
+  isMuted: boolean,
+  audioUrl: string | undefined,
+): "none" | "holiday" | "default" {
+  if (!chimeEnabled || isMuted) return "none";
+  return audioUrl ? "holiday" : "default";
+}

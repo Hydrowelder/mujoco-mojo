@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { JobStatus } from "../models";
 import {
+  celebrationKey,
+  chimeChoice,
   completionNotification,
   holidayTheme,
   outcomeGradient,
@@ -269,5 +271,45 @@ describe("holidayTheme", () => {
   it("has the same theme at any time of day", () => {
     expect(holidayTheme(new Date(2026, 2, 14, 0, 0, 1)).name).toBe("Pi Day");
     expect(holidayTheme(new Date(2026, 2, 14, 23, 59, 59)).name).toBe("Pi Day");
+  });
+});
+
+describe("celebrationKey", () => {
+  it("is the job's start time under a fixed prefix", () => {
+    expect(celebrationKey("2026-03-14T01:02:03")).toBe("mojo_celebrated_2026-03-14T01:02:03");
+    expect(celebrationKey(1700000000)).toBe("mojo_celebrated_1700000000");
+  });
+
+  it("is different for each job", () => {
+    expect(celebrationKey("a")).not.toBe(celebrationKey("b"));
+  });
+
+  it("spells out an unknown start time as undefined, as saved", () => {
+    expect(celebrationKey(undefined)).toBe("mojo_celebrated_undefined");
+  });
+});
+
+describe("chimeChoice", () => {
+  it("is the default chime when it is on and not muted", () => {
+    expect(chimeChoice(true, false, undefined)).toBe("default");
+    expect(chimeChoice(true, false, "")).toBe("default");
+  });
+
+  it("is the theme's own sound when it has one", () => {
+    expect(chimeChoice(true, false, "/sounds/pi.mp3")).toBe("holiday");
+  });
+
+  it("is silent when the server has it switched off", () => {
+    expect(chimeChoice(false, false, undefined)).toBe("none");
+    expect(chimeChoice(false, false, "/sounds/pi.mp3")).toBe("none");
+  });
+
+  it("is silent when this browser muted it", () => {
+    expect(chimeChoice(true, true, undefined)).toBe("none");
+    expect(chimeChoice(true, true, "/sounds/pi.mp3")).toBe("none");
+  });
+
+  it("is silent when both say so", () => {
+    expect(chimeChoice(false, true, "/sounds/pi.mp3")).toBe("none");
   });
 });

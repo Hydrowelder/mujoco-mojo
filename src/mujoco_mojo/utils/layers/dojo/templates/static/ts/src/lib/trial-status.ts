@@ -36,3 +36,27 @@ export function stepTextClass(status: TrialStatus | null, stepName: TrialStep): 
   if (status.step === stepName) return "text-accent-500 dark:text-accent-400";
   return "text-ink-disabled";
 }
+
+// how a trial reads in color across the app: errored ahead of failed, else it
+// passed. Takes the trial's number and the job's lists of errored and failed
+// trial numbers.
+export function trialOutcome(
+  trialNum: number,
+  errorTrialNums: number[],
+  failureTrialNums: number[],
+): "error" | "failure" | "success" {
+  if (errorTrialNums.includes(trialNum)) return "error";
+  if (failureTrialNums.includes(trialNum)) return "failure";
+  return "success";
+}
+
+// whether the trial's live status and logs should be polled: while the trial
+// is still running, and not once it has finished. `polling` is whether a poll
+// is already going.
+export function trialPollAction(
+  status: TrialStatus | null,
+  polling: boolean,
+): "start" | "stop" | "keep" {
+  if (status && status.completion === "incomplete") return polling ? "keep" : "start";
+  return polling ? "stop" : "keep";
+}

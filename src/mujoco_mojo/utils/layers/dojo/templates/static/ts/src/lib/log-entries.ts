@@ -104,3 +104,37 @@ export function formatLogTime(timestamp: number, tick?: number): string {
   if (diff < 24 * 60 * 60 * 1000) return notifTimeAgo(timestamp, tick);
   return new Date(timestamp).toLocaleString();
 }
+
+// the narrowest each log column can be dragged to
+export const LOG_COL_MIN: Record<"time" | "level" | "source", number> = {
+  time: 60,
+  level: 56,
+  source: 60,
+};
+
+// a log column's width while it is dragged: moved by the mouse, never below its minimum
+export function resizedLogColumnWidth(
+  col: "time" | "level" | "source",
+  startWidth: number,
+  dx: number,
+): number {
+  return Math.max(LOG_COL_MIN[col], startWidth + dx);
+}
+
+const HEADER_ICON_ALLOWANCE = 20; // sort chevron + gap
+const CELL_PADDING = 16; // px-2 on the cell (8px each side)
+const BADGE_PADDING = 16; // px-2 on the level badge (8px each side)
+
+// a log column's width to fit its contents: the widest of its header (plus room
+// for the sort chevron) and every cell, rounded up, plus the cell's padding
+// (and the badge's, for the level column).
+export function fittedLogColumnWidth(
+  col: "time" | "level" | "source",
+  headerWidth: number,
+  contentWidths: number[],
+): number {
+  let width = headerWidth + HEADER_ICON_ALLOWANCE;
+  for (const w of contentWidths) width = Math.max(width, w);
+  const padding = col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
+  return Math.ceil(width) + padding;
+}

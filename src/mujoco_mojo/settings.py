@@ -715,7 +715,7 @@ class ReloadedSettings(BaseModel):
     ui: UserInterface = Field(
         default_factory=default_user_interface,
         title="UI Backend",
-        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser). Defaults to `web` where this MuJoCo build can serve it, and `opengl` where it cannot.",
+        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser).",
     )
 
     @field_validator("ui", mode="before")

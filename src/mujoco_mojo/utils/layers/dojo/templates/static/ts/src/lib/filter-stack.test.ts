@@ -145,22 +145,22 @@ describe("filterSummary", () => {
   });
 
   describe("for a unit filter", () => {
-    it("shows the conversion when the entry has the snake_case names", () => {
-      expect(filterSummary({ type: "unit", from_unit: "rad", to_unit: "deg" }, UNIT)).toBe("rad → deg");
+    it("shows the conversion", () => {
+      expect(filterSummary({ type: "unit", fromUnit: "rad", toUnit: "deg" }, UNIT)).toBe("rad → deg");
     });
 
     it("shows a question mark for a side that is not there", () => {
-      expect(filterSummary({ type: "unit", from_unit: "rad" }, UNIT)).toBe("rad → ?");
+      expect(filterSummary({ type: "unit", fromUnit: "rad" }, UNIT)).toBe("rad → ?");
+      expect(filterSummary({ type: "unit", toUnit: "deg" }, UNIT)).toBe("? → deg");
+      expect(filterSummary({ type: "unit" }, UNIT)).toBe("? → ?");
     });
 
-    // known bug: the parameters of a unit filter are fromUnit and toUnit (the
-    // filter-schema endpoint reports them by their camelCase alias, and the
-    // series panel reads and writes those), but the summary looks for
-    // from_unit and to_unit, so on a real entry it always shows "? -> ?". this
-    // starts failing once the summary reads the right names; make it a normal
-    // test then
-    it.fails("shows the conversion for the names a real unit filter carries", () => {
-      expect(filterSummary({ type: "unit", fromUnit: "rad", toUnit: "deg" }, UNIT)).toBe("rad → deg");
+    it("shows a question mark for a side that is null", () => {
+      expect(filterSummary({ type: "unit", fromUnit: null, toUnit: "deg" }, UNIT)).toBe("? → deg");
+    });
+
+    it("does not read the snake_case names, which no entry carries", () => {
+      expect(filterSummary({ type: "unit", from_unit: "rad", to_unit: "deg" }, UNIT)).toBe("? → ?");
     });
   });
 });

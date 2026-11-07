@@ -1,11 +1,4 @@
-import {
-  enumAxisIds,
-  enumAxisLayout,
-  enumLabels,
-  enumMapOf,
-  enumRange,
-  planEnumAxes,
-} from "./lib/enum-axes";
+import { enumMapOf } from "./lib/enum-axes";
 import {
   breakableLabel,
   formatNum,
@@ -29,7 +22,6 @@ import {
 import {
   buildRefFrameFilter,
   refFrameActive,
-  refFrameAvailable,
   refFrameLabel,
   sameRefFrame,
   sanitizeRefFrame,
@@ -40,15 +32,17 @@ import { jsonPathAt, jsonRangeForPath } from "./lib/json-editor";
 import { decodeShareConfig, encodeShareConfig, extractShareBlob } from "./lib/share-link";
 import {
   filterLogEntries,
+  fittedLogColumnWidth,
   formatLogTime,
   logLevelClass,
   logLevelsOf,
   logSourceFull,
   logSourceShort,
+  resizedLogColumnWidth,
 } from "./lib/log-entries";
 import { paddedRange, selectVsDatasets } from "./lib/plot-range";
 import { validatePlotConfig } from "./lib/config-validate";
-import { countInRange, countWithPinned, presetRange, togglePinned, trialBounds } from "./lib/vs-range";
+import { countInRange, countWithPinned, presetRange, togglePinned, trialBounds, trialNumber } from "./lib/vs-range";
 import { pushSnapshot } from "./lib/history";
 import { countBy, distinctSorted, filterDists, toggleFacet } from "./lib/dist-table";
 import { highlightJson } from "./lib/json-highlight";
@@ -68,9 +62,11 @@ import {
   errorStep as trialErrorStep,
   stepDotClass as trialStepDotClass,
   stepTextClass as trialStepTextClass,
+  trialOutcome,
+  trialPollAction,
   type TrialStep,
 } from "./lib/trial-status";
-import { reorderYAxes } from "./lib/y-axes";
+import { newYAxisConfig, reorderYAxes, usedStyles, withoutYAxis, yRangeToggles } from "./lib/y-axes";
 import { applyRangeBound, rangeBoundText, resolveAxisRange as resolveRange } from "./lib/axis-range";
 import {
   DEFAULT_CONFIG,
@@ -103,6 +99,127 @@ import {
   toggleSelection,
 } from "./lib/tab-session";
 import type { PlotProfile } from "./lib/plot-profile";
+import {
+  MAX_CLOSED_PLOT_TABS,
+  closedPlotTabEntry,
+  duplicatePlotTab as copyPlotTab,
+  isPlotTabDirty,
+  loadClosedPlotTabs,
+  makeBlankPlotTab,
+  neededColumns,
+  persistClosedPlotTabs,
+  persistablePlotTabs,
+  pushClosedPlotTabs,
+  reopenPlotTab,
+  type PlotTab,
+} from "./lib/plot-tabs";
+import {
+  aspectRatio,
+  framesVisible,
+  frameInterval,
+  frameMarkersPath,
+  isScrubbable,
+  knownDuration,
+  loopedTime,
+  mediaUrl,
+  miniDragPosition,
+  miniFrameReady,
+  miniResizeSize,
+  miniUsesVideo,
+  overlayVisibility,
+  pickSelectedMedia,
+  shouldRunPlayback,
+  snappedTime,
+} from "./lib/media";
+import { trialDataUrl, unseenFilterErrors } from "./lib/trial-data";
+import {
+  chunked,
+  comparingNotice,
+  missingColumns,
+  orderedRange,
+  parseStoredVs,
+  vsActiveColumns,
+  vsChipClass as chipClass,
+  vsNeedsFetch,
+  vsTargetIds,
+} from "./lib/vs-sync";
+import { parseRawConfig, parseSavedConfig, parseSavedHistory } from "./lib/config-storage";
+import {
+  distPlot,
+  hasTooltipContent,
+  paramsHtml,
+  tooltipMinWidth,
+  tooltipPosition,
+  type DistColors,
+} from "./lib/dist-plot";
+import {
+  csvFileName,
+  csvText,
+  configFileName,
+  manifestFileName,
+  plotExportFileName,
+  plotExportSize,
+  plotImageFormat,
+} from "./lib/export";
+import {
+  activeColumns,
+  needsRefFrameMigration,
+  needsVsSync,
+  planConfigChange,
+} from "./lib/config-change";
+import { paddingLength, sharedLinkDecision, withoutSharedParam } from "./lib/boot";
+import { notifierText, popupCoords, relayoutRanges, scrubTime } from "./lib/plot-events";
+import {
+  anyPanelOpen,
+  isTextInputTarget,
+  shortcutsFor,
+  stepPlaybackRate,
+} from "./lib/shortcuts";
+import {
+  buildLayout,
+  type LayoutColors,
+} from "./lib/plot-layout";
+import {
+  enumContext,
+  primaryTraces,
+  vsTraces,
+  type Series,
+  type TraceContext,
+} from "./lib/plot-traces";
+import {
+  annotationXRange,
+  annotationYRange,
+  isUsableText,
+  placementLabel,
+  plotlyAnnotations,
+  plotlyShapes,
+  shapeFromClick,
+  upsertAt,
+} from "./lib/overlays";
+import {
+  duplicateLabTab as copyLabTab,
+  evictLabData,
+  evictedPlottedColumns,
+  isReusableLabTab,
+  labTabFor,
+  labUrl,
+  legacyLabTabs,
+  makeBlankLabTab,
+  resolveLabSchemas,
+  staleLabs,
+  type LabSchema,
+  type LabTab,
+  type RawLabSchema,
+} from "./lib/lab";
+import {
+  buildProfilePayload,
+  profileActiveIndex,
+  profileMissing,
+  profileUrl,
+  profileWarnings,
+  saveProfileRequest,
+  tabsFromProfile,
+} from "./lib/profiles";
 import { fetchWithTimeout, fetchWithRetry } from "./lib/fetch-timeout";
 import {
   describeSchemaPath,
@@ -161,9 +278,6 @@ import type {
   YAxisConfig,
 } from "./models";
 
-// how many recently-closed plot tabs reopenLastClosedPlotTab() can recover
-const _MAX_CLOSED_PLOT_TABS = 10;
-
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
 // ---------------------------------------------------------------------------
@@ -184,47 +298,6 @@ const _mini: { rafId: number | null } = { rafId: null };
 // ---------------------------------------------------------------------------
 // Lab tab state
 // ---------------------------------------------------------------------------
-interface LabTab {
-  id: string;
-  name: string;
-  graph: object | null;
-  savedState: string | null; // JSON of the graph at last save/load; null = never saved
-  dirty: boolean;
-  viewport: { scale: number; offset: [number, number] } | null; // remembered pan/zoom
-}
-
-interface LabSchema {
-  name: string;
-  signal_in_columns: string[];
-  outputs: string[];
-  modified: number;
-  valid: boolean;
-  missing: string[];
-  is_template: boolean;
-  template_inputs: string[];
-  template_outputs: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Plot tab state
-// ---------------------------------------------------------------------------
-// No separate "name" field - a plot tab's label is its config.title (see
-// _macros.html's tab_strip() call in _chart.html), since a plot tab has no
-// on-disk file identity the way a saved Signal Lab graph does.
-interface PlotTab {
-  id: string;
-  config: PlotConfig;
-  data: Record<string, number[]> | null;
-  filterFingerprints: Record<string, string>;
-  xAxisFilterFingerprint: string;
-  historyStack: string[];
-  historyIndex: number;
-  savedSnapshot: string | null; // JSON of config as of last profile save/load; null = never saved
-  // set only while sitting in closedPlotTabs - its index in plotTabs at the
-  // moment it was closed, so reopenLastClosedPlotTab() can reinsert it back
-  // where it was rather than always appending at the end.
-  closedAtIndex?: number;
-}
 
 // ---------------------------------------------------------------------------
 // Component factory
@@ -543,7 +616,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // --- PLOT TABS ---
     plotTabs: [] as PlotTab[],
     plotActiveTabId: null as string | null,
-    // most-recently-closed first, capped at _MAX_CLOSED_PLOT_TABS - lets any
+    // most-recently-closed first, capped at MAX_CLOSED_PLOT_TABS - lets any
     // close (confirmed-dirty or not) be undone via reopenLastClosedPlotTab()
     closedPlotTabs: [] as PlotTab[],
     // multi-select for bulk-closing plot tabs (shift/ctrl-click); cleared on
@@ -814,70 +887,27 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       id: string,
       requiredCols: string[] = [],
     ): Promise<TrialDataResponse> {
-      let url = `/mosaic/${id}/data`;
-      const colParams = new URLSearchParams();
-      if (requiredCols.length > 0)
-        colParams.append("cols", requiredCols.join(","));
-
-      // include active filter stacks for requested columns (x-axis and y-axes)
-      const filtersPayload: Record<string, object[]> = {};
-      const toActiveFilters = (
-        filters: { enabled?: boolean; [k: string]: unknown }[],
-      ) =>
-        filters
-          .filter((f) => f.enabled !== false)
-          .map((f) =>
-            Object.fromEntries(
-              Object.entries(f).filter(([k]) => k !== "enabled"),
-            ),
-          );
-      for (const col of requiredCols) {
-        const yConfig = this.config.yAxes[col];
-        if (
-          yConfig?.filters &&
-          yConfig.filters.length > 0 &&
-          !this.isEnumCol(col)
-        ) {
-          const active = toActiveFilters(yConfig.filters);
-          if (active.length > 0) filtersPayload[col] = active;
-        }
-        if (col === this.config.xAxis!.col!) {
-          const xFilters = this.config.xAxis?.filters ?? [];
-          if (xFilters.length > 0) {
-            const active = toActiveFilters(xFilters);
-            if (active.length > 0) filtersPayload[col] = active;
-          }
-        }
-      }
-      if (Object.keys(filtersPayload).length > 0) {
-        colParams.append("filters", JSON.stringify(filtersPayload));
-      }
-      if (this.config.displayUnitSystem) {
-        colParams.append("display_unit_system", this.config.displayUnitSystem);
-      }
-      if (this.config.maxPoints != null) {
-        colParams.append("max_points", String(this.config.maxPoints));
-      }
-
-      const queryStr = colParams.toString();
-      if (queryStr) url += `?${queryStr}`;
+      const url = trialDataUrl(id, requiredCols, this.config, (c) =>
+        this.isEnumCol(c),
+      );
       // lab-virtual columns can change value for the same URL after an
       // in-place edit + save, so always bypass the browser HTTP cache
       const resp = await fetchWithRetry(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`Trial ${id} failed`);
       const result = (await resp.json()) as TrialDataResponse;
       if (result.filter_errors && result.filter_errors.length > 0) {
-        result.filter_errors.forEach((msg) => {
-          if (!(this._shownFilterErrors as Set<string>).has(msg)) {
-            (this._shownFilterErrors as Set<string>).add(msg);
-            this.notify(msg, "error");
-            // clear after 5 s so the same error can resurface if the user tries again
-            setTimeout(
-              () => (this._shownFilterErrors as Set<string>).delete(msg),
-              5000,
-            );
-          }
-        });
+        for (const msg of unseenFilterErrors(
+          result.filter_errors,
+          this._shownFilterErrors as Set<string>,
+        )) {
+          (this._shownFilterErrors as Set<string>).add(msg);
+          this.notify(msg, "error");
+          // clear after 5 s so the same error can resurface if the user tries again
+          setTimeout(
+            () => (this._shownFilterErrors as Set<string>).delete(msg),
+            5000,
+          );
+        }
       }
       return result;
     },
@@ -890,10 +920,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       loopId: number,
     ) {
       const CHUNK_SIZE = 10;
-      for (let i = 0; i < columnList.length; i += CHUNK_SIZE) {
+      const chunks = chunked(columnList, CHUNK_SIZE);
+      for (let c = 0; c < chunks.length; c++) {
+        const i = c * CHUNK_SIZE;
         if (loopId !== this.discoveryId) return;
         await new Promise((r) => setTimeout(r, 50));
-        const chunk = columnList.slice(i, i + CHUNK_SIZE);
+        const chunk = chunks[c]!;
         try {
           const resp = await this.fetchTrialData(id, chunk);
           if (isVsDataset) {
@@ -925,18 +957,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       } catch {
         // dojo offline - leave existing status in place
       }
-      if (this.trialStatus && this.trialStatus.completion === "incomplete") {
-        if (this._trialStatusPoll === null) {
-          this._trialStatusPoll = setInterval(() => {
-            void this.fetchTrialStatus();
-            void this.fetchTrialLogs();
-          }, 3000);
-        }
-      } else {
-        if (this._trialStatusPoll !== null) {
-          clearInterval(this._trialStatusPoll);
-          this._trialStatusPoll = null;
-        }
+      const poll = trialPollAction(this.trialStatus, this._trialStatusPoll !== null);
+      if (poll === "start") {
+        this._trialStatusPoll = setInterval(() => {
+          void this.fetchTrialStatus();
+          void this.fetchTrialLogs();
+        }, 3000);
+      } else if (poll === "stop") {
+        clearInterval(this._trialStatusPoll!);
+        this._trialStatusPoll = null;
       }
     },
 
@@ -991,29 +1020,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     showDistTooltip(event: MouseEvent, entry: DistEntry) {
-      const hasChart = entry.pdf_x.length > 0 || entry.cat_labels.length > 0;
-      const hasParams = Object.keys(entry.params).length > 0;
-      if (!hasChart && !hasParams) return;
+      if (!hasTooltipContent(entry)) return;
       this._distTooltipEntry = entry;
       const tooltip = document.getElementById(
         "dist-pdf-tooltip",
       ) as HTMLElement | null;
       if (!tooltip) return;
-      // widen tooltip for categorical with many choices so bars have room
-      const minW =
-        entry.chart_type === "categorical"
-          ? Math.min(560, Math.max(340, entry.cat_labels.length * 52))
-          : 340;
+      const minW = tooltipMinWidth(entry.chart_type, entry.cat_labels.length);
       tooltip.style.minWidth = `${minW}px`;
-      const x = event.clientX + 18;
-      const y = event.clientY - 110;
-      // flip to the left of the cursor when too close to the right edge so the
-      // cursor never lands inside the tooltip (Plotly SVG overrides pointer-events
-      // on child elements, causing mouseleave/mouseenter flicker if the cursor
-      // enters the tooltip bounds)
-      const fitsRight = x + minW + 20 <= window.innerWidth;
-      tooltip.style.left = `${fitsRight ? x : Math.max(8, event.clientX - minW - 18)}px`;
-      tooltip.style.top = `${Math.max(8, y)}px`;
+      const pos = tooltipPosition(
+        event.clientX,
+        event.clientY,
+        minW,
+        window.innerWidth,
+      );
+      tooltip.style.left = `${pos.left}px`;
+      tooltip.style.top = `${pos.top}px`;
       tooltip.style.display = "block";
       void this._renderDistTooltipPlot(entry);
     },
@@ -1048,214 +1070,28 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // shade off from the rose the legend actually shows.
       const sampledColor = themeColor("danger");
 
-      const chartType = entry.chart_type;
-
-      if (chartType === "permutation" || chartType === "none") {
-        // no chart — hide the chart element so the tooltip is params-only
+      const colors: DistColors = {
+        bg,
+        text: textColor,
+        curve: curveColor,
+        cdf: cdfColor,
+        fill: fillColor,
+        sampled: sampledColor,
+        nominal: themeColor("ink-muted"),
+      };
+      const plot = distPlot(entry, colors);
+      if (!plot) {
+        // no chart - hide the chart element so the tooltip is params-only
         chartEl.style.display = "none";
       } else {
         chartEl.style.display = "";
-
-        let traces: object[];
-        let layout: object;
-
-        if (chartType === "categorical") {
-          const barColors = entry.cat_labels.map((lbl) =>
-            entry.sampled_labels?.includes(lbl) ? sampledColor : curveColor,
-          );
-          traces = [
-            {
-              x: entry.cat_labels,
-              y: entry.cat_probs,
-              type: "bar",
-              marker: { color: barColors, opacity: 0.85 },
-              hoverinfo: "x+y",
-            },
-          ];
-          const maxProb = Math.max(...entry.cat_probs.map((p) => p ?? 0), 0);
-          const annotations = entry.cat_labels.map((lbl, i) => ({
-            x: lbl,
-            y: entry.cat_probs[i] ?? 0,
-            text: `${((entry.cat_probs[i] ?? 0) * 100).toFixed(1)}%`,
-            showarrow: false,
-            yanchor: "bottom",
-            yshift: 2,
-            font: { size: 9, color: textColor },
-          }));
-          layout = {
-            paper_bgcolor: bg,
-            plot_bgcolor: bg,
-            margin: { t: 22, r: 10, b: 52, l: 52 },
-            xaxis: {
-              color: textColor,
-              showgrid: false,
-              tickfont: { size: 10 },
-              tickangle: entry.cat_labels.length > 5 ? -30 : 0,
-            },
-            yaxis: {
-              color: textColor,
-              showgrid: false,
-              tickfont: { size: 11 },
-              title: {
-                text: "Probability",
-                font: { size: 13 },
-                standoff: 4,
-              },
-              // extend range above max bar so annotations have room
-              range: [0, maxProb * 1.2],
-            },
-            annotations,
-            showlegend: false,
-            font: { size: 11, color: textColor },
-          };
-        } else {
-          // continuous or discrete: PDF/PMF + CDF on secondary y-axis
-          const unitsLabel =
-            entry.units !== "unset" && entry.units !== "" ? entry.units : "";
-
-          const shapes: object[] = [];
-          if (entry.nominal !== null && typeof entry.nominal === "number") {
-            shapes.push({
-              type: "line",
-              x0: entry.nominal,
-              x1: entry.nominal,
-              y0: 0,
-              y1: 1,
-              yref: "paper",
-              line: { color: themeColor("ink-muted"), width: 1.5, dash: "dot" },
-            });
-          }
-          for (const sampledValue of entry.sampled_values ?? []) {
-            shapes.push({
-              type: "line",
-              x0: sampledValue,
-              x1: sampledValue,
-              y0: 0,
-              y1: 1,
-              yref: "paper",
-              line: { color: sampledColor, width: 2, dash: "solid" },
-            });
-          }
-
-          const pdfTrace: object =
-            chartType === "discrete"
-              ? {
-                  x: entry.pdf_x,
-                  y: entry.pdf_y,
-                  type: "bar",
-                  marker: { color: curveColor, opacity: 0.75 },
-                  name: "P(x)",
-                  hoverinfo: "x+y",
-                }
-              : {
-                  x: entry.pdf_x,
-                  y: entry.pdf_y,
-                  type: "scatter",
-                  mode: "lines",
-                  fill: "tozeroy",
-                  line: { color: curveColor, width: 1.5 },
-                  fillcolor: fillColor,
-                  name: "PDF",
-                  hoverinfo: "x+y",
-                };
-
-          const cdfTrace: object = {
-            x: entry.cdf_x,
-            y: entry.cdf_y,
-            type: "scatter",
-            mode: "lines",
-            line: {
-              color: cdfColor,
-              width: 1.5,
-              shape: chartType === "discrete" ? "hv" : "linear",
-            },
-            name: "CDF",
-            yaxis: "y2",
-            hoverinfo: "x+y",
-          };
-
-          traces = [pdfTrace, cdfTrace];
-          layout = {
-            paper_bgcolor: bg,
-            plot_bgcolor: bg,
-            // only reserve bottom space for x-axis title when units are present
-            margin: { t: 14, r: 48, b: unitsLabel ? 46 : 32, l: 64 },
-            xaxis: {
-              color: textColor,
-              showgrid: false,
-              tickfont: { size: 11 },
-              ...(unitsLabel
-                ? {
-                    title: {
-                      text: unitsLabel,
-                      font: { size: 13 },
-                      standoff: 4,
-                    },
-                  }
-                : {}),
-            },
-            yaxis: {
-              color: curveColor,
-              showgrid: false,
-              tickfont: { size: 11 },
-              title: {
-                text:
-                  chartType === "discrete"
-                    ? "Probability"
-                    : "Probability Density",
-                font: { size: 13 },
-                standoff: 4,
-              },
-            },
-            // avoid setting `color` on yaxis2 — it bleeds into the x-axis ticks;
-            // use per-property colors on tickfont and title.font instead
-            yaxis2: {
-              overlaying: "y",
-              side: "right",
-              range: [0, 1],
-              showgrid: false,
-              tickfont: { size: 10, color: cdfColor },
-              title: {
-                text: "CDF",
-                font: { size: 12, color: cdfColor },
-                standoff: 2,
-              },
-              tickformat: ".1f",
-            },
-            showlegend: false,
-            shapes,
-            font: { size: 11, color: textColor },
-          };
-        }
-
-        await Plotly.react(chartEl, traces, layout, {
+        await Plotly.react(chartEl, plot.traces, plot.layout, {
           displayModeBar: false,
           responsive: true,
         });
       }
 
-      if (paramsEl) {
-        // categorical: probabilities are shown as bar annotations; skip the
-        // redundant params listing below the chart
-        if (chartType === "categorical") {
-          paramsEl.innerHTML = "";
-        } else {
-          const fmt = (v: string | number | boolean): string => {
-            if (typeof v === "number") {
-              return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
-                ? v.toExponential(3)
-                : v.toPrecision(4).replace(/\.?0+$/, "");
-            }
-            return String(v);
-          };
-          paramsEl.innerHTML = Object.entries(entry.params)
-            .map(
-              ([k, v]) =>
-                `<span><span class="text-ink-muted">${k}:</span> ${fmt(v)}</span>`,
-            )
-            .join("");
-        }
-      }
+      if (paramsEl) paramsEl.innerHTML = paramsHtml(entry);
     },
 
     get dataLength(): number {
@@ -1279,9 +1115,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     get warpOutcomeColor(): "success" | "warning" | "danger" {
       const store = Alpine.store("dojo") as DojoStore;
       const num = this.warpId ?? this.currentTrialNum;
-      if (store.errorTrialNums.includes(num)) return "warning";
-      if (store.failureTrialNums.includes(num)) return "danger";
-      return "success";
+      const outcome = trialOutcome(num, store.errorTrialNums, store.failureTrialNums);
+      return outcome === "error" ? "warning" : outcome === "failure" ? "danger" : "success";
     },
 
     // -----------------------------------------------------------------------
@@ -1504,15 +1339,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       e.preventDefault();
       const startX = e.clientX;
       const startWidth = this.logColWidths[col];
-      const MIN: Record<typeof col, number> = {
-        time: 60,
-        level: 56,
-        source: 60,
-      };
       const onMove = (ev: MouseEvent) => {
-        this.logColWidths[col] = Math.max(
-          MIN[col],
-          startWidth + (ev.clientX - startX),
+        this.logColWidths[col] = resizedLogColumnWidth(
+          col,
+          startWidth,
+          ev.clientX - startX,
         );
       };
       const onUp = () => {
@@ -1551,14 +1382,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         `[data-logcol-content="${col}"]`,
       );
 
-      const HEADER_ICON_ALLOWANCE = 20; // sort chevron + gap
-      const CELL_PADDING = 16; // px-2 on the cell (8px each side)
-      const BADGE_PADDING = 16; // px-2 on the level badge (8px each side)
-
-      let width =
-        this._measureTextWidth(headerEl.textContent?.trim() ?? "", headerEl) +
-        HEADER_ICON_ALLOWANCE;
-
+      const headerWidth = this._measureTextWidth(
+        headerEl.textContent?.trim() ?? "",
+        headerEl,
+      );
+      const contentWidths: number[] = [];
       if (contentEl) {
         for (const entry of this.filteredLogEntries) {
           let text: string;
@@ -1573,13 +1401,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               text = this.logSourceShort(entry);
               break;
           }
-          width = Math.max(width, this._measureTextWidth(text, contentEl));
+          contentWidths.push(this._measureTextWidth(text, contentEl));
         }
       }
 
-      const padding =
-        col === "level" ? CELL_PADDING + BADGE_PADDING : CELL_PADDING;
-      this.logColWidths[col] = Math.ceil(width) + padding;
+      this.logColWidths[col] = fittedLogColumnWidth(col, headerWidth, contentWidths);
       this._persistLogColWidths();
     },
 
@@ -1592,11 +1418,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     formatLogTime,
 
     _updateIsScrubbable() {
-      const sel = this.selectedMedia?.toLowerCase() ?? "";
-      this.mediaIsScrubbable =
-        sel.endsWith(".mp4") ||
-        sel.endsWith(".webm") ||
-        (sel.endsWith(".gif") && this._gifConvertStatus === "ready");
+      this.mediaIsScrubbable = isScrubbable(
+        this.selectedMedia,
+        this._gifConvertStatus,
+      );
     },
 
     _syncOverlayVisibility() {
@@ -1606,22 +1431,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const lineEl = document.getElementById(
         "playback-line-el",
       ) as HTMLElement | null;
-      const isTimeAxis = this.config.xAxis?.col === "time";
-      const hasYAxes = Object.keys(this.config.yAxes).length > 0;
-      const lineVisible =
-        this.mediaShowLine &&
-        this.mediaScrubMode === "play" &&
-        this.mediaIsScrubbable &&
-        isTimeAxis &&
-        hasYAxes;
-      const framesVisible =
-        this.mediaShowFrames &&
-        !!this._mediaFrameInterval &&
-        isTimeAxis &&
-        hasYAxes;
-      if (overlay)
-        overlay.style.display = lineVisible || framesVisible ? "block" : "none";
-      if (lineEl) lineEl.style.display = lineVisible ? "block" : "none";
+      const vis = overlayVisibility({
+        showLine: this.mediaShowLine,
+        scrubMode: this.mediaScrubMode,
+        isScrubbable: this.mediaIsScrubbable,
+        showFrames: this.mediaShowFrames,
+        frameInterval: this._mediaFrameInterval,
+        xCol: this.config.xAxis?.col,
+        hasYAxes: Object.keys(this.config.yAxes).length > 0,
+      });
+      if (overlay) overlay.style.display = vis.overlay;
+      if (lineEl) lineEl.style.display = vis.line;
     },
 
     _renderFrameMarkers() {
@@ -1630,12 +1450,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       ) as SVGPathElement | null;
       if (!framesPath) return;
       this._syncOverlayVisibility();
-      const hasYAxes = Object.keys(this.config.yAxes).length > 0;
       if (
-        !this.mediaShowFrames ||
-        !this._mediaFrameInterval ||
-        this.config.xAxis?.col !== "time" ||
-        !hasYAxes
+        !framesVisible({
+          showLine: this.mediaShowLine,
+          scrubMode: this.mediaScrubMode,
+          isScrubbable: this.mediaIsScrubbable,
+          showFrames: this.mediaShowFrames,
+          frameInterval: this._mediaFrameInterval,
+          xCol: this.config.xAxis?.col,
+          hasYAxes: Object.keys(this.config.yAxes).length > 0,
+        })
       ) {
         framesPath.setAttribute("d", "");
         return;
@@ -1653,47 +1477,35 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const video = document.getElementById(
         "media-video-player",
       ) as HTMLVideoElement | null;
-      const duration =
-        video?.duration && isFinite(video.duration) ? video.duration : Infinity;
-      const interval = this._mediaFrameInterval;
-      const ph = rect!.height;
-      const markerHeight = 5;
-      const markerTop = ph - fullLayout.margin.b - 20;
-      const markerBot = markerTop - markerHeight;
-      const [xMin, xMax] = fullLayout.xaxis.range;
-      const kStart = Math.max(0, Math.floor(xMin / interval));
-      const kEnd = Math.ceil(
-        Math.min(isFinite(duration) ? duration : xMax, xMax) / interval,
+      framesPath.setAttribute(
+        "d",
+        frameMarkersPath({
+          interval: this._mediaFrameInterval!,
+          duration: knownDuration(video?.duration),
+          height: rect!.height,
+          marginB: fullLayout.margin.b,
+          marginL: fullLayout.margin.l,
+          range: fullLayout.xaxis.range,
+          l2p: (v) => fullLayout.xaxis.l2p(v),
+        }),
       );
-      let d = "";
-      for (let k = kStart; k <= kEnd; k++) {
-        const px = fullLayout.margin.l + fullLayout.xaxis.l2p(k * interval);
-        d += `M${px},${markerTop}L${px},${markerBot}`;
-      }
-      framesPath.setAttribute("d", d);
     },
 
     _updatePlaybackLine() {
-      const isTimeAxis = this.config.xAxis?.col === "time";
       // loop only runs on time axis: line, zoom-looping, and frame markers all require it
-      const shouldRun =
-        this.mediaScrubMode === "play" &&
-        this.mediaFiles.length > 0 &&
-        this.mediaIsScrubbable &&
-        isTimeAxis &&
-        this.config.plotType !== "polar";
-      if (!shouldRun || this._mediaRafId !== null) return;
+      const playback = (): boolean =>
+        shouldRunPlayback({
+          scrubMode: this.mediaScrubMode,
+          fileCount: this.mediaFiles.length,
+          isScrubbable: this.mediaIsScrubbable,
+          isTimeAxis: this.config.xAxis?.col === "time",
+          plotType: this.config.plotType,
+        });
+      if (!playback() || this._mediaRafId !== null) return;
       const tick = () => {
-        const curTimeAxis = this.config.xAxis?.col === "time";
-        if (
-          this.mediaScrubMode !== "play" ||
-          this.mediaFiles.length === 0 ||
-          !this.mediaIsScrubbable ||
-          !curTimeAxis ||
-          // a polar plot's _fullLayout has polar.radialaxis/angularaxis, not
-          // xaxis at all - reading fullLayout.xaxis.range below would throw
-          this.config.plotType === "polar"
-        ) {
+        // a polar plot's _fullLayout has polar.radialaxis/angularaxis, not
+        // xaxis at all - reading fullLayout.xaxis.range below would throw
+        if (!playback()) {
           this._mediaRafId = null;
           this._syncOverlayVisibility();
           return;
@@ -1713,12 +1525,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           const fullLayout = plotEl._fullLayout;
           if (fullLayout) {
             const [xMin, xMax] = fullLayout.xaxis.range;
-            const safeMin = Math.max(0, xMin);
-            const safeMax = Math.min(video.duration, xMax);
-            if (safeMax > safeMin) {
-              if (video.currentTime >= safeMax) video.currentTime = safeMin;
-              else if (video.currentTime < safeMin) video.currentTime = safeMin;
-            }
+            const next = loopedTime(video.currentTime, xMin, xMax, video.duration);
+            if (next !== null) video.currentTime = next;
             this._syncOverlayVisibility();
             if (this.mediaShowLine) {
               const lineEl = document.getElementById(
@@ -1727,10 +1535,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               if (lineEl) {
                 lineEl.style.top = fullLayout.margin.t + "px";
                 lineEl.style.bottom = fullLayout.margin.b + "px";
-                const t = this._mediaFrameInterval
-                  ? Math.round(video.currentTime / this._mediaFrameInterval) *
-                    this._mediaFrameInterval
-                  : video.currentTime;
+                const t = snappedTime(video.currentTime, this._mediaFrameInterval);
                 lineEl.style.left =
                   fullLayout.margin.l + fullLayout.xaxis.l2p(t) + "px";
               }
@@ -1757,10 +1562,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.mediaFiles = data.files.map((f: TrialMediaFile) => f.name);
         if (this.mediaFiles.length > 0) {
           const saved = localStorage.getItem("mojo:media:file");
-          this.selectedMedia =
-            saved && this.mediaFiles.includes(saved)
-              ? saved
-              : this.mediaFiles[0]!;
+          this.selectedMedia = pickSelectedMedia(this.mediaFiles, saved)!;
         }
         this._applySelectedMediaFps();
         this._updateIsScrubbable();
@@ -1777,16 +1579,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // file with the same name forces the browser to reload it instead of
     // reusing a stale cached video/image from before the rerun
     _mediaFileUrl(filename: string, suffix = ""): string {
-      const base = `/mosaic/${this.trialId}/media/${filename}${suffix}`;
-      const mtime = this._mediaMtimeMap[filename];
-      return mtime !== undefined ? `${base}?t=${mtime}` : base;
+      return mediaUrl(this.trialId, filename, suffix, this._mediaMtimeMap[filename]);
     },
 
     _applySelectedMediaFps() {
       const fps = this.selectedMedia
         ? (this._mediaFpsMap[this.selectedMedia] ?? null)
         : null;
-      this._mediaFrameInterval = fps && fps > 0 ? 1 / fps : null;
+      this._mediaFrameInterval = frameInterval(fps);
     },
 
     _onVideoLoaded() {
@@ -1822,18 +1622,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const card = wrapper.parentElement;
       if (canvas) canvas.style.cursor = "grabbing";
       const onMove = (ev: MouseEvent) => {
-        const maxLeft = card
-          ? Math.max(0, card.offsetWidth - wrapper.offsetWidth - 4)
-          : 9999;
-        const maxTop = card
-          ? Math.max(0, card.offsetHeight - wrapper.offsetHeight - 4)
-          : 9999;
-        wrapper.style.left =
-          Math.max(4, Math.min(maxLeft, startLeft + ev.clientX - startX)) +
-          "px";
-        wrapper.style.top =
-          Math.max(4, Math.min(maxTop, startTop + (ev.clientY - startY))) +
-          "px";
+        const pos = miniDragPosition(
+          startLeft,
+          startTop,
+          ev.clientX - startX,
+          ev.clientY - startY,
+          card
+            ? {
+                width: card.offsetWidth,
+                height: card.offsetHeight,
+                wrapperWidth: wrapper.offsetWidth,
+                wrapperHeight: wrapper.offsetHeight,
+              }
+            : null,
+        );
+        wrapper.style.left = pos.left + "px";
+        wrapper.style.top = pos.top + "px";
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
@@ -1863,25 +1667,18 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const video = document.getElementById(
         "media-video-player",
       ) as HTMLVideoElement | null;
-      const aspectRatio =
-        video && video.videoWidth && video.videoHeight
-          ? video.videoWidth / video.videoHeight
-          : 16 / 9;
+      const aspect = aspectRatio(video?.videoWidth, video?.videoHeight);
       const onMove = (ev: MouseEvent) => {
-        const dw = ev.clientX - startX;
-        const dh = ev.clientY - startY;
-        let newW = Math.max(120, startW + dw);
-        let newH = Math.max(68, startH + dh);
-        if (ev.shiftKey) {
-          // constrain to aspect ratio — follow whichever axis moved more
-          if (Math.abs(dw) >= Math.abs(dh)) {
-            newH = Math.max(68, Math.round(newW / aspectRatio));
-          } else {
-            newW = Math.max(120, Math.round(newH * aspectRatio));
-          }
-        }
-        wrapper.style.width = newW + "px";
-        wrapper.style.height = newH + "px";
+        const size = miniResizeSize(
+          startW,
+          startH,
+          ev.clientX - startX,
+          ev.clientY - startY,
+          ev.shiftKey,
+          aspect,
+        );
+        wrapper.style.width = size.width + "px";
+        wrapper.style.height = size.height + "px";
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
@@ -1922,7 +1719,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const paint = () => {
         const isGif =
           this.selectedMedia?.toLowerCase().endsWith(".gif") ?? false;
-        const useVideo = !isGif || this._gifConvertStatus === "ready";
+        const useVideo = miniUsesVideo(isGif, this._gifConvertStatus);
         const srcEl = useVideo
           ? (document.getElementById(
               "media-video-player",
@@ -1934,7 +1731,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           const ctx = canvas.getContext("2d");
           if (ctx) {
             const vEl = srcEl as HTMLVideoElement;
-            if (isGif || vEl.readyState === undefined || vEl.readyState >= 2) {
+            if (miniFrameReady(isGif, vEl.readyState)) {
               ctx.drawImage(
                 srcEl as CanvasImageSource,
                 0,
@@ -1963,9 +1760,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     async startBackgroundDiscovery() {
       const currentId = ++this.discoveryId;
-      const pendingCols = this.columns.filter(
-        (c) => !Object.prototype.hasOwnProperty.call(this.data ?? {}, c),
-      );
+      const pendingCols = missingColumns(this.columns, this.data);
       if (pendingCols.length > 0)
         await this.trickleFetch(
           this.trialId,
@@ -1976,30 +1771,20 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         );
       if (currentId !== this.discoveryId) return;
 
-      const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-      const activeCols = [
-        this.config.xAxis!.col!,
-        ...Object.keys(this.config.yAxes),
-      ];
-
-      const pinnedSet = new Set(this.vsDraft.pinned);
-      const draftIds = this.allTrials.filter((id) => {
-        const n = parseInt(id.split("_").pop() ?? "");
-        return (
-          ((n >= start && n <= end) || pinnedSet.has(n)) && id !== this.trialId
-        );
-      });
+      const [start, end] = orderedRange(this.vsDraft.range);
+      const activeCols = activeColumns(this.config);
+      const draftIds = vsTargetIds(
+        this.allTrials,
+        start,
+        end,
+        this.vsDraft.pinned,
+        (id) => id === this.trialId,
+      );
 
       for (const id of draftIds) {
         if (currentId !== this.discoveryId) return;
         const existing = this.vsDatasets[id];
-        const needsFetch =
-          !existing ||
-          activeCols.some(
-            (c) => !Object.prototype.hasOwnProperty.call(existing, c),
-          );
-        if (needsFetch)
+        if (vsNeedsFetch(existing, activeCols, false))
           await this.trickleFetch(
             id,
             activeCols,
@@ -2017,13 +1802,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.placementMode = type;
       this.rectStart = null;
       this.shapeDraft = null;
-      const label =
-        type === "vline"
-          ? "Vertical Line"
-          : type === "hline"
-            ? "Horizontal Line"
-            : "Area Rectangle";
-      this.notify(`Mode: ${label}. Click plot to place.`, "info");
+      this.notify(`Mode: ${placementLabel(type)}. Click plot to place.`, "info");
     },
 
     deleteShape(index: number) {
@@ -2039,44 +1818,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           dash: s.dash ?? "solid",
         })),
       );
-      let newShape: Shape | null = null;
-
-      if (this.placementMode === "vline") {
-        newShape = {
-          type: "vline",
-          x0: pt.x,
-          color: defaultStyle.color,
-          dash: defaultStyle.dash,
-          label: "",
-        };
-      } else if (this.placementMode === "hline") {
-        newShape = {
-          type: "hline",
-          y0: pt.y,
-          color: defaultStyle.color,
-          dash: defaultStyle.dash,
-          label: "",
-        };
-      } else if (this.placementMode === "rect") {
-        if (!this.rectStart) {
-          this.rectStart = { x: pt.x, y: pt.y };
-          return true;
-        }
-        newShape = {
-          type: "rect",
-          x0: this.rectStart.x,
-          x1: pt.x,
-          y0: this.rectStart.y,
-          y1: pt.y,
-          color: defaultStyle.color,
-          dash: defaultStyle.dash,
-          label: "",
-        };
-        this.rectStart = null;
-      }
-
-      if (newShape) {
-        this.config.shapes.push(newShape);
+      const placed = shapeFromClick(
+        this.placementMode,
+        this.rectStart,
+        pt,
+        defaultStyle,
+      );
+      this.rectStart = placed.rectStart;
+      if (placed.shape) {
+        this.config.shapes.push(placed.shape);
         this.placementMode = null;
         this.saveAndRender();
       }
@@ -2085,11 +1835,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     saveShape() {
       if (!this.shapeDraft) return;
-      if (this.shapeEditIndex !== null) {
-        this.config.shapes[this.shapeEditIndex] = { ...this.shapeDraft };
-      } else {
-        this.config.shapes.push({ ...this.shapeDraft });
-      }
+      upsertAt(this.config.shapes, this.shapeDraft, this.shapeEditIndex);
       this.shapeDraft = null;
       this.shapeEditIndex = null;
       this.saveAndRender();
@@ -2111,12 +1857,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // Annotations
     // -----------------------------------------------------------------------
     saveAnnotation() {
-      if (!this.annDraft || !this.annDraft.text.trim()) return;
-      if (this.annEditIndex !== null) {
-        this.config.annotations[this.annEditIndex] = { ...this.annDraft };
-      } else {
-        this.config.annotations.push({ ...this.annDraft });
-      }
+      if (!this.annDraft || !isUsableText(this.annDraft.text)) return;
+      upsertAt(this.config.annotations, this.annDraft, this.annEditIndex);
       this.cancelAnnDraft();
       this.saveAndRender();
     },
@@ -2145,19 +1887,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           })
         | null;
       if (!el || !this.data) return;
-      const xValues = this.data[this.config.xAxis!.col!] ?? [];
-      const xMin = xValues[0] ?? 0;
-      const xMax = xValues[xValues.length - 1] ?? 100;
-      const xSpan = (xMax - xMin) * 0.1;
-      let newRangeX: [number, number] = [ann.x - xSpan / 2, ann.x + xSpan / 2];
-      if (newRangeX[0] < xMin) {
-        newRangeX[1] += xMin - newRangeX[0];
-        newRangeX[0] = xMin;
-      }
-      if (newRangeX[1] > xMax) {
-        newRangeX[0] -= newRangeX[1] - xMax;
-        newRangeX[1] = xMax;
-      }
+      const newRangeX = annotationXRange(
+        this.data[this.config.xAxis!.col!] ?? [],
+        ann.x,
+      );
 
       // enum columns have axes of their own, so only the numeric ones set the y zoom;
       // with none, the primary axis is an enum axis and keeps its fixed range
@@ -2175,11 +1908,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       }
 
       const fullY = this.calculatePaddedRange(numericY, false);
-      const ySpan = Math.abs(fullY[1] - fullY[0]) * 0.2;
-      const newRangeY: [number, number] = [
-        ann.y - ySpan / 2,
-        ann.y + ySpan / 2,
-      ];
+      const newRangeY = annotationYRange(fullY, ann.y);
 
       this.config.rangeY = newRangeY;
       void Plotly.relayout(el, {
@@ -2199,7 +1928,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     editAnnotation(index: number) {
       const ann = this.config.annotations[index]!;
       const newText = prompt("Update Annotation:", ann.text);
-      if (newText !== null && newText.trim() !== "") {
+      if (isUsableText(newText)) {
         this.config.annotations[index]!.text = newText;
         this.saveAndRender();
       }
@@ -2230,7 +1959,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.theme = document.documentElement.classList.contains("dark")
         ? "dark"
         : "light";
-      const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
+      const currentNum = trialNumber(this.trialId);
       this.warpId = isNaN(currentNum) ? null : currentNum;
       void this.fetchTrialStatus();
       void this.fetchTrialLogs();
@@ -2316,18 +2045,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             Date.now(),
             statusData.is_complete,
           );
-          const match = statusData.padding_style.match(/\d+/);
-          this.paddingLen = match ? parseInt(match[0]!) : 2;
+          this.paddingLen = paddingLength(statusData.padding_style);
         }
       } catch (e) {
         console.warn("Dojo offline", e);
       }
 
       try {
-        const initialCols = [
-          this.config.xAxis!.col!,
-          ...Object.keys(this.config.yAxes),
-        ];
+        const initialCols = activeColumns(this.config);
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
@@ -2337,34 +2062,35 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
         const params = new URLSearchParams(window.location.search);
         const shared = params.get("v");
-        let useSharedLink = !!shared;
+        let hasStoredTabs = false;
         if (shared) {
+          try {
+            hasStoredTabs = !!localStorage.getItem("mojo:plot:tabs");
+          } catch {}
+        }
+        const decision = sharedLinkDecision(shared, hasStoredTabs);
+        let useSharedLink = decision === "use";
+        if (decision === "ask") {
           // A ?v= link left in the address bar survives a plain page
           // refresh - without asking first, every such refresh would
           // silently blow away whatever tab session is already saved in
           // this browser, which is exactly what happened here. Only
           // prompt when there's actually something to lose.
-          let hasStoredTabs = false;
-          try {
-            hasStoredTabs = !!localStorage.getItem("mojo:plot:tabs");
-          } catch {}
-          if (hasStoredTabs) {
-            const ok = await window.mojoConfirm?.({
-              title: "Open shared link?",
-              message:
-                "This link will replace the plot tabs you already have open in this browser. Replace them, or keep what you have?",
-              confirmLabel: "Replace my tabs",
-              cancelLabel: "Keep my tabs",
-              variant: "warning",
-            });
-            useSharedLink = ok ?? false;
-          }
+          const ok = await window.mojoConfirm?.({
+            title: "Open shared link?",
+            message:
+              "This link will replace the plot tabs you already have open in this browser. Replace them, or keep what you have?",
+            confirmLabel: "Replace my tabs",
+            cancelLabel: "Keep my tabs",
+            variant: "warning",
+          });
+          useSharedLink = ok ?? false;
+        }
+        if (shared) {
           // Strip ?v= from the address bar regardless of the choice above,
           // so a later refresh doesn't re-ask (or silently reapply it)
           // for a link that's already been handled once.
-          const url = new URL(window.location.href);
-          url.searchParams.delete("v");
-          window.history.replaceState(null, "", url.toString());
+          window.history.replaceState(null, "", withoutSharedParam(window.location.href));
         }
         if (useSharedLink) {
           this.hydrateFromUrl(shared!);
@@ -2377,11 +2103,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
         // Migrate old profiles: if refFrame is set but no series has a RotationFilter,
         // inject it now (before watchers are registered so this is a silent migration).
-        if (refFrameActive(this.config.refFrame)) {
-          const hasRotation = Object.values(this.config.yAxes).some((y) =>
-            (y.filters ?? []).some((f) => f.type === "rotation"),
-          );
-          if (!hasRotation) this.applyRefFrame(this.config.refFrame);
+        if (needsRefFrameMigration(this.config)) {
+          this.applyRefFrame(this.config.refFrame);
         }
 
         // Restores a previously-saved multi-tab session (mojo:plot:tabs),
@@ -2488,11 +2211,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 '[x-ref="annBtn"]',
               ) as HTMLElement | null;
               if (annBtn) {
-                const btnRect = annBtn.getBoundingClientRect();
-                this.annCoords = {
-                  top: btnRect.top + window.scrollY,
-                  left: btnRect.left + window.scrollX - 288 - 16,
-                };
+                this.annCoords = popupCoords(
+                  annBtn.getBoundingClientRect(),
+                  window.scrollX,
+                  window.scrollY,
+                );
               }
               this.annotationsOpen = true;
               void this.$nextTick(() => {
@@ -2514,7 +2237,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                   ? node
                   : node.querySelector?.(".plotly-notifier");
                 if (!notif) continue;
-                const text = notif.textContent?.replace(/×/g, "").trim();
+                const text = notifierText(notif.textContent);
                 if (text) this.notify(text, "info");
                 (notif as HTMLElement).style.display = "none";
               }
@@ -2533,16 +2256,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             if (!fullLayout) return;
             const rect = plotEl.getBoundingClientRect();
             const relX = e.clientX - rect.left - fullLayout.margin.l;
-            if (this.config.xAxis?.col === "time") {
-              const t = fullLayout.xaxis.p2l(relX);
-              video.currentTime = Math.max(0, Math.min(video.duration, t));
-            } else {
-              const plotAreaWidth =
-                rect.width - fullLayout.margin.l - fullLayout.margin.r;
-              if (plotAreaWidth <= 0) return;
-              video.currentTime =
-                video.duration * Math.max(0, Math.min(1, relX / plotAreaWidth));
-            }
+            const xIsTime = this.config.xAxis?.col === "time";
+            const t = scrubTime(
+              video.duration,
+              xIsTime ? fullLayout.xaxis.p2l(relX) : null,
+              relX,
+              rect.width - fullLayout.margin.l - fullLayout.margin.r,
+            );
+            if (t !== null) video.currentTime = t;
           });
 
           setTimeout(() => {
@@ -2566,177 +2287,162 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       window.addEventListener(
         "keydown",
         (e) => {
-          if (e.repeat) return;
-
-          // dialog open → handle Escape/Enter exclusively, block all other shortcuts
           const dojoStore = Alpine.store("dojo") as DojoStore;
-          if (dojoStore?.dialog?.show) {
-            if (e.key === "Escape" || e.key === "Enter") {
-              e.preventDefault();
-              e.stopPropagation();
-              if (e.key === "Escape") dojoStore.dialog.cancel();
-              else dojoStore.dialog.confirm();
-            }
-            return;
-          }
-
+          const dialogOpen = !!dojoStore?.dialog?.show;
           const targetEl = e.target as HTMLElement;
-          const tag = targetEl.tagName;
           const isTextInput =
-            ["INPUT", "TEXTAREA", "SELECT"].includes(tag) ||
-            targetEl.isContentEditable;
-          if (e.key === "/" && !isTextInput) {
-            e.preventDefault();
-            (
-              document.querySelector(
-                "input[data-warp-input]",
-              ) as HTMLElement | null
-            )?.focus();
-          }
-          if (e.key === "Escape") {
-            const anyOpen = !!(
-              this.placementMode ||
-              this.annotationsOpen ||
-              this.shapesOpen ||
-              this.xMenuOpen ||
-              this.yMenuOpen ||
-              this.refFrameMenuOpen ||
-              this.refFrameOriginMenuOpen ||
-              this.plotConfigOpen ||
-              this.downloadOpen ||
-              this.editorOpen ||
-              this.profilesOpen ||
-              this.vsMenuOpen ||
-              this.labOpen ||
-              (Alpine.store("dojo") as DojoStore).overlayCount > 0 ||
-              isTextInput
-            );
-            if (isTextInput) targetEl.blur();
-            this.placementMode = null;
-            this.rectStart = null;
-            this.cancelAnnDraft();
-            this.cancelShapeDraft();
-            this.annotationsOpen = false;
-            this.shapesOpen = false;
-            this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = this.refFrameOriginMenuOpen = false;
-            this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
-            this.profilesOpen = this.vsMenuOpen = false;
-            this.profileSearch = "";
-            if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
-              this.labOpen = false;
-            } else {
-              void (
-                window.mojoConfirm?.({
-                  title: "Unsaved changes",
-                  message: "Close the lab and discard unsaved changes?",
-                  confirmLabel: "Discard",
-                  cancelLabel: "Keep editing",
-                  variant: "warning",
-                }) ?? Promise.resolve(false)
-              ).then((ok) => {
-                if (ok) {
-                  window.mojoLabRevertToSaved?.();
+            e.repeat || dialogOpen ? false : isTextInputTarget(targetEl);
+
+          for (const shortcut of shortcutsFor(e, {
+            dialogOpen,
+            isTextInput,
+            labOpen: this.labOpen,
+          })) {
+            if (shortcut.preventDefault) e.preventDefault();
+            if (shortcut.stopPropagation) e.stopPropagation();
+            switch (shortcut.action) {
+              case "dialog-cancel":
+                dojoStore.dialog.cancel();
+                break;
+              case "dialog-confirm":
+                dojoStore.dialog.confirm();
+                break;
+              case "focus-warp":
+                (
+                  document.querySelector(
+                    "input[data-warp-input]",
+                  ) as HTMLElement | null
+                )?.focus();
+                break;
+              case "escape": {
+                const anyOpen = anyPanelOpen({
+                  placementMode: this.placementMode,
+                  annotationsOpen: this.annotationsOpen,
+                  shapesOpen: this.shapesOpen,
+                  xMenuOpen: this.xMenuOpen,
+                  yMenuOpen: this.yMenuOpen,
+                  refFrameMenuOpen: this.refFrameMenuOpen,
+                  refFrameOriginMenuOpen: this.refFrameOriginMenuOpen,
+                  plotConfigOpen: this.plotConfigOpen,
+                  downloadOpen: this.downloadOpen,
+                  editorOpen: this.editorOpen,
+                  profilesOpen: this.profilesOpen,
+                  vsMenuOpen: this.vsMenuOpen,
+                  labOpen: this.labOpen,
+                  overlayCount: (Alpine.store("dojo") as DojoStore).overlayCount,
+                  isTextInput,
+                });
+                if (isTextInput) targetEl.blur();
+                this.placementMode = null;
+                this.rectStart = null;
+                this.cancelAnnDraft();
+                this.cancelShapeDraft();
+                this.annotationsOpen = false;
+                this.shapesOpen = false;
+                this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = this.refFrameOriginMenuOpen = false;
+                this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
+                this.profilesOpen = this.vsMenuOpen = false;
+                this.profileSearch = "";
+                if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
                   this.labOpen = false;
+                } else {
+                  void (
+                    window.mojoConfirm?.({
+                      title: "Unsaved changes",
+                      message: "Close the lab and discard unsaved changes?",
+                      confirmLabel: "Discard",
+                      cancelLabel: "Keep editing",
+                      variant: "warning",
+                    }) ?? Promise.resolve(false)
+                  ).then((ok) => {
+                    if (ok) {
+                      window.mojoLabRevertToSaved?.();
+                      this.labOpen = false;
+                    }
+                  });
                 }
-              });
-            }
-            window.dispatchEvent(new CustomEvent("mojo:escape"));
-            // Stop immediate propagation when something was open so Alpine's
-            // bubble-phase @keydown.escape.window handler doesn't also fire.
-            // This prevents Escape from both closing the lab and exiting fullscreen.
-            if (anyOpen) e.stopImmediatePropagation();
-          }
-          if (
-            (e.metaKey || e.ctrlKey) &&
-            e.key.toLowerCase() === "c" &&
-            !isTextInput
-          ) {
-            if (this.labOpen) {
-              e.preventDefault();
-              document.dispatchEvent(new CustomEvent("mojo:lab-clear"));
-            }
-          }
-          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-            e.preventDefault();
-            if (this.labOpen) {
-              const nameEl = document.getElementById(
-                "lab-name-input",
-              ) as HTMLInputElement | null;
-              const name = nameEl?.value.trim() ?? "";
-              if (name) {
-                const graph = window.mojoLabSerialize?.();
-                if (graph) void this.saveLabGraph(name, graph);
-              } else {
-                nameEl?.focus();
-                nameEl?.setSelectionRange(0, 0);
+                window.dispatchEvent(new CustomEvent("mojo:escape"));
+                // Stop immediate propagation when something was open so Alpine's
+                // bubble-phase @keydown.escape.window handler doesn't also fire.
+                // This prevents Escape from both closing the lab and exiting fullscreen.
+                if (anyOpen) e.stopImmediatePropagation();
+                break;
               }
-            } else if (!isTextInput) {
-              this._computeProfilesCoords();
-              this.profilesOpen = true;
-              void this.loadProfiles();
-              void this.$nextTick(() => {
-                const el = document.getElementById(
-                  "profile-name-input",
+              case "lab-clear":
+                document.dispatchEvent(new CustomEvent("mojo:lab-clear"));
+                break;
+              case "lab-save": {
+                const nameEl = document.getElementById(
+                  "lab-name-input",
                 ) as HTMLInputElement | null;
-                if (el) {
-                  el.focus();
-                  el.setSelectionRange(el.value.length, el.value.length);
+                const name = nameEl?.value.trim() ?? "";
+                if (name) {
+                  const graph = window.mojoLabSerialize?.();
+                  if (graph) void this.saveLabGraph(name, graph);
+                } else {
+                  nameEl?.focus();
+                  nameEl?.setSelectionRange(0, 0);
                 }
-              });
-            }
-          }
-          if ((e.metaKey || e.ctrlKey) && !isTextInput) {
-            // Up/Down mirror Left/Right (increment/decrement, matching the
-            // usual numeric-stepper convention) as a second way to jog
-            // between trials one at a time.
-            if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-              e.preventDefault();
-              document.getElementById("nav-prev")?.click();
-            } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-              e.preventDefault();
-              document.getElementById("nav-next")?.click();
-            }
-          }
-          if (isTextInput) return;
-
-          if (e.key === "<") {
-            e.preventDefault();
-            const prev = [...this.mediaSpeedPresets]
-              .reverse()
-              .find((p) => p < this.mediaPlaybackRate);
-            if (prev !== undefined) this.mediaPlaybackRate = prev;
-          } else if (e.key === ">") {
-            e.preventDefault();
-            const next = this.mediaSpeedPresets.find(
-              (p) => p > this.mediaPlaybackRate,
-            );
-            if (next !== undefined) this.mediaPlaybackRate = next;
-          }
-
-          const isZ = e.key.toLowerCase() === "z";
-          const isY = e.key.toLowerCase() === "y";
-          const cmdOrCtrl = e.metaKey || e.ctrlKey;
-          if (cmdOrCtrl && isZ) {
-            e.preventDefault();
-            if (this.labOpen) {
-              e.shiftKey ? window.mojoLabRedo?.() : window.mojoLabUndo?.();
-            } else {
-              if (e.shiftKey) this.redo();
-              else this.undo();
-            }
-          }
-          if (cmdOrCtrl && isY) {
-            e.preventDefault();
-            if (this.labOpen) window.mojoLabRedo?.();
-            else this.redo();
-          }
-          if (this.labOpen && cmdOrCtrl && e.shiftKey) {
-            if (e.key.toLowerCase() === "a") {
-              e.preventDefault();
-              window.mojoLabArrange?.();
-            } else if (e.key.toLowerCase() === "f") {
-              e.preventDefault();
-              window.mojoLabFitView?.();
+                break;
+              }
+              case "open-profiles":
+                this._computeProfilesCoords();
+                this.profilesOpen = true;
+                void this.loadProfiles();
+                void this.$nextTick(() => {
+                  const el = document.getElementById(
+                    "profile-name-input",
+                  ) as HTMLInputElement | null;
+                  if (el) {
+                    el.focus();
+                    el.setSelectionRange(el.value.length, el.value.length);
+                  }
+                });
+                break;
+              case "nav-prev":
+                document.getElementById("nav-prev")?.click();
+                break;
+              case "nav-next":
+                document.getElementById("nav-next")?.click();
+                break;
+              case "rate-down": {
+                const prev = stepPlaybackRate(
+                  this.mediaSpeedPresets,
+                  this.mediaPlaybackRate,
+                  "down",
+                );
+                if (prev !== undefined) this.mediaPlaybackRate = prev;
+                break;
+              }
+              case "rate-up": {
+                const next = stepPlaybackRate(
+                  this.mediaSpeedPresets,
+                  this.mediaPlaybackRate,
+                  "up",
+                );
+                if (next !== undefined) this.mediaPlaybackRate = next;
+                break;
+              }
+              case "undo":
+                this.undo();
+                break;
+              case "redo":
+                this.redo();
+                break;
+              case "lab-undo":
+                window.mojoLabUndo?.();
+                break;
+              case "lab-redo":
+                window.mojoLabRedo?.();
+                break;
+              case "lab-arrange":
+                window.mojoLabArrange?.();
+                break;
+              case "lab-fit":
+                window.mojoLabFitView?.();
+                break;
+              case "none":
+                break;
             }
           }
         },
@@ -2748,14 +2454,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.allTrials = data.trials ?? [];
 
       if (this.allTrials.length) {
-        const ids = this.allTrials
-          .map((id) => parseInt(id.split("_").pop() ?? ""))
-          .filter((n) => !isNaN(n));
-        const minFleet = Math.min(...ids);
-        const maxFleet = Math.max(...ids);
-        if (this.vs.range[0] === 0 && this.vs.range[1] === 0) {
-          this.vs.range = [minFleet, maxFleet];
-          this.vsDraft.range = [minFleet, maxFleet];
+        const bounds = trialBounds(this.allTrials);
+        if (bounds && this.vs.range[0] === 0 && this.vs.range[1] === 0) {
+          this.vs.range = [bounds.min, bounds.max];
+          this.vsDraft.range = [bounds.min, bounds.max];
         }
       }
 
@@ -2936,12 +2638,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             localStorage.removeItem("mojo:config:raw-draft");
           } catch {}
         }
-        if (
-          this.vs.enabled &&
-          (value.xAxis!.col! !== oldValue?.xAxis?.col ||
-            Object.keys(value.yAxes).length !==
-              Object.keys(oldValue.yAxes ?? {}).length)
-        ) {
+        if (needsVsSync(this.vs.enabled, value, oldValue)) {
           await this.syncVsRange();
         }
         this.pushHistory();
@@ -2949,39 +2646,23 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         // detect filter changes by comparing against the last-fetched fingerprint rather
         // than oldValue, because Alpine.js $watch does not reliably deep-clone oldValue
         // for nested reactive objects - both value and oldValue may point to the same data
-        const changedFilterCols = Object.keys(value.yAxes).filter((col) => {
-          const current = JSON.stringify(
-            (value.yAxes[col]?.filters ?? []).filter(
-              (f) => f.enabled !== false,
-            ),
-          );
-          return current !== (this.filterFingerprints[col] ?? "[]");
-        });
-        // detect x-axis filter changes
-        const xFilterCurrent = JSON.stringify(
-          (value.xAxis?.filters ?? []).filter((f) => f.enabled !== false),
+        const plan = planConfigChange(
+          value,
+          this.filterFingerprints,
+          this.xAxisFilterFingerprint,
         );
-        const xFilterChanged = xFilterCurrent !== this.xAxisFilterFingerprint;
-        if (xFilterChanged) {
-          this.xAxisFilterFingerprint = xFilterCurrent;
+        if (plan.xFilterChanged) {
+          this.xAxisFilterFingerprint = plan.xFilterFingerprint;
           if (this.data) delete this.data[value.xAxis!.col!];
         }
 
-        const colsToRefetch = [
-          ...(xFilterChanged ? [value.xAxis!.col!] : []),
-          ...changedFilterCols,
-        ];
-        if (colsToRefetch.length > 0) {
-          changedFilterCols.forEach((col) => {
-            this.filterFingerprints[col] = JSON.stringify(
-              (value.yAxes[col]?.filters ?? []).filter(
-                (f) => f.enabled !== false,
-              ),
-            );
+        if (plan.colsToRefetch.length > 0) {
+          plan.changedFilterCols.forEach((col) => {
+            this.filterFingerprints[col] = plan.filterFingerprints[col]!;
             if (this.data) delete this.data[col];
           });
           this.vsDatasets = {};
-          const resp = await this.fetchTrialData(this.trialId, colsToRefetch);
+          const resp = await this.fetchTrialData(this.trialId, plan.colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
           if (this.vs.enabled) await this.syncVsRange();
         }
@@ -3010,10 +2691,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         "config.displayUnitSystem",
         async (newVal: string | null, oldVal: string | null) => {
           if (newVal === oldVal) return;
-          const activeCols = [
-            this.config.xAxis!.col!,
-            ...Object.keys(this.config.yAxes),
-          ];
+          const activeCols = activeColumns(this.config);
           this.vsDatasets = {};
           try {
             const resp = await this.fetchTrialData(this.trialId, activeCols);
@@ -3040,10 +2718,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         "config.maxPoints",
         async (newVal: number | null, oldVal: number | null) => {
           if (newVal === oldVal) return;
-          const activeCols = [
-            this.config.xAxis!.col!,
-            ...Object.keys(this.config.yAxes),
-          ];
+          const activeCols = activeColumns(this.config);
           this.vsDatasets = {};
           try {
             const resp = await this.fetchTrialData(this.trialId, activeCols);
@@ -3146,19 +2821,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     _initVsState() {
-      let range = this.vs.range;
-      let pinned = this.vs.pinned;
+      let raw: string | null = null;
       try {
-        const raw = localStorage.getItem("mojo:plot:vs");
-        if (raw) {
-          const parsed = JSON.parse(raw) as {
-            range?: [number, number];
-            pinned?: number[];
-          };
-          if (parsed.range) range = parsed.range;
-          if (parsed.pinned) pinned = parsed.pinned;
-        }
+        raw = localStorage.getItem("mojo:plot:vs");
       } catch {}
+      const { range, pinned } = parseStoredVs(raw, {
+        range: this.vs.range,
+        pinned: this.vs.pinned,
+      });
       this._restoreVsRange(range, pinned);
     },
 
@@ -3180,18 +2850,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // trials get the same outcome color plus a ring, rather than switching
     // to a different (previously accent) fill.
     vsChipClass(t: string): string {
-      const tn = parseInt(t.split("_").pop() ?? "0");
       const store = Alpine.store("dojo") as DojoStore;
-      if (t === this.trialId)
-        return "border-accent-500 text-accent-500 dark:text-accent-400 cursor-default";
-      const ring = this.vsDraft.pinned.includes(tn)
-        ? " ring-2 ring-accent-500"
-        : "";
-      if (store.errorTrialNums.includes(tn))
-        return `bg-warning-50 dark:bg-warning-900/30 border-warning-400 dark:border-warning-500/50 text-warning-600 dark:text-warning-400 hover:bg-warning-100 dark:hover:bg-warning-800/50${ring}`;
-      if (store.failureTrialNums.includes(tn))
-        return `bg-danger-50 dark:bg-danger-900/30 border-danger-400 dark:border-danger-500/50 text-danger-600 dark:text-danger-400 hover:bg-danger-100 dark:hover:bg-danger-800/50${ring}`;
-      return `bg-success-50 dark:bg-success-900/30 border-success-400 dark:border-success-500/50 text-success-600 dark:text-success-400 hover:bg-success-100 dark:hover:bg-success-800/50${ring}`;
+      return chipClass(
+        t,
+        this.trialId,
+        this.vsDraft.pinned,
+        store.errorTrialNums,
+        store.failureTrialNums,
+      );
     },
 
     async syncVsRange() {
@@ -3212,53 +2878,26 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
       this.vsLoading = true;
       try {
-        const start = Math.min(this.vsDraft.range[0], this.vsDraft.range[1]);
-        const end = Math.max(this.vsDraft.range[0], this.vsDraft.range[1]);
-        let activeCols = [
-          this.config.xAxis!.col!,
-          ...Object.keys(this.config.yAxes),
-        ];
+        const [start, end] = orderedRange(this.vsDraft.range);
+        const activeCols = vsActiveColumns(this.config);
 
-        if (refFrameActive(this.config.refFrame)) {
-          const families = new Set<string>();
-          Object.keys(this.config.yAxes).forEach((col) => {
-            if (col.includes(":"))
-              families.add(col.substring(0, col.lastIndexOf(":")));
-          });
-          families.forEach((fam) =>
-            activeCols.push(`${fam}:x`, `${fam}:y`, `${fam}:z`),
-          );
-          const [refQuat, refOrigin] = this.config.refFrame;
-          if (refQuat)
-            activeCols.push(
-              `${refQuat}:w`,
-              `${refQuat}:x`,
-              `${refQuat}:y`,
-              `${refQuat}:z`,
-            );
-          if (refOrigin)
-            activeCols.push(`${refOrigin}:x`, `${refOrigin}:y`, `${refOrigin}:z`);
-        }
-        activeCols = [...new Set(activeCols)];
-
-        const currentNum = parseInt(this.trialId.split("_").pop() ?? "");
-        const pinnedSet = new Set(this.vsDraft.pinned);
-        const targetIds = this.allTrials.filter((id) => {
-          const n = parseInt(id.split("_").pop() ?? "");
-          return (
-            ((n >= start && n <= end) || pinnedSet.has(n)) && n !== currentNum
-          );
-        });
+        const currentNum = trialNumber(this.trialId);
+        const targetIds = vsTargetIds(
+          this.allTrials,
+          start,
+          end,
+          this.vsDraft.pinned,
+          (_id, n) => n === currentNum,
+        );
 
         await Promise.all(
           targetIds.map(async (id) => {
             const existing = this.vsDatasets[id];
-            const needsFetch =
-              !existing ||
-              activeCols.some(
-                (col) => !Object.prototype.hasOwnProperty.call(existing, col),
-              ) ||
-              refFrameActive(this.config.refFrame);
+            const needsFetch = vsNeedsFetch(
+              existing,
+              activeCols,
+              refFrameActive(this.config.refFrame),
+            );
             if (needsFetch) {
               const response = await this.fetchTrialData(id, activeCols);
               this.vsDatasets[id] = {
@@ -3275,10 +2914,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.vs.enabled = true;
         this._persistVsState();
         if (targetIds.length > 0) {
-          this.notify(
-            `Comparing ${targetIds.length} trial${targetIds.length === 1 ? "" : "s"}`,
-            "info",
-          );
+          this.notify(comparingNotice(targetIds.length), "info");
         }
       } finally {
         this.vsLoading = false;
@@ -3550,10 +3186,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       try {
         localStorage.setItem("mojo:config:raw-draft", this.configRaw);
       } catch {}
+      const raw = parseRawConfig(this.configRaw);
+      if (!raw.json) {
+        this.isValidJson = false;
+        this.isValidConfig = false;
+        return;
+      }
       try {
-        const parsed = JSON.parse(this.configRaw) as PlotConfig;
+        const parsed = raw.config;
         this.isValidJson = true;
-        if (parsed && typeof parsed === "object") {
+        if (parsed) {
           this.configErrors = this.validateConfig(parsed);
           this.isValidConfig = this.configErrors.length === 0;
           if (this.isValidConfig) {
@@ -3584,26 +3226,20 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     loadConfig() {
       const saved = localStorage.getItem("mojo_mosaic_config");
       if (saved) {
-        try {
-          const parsed = sanitizeRefFrame(JSON.parse(saved) as Partial<PlotConfig>);
-          this.config = { ...this.config, ...parsed };
-        } catch {
-          console.error("Stored config corrupt");
-        }
+        const parsed = parseSavedConfig(saved);
+        if (parsed !== null) this.config = { ...this.config, ...parsed };
+        else console.error("Stored config corrupt");
       } else {
         if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
       }
 
       const savedHistory = localStorage.getItem("mojo_mosaic_history");
       if (savedHistory) {
-        try {
-          const { stack, index } = JSON.parse(savedHistory) as {
-            stack: string[];
-            index: number;
-          };
-          this.historyStack = stack;
-          this.historyIndex = index;
-        } catch {
+        const history = parseSavedHistory(savedHistory);
+        if (history) {
+          this.historyStack = history.stack;
+          this.historyIndex = history.index;
+        } else {
           console.warn("History recovery failed.");
           this.pushHistory();
         }
@@ -4177,10 +3813,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         layout: { paper_bgcolor: string; plot_bgcolor: string };
       };
       if (!el) return;
-      const plotlyFormat = format === "jpg" ? "jpeg" : format;
+      const plotlyFormat = plotImageFormat(format);
       const bgColor = themeColor("surface");
-      const resW = Math.round(1280 * scale);
-      const resH = Math.round(720 * scale);
+      const { width: resW, height: resH } = plotExportSize(scale);
       this.notify(
         `Exporting ${resW}x${resH} ${format.toUpperCase()}...`,
         "info",
@@ -4204,7 +3839,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         });
         const link = document.createElement("a");
         link.href = dataUrl;
-        link.download = `${this.trialId}_${resW}p.${format}`;
+        link.download = plotExportFileName(this.trialId, resW, format);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4222,21 +3857,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     downloadCSV() {
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
-      const activeCols = [
+      const csv = csvText(
+        this.data,
         this.config.xAxis!.col!,
-        ...Object.keys(this.config.yAxes),
-      ];
-      const rowCount = this.data[this.config.xAxis!.col!]?.length ?? 0;
-      let csv = activeCols.join(",") + "\n";
-      for (let i = 0; i < rowCount; i++) {
-        csv +=
-          activeCols.map((col) => this.data![col]?.[i] ?? "").join(",") + "\n";
-      }
+        Object.keys(this.config.yAxes),
+      );
       const link = document.createElement("a");
       link.href = URL.createObjectURL(
         new Blob([csv], { type: "text/csv;charset=utf-8;" }),
       );
-      link.setAttribute("download", `${this.trialId}_filtered.csv`);
+      link.setAttribute("download", csvFileName(this.trialId));
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4251,7 +3881,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           type: "application/json",
         }),
       );
-      link.setAttribute("download", `${this.trialId}_config.json`);
+      link.setAttribute("download", configFileName(this.trialId));
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4272,7 +3902,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             type: "application/json",
           }),
         );
-        link.setAttribute("download", `${this.trialId}_column_manifest.json`);
+        link.setAttribute("download", manifestFileName(this.trialId));
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4325,17 +3955,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           "y",
           (c) => !refFrameActive(this.config.refFrame) || this.rotateableVectors.includes(c.split(":")[0]!),
         ).filter((r) => r.type === "file" && !r.hidden);
-        const fromIdx = rows.findIndex((r) => r.path === this.lastYRangeClick);
-        const toIdx = rows.findIndex((r) => r.path === row.path);
-        if (fromIdx !== -1 && toIdx !== -1) {
-          const [lo, hi] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
-          const shouldSelect = !this.config.yAxes[col];
-          for (let i = lo; i <= hi; i++) {
-            const c = rows[i]!.item!;
-            const isOn = !!this.config.yAxes[c];
-            if (shouldSelect && !isOn) this.toggleY(c);
-            else if (!shouldSelect && isOn) this.toggleY(c);
-          }
+        const toggles = yRangeToggles(
+          rows.map((r) => ({ path: r.path, item: r.item! })),
+          this.lastYRangeClick,
+          row.path,
+          !!this.config.yAxes[col],
+          (c) => !!this.config.yAxes[c],
+        );
+        if (toggles) {
+          for (const c of toggles) this.toggleY(c);
           this.lastYRangeClick = row.path;
           return;
         }
@@ -4345,28 +3973,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
     toggleY(col: string) {
       if (this.config.yAxes[col]) {
-        const { [col]: _, ...rest } = this.config.yAxes;
-        this.config.yAxes = rest;
+        this.config.yAxes = withoutYAxis(this.config.yAxes, col);
       } else {
-        const usedStyles = Object.values(this.config.yAxes).map((y) => ({
-          color: y.color,
-          dash: y.dash ?? "solid",
-        }));
-        const nextStyle = this.nextAvailableStyle(usedStyles);
-        // a filter or frame rotation on a code stream is meaningless
-        const initFilters: FilterEntry[] =
-          refFrameActive(this.config.refFrame) && !this.isEnumCol(col)
-            ? [buildRefFrameFilter(this.config.refFrame)]
-            : [];
-        this.config.yAxes[col] = {
-          color: nextStyle.color,
-          label: "",
-          width: 3,
-          opacity: 1,
-          filters: initFilters,
-          dash: nextStyle.dash,
-          marker: "none",
-        };
+        const nextStyle = this.nextAvailableStyle(usedStyles(this.config.yAxes));
+        this.config.yAxes[col] = newYAxisConfig(
+          nextStyle,
+          this.config.refFrame,
+          this.isEnumCol(col),
+        );
         // eagerly fetch if this column has no cached data yet
         if (!Object.prototype.hasOwnProperty.call(this.data ?? {}, col)) {
           void (async () => {
@@ -4512,10 +4126,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     // -----------------------------------------------------------------------
     // Profiles
-    // Encode each path segment individually so 'project/name' becomes 'project/name'
-    // in the URL (not 'project%2Fname'), matching the {name:path} FastAPI route.
     _profileUrl(name: string): string {
-      return `/mosaic/api/profiles/${name.split("/").map(encodeURIComponent).join("/")}`;
+      return profileUrl(name);
     },
 
     // ── Lab ──────────────────────────────────────────────────────────────────
@@ -4525,43 +4137,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       try {
         const resp = await fetch("/mosaic/api/lab");
         if (!resp.ok) return;
-        const all = (await resp.json()) as Omit<
-          (typeof this.labSchemas)[0],
-          "valid" | "missing"
-        >[];
-        // Deduplicate and sort inputs/outputs for each lab.
-        const schemas = all.map((lab) => ({
-          ...lab,
-          signal_in_columns: [...new Set(lab.signal_in_columns)].sort(),
-          outputs: [...new Set(lab.outputs)].sort(),
-          is_template: lab.is_template ?? false,
-          template_inputs: lab.template_inputs ?? [],
-          template_outputs: lab.template_outputs ?? [],
-        }));
-        // Iterative BFS: a lab is valid when all its inputs are already available.
-        // Labs that read from other valid labs' outputs need multiple passes to resolve.
-        const baseColumns = this.columns.filter((c) => !c.startsWith("Lab/"));
-        const available = new Set(baseColumns);
-        const validLabs = new Set<string>();
-        let changed = true;
-        while (changed) {
-          changed = false;
-          for (const lab of schemas) {
-            if (validLabs.has(lab.name)) continue;
-            if (lab.signal_in_columns.every((c) => available.has(c))) {
-              validLabs.add(lab.name);
-              lab.outputs.forEach((o) => available.add(`Lab/${lab.name}/${o}`));
-              changed = true;
-            }
-          }
-        }
-        this.labSchemas = schemas.map((lab) => ({
-          ...lab,
-          missing: lab.signal_in_columns.filter((c) => !available.has(c)),
-          valid: validLabs.has(lab.name),
-        }));
-        // Rebuild virtual Lab columns from scratch - removes stale entries from deleted labs.
-        this.columns = [...available].sort();
+        const all = (await resp.json()) as RawLabSchema[];
+        const resolved = resolveLabSchemas(all, this.columns);
+        this.labSchemas = resolved.schemas;
+        this.columns = resolved.columns;
       } catch {
         // Lab endpoint unavailable - silently ignore
       }
@@ -4575,46 +4154,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // ── tab helpers ──────────────────────────────────────────────────────────
 
     _makeBlankLabTab(): LabTab {
-      return {
-        id: newTabId(),
-        name: "",
-        graph: null,
-        savedState: null,
-        viewport: null,
-        dirty: false,
-      };
+      return makeBlankLabTab();
     },
 
     _initTabs() {
       const { tabs, activeId } = loadTabsFromStorage<LabTab>(
         "mojo:lab:tabs",
         "mojo:lab:activeTab",
-        () => {
-          // fall back to old single-lab format
-          const name = localStorage.getItem("mojo:lab:name") ?? "";
-          const graph = (() => {
-            try {
-              const s = localStorage.getItem("mojo:lab:draft");
-              return s ? (JSON.parse(s) as object) : null;
-            } catch {
-              return null;
-            }
-          })();
-          const id = newTabId();
-          return {
-            tabs: [
-              {
-                id,
-                name,
-                graph,
-                savedState: null,
-                dirty: false,
-                viewport: null,
-              },
-            ],
-            activeId: id,
-          };
-        },
+        legacyLabTabs,
       );
       this.labTabs = tabs;
       this.labActiveTabId = activeId;
@@ -4697,19 +4244,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const tabIdx = this.labTabs.findIndex((t) => t.id === tabId);
       if (tabIdx === -1) return;
       if (tabId === this.labActiveTabId) this._snapshotActiveTab();
-      const source = this.labTabs[tabIdx]!;
-      const duplicate: LabTab = {
-        id: newTabId(),
-        name: source.name ? `${source.name} copy` : "",
-        graph: source.graph
-          ? (JSON.parse(JSON.stringify(source.graph)) as object)
-          : null,
-        // never saved under its own name yet, so it starts dirty (unless
-        // it's an empty graph, matching a blank tab's own clean baseline)
-        savedState: null,
-        dirty: !!source.graph,
-        viewport: source.viewport ? { ...source.viewport } : null,
-      };
+      const duplicate = copyLabTab(this.labTabs[tabIdx]!);
       this.labTabs.splice(tabIdx + 1, 0, duplicate);
       await this._activateTab(duplicate.id);
       this._persistTabs();
@@ -4832,9 +4367,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         }
         return;
       }
-      const safePath = labName.split("/").map(encodeURIComponent).join("/");
       try {
-        const resp = await fetch(`/mosaic/api/lab/${safePath}`);
+        const resp = await fetch(labUrl(labName));
         if (!resp.ok) throw new Error(resp.statusText);
         const graph = (await resp.json()) as object;
 
@@ -4842,7 +4376,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const activeTab = this.labTabs.find(
           (t) => t.id === this.labActiveTabId,
         );
-        if (activeTab && !activeTab.name && !activeTab.dirty) {
+        if (activeTab && isReusableLabTab(activeTab)) {
           activeTab.name = labName;
           activeTab.graph = graph;
           activeTab.savedState = null;
@@ -4855,16 +4389,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           }
         } else {
           this._snapshotActiveTab();
-          const id = newTabId();
-          this.labTabs.push({
-            id,
-            name: labName,
-            graph,
-            savedState: null,
-            viewport: null,
-            dirty: false,
-          });
-          await this._activateTab(id);
+          const tab = labTabFor(labName, graph);
+          this.labTabs.push(tab);
+          await this._activateTab(tab.id);
         }
         // persist without snapshotting — mojoLabInit hasn't fired yet, so the
         // canvas is still showing the previous tab's graph; re-snapshotting
@@ -4889,9 +4416,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         });
         if (!ok) return;
       }
-      const safePath = trimmed.split("/").map(encodeURIComponent).join("/");
       try {
-        const resp = await fetch(`/mosaic/api/lab/${safePath}`, {
+        const resp = await fetch(labUrl(trimmed), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(graph),
@@ -4916,60 +4442,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         await this.refreshLabValidation();
         // compute the transitive closure of labs whose outputs may now be stale:
         // the saved lab itself, plus any lab that (directly or transitively) reads from it
-        const dependents = new Map<string, string[]>();
-        for (const lab of this.labSchemas) {
-          for (const col of lab.signal_in_columns) {
-            if (col.startsWith("Lab/")) {
-              // lab names may contain '/' (nested folders); the output label is
-              // always the final segment, so split from the right
-              const depRest = col.slice(4);
-              const depSplitIdx = depRest.lastIndexOf("/");
-              const src = depSplitIdx >= 0 ? depRest.slice(0, depSplitIdx) : "";
-              if (src) {
-                if (!dependents.has(src)) dependents.set(src, []);
-                dependents.get(src)!.push(lab.name);
-              }
-            }
-          }
-        }
-        const toInvalidate = new Set<string>([trimmed]);
-        const bfsQueue = [trimmed];
-        while (bfsQueue.length > 0) {
-          const cur = bfsQueue.shift()!;
-          for (const dep of dependents.get(cur) ?? []) {
-            if (!toInvalidate.has(dep)) {
-              toInvalidate.add(dep);
-              bfsQueue.push(dep);
-            }
-          }
-        }
+        const toInvalidate = staleLabs(this.labSchemas, trimmed);
         // evict all stale entries from the client-side data cache
-        const newData = { ...(this.data ?? {}) };
-        let evicted = false;
-        for (const labName of toInvalidate) {
-          const prefix = `Lab/${labName}/`;
-          for (const key of Object.keys(newData)) {
-            if (key.startsWith(prefix)) {
-              delete newData[key];
-              evicted = true;
-            }
-          }
-        }
-        if (evicted) this.data = newData;
+        const eviction = evictLabData(this.data, toInvalidate);
+        if (eviction.evicted) this.data = eviction.data;
         // re-fetch currently plotted cols that were just evicted
-        const activeCols = [
-          ...Object.keys(this.config.yAxes),
+        const activeCols = evictedPlottedColumns(
+          Object.keys(this.config.yAxes),
           this.config.xAxis?.col ?? "",
-        ].filter((c) => {
-          for (const labName of toInvalidate) {
-            if (
-              c.startsWith(`Lab/${labName}/`) &&
-              !Object.prototype.hasOwnProperty.call(this.data ?? {}, c)
-            )
-              return true;
-          }
-          return false;
-        });
+          toInvalidate,
+          this.data,
+        );
         // also refreshes the column metadata (a Signal Out's unit and tags come
         // from the saved graph); with nothing to refetch the server just returns
         // the manifest
@@ -5034,8 +4517,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     async deleteLabGraph(name: string) {
-      const safePath = name.split("/").map(encodeURIComponent).join("/");
-      await fetch(`/mosaic/api/lab/${safePath}`, {
+      await fetch(labUrl(name), {
         method: "DELETE",
       });
       this.notify(`Lab "${name}" deleted`, "info");
@@ -5054,28 +4536,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // field and syncVsRange()), not per-tab.
 
     _makeBlankPlotTab(): PlotTab {
-      const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
-      return {
-        id: newTabId(),
-        config,
-        data: null,
-        filterFingerprints: {},
-        xAxisFilterFingerprint: "[]",
-        historyStack: [],
-        historyIndex: -1,
-        // baselined against its own just-created state, not null/dirty - an
-        // untouched new tab has nothing unsaved to warn about; savedSnapshot
-        // only diverges once the user actually edits something in it.
-        savedSnapshot: JSON.stringify(config),
-      };
+      return makeBlankPlotTab(DEFAULT_CONFIG);
     },
 
     // Shared by the tab strip's dirty dot (_plot_tabs.html) and
     // closePlotTab()'s confirm-before-discard check, so the two can't drift.
     _isPlotTabDirty(tab: PlotTab): boolean {
-      return (
-        !tab.savedSnapshot || JSON.stringify(tab.config) !== tab.savedSnapshot
-      );
+      return isPlotTabDirty(tab);
     },
 
     // Called once at the end of init()'s existing config-loading sequence
@@ -5115,12 +4582,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           );
       this.plotTabs = tabs;
       this.plotActiveTabId = activeId;
-      try {
-        const raw = localStorage.getItem("mojo:plot:closedTabs");
-        this.closedPlotTabs = raw ? (JSON.parse(raw) as PlotTab[]) : [];
-      } catch {
-        this.closedPlotTabs = [];
-      }
+      this.closedPlotTabs = loadClosedPlotTabs();
       const active = tabs.find((t) => t.id === activeId)!;
       // active tab's fields become the live mirrors - when tabs came from
       // storage rather than wrapCurrentAsTab(), this replaces whatever
@@ -5152,19 +4614,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       tab.historyIndex = this.historyIndex;
     },
 
-    // Persists the tab list WITHOUT the large, always-refetchable data
-    // cache - unlike a LabTab's graph (small, needed to restore the
-    // canvas), raw telemetry arrays would bloat localStorage for no
-    // benefit, so every tab's data starts null again after a page reload.
+    // Persists the tab list WITHOUT the large, always-refetchable data cache
+    // (see persistablePlotTabs).
     _persistPlotTabs() {
-      const sanitized = this.plotTabs.map((t) => ({
-        ...t,
-        data: null,
-      }));
       persistTabsToStorage(
         "mojo:plot:tabs",
         "mojo:plot:activeTab",
-        sanitized,
+        persistablePlotTabs(this.plotTabs),
         this.plotActiveTabId ?? "",
       );
     },
@@ -5173,12 +4629,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       cfg: PlotConfig,
       cache: Record<string, number[]> | null,
     ): string[] {
-      const needed: string[] = [];
-      if (cfg.xAxis?.col && !cache?.[cfg.xAxis.col]) needed.push(cfg.xAxis.col);
-      for (const col of Object.keys(cfg.yAxes ?? {})) {
-        if (!cache?.[col]) needed.push(col);
-      }
-      return needed;
+      return neededColumns(cfg, cache);
     },
 
     async _activatePlotTab(tabId: string) {
@@ -5226,19 +4677,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const tabIdx = this.plotTabs.findIndex((t) => t.id === tabId);
       if (tabIdx === -1) return;
       if (tabId === this.plotActiveTabId) this._snapshotActivePlotTab();
-      const source = this.plotTabs[tabIdx]!;
-      const config = JSON.parse(JSON.stringify(source.config)) as PlotConfig;
-      if (config.title) config.title = `${config.title} copy`;
-      const duplicate: PlotTab = {
-        id: newTabId(),
-        config,
-        data: source.data ? { ...source.data } : null,
-        filterFingerprints: { ...source.filterFingerprints },
-        xAxisFilterFingerprint: source.xAxisFilterFingerprint,
-        historyStack: [],
-        historyIndex: -1,
-        savedSnapshot: null,
-      };
+      const duplicate = copyPlotTab(this.plotTabs[tabIdx]!);
       this.plotTabs.splice(tabIdx + 1, 0, duplicate);
       await this._activatePlotTab(duplicate.id);
       this._persistPlotTabs();
@@ -5311,14 +4750,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         () => this._makeBlankPlotTab(),
       );
       this.plotTabs = tabs;
-      // data stripped same as _persistPlotTabs() - always re-fetched on
-      // reopen via _activatePlotTab()'s own needed-columns check;
       // closedAtIndex is this tab's position before the splice above, so
       // reopenLastClosedPlotTab() can reinsert it back where it was.
-      this.closedPlotTabs = [
-        { ...closedTab, data: null, closedAtIndex: tabIdx },
-        ...this.closedPlotTabs,
-      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this.closedPlotTabs = pushClosedPlotTabs(this.closedPlotTabs, [
+        closedPlotTabEntry(closedTab, tabIdx),
+      ]);
       this._persistClosedPlotTabs();
       if (activeChanged) {
         await this._activatePlotTab(nextActiveId);
@@ -5352,14 +4788,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         if (!ok) return;
       }
       const remaining = this.plotTabs.filter((t) => !idSet.has(t.id));
-      this.closedPlotTabs = [
-        ...toClose.map((t) => ({
-          ...t,
-          data: null,
-          closedAtIndex: indexById.get(t.id),
-        })),
-        ...this.closedPlotTabs,
-      ].slice(0, _MAX_CLOSED_PLOT_TABS);
+      this.closedPlotTabs = pushClosedPlotTabs(
+        this.closedPlotTabs,
+        toClose.map((t) => closedPlotTabEntry(t, indexById.get(t.id))),
+      );
       this._persistClosedPlotTabs();
       this.selectedPlotTabIds = [];
       if (remaining.length === 0) {
@@ -5379,23 +4811,17 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.closedPlotTabs = rest;
       this._persistClosedPlotTabs();
       this._snapshotActivePlotTab();
-      const insertAt = Math.min(
-        mostRecent.closedAtIndex ?? this.plotTabs.length,
+      const { tab: reopened, insertAt } = reopenPlotTab(
+        mostRecent,
         this.plotTabs.length,
       );
-      const reopened: PlotTab = { ...mostRecent, closedAtIndex: undefined };
       this.plotTabs.splice(insertAt, 0, reopened);
       await this._activatePlotTab(reopened.id);
       this._persistPlotTabs();
     },
 
     _persistClosedPlotTabs() {
-      try {
-        localStorage.setItem(
-          "mojo:plot:closedTabs",
-          JSON.stringify(this.closedPlotTabs),
-        );
-      } catch {}
+      persistClosedPlotTabs(this.closedPlotTabs);
     },
 
     reorderPlotTabs(draggedId: string, dropIndex: number) {
@@ -5410,11 +4836,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _computeProfilesCoords() {
       const btn = document.getElementById("profiles-btn");
       if (!btn) return;
-      const r = btn.getBoundingClientRect();
-      this.profilesCoords = {
-        top: r.top + window.scrollY,
-        left: r.left + window.scrollX - 288 - 16,
-      };
+      this.profilesCoords = popupCoords(
+        btn.getBoundingClientRect(),
+        window.scrollX,
+        window.scrollY,
+      );
     },
 
     // -----------------------------------------------------------------------
@@ -5426,12 +4852,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           modified: number;
         }>;
 
-        const colSet = new Set(this.columns);
-        const frames = new Set(
-          this.columns
-            .filter((c) => c.endsWith(":w"))
-            .map((c) => c.replace(":w", "")),
-        );
         const warnings: Record<string, string[]> = {};
         await Promise.all(
           this.profiles.map(async (p) => {
@@ -5439,18 +4859,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               const pr = await fetch(this._profileUrl(p.name));
               if (!pr.ok) return;
               const profile = (await pr.json()) as Partial<PlotProfile>;
-              const w: string[] = [];
-              (profile.tabs ?? []).forEach((t, idx) => {
-                const cfg = t.config;
-                const label = cfg.title || `tab ${idx + 1}`;
-                if (cfg.xAxis?.col && !colSet.has(cfg.xAxis.col))
-                  w.push(`${label}: x-axis "${cfg.xAxis.col}"`);
-                for (const key of Object.keys(cfg.yAxes ?? {})) {
-                  if (!colSet.has(key)) w.push(`${label}: "${key}"`);
-                }
-                if (refFrameActive(cfg.refFrame) && !refFrameAvailable(cfg.refFrame, frames, colSet))
-                  w.push(`${label}: frame "${refFrameLabel(cfg.refFrame)}"`);
-              });
+              const w = profileWarnings(profile, this.columns);
               if (w.length) warnings[p.name] = w;
             } catch {
               /* skip */
@@ -5469,43 +4878,24 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.notify("Enter a profile name", "error");
         return;
       }
-      const normalise = (s: string) => s.toLowerCase().replace(/\s+/g, "_");
-      const existing = this.profiles.find(
-        (p) => normalise(p.name) === normalise(name),
-      );
-      if (existing) {
-        const ok = await window.mojoConfirm?.({
-          title: "Overwrite profile",
-          message: `"${existing.name}" already exists. Replace it with the current set of plot tabs?`,
-          confirmLabel: "Overwrite",
-          cancelLabel: "Cancel",
-          variant: "warning",
-        });
-        if (!ok) return;
-      }
       // a profile saves every open tab, not just the active one
       this._snapshotActivePlotTab();
-      const activeTabIndex = Math.max(
-        0,
-        this.plotTabs.findIndex((t) => t.id === this.plotActiveTabId),
+      const payload = buildProfilePayload(
+        this.plotTabs,
+        this.plotActiveTabId,
+        this.vs,
       );
-      const payload: PlotProfile = {
-        version: 2,
-        tabs: this.plotTabs.map((t) => ({ config: t.config })),
-        activeTabIndex,
-        // VS is workspace-level - saved once for the whole profile, not per tab
-        vsEnabled: this.vs.enabled,
-        vsRange: this.vs.range,
-        vsPinned: this.vs.pinned,
-      };
       try {
-        const resp = await fetch(this._profileUrl(name), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!resp.ok) throw new Error("Save failed");
-        const result = (await resp.json()) as { name: string };
+        const result = await saveProfileRequest(name, payload, async (existingName) =>
+          !!(await window.mojoConfirm?.({
+            title: "Overwrite profile",
+            message: `"${existingName}" already exists. Replace it with the current set of plot tabs?`,
+            confirmLabel: "Overwrite",
+            cancelLabel: "Cancel",
+            variant: "warning",
+          })),
+        );
+        if (!result.saved) return;
         this.profileNameDraft = "";
         // the just-saved content is every tab's new clean baseline
         this.plotTabs.forEach((t) => {
@@ -5530,49 +4920,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         }
         const profile = (await resp.json()) as PlotProfile;
 
-        const colSet = new Set(this.columns);
-        const frames = new Set(
-          this.columns
-            .filter((c) => c.endsWith(":w"))
-            .map((c) => c.replace(":w", "")),
-        );
-        // columns not present in this trial are tolerated: the profile still
-        // loads (so it can be used as a starting point), but those signals
-        // won't plot until matching columns exist.
-        const missing: string[] = [];
-        profile.tabs.forEach((t, idx) => {
-          const cfg = t.config;
-          const label = cfg.title || `tab ${idx + 1}`;
-          if (
-            cfg.xAxis?.col &&
-            !cfg.xAxis.col.startsWith("Lab/") &&
-            !colSet.has(cfg.xAxis.col)
-          )
-            missing.push(`${label}: x-axis "${cfg.xAxis.col}"`);
-          for (const key of Object.keys(cfg.yAxes ?? {})) {
-            if (!key.startsWith("Lab/") && !colSet.has(key))
-              missing.push(`${label}: signal "${key}"`);
-          }
-          if (refFrameActive(cfg.refFrame) && !refFrameAvailable(cfg.refFrame, frames, colSet))
-            missing.push(`${label}: frame "${refFrameLabel(cfg.refFrame)}"`);
-        });
-
-        // a profile is a saved workspace - loading one replaces every open
-        // tab, it doesn't patch the currently active one
-        const newTabs: PlotTab[] = profile.tabs.map((t) => ({
-          id: newTabId(),
-          config: t.config,
-          data: null,
-          filterFingerprints: {},
-          xAxisFilterFingerprint: "[]",
-          historyStack: [],
-          historyIndex: -1,
-          savedSnapshot: JSON.stringify(t.config),
-        }));
-        const activeIndex = Math.min(
-          Math.max(profile.activeTabIndex ?? 0, 0),
-          newTabs.length - 1,
-        );
+        const missing = profileMissing(profile, this.columns);
+        const newTabs = tabsFromProfile(profile);
+        const activeIndex = profileActiveIndex(profile, newTabs.length);
         this.plotTabs = newTabs;
         await this._activatePlotTab(newTabs[activeIndex]!.id);
         this._persistPlotTabs();
@@ -5721,24 +5071,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       });
 
       plotEl.on("plotly_relayout", (event) => {
-        if (event["xaxis.autorange"] || event["yaxis.autorange"]) {
+        const ranges = relayoutRanges(event);
+        if (ranges.reset) {
           this.config.rangeX = null;
           this.config.rangeY = null;
           void this.renderPlot();
           return;
         }
-        if (event["xaxis.range[0]"] !== undefined) {
-          this.config.rangeX = [
-            event["xaxis.range[0]"] as number,
-            event["xaxis.range[1]"] as number,
-          ];
-        }
-        if (event["yaxis.range[0]"] !== undefined) {
-          this.config.rangeY = [
-            event["yaxis.range[0]"] as number,
-            event["yaxis.range[1]"] as number,
-          ];
-        }
+        if (ranges.rangeX) this.config.rangeX = ranges.rangeX;
+        if (ranges.rangeY) this.config.rangeY = ranges.rangeY;
       });
     },
 
@@ -5749,520 +5090,80 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (!this.data) return;
 
       const isDark = document.documentElement.classList.contains("dark");
-      const textColor = themeColor("chart-text");
-      const majorGrid = themeColor("chart-grid-major");
-      const minorGrid = themeColor("chart-grid-minor");
-      const tooltipBg = themeColor("chart-tooltip-bg");
-      const tooltipFont = themeColor("chart-tooltip-font");
-      const tooltipBorder = themeColor("accent-500");
-      const spikeColor = themeColor("accent-500");
-
-      const isHoverDisabled = this.config.hover === "none";
-      const showX =
-        this.config.showSpike &&
-        !isHoverDisabled &&
-        (this.config.hover.includes("x") || this.config.hover === "closest");
-      const showY =
-        this.config.showSpike &&
-        !isHoverDisabled &&
-        (this.config.hover.includes("y") || this.config.hover === "closest");
+      const colors: LayoutColors = {
+        text: themeColor("chart-text"),
+        majorGrid: themeColor("chart-grid-major"),
+        minorGrid: themeColor("chart-grid-minor"),
+        tooltipBg: themeColor("chart-tooltip-bg"),
+        tooltipFont: themeColor("chart-tooltip-font"),
+        tooltipBorder: themeColor("accent-500"),
+        spike: themeColor("accent-500"),
+        title: themeColor("chart-title"),
+      };
 
       const isPolar = this.config.plotType === "polar";
-
-      // a marker symbol of "none" hides per-point markers regardless of lineMode
-      const traceMode = (marker: string): string => {
-        if (marker !== "none") return this.config.lineMode;
-        if (this.config.lineMode === "lines+markers") return "lines";
-        if (this.config.lineMode === "markers") return "none";
-        return this.config.lineMode;
-      };
-
       const yKeys = Object.keys(this.config.yAxes);
-
-      // integer-coded columns (those with an enumeration_map) sit on right-hand axes
-      // whose ticks are the enum names, one axis per distinct map (see lib/enum-axes.ts)
-      const enumPlan = planEnumAxes(
-        yKeys.filter((k) => this.data![k]),
-        this.columnMetadata,
-      );
-      const numericKeys = yKeys.filter((k) => !this.isEnumCol(k));
-      // with nothing numeric to draw, the first enum axis takes the primary slot so
-      // the plot is not left with an empty axis on the left
-      const enumPromoted =
-        !isPolar &&
-        enumPlan.groups.length > 0 &&
-        !numericKeys.some((k) => this.data![k]);
-      const hasEnumAxes = !isPolar && enumPlan.groups.length > 0;
-      // a step line, since interpolating between two codes would draw values that never happened
-      const lineShape = (key: string): string =>
-        !enumPlan.groupOf.has(key)
-          ? this.config.interp
-          : isPolar
-            ? "linear"
-            : "hv";
-      // the tooltip shows an enum point as its label (customdata) instead of the raw number
-      const yHover = (key: string, ref: "y" | "r"): string =>
-        enumPlan.groupOf.has(key) ? "%{customdata}" : `%{${ref}:.4f}`;
-      // per-trace extras for an enum column: the label of each point and, outside
-      // polar mode, which right-hand axis the trace belongs to
-      const enumTrace = (key: string, values: number[]): object => {
-        const gi = enumPlan.groupOf.get(key);
-        if (gi === undefined) return {};
-        const traceRef = isPolar ? "y" : enumAxisIds(gi, enumPromoted).traceRef;
-        return {
-          customdata: enumLabels(values, enumPlan.groups[gi]!),
-          ...(traceRef !== "y" ? { yaxis: traceRef } : {}),
-        };
-      };
-
-      let traces: object[] = yKeys
-        .map((key, i) => {
-          const p = this.getYProps(key, i);
-          if (!this.data![p.name]) {
-            return null;
-          }
-          const unit = this.effectiveUnit(key);
-          const traceLabel =
-            p.label + (unit ? ` (${unit.replace(/\s+/g, "")})` : "");
-          const lineStyle = {
-            width: p.width,
-            color: p.color,
-            shape: lineShape(key),
-            dash: p.dash,
-          };
-          if (isPolar) {
-            return {
-              r: this.data![p.name]!,
-              theta: this.data![this.config.xAxis!.col!],
-              name: traceLabel,
-              mode: traceMode(p.marker),
-              type: "scatterpolar",
-              line: lineStyle,
-              marker: { size: 6, symbol: p.marker },
-              opacity: p.opacity,
-              hoverlabel: {
-                namelength: -1,
-                bgcolor: tooltipBg,
-                bordercolor: tooltipBorder,
-                font: { family: "monospace", size: 12, color: tooltipFont },
-              },
-              hovertemplate: `<b>${key}</b><br>θ: %{theta:.4f}<br>r: ${yHover(key, "r")}<extra></extra>`,
-              ...enumTrace(key, this.data![p.name]!),
-            };
-          }
-          return {
-            x: this.data![this.config.xAxis!.col!],
-            y: this.data![p.name]!,
-            name: traceLabel,
-            mode: traceMode(p.marker),
-            type: "scatter",
-            line: lineStyle,
-            marker: { size: 6, symbol: p.marker },
-            opacity: p.opacity,
-            hoverlabel: {
-              namelength: -1,
-              bgcolor: tooltipBg,
-              bordercolor: tooltipBorder,
-              font: { family: "monospace", size: 12, color: tooltipFont },
-            },
-            hovertemplate: `<b>${key}</b><br>%{x}: ${yHover(key, "y")}<extra></extra>`,
-            ...enumTrace(key, this.data![p.name]!),
-          };
-        })
-        .filter((t): t is NonNullable<typeof t> => t !== null);
-
-      if (this.vs.enabled) {
-        const [start, end] = this.vs.range;
-        const pinnedSet = new Set(this.vs.pinned ?? []);
-        const legendTracker = new Set<string>();
-        const sortedVsIds = Object.keys(this.vsDatasets).sort(
-          (a, b) =>
-            parseInt(a.split("_").pop() ?? "0") -
-            parseInt(b.split("_").pop() ?? "0"),
-        );
-        sortedVsIds.forEach((vsId) => {
-          const n = parseInt(vsId.split("_").pop() ?? "");
-          if (
-            !((n >= start && n <= end) || pinnedSet.has(n)) ||
-            vsId === this.trialId
-          )
-            return;
-          const dataset = this.vsDatasets[vsId];
-          if (!dataset) return;
-          const vsTraces = yKeys
-            .map((key, i) => {
-              const p = this.getYProps(key, i);
-              if (!dataset[p.name]) return null;
-              const isFirst = !legendTracker.has(key);
-              const lineStyle = {
-                width: 1,
-                color: p.color,
-                shape: lineShape(key),
-                dash: "dot",
-              };
-              const t = isPolar
-                ? {
-                    r: dataset[p.name]!,
-                    theta: dataset[this.config.xAxis!.col!],
-                    name: `${p.label} (<i>vs.</i>)`,
-                    legendgroup: `group_${key}`,
-                    showlegend: isFirst,
-                    mode: traceMode(p.marker),
-                    type: "scatterpolar",
-                    line: lineStyle,
-                    opacity: 0.35,
-                    marker: { size: 4, symbol: p.marker },
-                    hoverlabel: { namelength: -1 },
-                    hovertemplate: `<b>${key}</b> (#${n})<br>θ: %{theta:.4f}<br>r: ${yHover(key, "r")}<extra></extra>`,
-                    ...enumTrace(key, dataset[p.name]!),
-                  }
-                : {
-                    x: dataset[this.config.xAxis!.col!],
-                    y: dataset[p.name]!,
-                    name: `${p.label} (<i>vs.</i>)`,
-                    legendgroup: `group_${key}`,
-                    showlegend: isFirst,
-                    mode: traceMode(p.marker),
-                    type: "scatter",
-                    line: lineStyle,
-                    opacity: 0.35,
-                    marker: { size: 4, symbol: p.marker },
-                    hoverlabel: { namelength: -1 },
-                    hovertemplate: `<b>${key}</b> (#${n})<br>%{x}: ${yHover(key, "y")}<extra></extra>`,
-                    ...enumTrace(key, dataset[p.name]!),
-                  };
-              legendTracker.add(key);
-              return t;
-            })
-            .filter((t): t is NonNullable<typeof t> => t !== null);
-          traces = [...traces, ...vsTraces];
-        });
-      }
-
-      const resolvedRangeX = this.resolveAxisRange(this.config.rangeX, [
-        this.config.xAxis!.col!,
-      ]);
-
       const xCol = this.config.xAxis!.col!;
-      const xUnit = this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []);
-      const xAxisText =
-        this.config.xAxisTitle ||
-        (xUnit ? `${xCol} (${xUnit.replace(/\s+/g, "")})` : xCol);
 
-      const xAxisObj = {
-        type: this.config.xScale ?? "linear",
-        ...(resolvedRangeX
-          ? {
-              autorange: false as const,
-              range:
-                this.config.xScale === "log"
-                  ? [
-                      Math.log10(Math.max(1e-6, resolvedRangeX[0])),
-                      Math.log10(Math.max(1e-6, resolvedRangeX[1])),
-                    ]
-                  : resolvedRangeX,
-            }
-          : { autorange: true as const }),
-        dtick:
-          this.config.xScale === "log" && this.config.xLogBase
-            ? Math.log10(this.config.xLogBase)
-            : undefined,
-        gridcolor: majorGrid,
-        showgrid: this.config.grid !== "none",
-        minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
-        zeroline: false,
-        tickfont: { color: textColor, size: 14 },
-        title: {
-          text: xAxisText,
-          font: { size: 14, color: textColor, family: "monospace" },
-        },
-        showspikes: showX,
-        spikemode: "across",
-        spikelinecolor: spikeColor,
-        spikethickness: -2,
+      // integer-coded columns sit on right-hand axes of their own, see lib/enum-axes.ts
+      const enumCtx = enumContext(yKeys, this.data, this.columnMetadata, isPolar);
+      const traceCtx: TraceContext = {
+        isPolar,
+        interp: this.config.interp,
+        lineMode: this.config.lineMode,
+        enum: enumCtx,
       };
+      const series: Series[] = yKeys.map((key, i) => ({
+        key,
+        props: this.getYProps(key, i),
+        unit: this.effectiveUnit(key),
+      }));
 
-      const frameLabel = refFrameActive(this.config.refFrame)
-        ? `<br><span style="color: ${textColor}; font-size: 14px; opacity: 0.6;">[Frame: ${refFrameLabel(this.config.refFrame)}]</span>`
-        : "";
-
-      // same "column (unit)" fallback the x-axis title already has (see
-      // xAxisText above), extended for the fact that the y-axis can have
-      // several signals: with exactly one, mirror the x-axis exactly;
-      // with several, fall back to just the shared unit (e.g. "N·m") if
-      // they all agree on one, since concatenating every column name
-      // doesn't read as a title. No fallback (blank) if units disagree.
-      // enum columns have axes of their own, so they take no part in the primary axis
-      const yCols = numericKeys;
-      const yUnitList = yCols.map((c) => this.effectiveUnit(c));
-      const yUnitsShared =
-        yUnitList.length > 0 && yUnitList.every((u) => u && u === yUnitList[0])
-          ? yUnitList[0]
-          : null;
-      const yAxisFallback =
-        yCols.length === 1
-          ? yUnitsShared
-            ? `${yCols[0]} (${yUnitsShared.replace(/\s+/g, "")})`
-            : yCols[0]
-          : (yUnitsShared ?? "");
-      const yAxisText = this.config.yAxisTitle || yAxisFallback;
-
-      // a manual y range means nothing once the primary slot is an enum axis
-      const resolvedRangeY = enumPromoted
-        ? null
-        : this.resolveAxisRange(this.config.rangeY, numericKeys);
-
-      const yAxisObj = {
-        type: this.config.yScale ?? "linear",
-        ...(resolvedRangeY
-          ? {
-              autorange: false as const,
-              range:
-                this.config.yScale === "log"
-                  ? [
-                      Math.log10(Math.max(1e-6, resolvedRangeY[0])),
-                      Math.log10(Math.max(1e-6, resolvedRangeY[1])),
-                    ]
-                  : resolvedRangeY,
-            }
-          : { autorange: true as const }),
-        dtick:
-          this.config.yScale === "log" && this.config.yLogBase
-            ? Math.log10(this.config.yLogBase)
-            : undefined,
-        gridcolor: majorGrid,
-        showgrid: this.config.grid !== "none",
-        minor: { showgrid: this.config.grid === "all", gridcolor: minorGrid },
-        zeroline: false,
-        tickfont: { color: textColor, size: 14 },
-        title: {
-          text: yAxisText + frameLabel,
-          font: { size: 14, color: textColor, family: "monospace" },
-        },
-        showspikes: showY,
-        spikemode: "across",
-        spikelinecolor: spikeColor,
-        spikethickness: -2,
-      };
-
-      // one right-hand axis per distinct enum map; when promoted the first one is
-      // keyed `yaxis` and so replaces the (empty) primary axis above
-      const enumLayout: Record<string, unknown> = {};
-      if (!isPolar) {
-        enumPlan.groups.forEach((group, gi) => {
-          const ids = enumAxisIds(gi, enumPromoted);
-          const primary = ids.layoutKey === "yaxis";
-          // a lone signal names the axis; a shared axis just counts its signals. the
-          // text uses the same color as the other axes, since the legend carries the trace colors
-          const only = group.columns.length === 1 ? group.columns[0]! : null;
-          const props = only ? this.getYProps(only, yKeys.indexOf(only)) : null;
-          const title =
-            primary && this.config.yAxisTitle
-              ? this.config.yAxisTitle
-              : props
-                ? props.label
-                : `${group.columns.length} signals`;
-          enumLayout[ids.layoutKey] = enumAxisLayout(group, {
-            title,
-            range: enumRange(
-              group,
-              group.columns.map((c) => this.data![c]!),
-            ),
-            color: textColor,
-            primary,
-            grid: { color: majorGrid, show: this.config.grid !== "none" },
-          });
-        });
+      let traces = primaryTraces(series, this.data, xCol, traceCtx, colors);
+      if (this.vs.enabled) {
+        traces = [
+          ...traces,
+          ...vsTraces(series, this.vsDatasets, this.vs, this.trialId, xCol, traceCtx),
+        ];
       }
 
-      const polarLayout = isPolar
-        ? {
-            polar: {
-              bgcolor: "rgba(0,0,0,0)",
-              radialaxis: {
-                color: textColor,
-                gridcolor: majorGrid,
-                tickfont: { color: textColor, size: 14, family: "monospace" },
-                title: {
-                  text: yAxisText || "r",
-                  font: { size: 14, color: textColor, family: "monospace" },
+      const layout = buildLayout({
+        trialId: this.trialId,
+        config: this.config,
+        isPolar,
+        enum: enumCtx,
+        resolvedRangeX: this.resolveAxisRange(this.config.rangeX, [xCol]),
+        // a manual y range means nothing once the primary slot is an enum axis
+        resolvedRangeY: enumCtx.enumPromoted
+          ? null
+          : this.resolveAxisRange(this.config.rangeY, enumCtx.numericKeys),
+        xUnit: this.effectiveUnit(xCol, this.config.xAxis?.filters ?? []),
+        yUnitList: enumCtx.numericKeys.map((c) => this.effectiveUnit(c)),
+        labelOf: (col) => this.getYProps(col, yKeys.indexOf(col)).label,
+        data: this.data,
+        colors,
+        overlays: {
+          annotations: isPolar
+            ? []
+            : plotlyAnnotations(
+                this.config.annotations ?? [],
+                this.config.shapes ?? [],
+                {
+                  tooltipFont: themeColor("chart-tooltip-font"),
+                  annotationBg: themeColor("chart-annotation-bg"),
+                  accent: themeColor("accent-500"),
+                  shapeLabelBg: themeColorAlpha("chart-shape-label-bg", 0xb3 / 255),
                 },
-              },
-              angularaxis: {
-                color: textColor,
-                gridcolor: majorGrid,
-                tickfont: { color: textColor, size: 14, family: "monospace" },
-                title: {
-                  text: xAxisText,
-                  font: { size: 14, color: textColor, family: "monospace" },
-                },
-              },
-            },
-          }
-        : { xaxis: xAxisObj, yaxis: yAxisObj, ...enumLayout };
-
-      const layout = {
-        uirevision: `${this.trialId}_${this.config.xAxis!.col!}_${Object.keys(this.config.yAxes).join("_")}_${this.config.plotType}`,
-        title: this.config.title
-          ? {
-              text: this.config.title,
-              font: {
-                family: "monospace",
-                size: 16,
-                color: themeColor("chart-title"),
-                weight: "bold",
-              },
-              x: 0,
-              xanchor: "left",
-            }
-          : null,
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        // beside enum axes the margins are Plotly's to grow (the axes use automargin),
-        // so the fixed legend gutter and the empty left axis are dropped
-        margin: {
-          t: this.config.title ? 60 : 30,
-          r: this.config.legendPos === "right" && !hasEnumAxes ? 150 : 30,
-          b: this.config.legendPos === "bottom" ? 80 : 50,
-          l: enumPromoted ? 30 : yAxisText ? 80 : 60,
+              ),
+          shapes: isPolar
+            ? []
+            : plotlyShapes(
+                this.config.shapes ?? [],
+                isDark,
+                themeColor("accent-500"),
+              ),
         },
-        hovermode: isHoverDisabled ? false : this.config.hover,
-        hoverlabel: {
-          bgcolor: tooltipBg,
-          bordercolor: tooltipBorder,
-          font: { family: "monospace", size: 12, color: tooltipFont },
-          align: "left",
-        },
-        showlegend: this.config.legendPos !== "hidden",
-        legend:
-          this.config.legendPos === "right"
-            ? {
-                orientation: "v",
-                // hanging off the plot edge would sit on the enum axes, so with
-                // them the legend anchors to the container edge and Plotly widens the margin
-                ...(hasEnumAxes
-                  ? { xref: "container", x: 1, xanchor: "right" }
-                  : { x: 1.02 }),
-                y: 1,
-                font: { family: "monospace", size: 14, color: textColor },
-                groupclick: "togglegroup",
-              }
-            : {
-                orientation: "h",
-                y: -0.2,
-                x: 0.5,
-                xanchor: "center",
-                font: { family: "monospace", size: 14, color: textColor },
-                groupclick: "togglegroup",
-              },
-        ...polarLayout,
-        annotations: isPolar
-          ? []
-          : [
-              ...(this.config.annotations ?? []).map((ann) => ({
-                x: ann.x,
-                y: ann.y,
-                text: ann.text,
-                showarrow: true,
-                arrowhead: 2,
-                ax: 0,
-                ay: -40,
-                font: {
-                  family: "monospace",
-                  size: 12,
-                  color: themeColor("chart-tooltip-font"),
-                },
-                bgcolor: themeColor("chart-annotation-bg"),
-                bordercolor: themeColor("accent-500"),
-                borderwidth: 1,
-                borderpad: 4,
-              })),
-              ...(this.config.shapes ?? [])
-                .filter((s) => s.label)
-                .map((s) => {
-                  let x = 0,
-                    y = 0,
-                    xanchor = "left",
-                    yanchor = "bottom",
-                    xref = "x",
-                    yref = "y";
-                  if (s.type === "vline") {
-                    x = s.x0;
-                    y = 1;
-                    yref = "paper";
-                  } else if (s.type === "hline") {
-                    x = 1;
-                    y = s.y0;
-                    xref = "paper";
-                    xanchor = "right";
-                  } else if (s.type === "rect") {
-                    x = s.x0;
-                    y = s.y1;
-                  }
-                  return {
-                    x,
-                    y,
-                    xref,
-                    yref,
-                    text: `<b>${s.label}</b>`,
-                    showarrow: false,
-                    xanchor,
-                    yanchor,
-                    font: {
-                      size: 10,
-                      color: s.color || themeColor("accent-500"),
-                      family: "monospace",
-                    },
-                    bgcolor: themeColorAlpha(
-                      "chart-shape-label-bg",
-                      0xb3 / 255,
-                    ),
-                    borderpad: 2,
-                  };
-                }),
-            ],
-        shapes: isPolar
-          ? []
-          : (this.config.shapes ?? []).map((s) => {
-              const shapeColor = s.color || themeColor("accent-500");
-              const base = {
-                line: { color: shapeColor, width: 2, dash: s.dash ?? "solid" },
-                layer: "below",
-              };
-              if (s.type === "vline")
-                return {
-                  ...base,
-                  type: "line",
-                  x0: s.x0,
-                  x1: s.x0,
-                  y0: 0,
-                  y1: 1,
-                  yref: "paper",
-                };
-              if (s.type === "hline")
-                return {
-                  ...base,
-                  type: "line",
-                  y0: s.y0,
-                  y1: s.y0,
-                  x0: 0,
-                  x1: 1,
-                  xref: "paper",
-                };
-              if (s.type === "rect")
-                return {
-                  ...base,
-                  type: "rect",
-                  x0: s.x0,
-                  x1: s.x1,
-                  y0: s.y0,
-                  y1: s.y1,
-                  fillcolor: isDark ? `${shapeColor}1A` : `${shapeColor}26`,
-                  line: { ...base.line, width: 1 },
-                };
-              return base;
-            }),
-      };
+      });
 
       const config = {
         responsive: true,

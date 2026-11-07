@@ -184,6 +184,9 @@ filterwarnings = [
     # nptyping.NDArray in a way beartype's import hook can't introspect at
     # decoration time
     "ignore::beartype.roar.BeartypeClawDecorWarning",
+    # starlette's TestClient reads an alias that anyio has deprecated, as soon
+    # as it is imported
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
 
 [project.urls]

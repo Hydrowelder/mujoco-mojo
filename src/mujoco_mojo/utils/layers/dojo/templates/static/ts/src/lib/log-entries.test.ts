@@ -8,7 +8,10 @@ import {
   logLevelsOf,
   logSourceFull,
   logSourceShort,
+  fittedLogColumnWidth,
+  LOG_COL_MIN,
   LOG_LEVEL_SEVERITY,
+  resizedLogColumnWidth,
   type LogFilter,
 } from "./log-entries";
 
@@ -188,5 +191,68 @@ describe("formatLogTime", () => {
 
   it("ignores the tick, which is only there to make a template re-run it", () => {
     expect(formatLogTime(NOW - 120_000, 1)).toBe(formatLogTime(NOW - 120_000, 99));
+  });
+});
+
+describe("LOG_COL_MIN", () => {
+  it("is the narrowest each column can be dragged to", () => {
+    expect(LOG_COL_MIN).toEqual({ time: 60, level: 56, source: 60 });
+  });
+});
+
+describe("resizedLogColumnWidth", () => {
+  it("moves the width by the drag", () => {
+    expect(resizedLogColumnWidth("time", 100, 25)).toBe(125);
+    expect(resizedLogColumnWidth("time", 100, -25)).toBe(75);
+    expect(resizedLogColumnWidth("source", 200, 0)).toBe(200);
+  });
+
+  it("stops at each column's own minimum", () => {
+    expect(resizedLogColumnWidth("time", 100, -500)).toBe(60);
+    expect(resizedLogColumnWidth("level", 100, -500)).toBe(56);
+    expect(resizedLogColumnWidth("source", 100, -500)).toBe(60);
+  });
+
+  it("can sit exactly on the minimum", () => {
+    expect(resizedLogColumnWidth("time", 100, -40)).toBe(60);
+    expect(resizedLogColumnWidth("level", 100, -44)).toBe(56);
+  });
+
+  it("is the minimum one pixel past it", () => {
+    expect(resizedLogColumnWidth("level", 100, -43)).toBe(57);
+    expect(resizedLogColumnWidth("level", 100, -45)).toBe(56);
+  });
+
+  it("lifts a column that started below its minimum", () => {
+    expect(resizedLogColumnWidth("time", 10, 0)).toBe(60);
+  });
+});
+
+describe("fittedLogColumnWidth", () => {
+  it("is the header plus room for the sort chevron when it is the widest, with the cell padding", () => {
+    expect(fittedLogColumnWidth("time", 50, [10, 20])).toBe(50 + 20 + 16);
+  });
+
+  it("is the widest cell when it beats the header, with the cell padding", () => {
+    expect(fittedLogColumnWidth("source", 50, [10, 200, 80])).toBe(200 + 16);
+  });
+
+  it("adds the badge's padding for the level column", () => {
+    expect(fittedLogColumnWidth("level", 40, [90])).toBe(90 + 32);
+    expect(fittedLogColumnWidth("level", 100, [90])).toBe(100 + 20 + 32);
+  });
+
+  it("rounds the content up before adding the padding", () => {
+    expect(fittedLogColumnWidth("source", 0, [100.2])).toBe(101 + 16);
+    expect(fittedLogColumnWidth("source", 0, [100])).toBe(100 + 16);
+    expect(fittedLogColumnWidth("time", 30.5, [])).toBe(51 + 16);
+  });
+
+  it("fits the header alone when there are no cells", () => {
+    expect(fittedLogColumnWidth("time", 30, [])).toBe(30 + 20 + 16);
+  });
+
+  it("is a tie at the point where header and cell are equally wide", () => {
+    expect(fittedLogColumnWidth("time", 30, [50])).toBe(50 + 16);
   });
 });

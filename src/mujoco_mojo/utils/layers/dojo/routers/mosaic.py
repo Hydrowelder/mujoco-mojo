@@ -605,10 +605,15 @@ _PROFILE_MAX_BYTES = (
 
 @router.post("/api/profiles/{name:path}")
 async def save_profile(
-    name: str, request: Request, body: dict[str, Any]
+    name: str,
+    request: Request,
+    body: dict[str, Any],
+    overwrite: bool = Query(True),
 ) -> dict[str, str]:
     """
     Save the current set of plot tabs as a named profile.
+
+    With `overwrite=false` a profile that is already stored under the name this one sanitizes to is left alone and the request fails with 409, whose detail carries the stored name, so the caller can ask before replacing it. The names are compared the way the files are, so this agrees with what a save would write.
 
     `body` is a plain dict (not `_PlotProfile` directly) so the legacy-format
     discriminator in `_parse_profile` can run before Pydantic's own request
@@ -632,10 +637,13 @@ async def save_profile(
             detail=f"Invalid profile payload: {exc}",
         ) from exc
     path = _resolve_profile_path(name)
+    d = _get_profiles_dir()
+    stored_name = path.relative_to(d).with_suffix("").as_posix()
+    if path.exists() and not overwrite:
+        raise HTTPException(status_code=409, detail={"name": stored_name})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(profile.model_dump_json(), encoding="utf-8")
-    d = _get_profiles_dir()
-    return {"name": path.relative_to(d).with_suffix("").as_posix()}
+    return {"name": stored_name}
 
 
 @router.delete("/api/profiles/{name:path}")
