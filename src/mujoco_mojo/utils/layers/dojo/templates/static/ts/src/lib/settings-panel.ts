@@ -891,7 +891,7 @@ export function createSettingsPanelState(): SettingsPanelState {
 
     renderMarkdown(text) {
       try {
-        return dojoMarked.parse(text, { async: false }) as string;
+        return dojoMarked.parse(text, { async: false });
       } catch {
         return text;
       }

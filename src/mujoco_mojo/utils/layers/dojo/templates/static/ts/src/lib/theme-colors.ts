@@ -33,7 +33,7 @@ function resolveToHex(cssColor: string): string {
   if (!hexCanvasCtx) return cssColor;
   hexCanvasCtx.fillStyle = cssColor;
   hexCanvasCtx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = hexCanvasCtx.getImageData(0, 0, 1, 1).data;
+  const [r = 0, g = 0, b = 0] = hexCanvasCtx.getImageData(0, 0, 1, 1).data;
   const toHex = (n: number) => n.toString(16).padStart(2, "0");
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }

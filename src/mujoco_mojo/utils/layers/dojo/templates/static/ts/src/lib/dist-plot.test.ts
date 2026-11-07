@@ -11,6 +11,12 @@ import {
   type DistColors,
 } from "./dist-plot";
 
+// the traces and layout a plot has, read loosely since plotly's own types are not used here
+interface PlotOut {
+  traces: any[];
+  layout: any;
+}
+
 const COLORS: DistColors = {
   bg: "#010101",
   text: "#020202",
@@ -121,7 +127,7 @@ describe("distPlot", () => {
   describe("categorical", () => {
     const cat = (over: Partial<DistEntry> = {}) =>
       entry({ chart_type: "categorical", cat_labels: ["a", "b", "c"], cat_probs: [0.2, 0.5, 0.3], pdf_x: [], ...over });
-    const plot = (over: Partial<DistEntry> = {}) => distPlot(cat(over), COLORS)! as { traces: any[]; layout: any };
+    const plot = (over: Partial<DistEntry> = {}): PlotOut => distPlot(cat(over), COLORS)!;
 
     it("draws one bar per choice", () => {
       expect(plot().traces).toEqual([
@@ -185,7 +191,7 @@ describe("distPlot", () => {
   });
 
   describe("continuous", () => {
-    const plot = (over: Partial<DistEntry> = {}) => distPlot(entry(over), COLORS)! as { traces: any[]; layout: any };
+    const plot = (over: Partial<DistEntry> = {}): PlotOut => distPlot(entry(over), COLORS)!;
 
     it("draws the density as a filled line and the CDF on a second axis", () => {
       const { traces } = plot();
@@ -282,7 +288,7 @@ describe("distPlot", () => {
   });
 
   describe("discrete", () => {
-    const plot = (over: Partial<DistEntry> = {}) => distPlot(entry({ chart_type: "discrete", ...over }), COLORS)! as { traces: any[]; layout: any };
+    const plot = (over: Partial<DistEntry> = {}): PlotOut => distPlot(entry({ chart_type: "discrete", ...over }), COLORS)!;
 
     it("draws the probabilities as bars", () => {
       expect(plot().traces[0]).toEqual({

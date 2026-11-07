@@ -70,12 +70,17 @@ export function effectiveUnit(recordedUnit: string | null, filters: FilterEntry[
   return unit;
 }
 
+// a unit's name, or a question mark when it is not set
+function unitText(unit: unknown): string {
+  return typeof unit === "string" ? unit : "?";
+}
+
 // the one-line summary shown on a filter's chip: up to three of its set
 // parameters as `name=value`, or the unit conversion for a unit filter. empty
 // for a filter with no parameters, or one the server has no schema for
 export function filterSummary(entry: FilterEntry, schema: FilterSchema | undefined): string {
   if (!schema || schema.params.length === 0) return "";
-  if (entry.type === "unit") return `${entry["fromUnit"] ?? "?"} → ${entry["toUnit"] ?? "?"}`;
+  if (entry.type === "unit") return `${unitText(entry["fromUnit"])} → ${unitText(entry["toUnit"])}`;
   const parts = schema.params
     .filter((p) => (entry as Record<string, unknown>)[p.name] != null)
     .map((p) => {

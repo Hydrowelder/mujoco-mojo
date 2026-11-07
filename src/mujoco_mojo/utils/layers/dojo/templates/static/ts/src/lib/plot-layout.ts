@@ -260,7 +260,7 @@ export interface LayoutInput {
 export function buildLayout(input: LayoutInput): object {
   const { config, isPolar, colors } = input;
   const flags = hoverFlags(config.hover, config.showSpike);
-  const xCol = config.xAxis!.col!;
+  const xCol = config.xAxis.col!;
   const xText = xAxisText(config.xAxisTitle, xCol, input.xUnit);
   const yText = yAxisText(
     config.yAxisTitle,

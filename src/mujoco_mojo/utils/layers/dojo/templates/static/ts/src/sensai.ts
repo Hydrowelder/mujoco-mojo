@@ -76,7 +76,7 @@ function sensai() {
         this.hasNewResponse = false;
         this._scrollToBottom();
         // dispatch after next tick so the panel is back in layout flow and scrollHeights are valid
-        (this as unknown as AlpineMagics).$nextTick(() => {
+        void (this as unknown as AlpineMagics).$nextTick(() => {
           window.dispatchEvent(new CustomEvent("sensai-remeasure"));
         });
       }
@@ -212,7 +212,7 @@ function sensai() {
     },
 
     resize(el: HTMLElement) {
-      const msgEl = (this as unknown as AlpineMagics).$refs["messages"] as HTMLElement | undefined;
+      const msgEl = (this as unknown as AlpineMagics).$refs["messages"];
       const wasAtBottom = this.atBottom;
       el.style.height = "auto";
       el.style.overflowY = "hidden";
@@ -230,7 +230,7 @@ function sensai() {
     },
 
     scrollToBottom() {
-      const el = (this as unknown as AlpineMagics).$refs["messages"] as HTMLElement | undefined;
+      const el = (this as unknown as AlpineMagics).$refs["messages"];
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       this.atBottom = true;
       this.hasNewResponse = false;
@@ -246,7 +246,7 @@ function sensai() {
     },
 
     _scrollToBottom() {
-      (this as unknown as AlpineMagics).$nextTick(() => {
+      void (this as unknown as AlpineMagics).$nextTick(() => {
         const el = (this as unknown as AlpineMagics).$refs["messages"];
         if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       });
@@ -369,7 +369,7 @@ function sensaiMsgData(role: string) {
       const content = (
         self.$el.querySelector(".sensai-md") ??
         self.$el.querySelector("p")
-      ) as HTMLElement | null;
+      );
       if (!content || content.scrollHeight === 0) return;
       const layout = messageLayout(
         self._role,

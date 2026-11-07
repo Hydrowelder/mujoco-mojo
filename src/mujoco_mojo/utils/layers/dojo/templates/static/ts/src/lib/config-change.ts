@@ -48,7 +48,7 @@ export function planConfigChange(
     xFilterChanged,
     xFilterFingerprint,
     colsToRefetch: [
-      ...(xFilterChanged ? [config.xAxis!.col!] : []),
+      ...(xFilterChanged ? [config.xAxis.col!] : []),
       ...changedFilterCols,
     ],
   };
@@ -64,7 +64,7 @@ export function needsVsSync(
   oldValue: PlotConfig | undefined,
 ): boolean {
   if (!vsEnabled) return false;
-  if (value.xAxis!.col! !== oldValue?.xAxis?.col) return true;
+  if (value.xAxis.col! !== oldValue?.xAxis?.col) return true;
   const signals = Object.keys(value.yAxes);
   const oldSignals = new Set(Object.keys(oldValue?.yAxes ?? {}));
   return (
@@ -85,5 +85,5 @@ export function needsRefFrameMigration(config: PlotConfig): boolean {
 
 // the columns a plot shows: the x column, then each signal
 export function activeColumns(config: PlotConfig): string[] {
-  return [config.xAxis!.col!, ...Object.keys(config.yAxes)];
+  return [config.xAxis.col!, ...Object.keys(config.yAxes)];
 }

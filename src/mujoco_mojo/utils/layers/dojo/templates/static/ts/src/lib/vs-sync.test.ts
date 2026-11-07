@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PlotConfig, YAxisConfig } from "./plot-config.generated";
+import type { PlotConfig } from "./plot-config.generated";
 import { DEFAULT_CONFIG } from "./plot-defaults";
 import {
   chunked,
@@ -20,7 +20,7 @@ const cfg = (
 ): PlotConfig => ({
   ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
   xAxis: { col: "time", filters: [] },
-  yAxes: Object.fromEntries(yCols.map((c) => [c, { color: "#ff0000" } as YAxisConfig])),
+  yAxes: Object.fromEntries(yCols.map((c) => [c, { color: "#ff0000" }])),
   ...over,
 });
 

@@ -32,7 +32,7 @@ export function vsTargetIds(
 // own quaternion and origin, so the frame can be applied to the comparison
 // data too.
 export function vsActiveColumns(config: PlotConfig): string[] {
-  let activeCols = [config.xAxis!.col!, ...Object.keys(config.yAxes)];
+  let activeCols = [config.xAxis.col!, ...Object.keys(config.yAxes)];
 
   if (refFrameActive(config.refFrame)) {
     const families = new Set<string>();

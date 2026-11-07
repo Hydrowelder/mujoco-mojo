@@ -5,7 +5,7 @@
 // first number in it, or 2 when it has none
 export function paddingLength(paddingStyle: string): number {
   const match = paddingStyle.match(/\d+/);
-  return match ? parseInt(match[0]!) : 2;
+  return match ? parseInt(match[0]) : 2;
 }
 
 // what to do with a `?v=` shared link in the address bar. A link left there

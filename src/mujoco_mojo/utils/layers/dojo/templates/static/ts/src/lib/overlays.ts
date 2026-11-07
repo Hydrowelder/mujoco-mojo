@@ -154,10 +154,10 @@ export function plotlyAnnotations(
     ...shapes
       .filter((s) => s.label)
       .map((s) => {
+        const yanchor = "bottom";
         let x = 0,
           y = 0,
           xanchor = "left",
-          yanchor = "bottom",
           xref = "x",
           yref = "y";
         if (s.type === "vline") {

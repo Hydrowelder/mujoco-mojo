@@ -18,7 +18,8 @@ export function reorderYAxes(
   const newKeys = [...keys];
   const movedKey = newKeys.splice(index, 1)[0]!;
   if (toEnd) {
-    direction === -1 ? newKeys.unshift(movedKey) : newKeys.push(movedKey);
+    if (direction === -1) newKeys.unshift(movedKey);
+    else newKeys.push(movedKey);
   } else {
     newKeys.splice(index + direction, 0, movedKey);
   }

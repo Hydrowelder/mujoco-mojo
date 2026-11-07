@@ -36,7 +36,7 @@ function typeOfValue(value: unknown): string {
 
 function matchesType(value: unknown, type: string): boolean {
   const actual = typeOfValue(value);
-  if (type === "integer") return actual === "number" && Number.isInteger(value as number);
+  if (type === "integer") return actual === "number" && Number.isInteger(value);
   if (type === "number") return actual === "number" || actual === "integer";
   return actual === type;
 }

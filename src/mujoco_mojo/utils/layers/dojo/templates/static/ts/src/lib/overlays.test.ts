@@ -265,7 +265,7 @@ describe("plotlyAnnotations", () => {
   });
 
   it("labels a shape with no type at the origin", () => {
-    const [a] = plotlyAnnotations([], [{ x0: 9, color: "#123456", label: "odd" } as unknown as Shape], COLORS) as Array<
+    const [a] = plotlyAnnotations([], [{ x0: 9, color: "#123456", label: "odd" }], COLORS) as Array<
       Record<string, unknown>
     >;
     expect(a).toMatchObject({ x: 0, y: 0, xref: "x", yref: "y", xanchor: "left", yanchor: "bottom" });
@@ -368,7 +368,7 @@ describe("plotlyShapes", () => {
   });
 
   it("draws a shape with no type as a bare styled outline", () => {
-    expect(plotlyShapes([{ x0: 9, color: "#123456" } as unknown as Shape], false, "#333333")).toEqual([
+    expect(plotlyShapes([{ x0: 9, color: "#123456" }], false, "#333333")).toEqual([
       { line: { color: "#123456", width: 2, dash: "solid" }, layer: "below" },
     ]);
   });

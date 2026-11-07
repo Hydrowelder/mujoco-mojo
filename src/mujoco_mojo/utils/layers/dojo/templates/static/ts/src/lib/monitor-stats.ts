@@ -136,8 +136,9 @@ export function completionNotification(status: JobStatus): Notification {
 // outcomes with a count of zero are left out
 export function outcomeGradient(outcomes: { color: string; n: number }[]): string {
   const segs = outcomes.filter((seg) => seg.n > 0);
-  if (segs.length === 0) return "transparent";
-  if (segs.length === 1) return segs[0].color;
+  const [first] = segs;
+  if (!first) return "transparent";
+  if (segs.length === 1) return first.color;
 
   const total = segs.reduce((sum, seg) => sum + seg.n, 0);
   const blend = 5; // half-width of each blend zone, in % of the filled bar

@@ -7,7 +7,7 @@ import {
   needsVsSync,
   planConfigChange,
 } from "./config-change";
-import type { FilterEntry, PlotConfig, YAxisConfig } from "./plot-config.generated";
+import type { FilterEntry, PlotConfig } from "./plot-config.generated";
 import { DEFAULT_CONFIG } from "./plot-defaults";
 
 const clip = (over: Partial<FilterEntry> = {}): FilterEntry => ({ type: "clip", min: 0, max: 5, ...over });
@@ -20,7 +20,7 @@ const cfg = (
   ...(JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig),
   xAxis: { col: "time", filters: [] },
   yAxes: Object.fromEntries(
-    Object.entries(yAxes).map(([k, filters]) => [k, { color: "#ff0000", filters } as YAxisConfig]),
+    Object.entries(yAxes).map(([k, filters]) => [k, { color: "#ff0000", filters }]),
   ),
   ...over,
 });

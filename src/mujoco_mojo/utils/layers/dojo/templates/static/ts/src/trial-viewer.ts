@@ -20,7 +20,6 @@ import {
   toggleSearchSegment,
 } from "./lib/column-search";
 import {
-  buildRefFrameFilter,
   refFrameActive,
   refFrameLabel,
   sameRefFrame,
@@ -82,7 +81,6 @@ import {
   buildTreeRowsFromNames,
   visibleTreeRows,
   allTreeFolderPaths,
-  anyTreeRowVisible,
   sortTreeItems,
   type TreeRow,
   type TreeSortMode,
@@ -100,7 +98,6 @@ import {
 } from "./lib/tab-session";
 import type { PlotProfile } from "./lib/plot-profile";
 import {
-  MAX_CLOSED_PLOT_TABS,
   closedPlotTabEntry,
   duplicatePlotTab as copyPlotTab,
   isPlotTabDirty,
@@ -281,9 +278,8 @@ import type {
 // ---------------------------------------------------------------------------
 // CodeMirror editor state (kept outside Alpine to avoid proxy issues)
 // ---------------------------------------------------------------------------
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _cm: {
-  editor: any;
+  editor: EditorView | null;
   updating: boolean;
   debounce: ReturnType<typeof setTimeout> | null;
 } = {
@@ -291,6 +287,18 @@ const _cm: {
   updating: false,
   debounce: null,
 };
+
+// the plot's element, which plotly gives a `_fullLayout` once it has drawn
+interface PlotAreaEl extends HTMLElement {
+  _fullLayout?: {
+    xaxis: { l2p(v: number): number; range: [number, number] };
+    margin: { l: number; r: number; t: number; b: number };
+  };
+}
+
+function plotAreaEl(): PlotAreaEl | null {
+  return document.getElementById("plot-area");
+}
 
 // miniplayer RAF state - kept outside Alpine to avoid proxy overhead
 const _mini: { rafId: number | null } = { rafId: null };
@@ -767,7 +775,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     > => {
       try {
         const saved = localStorage.getItem("mojo:dists:col-widths");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          return JSON.parse(saved) as Record<
+            "name" | "category" | "dist_type" | "units" | "nominal" | "sampled",
+            number
+          >;
+        }
       } catch {
         // ignore malformed storage
       }
@@ -793,7 +806,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     logColWidths: ((): Record<"time" | "level" | "source", number> => {
       try {
         const saved = localStorage.getItem("mojo:trial-logs:col-widths");
-        if (saved) return JSON.parse(saved);
+        if (saved) return JSON.parse(saved) as Record<"time" | "level" | "source", number>;
       } catch {
         // ignore malformed storage
       }
@@ -898,13 +911,13 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (result.filter_errors && result.filter_errors.length > 0) {
         for (const msg of unseenFilterErrors(
           result.filter_errors,
-          this._shownFilterErrors as Set<string>,
+          this._shownFilterErrors,
         )) {
-          (this._shownFilterErrors as Set<string>).add(msg);
+          (this._shownFilterErrors).add(msg);
           this.notify(msg, "error");
           // clear after 5 s so the same error can resurface if the user tries again
           setTimeout(
-            () => (this._shownFilterErrors as Set<string>).delete(msg),
+            () => (this._shownFilterErrors).delete(msg),
             5000,
           );
         }
@@ -938,7 +951,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             this.data = { ...(this.data ?? {}), ...resp.data };
           }
           if (Object.keys(this.config.yAxes).some((y) => chunk.includes(y)))
-            this.renderPlot();
+            void this.renderPlot();
           console.debug(
             `[Dojo Hydration ${label}]: ${i + chunk.length}/${columnList.length}`,
           );
@@ -1024,7 +1037,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this._distTooltipEntry = entry;
       const tooltip = document.getElementById(
         "dist-pdf-tooltip",
-      ) as HTMLElement | null;
+      );
       if (!tooltip) return;
       const minW = tooltipMinWidth(entry.chart_type, entry.cat_labels.length);
       tooltip.style.minWidth = `${minW}px`;
@@ -1049,7 +1062,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     async _renderDistTooltipPlot(entry: DistEntry) {
       const chartEl = document.getElementById(
         "dist-pdf-chart",
-      ) as HTMLElement | null;
+      );
       const paramsEl = document.getElementById("dist-pdf-params");
       if (!chartEl) return;
 
@@ -1257,7 +1270,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     autoFitDistColumn(
       col: "name" | "category" | "dist_type" | "units" | "nominal" | "sampled",
     ) {
-      const container = this.$refs.distTable as HTMLElement | undefined;
+      const container = this.$refs.distTable;
       if (!container) return;
       const headerEl = container.querySelector<HTMLElement>(
         `[data-distcol-header="${col}"]`,
@@ -1369,7 +1382,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     autoFitLogColumn(col: "time" | "level" | "source") {
-      const container = this.$refs.logTable as HTMLElement | undefined;
+      const container = this.$refs.logTable;
       if (!container) return;
 
       // text-overflow:ellipsis cells report their box size (not content size)
@@ -1427,10 +1440,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _syncOverlayVisibility() {
       const overlay = document.getElementById(
         "playback-line-overlay",
-      ) as HTMLElement | null;
+      );
       const lineEl = document.getElementById(
         "playback-line-el",
-      ) as HTMLElement | null;
+      );
       const vis = overlayVisibility({
         showLine: this.mediaShowLine,
         scrubMode: this.mediaScrubMode,
@@ -1464,13 +1477,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         framesPath.setAttribute("d", "");
         return;
       }
-      type PlotEl = HTMLElement & {
-        _fullLayout?: {
-          xaxis: { l2p(v: number): number; range: [number, number] };
-          margin: { l: number; r: number; t: number; b: number };
-        };
-      };
-      const plotEl = document.getElementById("plot-area") as PlotEl | null;
+      const plotEl = plotAreaEl();
       const fullLayout = plotEl?._fullLayout;
       const rect = plotEl?.getBoundingClientRect();
       if (!plotEl || !fullLayout) return;
@@ -1513,14 +1520,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const video = document.getElementById(
           "media-video-player",
         ) as HTMLVideoElement | null;
-        const plotEl = document.getElementById("plot-area") as
-          | (HTMLElement & {
-              _fullLayout?: {
-                xaxis: { l2p(v: number): number; range: [number, number] };
-                margin: { l: number; r: number; t: number; b: number };
-              };
-            })
-          | null;
+        const plotEl = plotAreaEl();
         if (video && plotEl && video.duration > 0 && !isNaN(video.duration)) {
           const fullLayout = plotEl._fullLayout;
           if (fullLayout) {
@@ -1531,7 +1531,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             if (this.mediaShowLine) {
               const lineEl = document.getElementById(
                 "playback-line-el",
-              ) as HTMLElement | null;
+              );
               if (lineEl) {
                 lineEl.style.top = fullLayout.margin.t + "px";
                 lineEl.style.bottom = fullLayout.margin.b + "px";
@@ -1610,10 +1610,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _miniDragStart(e: MouseEvent) {
       const wrapper = document.getElementById(
         "mini-wrapper",
-      ) as HTMLElement | null;
+      );
       const canvas = document.getElementById(
         "mini-canvas",
-      ) as HTMLElement | null;
+      );
       if (!wrapper) return;
       const startX = e.clientX;
       const startY = e.clientY;
@@ -1657,7 +1657,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _miniResizeStart(e: MouseEvent) {
       const wrapper = document.getElementById(
         "mini-wrapper",
-      ) as HTMLElement | null;
+      );
       if (!wrapper) return;
       const startX = e.clientX;
       const startY = e.clientY;
@@ -1697,7 +1697,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     _startMiniplayer() {
       const wrapper = document.getElementById(
         "mini-wrapper",
-      ) as HTMLElement | null;
+      );
       const canvas = document.getElementById(
         "mini-canvas",
       ) as HTMLCanvasElement | null;
@@ -1733,7 +1733,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             const vEl = srcEl as HTMLVideoElement;
             if (miniFrameReady(isGif, vEl.readyState)) {
               ctx.drawImage(
-                srcEl as CanvasImageSource,
+                srcEl,
                 0,
                 0,
                 canvas.width,
@@ -1754,7 +1754,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       }
       const wrapper = document.getElementById(
         "mini-wrapper",
-      ) as HTMLElement | null;
+      );
       if (wrapper) wrapper.style.display = "none";
     },
 
@@ -1877,18 +1877,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     jumpToAnnotation(ann: Annotation) {
-      const el = document.getElementById("plot-area") as
-        | (HTMLElement & {
-            _fullLayout?: {
-              xaxis: { p2l(v: number): number };
-              yaxis: { p2l(v: number): number };
-              margin: { l: number; t: number };
-            };
-          })
-        | null;
+      const el = document.getElementById("plot-area");
       if (!el || !this.data) return;
       const newRangeX = annotationXRange(
-        this.data[this.config.xAxis!.col!] ?? [],
+        this.data[this.config.xAxis.col!] ?? [],
         ann.x,
       );
 
@@ -2006,7 +1998,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             ? "dark"
             : "light";
           if (this.data && Object.keys(this.config.yAxes).length > 0)
-            this.renderPlot();
+            void this.renderPlot();
         }
       });
       observer.observe(document.documentElement, { attributes: true });
@@ -2124,9 +2116,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           await this.renderPlot();
           // wait one layout pass before reading getBoundingClientRect for frame markers
           requestAnimationFrame(() => {
-            const plotEl = document.getElementById("plot-area") as
-              | (HTMLElement & { _fullLayout?: unknown })
-              | null;
+            const plotEl = plotAreaEl();
             console.debug(
               "[init RAF] _fullLayout present:",
               !!plotEl?._fullLayout,
@@ -2207,9 +2197,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               // @click handler (_chart.html) -- popup width 288px (w-72) +
               // 16px gap, positioned document-relative since the popup is
               // x-teleport'd to <body>.
-              const annBtn = document.querySelector(
+              const annBtn = document.querySelector<HTMLElement>(
                 '[x-ref="annBtn"]',
-              ) as HTMLElement | null;
+              );
               if (annBtn) {
                 this.annCoords = popupCoords(
                   annBtn.getBoundingClientRect(),
@@ -2219,11 +2209,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               }
               this.annotationsOpen = true;
               void this.$nextTick(() => {
-                (
-                  document.querySelector(
-                    '[x-ref="annInput"]',
-                  ) as HTMLInputElement | null
-                )?.focus();
+                document
+                  .querySelector<HTMLInputElement>('[x-ref="annInput"]')
+                  ?.focus();
               });
             }, 0);
           });
@@ -2308,11 +2296,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 dojoStore.dialog.confirm();
                 break;
               case "focus-warp":
-                (
-                  document.querySelector(
-                    "input[data-warp-input]",
-                  ) as HTMLElement | null
-                )?.focus();
+                document
+                  .querySelector<HTMLElement>("input[data-warp-input]")
+                  ?.focus();
                 break;
               case "escape": {
                 const anyOpen = anyPanelOpen({
@@ -2653,7 +2639,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         );
         if (plan.xFilterChanged) {
           this.xAxisFilterFingerprint = plan.xFilterFingerprint;
-          if (this.data) delete this.data[value.xAxis!.col!];
+          if (this.data) delete this.data[value.xAxis.col!];
         }
 
         if (plan.colsToRefetch.length > 0) {
@@ -2699,7 +2685,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             // replace entirely so background-hydrated columns with stale unit values
             // are not used; startBackgroundDiscovery re-hydrates the rest
             this.data = resp.data;
-            this.renderPlot();
+            void this.renderPlot();
             // re-index frame markers after the plot re-renders with the new unit scale
             requestAnimationFrame(() => {
               this._renderFrameMarkers();
@@ -2723,7 +2709,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           try {
             const resp = await this.fetchTrialData(this.trialId, activeCols);
             this.data = resp.data;
-            this.renderPlot();
+            void this.renderPlot();
             void this.startBackgroundDiscovery();
           } catch (e) {
             console.warn("Max points re-fetch failed", e);
@@ -2790,7 +2776,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       window.addEventListener("mojo-sensai-plot-config", (e) => {
         const detail = (e as CustomEvent<PlotConfig>).detail;
         if (detail && typeof detail === "object") {
-          this.config = { ...detail } as PlotConfig;
+          this.config = { ...detail };
         }
       });
 
@@ -2926,7 +2912,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         this.vs.enabled = false;
         this.vsDatasets = {};
         this._persistVsState();
-        this.renderPlot();
+        void this.renderPlot();
       }
     },
 
@@ -3230,7 +3216,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         if (parsed !== null) this.config = { ...this.config, ...parsed };
         else console.error("Stored config corrupt");
       } else {
-        if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
+        if (this.columns.includes("time")) this.config.xAxis.col = "time";
       }
 
       const savedHistory = localStorage.getItem("mojo_mosaic_history");
@@ -3252,7 +3238,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     saveAndRender() {
       localStorage.setItem("mojo_mosaic_config", JSON.stringify(this.config));
       this.persistHistory();
-      this.renderPlot();
+      void this.renderPlot();
       void this.$nextTick(() => {
         const el = document.getElementById("plot-area");
         if (el && el.offsetParent !== null) Plotly.Plots.resize(el);
@@ -3388,7 +3374,6 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
     initCodeMirror(hostEl: HTMLElement) {
       if (!hostEl || _cm.editor) return;
-      const self = this;
 
       // Restore persisted height before creating the editor so it sizes correctly.
       restorePersistedHeight(hostEl, "mojo:json-editor:height");
@@ -3577,7 +3562,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const plotFieldHoverTooltip = hoverTooltip((view, pos): Tooltip | null => {
         const path = jsonPathAt(view.state, pos);
         if (path.length === 0) return null;
-        const description = describeSchemaPath(self.plotConfigSchema, path);
+        const description = describeSchemaPath(this.plotConfigSchema, path);
         if (!description) return null;
         const node = syntaxTree(view.state).resolveInner(pos, -1);
         return {
@@ -3605,14 +3590,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // covers that) or before plotConfigSchema has loaded (see the
       // forceLinting call in init(), which re-runs this once it has).
       const plotConfigSchemaLinter = linter((view): Diagnostic[] => {
-        if (!self.plotConfigSchema) return [];
+        if (!this.plotConfigSchema) return [];
         let parsed: unknown;
         try {
           parsed = JSON.parse(view.state.doc.toString());
         } catch {
           return [];
         }
-        return collectSchemaDiagnostics(parsed, self.plotConfigSchema as Record<string, unknown>)
+        return collectSchemaDiagnostics(parsed, this.plotConfigSchema as Record<string, unknown>)
           .map(({ path, message }): Diagnostic | null => {
             const range = jsonRangeForPath(view.state, path);
             return range ? { ...range, severity: "error", message } : null;
@@ -3636,10 +3621,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             if (update.docChanged && !_cm.updating) {
               const text = update.state.doc.toString();
               _cm.updating = true;
-              self.configRaw = text;
+              this.configRaw = text;
               if (_cm.debounce !== null) clearTimeout(_cm.debounce);
               _cm.debounce = setTimeout(() => {
-                self.updateFromRaw();
+                this.updateFromRaw();
                 _cm.debounce = null;
               }, 500);
               _cm.updating = false;
@@ -3681,7 +3666,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       // Sync external configRaw changes into CM.
       this.$watch("configRaw", (val: string) => {
         if (!_cm.updating && _cm.editor) {
-          const current = _cm.editor.state.doc.toString() as string;
+          const current = _cm.editor.state.doc.toString();
           if (current !== val) {
             _cm.updating = true;
             _cm.editor.dispatch({
@@ -3776,7 +3761,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (ok) {
         localStorage.removeItem("mojo_mosaic_config");
         this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as PlotConfig;
-        if (this.columns.includes("time")) this.config.xAxis!.col! = "time";
+        if (this.columns.includes("time")) this.config.xAxis.col = "time";
         this.notify("Settings Reset", "info");
         this.configRaw = JSON.stringify(this.config, null, 4);
       }
@@ -3859,7 +3844,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (!this.data || Object.keys(this.config.yAxes).length === 0) return;
       const csv = csvText(
         this.data,
-        this.config.xAxis!.col!,
+        this.config.xAxis.col!,
         Object.keys(this.config.yAxes),
       );
       const link = document.createElement("a");
@@ -4654,7 +4639,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       if (needed.length > 0) {
         const fetched = await this.fetchTrialData(this.trialId, needed);
         this.data = { ...(this.data ?? {}), ...fetched.data };
-        this.renderPlot();
+        void this.renderPlot();
       }
     },
 
@@ -5103,7 +5088,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
 
       const isPolar = this.config.plotType === "polar";
       const yKeys = Object.keys(this.config.yAxes);
-      const xCol = this.config.xAxis!.col!;
+      const xCol = this.config.xAxis.col!;
 
       // integer-coded columns sit on right-hand axes of their own, see lib/enum-axes.ts
       const enumCtx = enumContext(yKeys, this.data, this.columnMetadata, isPolar);

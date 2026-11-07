@@ -75,7 +75,7 @@ export function toggleSearchSegment(
       items.length > 1 ? `(${items.sort().join("|")})` : (items[0] ?? "");
   } else {
     let parts = (pathPart ?? "").split("/").filter((p) => p !== "");
-    let target = parts[depth] ?? "";
+    const target = parts[depth] ?? "";
     let items = target.replace(/[()]/g, "").split("|").filter(Boolean);
     items = items.includes(segment)
       ? items.filter((i) => i !== segment)
@@ -91,7 +91,7 @@ export function toggleSearchSegment(
     pathPart = parts.join("/");
     if (pathPart && pathPart.toLowerCase() !== "time") {
       const isFolder = columns.some((c) =>
-        c.toLowerCase().startsWith(pathPart!.toLowerCase() + "/"),
+        c.toLowerCase().startsWith(pathPart.toLowerCase() + "/"),
       );
       if (isFolder) pathPart += "/";
     }

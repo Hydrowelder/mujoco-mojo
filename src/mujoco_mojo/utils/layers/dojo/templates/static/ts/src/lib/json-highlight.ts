@@ -3,7 +3,7 @@
 // whatever is in the config can't add markup of its own
 
 const TOKEN =
-  /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\[\]{},])|(\S+)/g;
+  /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|[[\]{},])|(\S+)/g;
 
 // keys, strings, numbers, true/false and null each get a color, punctuation
 // stays neutral, and anything that isn't JSON at all is underlined in red

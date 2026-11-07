@@ -86,10 +86,10 @@ function insert<T extends { name: string }>(
   const attrPart = colonIdx === -1 ? null : item.name.slice(colonIdx + 1);
   const segments = pathPart.split("/").filter((s) => s.length > 0);
   if (attrPart) segments.push(attrPart);
-  if (segments.length === 0) return;
+  const leaf = segments.pop();
+  if (leaf === undefined) return;
   let node = root;
-  for (let i = 0; i < segments.length - 1; i++) {
-    const seg = segments[i];
+  for (const seg of segments) {
     const path = node.path ? `${node.path}/${seg}` : seg;
     let child = node.folders.get(seg);
     if (!child) {
@@ -100,7 +100,7 @@ function insert<T extends { name: string }>(
     }
     node = child;
   }
-  node.files.push({ name: segments[segments.length - 1], item });
+  node.files.push({ name: leaf, item });
 }
 
 function pushFile<T>(node: FolderNode<T>, f: { name: string; item: T }, depth: number, out: TreeRow<T>[]): void {

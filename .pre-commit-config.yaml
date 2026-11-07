@@ -16,6 +16,18 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: dojo-eslint
+        name: Lint the Dojo frontend (ESLint)
+        # system, not node: it needs the npm dependencies installed in the ts
+        # directory (`npm install` there, see CLAUDE.md), the same as the type check
+        # and the tests, and only runs when the frontend's sources change
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts run lint
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/static/ts/(src/.*\.ts|eslint\.config\.js|tsconfig\.json|package-lock\.json)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
       - id: copy-docs-examples
         name: Copy Docs Examples to Examples
         entry: python scripts/copy_docs_examples_to_examples.py

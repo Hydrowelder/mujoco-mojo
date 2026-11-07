@@ -88,12 +88,7 @@ function monitor() {
 
     handleDataUpdate(data: JobStatus) {
       const wasInit = this.hasInitialData;
-      const prev = { ...this.prevStatus } as {
-        n_done: number;
-        n_success: number;
-        n_failed: number;
-        n_error: number;
-      };
+      const prev = { ...this.prevStatus };
       this.prevStatus = {
         n_done: data.n_done,
         n_success: data.n_success,
@@ -249,7 +244,7 @@ function monitor() {
           return;
         }
         for (const shot of confettiShots(plan, timeLeft, Math.random)) {
-          confetti({ ...defaults, ...shot });
+          void confetti({ ...defaults, ...shot });
         }
       }, plan.intervalMs);
     },

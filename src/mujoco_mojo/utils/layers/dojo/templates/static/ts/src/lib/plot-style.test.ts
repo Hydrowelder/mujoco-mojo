@@ -49,7 +49,7 @@ describe("nextAvailableStyle", () => {
     const asked: number[] = [];
     nextAvailableStyle([], 3, (i) => (asked.push(i), COLORS[i]!), DASHES);
     nextAvailableStyle(
-      Array.from({ length: 9 }, () => ({ color: "?", dash: "solid" as DashStyle })),
+      Array.from({ length: 9 }, () => ({ color: "?", dash: "solid" })),
       3,
       (i) => (asked.push(i), COLORS[i]!),
       DASHES,

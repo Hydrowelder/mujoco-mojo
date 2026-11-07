@@ -74,7 +74,7 @@ describe("saveProfileRequest", () => {
   const payload = profileOf([config("A", "time", ["a"])]);
   const replyWith = (status: number, json: () => Promise<unknown>) =>
     ({ ok: status >= 200 && status < 300, status, json }) as Response;
-  const reply = (status: number, body: unknown = {}) => replyWith(status, async () => body);
+  const reply = (status: number, body: unknown = {}) => replyWith(status, () => Promise.resolve(body));
 
   const stubFetch = (...replies: Array<Response | Error>) => {
     const fn = vi.fn();

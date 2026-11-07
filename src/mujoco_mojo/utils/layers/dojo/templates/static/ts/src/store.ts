@@ -116,7 +116,7 @@ document.addEventListener("alpine:init", () => {
     globalToast: {
       show: false,
       message: "",
-      type: "info" as "success" | "error" | "info",
+      type: "info",
     },
     isSyncing: false,
     syncProgress: 0,
@@ -186,14 +186,14 @@ document.addEventListener("alpine:init", () => {
         this.unreadCount = saved.unreadCount;
       }
 
-      this.checkServerHealth();
-      setInterval(() => this.checkServerHealth(), 5000);
+      void this.checkServerHealth();
+      setInterval(() => void this.checkServerHealth(), 5000);
       this.startGlobalSync();
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) this.checkServerHealth();
+        if (!document.hidden) void this.checkServerHealth();
       });
       this._installPlotlyLogCapture();
-      this.fetchChangelog();
+      void this.fetchChangelog();
     },
 
     async fetchChangelog() {
@@ -296,7 +296,7 @@ document.addEventListener("alpine:init", () => {
         const orig = console[level].bind(console);
         console[level] = (...args: unknown[]) => {
           orig(...args);
-          const first = String(args[0] ?? "");
+          const first = typeof args[0] === "string" ? args[0] : "";
           if (isPlotlyPrefix(first)) {
             forward(first, args.slice(1));
           }
@@ -473,10 +473,10 @@ document.addEventListener("alpine:init", () => {
         this._setConnected(true);
       };
 
-      this.source.onmessage = (event: MessageEvent) => {
+      this.source.onmessage = (event: MessageEvent<string>) => {
         if (!event.data || !event.data.trim()) return;
         try {
-          const ev = parseSyncEvent(event.data as string);
+          const ev = parseSyncEvent(event.data);
           if (ev.kind === "start") this.startSync();
           else if (ev.kind === "progress") this.setSyncProgress(ev.value);
           else if (ev.kind === "final") {
@@ -498,7 +498,7 @@ document.addEventListener("alpine:init", () => {
         console.error("[Mojo Sync] Connection lost. Attempting recovery...");
         this.isSyncing = false;
         this.stopGlobalSync();
-        this.checkServerHealth();
+        void this.checkServerHealth();
         setTimeout(() => this.startGlobalSync(), 5000);
       };
     },
@@ -575,23 +575,23 @@ document.addEventListener("alpine:init", () => {
 
     addNotification(message: string, type: string) {
       prependNotification(
-        this.notifications as NotificationEntry[],
+        this.notifications,
         newNotification(
           message,
           type,
-          !!(this.notifOpen as boolean),
+          !!(this.notifOpen),
           Date.now(),
           Math.random(),
         ),
       );
-      if (!(this.notifOpen as boolean)) (this.unreadCount as number)++;
+      if (!(this.notifOpen)) (this.unreadCount)++;
       this._saveNotifications();
     },
 
     openNotifications() {
       this.notifOpen = !this.notifOpen;
       if (this.notifOpen) {
-        markAllRead(this.notifications as NotificationEntry[]);
+        markAllRead(this.notifications);
         this.unreadCount = 0;
         this._saveNotifications();
       }
@@ -613,7 +613,7 @@ document.addEventListener("alpine:init", () => {
       message: "",
       confirmLabel: "Confirm",
       cancelLabel: "Cancel",
-      variant: "info" as "danger" | "warning" | "info",
+      variant: "info",
       showInput: false,
       inputValue: "",
       inputPlaceholder: "",
