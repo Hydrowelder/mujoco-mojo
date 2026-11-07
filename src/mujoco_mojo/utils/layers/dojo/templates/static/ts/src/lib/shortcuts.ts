@@ -119,6 +119,9 @@ export interface PanelState {
   editorOpen: boolean;
   profilesOpen: boolean;
   vsMenuOpen: boolean;
+  shareOpen: boolean;
+  // the notification history in the page header
+  notifOpen: boolean;
   labOpen: boolean;
   // how many overlays (dialogs, popups) the page has open
   overlayCount: number;
@@ -141,6 +144,8 @@ export function anyPanelOpen(s: PanelState): boolean {
     s.editorOpen ||
     s.profilesOpen ||
     s.vsMenuOpen ||
+    s.shareOpen ||
+    s.notifOpen ||
     s.labOpen ||
     s.overlayCount > 0 ||
     s.isTextInput

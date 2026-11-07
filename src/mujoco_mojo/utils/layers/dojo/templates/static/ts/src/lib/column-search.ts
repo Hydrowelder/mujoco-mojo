@@ -199,12 +199,17 @@ export function quatBases(columns: string[]): string[] {
 }
 
 // the columns that can be rotated into another frame: the x, y and z
-// components of the vectors named in `vectors` (a base such as `Bodies/B/xpos`)
-export function rotatableColumns(columns: string[], vectors: string[]): string[] {
+// components of the vectors named in `vectors` (a base such as `Bodies/B/xpos`),
+// plus any column `keep` accepts (an enum signal, which is drawn as it is)
+export function rotatableColumns(
+  columns: string[],
+  vectors: string[],
+  keep: (col: string) => boolean = () => false,
+): string[] {
   return columns.filter((col) => {
     const parts = col.split(":");
     const suffix = parts.pop();
     const family = parts.join(":");
-    return ["x", "y", "z"].includes(suffix ?? "") && vectors.includes(family);
+    return (["x", "y", "z"].includes(suffix ?? "") && vectors.includes(family)) || keep(col);
   });
 }

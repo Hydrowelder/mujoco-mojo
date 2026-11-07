@@ -1932,11 +1932,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     get selectableYColumns(): string[] {
       if (!this.columns) return [];
       if (!refFrameActive(this.config.refFrame)) return this.columns;
-      return rotatableColumns(this.columns, this.rotateableVectors ?? []);
+      return rotatableColumns(this.columns, this.rotateableVectors ?? [], (c) => this.isEnumCol(c));
     },
 
     get frameActive(): boolean {
       return refFrameActive(this.config.refFrame);
+    },
+
+    // whether a signal can be picked: any, in the world frame, else only the
+    // vectors a frame can rotate, and enum signals (drawn as they are, with no
+    // rotation filter)
+    isFrameSelectable(col: string): boolean {
+      return (
+        !refFrameActive(this.config.refFrame) ||
+        this.isEnumCol(col) ||
+        (this.rotateableVectors ?? []).includes(col.split(":")[0]!)
+      );
     },
 
     get availableQuats(): string[] {
@@ -2314,6 +2325,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                   editorOpen: this.editorOpen,
                   profilesOpen: this.profilesOpen,
                   vsMenuOpen: this.vsMenuOpen,
+                  shareOpen: this.shareOpen,
+                  notifOpen: (Alpine.store("dojo") as DojoStore).notifOpen,
                   labOpen: this.labOpen,
                   overlayCount: (Alpine.store("dojo") as DojoStore).overlayCount,
                   isTextInput,
@@ -2327,7 +2340,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
                 this.shapesOpen = false;
                 this.xMenuOpen = this.yMenuOpen = this.refFrameMenuOpen = this.refFrameOriginMenuOpen = false;
                 this.plotConfigOpen = this.downloadOpen = this.editorOpen = false;
-                this.profilesOpen = this.vsMenuOpen = false;
+                this.profilesOpen = this.vsMenuOpen = this.shareOpen = false;
+                (Alpine.store("dojo") as DojoStore).notifOpen = false;
                 this.profileSearch = "";
                 if (!this.labOpen || !window.mojoLabHasUnsavedChanges?.()) {
                   this.labOpen = false;
@@ -3936,10 +3950,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const col = row.item;
       if (col === null) return;
       if (shiftKey && this.lastYRangeClick !== null) {
-        const rows = this.getColumnVisibleRows(
-          "y",
-          (c) => !refFrameActive(this.config.refFrame) || this.rotateableVectors.includes(c.split(":")[0]!),
-        ).filter((r) => r.type === "file" && !r.hidden);
+        const rows = this.getColumnVisibleRows("y", (c) => this.isFrameSelectable(c)).filter((r) => r.type === "file" && !r.hidden);
         const toggles = yRangeToggles(
           rows.map((r) => ({ path: r.path, item: r.item! })),
           this.lastYRangeClick,

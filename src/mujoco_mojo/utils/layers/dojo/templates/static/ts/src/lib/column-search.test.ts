@@ -282,4 +282,18 @@ describe("rotatableColumns", () => {
   it("splits a vector's name from its component at the last colon", () => {
     expect(rotatableColumns(["a:b:x", "a:b:u"], ["a:b"])).toEqual(["a:b:x"]);
   });
+
+  it("also keeps a column the caller accepts, such as an enum signal, in column order", () => {
+    const withEnum = [...cols, "Sensors/contact", "Bodies/B/quat:w"];
+    const kept = rotatableColumns(withEnum, ["Bodies/B/xpos"], (c) => c === "Sensors/contact");
+    expect(kept).toEqual(["Bodies/B/xpos:x", "Bodies/B/xpos:y", "Bodies/B/xpos:z", "Sensors/contact"]);
+  });
+
+  it("keeps only what is rotatable when nothing else is accepted", () => {
+    expect(rotatableColumns(cols, ["Bodies/B/xpos"], () => false)).toEqual(rotatableColumns(cols, ["Bodies/B/xpos"]));
+  });
+
+  it("does not drop a rotatable column the caller rejects", () => {
+    expect(rotatableColumns(cols, ["Bodies/C/xpos"], () => false)).toEqual(["Bodies/C/xpos:x"]);
+  });
 });

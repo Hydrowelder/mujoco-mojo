@@ -939,7 +939,7 @@
                     </div>
 
                     <div class="max-h-80 overflow-y-auto custom-scrollbar border-b border-t border-subtle py-2">
-                        <template x-for="row in getColumnVisibleRows('y', (col) => !frameActive || rotateableVectors.includes(col.split(':')[0]))"
+                        <template x-for="row in getColumnVisibleRows('y', (col) => isFrameSelectable(col))"
                                   :key="row.key">
                             <div class="expander-body-wrap duration-100 ease-out"
                                  :class="!row.hidden ? 'expander-open' : ''">
@@ -949,16 +949,24 @@
                                     </template>
                                     <template x-if="row.type === 'file'">
                                         {# py-1 moved off the label and onto the inner span - see
-                                           tree_folder_row's comment in _macros.html for why. #}
+                                           tree_folder_row's comment in _macros.html for why.
+
+                                           A mouse click anywhere on the row is handled here, on the label, with its
+                                           default prevented so the browser does not forward it to the checkbox: a
+                                           Shift+click on a label is not forwarded by every browser, and the range
+                                           select needs it. The checkbox ignores the pointer (pointer-events-none) so a
+                                           click on it reaches this handler too, and keeps its own handler for the
+                                           keyboard (Space on the focused checkbox). #}
                                         <label class="flex items-center gap-2 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
                                                :title="row.item"
-                                               @mousedown.prevent>
+                                               @mousedown.prevent
+                                               @click.prevent="toggleYRange(row, $event.shiftKey)">
                                             {{ tree_indent_guides('row') }}
                                             <span class="flex items-center gap-2 min-w-0 flex-1 py-1">
                                                 <input type="checkbox"
                                                        :checked="config.yAxes[row.item]"
                                                        @click.stop="toggleYRange(row, $event.shiftKey)"
-                                                       class="rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
+                                                       class="pointer-events-none rounded text-accent-500 w-3 h-3 border-control accent-accent-500 bg-surface shrink-0 ml-1" />
                                                 <span class="text-sm font-mono font-bold min-w-0 flex-1 truncate"
                                                       :class="config.yAxes[row.item] ? 'text-accent-500' : 'text-ink-secondary'"
                                                       x-text="row.name"></span>
