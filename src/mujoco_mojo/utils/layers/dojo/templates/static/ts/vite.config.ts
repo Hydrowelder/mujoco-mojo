@@ -13,6 +13,14 @@ import entries from "./entries.json" with { type: "json" };
 // (scripts/dev_dojo.sh sets this)
 const DOJO_TARGET = process.env.DOJO_TARGET ?? "http://127.0.0.1:8000";
 
+// how each Dojo path is proxied. the browser's own Host header is kept
+// (changeOrigin is what Vite's string form of an entry turns on, and it
+// rewrites Host to the Dojo's address): the Dojo builds absolute URLs from it,
+// like the redirect from /monitor to /monitor/, and with Host rewritten that
+// sent the browser off Vite to the Dojo's own port, which serves none of the
+// sources
+const toDojo = { target: DOJO_TARGET, changeOrigin: false };
+
 // the Jinja templates are siblings of this ts/ directory, not descendants of
 // it, so they sit outside Vite's module graph
 const TEMPLATES_DIR = resolve(import.meta.dirname, "../..");
@@ -111,23 +119,23 @@ export default defineConfig({
     watch: { ignored: ["**/static/dist/**", "**/__pycache__/**"] },
     proxy: {
       // the Dojo's root, which redirects to /monitor
-      "^/$": DOJO_TARGET,
-      "/monitor": DOJO_TARGET,
-      "/mosaic": DOJO_TARGET,
-      "/morph": DOJO_TARGET,
-      "/settings": DOJO_TARGET,
-      "/sensai": DOJO_TARGET,
-      "/changelog": DOJO_TARGET,
-      "/mojo-static": DOJO_TARGET,
+      "^/$": toDojo,
+      "/monitor": toDojo,
+      "/mosaic": toDojo,
+      "/morph": toDojo,
+      "/settings": toDojo,
+      "/sensai": toDojo,
+      "/changelog": toDojo,
+      "/mojo-static": toDojo,
       // the well-known paths browsers probe directly (see main.py)
-      "/favicon.ico": DOJO_TARGET,
-      "/apple-touch-icon.png": DOJO_TARGET,
-      "/favicon-32x32.png": DOJO_TARGET,
-      "/favicon-16x16.png": DOJO_TARGET,
+      "/favicon.ico": toDojo,
+      "/apple-touch-icon.png": toDojo,
+      "/favicon-32x32.png": toDojo,
+      "/favicon-16x16.png": toDojo,
       // the Optuna dashboard (morph.py) is mounted at the Dojo's root
-      "/dashboard": DOJO_TARGET,
-      "/api": DOJO_TARGET,
-      "/static": DOJO_TARGET,
+      "/dashboard": toDojo,
+      "/api": toDojo,
+      "/static": toDojo,
     },
   },
   optimizeDeps: {

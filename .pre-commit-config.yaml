@@ -28,6 +28,19 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: gen-docs-models
+        name: Update the docs example models linked to MuJoCo Live
+        entry: uv run --no-project --with-editable . python scripts/gen_docs_models.py
+        # system, not python, for the same reason as gen-mjcf-tags above. This one runs
+        # before a push rather than a commit: it builds the example models (a few seconds)
+        # and the push is what publishes them to the branch the docs link to. A push stops
+        # when the hook rewrote a model, so commit the new file and push again
+        language: system
+        files: ^(src/mujoco_mojo/.*\.py|docs/user-guides/examples/vlr/vlr_example\.py|scripts/gen_docs_models\.py)$
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: local
+    hooks:
       - id: copy-docs-examples
         name: Copy Docs Examples to Examples
         entry: python scripts/copy_docs_examples_to_examples.py

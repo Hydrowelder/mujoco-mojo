@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<mujoco model="Vertically Landing Rocket">
+  <option timestep="0.001" o_solref="0.005 1.0" o_friction="0 0 0 0 0" cone="elliptic">
+    <flag override="enable"/>
+  </option>
+  <asset>
+    <texture name="grid_tex" type="2d" builtin="checker" rgb1="0.5803921568627451 0.6392156862745098 0.7215686274509804" rgb2="0.2784313725490196 0.3333333333333333 0.4117647058823529" width="1024" height="1024"/>
+    <material name="grid_mat" texture="grid_tex"/>
+  </asset>
+  <worldbody>
+    <geom name="floor" type="plane" condim="3" material="grid_mat" pos="0.5 0.5 0.0" quat="1 0 0 0" size="0.0 0.0 0.1"/>
+    <camera name="iso_view" pos="0.6095999999999999 0.6095999999999999 0.6095999999999999" quat="0.3279176444836154 0.197272977984932 0.4762590989409519 0.7916632246537831"/>
+    <light pos="0.0 0.0 6.095999999999999"/>
+    <body name="rocket" pos="0.0 0.0 3.0479999999999996" euler="5 0 0">
+      <freejoint/>
+      <geom type="cylinder" condim="3" mass="0.4535923700000001" fromto="0.0 0.0 0.0 0.0 0.0 0.30479999999999996" pos="0 0 0" quat="1 0 0 0" rgba="0.023529411764705882 0.7137254901960784 0.8313725490196079 0.2" size="0.038099999999999995"/>
+      <frame name="px_side" pos="0.038099999999999995 0.0 0.0" euler="0.0 0.0 0.0">
+        <site name="px_tube_spring" type="sphere" pos="0.0 0.0 0.1016" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        <body name="px_leg" pos="0 0 0" euler="0 30 0">
+          <joint name="px_leg_main_hinge" pos="0 0 0" axis="0 1 0"/>
+          <geom type="box" condim="3" density="1239.9999999999998" fromto="0.0 0.0 0.0 0.15239999999999998 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9568627450980393 0.24705882352941178 0.3686274509803922 0.5" size="0.0127 0.0 0.0"/>
+          <geom type="sphere" condim="3" density="0.0" pos="0.15239999999999998 0.0 0.0" quat="1 0 0 0" rgba="0.6588235294117647 0.3333333333333333 0.9686274509803922 1.0" size="0.0254"/>
+          <site name="px_leg_spring" type="sphere" pos="0.07619999999999999 0.0 0.0" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        </body>
+      </frame>
+      <frame name="mx_side" pos="2.3329521523757074e-18 0.038099999999999995 0.0" euler="0.0 0.0 90.0">
+        <site name="mx_tube_spring" type="sphere" pos="0.0 0.0 0.1016" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        <body name="mx_leg" pos="0 0 0" euler="0 30 0">
+          <joint name="mx_leg_main_hinge" pos="0 0 0" axis="0 1 0"/>
+          <geom type="box" condim="3" density="1239.9999999999998" fromto="0.0 0.0 0.0 0.15239999999999998 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9568627450980393 0.24705882352941178 0.3686274509803922 0.5" size="0.0127 0.0 0.0"/>
+          <geom type="sphere" condim="3" density="0.0" pos="0.15239999999999998 0.0 0.0" quat="1 0 0 0" rgba="0.6588235294117647 0.3333333333333333 0.9686274509803922 1.0" size="0.0254"/>
+          <site name="mx_leg_spring" type="sphere" pos="0.07619999999999999 0.0 0.0" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        </body>
+      </frame>
+      <frame name="py_side" pos="-0.038099999999999995 4.665904304751415e-18 0.0" euler="0.0 0.0 180.0">
+        <site name="py_tube_spring" type="sphere" pos="0.0 0.0 0.1016" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        <body name="py_leg" pos="0 0 0" euler="0 30 0">
+          <joint name="py_leg_main_hinge" pos="0 0 0" axis="0 1 0"/>
+          <geom type="box" condim="3" density="1239.9999999999998" fromto="0.0 0.0 0.0 0.15239999999999998 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9568627450980393 0.24705882352941178 0.3686274509803922 0.5" size="0.0127 0.0 0.0"/>
+          <geom type="sphere" condim="3" density="0.0" pos="0.15239999999999998 0.0 0.0" quat="1 0 0 0" rgba="0.6588235294117647 0.3333333333333333 0.9686274509803922 1.0" size="0.0254"/>
+          <site name="py_leg_spring" type="sphere" pos="0.07619999999999999 0.0 0.0" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        </body>
+      </frame>
+      <frame name="my_side" pos="-6.998856457127123e-18 -0.038099999999999995 0.0" euler="0.0 0.0 -90.0">
+        <site name="my_tube_spring" type="sphere" pos="0.0 0.0 0.1016" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        <body name="my_leg" pos="0 0 0" euler="0 30 0">
+          <joint name="my_leg_main_hinge" pos="0 0 0" axis="0 1 0"/>
+          <geom type="box" condim="3" density="1239.9999999999998" fromto="0.0 0.0 0.0 0.15239999999999998 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9568627450980393 0.24705882352941178 0.3686274509803922 0.5" size="0.0127 0.0 0.0"/>
+          <geom type="sphere" condim="3" density="0.0" pos="0.15239999999999998 0.0 0.0" quat="1 0 0 0" rgba="0.6588235294117647 0.3333333333333333 0.9686274509803922 1.0" size="0.0254"/>
+          <site name="my_leg_spring" type="sphere" pos="0.07619999999999999 0.0 0.0" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.017779999999999997"/>
+        </body>
+      </frame>
+    </body>
+  </worldbody>
+  <visual>
+    <rgba haze="0 0 0 0"/>
+  </visual>
+</mujoco>
