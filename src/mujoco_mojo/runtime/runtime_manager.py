@@ -153,6 +153,11 @@ class RuntimeManager:
         if n_with_frames:
             logger.info(f"Saving {n_with_frames} videos in parallel...")
 
+        # each renderer's GL context is current on this thread, the one that ran the simulation, so it
+        # has to be freed here and not on the pool's threads. encoding below never touches the renderer
+        for recorder in self.video_recorders:
+            recorder.close_renderer()
+
         def _save_and_close(recorder: VideoRecorder) -> None:
             recorder.save()
             recorder.close()

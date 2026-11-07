@@ -537,8 +537,16 @@ class VideoRecorder:
             proc.kill()
             raise
 
+    def close_renderer(self) -> None:
+        """
+        Releases the GL context held by the underlying MuJoCo renderer. Safe to call more than once.
+
+        Call it from the thread that called `setup`: the renderer leaves its context current on that thread, and freeing it from another thread fails (on Windows, with a GLFW "context in use" error, and sometimes a crash).
+        """
+        self._renderer.close()
+
     def close(self) -> None:
-        """Releases the GL context held by the underlying MuJoCo renderer, and kills the ffmpeg encoder if `save` was never called. Call once recording is finished and `save` has been called."""
+        """Releases the GL context held by the underlying MuJoCo renderer (see `close_renderer`, including which thread to call it from), and kills the ffmpeg encoder if `save` was never called. Call once recording is finished and `save` has been called."""
         if self._encoder_proc is not None and self._encoder_proc.poll() is None:
             proc = self._encoder_proc
             try:
@@ -548,7 +556,7 @@ class VideoRecorder:
                 pass
             proc.kill()
             proc.wait()
-        self._renderer.close()
+        self.close_renderer()
 
     def register_to_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
         from mujoco_mojo.runtime.runtime_manager import RuntimeManager

@@ -8,6 +8,7 @@ import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import Any
 
@@ -436,6 +437,10 @@ class ViewerSpy:
         return launch
 
 
+@pytest.mark.skipif(
+    not studio_module.web_client_available(),
+    reason="this MuJoCo build has no Studio browser viewer (e.g. the 4.0.0 Windows wheel)",
+)
 # Studio's web server leaves one loopback socket open after it is closed, whatever the caller does
 @pytest.mark.filterwarnings(
     "ignore::ResourceWarning",
@@ -594,6 +599,8 @@ def fake_viewer(monkeypatch: pytest.MonkeyPatch, listener: int) -> Iterator[Fake
 
     monkeypatch.setattr(launch_web, "launch", launch)
     monkeypatch.setattr(launch_native, "launch", launch)
+    # the fake stands in for the browser client too, so these run on MuJoCo builds that do not ship one
+    monkeypatch.setattr(studio_module, "web_client_available", lambda: True)
     monkeypatch.setattr(studio_module, "find_free_port", lambda host, start: listener)
     monkeypatch.delenv("SSH_CONNECTION", raising=False)
     monkeypatch.delenv("SSH_CLIENT", raising=False)
@@ -824,12 +831,25 @@ def test_the_viewer_cannot_be_started_without_the_controls_for_its_buttons(
         backend.start(make_state())
 
 
+def only_the_bindings_exist(name: str) -> ModuleSpec | None:
+    """Stands in for `importlib.util.find_spec` on a MuJoCo build that has the browser viewer's bindings but no client in the package."""
+    return ModuleSpec(name, None) if name == "mujoco.studio.web.state_payload" else None
+
+
 def test_the_browser_client_is_found_where_the_override_points_or_in_the_package(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(importlib.util, "find_spec", only_the_bindings_exist)
     monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path))
     assert studio_module.web_client_available()
 
     monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path / "missing"))
+    assert not studio_module.web_client_available()
+
+
+def test_a_client_is_no_use_without_the_browser_viewers_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path))
     assert not studio_module.web_client_available()

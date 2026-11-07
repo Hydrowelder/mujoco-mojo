@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -147,6 +148,21 @@ def test_save_recordings_skips_log_when_no_frames_captured(caplog) -> None:
     mock_recorder.save.assert_called_once()
     mock_recorder.close.assert_called_once()
     assert not any("Saving" in r.message for r in caplog.records)
+
+
+def test_save_recordings_frees_renderers_on_the_calling_thread() -> None:
+    """A renderer's GL context is current on the thread that ran the simulation, and freeing it from the save pool's threads fails, so it is freed before the pool starts."""
+    freed_on: list[int] = []
+    mock_recorder = MagicMock(frame_count=1)
+    mock_recorder.close_renderer.side_effect = lambda: freed_on.append(
+        threading.get_ident()
+    )
+    mgr = RuntimeManager(video_recorders=[mock_recorder])
+
+    mgr.save_recordings()
+
+    assert freed_on == [threading.get_ident()]
+    mock_recorder.save.assert_called_once()
 
 
 @patch("mujoco_mojo.runtime.runtime_manager.ThreadPoolExecutor")

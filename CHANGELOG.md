@@ -4,7 +4,8 @@
 
 - Added support for [MuJoCo 4.0.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-4-0-0-november-6-2026)
 - `reloaded` now shows your model in MuJoCo Studio, either in its own window (`-ui studio`) or in a web browser (`-ui web`), which also works over SSH. The classic viewer is still there as `-ui opengl`
-- `reloaded` now opens the browser viewer by default when you're connected over SSH or have no display
+- `reloaded` now opens the browser viewer by default when your MuJoCo build can serve it, and the classic OpenGL viewer when it cannot
+- Fixed a GLFW "context in use" warning, and a possible crash, when a run that recorded video finished
 - `reloaded` now has a new terminal screen, with a status bar, a log you can copy from, and new `pause`, `step`, `speed` , and `explain` commands
 - Updated `Inertial.from_random` to use `stochas` transations instead of the more complex hand-rolled random draw method
 - The job status and runtime report now list the `--arg` and `--kwarg` values a job ran with

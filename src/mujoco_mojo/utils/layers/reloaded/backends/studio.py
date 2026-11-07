@@ -6,7 +6,6 @@ import importlib
 import importlib.util
 import io
 import logging
-import os
 import socket
 import threading
 import time
@@ -21,7 +20,12 @@ import mujoco
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.utils import display_problem, find_free_port, is_ssh_session
+from mujoco_mojo.utils.utils import (
+    display_problem,
+    find_free_port,
+    is_ssh_session,
+    web_client_available,
+)
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 from .base import ConnectionInfo, ViewerControls
@@ -64,20 +68,6 @@ def studio_available() -> bool:
     except ImportError:
         return False
     return True
-
-
-def web_client_available() -> bool:
-    """Whether the browser viewer has a client to serve: the one built into the MuJoCo package, or the one `MUJOCO_WEB_VIEWER_DIST` points at."""
-    override = os.environ.get("MUJOCO_WEB_VIEWER_DIST")
-    if override and Path(override).is_dir():
-        return True
-    spec = importlib.util.find_spec("mujoco.studio.web")
-    if spec is None:
-        return False
-    return any(
-        (Path(location) / "dist").is_dir()
-        for location in spec.submodule_search_locations or []
-    )
 
 
 def check_studio_available(ui: UserInterface) -> None:

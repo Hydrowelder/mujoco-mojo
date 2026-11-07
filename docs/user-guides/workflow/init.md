@@ -34,12 +34,12 @@ It also creates a `.mujoco-mojo/` folder holding the project's settings file (`s
 
 `reloaded.sh` does not name a viewer. Reloaded takes it from the `reloaded.ui` setting, which defaults to the right one for the machine you run it on:
 
-| Machine                                  | Default viewer           |
-| ---------------------------------------- | ------------------------ |
-| A desktop session                        | `studio` (native window) |
-| An SSH session, or Linux with no display | `web` (in a browser)     |
+| Your MuJoCo build                                | Default viewer                  |
+| ------------------------------------------------ | ------------------------------- |
+| Can serve the browser viewer                     | `web` (in a browser)            |
+| Cannot (for example the 4.0.0 Windows wheel)     | `opengl` (the classic window)   |
 
-A machine reached over SSH gets the browser viewer even when X forwarding is on, because that is the better experience over a network link. Because nothing is written into the script, the same project works on your desktop and on a remote machine. To pin a viewer, set `reloaded.ui` in your settings, or add `-ui studio` or `-ui web` to the command in `reloaded.sh`.
+A machine reached over SSH gets the browser viewer when it is available, which is the better experience over a network link. Because nothing is written into the script, the same project works on your desktop and on a remote machine. To pin a viewer, set `reloaded.ui` in your settings, or add `-ui studio`, `-ui web`, or `-ui opengl` to the command in `reloaded.sh`.
 
 ---
 

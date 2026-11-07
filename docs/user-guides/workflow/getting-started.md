@@ -42,8 +42,7 @@ Before writing code, it is helpful to understand the three pillars of a Mojo pro
     import mujoco_mojo as mojo
     import mujoco_mojo.runtime as rt
 
-    def generate(
-        mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+    def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         # Add geoms, sites, and sample distributions here
         return mojo_model
 

@@ -1,9 +1,9 @@
 import dataclasses
 import math
+import sys
 
 import mujoco
 from mujoco.studio import messages, plugin, sim
-from mujoco.studio.web import state_payload
 
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
@@ -21,8 +21,22 @@ __all__ = [
 
 logger = get_logger(__name__)
 
-MAX_OVERLAY_GEOMS = state_payload.MAX_EXTRA_GEOMS
-"""How many extra geoms the browser viewer draws. Anything past it is dropped."""
+
+def _browser_geom_cap() -> int:
+    """
+    How many extra geoms the browser viewer can draw.
+
+    Some mujoco builds (e.g. the 4.0.0 Windows wheel) ship Studio without the browser viewer and its `state_payload` module. The browser viewer is the only one with a cap, so without it there is none.
+    """
+    try:
+        from mujoco.studio.web import state_payload
+    except ImportError:
+        return sys.maxsize
+    return int(state_payload.MAX_EXTRA_GEOMS)
+
+
+MAX_OVERLAY_GEOMS: int = _browser_geom_cap()
+"""How many extra geoms the browser viewer draws. Anything past it is dropped. Unlimited when this mujoco build has no browser viewer."""
 
 _REAL_TIME_PERCENT = 100.0
 """Studio writes its speed as a percentage of real time, where Reloaded writes a multiple."""
