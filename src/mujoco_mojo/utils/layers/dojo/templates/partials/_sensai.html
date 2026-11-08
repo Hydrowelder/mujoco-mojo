@@ -147,6 +147,84 @@
       </div>
     </div>
 
+    <!-- chats: one tab each, with its own messages -->
+    <div class="shrink-0 flex items-stretch border-b border-subtle">
+      <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5">
+        <template x-for="tab in tabs"
+                  :key="tab.id">
+          <div @click="switchTab(tab.id)"
+               @auxclick.prevent="if ($event.button === 1) closeTab(tab.id)"
+               @keydown.enter="switchTab(tab.id)"
+               role="button"
+               tabindex="0"
+               :title="tab.title"
+               class="relative shrink-0 flex items-center gap-1.5 px-2.5 h-8 border-b-2 text-xs font-mono select-none group transition-colors rounded-t-lg"
+               :class="tab.id === activeId ? 'border-accent-500 text-ink-strong bg-accent-100/50 dark:bg-chip/50 font-bold cursor-default' : 'border-transparent text-ink-muted hover:text-accent-500 hover:bg-control cursor-pointer'">
+            <!-- a request is running -->
+            <span x-show="isRunning(tab.id)"
+                  x-cloak
+                  title="Working"
+                  class="w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse shrink-0"></span>
+            <!-- waiting for its turn behind another chat -->
+            <span x-show="isQueued(tab.id)"
+                  x-cloak
+                  title="Waiting for another chat to finish"
+                  class="w-1.5 h-1.5 rounded-full border border-ink-muted shrink-0"></span>
+            <!-- answered while another chat was open -->
+            <span x-show="tab.unread && !isBusy(tab.id)"
+                  x-cloak
+                  title="New reply"
+                  class="w-1.5 h-1.5 rounded-full bg-success-500 shrink-0"></span>
+            <template x-if="renamingId !== tab.id">
+              <span class="max-w-28 truncate"
+                    x-text="tab.title"
+                    @dblclick.stop="startRename(tab.id)"></span>
+            </template>
+            <template x-if="renamingId === tab.id">
+              <input x-ref="tabNameInput"
+                     :value="tab.title"
+                     @click.stop
+                     @dblclick.stop
+                     @keydown.enter="renameTab(tab.id, $event.target.value)"
+                     @keydown.escape.stop="renamingId = null"
+                     @blur="if (renamingId === tab.id) renameTab(tab.id, $event.target.value)"
+                     class="bg-transparent border-b border-accent-500 outline-none text-xs font-mono w-24 min-w-0" />
+            </template>
+            <button x-show="tabs.length > 1"
+                    @click.stop="closeTab(tab.id)"
+                    title="Close chat"
+                    class="shrink-0 opacity-50 group-hover:opacity-100 -mr-1 p-0.5 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-ink-muted hover:text-danger-500">
+              <svg class="w-3 h-3"
+                   fill="none"
+                   stroke="currentColor"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="3"
+                      d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </template>
+      </div>
+      <div class="shrink-0 flex items-center px-1.5 border-l border-subtle">
+        <button @click="newTab()"
+                :disabled="tabs.length >= maxTabs"
+                :title="tabs.length >= maxTabs ? 'At most ' + maxTabs + ' chats are open. Close one to start another.' : 'New chat'"
+                class="flex items-center p-1 rounded-md text-ink-muted hover:text-accent-500 hover:bg-control transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink-muted">
+          <svg class="w-3.5 h-3.5"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2.5"
+               viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- message list -->
     <div class="relative flex-1 min-h-0">
       <div x-ref="messages"
@@ -154,7 +232,7 @@
            class="h-full overflow-y-auto p-3 space-y-3">
 
         <!-- empty state -->
-        <div x-show="messages.length === 0 && !loading"
+        <div x-show="messages.length === 0 && !isBusy(activeId)"
              class="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
           <svg class="w-7 h-7 text-icon-faint"
                fill="none"
@@ -171,7 +249,7 @@
 
         <!-- messages -->
         <template x-for="(msg, i) in messages"
-                  :key="i">
+                  :key="activeId + ':' + i">
           <div x-data="sensaiMsgData(msg.role, isLastUserMessage(i))"
                x-init="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
                @sensai-remeasure.window="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
@@ -258,7 +336,7 @@
         </template>
 
         <!-- streaming bubble — shown while model is generating tokens -->
-        <div x-show="streaming"
+        <div x-show="streaming && isRunning(activeId)"
              x-cloak
              class="flex flex-col gap-0.5 items-start">
           <div class="text-xs font-mono text-ink-muted px-1">SensAI</div>
@@ -269,7 +347,7 @@
         </div>
 
         <!-- typing/thinking indicator — shown while waiting for first token -->
-        <div x-show="loading && !streaming"
+        <div x-show="isRunning(activeId) && !streaming"
              class="flex justify-start">
           <div class="bg-surface border border-subtle rounded-xl px-4 py-3 flex items-center gap-2">
             <span x-show="thinkingLabel"
@@ -281,6 +359,15 @@
                   style="animation-delay: 150ms"></span>
             <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
                   style="animation-delay: 300ms"></span>
+          </div>
+        </div>
+
+        <!-- this chat is waiting for its turn behind another chat's request -->
+        <div x-show="isQueued(activeId)"
+             x-cloak
+             class="flex justify-start">
+          <div class="bg-surface border border-subtle rounded-xl px-4 py-3 text-sm font-mono text-ink-muted">
+            Waiting for another chat to finish...
           </div>
         </div>
       </div>
@@ -312,14 +399,14 @@
                   x-ref="inputArea"
                   @input="resize($el)"
                   @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send() }"
-                  :disabled="loading"
+                  :disabled="isBusy(activeId)"
                   rows="1"
                   placeholder="Ask about your sim..."
                   class="input-field flex-1 resize-none px-3 py-2 leading-snug text-base"></textarea>
         <button @click="send()"
-                :disabled="loading || !input.trim()"
+                :disabled="isBusy(activeId) || !input.trim()"
                 class="btn-icon shrink-0 transition-all"
-                :class="(loading || !input.trim()) ? 'btn-secondary opacity-40 cursor-not-allowed' : 'btn-primary'"
+                :class="(isBusy(activeId) || !input.trim()) ? 'btn-secondary opacity-40 cursor-not-allowed' : 'btn-primary'"
                 title="Send (Enter)">
           <svg class="w-4 h-4"
                fill="none"

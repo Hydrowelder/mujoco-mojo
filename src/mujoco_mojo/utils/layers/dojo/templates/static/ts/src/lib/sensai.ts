@@ -4,6 +4,11 @@
 // rules for the composer and the message bubbles.
 
 import type { ColumnManifest } from "../models";
+import {
+  loadTabsFromStorage,
+  newTabId,
+  persistTabsToStorage,
+} from "./tab-session";
 
 export interface SensAIMessage {
   role: "user" | "assistant";
@@ -27,8 +32,31 @@ export interface SensAIResultPayload {
 
 export type SensAIEventPayload = SensAIResultPayload & { delta?: string };
 
+// the one chat history there was before tabs, read once to become the first tab
 export const STORAGE_KEY = "sensai-messages";
+export const TABS_KEY = "sensai-tabs";
+export const ACTIVE_TAB_KEY = "sensai-active-tab";
 export const PINNED_KEY = "sensai-pinned";
+
+// how many chats can be open at once, so the saved history stays a size the
+// browser's storage can hold
+export const MAX_TABS = 8;
+
+// a tab's title is the start of its first message, cut to this many characters
+const TITLE_LENGTH = 24;
+
+// one chat: its own messages, so each carries its own context to the model
+export interface SensAITab {
+  id: string;
+  title: string;
+  messages: SensAIMessage[];
+  // what was typed in this chat's box and not sent, kept while another chat is open
+  draft?: string;
+  // a reply arrived in this chat while another one was open
+  unread?: boolean;
+  // false once the user renamed it, so a first message no longer retitles it
+  autoTitled?: boolean;
+}
 
 // how many earlier messages a request carries along as context
 const HISTORY_LENGTH = 20;
@@ -167,9 +195,62 @@ export function loadMessages(): SensAIMessage[] | null {
   return null;
 }
 
-export function saveMessages(messages: SensAIMessage[]): void {
+// "Chat N", one more than the largest number in use, so a new chat never takes
+// the name of one that is open
+export function defaultTabTitle(tabs: SensAITab[]): string {
+  const used = tabs.map((t) => Number(/^Chat (\d+)$/.exec(t.title)?.[1] ?? 0));
+  return `Chat ${Math.max(0, ...used) + 1}`;
+}
+
+export function blankTab(tabs: SensAITab[]): SensAITab {
+  return {
+    id: newTabId(),
+    title: defaultTabTitle(tabs),
+    messages: [],
+    autoTitled: true,
+  };
+}
+
+// the start of a message as a tab title: one line, cut with an ellipsis
+export function titleFromMessage(message: string): string {
+  const flat = message.replace(/\s+/g, " ").trim();
+  return flat.length > TITLE_LENGTH
+    ? `${flat.slice(0, TITLE_LENGTH - 1).trimEnd()}\u2026`
+    : flat;
+}
+
+// the saved chats and which one was open, with a timestamp filled in for any
+// message that has none. the history from before tabs becomes the first chat,
+// and a first visit gets one empty chat, so there is always one to type in
+export function loadSensAITabs(): { tabs: SensAITab[]; activeId: string } {
+  const { tabs, activeId } = loadTabsFromStorage<SensAITab>(
+    TABS_KEY,
+    ACTIVE_TAB_KEY,
+    () => {
+      const tab = blankTab([]);
+      tab.messages = loadMessages() ?? [];
+      return { tabs: [tab], activeId: tab.id };
+    },
+  );
+  return {
+    tabs: tabs.map((t) => ({
+      ...t,
+      title: typeof t.title === "string" ? t.title : "Chat",
+      messages: (Array.isArray(t.messages) ? t.messages : []).map((m) => ({
+        ...m,
+        ts: m.ts ?? Date.now(),
+      })),
+    })),
+    activeId,
+  };
+}
+
+// the old single history is dropped once the chats are saved, so it cannot
+// come back as a second copy if the saved chats are ever lost
+export function saveSensAITabs(tabs: SensAITab[], activeId: string): void {
+  persistTabsToStorage(TABS_KEY, ACTIVE_TAB_KEY, tabs, activeId);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    if (localStorage.getItem(TABS_KEY) !== null) localStorage.removeItem(STORAGE_KEY);
   } catch {
     /* ignore */
   }
@@ -193,18 +274,6 @@ export function savePinned(pinned: boolean): void {
   }
 }
 
-// the saved history exactly as stored, for the download
-export function storedMessages(): SensAIMessage[] {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  let messages: SensAIMessage[] = [];
-  try {
-    if (stored) messages = JSON.parse(stored) as SensAIMessage[];
-  } catch {
-    /* ignore */
-  }
-  return messages;
-}
-
 // the chat history file: the export time and each message with its time,
 // sender, text and, when it has them, its error flag, route, model and plot
 // update
@@ -224,6 +293,18 @@ export function historyExport(messages: SensAIMessage[], now: Date): object {
         entry["plot_config_update"] = m.plot_config_update;
       return entry;
     }),
+  };
+}
+
+// every chat in one file: the export time and, for each chat, its title and
+// its messages as historyExport writes them
+export function tabsExport(tabs: SensAITab[], now: Date): object {
+  return {
+    exported_at: now.toISOString(),
+    tabs: tabs.map((t) => ({
+      title: t.title,
+      messages: (historyExport(t.messages, now) as { messages: object[] }).messages,
+    })),
   };
 }
 

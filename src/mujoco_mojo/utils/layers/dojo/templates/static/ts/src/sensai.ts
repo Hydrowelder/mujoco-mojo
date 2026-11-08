@@ -9,26 +9,31 @@ import {
 } from "./lib/codemirror";
 import { renderMarkdown } from "./lib/markdown";
 import {
+  MAX_TABS,
+  blankTab,
   chatRequestBody,
   composerSize,
   createSseParser,
+  defaultTabTitle,
   enabledFromSettings,
-  historyExport,
+  headerTooltip,
   historyFileName,
   isAtBottom,
   lastUserIndex,
-  loadMessages,
   loadPinned,
-  headerTooltip,
+  loadSensAITabs,
   messageLayout,
   resultContent,
   revealStep,
-  saveMessages,
+  saveSensAITabs,
   savePinned,
-  storedMessages,
+  tabsExport,
+  titleFromMessage,
   type SensAIMessage,
+  type SensAITab,
   type SseEvent,
 } from "./lib/sensai";
+import { pickNextActiveOnClose } from "./lib/tab-session";
 
 interface SensAIConfig {
   enabled: boolean;
@@ -40,26 +45,64 @@ function sensai() {
     // pinned keeps the window open when the user clicks elsewhere or presses
     // Escape; only the SensAI button closes it then
     pinned: false,
-    loading: false,
+    // each chat is a tab with its own messages. requests run one at a time, in
+    // the order they were sent: a plot edit comes back as the whole plot built
+    // from the config the request started with, so two running together would
+    // overwrite each other's changes
+    tabs: [] as SensAITab[],
+    activeId: "",
+    maxTabs: MAX_TABS,
+    renamingId: null as string | null,
+    // the chat whose request is running, and the chats waiting their turn
+    runningId: null as string | null,
+    queue: [] as string[],
     streaming: false,
     streamingContent: "",
     thinkingLabel: null as string | null,
     enabled: null as boolean | null,
-    messages: [] as SensAIMessage[],
     input: "",
     atBottom: true,
     hasNewResponse: false,
     _revealQueue: "",
     _revealTimer: null as number | null,
+    _abort: null as AbortController | null,
+    _draining: null as Promise<void> | null,
     headerTooltip,
+
+    get activeTab(): SensAITab | undefined {
+      return this.tabs.find((t) => t.id === this.activeId);
+    },
+
+    // the open chat's messages, which is what the message list shows
+    get messages(): SensAIMessage[] {
+      return this.activeTab?.messages ?? [];
+    },
 
     // whether message `i` is the latest one the user sent, which starts open
     isLastUserMessage(i: number): boolean {
       return lastUserIndex(this.messages) === i;
     },
 
+    isRunning(id: string): boolean {
+      return this.runningId === id;
+    },
+
+    isQueued(id: string): boolean {
+      return this.queue.includes(id);
+    },
+
+    // a chat with a request running or waiting takes no second message
+    isBusy(id: string): boolean {
+      return this.isRunning(id) || this.isQueued(id);
+    },
+
     async init() {
-      this._loadMessages();
+      const saved = loadSensAITabs();
+      this.tabs = saved.tabs;
+      this.activeId = saved.activeId;
+      this.input = this.activeTab?.draft ?? "";
+      // writes the chats back, which also retires the history from before tabs
+      this._saveTabs();
       this.pinned = loadPinned();
       (this as unknown as AlpineMagics).$watch("input", () => {
         const el = (this as unknown as AlpineMagics).$refs["inputArea"];
@@ -112,21 +155,146 @@ function sensai() {
       savePinned(this.pinned);
     },
 
-    async send() {
-      const message = this.input.trim();
-      if (!message || this.loading) return;
+    // ---- chats (tabs) ----
 
-      this.messages.push({ role: "user", content: message, ts: Date.now() });
-      this._saveMessages();
+    newTab() {
+      if (this.tabs.length >= MAX_TABS) return;
+      const tab = blankTab(this.tabs);
+      this.tabs.push(tab);
+      this.switchTab(tab.id);
+    },
+
+    switchTab(id: string) {
+      if (id === this.activeId || !this.tabs.some((t) => t.id === id)) return;
+      const from = this.activeTab;
+      if (from) from.draft = this.input;
+      this.renamingId = null;
+      this.activeId = id;
+      this._showActiveTab();
+    },
+
+    // what changes when another chat comes to the front: its unsent text goes
+    // in the box, it is no longer unread, and its messages are laid out afresh
+    _showActiveTab() {
+      const tab = this.activeTab;
+      this.input = tab?.draft ?? "";
+      if (tab) tab.unread = false;
+      this.atBottom = true;
+      this.hasNewResponse = false;
+      this._saveTabs();
+      this._scrollToBottom();
+      void (this as unknown as AlpineMagics).$nextTick(() => {
+        window.dispatchEvent(new CustomEvent("sensai-remeasure"));
+      });
+    },
+
+    // closes a chat, stopping its request if one is running or waiting. the
+    // last one left is replaced by an empty chat
+    closeTab(id: string) {
+      const idx = this.tabs.findIndex((t) => t.id === id);
+      if (idx === -1) return;
+      this._cancel(id);
+      const next = pickNextActiveOnClose(this.tabs, idx, this.activeId, () => blankTab([]));
+      this.tabs = next.tabs;
+      if (next.activeChanged) {
+        this.renamingId = null;
+        this.activeId = next.nextActiveId;
+        this._showActiveTab();
+      } else {
+        this._saveTabs();
+      }
+    },
+
+    startRename(id: string) {
+      this.renamingId = id;
+      void (this as unknown as AlpineMagics).$nextTick(() => {
+        const el = (this as unknown as AlpineMagics).$refs["tabNameInput"] as
+          | HTMLInputElement
+          | undefined;
+        el?.focus();
+        el?.select();
+      });
+    },
+
+    // an empty name keeps the old one; a typed one is the user's, so the
+    // chat's first message no longer renames it
+    renameTab(id: string, value: string) {
+      this.renamingId = null;
+      const tab = this.tabs.find((t) => t.id === id);
+      const title = value.trim();
+      if (!tab || !title) return;
+      tab.title = title;
+      tab.autoTitled = false;
+      this._saveTabs();
+    },
+
+    // takes a chat's request off the queue, or stops it if it is the one running
+    _cancel(id: string) {
+      this.queue = this.queue.filter((q) => q !== id);
+      if (this.runningId === id) this._abort?.abort();
+    },
+
+    // ---- sending ----
+
+    // adds the message to the open chat and puts the chat in line for its
+    // reply. the returned promise settles once every request in line, this
+    // one included, has finished
+    async send() {
+      const tab = this.activeTab;
+      const message = this.input.trim();
+      if (!tab || !message || this.isBusy(tab.id)) return;
+
+      tab.messages.push({ role: "user", content: message, ts: Date.now() });
+      if (tab.autoTitled !== false && tab.messages.length === 1) {
+        tab.title = titleFromMessage(message);
+      }
+      tab.draft = "";
       this.input = "";
-      this.loading = true;
+      this._saveTabs();
+      this.queue.push(tab.id);
+      const finished = this._drain();
+      await (this as unknown as AlpineMagics).$nextTick();
+      this._scrollToBottom();
+      await finished;
+    },
+
+    // runs the waiting requests one after another. a call while it is already
+    // running joins that run instead of starting a second one
+    _drain(): Promise<void> {
+      if (this._draining) return this._draining;
+      const run = (async () => {
+        try {
+          while (this.queue.length > 0) {
+            const id = this.queue.shift()!;
+            const tab = this.tabs.find((t) => t.id === id);
+            if (tab) await this._run(tab);
+          }
+        } finally {
+          this.runningId = null;
+        }
+      })();
+      this._draining = run.finally(() => {
+        this._draining = null;
+      });
+      return this._draining;
+    },
+
+    // sends one chat's latest message and puts what comes back in that chat,
+    // whichever chat is open by then
+    async _run(tab: SensAITab) {
+      this.runningId = tab.id;
       this.streaming = false;
       this.streamingContent = "";
       this.thinkingLabel = null;
-      await (this as unknown as AlpineMagics).$nextTick();
-      this._scrollToBottom();
+      const controller = new AbortController();
+      this._abort = controller;
+      if (tab.id === this.activeId) this._scrollToBottom();
 
       try {
+        const pending = tab.messages[tab.messages.length - 1];
+        if (!pending || pending.role !== "user") return;
+        // read now, not when the message was sent: the request ahead of this
+        // one may have changed the plot since
         const currentPlotConfigJson = localStorage.getItem("mojo_mosaic_config");
 
         const response = await fetch("/sensai/chat", {
@@ -134,12 +302,13 @@ function sensai() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
             chatRequestBody(
-              message,
-              this.messages,
+              pending.content,
+              tab.messages,
               currentPlotConfigJson,
               (Alpine.store("dojo") as DojoStore).columnManifest,
             ),
           ),
+          signal: controller.signal,
         });
 
         if (!response.ok || !response.body) {
@@ -148,35 +317,46 @@ function sensai() {
             const err = (await response.json()) as { detail?: string };
             if (err.detail) detail = err.detail;
           } catch { /* ignore */ }
-          this.messages.push({ role: "assistant", content: detail, error: true, ts: Date.now() });
+          tab.messages.push({ role: "assistant", content: detail, error: true, ts: Date.now() });
           return;
         }
 
-        await this._streamSse(response.body);
+        await this._streamSse(response.body, tab);
       } catch {
-        this.messages.push({
-          role: "assistant",
-          content: "Network error. Please try again.",
-          error: true,
-          ts: Date.now(),
-        });
+        // closing or clearing the chat stops its request on purpose, which is
+        // not an error to report
+        if (!controller.signal.aborted) {
+          tab.messages.push({
+            role: "assistant",
+            content: "Network error. Please try again.",
+            error: true,
+            ts: Date.now(),
+          });
+        }
       } finally {
-        this._saveMessages();
-        this.loading = false;
+        this._abort = null;
+        this._saveTabs();
         this.streaming = false;
         this.streamingContent = "";
         this.thinkingLabel = null;
         this._flushReveal();
         window.dispatchEvent(new CustomEvent("sensai-remeasure"));
-        if (!this.open || !this.atBottom) {
-          this.hasNewResponse = true;
-        }
+        if (!controller.signal.aborted) this._noteReply(tab);
       }
     },
 
-    // applies one event from the server's stream; a throw while applying it
-    // is ignored, like a malformed line
-    _handleSseEvent({ type: eventType, payload }: SseEvent) {
+    // marks a reply the user has not seen: a chat that was not open gets a dot,
+    // and the button shows one when the window is closed or scrolled up
+    _noteReply(tab: SensAITab) {
+      const elsewhere = tab.id !== this.activeId;
+      if (elsewhere) tab.unread = true;
+      if (!this.open || (!elsewhere && !this.atBottom)) this.hasNewResponse = true;
+      if (elsewhere) this._saveTabs();
+    },
+
+    // applies one event from the server's stream to the chat that sent the
+    // request; a throw while applying it is ignored, like a malformed line
+    _handleSseEvent({ type: eventType, payload }: SseEvent, tab: SensAITab) {
       try {
         if (eventType === "tool_call" && typeof payload.label === "string") {
           this.thinkingLabel = payload.label;
@@ -190,7 +370,7 @@ function sensai() {
         } else if (eventType === "result") {
           this._flushReveal();
           const content = resultContent(payload.message, this.streamingContent);
-          this.messages.push({
+          tab.messages.push({
             role: "assistant",
             content,
             plot_config_update: payload.plot_config_update ?? null,
@@ -199,6 +379,15 @@ function sensai() {
             ts: Date.now(),
           });
           if (payload.plot_config_update) {
+            // saved here as well as by the trial viewer, which does so only after
+            // it has fetched any new signal's data: the next request in line reads
+            // the plot from storage and must not start from the one before this
+            try {
+              localStorage.setItem(
+                "mojo_mosaic_config",
+                JSON.stringify(payload.plot_config_update),
+              );
+            } catch { /* ignore */ }
             window.dispatchEvent(new CustomEvent("mojo-sensai-plot-config", {
               detail: payload.plot_config_update,
             }));
@@ -211,7 +400,7 @@ function sensai() {
           this.streamingContent = "";
         } else if (eventType === "error") {
           this._flushReveal();
-          this.messages.push({
+          tab.messages.push({
             role: "assistant",
             content: payload.detail ?? "An error occurred.",
             error: true,
@@ -224,7 +413,7 @@ function sensai() {
       } catch { /* ignore */ }
     },
 
-    async _streamSse(body: ReadableStream<Uint8Array>) {
+    async _streamSse(body: ReadableStream<Uint8Array>, tab: SensAITab) {
       const reader = body.getReader();
       const decoder = new TextDecoder();
       const parser = createSseParser();
@@ -234,10 +423,10 @@ function sensai() {
           const { done, value } = await reader.read();
           if (done) break;
           for (const event of parser.feed(decoder.decode(value, { stream: true }))) {
-            this._handleSseEvent(event);
+            this._handleSseEvent(event, tab);
           }
         }
-        for (const event of parser.end()) this._handleSseEvent(event);
+        for (const event of parser.end()) this._handleSseEvent(event, tab);
       } finally {
         reader.releaseLock();
       }
@@ -268,13 +457,8 @@ function sensai() {
       this.hasNewResponse = false;
     },
 
-    _loadMessages() {
-      const loaded = loadMessages();
-      if (loaded) this.messages = loaded;
-    },
-
-    _saveMessages() {
-      saveMessages(this.messages);
+    _saveTabs() {
+      saveSensAITabs(this.tabs, this.activeId);
     },
 
     _scrollToBottom() {
@@ -315,9 +499,17 @@ function sensai() {
       this._revealQueue = "";
     },
 
+    // empties the open chat, stopping its request if one is running or waiting
     clear() {
-      this.messages = [];
-      this._saveMessages();
+      const tab = this.activeTab;
+      if (!tab) return;
+      this._cancel(tab.id);
+      tab.messages = [];
+      // a title made from the messages that are gone goes with them
+      if (tab.autoTitled !== false) {
+        tab.title = defaultTabTitle(this.tabs.filter((t) => t.id !== tab.id));
+      }
+      this._saveTabs();
     },
   };
 }
@@ -326,7 +518,7 @@ window.sensai = sensai;
 
 function downloadSensAIHistory(): void {
   const now = new Date();
-  const payload = historyExport(storedMessages(), now);
+  const payload = tabsExport(loadSensAITabs().tabs, now);
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);

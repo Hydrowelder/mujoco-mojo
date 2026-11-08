@@ -3,11 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PINNED_KEY,
+  ACTIVE_TAB_KEY,
   STORAGE_KEY,
+  TABS_KEY,
+  blankTab,
   chatHistory,
   chatRequestBody,
   composerSize,
   createSseParser,
+  defaultTabTitle,
   enabledFromSettings,
   historyExport,
   headerTooltip,
@@ -16,13 +20,16 @@ import {
   lastUserIndex,
   loadMessages,
   loadPinned,
+  loadSensAITabs,
   messageLayout,
   resultContent,
   revealStep,
-  saveMessages,
   savePinned,
-  storedMessages,
+  saveSensAITabs,
+  tabsExport,
+  titleFromMessage,
   type SensAIMessage,
+  type SensAITab,
   type SseEvent,
 } from "./sensai";
 
@@ -39,8 +46,32 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
+// storage that refuses a write or a read, as it does when it is full or blocked.
+// the whole of `localStorage` is replaced: a spy on Storage.prototype does
+// nothing once the page has used a method, because happy-dom keeps handing out
+// the one it returned first, so a test that spied would pass without testing
+function stubStorage(fail: { read?: boolean; write?: (key: string) => boolean }): Map<string, string> {
+  const data = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => {
+      if (fail.read) throw new Error("storage refused a read");
+      return data.get(key) ?? null;
+    },
+    setItem: (key: string, value: string) => {
+      if (fail.write?.(key)) throw new Error("storage refused a write");
+      data.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    clear: () => data.clear(),
+  });
+  return data;
+}
 
 const ev = (type: string, payload: object) => `event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
 
@@ -281,15 +312,7 @@ describe("chatRequestBody", () => {
   });
 });
 
-describe("saved messages", () => {
-  it("round-trips through localStorage under its own key", () => {
-    const messages = [msg({ content: "a", ts: 5 }), msg({ role: "assistant", content: "b", ts: 6, error: true })];
-    saveMessages(messages);
-    expect(STORAGE_KEY).toBe("sensai-messages");
-    expect(JSON.parse(localStorage.getItem("sensai-messages")!)).toEqual(messages);
-    expect(loadMessages()).toEqual(messages);
-  });
-
+describe("the history from before tabs", () => {
   it("fills in a timestamp for a message saved without one, and keeps the ones it has", () => {
     vi.spyOn(Date, "now").mockReturnValue(777);
     localStorage.setItem(STORAGE_KEY, JSON.stringify([{ role: "user", content: "old" }, { role: "user", content: "zero", ts: 0 }, { role: "user", content: "x", ts: 9 }]));
@@ -309,26 +332,172 @@ describe("saved messages", () => {
     expect(loadMessages()).toEqual([]);
   });
 
-  it("does not throw when storage refuses to read or write", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("denied");
-    });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("quota");
-    });
+  it("does not throw when storage refuses to read", () => {
+    stubStorage({ read: true });
     expect(loadMessages()).toBeNull();
-    expect(() => saveMessages([msg()])).not.toThrow();
+  });
+});
+
+const tab = (over: Partial<SensAITab> = {}): SensAITab => ({
+  id: "t1",
+  title: "Chat 1",
+  messages: [],
+  ...over,
+});
+
+describe("defaultTabTitle", () => {
+  it("is Chat 1 for the first chat", () => {
+    expect(defaultTabTitle([])).toBe("Chat 1");
   });
 
-  it("is read back exactly as stored for the download, with no timestamp added", () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ role: "user", content: "old" }]));
-    expect(storedMessages()).toEqual([{ role: "user", content: "old" }]);
+  it("is one more than the largest number in use, so it never takes an open chat's name", () => {
+    expect(defaultTabTitle([tab({ title: "Chat 1" }), tab({ title: "Chat 3" })])).toBe("Chat 4");
   });
 
-  it("is an empty list for the download when nothing or garbage is stored", () => {
-    expect(storedMessages()).toEqual([]);
-    localStorage.setItem(STORAGE_KEY, "{broken");
-    expect(storedMessages()).toEqual([]);
+  it("does not count a title the user or a message gave", () => {
+    expect(defaultTabTitle([tab({ title: "Wheel speed" }), tab({ title: "Chat 2 notes" })])).toBe("Chat 1");
+  });
+});
+
+describe("blankTab", () => {
+  it("is empty, titled by number and still free to be retitled by its first message", () => {
+    const blank = blankTab([tab({ title: "Chat 1" })]);
+    expect(blank).toMatchObject({ title: "Chat 2", messages: [], autoTitled: true });
+    expect(blank.id).not.toBe("");
+  });
+
+  it("gets an id no other chat has", () => {
+    expect(blankTab([]).id).not.toBe(blankTab([]).id);
+  });
+});
+
+describe("titleFromMessage", () => {
+  it("is a short message as it is", () => {
+    expect(titleFromMessage("plot box1")).toBe("plot box1");
+  });
+
+  it("is one line, with runs of whitespace and newlines made single spaces", () => {
+    expect(titleFromMessage("  plot\n\nbox1   xpos  ")).toBe("plot box1 xpos");
+  });
+
+  it("is cut with an ellipsis past 24 characters, 24 in all", () => {
+    const title = titleFromMessage("add the angular velocity of the other body");
+    expect(title).toBe("add the angular velocit\u2026");
+    expect(title).toHaveLength(24);
+  });
+
+  it("keeps a message of exactly 24 characters whole", () => {
+    expect(titleFromMessage("a".repeat(24))).toBe("a".repeat(24));
+  });
+
+  it("does not leave a space in front of the ellipsis", () => {
+    expect(titleFromMessage("abcdefghijklmnopqrstuv wxyz")).toBe("abcdefghijklmnopqrstuv\u2026");
+  });
+});
+
+describe("saved chats", () => {
+  it("round-trip through localStorage, with which one was open", () => {
+    const chats = [tab({ id: "a", title: "One", messages: [msg({ content: "hi", ts: 5 })] }), tab({ id: "b", title: "Two" })];
+    saveSensAITabs(chats, "b");
+    expect(loadSensAITabs()).toEqual({ tabs: chats, activeId: "b" });
+    expect(TABS_KEY).toBe("sensai-tabs");
+    expect(ACTIVE_TAB_KEY).toBe("sensai-active-tab");
+  });
+
+  it("start with one empty chat on a first visit", () => {
+    const { tabs, activeId } = loadSensAITabs();
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]).toMatchObject({ title: "Chat 1", messages: [] });
+    expect(activeId).toBe(tabs[0]!.id);
+  });
+
+  it("take the history from before tabs as the first chat", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ role: "user", content: "old", ts: 3 }]));
+    const { tabs } = loadSensAITabs();
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]!.messages).toEqual([{ role: "user", content: "old", ts: 3 }]);
+  });
+
+  it("drop the history from before tabs once the chats are saved, so it cannot return as a copy", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([{ role: "user", content: "old", ts: 3 }]));
+    saveSensAITabs(loadSensAITabs().tabs, "x");
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(loadSensAITabs().tabs[0]!.messages).toHaveLength(1);
+  });
+
+  it("do not drop the old history when the chats could not be written", () => {
+    const data = stubStorage({ write: (key) => key === TABS_KEY });
+    data.set(STORAGE_KEY, JSON.stringify([{ role: "user", content: "old", ts: 3 }]));
+
+    saveSensAITabs([tab()], "t1");
+
+    expect(data.has(TABS_KEY)).toBe(false);
+    expect(data.has(STORAGE_KEY)).toBe(true);
+  });
+
+  it("open the one that was open, or the first when it is gone", () => {
+    saveSensAITabs([tab({ id: "a" }), tab({ id: "b" })], "b");
+    expect(loadSensAITabs().activeId).toBe("b");
+    saveSensAITabs([tab({ id: "a" }), tab({ id: "b" })], "gone");
+    expect(loadSensAITabs().activeId).toBe("a");
+  });
+
+  it("fill in a timestamp, a title and a message list that a saved chat lacks", () => {
+    vi.spyOn(Date, "now").mockReturnValue(888);
+    localStorage.setItem(TABS_KEY, JSON.stringify([{ id: "a", messages: [{ role: "user", content: "x" }] }, { id: "b", title: "B" }]));
+    const { tabs } = loadSensAITabs();
+    expect(tabs[0]).toMatchObject({ title: "Chat", messages: [{ role: "user", content: "x", ts: 888 }] });
+    expect(tabs[1]).toMatchObject({ title: "B", messages: [] });
+  });
+
+  it("start afresh when the saved chats cannot be read, or are an empty list", () => {
+    for (const bad of ["{broken", "[]", "null", "{}"]) {
+      localStorage.setItem(TABS_KEY, bad);
+      const { tabs } = loadSensAITabs();
+      expect(tabs).toHaveLength(1);
+      expect(tabs[0]!.messages).toEqual([]);
+    }
+  });
+
+  it("do not throw when storage refuses to read or write", () => {
+    stubStorage({ read: true, write: () => true });
+    expect(loadSensAITabs().tabs).toHaveLength(1);
+    expect(() => saveSensAITabs([tab()], "t1")).not.toThrow();
+  });
+
+  it("keep a chat's unsent text and its unread mark", () => {
+    saveSensAITabs([tab({ draft: "half a thought", unread: true })], "t1");
+    expect(loadSensAITabs().tabs[0]).toMatchObject({ draft: "half a thought", unread: true });
+  });
+});
+
+describe("tabsExport", () => {
+  const NOW = new Date("2026-03-04T05:06:07.000Z");
+  const T = Date.parse("2026-03-04T01:02:03.000Z");
+
+  it("records when it was exported, with no chats when there are none", () => {
+    expect(tabsExport([], NOW)).toEqual({ exported_at: "2026-03-04T05:06:07.000Z", tabs: [] });
+  });
+
+  it("lists each chat by title with its messages as the single-chat export writes them", () => {
+    const out = tabsExport(
+      [
+        tab({ title: "First", messages: [msg({ ts: T, content: "hi" }), msg({ role: "assistant", ts: T + 1000, content: "yo", model: "m1" })] }),
+        tab({ title: "Second", messages: [msg({ ts: T, content: "other" })] }),
+      ],
+      NOW,
+    ) as { tabs: Array<{ title: string; messages: Array<Record<string, unknown>> }> };
+    expect(out.tabs.map((t) => t.title)).toEqual(["First", "Second"]);
+    expect(out.tabs[0]!.messages).toEqual([
+      { timestamp: "2026-03-04T01:02:03.000Z", sender: "user", message: "hi" },
+      { timestamp: "2026-03-04T01:02:04.000Z", sender: "sensai", message: "yo", model: "m1" },
+    ]);
+    expect(out.tabs[1]!.messages).toHaveLength(1);
+  });
+
+  it("keeps an empty chat in the file", () => {
+    const out = tabsExport([tab({ title: "Empty" })], NOW) as { tabs: Array<{ messages: unknown[] }> };
+    expect(out.tabs[0]!.messages).toEqual([]);
   });
 });
 
@@ -417,8 +586,8 @@ describe("a reply's model", () => {
   });
 
   it("survives a save and a load", () => {
-    saveMessages([msg({ role: "assistant", model: "m1" })]);
-    expect(loadMessages()?.[0]).toMatchObject({ model: "m1" });
+    saveSensAITabs([tab({ messages: [msg({ role: "assistant", model: "m1" })] })], "t1");
+    expect(loadSensAITabs().tabs[0]!.messages[0]).toMatchObject({ model: "m1" });
   });
 });
 
@@ -564,12 +733,7 @@ describe("pinned", () => {
   });
 
   it("survives storage that cannot be read or written", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    stubStorage({ read: true, write: () => true });
     expect(loadPinned()).toBe(false);
     expect(() => savePinned(true)).not.toThrow();
   });
