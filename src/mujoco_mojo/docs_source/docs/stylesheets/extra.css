@@ -1,0 +1,240 @@
+/* ==========================================================
+   MUJOCO MOJO - CUSTOM DOCS STYLING
+   Syncs MkDocs Material with the Dashboard '70s Aesthetic
+   ========================================================== */
+
+:root {
+    /* 1. FONT STACK SYNC (Matches Tailwind Default) */
+    --md-text-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --md-code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    /* Primary Mojo Accent (Cyan-500) */
+    --md-primary-fg-color: #06b6d4;
+    --md-primary-fg-color--transparent: rgba(6, 182, 212, 0.1);
+    --md-accent-fg-color: #06b6d4;
+}
+
+/* Disable the new-tab icon for badge links */
+a.badge-link::after {
+    content: none !important;
+}
+
+a.badge-link {
+    text-decoration: none;
+}
+
+/* ----------------------------------------------------------
+   1. THEME COLOR SYNC (Dashboard Palettes)
+   ---------------------------------------------------------- */
+
+/* Light Mode Sync */
+[data-md-color-scheme="default"] {
+    --md-default-bg-color: #e2e8f0;
+    /* Slate-200 */
+    --md-default-fg-color: #1e293b;
+    /* Slate-800 */
+    --md-footer-bg-color: #cbd5e1;
+    /* Slate-300 (Nav Bar) */
+    --md-footer-bg-color--dark: #e2e8f0;
+    /* Slate-200 (Meta Bar) */
+}
+
+/* Dark Mode Sync */
+[data-md-color-scheme="slate"] {
+    --md-default-bg-color: #0f172a;
+    /* Slate-900 */
+    --md-default-fg-color: #f1f5f9;
+    /* Slate-100 */
+    --md-card-bg-color: #1e293b;
+    /* Slate-800 */
+    --md-header-bg-color: #0f172a;
+    /* Slate-900 */
+    --md-footer-bg-color: #020617;
+    /* Slate-950 (Nav Bar) */
+    --md-footer-bg-color--dark: #0f172a;
+    /* Slate-900 (Meta Bar) */
+}
+
+/* ----------------------------------------------------------
+   2. TYPOGRAPHY ('70s Bold Aesthetic)
+   ---------------------------------------------------------- */
+
+/* Standard text weight */
+body {
+    font-weight: 400;
+}
+
+h1,
+h2,
+h3 {
+    font-weight: 900 !important;
+    letter-spacing: -0.025em;
+    color: var(--md-default-fg-color);
+}
+
+h1,
+.md-header__topic {
+    text-transform: uppercase;
+}
+
+/* Figure captions are often wrapped in a glightbox <a> link and would otherwise
+   inherit the cyan link color and underline, which is hard to read at caption size.
+   text-decoration is drawn by the anchor itself, so it must be cleared there too. */
+.md-typeset figure > a {
+    text-decoration: none;
+}
+
+.md-typeset figure figcaption {
+    color: var(--md-default-fg-color);
+    font-style: normal;
+    text-decoration: none;
+}
+
+code,
+kbd,
+pre {
+    font-family: var(--md-code-font) !important;
+}
+
+
+
+/* ----------------------------------------------------------
+   3. ADAPTIVE LOGO & HOVER EFFECTS
+   ---------------------------------------------------------- */
+
+.md-header__button.md-logo img {
+    height: 2rem;
+    width: auto;
+    border-radius: 4px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.3s ease-in-out;
+}
+
+.md-header__button.md-logo:hover img {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.6)) drop-shadow(0 0 12px rgba(6, 182, 212, 0.3));
+}
+
+/* ----------------------------------------------------------
+   4. FOOTER NAVIGATOR
+   ---------------------------------------------------------- */
+
+/* Copyright & Nav Text Colors */
+.md-footer__link,
+.md-footer-meta__inner,
+.md-copyright,
+.md-social,
+.md-social a,
+.md-copyright__highlight,
+.md-copyright__highlight a {
+    color: var(--md-default-fg-color) !important;
+    transition: color 0.2s ease;
+}
+
+/* Specific Copyright Link Hover */
+.md-social a:hover,
+.md-copyright__highlight a:hover {
+    color: #06b6d4 !important;
+    /* Cyan-500 */
+    text-decoration: none;
+}
+
+/* Nav Link Hover */
+.md-footer__link:hover {
+    color: #06b6d4 !important;
+}
+
+/* Secondary footer text labels */
+.md-footer__direction {
+    opacity: 0.6;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+}
+
+/* ----------------------------------------------------------
+   5. PROGRESS BAR SYNC (Matching Dashboard)
+   ---------------------------------------------------------- */
+
+.md-progress {
+    background-color: #06b6d4;
+    background-image: linear-gradient(to right, #0891b2, #3b82f6);
+}
+
+::selection {
+    background-color: rgba(6, 182, 212, 0.2);
+}
+
+
+/* Ensure the figure doesn't collapse or overlap */
+.mojo-splash,
+.fade-in {
+    display: block;
+    width: 100%;
+    margin: 2rem 0;
+    text-align: center;
+    overflow: visible;
+}
+
+/* 2. Target the IMAGE for animation, transition, and height */
+.mojo-splash img,
+.fade-in img {
+    height: 10.0em;
+    width: auto;
+    display: block;
+    margin: 0 auto;
+
+    /* Animation */
+    opacity: 0;
+    animation-name: mojoFadeIn;
+    animation-duration: 2s;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: forwards;
+
+    /* Transition - MUST be on the img for the scale to work */
+    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.mojo-splash img:hover,
+.fade-in img:hover {
+    transform: scale(1.05);
+}
+
+/* Optional: Add a fade-in animation for that "Splash" feel */
+@keyframes mojoFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(0px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    width: 50%;
+    height: auto;
+}
+
+/* --- Mojo Auto-Highlighting --- */
+
+/* For "MuJoCo Mojo" in regular text */
+.mojo-text-highlight {
+    color: #06b6d4;
+    /* Cyan-500 */
+    font-weight: 900;
+    /* Extra Bold '70s feel */
+    letter-spacing: -0.01em;
+}
+
+/* For `mujoco-mojo` or `mujoco_mojo` in code blocks */
+code.mojo-code-highlight,
+.mojo-code-highlight code {
+    color: #22d3ee !important;
+    /* Slightly lighter Cyan-400 for better code contrast */
+    font-weight: 700;
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    background-color: rgba(6, 182, 212, 0.05) !important;
+}

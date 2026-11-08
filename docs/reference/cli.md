@@ -11,7 +11,7 @@ Every `mujoco-mojo` command with its arguments and options. Add `--help` to any 
 | [`mujoco-mojo dojo`](#mujoco-mojo-dojo) | Launch the Mojo Dojo to monitor the progress of a running job. |
 | [`mujoco-mojo run`](#mujoco-mojo-run) | Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.). |
 | [`mujoco-mojo settings`](#mujoco-mojo-settings) | Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`. |
-| [`mujoco-mojo docs`](#mujoco-mojo-docs) | Find the user guides that ship with this version of mujoco-mojo. |
+| [`mujoco-mojo docs`](#mujoco-mojo-docs) | Find the documentation that ships with this version of mujoco-mojo, and build and browse its site. |
 
 ## Global options
 
@@ -330,7 +330,7 @@ mujoco-mojo settings reset [OPTIONS]
 
 ## `mujoco-mojo docs`
 
-Find the user guides that ship with this version of mujoco-mojo.
+Find the documentation that ships with this version of mujoco-mojo, and build and browse its site.
 
 ```bash
 mujoco-mojo docs [OPTIONS] COMMAND [ARGS]...
@@ -340,14 +340,61 @@ mujoco-mojo docs [OPTIONS] COMMAND [ARGS]...
 
 | Command | What it does |
 | :--- | :--- |
-| [`mujoco-mojo docs path`](#mujoco-mojo-docs-path) | Print the folder that holds the user guides. |
+| [`mujoco-mojo docs path`](#mujoco-mojo-docs-path) | Print the folder that holds the documentation source. |
+| [`mujoco-mojo docs build`](#mujoco-mojo-docs-build) | Build the documentation site for this version of mujoco-mojo. |
+| [`mujoco-mojo docs serve`](#mujoco-mojo-docs-serve) | Browse the documentation site in a web browser. |
+| [`mujoco-mojo docs list`](#mujoco-mojo-docs-list) | List the documentation sites that are built. |
 
 ### `mujoco-mojo docs path`
 
-Print the folder that holds the user guides.
+Print the folder that holds the documentation source.
 
-The guides are plain markdown written from the documentation site, so they match the installed version and need no network. Only the path is printed, for scripts and coding assistants to use.
+It is the same pages and `mkdocs.yml` as the online docs, as markdown, for the version you have installed, so it needs no network. The guides are in `docs/user-guides/` and the command line reference is `docs/reference/cli.md`. The images are left out. Only the path is printed, for scripts and coding assistants to use. To read the pages as a site, see `docs serve`.
 
 ```bash
 mujoco-mojo docs path [OPTIONS]
+```
+
+### `mujoco-mojo docs build`
+
+Build the documentation site for this version of mujoco-mojo.
+
+The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
+
+```bash
+mujoco-mojo docs build [OPTIONS]
+```
+
+**Options**
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--rebuild` | flag | off | Build the docs again even if this version's docs are already built. |
+
+### `mujoco-mojo docs serve`
+
+Browse the documentation site in a web browser.
+
+Serves the site built by `docs build`. If this version's docs are not built yet they are built first, which needs the `docs` extra (`pip install mujoco-mojo[docs]`) once; after that nothing extra is needed.
+
+```bash
+mujoco-mojo docs serve [OPTIONS]
+```
+
+**Options**
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--version` | text | none | Which version's docs to serve, such as 2.7.1. Defaults to the installed version. Another version has to have been built already, by an install of that version. |
+| `--host`, `-h` | text | `127.0.0.1` | What host IP should be used to serve the process. |
+| `--port`, `-p` | integer | `8000` | Port number to use to serve the process. Auto-selects the next free port at or after this one if it's already taken. |
+
+### `mujoco-mojo docs list`
+
+List the documentation sites that are built.
+
+One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
+
+```bash
+mujoco-mojo docs list [OPTIONS]
 ```

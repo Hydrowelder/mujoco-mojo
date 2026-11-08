@@ -455,6 +455,23 @@ if True:
         ),
     ]
 
+    # docs
+    DocsRebuildType = Annotated[
+        bool,
+        typer.Option(
+            "--rebuild",
+            help="Build the docs again even if this version's docs are already built.",
+        ),
+    ]
+    # a None sentinel and not the installed version: the version is not a fixed value, and the generated command line reference has to read the same wherever it is written
+    DocsVersionType = Annotated[
+        str | None,
+        typer.Option(
+            "--version",
+            help="Which version's docs to serve, such as 2.7.1. Defaults to the installed version. Another version has to have been built already, by an install of that version.",
+        ),
+    ]
+
     # Reloaded
     ConfigPathFileType = Annotated[
         Path | None,
@@ -608,7 +625,7 @@ cli_app.add_typer(settings_app, name="settings")
 
 # docs subcommand group
 docs_app = typer.Typer(
-    help="Find the user guides that ship with this version of mujoco-mojo.",
+    help="Find the documentation that ships with this version of mujoco-mojo, and build and browse its site.",
     no_args_is_help=True,
 )
 cli_app.add_typer(docs_app, name="docs")
@@ -1014,14 +1031,112 @@ def run_watch_workdir(
 @docs_app.command(name="path")
 def docs_path() -> None:
     """
-    [bold yellow]Print the folder that holds the user guides.[/bold yellow]
+    [bold yellow]Print the folder that holds the documentation source.[/bold yellow]
 
-    The guides are plain markdown written from the documentation site, so they match the installed version and need no network. Only the path is printed, for scripts and coding assistants to use.
+    It is the same pages and `mkdocs.yml` as the online docs, as markdown, for the version you have installed, so it needs no network. The guides are in `docs/user-guides/` and the command line reference is `docs/reference/cli.md`. The images are left out. Only the path is printed, for scripts and coding assistants to use. To read the pages as a site, see `docs serve`.
     """
-    from mujoco_mojo.meta import USER_GUIDE_DIR
+    from mujoco_mojo.meta import DOCS_SOURCE_DIR
 
     # echo, not the rich console: a long path must not be wrapped or styled
-    typer.echo(USER_GUIDE_DIR)
+    typer.echo(DOCS_SOURCE_DIR)
+
+
+def _build_docs_with_status(rebuild: bool) -> Path:
+    """Builds the docs site of the installed version behind a status line, and turns a failure into the red error and exit code 1 the other commands give."""
+    from mujoco_mojo.utils.docs_site import DocsBuildError, build_docs
+
+    try:
+        with console.status("Building the documentation site, which takes a moment..."):
+            return build_docs(VERSION, rebuild=rebuild)
+    except (ModuleNotFoundError, DocsBuildError) as exc:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+
+
+@docs_app.command(name="build")
+def docs_build(rebuild: DocsRebuildType = False) -> None:
+    r"""
+    [bold yellow]Build the documentation site for this version of mujoco-mojo.[/bold yellow]
+
+    The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo\[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
+    """
+    typer.echo(_build_docs_with_status(rebuild))
+
+
+@docs_app.command(name="serve")
+def docs_serve(
+    version: DocsVersionType = None,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+) -> None:
+    r"""
+    [bold yellow]Browse the documentation site in a web browser.[/bold yellow]
+
+    Serves the site built by `docs build`. If this version's docs are not built yet they are built first, which needs the `docs` extra (`pip install mujoco-mojo\[docs]`) once; after that nothing extra is needed.
+    """
+    import uvicorn
+
+    from mujoco_mojo.utils.docs_site import (
+        built_versions,
+        docs_app_for,
+        docs_site_dir,
+        is_built,
+    )
+
+    chosen = (version or VERSION).removeprefix("v")
+    site = docs_site_dir(chosen)
+    if not is_built(site):
+        if chosen != VERSION:
+            built = ", ".join(built_versions()) or "none"
+            console.print(
+                f"[bold red]Error:[/bold red] The docs for v{escape(chosen)} are not built, and this install (v{VERSION}) can only build its own. Built versions: {escape(built)}"
+            )
+            raise typer.Exit(code=1)
+        console.print(f"The docs for v{VERSION} are not built yet. Building them now.")
+        site = _build_docs_with_status(rebuild=False)
+
+    port = find_free_port(host, port)
+    connection_info = f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
+    if host == "0.0.0.0":
+        connection_info += (
+            f"\nMobile: [bold cyan u]http://{get_local_ip()}:{port}[/bold cyan u]"
+        )
+    else:
+        connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
+
+    console.print(
+        Panel(
+            f"""[bold green]The MuJoCo Mojo docs are live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
+            border_style="cyan",
+            expand=False,
+            title="Mojo Docs",
+            subtitle=f"v{chosen}",
+        )
+    )
+
+    uvicorn.run(docs_app_for(site), host=host, port=port, log_level="critical")
+
+
+@docs_app.command(name="list")
+def docs_list() -> None:
+    """
+    [bold yellow]List the documentation sites that are built.[/bold yellow]
+
+    One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
+    """
+    from mujoco_mojo.utils.docs_site import built_versions, docs_site_dir
+
+    versions = built_versions()
+    if not versions:
+        console.print(
+            "No docs are built yet. Run [bold]mujoco-mojo docs build[/bold] to build them."
+        )
+        return
+    width = max(len(built) for built in versions)
+    for built in versions:
+        marker = "*" if built == VERSION else " "
+        # echo, not the rich console: a long path must not be wrapped or styled
+        typer.echo(f"{marker} {built:<{width}}  {docs_site_dir(built)}")
 
 
 def _agents_follow_up(wrote: bool, snippet: str) -> None:

@@ -1038,18 +1038,6 @@ wheels = [
 ]
 
 [[package]]
-name = "griffe-pydantic"
-version = "1.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "griffelib" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/bd/d2eaeaf3f9910c9cd72793af0de18ee3d3a3a27bb30ab01cfd7659c08dc4/griffe_pydantic-1.3.1.tar.gz", hash = "sha256:f7caedfa0effedb22893bf01cc411fd567614f7b4de7ce0c1f4293eb7acb5c44", size = 38176, upload-time = "2026-02-21T09:38:49.674Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/88/17d656aa97406cd509e2be0e6eddcf81fc1666104bf81042b89721d4a44c/griffe_pydantic-1.3.1-py3-none-any.whl", hash = "sha256:475103794a1d5da3933d3968e82a2bd9d9a1fa507c06d5ee1a39ee1fadcca628", size = 15189, upload-time = "2026-02-20T11:34:14.965Z" },
-]
-
-[[package]]
 name = "griffelib"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1981,18 +1969,6 @@ wheels = [
 ]
 
 [[package]]
-name = "mkdocs-open-in-new-tab"
-version = "1.0.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "mkdocs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/0e/f72a506a21bdb27b807124e00c688226848a388d1fd3980b80ae3cc27203/mkdocs_open_in_new_tab-1.0.8.tar.gz", hash = "sha256:3e0dad08cc9938b0b13097be8e0aa435919de1eeb2d1a648e66b5dee8d57e048", size = 5791, upload-time = "2024-11-18T13:15:13.977Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/94/44f3c868495481c868d08eea065c82803f1affd8553d3383b782f497613c/mkdocs_open_in_new_tab-1.0.8-py3-none-any.whl", hash = "sha256:051d767a4467b12d89827e1fea0ec660b05b027c726317fe4fceee5456e36ad2", size = 7717, upload-time = "2024-11-18T13:15:12.286Z" },
-]
-
-[[package]]
 name = "mkdocstrings"
 version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
@@ -2149,10 +2125,16 @@ dependencies = [
 all = [
     { name = "coacd" },
     { name = "joblib" },
+    { name = "mkdocstrings", extra = ["python"] },
     { name = "optuna" },
     { name = "optuna-dashboard" },
     { name = "pydantic-ai" },
     { name = "requests" },
+    { name = "zensical" },
+]
+docs = [
+    { name = "mkdocstrings", extra = ["python"] },
+    { name = "zensical" },
 ]
 mesh-decomp = [
     { name = "coacd" },
@@ -2170,12 +2152,9 @@ sensai = [
 [package.dev-dependencies]
 dev = [
     { name = "coacd" },
-    { name = "griffe-pydantic" },
     { name = "ipykernel" },
     { name = "joblib" },
-    { name = "mkdocs" },
-    { name = "mkdocs-open-in-new-tab" },
-    { name = "mkdocstrings", extra = ["python"] },
+    { name = "mujoco-mojo", extra = ["docs"] },
     { name = "optuna" },
     { name = "optuna-dashboard" },
     { name = "pybind11-stubgen" },
@@ -2186,7 +2165,6 @@ dev = [
     { name = "tabulate" },
     { name = "ty" },
     { name = "watchfiles" },
-    { name = "zensical" },
 ]
 
 [package.metadata]
@@ -2201,6 +2179,8 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'optimize'", specifier = ">=1.5.3" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "mediapy", specifier = ">=1.2.7" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'all'", specifier = ">=1.0.6" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.6" },
     { name = "mujoco", specifier = ">=4.0.0" },
     { name = "numpy", specifier = ">=2.4.1" },
     { name = "numpydantic", specifier = ">=1.7.0" },
@@ -2234,18 +2214,17 @@ requires-dist = [
     { name = "typer", specifier = ">=0.24.1" },
     { name = "uvicorn", specifier = ">=0.41.0" },
     { name = "watchfiles", specifier = ">=1.1.1" },
+    { name = "zensical", marker = "extra == 'all'", specifier = ">=0.1.0" },
+    { name = "zensical", marker = "extra == 'docs'", specifier = ">=0.1.0" },
 ]
-provides-extras = ["all", "mesh-decomp", "optimize", "sensai"]
+provides-extras = ["all", "docs", "mesh-decomp", "optimize", "sensai"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "coacd", specifier = ">=1.0.7" },
-    { name = "griffe-pydantic", specifier = ">=1.3.1" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "joblib", specifier = ">=1.5.3" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
-    { name = "mkdocs-open-in-new-tab", specifier = ">=1.0.8" },
-    { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.6" },
+    { name = "mujoco-mojo", extras = ["docs"] },
     { name = "optuna", specifier = ">=4.8.0" },
     { name = "optuna-dashboard", specifier = ">=0.20.0" },
     { name = "pybind11-stubgen", specifier = ">=2.5.5" },
@@ -2256,7 +2235,6 @@ dev = [
     { name = "tabulate", specifier = ">=0.10.0" },
     { name = "ty", specifier = ">=0.0.89" },
     { name = "watchfiles", specifier = ">=1.2.0" },
-    { name = "zensical", specifier = ">=0.1.0" },
 ]
 
 [[package]]

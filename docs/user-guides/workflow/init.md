@@ -33,7 +33,7 @@ It also creates a `.mujoco-mojo/` folder holding the project's settings file (`s
 
 ### For Coding Assistants
 
-`AGENTS.md` is the file that coding assistants such as Codex, Cursor, GitHub Copilot and Claude Code read for instructions about a project. The one `init` writes says where the Mojo guides are, so an assistant that has never seen Mojo can read them instead of guessing. `mujoco-mojo docs path` prints the folder: it holds the same guides as this site, for the version you have installed, and works without a network connection.
+`AGENTS.md` is the file that coding assistants such as Codex, Cursor, GitHub Copilot and Claude Code read for instructions about a project. The one `init` writes says where the Mojo docs are, so an assistant that has never seen Mojo can read them instead of guessing. `mujoco-mojo docs path` prints the folder: it holds the pages of this site as markdown, for the version you have installed, and works without a network connection. The images are left out.
 
 If the project already has an `AGENTS.md`, `init` leaves it alone and prints the text to add to it. Claude Code reads `CLAUDE.md` instead of `AGENTS.md` when both exist, so a project with a `CLAUDE.md` needs the line `@AGENTS.md` in it. `init` tells you when that applies.
 

@@ -390,13 +390,6 @@ griffe==1.15.0 \
     --hash=sha256:6f6762661949411031f5fcda9593f586e6ce8340f0ba88921a0f2ef7a81eb9a3 \
     --hash=sha256:7726e3afd6f298fbc3696e67958803e7ac843c1cfe59734b6251a40cdbfb5eea
     # via mkdocstrings-python
-griffe-pydantic==1.3.1 \
-    --hash=sha256:475103794a1d5da3933d3968e82a2bd9d9a1fa507c06d5ee1a39ee1fadcca628 \
-    --hash=sha256:f7caedfa0effedb22893bf01cc411fd567614f7b4de7ce0c1f4293eb7acb5c44
-griffelib==2.3.0 \
-    --hash=sha256:1b8f9cd525681c26b1d6d574faa1371651e8459ca51d209684f50b8096ae06e0 \
-    --hash=sha256:7b0952caf5bca6afa4bb5ee8c6a2d183fe3f21b62efc5f6c7243cb2b26d2d115
-    # via griffe-pydantic
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
     --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
@@ -747,7 +740,6 @@ mkdocs==1.6.1 \
     --hash=sha256:db91759624d1647f3f34aa0c3f327dd2601beae39a366d6e064c03468d35c20e
     # via
     #   mkdocs-autorefs
-    #   mkdocs-open-in-new-tab
     #   mkdocstrings
 mkdocs-autorefs==1.4.3 \
     --hash=sha256:469d85eb3114801d08e9cc55d102b3ba65917a869b893403b8987b601cf55dc9 \
@@ -759,13 +751,12 @@ mkdocs-get-deps==0.2.0 \
     --hash=sha256:162b3d129c7fad9b19abfdcb9c1458a651628e4b1dea628ac68790fb3061c60c \
     --hash=sha256:2bf11d0b133e77a0dd036abeeb06dec8775e46efa526dc70667d8863eefc6134
     # via mkdocs
-mkdocs-open-in-new-tab==1.0.8 \
-    --hash=sha256:051d767a4467b12d89827e1fea0ec660b05b027c726317fe4fceee5456e36ad2 \
-    --hash=sha256:3e0dad08cc9938b0b13097be8e0aa435919de1eeb2d1a648e66b5dee8d57e048
 mkdocstrings==1.0.6 \
     --hash=sha256:2703708697487d1b6d6d7b412e176fa436edf120c1bf81dc9e126b12d00893c7 \
     --hash=sha256:a0b8c2bdd29a6416c80d717aa369bbf7831946bd9f23c2a66db1b1dbe7693dbd
-    # via mkdocstrings-python
+    # via
+    #   mkdocstrings-python
+    #   mujoco-mojo
 mkdocstrings-python==2.0.1 \
     --hash=sha256:66ecff45c5f8b71bf174e11d49afc845c2dfc7fc0ab17a86b6b337e0f24d8d90 \
     --hash=sha256:843a562221e6a471fefdd4b45cc6c22d2607ccbad632879234fa9692e9cf7732
@@ -1992,6 +1983,7 @@ zensical==0.1.0 \
     --hash=sha256:d184a9e718ea7857558128a0708c950b3ab47366e96c724b33890aab70c64f5a \
     --hash=sha256:f2892e08d7ea4baf714d0d033246044ea0f1b4acedd5a593988fcf61bdf26e30 \
     --hash=sha256:ff89088b554f7a88358eaa470c6738b6d1511f9fec835f0bacc29f95dd6139f9
+    # via mujoco-mojo
 zensical-ui==0.0.41 \
     --hash=sha256:2268e3533a2e186eb7b67dcc8ccdbfc5994fe114cda9382a505f306256df3d88 \
     --hash=sha256:f0cd5b4351c130257df65b2100fc7116e72c777b1fbc596fee64a9f5de4ccdad

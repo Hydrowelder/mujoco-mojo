@@ -9,6 +9,7 @@ from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from mujoco_mojo.meta import DOCS_ASSETS_DIR, DOCS_SOURCE_DIR
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
@@ -38,7 +39,16 @@ VITE_DEV = os.environ.get("MOJO_DOJO_DEV", "").lower() in {"1", "true", "yes"}
 
 # Chime sound comes from https://mixkit.co/free-sound-effects/win/
 templates = Jinja2Templates(directory=HERE / "templates")
-static = StaticFiles(directory=HERE / "templates" / "static")
+# the folder is looked in first, then the docs' own assets, so `/mojo-static/light-logo.svg` and `dark-logo.svg` are the logos of the docs source and the Dojo keeps no copy of them
+static = StaticFiles(
+    directory=HERE / "templates" / "static",
+    packages=[
+        (
+            "mujoco_mojo",
+            DOCS_ASSETS_DIR.relative_to(DOCS_SOURCE_DIR.parent).as_posix(),
+        )
+    ],
+)
 
 # the same dict as `templates.env.globals`, typed for what it holds: jinja2 builds that dict from
 # an unannotated literal of its own helpers, so a type checker infers a value type that

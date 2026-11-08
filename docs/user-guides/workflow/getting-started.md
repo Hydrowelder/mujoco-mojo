@@ -24,7 +24,21 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 !!! tip "Optional Extras"
 
-    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, and `mujoco-mojo[sensai]` for the Dojo's SensAI assistant. Install `mujoco-mojo[all]` to get everything.
+    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, `mujoco-mojo[sensai]` for the Dojo's SensAI assistant, and `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline)). Install `mujoco-mojo[all]` to get all of them except `docs`.
+
+---
+
+## Reading the Docs Offline
+
+This documentation ships with the package, so you can read the version that matches what you have installed without leaving your machine:
+
+```bash linenums="0"
+mujoco-mojo docs serve
+```
+
+Open the address it prints. The first time, there is nothing to serve yet, so it builds the site for your version into `~/.mujoco-mojo/docs/v<version>` before it starts, which takes a moment and needs the `docs` extra (`pip install mujoco-mojo[docs]`). After that it only serves that saved copy, which starts at once and needs no extra packages. To build without serving, run `mujoco-mojo docs build`, and add `--rebuild` to build it again. A site that an older install built is still there: `mujoco-mojo docs list` shows which are built and where, and `mujoco-mojo docs serve --version 2.7.1` serves one.
+
+The package carries the pages, the search and the API reference, but not the screenshots and other large images. The built site links those to GitHub, at the tag of your version, so they show up when you are online. The links to other projects' documentation, such as Python's and pydantic's, are only made if you were online when the site was built.
 
 ---
 

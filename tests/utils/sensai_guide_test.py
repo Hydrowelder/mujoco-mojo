@@ -1,11 +1,11 @@
-"""Tests for how SensAI's guide agent finds things in the user guides bundled with the package: splitting them into sections, ranking sections against a question, and reading a guide or a part of one."""
+"""Tests for how SensAI's guide agent finds things in the guides of the docs source bundled with the package: splitting them into sections, ranking sections against a question, and reading a guide or a part of one."""
 
 from pathlib import Path
 
 import pytest
 
+from mujoco_mojo.meta import DOCS_SOURCE_DIR
 from mujoco_mojo.utils.layers.dojo.sensai.guide_catalog import (
-    GUIDE_DIR,
     SITE_URL,
     guides,
     read_guide,
@@ -49,8 +49,10 @@ Start it with the `dojo` command.
 
 
 def make_guides(root: Path, files: dict[str, str]) -> Path:
+    """A docs source in `root` with the guides in it, each under the path it is known by: `reference/cli.md` is a page of the reference, and any other is under `docs/user-guides/`."""
     for name, text in files.items():
-        path = root / name
+        folder = "docs" if name.startswith("reference/") else "docs/user-guides"
+        path = root / folder / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     return root
@@ -426,7 +428,7 @@ class TestTheBundledGuides:
     """The real guides, so a reorganized docs folder or a broken bundle shows up here and not as a bad answer."""
 
     def test_the_bundle_is_found_and_every_guide_has_a_title_and_sections(self) -> None:
-        assert GUIDE_DIR.is_dir()
+        assert DOCS_SOURCE_DIR.is_dir()
         every = guides()
 
         assert len(every) >= 20

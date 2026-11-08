@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 import mujoco_mojo.settings as settings_module
-from mujoco_mojo.meta import USER_GUIDE_DIR
+from mujoco_mojo.meta import DOCS_SOURCE_DIR
 from mujoco_mojo.utils.layers.cli import cli_app
 
 
@@ -52,7 +52,7 @@ class TestTheAgentsFile:
         assert text.startswith("# MuJoCo Mojo")
         assert "`mujoco-mojo docs path`" in text
 
-    def test_every_guide_it_names_is_in_the_bundle(self, project: Path) -> None:
+    def test_every_file_it_names_is_in_the_bundle(self, project: Path) -> None:
         """A guide renamed in the docs would leave every new project pointing at nothing."""
         run_init()
 
@@ -60,10 +60,10 @@ class TestTheAgentsFile:
             r"`([\w./-]+\.md)`", (project / "AGENTS.md").read_text(encoding="utf-8")
         )
 
-        assert "workflow/getting-started.md" in named
-        assert "reference/cli.md" in named
+        assert "docs/user-guides/workflow/getting-started.md" in named
+        assert "docs/reference/cli.md" in named
         for path in named:
-            assert (USER_GUIDE_DIR / path).is_file(), path
+            assert (DOCS_SOURCE_DIR / path).is_file(), path
 
     def test_the_scripts_it_names_are_the_ones_init_writes(self, project: Path) -> None:
         run_init()

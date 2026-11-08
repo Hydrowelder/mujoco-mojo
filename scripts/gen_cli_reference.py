@@ -1,7 +1,7 @@
 """
 Writes the command line reference of `mujoco-mojo` to `docs/reference/cli.md`.
 
-The page is read off the Typer app itself, so every command, argument and option is on it with the type, default and help the command line gives, and it cannot drift from the code. It is a docs page like the others, in the Reference section: the docs site shows it, `scripts/gen_user_guide.py` bundles it into the package with the user guides, and SensAI answers questions about the commands from it.
+The page is read off the Typer app itself, so every command, argument and option is on it with the type, default and help the command line gives, and it cannot drift from the code. It is a docs page like the others, in the Reference section: the docs site shows it, `scripts/gen_docs_source.py` bundles it into the package with the rest of the docs source, and SensAI answers questions about the commands from it.
 
 Typer bundles its own copy of click (`typer._click`), so a `click.Group`, `click.Option` or `click.Argument` check on one of its commands is never true. This reads them by what they have instead: a command with `commands` is a group, and a parameter says what it is in `param_type_name`.
 

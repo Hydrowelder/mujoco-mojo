@@ -9,9 +9,14 @@
 - `reloaded` now has a new terminal screen, with a status bar, a log you can copy from, and new `pause`, `step`, `speed` , and `explain` commands
 - Updated `Inertial.from_random` to use `stochas` transations instead of the more complex hand-rolled random draw method
 - The job status and runtime report now list the `--arg` and `--kwarg` values a job ran with
-- Fixed `Visual(rgba=VisualRGBA(...))` raising a `TypeError`
-- Various improvements for SensAI
 - Added MuJoCo Mojo documentation to the distribution
+- Added `mujoco-mojo docs build`, `docs serve` and `docs list` to build the documentation site for your installed version, browse it locally and see which are built (similar to `cargo doc`)
+- Various improvements for SensAI
+    - Added a new guide agent for explaining how to user MuJoCo Mojo
+    - Expanded tools for job status querying
+    - Fixed bugs when using SensAI to edit plot configs
+    - Now includes tabs for multiple chats
+- Fixed `Visual(rgba=VisualRGBA(...))` raising a `TypeError`
 
 > [!WARNING]
 > - **Breaking:** The `viser` and `mjviser` viewers are gone. A settings file that still names one now opens the browser viewer

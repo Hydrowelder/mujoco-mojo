@@ -67,20 +67,18 @@ keywords = [
 ]
 
 [project.optional-dependencies]
+docs = ["mkdocstrings[python]>=1.0.6", "zensical>=0.1.0"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
 sensai = ["pydantic-ai>=2.53.0", "requests>=2.32.5"]
-all = ["mujoco-mojo[mesh-decomp,optimize,sensai]"]
+all = ["mujoco-mojo[docs,mesh-decomp,optimize,sensai]"]
 
 [dependency-groups]
 dev = [
     "coacd>=1.0.7",
-    "griffe-pydantic>=1.3.1",
     "ipykernel>=7.2.0",
     "joblib>=1.5.3",
-    "mkdocs-open-in-new-tab>=1.0.8",
-    "mkdocs>=1.6.1",
-    "mkdocstrings[python]>=1.0.6",
+    "mujoco-mojo[docs]",
     "optuna-dashboard>=0.20.0",
     "optuna>=4.8.0",
     "pybind11-stubgen>=2.5.5",
@@ -91,7 +89,6 @@ dev = [
     "tabulate>=0.10.0",
     "ty>=0.0.89",
     "watchfiles>=1.2.0",
-    "zensical>=0.1.0",
 ]
 
 [project.scripts]

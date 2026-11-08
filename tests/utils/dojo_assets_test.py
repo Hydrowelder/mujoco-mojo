@@ -4,7 +4,11 @@ import json
 import re
 
 import pytest
+from starlette.applications import Starlette
+from starlette.routing import Mount
+from starlette.testclient import TestClient
 
+from mujoco_mojo.meta import DOCS_ASSETS_DIR
 from mujoco_mojo.utils.layers.dojo import shared
 
 TEMPLATES_DIR = shared.HERE / "templates"
@@ -54,3 +58,56 @@ def test_every_asset_a_template_asks_for_is_an_entry() -> None:
     }
     assert asked
     assert asked <= ENTRIES.keys()
+
+
+class TestTheLogos:
+    """The Dojo's logos are the docs' own, in the docs source that ships with the package, so there is one copy of each in the package. `/mojo-static` serves them after its own folder."""
+
+    @pytest.fixture
+    def client(self) -> TestClient:
+        return TestClient(Starlette(routes=[Mount("/mojo-static", app=shared.static)]))
+
+    @pytest.mark.parametrize("name", ["light-logo.svg", "dark-logo.svg"])
+    def test_the_logo_is_served_from_the_docs_source(
+        self, client: TestClient, name: str
+    ) -> None:
+        response = client.get(f"/mojo-static/{name}")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/svg+xml"
+        assert response.content == (DOCS_ASSETS_DIR / name).read_bytes()
+
+    def test_the_dojos_own_files_are_still_served(self, client: TestClient) -> None:
+        assert client.get("/mojo-static/chime.mp3").status_code == 200
+        assert client.get("/mojo-static/dist/main.css").status_code == 200
+
+    def test_a_file_that_is_in_neither_folder_is_not_found(
+        self, client: TestClient
+    ) -> None:
+        assert client.get("/mojo-static/nope.svg").status_code == 404
+
+    def test_every_logo_a_template_asks_for_is_served(self, client: TestClient) -> None:
+        pages = [
+            *TEMPLATES_DIR.glob("*.html"),
+            *(TEMPLATES_DIR / "partials").rglob("*.html"),
+        ]
+        asked = {
+            name
+            for path in pages
+            for name in re.findall(r"/mojo-static/([\w.-]+\.svg)", path.read_text())
+        }
+
+        assert {"light-logo.svg", "dark-logo.svg"} <= asked
+        for name in sorted(asked):
+            assert client.get(f"/mojo-static/{name}").status_code == 200, name
+
+    def test_the_dojo_keeps_no_copy_of_a_docs_logo(self) -> None:
+        """A second copy is what this replaced: the two would drift, and the wheel would carry both."""
+        logos = {path.read_bytes() for path in DOCS_ASSETS_DIR.glob("*.svg")}
+        copies = [
+            path.name
+            for path in (TEMPLATES_DIR / "static").glob("*.svg")
+            if path.read_bytes() in logos
+        ]
+
+        assert copies == []

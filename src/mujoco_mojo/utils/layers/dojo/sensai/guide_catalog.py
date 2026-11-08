@@ -1,7 +1,7 @@
 """
 Finding things in the user guides that ship with the package, for the guide agent SensAI answers "how do I use Mojo" with.
 
-The guides are `mujoco_mojo/user_guide/*.md`, written by `scripts/gen_user_guide.py` from the docs as plain markdown. This reads them, splits each at its headings into sections, and ranks sections against a question by word (BM25, with the words of a heading counting for more). There are no embeddings and nothing is downloaded, so it works offline and gives the same ranking every time.
+The guides are the pages under `docs/user-guides/` of the docs source that ships in the package (`DOCS_SOURCE_DIR`), and the command line reference, read as plain markdown (`utils/docs_text.py` removes the site's markup). This reads them, splits each at its headings into sections, and ranks sections against a question by word (BM25, with the words of a heading counting for more). There are no embeddings and nothing is downloaded, so it works offline and gives the same ranking every time.
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from mujoco_mojo.meta import USER_GUIDE_DIR
+from mujoco_mojo.meta import DOCS_SOURCE_DIR
+from mujoco_mojo.utils.docs_text import plain_text
 
 __all__ = [
-    "GUIDE_DIR",
     "SITE_URL",
     "Guide",
     "Hit",
@@ -33,9 +33,6 @@ __all__ = [
 
 SITE_URL = "https://hydrowelder.github.io/mujoco-mojo/"
 """Where the docs site is, which the guide links are built on."""
-
-GUIDE_DIR = USER_GUIDE_DIR
-"""The bundled guides."""
 
 _HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
@@ -84,7 +81,7 @@ class Guide(BaseModel):
     """One bundled guide."""
 
     path: str
-    """Its path under the bundle, such as `workflow/getting-started.md`."""
+    """Its path as a guide, such as `workflow/getting-started.md` (its path under `docs/user-guides/`), or `reference/cli.md` for the command line reference."""
     title: str
     text: str
     sections: list[Section]
@@ -154,19 +151,34 @@ def _split_sections(path: str, text: str) -> tuple[str, list[Section]]:
     return title, sections
 
 
+def _guide_files(directory: Path) -> dict[str, Path]:
+    """The pages of the docs source in `directory` that are guides, each by the path it is known by: the pages under `docs/user-guides/` by their path there, and the command line reference as `reference/cli.md`. The rest of the docs (the home page, the changelog, the API reference stubs) are not guides."""
+    docs = directory / "docs"
+    found = {
+        file.relative_to(docs / "user-guides").as_posix(): file
+        for file in (docs / "user-guides").rglob("*.md")
+    }
+    reference = docs / "reference" / "cli.md"
+    if reference.is_file():
+        found["reference/cli.md"] = reference
+    return found
+
+
 @cache
-def guides(directory: Path = GUIDE_DIR) -> tuple[Guide, ...]:
-    """Every guide in `directory`, in path order."""
+def guides(directory: Path = DOCS_SOURCE_DIR) -> tuple[Guide, ...]:
+    """Every guide in the docs source in `directory`, in path order."""
     found: list[Guide] = []
-    for file in sorted(directory.rglob("*.md")):
-        path = file.relative_to(directory).as_posix()
-        text = file.read_text(encoding="utf-8")
+    # sorted by the parts of the path, as the files were when they were read from a folder, so a guide comes before the folder of the same name
+    for path, file in sorted(
+        _guide_files(directory).items(), key=lambda item: Path(item[0]).parts
+    ):
+        text = plain_text(file)
         title, sections = _split_sections(path, text)
         found.append(Guide(path=path, title=title, text=text, sections=sections))
     return tuple(found)
 
 
-def table_of_contents(directory: Path = GUIDE_DIR) -> str:
+def table_of_contents(directory: Path = DOCS_SOURCE_DIR) -> str:
     """One line per guide, its path and title, for the agent's instructions."""
     return "\n".join(f"- {g.path}: {g.title}" for g in guides(directory))
 
@@ -254,7 +266,9 @@ def _snippet(section: Section, terms: set[str]) -> str:
     return best
 
 
-def search_guides(query: str, limit: int = 5, directory: Path = GUIDE_DIR) -> list[Hit]:
+def search_guides(
+    query: str, limit: int = 5, directory: Path = DOCS_SOURCE_DIR
+) -> list[Hit]:
     """The sections that best answer `query`, best first, at most two from any one guide. Empty when no word of the query is in the guides."""
     terms = set(_terms(query))
     if not terms:
@@ -322,7 +336,10 @@ def _section_text(guide: Guide, i: int) -> str:
 
 
 def read_guide(
-    path: str, section: str = "", limit: int = _READ_LIMIT, directory: Path = GUIDE_DIR
+    path: str,
+    section: str = "",
+    limit: int = _READ_LIMIT,
+    directory: Path = DOCS_SOURCE_DIR,
 ) -> str:
     """
     A guide, or one section of it, with its title and docs site link on top.
