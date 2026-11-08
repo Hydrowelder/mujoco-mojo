@@ -9,6 +9,7 @@ Every `mujoco-mojo` command with its arguments and options. Add `--help` to any 
 | [`mujoco-mojo dojo`](#mujoco-mojo-dojo) | Launch the Mojo Dojo to monitor the progress of a running job. |
 | [`mujoco-mojo run`](#mujoco-mojo-run) | Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.). |
 | [`mujoco-mojo settings`](#mujoco-mojo-settings) | Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`. |
+| [`mujoco-mojo docs`](#mujoco-mojo-docs) | Find the user guides that ship with this version of mujoco-mojo. |
 
 ## Global options
 
@@ -22,7 +23,7 @@ Every `mujoco-mojo` command with its arguments and options. Add `--help` to any 
 
 Initialize a new empty mujoco-mojo project.
 
-Writes a `simulation.py` scaffold, the `run.sh` and `reloaded.sh` scripts, and a project settings file to the current directory. The scaffold contains stub implementations of **generate**, **runtime**, and **UserData**. Pass `--optimizer` to also include an **objective** stub.
+Writes these to the current directory: a `simulation.py` scaffold, the `run.sh` and `reloaded.sh` scripts, a project settings file, and an `AGENTS.md` that points coding agents at the user guides (an existing `AGENTS.md` is left alone). The scaffold contains stub implementations of **generate**, **runtime**, and **UserData**. Pass `--optimizer` to also include an **objective** stub.
 
 ```bash
 mujoco-mojo init [OPTIONS]
@@ -324,3 +325,27 @@ mujoco-mojo settings reset [OPTIONS]
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--project`, `-p` | flag | off | Delete the project-local settings file (the nearest .mujoco-mojo/settings.toml in this or a parent directory) instead of resetting the global one. |
+
+## `mujoco-mojo docs`
+
+Find the user guides that ship with this version of mujoco-mojo.
+
+```bash
+mujoco-mojo docs [OPTIONS] COMMAND [ARGS]...
+```
+
+**Commands**
+
+| Command | What it does |
+| :--- | :--- |
+| [`mujoco-mojo docs path`](#mujoco-mojo-docs-path) | Print the folder that holds the user guides. |
+
+### `mujoco-mojo docs path`
+
+Print the folder that holds the user guides.
+
+The guides are plain markdown written from the documentation site, so they match the installed version and need no network. Only the path is printed, for scripts and coding assistants to use.
+
+```bash
+mujoco-mojo docs path [OPTIONS]
+```

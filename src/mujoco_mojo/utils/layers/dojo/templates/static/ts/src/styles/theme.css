@@ -210,6 +210,17 @@
   --color-chart-annotation-bg: var(--color-slate-50);
   --color-chart-shape-label-bg: var(--color-slate-50);
 
+  /* syntax colors for code shown in the SensAI chat: _sensai.html colors
+     CodeMirror's tok-* classes with these, so a code block follows the
+     light/dark toggle through CSS alone. the 700 step reads on the light
+     well, and the 400 step (under .dark below) on the dark one. */
+  --color-code-key: var(--color-blue-700); /* JSON property names */
+  --color-code-string: var(--color-emerald-700);
+  --color-code-number: var(--color-amber-700);
+  --color-code-atom: var(--color-violet-700); /* true, false, null and keywords */
+  --color-code-punct: var(--color-slate-500); /* braces, commas, operators */
+  --color-code-comment: var(--color-slate-500);
+
   /* the Signal Lab node editor is fixed dark chrome regardless of the
      site's light/dark toggle, so none of these are overridden under .dark
      below. */
@@ -264,4 +275,11 @@
   --color-chart-tooltip-font: var(--color-slate-50);
   --color-chart-annotation-bg: var(--color-slate-800);
   --color-chart-shape-label-bg: var(--color-slate-900);
+
+  --color-code-key: var(--color-blue-400);
+  --color-code-string: var(--color-emerald-400);
+  --color-code-number: var(--color-amber-400);
+  --color-code-atom: var(--color-violet-400);
+  --color-code-punct: var(--color-slate-400);
+  --color-code-comment: var(--color-slate-500);
 }

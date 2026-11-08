@@ -12,10 +12,11 @@ import re
 import unicodedata
 from collections import Counter
 from functools import cache
-from importlib import resources
 from pathlib import Path
 
 from pydantic import BaseModel
+
+from mujoco_mojo.meta import USER_GUIDE_DIR
 
 __all__ = [
     "GUIDE_DIR",
@@ -33,7 +34,7 @@ __all__ = [
 SITE_URL = "https://hydrowelder.github.io/mujoco-mojo/"
 """Where the docs site is, which the guide links are built on."""
 
-GUIDE_DIR = Path(str(resources.files("mujoco_mojo"))) / "user_guide"
+GUIDE_DIR = USER_GUIDE_DIR
 """The bundled guides."""
 
 _HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")

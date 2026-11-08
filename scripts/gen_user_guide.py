@@ -24,6 +24,9 @@ import sys
 import textwrap
 from pathlib import Path
 
+# the characters the `fix-smart-quotes` hook rewrites under src/, where the bundle is: a guide with one in it would otherwise be bundled with it, rewritten by that hook, and written back by this script on every commit
+from fix_smart_quotes import REPLACEMENTS as _SMART_PUNCTUATION
+
 ROOT = Path(__file__).parents[1]
 SOURCE_DIR = ROOT / "docs" / "user-guides"
 OUTPUT_DIR = ROOT / "src" / "mujoco_mojo" / "user_guide"
@@ -178,9 +181,16 @@ def clean(text: str) -> str:
     return "\n".join(collapsed).strip("\n") + "\n"
 
 
+def plain_punctuation(text: str) -> str:
+    """The text with each character the `fix-smart-quotes` hook rewrites already written the way it writes it (a curly quote as a straight one, an ellipsis as three dots)."""
+    for old, new in _SMART_PUNCTUATION.items():
+        text = text.replace(old, new)
+    return text
+
+
 def render(source: Path) -> str:
     """The bundled text of the guide `source`."""
-    return clean(expand_includes(source.read_text(encoding="utf-8")))
+    return plain_punctuation(clean(expand_includes(source.read_text(encoding="utf-8"))))
 
 
 def _wanted() -> dict[Path, str]:

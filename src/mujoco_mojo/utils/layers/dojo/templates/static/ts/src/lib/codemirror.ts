@@ -12,4 +12,6 @@ export { EditorState, Compartment } from "@codemirror/state";
 export { linter, lintGutter, forceLinting } from "@codemirror/lint";
 export type { Diagnostic } from "@codemirror/lint";
 export { syntaxHighlighting, defaultHighlightStyle, syntaxTree } from "@codemirror/language";
+// colors a token through a plain CSS class (tok-string, tok-number, ...), so what draws it can be CSS and follow the light/dark toggle
+export { classHighlighter } from "@lezer/highlight";
 export type { SyntaxNode } from "@lezer/common";

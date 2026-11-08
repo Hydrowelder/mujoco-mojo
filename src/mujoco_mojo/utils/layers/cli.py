@@ -606,6 +606,13 @@ settings_app = typer.Typer(
 )
 cli_app.add_typer(settings_app, name="settings")
 
+# docs subcommand group
+docs_app = typer.Typer(
+    help="Find the user guides that ship with this version of mujoco-mojo.",
+    no_args_is_help=True,
+)
+cli_app.add_typer(docs_app, name="docs")
+
 
 @cli_app.callback(
     epilog="Check out the [link=https://hydrowelder.github.io/mujoco-mojo/]full documentation[/link] for more info."
@@ -1004,6 +1011,49 @@ def run_watch_workdir(
     raise typer.Exit(code=0 if outcome is WatchOutcome.DONE else 1)
 
 
+@docs_app.command(name="path")
+def docs_path() -> None:
+    """
+    [bold yellow]Print the folder that holds the user guides.[/bold yellow]
+
+    The guides are plain markdown written from the documentation site, so they match the installed version and need no network. Only the path is printed, for scripts and coding assistants to use.
+    """
+    from mujoco_mojo.meta import USER_GUIDE_DIR
+
+    # echo, not the rich console: a long path must not be wrapped or styled
+    typer.echo(USER_GUIDE_DIR)
+
+
+def _agents_follow_up(wrote: bool, snippet: str) -> None:
+    """
+    What `init` tells the user about `AGENTS.md` once it has run.
+
+    A project that already had one keeps it untouched, so the text to add is shown instead. And when a `CLAUDE.md` is in this folder or above it, Claude Code reads that and not `AGENTS.md`, so the line that imports it is shown too (unless the file has it already).
+    """
+    if not wrote:
+        console.print(
+            "\n[bold yellow]AGENTS.md[/bold yellow]\n"
+            "[bold cyan]AGENTS.md[/bold cyan] already exists, so it was left alone. "
+            "To point coding agents at the Mojo guides, add this to it:\n"
+        )
+        # soft_wrap: it is meant to be copied, so no line breaks of rich's own in it
+        console.print(snippet, markup=False, highlight=False, soft_wrap=True)
+    here = Path.cwd()
+    claude = next(
+        (d / "CLAUDE.md" for d in (here, *here.parents) if (d / "CLAUDE.md").is_file()),
+        None,
+    )
+    if claude is not None and "@AGENTS.md" not in claude.read_text(
+        encoding="utf-8", errors="replace"
+    ):
+        console.print(
+            "\n[bold yellow]CLAUDE.md[/bold yellow]\n"
+            f"Claude Code reads [bold cyan]{escape(str(claude))}[/bold cyan] instead of "
+            "AGENTS.md when both exist. Add this line to it so it reads AGENTS.md too:\n\n"
+            "    [bold yellow]@AGENTS.md[/bold yellow]"
+        )
+
+
 @cli_app.command(name="init")
 def init_project(
     optimizer: Annotated[
@@ -1018,7 +1068,7 @@ def init_project(
     """
     [bold yellow]Initialize a new empty mujoco-mojo project.[/bold yellow]
 
-    Writes a [bold cyan]simulation.py[/bold cyan] scaffold, the [bold cyan]run.sh[/bold cyan] and [bold cyan]reloaded.sh[/bold cyan] scripts, and a project settings file to the current directory. The scaffold contains stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
+    Writes these to the current directory: a [bold cyan]simulation.py[/bold cyan] scaffold, the [bold cyan]run.sh[/bold cyan] and [bold cyan]reloaded.sh[/bold cyan] scripts, a project settings file, and an [bold cyan]AGENTS.md[/bold cyan] that points coding agents at the user guides (an existing [bold cyan]AGENTS.md[/bold cyan] is left alone). The scaffold contains stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
     """
     import os
     from importlib.resources import files
@@ -1054,13 +1104,29 @@ def init_project(
     os.chmod(run_dest, 0o755)
     os.chmod(reloaded_dest, 0o755)
 
-    w = max(len(str(p)) for p in (py_dest, run_dest, reloaded_dest))
+    # not among the conflicts above: a project often has one already, and it is the user's
+    agents_dest = Path("AGENTS.md")
+    agents_text = tmpl.joinpath("AGENTS.md").read_text(encoding="utf-8")
+    agents_written = not agents_dest.exists()
+    if agents_written:
+        agents_dest.write_text(agents_text, encoding="utf-8")
+
+    shown = [py_dest, run_dest, reloaded_dest]
+    if agents_written:
+        shown.append(agents_dest)
+    w = max(len(str(p)) for p in shown)
+    agents_line = (
+        f"  [bold cyan]{str(agents_dest).ljust(w)}[/bold cyan]  - points coding agents at the guides\n"
+        if agents_written
+        else ""
+    )
     console.print(
         Panel(
             f"[bold green]Project initialized![/bold green]\n\n"
             f"  [bold cyan]{str(py_dest).ljust(w)}[/bold cyan]  - simulation stubs\n"
             f"  [bold cyan]{str(run_dest).ljust(w)}[/bold cyan]  - run the campaign\n"
-            f"  [bold cyan]{str(reloaded_dest).ljust(w)}[/bold cyan]  - interactive viewer\n\n"
+            f"  [bold cyan]{str(reloaded_dest).ljust(w)}[/bold cyan]  - interactive viewer\n"
+            f"{agents_line}\n"
             f"[white]Get started:[/white]\n"
             f"    [bold yellow]bash run.sh[/bold yellow]",
             title="[cyan]Mojo Init[/cyan]",
@@ -1068,6 +1134,8 @@ def init_project(
             border_style="cyan",
         )
     )
+
+    _agents_follow_up(agents_written, agents_text)
 
     settings_init(force=False, project=True)
 

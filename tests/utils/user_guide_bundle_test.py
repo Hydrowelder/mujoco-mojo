@@ -169,6 +169,18 @@ class TestRendering:
 
         assert generator.clean(text) == "    Figure: The **body** and `legs`.\n"
 
+    def test_smart_punctuation_is_bundled_the_way_the_pre_commit_hook_writes_it(
+        self, generator: ModuleType, tmp_path: Path
+    ) -> None:
+        """The hook rewrites these under `src/`, where the bundle is. A bundle that kept them would be rewritten by it and written back by the generator on every commit."""
+        source = tmp_path / "g.md"
+        source.write_text(
+            "# G\n\nIt\u2019s a \u201cquote\u201d \u2013 and\u2026 done.\n",
+            encoding="utf-8",
+        )
+
+        assert generator.render(source) == '# G\n\nIt\'s a "quote" - and... done.\n'
+
     def test_a_figure_without_a_caption_disappears(self, generator: ModuleType) -> None:
         text = "a\n\n<figure>\n![alt](./a.jpg)\n</figure>\n\nb\n"
 
@@ -283,3 +295,14 @@ class TestTheBundleOnASmallTree:
         self, generator: ModuleType, tree: Path
     ) -> None:
         assert [p.name for p in generator.sources()] == ["a.md", "cli.md"]
+
+
+def test_the_bundle_has_nothing_the_pre_commit_hook_would_rewrite(
+    generator: ModuleType,
+) -> None:
+    """The hook runs on everything under `src/`, the bundle included, so a file in it that the hook would change is a commit that never settles."""
+    hook = importlib.import_module("fix_smart_quotes")
+    for path in bundled():
+        text = path.read_text(encoding="utf-8")
+        for char in hook.REPLACEMENTS:
+            assert char not in text, f"{path.relative_to(BUNDLE)} has U+{ord(char):04X}"

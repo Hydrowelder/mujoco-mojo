@@ -320,8 +320,8 @@ class TestSearching:
 
         snippet = search_guides("widget", directory=tmp_path)[0].snippet
 
-        assert snippet.endswith("…")
-        assert len(snippet) <= 222
+        assert snippet.endswith("...")
+        assert len(snippet) <= 223
 
 
 class TestReading:

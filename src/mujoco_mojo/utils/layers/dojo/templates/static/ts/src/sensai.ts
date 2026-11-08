@@ -5,8 +5,9 @@ import {
   EditorState,
   json,
   syntaxHighlighting,
-  defaultHighlightStyle,
+  classHighlighter,
 } from "./lib/codemirror";
+import { addCopyButton } from "./lib/code-block";
 import { renderMarkdown } from "./lib/markdown";
 import {
   MAX_TABS,
@@ -14,7 +15,6 @@ import {
   chatRequestBody,
   composerSize,
   createSseParser,
-  defaultTabTitle,
   enabledFromSettings,
   headerTooltip,
   historyFileName,
@@ -498,19 +498,6 @@ function sensai() {
       }
       this._revealQueue = "";
     },
-
-    // empties the open chat, stopping its request if one is running or waiting
-    clear() {
-      const tab = this.activeTab;
-      if (!tab) return;
-      this._cancel(tab.id);
-      tab.messages = [];
-      // a title made from the messages that are gone goes with them
-      if (tab.autoTitled !== false) {
-        tab.title = defaultTabTitle(this.tabs.filter((t) => t.id !== tab.id));
-      }
-      this._saveTabs();
-    },
   };
 }
 
@@ -558,13 +545,18 @@ function initSensAICodeBlocks(container: HTMLElement): void {
       const extensions = [
         EditorView.editable.of(false),
         EditorState.readOnly.of(true),
-        syntaxHighlighting(defaultHighlightStyle),
+        // classes, not colors: _sensai.html colors them with theme tokens, so a block
+        // reads in dark mode too and follows the toggle with no reconfiguring here
+        syntaxHighlighting(classHighlighter),
       ];
       if (lang === "json") extensions.unshift(json());
       new EditorView({
         state: EditorState.create({ doc: code, extensions }),
         parent: el,
       });
+      addCopyButton(el, code, (text) =>
+        (Alpine.store("dojo") as DojoStore).copyText(text, "Code copied"),
+      );
     });
   } catch { /* no blocks present, or a block's data-code/data-lang malformed */ }
 }

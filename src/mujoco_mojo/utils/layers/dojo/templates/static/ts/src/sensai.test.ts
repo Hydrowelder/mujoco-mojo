@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { renderMarkdown } from "./lib/markdown";
 import {
   ACTIVE_TAB_KEY,
   PINNED_KEY,
@@ -34,7 +38,6 @@ type SensAI = {
   switchTab(id: string): void;
   closeTab(id: string): void;
   renameTab(id: string, value: string): void;
-  clear(): void;
   send(): Promise<void>;
   isBusy(id: string): boolean;
   isRunning(id: string): boolean;
@@ -100,11 +103,18 @@ interface Call {
 let calls: Call[];
 let failNextRequest: boolean;
 
+// the dojo store the component reaches through Alpine, with a copy the tests can watch
+const store = {
+  columnManifest: null,
+  copyText: vi.fn((_text: string, _message?: string) => Promise.resolve(true)),
+};
+
 beforeEach(() => {
   localStorage.clear();
   calls = [];
   failNextRequest = false;
-  vi.stubGlobal("Alpine", { store: () => ({ columnManifest: null }) });
+  store.copyText.mockClear();
+  vi.stubGlobal("Alpine", { store: () => store });
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
     if (url === "/sensai/config") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ enabled: true }) });
@@ -314,22 +324,6 @@ describe("the chats", () => {
     const s = await boot();
     s.renameTab(first(s).id, "   ");
     expect(first(s).title).toBe("Chat 1");
-  });
-
-  it("go back to a numbered title when cleared, unless the user named them", async () => {
-    const s = await boot();
-    const sent = ask(s, "plot box1");
-    await settle();
-    calls[0]!.reply.answer("ok");
-    await sent;
-    expect(first(s).title).toBe("plot box1");
-
-    s.clear();
-    expect(first(s)).toMatchObject({ title: "Chat 1", messages: [] });
-
-    s.renameTab(first(s).id, "Mine");
-    s.clear();
-    expect(first(s).title).toBe("Mine");
   });
 
   it("are saved, with which one is open, and come back the same", async () => {
@@ -615,39 +609,22 @@ describe("requests from different chats", () => {
     expect(first(s).messages.some((m) => m.error)).toBe(false);
   });
 
-  it("stop the request of a chat that is cleared, without an error in the chat", async () => {
+  it("stop the request of the only chat when it is closed, leaving an empty chat and no error", async () => {
     const s = await boot();
     const sent = ask(s, "question");
     await settle();
+    const closed = first(s).id;
 
-    s.clear();
+    s.closeTab(closed);
     await sent;
 
     expect(calls[0]!.signal?.aborted).toBe(true);
+    expect(s.tabs).toHaveLength(1);
+    expect(first(s).id).not.toBe(closed);
     expect(first(s).messages).toEqual([]);
+    expect(s.isBusy(closed)).toBe(false);
     expect(s.isBusy(first(s).id)).toBe(false);
     expect(s.runningId).toBeNull();
-  });
-
-  it("take the waiting request off the line when its chat is cleared", async () => {
-    const s = await boot();
-    const sentFirst = ask(s, "first chat question");
-    await settle();
-    s.newTab();
-    void ask(s, "second chat question");
-    await settle();
-
-    s.clear();
-    // no longer waiting at once, so the chat does not sit under "Waiting" until the turn it gave up
-    expect(s.isBusy(second(s).id)).toBe(false);
-    expect(s.queue).toEqual([]);
-
-    calls[0]!.reply.answer("first answer");
-    await sentFirst;
-    await settle();
-
-    expect(calls).toHaveLength(1);
-    expect(second(s).messages).toEqual([]);
   });
 
   it("carry the waiting chat's own context, even though another chat is open when its turn comes", async () => {
@@ -741,3 +718,140 @@ describe("a chat with a request in line", () => {
     expect(s.queue).toEqual([]);
   });
 });
+
+describe("the code blocks of a reply", () => {
+  const initBlocks = (container: HTMLElement): void =>
+    (window as unknown as { initSensAICodeBlocks(el: HTMLElement): void }).initSensAICodeBlocks(container);
+
+  // a reply as it is shown: the markdown rendered, then its blocks turned into editors
+  function reply(markdown: string): HTMLElement {
+    const container = document.createElement("div");
+    container.innerHTML = renderMarkdown(markdown);
+    document.body.appendChild(container);
+    initBlocks(container);
+    return container;
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("gets an editor and a copy button for each fenced block, and none for inline code", () => {
+    const container = reply("Run `mujoco-mojo init` first.\n\n```bash\nmujoco-mojo init\n```\n\n```bash\nbash run.sh\n```\n");
+
+    const blocks = container.querySelectorAll(".sensai-cm-block");
+    expect(blocks).toHaveLength(2);
+    for (const block of blocks) {
+      expect(block.querySelector(".cm-editor")).not.toBeNull();
+      expect(block.querySelectorAll("button.sensai-cm-copy")).toHaveLength(1);
+    }
+    expect(container.querySelectorAll("button")).toHaveLength(2);
+  });
+
+  it("puts the button on a block of one line as well as one of many", () => {
+    const container = reply("```bash\nbash run.sh\n```\n\n```bash\na \\\n  b \\\n  c\n```\n");
+
+    expect(container.querySelectorAll("button.sensai-cm-copy")).toHaveLength(2);
+  });
+
+  it("copies the code of the block, whole and exactly", async () => {
+    const container = reply("```bash\nmujoco-mojo run monte-carlo \\\n  -g sim.generate \\\n  -r sim.runtime\n```\n");
+
+    container.querySelector<HTMLButtonElement>("button.sensai-cm-copy")!.click();
+    await Promise.resolve();
+
+    expect(store.copyText).toHaveBeenCalledOnce();
+    expect(store.copyText).toHaveBeenCalledWith(
+      "mujoco-mojo run monte-carlo \\\n  -g sim.generate \\\n  -r sim.runtime",
+      "Code copied",
+    );
+  });
+
+  it("copies each block's own code from its own button", async () => {
+    const container = reply("```bash\nfirst\n```\n\n```bash\nsecond\n```\n");
+
+    const buttons = container.querySelectorAll<HTMLButtonElement>("button.sensai-cm-copy");
+    buttons[1]!.click();
+    await Promise.resolve();
+
+    expect(store.copyText).toHaveBeenCalledWith("second", "Code copied");
+    expect(store.copyText).not.toHaveBeenCalledWith("first", expect.anything());
+  });
+
+  it("is set up once however many times the reply is laid out again", () => {
+    const container = reply("```bash\nls\n```\n");
+
+    initBlocks(container);
+    initBlocks(container);
+
+    expect(container.querySelectorAll("button.sensai-cm-copy")).toHaveLength(1);
+    expect(container.querySelectorAll(".cm-editor")).toHaveLength(1);
+  });
+
+  it("has the button beside the editor, not inside it, so scrolling the code does not move it", () => {
+    const container = reply("```bash\nls\n```\n");
+
+    const button = container.querySelector("button.sensai-cm-copy")!;
+    expect(button.parentElement).toBe(container.querySelector(".sensai-cm-block"));
+    expect(container.querySelector(".cm-editor")!.contains(button)).toBe(false);
+  });
+
+  it("marks the parts of JSON with token classes, which the stylesheet colors", () => {
+    const container = reply('```json\n{"a": 1, "b": "x", "c": true, "d": null, "e": [1.5]}\n```\n');
+
+    const classes = new Set(
+      [...container.querySelectorAll(".cm-line [class]")]
+        .flatMap((el) => [...el.classList])
+        .filter((name) => name.startsWith("tok-")),
+    );
+
+    for (const expected of ["tok-propertyName", "tok-string", "tok-number", "tok-bool", "tok-punctuation"]) {
+      expect(classes, expected).toContain(expected);
+    }
+  });
+
+  it("leaves no token class a block can produce without a color in the stylesheet", () => {
+    const container = reply('```json\n{"a": 1, "b": "x", "c": true, "d": null, "e": [1.5]}\n```\n');
+    // the Jinja templates sit beside static/, not under it
+    const css = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+
+    const classes = new Set(
+      [...container.querySelectorAll(".cm-line [class]")]
+        .flatMap((el) => [...el.classList])
+        .filter((name) => name.startsWith("tok-")),
+    );
+
+    expect(classes.size).toBeGreaterThan(0);
+    for (const name of classes) {
+      expect(css, name).toMatch(new RegExp(`\\.sensai-cm-block \\.${name}\\b[^{]*\\{[^}]*color:`));
+    }
+  });
+});
+
+describe("the SensAI window's header and tabs", () => {
+  // the Jinja templates sit beside static/, not under it
+  const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+
+  it("has no Clear button: closing a chat does that", () => {
+    expect(template).not.toMatch(/clear\(\)/);
+    expect(template).not.toMatch(/>\s*Clear\s*</);
+  });
+
+  it("offers closing on every chat, the only one included, which leaves an empty chat", () => {
+    // the button's own tag, up to its icon (an attribute can hold a `>`, as in `tabs.length > 1`)
+    const at = template.indexOf('@click.stop="closeTab(tab.id)"');
+    const tag = template.slice(template.lastIndexOf("<button", at), template.indexOf("<svg", at));
+
+    expect(at).toBeGreaterThan(-1);
+    // no condition on how many chats there are: with the Clear button gone it is the way to empty one
+    expect(tag).not.toContain("x-show");
+    expect(tag).toContain("Close chat, leaving an empty one");
+  });
+
+  it("has no way left to call clear on the component", async () => {
+    const s = await boot();
+
+    expect((s as unknown as { clear?: unknown }).clear).toBeUndefined();
+  });
+});
+
