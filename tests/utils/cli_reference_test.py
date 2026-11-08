@@ -2,6 +2,7 @@
 
 import enum
 import importlib
+import os
 import re
 from pathlib import Path
 from types import ModuleType
@@ -109,6 +110,73 @@ class TestTheRealCommandLine:
             "docs/reference/cli.md is out of date. "
             "Run: python scripts/gen_cli_reference.py"
         )
+
+    def test_the_page_is_the_same_whatever_settings_the_machine_has(
+        self,
+        generator: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Many defaults on the command line come from the user's settings, so a page written on a machine with settings of its own would fail the check anywhere else. A global settings file, a project one and `MUJOCO_MOJO_*` variables are all set here, and the page does not show them."""
+        home = tmp_path / "home"
+        (home / ".mujoco-mojo").mkdir(parents=True)
+        (home / ".mujoco-mojo" / "settings.toml").write_text(
+            '[general]\nn_proc = 7\n\n[reloaded]\nui = "studio"\n', encoding="utf-8"
+        )
+        project = tmp_path / "project"
+        (project / ".mujoco-mojo").mkdir(parents=True)
+        (project / ".mujoco-mojo" / "settings.toml").write_text(
+            '[general]\nxml_name = "mine.xml"\n', encoding="utf-8"
+        )
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
+        monkeypatch.chdir(project)
+        monkeypatch.setenv("MUJOCO_MOJO_GENERAL__MODEL_CONFIG_NAME", "mine")
+        monkeypatch.setenv("MUJOCO_MOJO_RUN__MONTE_CARLO__RESUME", "false")
+
+        page = generator.render()
+
+        assert page == generator.OUTPUT.read_text(encoding="utf-8")
+        assert (
+            "| `--user-interface`, `-ui` | one of `opengl`, `studio`, `web` | `web` |"
+            in page
+        )
+
+    def test_the_clean_environment_has_none_of_the_machines_settings(
+        self, generator: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("MUJOCO_MOJO_GENERAL__N_PROC", "5")
+        monkeypatch.setenv("MUJOCO_MOJO_RELOADED__UI", "studio")
+        monkeypatch.setenv("SOME_OTHER_VARIABLE", "kept")
+
+        environment = generator.clean_environment("/empty/home")
+
+        assert environment["HOME"] == "/empty/home"
+        assert environment["USERPROFILE"] == "/empty/home"
+        # the machine's own variables are gone, and the viewer is the one pinned value
+        assert {name for name in environment if name.startswith("MUJOCO_MOJO_")} == {
+            "MUJOCO_MOJO_RELOADED__UI"
+        }
+        assert environment["MUJOCO_MOJO_RELOADED__UI"] == "web"
+        # everything else is left as it is, since the child needs its PATH and the like
+        assert environment["SOME_OTHER_VARIABLE"] == "kept"
+
+    def test_a_command_line_that_cannot_be_read_fails_with_what_the_child_said(
+        self, generator: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A viewer that is not one makes the settings invalid, so the child cannot import the command line, and the page is not written from nothing."""
+        monkeypatch.setattr(
+            generator,
+            "clean_environment",
+            lambda home: {
+                **os.environ,
+                "HOME": home,
+                "MUJOCO_MOJO_RELOADED__UI": "not-a-viewer",
+            },
+        )
+
+        with pytest.raises(RuntimeError, match="reading the command line failed"):
+            generator.render()
 
     def test_every_command_has_a_section_and_every_option_is_in_it(
         self, generator: ModuleType

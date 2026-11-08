@@ -5,6 +5,8 @@ The page is read off the Typer app itself, so every command, argument and option
 
 Typer bundles its own copy of click (`typer._click`), so a `click.Group`, `click.Option` or `click.Argument` check on one of its commands is never true. This reads them by what they have instead: a command with `commands` is a group, and a parameter says what it is in `param_type_name`.
 
+Many defaults on the command line come from the user's settings (`~/.mujoco-mojo/settings.toml`, a project's `.mujoco-mojo/settings.toml`, `MUJOCO_MOJO_*` variables), and the viewer default depends on whether this machine's MuJoCo can serve the web viewer. A page written from whatever machine ran the script would show that machine's values, and the test that checks the page would fail on any machine that differs. So the real command line is read in a child process on a clean footing (see `clean_environment`): an empty home, no `MUJOCO_MOJO_*` variables, and the viewer pinned to `web`.
+
 Usage:
     python scripts/gen_cli_reference.py           # rewrite the page
     python scripts/gen_cli_reference.py --check   # exit 1 if the page is out of date, changing nothing
@@ -15,8 +17,11 @@ The pre-commit hook `gen-cli-reference` runs it when the command line changes, a
 from __future__ import annotations
 
 import enum
+import os
 import re
+import subprocess
 import sys
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -214,8 +219,24 @@ def _section(path: list[str], command: Any) -> str:
     return "\n\n".join(blocks)
 
 
-def render(app: typer.Typer | None = None, program: str = "mujoco-mojo") -> str:
-    """The text of the page for `app`, the `mujoco-mojo` command line unless another is given."""
+def clean_environment(home: str) -> dict[str, str]:
+    """The environment to read the real command line in: this one with `home` as the home directory (so no global settings file is found), no `MUJOCO_MOJO_*` variable (so no setting is overridden), and the viewer set to `web`. The viewer default is the one that comes from the machine and not from the code (`web` where MuJoCo can serve it, `opengl` where it cannot), so it is pinned to one value for the page to read the same everywhere."""
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("MUJOCO_MOJO_")
+    }
+    environment.update(
+        HOME=home,
+        USERPROFILE=home,
+        PYTHONIOENCODING="utf-8",
+        MUJOCO_MOJO_RELOADED__UI="web",
+    )
+    return environment
+
+
+def render_here(app: typer.Typer | None = None, program: str = "mujoco-mojo") -> str:
+    """The text of the page for `app` as this process reads it, the `mujoco-mojo` command line unless another is given. Its defaults are this machine's, so the real command line is read with `render`, which cleans them."""
     if app is None:
         from mujoco_mojo.utils.layers.cli import cli_app
 
@@ -237,19 +258,49 @@ def render(app: typer.Typer | None = None, program: str = "mujoco-mojo") -> str:
     return "\n\n".join(blocks) + "\n"
 
 
-def stale() -> bool:
-    """Whether the page is missing or differs from what the command line gives."""
-    return not OUTPUT.is_file() or OUTPUT.read_text(encoding="utf-8") != render()
+def render(app: typer.Typer | None = None, program: str = "mujoco-mojo") -> str:
+    """The text of the page for `app`, the `mujoco-mojo` command line unless another is given. The real command line is read in a child process on the clean footing `clean_environment` gives, and the page comes back through a file, so anything the import prints cannot get into it."""
+    if app is not None:
+        return render_here(app, program)
+    with tempfile.TemporaryDirectory() as home:
+        page = Path(home) / "cli.md"
+        done = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--render-to", str(page)],
+            cwd=home,
+            env=clean_environment(home),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        if done.returncode != 0:
+            raise RuntimeError(
+                f"reading the command line failed:\n{done.stdout}\n{done.stderr}"
+            )
+        return page.read_text(encoding="utf-8")
+
+
+def stale(page: str | None = None) -> bool:
+    """Whether the page is missing or differs from what the command line gives, which is `page` when it is already rendered (reading the command line takes a moment)."""
+    if page is None:
+        page = render()
+    return not OUTPUT.is_file() or OUTPUT.read_text(encoding="utf-8") != page
 
 
 def main(argv: list[str]) -> int:
+    if "--render-to" in argv:
+        # what `render` runs in its child process: this process's own reading of the command line
+        target = Path(argv[argv.index("--render-to") + 1])
+        target.write_text(render_here(), encoding="utf-8", newline="\n")
+        return 0
+    page = render()
     if "--check" in argv:
-        if stale():
+        if stale(page):
             print(f"out of date: {OUTPUT.relative_to(ROOT)}")
             print("Run: python scripts/gen_cli_reference.py")
-        return 1 if stale() else 0
-    if stale():
-        OUTPUT.write_text(render(), encoding="utf-8", newline="\n")
+        return 1 if stale(page) else 0
+    if stale(page):
+        OUTPUT.write_text(page, encoding="utf-8", newline="\n")
         print(f"Written -> {OUTPUT.relative_to(ROOT)}")
     return 0
 

@@ -39,6 +39,39 @@ def test_every_guide_is_bundled_and_nothing_else(generator: ModuleType) -> None:
     assert len(wanted) >= 20
 
 
+def test_a_markdown_file_in_a_mojo_working_directory_is_not_a_guide(
+    generator: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Running an example in the guides folder leaves a working directory there, with a report in it. Mojo writes a `.gitignore` of `*` into a working directory, so git ignores it whole: it is on the machine that ran it and not on any other, and bundling it made the check fail anywhere but there."""
+    guides = tmp_path / "guides"
+
+    def write(relative: str, text: str = "text\n") -> None:
+        path = guides / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    write("intro.md")
+    write("run/.gitignore", "*")
+    write("run/MOJO_RUNTIME_REPORT.md")
+    write("run/trials/trial_0/notes.md")
+    write("shared/.gitignore", "*.pyc\n")
+    write("shared/page.md")
+    write("shared/keep.md")
+    write("shared/out/.gitignore", "*\n")
+    write("shared/out/report.md")
+    # a `.gitignore` of `*` above the guides folder is not one of theirs
+    (tmp_path / ".gitignore").write_text("*", encoding="utf-8")
+    monkeypatch.setattr(generator, "SOURCE_DIR", guides)
+
+    found = [
+        path.relative_to(guides).as_posix()
+        for path in generator.sources()
+        if path.is_relative_to(guides)
+    ]
+
+    assert found == ["intro.md", "shared/keep.md", "shared/page.md"]
+
+
 def test_rendering_is_deterministic(generator: ModuleType) -> None:
     """A guide that rendered differently from one run to the next would make the staleness check fail on every commit."""
     for source in generator.sources():

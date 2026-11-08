@@ -8,7 +8,7 @@ The guides in `docs/user-guides/` are written for the docs site, and read as pla
 - HTML comments (notes for the people who maintain the docs) are removed
 - attribute lists after a link (`{ .md-button }`) and icon codes (`:material-open-in-new:`) are removed
 
-Code blocks are left alone apart from the includes. The output mirrors the folder layout of `docs/user-guides/`, one file per guide, and the generated command line reference (`docs/reference/cli.md`) is bundled with them as `reference/cli.md`.
+Markdown inside a Mojo working directory (a folder whose `.gitignore` is just `*`, as running an example in the guides folder leaves behind) is output of a run and not a guide, so it is skipped. Code blocks are left alone apart from the includes. The output mirrors the folder layout of `docs/user-guides/`, one file per guide, and the generated command line reference (`docs/reference/cli.md`) is bundled with them as `reference/cli.md`.
 
 Usage:
     python scripts/gen_user_guide.py           # rewrite the bundled guides
@@ -58,9 +58,25 @@ class GuideError(Exception):
     """A guide that cannot be written as plain markdown, such as an include of a file or section that is not there."""
 
 
+def in_working_directory(path: Path) -> bool:
+    """Whether `path` is inside a Mojo working directory, which is output of a run and not a guide. Mojo writes a `.gitignore` holding just `*` into every working directory it makes, so a folder with one is ignored by git whole, exists only on the machine that ran it, and has to stay out of the bundle: a report written there (`MOJO_RUNTIME_REPORT.md`) names that machine's folders, and would be a guide on one machine and not on another."""
+    for folder in path.parents:
+        if folder == SOURCE_DIR:
+            return False
+        marker = folder / ".gitignore"
+        if marker.is_file() and marker.read_text(encoding="utf-8").strip() == "*":
+            return True
+    return False
+
+
 def sources() -> list[Path]:
-    """Every guide, in a fixed order, then the reference pages bundled with them."""
-    return [*sorted(SOURCE_DIR.rglob("*.md")), *REFERENCE_PAGES]
+    """Every guide, in a fixed order, then the reference pages bundled with them. A markdown file in a Mojo working directory is not a guide."""
+    guides = (
+        path
+        for path in sorted(SOURCE_DIR.rglob("*.md"))
+        if not in_working_directory(path)
+    )
+    return [*guides, *REFERENCE_PAGES]
 
 
 def output_path(source: Path) -> Path:
