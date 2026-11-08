@@ -41,6 +41,7 @@ import {
 } from "./lib/store-logic";
 import type {
   ChangelogResponse,
+  ColumnManifest,
   DojoStore,
   JobStatus,
   NotificationEntry,
@@ -106,6 +107,7 @@ document.addEventListener("alpine:init", () => {
       !!window.__mojoDefaultToFullscreen,
     ),
     overlayCount: 0,
+    columnManifest: null as ColumnManifest | null,
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem("mojo_muted") !== "false",
@@ -340,7 +342,7 @@ document.addEventListener("alpine:init", () => {
         try {
           await navigator.clipboard.writeText(text);
           this.toast(successMsg, "success");
-          return;
+          return true;
         } catch (err) {
           console.warn("Modern clipboard failed, falling back...", err);
         }
@@ -351,14 +353,17 @@ document.addEventListener("alpine:init", () => {
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
+      let copied = false;
       try {
         if (document.execCommand("copy")) {
           this.toast(successMsg, "success");
+          copied = true;
         } else throw new Error("execCommand returned false");
       } catch {
         this.toast("Failed to copy to clipboard", "error");
       }
       document.body.removeChild(textArea);
+      return copied;
     },
 
     _setConnected(connected: boolean) {

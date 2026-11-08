@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  PINNED_KEY,
   STORAGE_KEY,
   chatHistory,
   chatRequestBody,
@@ -9,13 +10,17 @@ import {
   createSseParser,
   enabledFromSettings,
   historyExport,
+  headerTooltip,
   historyFileName,
   isAtBottom,
+  lastUserIndex,
   loadMessages,
+  loadPinned,
   messageLayout,
   resultContent,
   revealStep,
   saveMessages,
+  savePinned,
   storedMessages,
   type SensAIMessage,
   type SseEvent,
@@ -238,7 +243,7 @@ describe("chatHistory", () => {
 
 describe("chatRequestBody", () => {
   it("is the message, the history, and the plot config", () => {
-    const body = chatRequestBody("what now", [msg({ content: "earlier" }), msg({ content: "what now" })], '{"title":"T"}');
+    const body = chatRequestBody("what now", [msg({ content: "earlier" }), msg({ content: "what now" })], '{"title":"T"}', null);
     expect(body).toEqual({
       message: "what now",
       message_history: [{ role: "user", content: "earlier" }],
@@ -250,7 +255,29 @@ describe("chatRequestBody", () => {
   });
 
   it("sends null when there is no stored plot config", () => {
-    expect((chatRequestBody("q", [msg()], null) as { current_plot_config_json: unknown }).current_plot_config_json).toBeNull();
+    expect((chatRequestBody("q", [msg()], null, null) as { current_plot_config_json: unknown }).current_plot_config_json).toBeNull();
+  });
+
+  it("sends the trial's signals so the agent can check the names it uses", () => {
+    const manifest = {
+      all: ["time", "Bodies/B/xpos:x", "Bodies/B/quat:w"],
+      rotatable_vectors: ["Bodies/B/xpos"],
+      available_quats: ["Bodies/B/quat"],
+    };
+
+    expect(chatRequestBody("q", [msg()], null, manifest)).toMatchObject({
+      all_columns: ["time", "Bodies/B/xpos:x", "Bodies/B/quat:w"],
+      rotatable_vectors: ["Bodies/B/xpos"],
+      available_quats: ["Bodies/B/quat"],
+    });
+  });
+
+  it("sends empty lists away from a trial, where there are no signals", () => {
+    expect(chatRequestBody("q", [msg()], null, null)).toMatchObject({
+      all_columns: [],
+      rotatable_vectors: [],
+      available_quats: [],
+    });
   });
 });
 
@@ -353,6 +380,48 @@ describe("historyExport", () => {
   });
 });
 
+describe("a reply's model", () => {
+  const NOW = new Date("2026-03-04T05:06:07.000Z");
+  const T = Date.parse("2026-03-04T01:02:03.000Z");
+
+  it("is named in the header's tooltip", () => {
+    expect(headerTooltip("gemini-3.5-flash-lite", true, true)).toBe("Response from gemini-3.5-flash-lite");
+  });
+
+  it("shares the tooltip with what a click does, on a message that can collapse", () => {
+    expect(headerTooltip("m1", false, true)).toBe("Response from m1\nCollapse");
+    expect(headerTooltip("m1", false, false)).toBe("Response from m1\nExpand");
+  });
+
+  it("leaves the click hint alone when the server did not say which model it was", () => {
+    expect(headerTooltip(undefined, false, true)).toBe("Collapse");
+    expect(headerTooltip(null, false, false)).toBe("Expand");
+    expect(headerTooltip("", false, true)).toBe("Collapse");
+  });
+
+  it("has no tooltip at all with no model and nothing to collapse", () => {
+    expect(headerTooltip(undefined, true, true)).toBe("");
+  });
+
+  it("is exported with the message, after its route, only when it has one", () => {
+    const out = historyExport(
+      [
+        msg({ role: "assistant", ts: T, routed_to: "plot_config", model: "m1" }),
+        msg({ role: "assistant", ts: T }),
+      ],
+      NOW,
+    ) as { messages: Array<Record<string, unknown>> };
+    expect(Object.keys(out.messages[0]!)).toEqual(["timestamp", "sender", "message", "routed_to", "model"]);
+    expect(out.messages[0]).toMatchObject({ model: "m1" });
+    expect(out.messages[1]).not.toHaveProperty("model");
+  });
+
+  it("survives a save and a load", () => {
+    saveMessages([msg({ role: "assistant", model: "m1" })]);
+    expect(loadMessages()?.[0]).toMatchObject({ model: "m1" });
+  });
+});
+
 describe("historyFileName", () => {
   it("is named for the day, in UTC", () => {
     expect(historyFileName(new Date("2026-03-04T05:06:07.000Z"))).toBe("sensai-chat-2026-03-04.json");
@@ -436,5 +505,72 @@ describe("messageLayout", () => {
   it("assumes a 22px line when the line height is not a number", () => {
     expect(messageLayout("user", 55, "normal")).toEqual({ single: true, open: true });
     expect(messageLayout("user", 56, "normal")).toEqual({ single: false, open: false });
+  });
+
+  it("starts a longer user message open when it is the latest one they sent", () => {
+    expect(messageLayout("user", 51, "20px", true)).toEqual({ single: false, open: true });
+    expect(messageLayout("user", 51, "20px", false)).toEqual({ single: false, open: false });
+  });
+
+  it("leaves the latest-message flag out of what an assistant message does", () => {
+    expect(messageLayout("assistant", 51, "20px", true)).toEqual({ single: false, open: true });
+    expect(messageLayout("assistant", 51, "20px", false)).toEqual({ single: false, open: true });
+  });
+});
+
+describe("lastUserIndex", () => {
+  it("is the position of the latest message the user sent", () => {
+    const messages = [
+      msg({ role: "user" }),
+      msg({ role: "assistant" }),
+      msg({ role: "user" }),
+      msg({ role: "assistant" }),
+    ];
+    expect(lastUserIndex(messages)).toBe(2);
+  });
+
+  it("skips replies after it, and counts a message that has no reply yet", () => {
+    expect(lastUserIndex([msg({ role: "assistant" }), msg({ role: "user" })])).toBe(1);
+  });
+
+  it("is -1 with no message from the user", () => {
+    expect(lastUserIndex([])).toBe(-1);
+    expect(lastUserIndex([msg({ role: "assistant" })])).toBe(-1);
+  });
+});
+
+describe("pinned", () => {
+  it("is unpinned when nothing was saved", () => {
+    expect(loadPinned()).toBe(false);
+  });
+
+  it("is remembered once pinned, and forgotten once unpinned", () => {
+    savePinned(true);
+    expect(loadPinned()).toBe(true);
+    savePinned(false);
+    expect(loadPinned()).toBe(false);
+  });
+
+  it("stores a flag a person could read in the browser's storage tab", () => {
+    savePinned(true);
+    expect(localStorage.getItem(PINNED_KEY)).toBe("1");
+    savePinned(false);
+    expect(localStorage.getItem(PINNED_KEY)).toBe("0");
+  });
+
+  it("treats anything but the saved flag as unpinned", () => {
+    localStorage.setItem(PINNED_KEY, "yes");
+    expect(loadPinned()).toBe(false);
+  });
+
+  it("survives storage that cannot be read or written", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(loadPinned()).toBe(false);
+    expect(() => savePinned(true)).not.toThrow();
   });
 });

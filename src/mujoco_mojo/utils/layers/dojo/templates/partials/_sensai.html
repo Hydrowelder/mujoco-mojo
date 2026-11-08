@@ -92,8 +92,8 @@
 <!-- SensAI FAB + compact chat panel - fixed bottom-right -->
 <div x-data="sensai()"
      x-show="enabled !== false"
-     @keydown.escape.window="if (open) close()"
-     @click.away="close()"
+     @keydown.escape.window="if (open) dismiss()"
+     @click.away="dismiss()"
      class="fixed bottom-6 right-6 z-400">
 
   <!-- chat panel - appears above the FAB -->
@@ -121,11 +121,30 @@
         </svg>
         <span class="font-black uppercase tracking-widest text-base text-ink-strong">SensAI</span>
       </div>
-      <button @click="clear()"
-              x-show="messages.length > 0"
-              class="text-sm font-mono text-ink-muted hover:text-danger-500 transition-colors">
-        Clear
-      </button>
+      <div class="flex items-center gap-3">
+        <!-- pin: keeps the window open when you click elsewhere on the page -->
+        <button @click="togglePin()"
+                :aria-pressed="pinned"
+                class="flex items-center transition-colors"
+                :class="pinned ? 'text-accent-500' : 'text-ink-muted hover:text-ink-body'"
+                :title="pinned ? 'Unpin: SensAI closes when you click elsewhere' : 'Pin open: SensAI stays open when you click elsewhere'">
+          <svg class="w-4 h-4"
+               :fill="pinned ? 'currentColor' : 'none'"
+               stroke="currentColor"
+               stroke-linecap="round"
+               stroke-linejoin="round"
+               stroke-width="1.75"
+               viewBox="0 0 24 24">
+            <line x1="12" y1="17" x2="12" y2="22" />
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+          </svg>
+        </button>
+        <button @click="clear()"
+                x-show="messages.length > 0"
+                class="text-sm font-mono text-ink-muted hover:text-danger-500 transition-colors">
+          Clear
+        </button>
+      </div>
     </div>
 
     <!-- message list -->
@@ -153,9 +172,9 @@
         <!-- messages -->
         <template x-for="(msg, i) in messages"
                   :key="i">
-          <div x-data="sensaiMsgData(msg.role)"
-               x-init="$nextTick(() => { initSensAICodeBlocks($el); measure(); })"
-               @sensai-remeasure.window="$nextTick(() => { initSensAICodeBlocks($el); measure(); })"
+          <div x-data="sensaiMsgData(msg.role, isLastUserMessage(i))"
+               x-init="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
+               @sensai-remeasure.window="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
                class="flex flex-col gap-0.5"
                :class="msg.role === 'user' ? 'items-end' : 'items-start'">
 
@@ -165,7 +184,7 @@
                     @keydown.space.prevent="if (!single) open = !open"
                     class="flex items-center gap-1.5 text-xs font-mono text-ink-muted px-1 transition-colors"
                     :class="!single ? 'hover:text-ink-body cursor-pointer' : 'cursor-default'"
-                    :title="!single ? (open ? 'Collapse' : 'Expand') : ''">
+                    :title="headerTooltip(msg.model, single, open)">
               <span x-text="msg.role === 'user' ? 'You' : 'SensAI'"></span>
               <span>·</span>
               <span x-text="notifTimeAgo(msg.ts, $store.dojo.notifTick)"></span>
@@ -206,6 +225,35 @@
                      x-html="renderMarkdown(msg.content)"></div>
               </template>
             </div>
+
+            <!-- copy button: below the bubble, on the same side as it -->
+            <button @click="copy(msg.content)"
+                    class="flex items-center px-1 py-0.5 transition-colors"
+                    :class="copied ? 'text-success-500' : 'text-ink-muted hover:text-ink-body'"
+                    :title="copied ? 'Copied' : 'Copy message'"
+                    aria-label="Copy message">
+              <svg x-show="!copied"
+                   class="w-3.5 h-3.5"
+                   fill="none"
+                   stroke="currentColor"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="1.75"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <svg x-show="copied"
+                   x-cloak
+                   class="w-3.5 h-3.5"
+                   fill="none"
+                   stroke="currentColor"
+                   viewBox="0 0 24 24">
+                <path stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.25"
+                      d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
           </div>
         </template>
 

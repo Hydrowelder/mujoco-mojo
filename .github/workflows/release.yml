@@ -42,9 +42,53 @@ jobs:
         # Explicitly tells uv which python version to use for the test environment;
         # --locked fails the job if uv.lock is out of date with pyproject.toml
         run: uv run --locked --python ${{ matrix.python-version }} --group dev --extra all pytest
+  frontend:
+    name: "Frontend (types, lint, tests, build)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # the Dojo's frontend is its own npm project, apart from the Python package
+        working-directory: src/mujoco_mojo/utils/layers/dojo/templates/static/ts
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/mujoco_mojo/utils/layers/dojo/templates/static/ts/package-lock.json
+
+      - name: Install dependencies
+        # installs exactly what package-lock.json says, and fails if it is out of date with package.json
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the committed build is current
+        # static/dist is committed, so it is what ships: a change to the TypeScript
+        # without a rebuilt dist would release the old code
+        run: |
+          if [ -n "$(git status --porcelain -- ../dist)" ]; then
+            git status --short -- ../dist
+            echo "::error::static/dist is out of date with the TypeScript sources. Run 'npm run build' in the ts directory and commit the result."
+            exit 1
+          fi
   publish:
     name: "Build and Publish"
-    needs: [test]
+    needs: [test, frontend]
     # ONLY run this job if the push was actually a tag
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest

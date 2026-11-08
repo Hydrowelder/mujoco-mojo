@@ -660,12 +660,16 @@
        while staying below the z-1000 toast layer - a toast (e.g. a save
        error) should still be seen over a confirmation prompt, not hidden
        behind it. -->
+  {# Enter must only be prevented while this dialog is open. The .prevent modifier
+     would cancel the default of every Enter on the page, even with no dialog:
+     no newline in a textarea (SensAI's Shift+Enter), no click from Enter on a
+     focused button. #}
   <div x-data
        x-show="$store.dojo.dialog.show"
        class="fixed inset-0 z-980 flex items-center justify-center p-4"
        style="display:none;"
        @keydown.escape.window="$store.dojo.dialog.cancel()"
-       @keydown.enter.window.prevent="if ($store.dojo.dialog.show) $store.dojo.dialog.confirm()">
+       @keydown.enter.window="if ($store.dojo.dialog.show) { $event.preventDefault(); $store.dojo.dialog.confirm() }">
 
     <!-- backdrop: its own explicit enter/leave (styles/overlay.css's
          .modal-backdrop), timed identically to the card below - see the

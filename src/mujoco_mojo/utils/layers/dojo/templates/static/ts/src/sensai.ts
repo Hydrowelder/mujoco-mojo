@@ -1,3 +1,4 @@
+import type { DojoStore } from "./models";
 import type { AlpineMagics } from "./types/global";
 import {
   EditorView,
@@ -15,11 +16,15 @@ import {
   historyExport,
   historyFileName,
   isAtBottom,
+  lastUserIndex,
   loadMessages,
+  loadPinned,
+  headerTooltip,
   messageLayout,
   resultContent,
   revealStep,
   saveMessages,
+  savePinned,
   storedMessages,
   type SensAIMessage,
   type SseEvent,
@@ -32,6 +37,9 @@ interface SensAIConfig {
 function sensai() {
   return {
     open: false,
+    // pinned keeps the window open when the user clicks elsewhere or presses
+    // Escape; only the SensAI button closes it then
+    pinned: false,
     loading: false,
     streaming: false,
     streamingContent: "",
@@ -43,9 +51,16 @@ function sensai() {
     hasNewResponse: false,
     _revealQueue: "",
     _revealTimer: null as number | null,
+    headerTooltip,
+
+    // whether message `i` is the latest one the user sent, which starts open
+    isLastUserMessage(i: number): boolean {
+      return lastUserIndex(this.messages) === i;
+    },
 
     async init() {
       this._loadMessages();
+      this.pinned = loadPinned();
       (this as unknown as AlpineMagics).$watch("input", () => {
         const el = (this as unknown as AlpineMagics).$refs["inputArea"];
         if (el) this.resize(el);
@@ -86,6 +101,17 @@ function sensai() {
       this.open = false;
     },
 
+    // what a click elsewhere on the page, or Escape, does: close the window,
+    // unless it is pinned
+    dismiss() {
+      if (!this.pinned) this.close();
+    },
+
+    togglePin() {
+      this.pinned = !this.pinned;
+      savePinned(this.pinned);
+    },
+
     async send() {
       const message = this.input.trim();
       if (!message || this.loading) return;
@@ -107,7 +133,12 @@ function sensai() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            chatRequestBody(message, this.messages, currentPlotConfigJson),
+            chatRequestBody(
+              message,
+              this.messages,
+              currentPlotConfigJson,
+              (Alpine.store("dojo") as DojoStore).columnManifest,
+            ),
           ),
         });
 
@@ -164,6 +195,7 @@ function sensai() {
             content,
             plot_config_update: payload.plot_config_update ?? null,
             routed_to: payload.routed_to,
+            model: payload.model ?? undefined,
             ts: Date.now(),
           });
           if (payload.plot_config_update) {
@@ -358,12 +390,25 @@ interface SensAIMsgState {
   _role: string;
 }
 
-function sensaiMsgData(role: string) {
+// how long the copy button shows its check mark
+const COPIED_MS = 1500;
+
+function sensaiMsgData(role: string, isLastUser = false) {
   return {
-    open: role !== "user",
+    open: role !== "user" || isLastUser,
     single: false,
+    copied: false,
     _role: role,
-    measure() {
+    // copies a message's own text (the markdown of a reply, not its rendering)
+    async copy(text: string) {
+      const ok = await (Alpine.store("dojo") as DojoStore).copyText(text, "Message copied");
+      if (!ok) return;
+      this.copied = true;
+      setTimeout(() => {
+        this.copied = false;
+      }, COPIED_MS);
+    },
+    measure(isLastUser = false) {
       const self = this as unknown as SensAIMsgState & AlpineMagics;
       // assistant messages render into .sensai-md; user messages use a plain <p>
       const content = (
@@ -375,6 +420,7 @@ function sensaiMsgData(role: string) {
         self._role,
         content.scrollHeight,
         getComputedStyle(content).lineHeight,
+        isLastUser,
       );
       self.single = layout.single;
       self.open = layout.open;

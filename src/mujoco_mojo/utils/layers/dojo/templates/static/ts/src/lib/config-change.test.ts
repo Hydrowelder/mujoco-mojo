@@ -6,6 +6,7 @@ import {
   needsRefFrameMigration,
   needsVsSync,
   planConfigChange,
+  signalsToFetch,
 } from "./config-change";
 import type { FilterEntry, PlotConfig } from "./plot-config.generated";
 import { DEFAULT_CONFIG } from "./plot-defaults";
@@ -218,5 +219,41 @@ describe("activeColumns", () => {
 
   it("is just the x column with no signals", () => {
     expect(activeColumns(cfg({}))).toEqual(["time"]);
+  });
+});
+
+describe("signalsToFetch", () => {
+  const COLUMNS = ["time", "a", "b", "c"];
+
+  it("is the plotted signals with no data yet", () => {
+    expect(signalsToFetch(cfg({ a: [], b: [] }), { time: [0], a: [1] }, COLUMNS)).toEqual(["b"]);
+  });
+
+  it("is every plotted signal on a blank plot that has only fetched its x column", () => {
+    expect(signalsToFetch(cfg({ a: [], b: [] }), { time: [0, 1] }, COLUMNS)).toEqual(["a", "b"]);
+  });
+
+  it("is every plotted signal when no data has loaded", () => {
+    expect(signalsToFetch(cfg({ a: [] }), null, COLUMNS)).toEqual(["a"]);
+  });
+
+  it("leaves out a signal whose data is there, even an empty series", () => {
+    expect(signalsToFetch(cfg({ a: [] }), { a: [] }, COLUMNS)).toEqual([]);
+  });
+
+  it("leaves out a signal the trial does not have, which could never be fetched", () => {
+    expect(signalsToFetch(cfg({ a: [], nope: [] }), {}, COLUMNS)).toEqual(["a"]);
+  });
+
+  it("fetches nothing while the trial's columns are not known", () => {
+    expect(signalsToFetch(cfg({ a: [] }), {}, [])).toEqual([]);
+  });
+
+  it("is empty for a plot with no signals, and does not include the x column", () => {
+    expect(signalsToFetch(cfg({}), {}, COLUMNS)).toEqual([]);
+  });
+
+  it("keeps the order the signals are plotted in", () => {
+    expect(signalsToFetch(cfg({ c: [], a: [], b: [] }), {}, COLUMNS)).toEqual(["c", "a", "b"]);
   });
 });

@@ -54,6 +54,24 @@ export function planConfigChange(
   };
 }
 
+// the plotted signals that have no data yet, and that the trial has. the config
+// watcher fetches a signal only when its filters change, so one that a config
+// swapped in whole has just added (typed into the JSON editor, sent by SensAI,
+// restored by undo, loaded from a profile) would wait for the background
+// loader, which can be cut short, and show no trace until it came. a name the
+// trial does not have is left out: it could never be fetched, and trying again
+// on every config change would only repeat the failure
+export function signalsToFetch(
+  config: PlotConfig,
+  data: Record<string, number[]> | null,
+  trialColumns: string[],
+): string[] {
+  const known = new Set(trialColumns);
+  return Object.keys(config.yAxes).filter(
+    (col) => known.has(col) && !Object.prototype.hasOwnProperty.call(data ?? {}, col),
+  );
+}
+
 // comparison trials need syncing again when the x column changes or the set of
 // signals does (one added, removed or swapped for another), since each trial's
 // data holds just the plotted columns. reordering the signals changes nothing

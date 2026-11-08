@@ -19,6 +19,20 @@ from pydantic.alias_generators import to_camel
 from mujoco_mojo.utils.filters.filters import AnyFilter
 
 # ---------------------------------------------------------------------------
+# signal colors
+# ---------------------------------------------------------------------------
+
+PLOT_COLORS: tuple[str, ...] = (
+    "#00b8db",
+    "#00bc7d",
+    "#2b7fff",
+    "#8e51ff",
+    "#fe9a00",
+    "#ff2056",
+)
+"""The colors a signal added to the plot takes, in this order, each as a 6-digit hex string. The trial viewer's color picker and its next-color rule read this list, through the generated TypeScript constant of the same name (run `python scripts/gen_ts_models.py` after changing it), and SensAI picks colors from it and is shown it in its instructions."""
+
+# ---------------------------------------------------------------------------
 # String-enum types  (generate named TypeScript union types)
 # ---------------------------------------------------------------------------
 

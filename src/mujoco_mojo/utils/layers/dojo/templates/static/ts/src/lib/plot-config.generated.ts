@@ -317,3 +317,13 @@ export interface PlotConfig {
 }
 
 export type Shape = VlineShape | HlineShape | RectShape;
+
+/** the colors a signal added to the plot takes, in order (PLOT_COLORS in plot_config.py). */
+export const PLOT_COLORS: readonly string[] = [
+  "#00b8db",
+  "#00bc7d",
+  "#2b7fff",
+  "#8e51ff",
+  "#fe9a00",
+  "#ff2056",
+];

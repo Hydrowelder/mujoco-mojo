@@ -21,3 +21,6 @@ class SensAIDeps:
 
     current_plot_config: PlotConfig | None
     """The plot config currently active in the trial viewer, or None if not set."""
+
+    plot_edit_refusal: str | None = None
+    """Why the plot agent's latest edit or profile load was refused, or None if it was not. When the model keeps repeating a refused call until it runs out of tries, the chat agent tells the user this instead of the turn failing."""

@@ -187,6 +187,9 @@ filterwarnings = [
     # starlette's TestClient reads an alias that anyio has deprecated, as soon
     # as it is imported
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    # google-genai, which the SensAI package imports, still uses a typing alias that
+    # Python 3.14 deprecates, as soon as it is imported
+    "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning",
 ]
 
 [project.urls]

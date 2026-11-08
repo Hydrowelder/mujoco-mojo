@@ -6,7 +6,7 @@ Run from the repo root:
     python scripts/gen_ts_models.py
 
 Writes:
-    src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/plot-config.generated.ts (from plot_config.py)
+    src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/plot-config.generated.ts (from plot_config.py: the models and PLOT_COLORS)
     src/mujoco_mojo/utils/layers/dojo/templates/static/ts/src/lib/column-metadata.generated.ts (from signal_metadata.py's ColumnMetadata)
 """
 
@@ -219,7 +219,7 @@ def _top_level_interface(
 def main() -> None:
     # Import inside main so sys.path manipulation is localised
     sys.path.insert(0, str(ROOT / "src"))
-    from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig
+    from mujoco_mojo.utils.layers.dojo.plot_config import PLOT_COLORS, PlotConfig
 
     schema = PlotConfig.model_json_schema()
     defs: dict[str, Any] = schema.get("$defs", {})
@@ -244,6 +244,14 @@ def main() -> None:
     # Emit named unions discovered while walking properties (e.g. Shape)
     for union_name, union_body in extra_unions.items():
         blocks.append(f"export type {union_name} = {union_body};\n")
+
+    # the signal color cycle, so the templates' `x-for="color in plotColors"` and
+    # the next-color rule follow the one list in plot_config.py
+    colors = "".join(f'  "{color}",\n' for color in PLOT_COLORS)
+    blocks.append(
+        "/** the colors a signal added to the plot takes, in order (PLOT_COLORS in plot_config.py). */\n"
+        f"export const PLOT_COLORS: readonly string[] = [\n{colors}];\n"
+    )
 
     # No baked-in JSON Schema document here (there used to be one, for
     # lib/schema-validate.ts's additive client-side validation) - it was a

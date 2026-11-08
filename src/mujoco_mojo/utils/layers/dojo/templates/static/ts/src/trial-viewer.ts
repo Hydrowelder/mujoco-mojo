@@ -163,6 +163,7 @@ import {
   needsRefFrameMigration,
   needsVsSync,
   planConfigChange,
+  signalsToFetch,
 } from "./lib/config-change";
 import { paddingLength, sharedLinkDecision, withoutSharedParam } from "./lib/boot";
 import { notifierText, popupCoords, relayoutRanges, scrubTime } from "./lib/plot-events";
@@ -245,7 +246,7 @@ import {
   type Tooltip,
   type Diagnostic,
 } from "./lib/codemirror";
-import { DASH_STYLE_VALUES } from "./lib/plot-config.generated";
+import { DASH_STYLE_VALUES, PLOT_COLORS } from "./lib/plot-config.generated";
 import {
   attachVerticalResizeHandle,
   restorePersistedHeight,
@@ -363,14 +364,10 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     rotateableVectors: [] as string[],
     columnMetadata: {} as Record<string, ColumnMeta>,
     discoveryId: 0,
-    plotColors: [
-      themeColor("accent-500"),
-      themeColor("success"),
-      themeColor("chart-blue"),
-      themeColor("chart-violet"),
-      themeColor("warning"),
-      themeColor("danger"),
-    ],
+    // the signal color cycle, from PLOT_COLORS in plot_config.py through the
+    // generated constant, so a color added or reordered there reaches the color
+    // picker and the next-color rule without a change here
+    plotColors: [...PLOT_COLORS],
     dashStyles: DASH_STYLE_VALUES,
 
     // Toast (shared mixin)
@@ -1950,6 +1947,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       );
     },
 
+    // shares this trial's signals with SensAI, which sends them with each message
+    // so the agent can check the signal names it uses against the real ones
+    _publishColumnManifest() {
+      (Alpine.store("dojo") as DojoStore).columnManifest = {
+        all: [...this.columns],
+        rotatable_vectors: [...this.rotateableVectors],
+        available_quats: this.availableQuats,
+      };
+    },
+
     get availableQuats(): string[] {
       if (!this.columns || !Array.isArray(this.columns)) return [];
       return quatBases(this.columns);
@@ -2059,6 +2066,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
+        this._publishColumnManifest();
         this.columnMetadata = response.columns.column_metadata ?? {};
         this.data = response.data;
         void this.loadLabSchemas();
@@ -2665,6 +2673,22 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           const resp = await this.fetchTrialData(this.trialId, plan.colsToRefetch);
           this.data = { ...(this.data ?? {}), ...resp.data };
           if (this.vs.enabled) await this.syncVsRange();
+        }
+
+        // a signal this change added that has no data yet is fetched here, as
+        // toggleY does when it adds one, whatever put it in the config (the
+        // JSON editor, SensAI, undo, a profile); the filter check above only
+        // catches a filter change
+        const uncached = signalsToFetch(value, this.data, this.columns).filter(
+          (col) => !plan.colsToRefetch.includes(col),
+        );
+        if (uncached.length > 0) {
+          try {
+            const resp = await this.fetchTrialData(this.trialId, uncached);
+            this.data = { ...(this.data ?? {}), ...resp.data };
+          } catch {
+            // non-critical: the trace stays empty until the background loader gets to it
+          }
         }
 
         this.saveAndRender();
@@ -4137,6 +4161,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const resolved = resolveLabSchemas(all, this.columns);
         this.labSchemas = resolved.schemas;
         this.columns = resolved.columns;
+        this._publishColumnManifest();
       } catch {
         // Lab endpoint unavailable - silently ignore
       }

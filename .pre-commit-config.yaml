@@ -28,6 +28,27 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: dojo-tsc
+        name: Type-check the Dojo frontend (tsc)
+        # system, not node, for the same reason as dojo-eslint
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts run typecheck
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/static/ts/(src/.*\.ts|tsconfig\.json|package-lock\.json)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: dojo-vitest
+        name: Test the Dojo frontend (Vitest)
+        # before a push, not a commit, like the Python tests (act-test below). The
+        # tests also read the Jinja templates, so a template change runs them too
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts test
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/(static/ts/(src/.*\.ts|vitest\.config\.ts|tsconfig\.json|package-lock\.json)|[^/]+\.html|partials/.*\.html)$
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: local
+    hooks:
       - id: gen-docs-models
         name: Update the docs example models linked to MuJoCo Live
         entry: uv run --no-project --with-editable . python scripts/gen_docs_models.py

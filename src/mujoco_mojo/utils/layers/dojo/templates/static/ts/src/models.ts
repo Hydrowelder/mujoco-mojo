@@ -150,6 +150,12 @@ export interface TrialLogsResponse {
   entries: LogEntry[];
 }
 
+// the signals of the open trial, shared with SensAI so it can check the names it uses
+export type ColumnManifest = Pick<
+  TrialDataResponse["columns"],
+  "all" | "rotatable_vectors" | "available_quats"
+>;
+
 export interface TrialDataResponse {
   columns: {
     all: string[];
@@ -275,6 +281,8 @@ export interface DojoStore extends SettingsPanelState {
   isPageReady: boolean;
   isFullscreen: boolean;
   overlayCount: number;
+  // set by the trial viewer, null on every other page
+  columnManifest: ColumnManifest | null;
   loadStartTime: number;
   isComplete: boolean;
   isMuted: boolean;
@@ -312,7 +320,8 @@ export interface DojoStore extends SettingsPanelState {
   init(): void;
   _installPlotlyLogCapture(): void;
   toast(message: string, type?: "success" | "error" | "info"): void;
-  copyText(text: string, successMsg?: string): Promise<void>;
+  // true when the text was copied (a toast says so either way)
+  copyText(text: string, successMsg?: string): Promise<boolean>;
   _setConnected(connected: boolean): void;
   checkServerHealth(): Promise<void>;
   setPageReady(val: boolean, force?: boolean): void;
