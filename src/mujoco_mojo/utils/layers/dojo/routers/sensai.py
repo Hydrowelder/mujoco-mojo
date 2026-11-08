@@ -177,12 +177,14 @@ _DELEGATION_TOOL_ROUTES = {
     "ask_job_status_agent": "job_status",
     "ask_column_manifest_agent": "column_manifest",
     "ask_plot_config_agent": "plot_config",
+    "ask_guide_agent": "guide",
 }
 
 _DELEGATION_TOOL_LABELS = {
     "ask_job_status_agent": "Checking job status...",
     "ask_column_manifest_agent": "Looking up available signals...",
     "ask_plot_config_agent": "Reading the plot configuration...",
+    "ask_guide_agent": "Looking through the Mojo guides...",
 }
 
 
@@ -202,6 +204,10 @@ _STOPPED_WHILE: dict[str, tuple[str, str]] = {
     "ask_column_manifest_agent": (
         " while looking up signals",
         " Try asking about one kind of signal at a time.",
+    ),
+    "ask_guide_agent": (
+        " while looking through the guides",
+        " Try asking about one thing at a time.",
     ),
 }
 

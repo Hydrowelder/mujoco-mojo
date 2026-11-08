@@ -192,7 +192,7 @@ Once the world looks right, it's time to test your forces. By providing a `--run
 1. Launch with both: `mujoco-mojo reloaded --generator my_mod.gen --runtime my_mod.run`.
 2. Modify your physics logic (e.g., increase a spring's stiffness).
 3. Enter `run 1.0` (Real-time) or `run 0.5` (Slow-motion).
-4. Watch the physics play out. If it’s not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
+4. Watch the physics play out. If it's not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
 
 ---
 

@@ -42,8 +42,10 @@ export const PINNED_KEY = "sensai-pinned";
 // browser's storage can hold
 export const MAX_TABS = 8;
 
-// a tab's title is the start of its first message, cut to this many characters
-const TITLE_LENGTH = 24;
+// a tab's title is the start of its first message, cut to this many characters.
+// the tab shows only the first few (the strip cuts the rest off), so the title
+// has to hold more than that for the tooltip to be able to show the whole name
+const TITLE_LENGTH = 80;
 
 // one chat: its own messages, so each carries its own context to the model
 export interface SensAITab {

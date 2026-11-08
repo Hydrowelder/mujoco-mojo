@@ -100,7 +100,7 @@ Install `mujoco-mojo` in your project using the following:
 
 - **Strongly-Typed Elements:** MJCF components backed by Pydantic v2 for immediate validation.
 - **Semantic Validation:** Early detection of structural errors and attribute mismatches before the engine starts.
-- **MuJoCo Alignment:** Designed to mirror MuJoCo’s XML schema closely (no magic abstractions)
+- **MuJoCo Alignment:** Designed to mirror MuJoCo's XML schema closely (no magic abstractions)
 - **Object Enumerations:** Embedded MuJoCo object mappings to simplify retrieving `mjOBJ` IDs.
 - **Asset Sharing:** Specialized handling of dependency by remapping assets to become shared allows for space efficient execution of complex models
 

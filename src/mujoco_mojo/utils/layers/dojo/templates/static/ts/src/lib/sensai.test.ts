@@ -380,18 +380,26 @@ describe("titleFromMessage", () => {
     expect(titleFromMessage("  plot\n\nbox1   xpos  ")).toBe("plot box1 xpos");
   });
 
-  it("is cut with an ellipsis past 24 characters, 24 in all", () => {
-    const title = titleFromMessage("add the angular velocity of the other body");
-    expect(title).toBe("add the angular velocit\u2026");
-    expect(title).toHaveLength(24);
+  it("keeps a whole sentence, so the tooltip can show a name the tab itself has to cut short", () => {
+    const sentence = "add the angular velocity of the other body to the plot";
+    expect(titleFromMessage(sentence)).toBe(sentence);
   });
 
-  it("keeps a message of exactly 24 characters whole", () => {
-    expect(titleFromMessage("a".repeat(24))).toBe("a".repeat(24));
+  it("is cut with an ellipsis past 80 characters, 80 in all", () => {
+    const title = titleFromMessage("word ".repeat(30));
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith("\u2026")).toBe(true);
+    const long = titleFromMessage("a".repeat(200));
+    expect(long).toHaveLength(80);
+    expect(long.endsWith("\u2026")).toBe(true);
+  });
+
+  it("keeps a message of exactly 80 characters whole", () => {
+    expect(titleFromMessage("a".repeat(80))).toBe("a".repeat(80));
   });
 
   it("does not leave a space in front of the ellipsis", () => {
-    expect(titleFromMessage("abcdefghijklmnopqrstuv wxyz")).toBe("abcdefghijklmnopqrstuv\u2026");
+    expect(titleFromMessage(`${"a".repeat(78)} bcd`)).toBe(`${"a".repeat(78)}\u2026`);
   });
 });
 

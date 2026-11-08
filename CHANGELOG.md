@@ -11,6 +11,7 @@
 - The job status and runtime report now list the `--arg` and `--kwarg` values a job ran with
 - Fixed `Visual(rgba=VisualRGBA(...))` raising a `TypeError`
 - Various improvements for SensAI
+- Added MuJoCo Mojo documentation to the distribution
 
 > [!WARNING]
 > - **Breaking:** The `viser` and `mjviser` viewers are gone. A settings file that still names one now opens the browser viewer

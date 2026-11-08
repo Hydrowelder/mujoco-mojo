@@ -71,6 +71,32 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: gen-cli-reference
+        name: Update the command line reference page
+        # system, not python, for the same reason as gen-mjcf-tags below: it imports
+        # mujoco_mojo. It writes docs/reference/cli.md from the
+        # command line itself, so it is listed before gen-user-guide, which bundles it
+        entry: uv run --no-project --with-editable . python scripts/gen_cli_reference.py
+        language: system
+        files: ^(src/mujoco_mojo/utils/layers/cli\.py|scripts/gen_cli_reference\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: gen-user-guide
+        name: Update the user guides bundled in the package
+        # stdlib only, so pre-commit's own python is enough. It rewrites
+        # src/mujoco_mojo/user_guide/ (the guides as plain markdown, which SensAI reads),
+        # and a commit stops when it did, so stage the result and commit again. The
+        # command line is in the pattern because the reference page is one of the guides:
+        # gen-cli-reference rewrites it first, but only a staged file starts a hook
+        entry: python scripts/gen_user_guide.py
+        language: python
+        files: ^(docs/user-guides/.*\.(md|py)|docs/reference/cli\.md|scripts/gen_user_guide\.py|src/mujoco_mojo/utils/layers/cli\.py)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
       - id: gen-mjcf-tags
         name: Update the implemented MJCF tags checklist
         entry: uv run --no-project --with-editable . python scripts/gen_mjcf_tags.py

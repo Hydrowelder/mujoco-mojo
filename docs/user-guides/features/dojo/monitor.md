@@ -48,4 +48,4 @@ Below the job statistics card, lists of the successful and failed trials is show
 
     Because simulations can take hours, Mojo provides sensory cues so you don't have to keep your eyes glued. An audible bell rings when the final trial is processed. It can be muted in the top toolbar.
 
-    You now know how to monitor your "fleet" of simulations. Now it’s time to look at the data itself. Head over to the [Mosaic guide](mosaic.md) to learn about data plotting, multi-trial comparison, and data sharing.
+    You now know how to monitor your "fleet" of simulations. Now it's time to look at the data itself. Head over to the [Mosaic guide](mosaic.md) to learn about data plotting, multi-trial comparison, and data sharing.
