@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { renderMarkdown } from "./lib/markdown";
+
 // the Jinja templates sit beside static/, not under it
 const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
 
@@ -296,16 +298,80 @@ describe("a message's header row holds its name, when it was sent, and its copy 
   });
 });
 
-describe("math in a reply, which the browser draws with its own math fonts", () => {
-  const css = template.replace(/\/\*[\s\S]*?\*\//g, "");
-  const declarations = (selector: string): string => {
-    const found = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selectors]) =>
-      selectors!.split(",").some((s) => s.trim() === selector),
-    );
-    expect(found.length, selector).toBeGreaterThan(0);
-    return found.map(([, , body]) => body!).join("\n");
-  };
+// the declarations of every rule in the page's style block whose selector list has `selector` in it, comments left out
+const css = template.replace(/\/\*[\s\S]*?\*\//g, "");
+const declarations = (selector: string): string => {
+  const found = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selectors]) =>
+    selectors!.split(",").some((s) => s.trim() === selector),
+  );
+  expect(found.length, selector).toBeGreaterThan(0);
+  return found.map(([, , body]) => body!).join("\n");
+};
 
+describe("a table in a reply has a border around every cell and a recessed header", () => {
+  it("is drawn in the code block's own two theme colors, so it follows light and dark mode", () => {
+    const cells = declarations(".sensai-md td");
+
+    expect(declarations(".sensai-md th")).toContain("border: 1px solid var(--color-subtle);");
+    expect(cells).toContain("border: 1px solid var(--color-subtle);");
+    expect(declarations(".sensai-md th")).toContain("background: var(--color-well);");
+    expect(declarations(".sensai-cm-block")).toContain("border: 1px solid var(--color-subtle);");
+    expect(declarations(".sensai-cm-block")).toContain("background: var(--color-well);");
+  });
+
+  it("has no color of its own that is not a theme token", () => {
+    const rules = ["table", "th", "td"].map((tag) => declarations(`.sensai-md ${tag}`)).join("\n");
+
+    expect(rules).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i);
+  });
+
+  it("collapses the borders, so two cells share one line and not a double one", () => {
+    expect(declarations(".sensai-md table")).toContain("border-collapse: collapse;");
+  });
+
+  it("gives the cells room, and the header more weight than the rows", () => {
+    expect(declarations(".sensai-md td")).toContain("padding: 0.25rem 0.625rem;");
+    expect(declarations(".sensai-md th")).toContain("padding: 0.25rem 0.625rem;");
+    expect(declarations(".sensai-md th")).toContain("font-weight: 600;");
+  });
+
+  it("is a block as wide as its table, up to the bubble, that scrolls sideways when the table is wider", () => {
+    const table = declarations(".sensai-md table");
+
+    expect(table).toContain("display: block;");
+    expect(table).toContain("width: max-content;");
+    expect(table).toContain("max-width: 100%;");
+    expect(table).toContain("overflow-x: auto;");
+  });
+
+  it("has room above and below it, as a code block does", () => {
+    expect(declarations(".sensai-md table")).toContain("margin: 0.5rem 0;");
+  });
+
+  it("left-aligns a header that has no alignment of its own, and leaves one that has to its align attribute", () => {
+    expect(declarations(".sensai-md th:not([align])")).toContain("text-align: left;");
+    // a rule on every header would beat the align attribute, which is only a hint to the browser
+    expect(declarations(".sensai-md th")).not.toContain("text-align");
+  });
+
+  it("is written by marked with the pieces these rules name", () => {
+    const html = renderMarkdown("| Job | Trials |\n| --- | ---: |\n| a | 200 |\n");
+
+    expect(html).toContain("<table>");
+    expect(html).toContain("<th>Job</th>");
+    expect(html).toContain('<th align="right">Trials</th>');
+    expect(html).toContain('<td align="right">200</td>');
+  });
+
+  it("keeps a code span and a price in a cell as they are", () => {
+    const html = renderMarkdown("| a | b |\n| --- | --- |\n| `x<y` | $5 or $10 |\n");
+
+    expect(html).toContain('<td><code class="md-inline-code">x&lt;y</code></td>');
+    expect(html).toContain("<td>$5 or $10</td>");
+  });
+});
+
+describe("math in a reply, which the browser draws with its own math fonts", () => {
   it("has the formula a little larger than the text around it", () => {
     expect(declarations(".sensai-md math")).toContain("font-size: 1.05em;");
   });
